@@ -1763,6 +1763,23 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT =
+    buildConf("spark.sql.legacy.filterShortCircuitOnNullConjunct")
+      .internal()
+      .doc("When true, whole stage codegen of a filter condition, including the FILTER clause " +
+        "of an aggregate function, drops a row at the first top-level conjunct that evaluates " +
+        "to NULL without evaluating the remaining conjuncts, so an error that one of them " +
+        "would raise on that row is not raised. When false, only a FALSE conjunct stops the " +
+        "evaluation, as the SQL standard requires and as the interpreted evaluation does, and " +
+        "the row is dropped after the remaining conjuncts are evaluated. Once a condition has " +
+        "a conjunct that can be NULL, the IS NOT NULL checks after that conjunct are then " +
+        "evaluated in the order of the condition on every row, not only on rows where a " +
+        "conjunct is NULL.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val CASE_SENSITIVE = buildConf(SqlApiConfHelper.CASE_SENSITIVE_KEY)
     .internal()
     .doc("Whether the query analyzer should be case sensitive or not. " +
@@ -1795,6 +1812,19 @@ object SQLConf {
       .internal()
       .doc("Controls whether we optimize the ASTree that gets generated when parsing " +
         "VALUES lists (UnresolvedInlineTable) by eagerly evaluating it in the AST Builder.")
+      .booleanConf
+      .createWithDefault(true)
+
+  val INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED =
+    buildConf("spark.sql.inlineTable.nonFoldableExpressions.enabled")
+      .internal()
+      .doc("When true, VALUES lists (inline tables) may contain expressions that are not " +
+        "constant-foldable, such as nondeterministic functions, Scala/Java UDFs, and " +
+        "uncorrelated scalar subqueries. Such an inline table is evaluated on executors when " +
+        "the query runs instead of being folded into a local relation during analysis. When " +
+        "false, these expressions are rejected during analysis.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
 
@@ -3418,6 +3448,35 @@ object SQLConf {
       .checkValue(v => v >= 2 || v == -1,
         "The threshold must be >= 2 or -1 (disabled)")
       .createWithDefault(-1)
+
+  val REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED =
+    buildConf("spark.sql.optimizer.rewriteCountDistinctConditional.enabled")
+      .internal()
+      .doc("When true, rewrites COUNT(DISTINCT IF(cond, base, NULL)) and " +
+        "COUNT(DISTINCT CASE WHEN cond THEN base END) into " +
+        "COUNT(DISTINCT base) FILTER (WHERE cond). This reduces the Expand factor " +
+        "in RewriteDistinctAggregates from Nx to 1x when multiple conditional distinct " +
+        "counts share the same base column. Also guards the shared distinct Expand " +
+        "key with the union of the filters (IF(Or(cond1, ..., condN), base, NULL)) " +
+        "for an all-filtered distinct group whose filters are deterministic and " +
+        "subquery-free and whose children are safe to evaluate unconditionally " +
+        "(including user-written FILTER on a plain column), so the first " +
+        "aggregate's output cardinality stays bounded by the un-rewritten " +
+        "plan. A child that is not safe to evaluate unconditionally (for example " +
+        "a division, which can throw) keeps the raw Expand key. When false, both " +
+        "the IF/CASE rewrite and the union-of-filters guard are disabled. The " +
+        "IF/CASE rewrite is only applied to base expressions that are safe to " +
+        "evaluate unconditionally (e.g. plain columns), so the short-circuit " +
+        "semantics of IF/CASE WHEN are preserved. A condition that contains a " +
+        "subquery is not rewritten. When spark.sql.optimizer.optimizeExpandRatio " +
+        "enables OptimizeExpand, the normalized FILTER form is not eligible for " +
+        "pre-aggregation because Expand projects filter flags. Enabling both can " +
+        "therefore trade lower Expand fan-out for losing pre-aggregation on " +
+        "duplicate-heavy inputs (SPARK-60318).")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val REMOVE_REDUNDANT_PROJECTS_ENABLED = buildConf("spark.sql.execution.removeRedundantProjects")
     .internal()
@@ -5760,6 +5819,28 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PYTHON_UDF_IN_PROCESS_FULL_VALIDATION =
+    buildConf("spark.sql.execution.pythonUDF.inProcess.fullValidation.enabled")
+      .doc("When true, in-process Python UDFs fully validate the Arrow structure of each " +
+        "result, including every offset of variable-width and nested values, before the JVM " +
+        "reads it. The JVM reads result buffers without bounds checks, so a malformed result, " +
+        "such as one built from raw buffers, can produce wrong values or crash the executor. " +
+        "String values are not checked for valid UTF-8. When false, only constant-time Arrow " +
+        "validation is performed. Worker-based Arrow UDFs do not validate their results.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
+  val PYTHON_UDF_DETAILED_TIMING_ENABLED =
+    buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
+      .internal()
+      .doc("When true, collect detailed timing metrics for supported Python UDFs.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PYTHON_UDF_ARROW_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.arrow.enabled")
       .doc("Enable Arrow optimization in regular Python UDFs. This optimization " +
@@ -7850,13 +7931,15 @@ object SQLConf {
 
   val CHAR_VARCHAR_STANDARD_SEMANTICS =
     buildConf("spark.sql.charVarchar.standardSemantics.enabled")
-      .doc("When true, enable SQL standard CHAR/VARCHAR semantics: first-class types in " +
-        "schemas and CAST targets; least-common-type for COALESCE/CASE/UNION may return " +
-        "CHAR/VARCHAR; transforming string functions and operators return plain STRING. " +
-        "This is a breaking change from the annotated-STRING default and from " +
-        "preserveCharVarcharTypeInfo (which keeps Char/Varchar through transforms). " +
-        "Storage types stay with the data source: native ORC CHAR/VARCHAR keep ORC " +
-        "enforcement; STRING columns with a Spark CHAR/VARCHAR schema are checked by Spark.")
+      .doc("Preview feature: when true, treat CHAR, VARCHAR, and STRING as a character string " +
+        "type family with the precedence CHAR -> VARCHAR -> STRING. This may change in future " +
+        "releases. CHAR and VARCHAR are first-class types in schemas and CAST targets; " +
+        "least-common-type for COALESCE/CASE/UNION may return CHAR/VARCHAR; transforming " +
+        "string functions and operators return STRING. The default (false) keeps the Spark 3.1 " +
+        "table-schema overlay on STRING. This differs from preserveCharVarcharTypeInfo, which " +
+        "keeps Char/Varchar through transforms. Storage types stay with the data source: " +
+        "native ORC CHAR/VARCHAR keep ORC enforcement; STRING columns with a Spark " +
+        "CHAR/VARCHAR schema are checked by Spark.")
       .version("4.4.0")
       // PERSISTED, like ANSI mode: the flag decides the types a view body resolves to, so a view
       // created under standard semantics must keep computing CHAR/VARCHAR regardless of the
@@ -9518,6 +9601,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def subqueryReuseEnabled: Boolean = getConf(SUBQUERY_REUSE_ENABLED)
 
+  def rewriteCountDistinctConditionalEnabled: Boolean =
+    getConf(REWRITE_COUNT_DISTINCT_CONDITIONAL_ENABLED)
+
   override def caseSensitiveAnalysis: Boolean = getConf(SQLConf.CASE_SENSITIVE)
 
   def constraintPropagationEnabled: Boolean = getConf(CONSTRAINT_PROPAGATION_ENABLED)
@@ -9633,6 +9719,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def subexpressionEliminationFilterExecEnabled: Boolean =
     getConf(SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED)
+
+  def legacyFilterShortCircuitOnNullConjunct: Boolean =
+    getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
 
@@ -9954,6 +10043,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(PYTHON_UDF_DAEMON_KILL_WORKER_ON_FLUSH_FAILURE)
 
   def pythonWorkerLoggingEnabled: Boolean = getConf(PYTHON_WORKER_LOGGING_ENABLED)
+
+  def pythonUDFDetailedTimingEnabled: Boolean =
+    getConf(PYTHON_UDF_DETAILED_TIMING_ENABLED)
 
   def pythonUDFArrowConcurrencyLevel: Option[Int] = getConf(PYTHON_UDF_ARROW_CONCURRENCY_LEVEL)
 

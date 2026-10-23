@@ -431,8 +431,8 @@ case class GroupPartitionsExec(
       // within-partition ordering is lost due to concatenation -- for example, if two input
       // partitions both share key=A and hold rows (A,1),(A,3) and (A,2),(A,5) respectively (each
       // sorted ascending by the data column), concatenating them yields (A,1),(A,3),(A,2),(A,5)
-      // which is no longer sorted by the data column. Only sort orders over partition key
-      // expressions remain valid -- they evaluate to the same value (A) in every merged partition.
+      // which is no longer sorted by the data column. For unmarked layouts without reducers, sort
+      // orders over partition keys remain valid: they evaluate to the same value in each partition.
       //
       // The config below and the child's ordering stay per-call reads. They only change how much
       // of an ordering that holds either way is reported. So a late read can never claim more
@@ -441,9 +441,10 @@ case class GroupPartitionsExec(
       // is planned, see `sortedMergeOrdering`.
       outputPartitioning match {
         case p: Partitioning with Expression
-            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled =>
-          // Without reducers all merged partitions share the same original key value, so the sort
-          // orders on key expressions still hold. The transform keys match nothing here, since
+            if reducers.isEmpty && conf.v2BucketingPreserveKeyOrderingOnCoalesceEnabled &&
+              PartitioningCollection.keyedUnknownKeysOf(p).isEmpty =>
+          // Undeclared rows can have different key values within a merged partition.
+          // Unmarked layouts without reducers keep key orders. Transform keys match nothing here:
           // `DataSourceV2ScanExecBase.outputOrdering` drops every sort order over a transform.
           val keyedPartitionings = p.collect { case k: KeyedPartitioning => k }
           val keyExprs = ExpressionSet(keyedPartitionings.flatMap(_.expressions))
@@ -566,6 +567,9 @@ case class GroupPartitionsExec(
  *                   claim into a different key space or changes the modulus. A reducer slot counts
  *                   as key-changing even where a conforming self-reducer could not rewrite a
  *                   reachable key value, so the give-up there loses at most an optimization.
+ * @param keysRewritten whether the grouping re-labels the groups, by projecting the keys onto
+ *                      cluster-key positions or by reducing them, so an undeclared row is grouped
+ *                      under the image of a key the clustering does not read.
  * @param numPrunedPartitions the alignment's effect on the reads of the child's splits, 0 outside
  *                            the alignment path. See `alignToExpectedKeys`.
  * @param numReplicatedPartitionReads as above.
@@ -574,6 +578,7 @@ private[sql] case class PartitionGrouping(
     partitions: Seq[(InternalRowComparableWrapper, Seq[Int])],
     layout: KeyLayout,
     isIdentity: Boolean,
+    keysRewritten: Boolean,
     numPrunedPartitions: Int,
     numReplicatedPartitionReads: Int) {
 
@@ -616,7 +621,9 @@ private[sql] object GroupPartitionsExec {
     val grouping = computeGrouping(
       childKp, joinKeyPositions, expectedPartitionKeys, reducers, ungroupingOrigin)
     GroupPartitionsExec(child, grouping,
-      computeOutputPartitioning(childExpr, grouping, joinKeyPositions, reducers),
+      computeOutputPartitioning(
+        childExpr, grouping, joinKeyPositions, reducers,
+        hasExpectedKeys = expectedPartitionKeys.isDefined),
       childPartitioning, joinKeyPositions, expectedPartitionKeys.map(_.size), reducers,
       ungroupingOrigin, sortedMergeOrdering)
   }
@@ -631,7 +638,8 @@ private[sql] object GroupPartitionsExec {
       p: Partitioning with Expression,
       grouping: PartitionGrouping,
       joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[KeyReducer]]]): Partitioning = {
+      reducers: Option[Seq[Option[KeyReducer]]],
+      hasExpectedKeys: Boolean): Partitioning = {
     // There can be multiple `KeyedPartitioning`s in an output partitioning of a join, but they
     // can only differ in `expressions`, since they share one `KeyLayout` (enforced by
     // `PartitioningCollection`). So the grouping is computed once, and the layout it describes
@@ -642,18 +650,20 @@ private[sql] object GroupPartitionsExec {
     // single-side-transform reducers; for the both-sides-reduce shape no single transform
     // describes the keys, so the reduce marks it (see `KeyedShuffleSpec.reducersBothWays`).
     //
-    // A marked claim pins undeclared rows to hash(key) % numPartitions (see [[KeyLayout]]'s
-    // `mayContainUnknownPartitionKeys`), and only an identity grouping keeps that relationship (see
-    // `PartitionGrouping.isIdentity`). Clearing the marker alone would misreport the undeclared
-    // rows that remain, so the keyed partitioning goes and only the physical output count is
-    // reported, one per group with padding included, which is the count a parent's
-    // `PartitioningCollection` needs for uniformity. `EnsureRequirements` asks this before it
-    // commits to a pairing and falls back to a shuffle when it happens.
+    // A marked layout keeps its keyed claim through a plain regrouping: coalescing the partitions
+    // that share a key leaves every key's rows, declared or not, in the group named for the
+    // declared key they reached, and full-key clustering is all a `ClusteredDistribution` reads.
+    // `computeGrouping` reports that layout as `ROUTING_LOST`, since the regrouping moved an
+    // undeclared key's group off `hash(key) % numPartitions`.
     //
-    // The marker read off `p` is the same bit the `else` branch publishes through
-    // `grouping.layout`, since `computeGrouping` copies the child's layout and carries the
-    // marker over. A change to that copy has to move this guard with it.
-    if (PartitioningCollection.keyedMarkerOf(p).contains(true) && !grouping.isIdentity) {
+    // A key rewrite or non-identity expected-key alignment re-labels or replicates the groups, so
+    // those shapes give the keyed claim up, and only the physical output count is reported, which
+    // is the count a parent's `PartitioningCollection` needs for uniformity.
+    //
+    // The state read off `p` is the one `computeGrouping` copies into `grouping.layout`; a change
+    // to that copy has to move this guard with it.
+    if (PartitioningCollection.keyedUnknownKeysOf(p).isDefined &&
+        (grouping.keysRewritten || (hasExpectedKeys && !grouping.isIdentity))) {
       UnknownPartitioning(grouping.partitions.size)
     } else {
       // One instance for every member, so they share it by reference. It already carries the
@@ -722,12 +732,23 @@ private[sql] object GroupPartitionsExec {
       val splits = keyMap.getOrElse(key, Seq.empty)
       numMatchedPartitions += splits.size
       if (distributePartitions) {
+        // `padTo` only pads, never truncates, so a key holding more splits than its expected
+        // count would be emitted more times than the count says, while `isGrouped` can still
+        // read as grouped. No producer does this today: under partial clustering the join split
+        // carries no reducers (`reducersBothWays` returns none), so it never merges keys and its
+        // counts match its splits, and the ordering split counts the same keys it groups. The
+        // assert surfaces any future miscount here instead of as a shuffle fallback at the
+        // `committed` gate in `EnsureRequirements` or as a bad grouped layout.
+        assert(splits.size <= numSplits,
+          s"a distributed partition key holds more splits (${splits.size}) than its expected " +
+            s"count ($numSplits)")
         // Distribute splits across expected partitions, padding with empty sequences
         val paddedSplits = splits.map(Seq(_)).padTo(numSplits, Seq.empty)
         paddedSplits.map((key, _))
       } else {
-        // The slots beyond the first re-read the whole group. A key this side does not hold
-        // has no splits to re-read, so the product is 0 and no explicit guard is needed.
+        // `Seq.fill(numSplits)` emits exactly `numSplits` entries whatever the split count, so this
+        // branch cannot over-emit and needs no size guard. The slots beyond the first re-read the
+        // whole group; a key this side does not hold has no splits to re-read, so the product is 0.
         numReplicatedPartitionReads += (numSplits - 1) * splits.size
         // Replicate all splits to each expected partition
         Seq.fill(numSplits)((key, splits))
@@ -816,13 +837,10 @@ private[sql] object GroupPartitionsExec {
         case ((_, Seq(single)), outputIndex) => single == outputIndex
         case _ => false
       }
-    // A `copy` of the child's layout rather than a fresh one, so the marker and anything the
-    // layout grows later are carried without this having to name them. The origin is the one
-    // field not carried: the output claims what this node's own producer stamped, never what
-    // the child's claimed, and only while the shape holds the claim -- a grouping that settles
-    // every key leaves nothing repeating, so it spends the claim the way `toGrouped` does.
-    // Built here, where the child is in scope, so `computeOutputPartitioning` has nothing left
-    // to re-apply.
+    // Copy the child's layout, deciding both origins explicitly. Only identity regrouping keeps
+    // unknown-key routing. Ungrouping uses this node's stamp, cleared when every key is grouped.
+    val unknownKeysOrigin =
+      if (isIdentity) childKp.layout.unknownKeysOrigin else childKp.layout.unknownKeysRoutingLost
     PartitionGrouping(
       partitions,
       childKp.layout.copy(
@@ -830,8 +848,9 @@ private[sql] object GroupPartitionsExec {
         dataTypes = reducedDataTypes,
         isGrouped = isGrouped,
         isCollapsed = isCollapsed,
+        unknownKeysOrigin = unknownKeysOrigin,
         ungroupingOrigin = if (isGrouped) None else ungroupingOrigin),
-      isIdentity, numPrunedPartitions, numReplicatedPartitionReads)
+      isIdentity, keysRewritten, numPrunedPartitions, numReplicatedPartitionReads)
   }
 }
 

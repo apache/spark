@@ -23,12 +23,11 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.WatermarkSupp
  * An iterator over the evictable rows of a [[StateStore]], which removes each row it returns and
  * reports how far it has progressed.
  *
- * Only the rows that are actually evicted are returned, so every row this iterator yields has been
- * removed from the store. The removal happens in `hasNext` rather than `next` (see the note on
- * `pending` below) precisely so that a caller which stops early still leaves the store consistent
- * with what it observed. That lets a caller both emit the evicted rows -- streaming aggregation in
- * append mode outputs a grouping key once the watermark passes it -- and count real removals rather
- * than state rows scanned.
+ * A row is removed when `next` returns it; `hasNext` only finds the next evictable row and does
+ * not remove it. So a caller which stops early leaves every row it did not consume in the store,
+ * and `numRowsRemovedSoFar` equals the number of rows returned. That lets a caller both emit the
+ * evicted rows -- streaming aggregation in append mode outputs a grouping key once the watermark
+ * passes it -- and count real removals rather than state rows scanned.
  */
 trait EvictionIterator extends Iterator[UnsafeRowPair] {
   /** Number of state rows examined so far, whether or not they were evicted. */
@@ -71,10 +70,7 @@ object EvictionIterator {
       override def numRowsReadDuringEvictionSoFar: Long = rowsRead
       override def numRowsRemovedSoFar: Long = rowsRemoved
 
-      // The row hasNext has advanced to and already removed from the store, held so next() can
-      // return it. Removal happens in hasNext (not next()) so that a caller which stops iterating
-      // after hasNext -- without the matching next() -- still leaves the store consistent with the
-      // rows it was told are evicted; every row this iterator surfaces has already been removed.
+      // The next evictable row found by hasNext, not yet removed from the store.
       private var pending: Option[UnsafeRowPair] = None
 
       override def hasNext: Boolean = evictionPredicate match {
@@ -83,8 +79,6 @@ object EvictionIterator {
             val rowPair = storeIterator.next()
             rowsRead += 1
             if (predicate.eval(rowPair.key)) {
-              store.remove(rowPair.key)
-              rowsRemoved += 1
               pending = Some(rowPair)
             }
           }
@@ -98,6 +92,8 @@ object EvictionIterator {
         }
         val rowPair = pending.get
         pending = None
+        store.remove(rowPair.key)
+        rowsRemoved += 1
         rowPair
       }
     }

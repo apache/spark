@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 import unittest
+from unittest.mock import patch
 
 has_resource_module = True
 try:
@@ -32,6 +33,97 @@ from py4j.protocol import Py4JJavaError
 
 from pyspark import SparkConf, SparkContext
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
+from pyspark.worker_metrics import WorkerMetrics
+
+
+class WorkerMetricsTests(unittest.TestCase):
+    def setUp(self):
+        metrics = WorkerMetrics()
+        metrics.reset()
+        self.addCleanup(metrics.reset)
+
+    def test_constructor_reuses_collector_without_reset(self):
+        metrics = WorkerMetrics()
+        metrics.set("bootTimestampMs", 123)
+        metrics.increment("rows", 2)
+        self.assertIs(WorkerMetrics(), metrics)
+        self.assertEqual(WorkerMetrics().to_dict(), {"bootTimestampMs": 123, "rows": 2})
+
+    def test_reset_isolates_new_task_from_existing_timer(self):
+        metrics = WorkerMetrics()
+        metrics.set("previousTaskRows", 10)
+        previous_timer = metrics.measure("previousTaskDuration")
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 5_000_000, 10_000_000, 12_000_000],
+        ):
+            with previous_timer:
+                metrics.reset()
+                metrics.increment("currentTaskRows")
+            with metrics.measure("currentTaskDuration"):
+                pass
+        previous_timer.add_duration_ns(3_000_000)
+        self.assertIs(WorkerMetrics(), metrics)
+        self.assertEqual(metrics.to_dict(), {"currentTaskRows": 1, "currentTaskDuration": 2})
+
+    def test_set_current_timestamp_uses_epoch_milliseconds(self):
+        metrics = WorkerMetrics()
+        with patch("pyspark.worker_metrics.time.time_ns", return_value=1_700_000_000_123_456_789):
+            metrics.set_current_timestamp("bootTimestampMs")
+        self.assertEqual(metrics.to_dict(), {"bootTimestampMs": 1_700_000_000_123})
+
+    def test_accumulate_before_converting_to_milliseconds(self):
+        metrics = WorkerMetrics()
+        # Control the clock to retain fractional milliseconds and exclude gaps between blocks.
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[10_000_000, 10_600_000, 100_000_000, 100_700_000],
+        ):
+            with metrics.measure("duration"):
+                pass
+            self.assertEqual(metrics.to_dict(), {"duration": 0})
+            with metrics.measure("duration"):
+                pass
+        self.assertEqual(metrics.to_dict(), {"duration": 1})
+
+    def test_nested_timings_are_inclusive(self):
+        metrics = WorkerMetrics()
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 1_000_000, 3_000_000, 5_000_000],
+        ):
+            with metrics.measure("outer"):
+                with metrics.measure("inner"):
+                    pass
+        self.assertEqual(metrics.to_dict(), {"outer": 5, "inner": 2})
+
+    def test_reuse_timer_scope(self):
+        metrics = WorkerMetrics()
+        timer = metrics.measure("duration")
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 2_000_000, 3_000_000, 4_000_000],
+        ):
+            with timer:
+                with self.assertRaisesRegex(RuntimeError, "already running"):
+                    with timer:
+                        pass
+            with timer:
+                pass
+        self.assertEqual(metrics.to_dict(), {"duration": 3})
+
+    def test_accumulate_and_propagate_exception(self):
+        metrics = WorkerMetrics()
+        with patch(
+            "pyspark.worker_metrics.time.perf_counter_ns",
+            side_effect=[0, 2_000_000, 3_000_000, 4_000_000],
+        ):
+            with self.assertRaisesRegex(ValueError, "worker failure"):
+                with metrics.measure("duration"):
+                    raise ValueError("worker failure")
+            with metrics.measure("duration"):
+                pass
+        self.assertEqual(metrics.to_dict(), {"duration": 3})
 
 
 class WorkerTests(ReusedPySparkTestCase):
