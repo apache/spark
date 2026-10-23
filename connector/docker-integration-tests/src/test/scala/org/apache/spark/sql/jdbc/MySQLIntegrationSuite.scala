@@ -381,6 +381,7 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
         .jdbc(jdbcUrl, "backslash", new Properties)
       checkAnswer(df.filter(col("s") === "C:\\temp"), Row("C:\\temp"))
       checkAnswer(df.filter(col("s").startsWith("C:\\")), Row("C:\\temp"))
+      checkAnswer(df.filter(col("s") === "x\\' OR 1=1) #"), Seq.empty)
     }
   }
 }
