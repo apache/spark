@@ -576,8 +576,10 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
               assert(relation.statsAvailable == (storageLevel.useDisk && materialize))
               assert(relation.isOutputRepeatable == materialize)
 
+              // Not an equality to a literal, which would be inferred for `bf1.c1` too and leave
+              // the filter nothing to prune.
               val query = s"SELECT * FROM bf1 JOIN " +
-                s"(SELECT * FROM $cacheName WHERE c2 = 8) filtered_keys " +
+                s"(SELECT * FROM $cacheName WHERE c2 IN (8, 9)) filtered_keys " +
                 "ON bf1.c1 = filtered_keys.c2"
               val actual = sql(query)
               assert(getNumBloomFilters(actual.queryExecution.optimizedPlan) == 1)
@@ -1148,6 +1150,18 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
         "where bf2.a2 = 62"
       assertDidNotRewriteWithBloomFilter(query)
       assert(hasDynamicPruning(query))
+    }
+  }
+
+  test("Runtime bloom filter join: do not add bloom filter on a key fixed by a literal") {
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1",
+      SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1") {
+      // A static partition filter fixes the partition key, so its DPP filter is dropped as
+      // redundant. A Bloom filter on that key, or on the other side's key, which the literal is
+      // inferred for, would prune next to nothing.
+      val query = "select * from bf5part f join bf2 on f.f5 = bf2.f2 where f.f5 = 20"
+      assertDidNotRewriteWithBloomFilter(query)
+      assert(!hasDynamicPruning(query))
     }
   }
 
@@ -1778,6 +1792,18 @@ class InjectRuntimeFilterSuite extends SharedSparkSession
       assert(hintWarnings(renamedFailing).count(_.contains("is not supported")) == 1)
       assertHintedRewrite("select * from bf4 where bf4.c4 in (select /*+ RUNTIME_FILTER(bf3) */ " +
         "t.k from (select c2 as k from bf2) t join bf3 on t.k = bf3.c3)")
+      // And when a DPP filter from the outer query is pushed through the hoisted join, which
+      // rebuilds it: the decision is kept in the join's hint.
+      val pushedThroughFailing = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
+        "(select /*+ RUNTIME_FILTER(t) */ p.f5 from bf5part p " +
+        "join (select c3 from bf3 limit 5) t on p.c5 = t.c3)"
+      assert(hintWarnings(pushedThroughFailing).count(_.contains("is not supported")) == 1)
+      val pushedThroughRenamed = "select * from bf4 where bf4.a4 = 10 and bf4.c4 in " +
+        "(select /*+ RUNTIME_FILTER(bf3) */ t.f5 from (select f5, c5 as k from bf5part) t " +
+        "join bf3 on t.k = bf3.c3)"
+      assert(hasDynamicPruning(pushedThroughRenamed))
+      assert(bloomFilterApplicationSideKeys(pushedThroughRenamed) == Set("c5"))
+      assert(getNumBloomFilters(sql(pushedThroughRenamed).queryExecution.optimizedPlan) == 1)
       val ambiguous = "select * from bf4 where bf4.c4 in " +
         "(select /*+ RUNTIME_FILTER(bf2, bf3) */ bf2.c2 from bf2 join bf3 on bf2.c2 = bf3.c3)"
       assert(hintWarnings(ambiguous).count(
