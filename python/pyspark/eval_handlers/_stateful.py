@@ -67,8 +67,6 @@ if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
 
-    from pyspark.eval_handlers._typing import UDF
-
 
 class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     """SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE (``applyInPandasWithState``): regroup the input
@@ -97,16 +95,25 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         ]
     )
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        """Apply applyInPandasWithState UDF.
+
+        The input batches carry the data columns plus a trailing state-info
+        column. Chunks are regrouped by grouping key (via the reused state
+        object), the UDF is invoked once per key with a lazy iterator of
+        data DataFrames and its state, and the output DataFrames plus updated
+        state are batched into count/data/state RecordBatches bounded by
+        arrow_max_records_per_batch.
+        """
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
-        assert len(udfs) == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
+        assert len(self._udfs) == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
 
         # See FlatMapGroupsInPandasWithStateExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        parsed_offsets = extract_key_value_indexes(self._udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
 
@@ -119,16 +126,6 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
 
         self._pickle_ser = CPickleSerializer()
 
-    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Apply applyInPandasWithState UDF.
-
-        The input batches carry the data columns plus a trailing state-info
-        column. Chunks are regrouped by grouping key (via the reused state
-        object), the UDF is invoked once per key with a lazy iterator of
-        data DataFrames and its state, and the output DataFrames plus updated
-        state are batched into count/data/state RecordBatches bounded by
-        arrow_max_records_per_batch.
-        """
         import pandas as pd
         import pyarrow as pa
 
@@ -418,16 +415,25 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        """Apply transformWithStateInPandas UDF.
+
+        Data chunks for the same grouping key appear sequentially in the
+        input batches but may span batch boundaries, so rows are regrouped
+        by key and re-chunked into pandas DataFrames bounded by
+        arrow_max_records_per_batch and arrow_max_bytes_per_batch. The UDF
+        is invoked once per grouping key with a lazy iterator of chunks,
+        then once for PROCESS_TIMER and once for COMPLETE.
+        """
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        assert len(self._udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
+        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udfs[0].args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for TRANSFORM_WITH_STATE_PANDAS UDF."
         )
@@ -448,16 +454,6 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
         )
         self._arrow_max_bytes_per_batch = self._runner_conf.arrow_max_bytes_per_batch
 
-    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Apply transformWithStateInPandas UDF.
-
-        Data chunks for the same grouping key appear sequentially in the
-        input batches but may span batch boundaries, so rows are regrouped
-        by key and re-chunked into pandas DataFrames bounded by
-        arrow_max_records_per_batch and arrow_max_bytes_per_batch. The UDF
-        is invoked once per grouping key with a lazy iterator of chunks,
-        then once for PROCESS_TIMER and once for COMPLETE.
-        """
         import pandas as pd
 
         total_bytes = 0
@@ -570,12 +566,23 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        """Apply transformWithStateInPandas UDF with initial state.
+
+        The input batches carry two struct columns, ``inputData`` and
+        ``initState``; each batch holds one or the other but never both.
+        Rows are flattened out of whichever struct is present, regrouped by
+        grouping key, and re-chunked into pandas DataFrames bounded by
+        arrow_max_records_per_batch and arrow_max_bytes_per_batch. The UDF
+        is invoked once per grouping key with two separate lazy iterators
+        (data DataFrames and init-state DataFrames), then once for
+        PROCESS_TIMER and once for COMPLETE.
+        """
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        assert len(self._udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
+        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -584,7 +591,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         #     [groupingKeyOffsets, dedupDataOffsets],
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._init_key_offsets = parsed_offsets[1][0]
         self._output_schema = StructType([StructField("_0", self._return_type)])
@@ -601,18 +608,6 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         )
         self._arrow_max_bytes_per_batch = self._runner_conf.arrow_max_bytes_per_batch
 
-    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Apply transformWithStateInPandas UDF with initial state.
-
-        The input batches carry two struct columns, ``inputData`` and
-        ``initState``; each batch holds one or the other but never both.
-        Rows are flattened out of whichever struct is present, regrouped by
-        grouping key, and re-chunked into pandas DataFrames bounded by
-        arrow_max_records_per_batch and arrow_max_bytes_per_batch. The UDF
-        is invoked once per grouping key with two separate lazy iterators
-        (data DataFrames and init-state DataFrames), then once for
-        PROCESS_TIMER and once for COMPLETE.
-        """
         import pandas as pd
         import pyarrow as pa
 
@@ -789,23 +784,6 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
-        require_minimum_pyarrow_version()
-
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
-
-        # See TransformWithStateInPySparkExec for how arg_offsets are used to
-        # distinguish between grouping attributes and data attributes.
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
-        self._key_offsets = parsed_offsets[0][0]
-
-        self._stateful_processor_api_client = StatefulProcessorApiClient(
-            self._eval_conf.state_server_socket_port,  # type: ignore[arg-type]
-            self._eval_conf.grouping_key_schema,  # type: ignore[arg-type]
-            auth_secret=self._eval_conf.state_server_auth_secret,
-        )
-
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         """Apply transformWithStateInPySpark UDF over Row objects.
 
@@ -817,6 +795,22 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         are converted back into Arrow RecordBatches wrapped in a single
         struct column for the output stream.
         """
+        require_minimum_pyarrow_version()
+
+        assert len(self._udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
+        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+
+        # See TransformWithStateInPySparkExec for how arg_offsets are used to
+        # distinguish between grouping attributes and data attributes.
+        parsed_offsets = extract_key_value_indexes(self._udfs[0].args_offsets)
+        self._key_offsets = parsed_offsets[0][0]
+
+        self._stateful_processor_api_client = StatefulProcessorApiClient(
+            self._eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            self._eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=self._eval_conf.state_server_auth_secret,
+        )
+
         import pyarrow as pa
 
         def generate_data_batches() -> Iterator[tuple[Any, Any]]:
@@ -895,11 +889,25 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+        """Apply transformWithStateInPySpark UDF with initial state over Rows.
+
+        The input batches carry two struct columns, ``inputData`` and
+        ``initState``; each batch holds one or the other but never both.
+        Rows are flattened out of whichever struct is present, regrouped by
+        grouping key, and re-chunked into Row lists bounded by
+        arrow_max_records_per_batch. The UDF is invoked once per chunk with
+        two separate iterators (data Rows and init-state Rows), then once for
+        PROCESS_TIMER and once for COMPLETE. The UDF yields (iterator of Row,
+        Spark type) pairs that are converted back into Arrow RecordBatches
+        wrapped in a single struct column for the output stream.
+        """
         require_minimum_pyarrow_version()
 
-        assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
-        self._func, self._return_type = udfs[0].func, udfs[0].return_type
+        assert len(self._udfs) == 1, (
+            "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
+        )
+        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -908,7 +916,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         #     [groupingKeyOffsets, dedupDataOffsets],
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
-        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._init_key_offsets = parsed_offsets[1][0]
 
@@ -923,19 +931,6 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         )
 
-    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        """Apply transformWithStateInPySpark UDF with initial state over Rows.
-
-        The input batches carry two struct columns, ``inputData`` and
-        ``initState``; each batch holds one or the other but never both.
-        Rows are flattened out of whichever struct is present, regrouped by
-        grouping key, and re-chunked into Row lists bounded by
-        arrow_max_records_per_batch. The UDF is invoked once per chunk with
-        two separate iterators (data Rows and init-state Rows), then once for
-        PROCESS_TIMER and once for COMPLETE. The UDF yields (iterator of Row,
-        Spark type) pairs that are converted back into Arrow RecordBatches
-        wrapped in a single struct column for the output stream.
-        """
         import pyarrow as pa
 
         def extract_rows(

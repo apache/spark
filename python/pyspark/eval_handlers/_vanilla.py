@@ -42,9 +42,6 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
 
     eval_type = PythonEvalType.SQL_BATCHED_UDF
 
-    def _setup_udfs(self, udfs: "list[UDF]") -> None:
-        self._udf_infos = [self._prepare_udf(udf) for udf in udfs]
-
     @staticmethod
     def _prepare_udf(udf: "UDF") -> tuple[list[int], Callable[..., Any]]:
         """Apply kwargs binding, and convert each result to the internal representation only
@@ -63,6 +60,8 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
         return BatchedSerializer(CPickleSerializer(), batch_size)
 
     def run(self, split_index: int, data: Iterator[Any]) -> Iterator[Any]:
+        self._udf_infos = [self._prepare_udf(udf) for udf in self._udfs]
+
         if len(self._udf_infos) == 1:
             arg_offsets, f = self._udf_infos[0]
             return (f(*[row[offset] for offset in arg_offsets]) for row in data)

@@ -75,14 +75,13 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         self._return_schema = StructType(
-            [StructField("_%d" % i, udf.return_type) for i, udf in enumerate(udfs)]
+            [StructField("_%d" % i, udf.return_type) for i, udf in enumerate(self._udfs)]
         )
 
-    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
 
         for input_batch in data:
@@ -150,13 +149,13 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     _iter_based = True
     _fail_on_stopiteration = False
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
 
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        assert len(udfs) == 1, "One SCALAR_PANDAS_ITER UDF expected here."
-        udf = udfs[0]
+        assert len(self._udfs) == 1, "One SCALAR_PANDAS_ITER UDF expected here."
+        udf = self._udfs[0]
         self._udf_func, self._args_offsets = udf.func, udf.args_offsets
         self._return_type = udf.return_type
         self._return_schema = StructType([StructField("_0", self._return_type)])
@@ -166,7 +165,6 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             else Iterator[pd.Series]
         )
 
-    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         num_input_rows = 0
 
         def extract_args(batch: "pa.RecordBatch") -> Any:
@@ -221,13 +219,13 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
     _iter_based = True
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
 
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        assert len(udfs) == 1, "One MAP_PANDAS_ITER UDF expected here."
-        self._udf_func, self._return_type = udfs[0].func, udfs[0].return_type
+        assert len(self._udfs) == 1, "One MAP_PANDAS_ITER UDF expected here."
+        self._udf_func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
         self._return_schema = StructType([StructField("_0", self._return_type)])
         self._expected_iter_type = (
             Iterator[pd.DataFrame]
@@ -235,7 +233,6 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             else Iterator[pd.Series]
         )
 
-    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         def dataframe_iter() -> "Iterator[Any]":
             # Input batches have a single struct column (see MapInBatchEvaluatorFactory);
             # convert lazily so peakmem stays bounded by one batch.
@@ -286,11 +283,17 @@ class PandasCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[CoGroupedBatch]") -> "Iterator[pa.RecordBatch]":
+        """Apply cogroupBy Pandas UDF.
+
+        The explicit ``del`` calls keep peakmem bounded across groups: without them the
+        previous group's tables and DataFrames stay bound on the generator frame while
+        the next group is read.
+        """
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        assert len(udfs) == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
-        udf = udfs[0]
+        assert len(self._udfs) == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
+        udf = self._udfs[0]
         self._cogrouped_udf, self._return_type = udf.func, udf.return_type
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
@@ -299,13 +302,6 @@ class PandasCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         self._right_key_offsets, self._right_value_offsets = parsed_offsets[1]
         self._return_schema = StructType([StructField("_0", self._return_type)])
 
-    def run(self, split_index: int, data: "Iterator[CoGroupedBatch]") -> "Iterator[pa.RecordBatch]":
-        """Apply cogroupBy Pandas UDF.
-
-        The explicit ``del`` calls keep peakmem bounded across groups: without them the
-        previous group's tables and DataFrames stay bound on the generator frame while
-        the next group is read.
-        """
         import pandas as pd
         import pyarrow as pa
 
@@ -368,11 +364,12 @@ class PandasGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
     _iter_based = True
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
+        """Apply groupBy Pandas UDF (iterator variant)."""
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        assert len(udfs) == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
-        udf = udfs[0]
+        assert len(self._udfs) == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
+        udf = self._udfs[0]
         self._grouped_udf, self._return_type = udf.func, udf.return_type
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
@@ -383,8 +380,6 @@ class PandasGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         self._key_offsets, self._value_offsets = parsed_offsets[0]
         self._return_schema = StructType([StructField("_0", self._return_type)])
 
-    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
-        """Apply groupBy Pandas UDF (iterator variant)."""
         import pandas as pd
 
         value_offsets = self._value_offsets
@@ -530,14 +525,13 @@ class PandasGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         self._return_schema = StructType(
-            [StructField("_%d" % i, udf.return_type) for i, udf in enumerate(udfs)]
+            [StructField("_%d" % i, udf.return_type) for i, udf in enumerate(self._udfs)]
         )
 
-    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
         import pyarrow as pa
 
@@ -578,15 +572,14 @@ class PandasGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        assert len(udfs) == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
-        udf = udfs[0]
+        assert len(self._udfs) == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
+        udf = self._udfs[0]
         self._udf_func, self._args_offsets = udf.func, udf.args_offsets
         self._return_schema = StructType([StructField("_0", udf.return_type)])
 
-    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
 
         args_offsets = self._args_offsets
@@ -629,15 +622,14 @@ class PandasWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         self._window_bound_types = self._runner_conf.window_bound_types
         self._return_schema = StructType(
-            [StructField("_%d" % i, udf.return_type) for i, udf in enumerate(udfs)]
+            [StructField("_%d" % i, udf.return_type) for i, udf in enumerate(self._udfs)]
         )
 
-    def run(self, split_index: int, data: "Iterator[GroupedBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
         import pyarrow as pa
 
@@ -724,13 +716,13 @@ class ArrowBatchedUDFLegacyPandasHandler(BatchEvalTypeHandler["pa.RecordBatch"])
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 
-    def _setup_udfs(self, udfs: list[UDF]) -> None:
+    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
 
         # --- UDF preparation ---
         self._udf_infos = []
-        for udf in udfs:
+        for udf in self._udfs:
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 udf.func, udf.args_offsets, udf.kwargs_offsets
@@ -753,12 +745,11 @@ class ArrowBatchedUDFLegacyPandasHandler(BatchEvalTypeHandler["pa.RecordBatch"])
                     coerce,
                 )
             )
-        col_names = [f"_{i}" for i in range(len(udfs))]
+        col_names = [f"_{i}" for i in range(len(self._udfs))]
         self._return_schema = StructType(
             [StructField(name, info[3]) for name, info in zip(col_names, self._udf_infos)]
         )
 
-    def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
         import pandas as pd
 
         runner_conf = self._runner_conf
