@@ -124,15 +124,21 @@ categories of metadata operations through Spark SQL.
 `createTable(ident, tableInfo)` is the form Spark calls (since 4.1.0). The older overloads
 `createTable(ident, columns, partitions, properties)` and `createTable(ident, schema, partitions, properties)`
 are deprecated (since 4.1.0 and 3.4.0 respectively); their default implementations delegate down the
-chain, so a catalog that overrides only the `TableInfo` form serves every `CREATE TABLE`,
-`REPLACE TABLE`, and CTAS path.
+chain, so a catalog that implements only `TableCatalog` serves `CREATE TABLE`, `REPLACE TABLE`, and
+CTAS by overriding the `TableInfo` form alone. A [`StagingTableCatalog`](#stagingtablecatalog) is
+different: for CTAS, RTAS, and `REPLACE TABLE`, Spark calls `stageCreate`, `stageReplace`, or
+`stageCreateOrReplace` instead of `createTable`, and each has its own `TableInfo` overload that must
+be overridden, since the defaults delegate to the deprecated forms and throw.
 
 ### StagingTableCatalog
 
 [`StagingTableCatalog`](api/java/org/apache/spark/sql/connector/catalog/StagingTableCatalog.html)
 extends `TableCatalog` and enables **atomic** `CREATE TABLE AS SELECT` and
 `REPLACE TABLE AS SELECT`. It returns a `StagedTable` whose changes only become visible when
-`commitStagedChanges()` is called. If the write fails, the catalog remains unchanged.
+`commitStagedChanges()` is called. If the write fails, the catalog remains unchanged. Spark reaches
+these paths through `stageCreate(ident, tableInfo)`, `stageReplace(ident, tableInfo)`, and
+`stageCreateOrReplace(ident, tableInfo)` rather than `createTable`, so a staging catalog overrides
+those three in addition to the `TableCatalog` methods.
 
 ### SupportsNamespaces
 
