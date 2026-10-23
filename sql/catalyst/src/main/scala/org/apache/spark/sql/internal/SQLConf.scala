@@ -6465,6 +6465,7 @@ object SQLConf {
         "from the element of an explode or posexplode of an array column also prune that " +
         "column at the scan below the generator.")
       .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
