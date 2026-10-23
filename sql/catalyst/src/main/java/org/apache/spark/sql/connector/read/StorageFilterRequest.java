@@ -44,8 +44,8 @@ public interface StorageFilterRequest extends Serializable {
    * <p>
    * Spark asks for it only where whole-stage codegen is on and the scan's output still fits it with
    * the column.
-   * Without it, the reader may still apply the filter, and Spark evaluates the predicate on every
-   * row the reader returns.
+   * Without it, the reader may still apply the filter, and the plan above the scan checks every row
+   * the reader returns.
    */
   boolean appendsCheckedColumn();
 }

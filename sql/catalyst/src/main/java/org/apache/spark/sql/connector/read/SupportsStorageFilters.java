@@ -38,9 +38,10 @@ import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotApplied
  * {@link SupportsRuntimeV2Filtering} is the interface for that. A scan may implement both.
  * <p>
  * Applying the filter is optional, per unit the reader chooses, such as a file or a row group.
- * Spark keeps the predicate in the plan above the scan, so a reader may read a unit without it,
- * as a plain read does. A reader does that when it cannot use the filter on the unit, or for the
- * rest of the unit once the filter throws {@link StorageFilterNotAppliedException}.
+ * Spark keeps the predicate, or a condition that implies it, in the plan above the scan, so a
+ * reader may read a unit without it, as a plain read does. A reader does that when it cannot use
+ * the filter on the unit, or for the rest of the unit once the filter throws
+ * {@link StorageFilterNotAppliedException}.
  * <p>
  * When {@link StorageFilterRequest#appendsCheckedColumn()} is true, the reader also marks the rows
  * the filter was evaluated on and kept. Spark reserves the name {@link #CHECKED_COLUMN_NAME} for
