@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.execution.{ColumnarToRowIterator, SparkPlan}
+import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.python.EvalPythonExec.ArgumentMetadata
 import org.apache.spark.sql.internal.SQLConf
@@ -117,29 +117,13 @@ case class ArrowEvalPythonExec(
   // accept columnar input to avoid the ColumnarToRow -> ArrowWriter round-trip.
   // The Arrow FieldVectors are extracted directly from ArrowColumnVector and
   // serialized to IPC, bypassing the row-based ArrowWriter conversion.
+  // This node then outputs only columnar batches, so the planner inserts a
+  // ColumnarToRowExec above it for a row-based parent, which releases each
+  // batch once its rows are consumed. Otherwise it reads rows from its child,
+  // even from one that also supports columnar, such as the scan of the Arrow
+  // cache. Either way, the choice is fixed when the plan is built.
   override def supportsColumnar: Boolean =
     child.supportsColumnar && conf.arrowPySparkUDFColumnarInputEnabled
-  override def supportsRowBased: Boolean = true
-
-  override protected def doExecute(): RDD[InternalRow] = {
-    // Checks the configuration too, through `supportsColumnar`: a child that also returns rows,
-    // such as the scan of the Arrow cache, gets no ColumnarToRowExec when columnar input is
-    // disabled, and still supports columnar.
-    if (supportsColumnar) {
-      // Columnar path: delegate to doExecuteColumnar, flatten to
-      // UnsafeRow. ColumnarBatchRow from rowIterator() is NOT
-      // UnsafeRow, and downstream operators (e.g., outer
-      // EvalPythonExec) may cast to UnsafeRow. Like ColumnarToRowExec,
-      // this releases each batch once its rows are consumed: the
-      // batches of the Arrow columnar path carry the input columns.
-      doExecuteColumnar().mapPartitionsInternal { batchIter =>
-        new ColumnarToRowIterator(batchIter, UnsafeProjection.create(schema))
-      }
-    } else {
-      // Row-based path: unchanged.
-      super.doExecute()
-    }
-  }
 
   override protected def doExecuteColumnar(): RDD[ColumnarBatch] = {
     val inputRDD = child.executeColumnar()

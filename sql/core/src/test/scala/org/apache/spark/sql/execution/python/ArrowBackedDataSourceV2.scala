@@ -81,7 +81,7 @@ object ArrowBackedDataSourceV2 {
   val BATCH_SIZE: Int = 1024
 
   // The batches that ArrowBackedPartitionReaders returned, and the ones among them that their
-  // consumer released with closeIfFreeable before the end of the task.
+  // consumer released with closeIfFreeable.
   val returnedBatches = new AtomicInteger
   val releasedBatches = new AtomicInteger
   // The most batches of one reader returned and not released yet at a time.
@@ -251,6 +251,7 @@ private class ReusingArrowPartitionReader(start: Int, end: Int, batchSize: Int)
  * - id (INT): sequential integer starting from partition start
  * - name (STRING): "row_<id>"
  * - value (DOUBLE): id * 0.1
+ * - data (STRING): 100 random characters
  *
  * Every batch has vectors of its own, which are not reused vectors: the consumer may
  * hold them past the next batch, even past the close of the reader, and releases them with
@@ -275,33 +276,17 @@ private class ArrowBackedPartitionReader(start: Int, end: Int, batchSize: Int)
   private val allBatches =
     new java.util.ArrayList[ColumnarBatch]()
   private var numReleased = 0
-  @volatile private var taskCompleted = false
+  private var closed = false
 
-  TaskContext.get().addTaskCompletionListener[Unit] { _ =>
-    taskCompleted = true
-    allBatches.synchronized {
-      allBatches.forEach(_.close())
-      allBatches.clear()
-    }
-    allocator.close()
-  }
-
-  /** The first column of a batch, which counts the release of the batch. */
+  /** The first column of a batch, which counts the releases of the batch by its consumer. */
   private class ReleaseCountingArrowColumnVector(vector: ValueVector)
       extends ArrowColumnVector(vector) {
-    private var closed = false
-
-    override def close(): Unit = {
+    override def closeIfFreeable(): Unit = {
       allBatches.synchronized {
-        if (!closed) {
-          closed = true
-          if (!taskCompleted) {
-            numReleased += 1
-            ArrowBackedDataSourceV2.releasedBatches.incrementAndGet()
-          }
-        }
+        numReleased += 1
+        ArrowBackedDataSourceV2.releasedBatches.incrementAndGet()
       }
-      super.close()
+      super.closeIfFreeable()
     }
   }
 
@@ -337,9 +322,24 @@ private class ArrowBackedPartitionReader(start: Int, end: Int, batchSize: Int)
 
   override def get(): ColumnarBatch = currentBatch
 
-  // The consumer may still hold the returned batches, which are closed when the task completes.
+  // The consumer may still hold the returned batches, so they are closed when the task completes.
+  // The listener is registered here rather than in the constructor: the reader may be created by
+  // the writer thread of a pipelined Python UDF after the listener that waits for that writer to
+  // stop, and the listeners run in reverse order, so the batches could be freed while the writer
+  // still reads them. When the reader is closed, either the writer has read every batch, or the
+  // task is completing and that listener has already run.
   override def close(): Unit = {
     currentBatch = null
+    if (!closed) {
+      closed = true
+      TaskContext.get().addTaskCompletionListener[Unit] { _ =>
+        allBatches.synchronized {
+          allBatches.forEach(_.close())
+          allBatches.clear()
+        }
+        allocator.close()
+      }
+    }
   }
 
   private def createIntVector(

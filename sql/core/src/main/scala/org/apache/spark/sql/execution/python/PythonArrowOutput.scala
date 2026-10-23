@@ -249,7 +249,8 @@ abstract class BaseSliceArrowOutputProcessor(
     batch
   }
 
-  // The slices of a batch are closed once the next one is produced, so they are reused vectors.
+  // The vectors are either the reader's root, into which the next batch is loaded, or a slice of
+  // it, which is closed once the next one is produced, so they are reused vectors.
   protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = {
     root.getFieldVectors.asScala.map { vector =>
       new ReusedArrowColumnVector(vector)

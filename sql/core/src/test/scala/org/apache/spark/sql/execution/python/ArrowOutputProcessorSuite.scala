@@ -28,7 +28,7 @@ import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.execution.vectorized.ReusedColumnVector
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.types.{IntegerType, StringType, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.unsafe.types.UTF8String
@@ -69,31 +69,38 @@ class ArrowOutputProcessorSuite extends SparkFunSuite {
     }
   }
 
-  test("Struct output columns stay valid after a consumer releases each batch") {
-    // The output processor loads every batch into the same vectors. A consumer releases each
-    // batch with closeIfFreeable once it is done with it, which must leave the vectors, including
-    // the child columns of a struct, to the processor.
-    val allocator =
-      ArrowUtils.rootAllocator.newChildAllocator("arrow-output-reader", 0, Long.MaxValue)
-    val reader = new ArrowStreamReader(new ByteArrayInputStream(arrowStream()), allocator)
-    val processor = new ArrowOutputProcessorImpl(reader, metrics())
-    try {
-      val values = ArrayBuffer[(Int, String)]()
-      while (processor.loadBatch()) {
-        val batch = processor.produceBatch()
-        val column = batch.column(0)
-        assert(column.isInstanceOf[ReusedColumnVector])
-        (0 until batch.numRows()).foreach { i =>
-          val struct = column.getStruct(i)
-          values += ((struct.getInt(0), struct.getUTF8String(1).toString))
+  // The output processors load every batch into the same vectors. A consumer releases each batch
+  // with closeIfFreeable once it is done with it, which must leave the vectors, including the
+  // child columns of a struct, to the processor. The slicing processors are given limits that
+  // never split a batch, so that they return the reader's root as the whole-batch processor does.
+  Seq[(String, ArrowStreamReader => ArrowOutputProcessor)](
+    "whole batches" -> (new ArrowOutputProcessorImpl(_, metrics())),
+    "records limit" -> (new SliceRecordsArrowOutputProcessorImpl(_, metrics(), rowsPerBatch)),
+    "bytes limit" -> (new SliceBytesArrowOutputProcessorImpl(_, metrics(), Int.MaxValue))
+  ).foreach { case (name, newProcessor) =>
+    test(s"Struct output columns stay valid after a consumer releases each batch: $name") {
+      val allocator =
+        ArrowUtils.rootAllocator.newChildAllocator("arrow-output-reader", 0, Long.MaxValue)
+      val reader = new ArrowStreamReader(new ByteArrayInputStream(arrowStream()), allocator)
+      val processor = newProcessor(reader)
+      try {
+        val values = ArrayBuffer[(Int, String)]()
+        while (processor.loadBatch()) {
+          val batch = processor.produceBatch()
+          val column = batch.column(0)
+          assert(column.isInstanceOf[ReusedArrowColumnVector])
+          (0 until batch.numRows()).foreach { i =>
+            val struct = column.getStruct(i)
+            values += ((struct.getInt(0), struct.getUTF8String(1).toString))
+          }
+          batch.closeIfFreeable()
         }
-        batch.closeIfFreeable()
+        assert(values.toSeq == (0 until numBatches * rowsPerBatch).map(v => (v, s"v$v")))
+      } finally {
+        processor.close()
+        reader.close()
+        allocator.close()
       }
-      assert(values.toSeq == (0 until numBatches * rowsPerBatch).map(v => (v, s"v$v")))
-    } finally {
-      processor.close()
-      reader.close()
-      allocator.close()
     }
   }
 
