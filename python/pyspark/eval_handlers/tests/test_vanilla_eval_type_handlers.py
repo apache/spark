@@ -17,7 +17,7 @@
 
 """Tests for the plain Python (pickle) UDF eval type handler (``_vanilla``).
 
-The handler is built from ``UDF`` records, as ``read_single_udf`` returns them, and fed
+The handler is built from ``UDF`` records, as ``create_udf`` returns them, and fed
 pickled-row input via ``run(0, <rows>)``.
 """
 

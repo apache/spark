@@ -92,7 +92,7 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
-        """Build a grouped/cogrouped-map handler. As from ``read_single_udf``, ``func`` is
+        """Build a grouped/cogrouped-map handler. As from ``create_udf``, ``func`` is
         wrapped (losing the signature) while ``raw_func`` keeps it."""
         return handler_cls(
             udfs=[

@@ -138,7 +138,7 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):
         """Build a grouped/cogrouped-map handler with the shared return type. As from
-        ``read_single_udf``, ``func`` is wrapped (losing the signature) while ``raw_func``
+        ``create_udf``, ``func`` is wrapped (losing the signature) while ``raw_func``
         keeps it."""
         return handler_cls(
             udfs=[
@@ -609,7 +609,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
     _KEY_SCHEMA = StructType([StructField("k", LongType())])
 
     def _handler(self, cap=10000):
-        # As from read_single_udf: func is wrapped, raw_func is the Aggregator itself.
+        # As from create_udf: func is wrapped, raw_func is the Aggregator itself.
         agg = _SumAggregator()
         return ArrowGroupedAggIncrementalPartialUDFHandler(
             udfs=[self._udf(fail_on_stopiteration(agg), [1], raw_func=agg)],
@@ -692,7 +692,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
         return pa.RecordBatch.from_arrays([pa.array(buffers, type=self._BUFFER_TYPE)], ["buf"])
 
     def _handler(self):
-        # As from read_single_udf: func is wrapped, raw_func is the Aggregator itself.
+        # As from create_udf: func is wrapped, raw_func is the Aggregator itself.
         agg = _SumAggregator()
         return ArrowGroupedAggIncrementalFinalUDFHandler(
             udfs=[self._udf(fail_on_stopiteration(agg), [0], raw_func=agg)],
@@ -722,7 +722,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
 class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
     def _handler(self, agg, bound_type, args_offsets):
         return ArrowWindowAggIncrementalUDFHandler(
-            # As from read_single_udf: func is wrapped, raw_func is the Aggregator itself.
+            # As from create_udf: func is wrapped, raw_func is the Aggregator itself.
             udfs=[self._udf(fail_on_stopiteration(agg), args_offsets, raw_func=agg)],
             runner_conf=RunnerConf({"window_bound_types": bound_type}),
             eval_conf=None,

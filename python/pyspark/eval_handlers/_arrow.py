@@ -820,6 +820,8 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
     variant_conf = "use_legacy_pandas_udf_conversion"
     variant_value = False
+    # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
+    _fail_on_stopiteration = False
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()

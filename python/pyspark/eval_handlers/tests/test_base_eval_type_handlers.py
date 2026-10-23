@@ -22,7 +22,6 @@ Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
 """
 
 import os
-from types import SimpleNamespace
 from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
@@ -41,12 +40,12 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.sql.types import LongType
+from pyspark.sql.types import LongType, StringType
 from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import read_single_udf
+    from pyspark.worker import unpickle_and_chain
     from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import RunnerConf, pickleSer
 
@@ -272,20 +271,16 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
-class ReadSingleUDFTests(PySparkBaseTestCase):
-    def test_returns_udf_record(self):
-        def stop(x):
-            raise StopIteration(x)
+class CreateUDFTests(PySparkBaseTestCase):
+    @staticmethod
+    def _stop(x):
+        raise StopIteration(x)
 
-        udf_info = UDFInfo(
-            udfs=[CloudPickleSerializer().dumps((stop, LongType()))],
-            args=[1],
-            kwargs={"y": 2},
-            result_id=0,
-        )
-        # read_single_udf only reads these two attributes of the handler class.
-        handler_cls = SimpleNamespace(eval_type=PythonEvalType.SQL_BATCHED_UDF, is_iter_based=False)
-        udf = read_single_udf(pickleSer, udf_info, handler_cls, RunnerConf({}))
+    def _udf_info(self):
+        return UDFInfo(udfs=[], args=[1], kwargs={"y": 2}, result_id=0)
+
+    def test_returns_udf_record(self):
+        udf = EvalTypeHandler.create_udf(self._stop, LongType(), self._udf_info(), RunnerConf({}))
 
         self.assertIsInstance(udf, UDF)
         self.assertEqual(udf.args_offsets, [1])
@@ -296,6 +291,40 @@ class ReadSingleUDFTests(PySparkBaseTestCase):
             udf.func(1)
         with self.assertRaises(StopIteration):
             udf.raw_func(1)
+
+    def test_fail_on_stopiteration_per_handler(self):
+        not_wrapped = {
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        }
+        for _, variants in list(_eval_type_handlers.values()):
+            for handler_cls in variants.values():
+                with self.subTest(handler=handler_cls.__name__):
+                    udf = handler_cls.create_udf(
+                        self._stop, LongType(), self._udf_info(), RunnerConf({})
+                    )
+                    expected = (
+                        StopIteration
+                        if handler_cls.eval_type in not_wrapped
+                        else PySparkRuntimeError
+                    )
+                    with self.assertRaises(expected):
+                        udf.func(1)
+
+
+class UnpickleAndChainTests(PySparkBaseTestCase):
+    def test_chains_in_order(self):
+        ser = CloudPickleSerializer()
+        func, return_type = unpickle_and_chain(
+            pickleSer,
+            [
+                ser.dumps((lambda x: x + 1, LongType())),
+                ser.dumps((lambda x: str(x * 2), StringType())),
+            ],
+        )
+        self.assertEqual(func(3), "8")
+        self.assertEqual(return_type, StringType())
 
 
 if __name__ == "__main__":

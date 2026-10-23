@@ -17,14 +17,15 @@
 
 """Base classes and registry for the eval type handlers.
 
-This leaf module imports only ``_typing`` and the serializers, so the package
-``__init__`` and the concrete-handler submodules can both import it.
+This module imports no other handler submodule, so the package ``__init__`` and the
+concrete-handler submodules can both import it.
 """
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
 
+from pyspark.eval_handlers._profiler import wrap_memory_profiler, wrap_perf_profiler
 from pyspark.eval_handlers._typing import (
     UDF,
     UDTF,
@@ -39,10 +40,12 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
+from pyspark.util import fail_on_stopiteration
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
 
+    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 # eval type -> (variant_conf or None, {variant_value: handler class}), populated by
@@ -149,6 +152,45 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
+    # Whether create_udf wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
+    # user code fails the task instead of silently ending the loop that calls the UDF.
+    _fail_on_stopiteration: ClassVar[bool] = True
+
+    @classmethod
+    def create_udf(
+        cls,
+        func: Callable[..., Any],
+        return_type: Any,
+        udf_info: "UDFInfo",
+        runner_conf: "RunnerConf",
+    ) -> UDF:
+        """Build the ``UDF`` record for ``func``, the unpickled (and chained) function of
+        ``udf_info``, wrapping it for profiling and in ``fail_on_stopiteration``."""
+        # A function from pyspark.sql.worker reads or writes a data source, so it is profiled by
+        # the data_source_profiler config.
+        module = getattr(func, "__module__", "")
+        if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
+            profiler = runner_conf.data_source_profiler
+        else:
+            profiler = runner_conf.udf_profiler
+        if profiler == "perf":
+            profiling_func = wrap_perf_profiler(func, cls.is_iter_based, udf_info.result_id)
+        elif profiler == "memory":
+            profiling_func = wrap_memory_profiler(func, cls.is_iter_based, udf_info.result_id)
+        else:
+            profiling_func = func
+
+        return UDF(
+            func=(
+                fail_on_stopiteration(profiling_func)
+                if cls._fail_on_stopiteration
+                else profiling_func
+            ),
+            raw_func=func,
+            args_offsets=udf_info.args,
+            kwargs_offsets=udf_info.kwargs,
+            return_type=return_type,
+        )
 
     def __init__(
         self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
