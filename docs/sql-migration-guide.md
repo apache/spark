@@ -24,6 +24,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.4 to 5.0
 
+- Since Spark 5.0, Data Source V2 file scans preserve filters containing deterministic Python UDFs on partition columns for evaluation after the scan. Previously, these filters could be dropped, returning rows that did not satisfy the filter (SPARK-60486). Affected queries can now return fewer rows; data derived from their previous results may need to be recomputed.
 - Since Spark 5.0, the Spark Thrift Server refuses to start when `hive.server2.enable.doAs` is `true` and `hive.server2.authentication` verifies user identities (any recognized type other than `NONE`/`NOSASL`). It impersonates the connecting user for Hive metastore calls and driver-side file system access, but executor-side data access still runs as the server's own service identity, so storage-level permissions are checked against the service principal rather than the connecting user (SPARK-5159). Spark 4.4 logs a warning for the same configuration. To restore the previous behavior, set `spark.sql.hive.thriftServer.allowIneffectiveDoAs` to `true`. Setting `hive.server2.enable.doAs` to `false` also starts the server, but note that it stops impersonating metastore calls as well, so it is not a no-op.
 
 ## Upgrading from Spark SQL 4.3 to 4.4
