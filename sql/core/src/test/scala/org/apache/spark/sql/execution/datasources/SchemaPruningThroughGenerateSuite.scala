@@ -377,8 +377,11 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: rollup over exploded fields prunes only the outer element") {
-    // TODO: narrow the inner element under a rollup. Unlike cube below, grouping by
-    // rollup on a nested field narrows the outer element but reads the inner one whole
+    // TODO: have NestedColumnAliasing push aggregate-input extractions below the Expand.
+    // It extracts `part.price` above the Expand but grouping keys below it, so the bare
+    // `part` element flows through the Expand whole and the full inner struct is read.
+    // In the cube test below the inner field is a grouping key instead, so both
+    // generators are narrowed before the Expand matters
     checkPrunedQuery(
       """select country, item.sku, sum(part.price) as total_price
         |from orders
