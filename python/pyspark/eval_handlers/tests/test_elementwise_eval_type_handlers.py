@@ -103,18 +103,17 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
         )
-        handler._on_udfs_assigned(
-            [
-                UDF(
-                    func=func,
-                    raw_func=func,
-                    args_offsets=args_offsets,
-                    kwargs_offsets=kwargs_offsets,
-                    return_type=return_type,
-                )
-                for func, args_offsets, kwargs_offsets, return_type in udfs
-            ]
-        )
+        handler._udfs = [
+            UDF(
+                func=func,
+                raw_func=func,
+                args_offsets=args_offsets,
+                kwargs_offsets=kwargs_offsets,
+                return_type=return_type,
+            )
+            for func, args_offsets, kwargs_offsets, return_type in udfs
+        ]
+        handler._setup_udfs(handler._udfs)
         return handler
 
     @staticmethod

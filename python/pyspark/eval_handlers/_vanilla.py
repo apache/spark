@@ -42,8 +42,7 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
 
     eval_type = PythonEvalType.SQL_BATCHED_UDF
 
-    def _on_udfs_assigned(self, udfs: "list[UDF]") -> None:
-        super()._on_udfs_assigned(udfs)
+    def _setup_udfs(self, udfs: "list[UDF]") -> None:
         self._udf_infos = [self._prepare_udf(udf) for udf in udfs]
 
     @staticmethod

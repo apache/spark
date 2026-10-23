@@ -140,16 +140,15 @@ class TableUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
 
     def _handler(self, udtf, args=(0,), kwargs=None, return_type=None):
         handler = TableUDTFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
-        handler._on_udfs_assigned(
-            [
-                UDTF(
-                    udtf=udtf,
-                    args_offsets=list(args),
-                    kwargs_offsets=kwargs or {},
-                    return_type=return_type or self._ROW_RETURN_TYPE,
-                )
-            ]
-        )
+        handler._udfs = [
+            UDTF(
+                udtf=udtf,
+                args_offsets=list(args),
+                kwargs_offsets=kwargs or {},
+                return_type=return_type or self._ROW_RETURN_TYPE,
+            )
+        ]
+        handler._setup_udfs(handler._udfs)
         return handler
 
     def _run(self, handler, *rows):
@@ -251,16 +250,15 @@ class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     def _handler(self, udtf, args=(0,), kwargs=None, table_arg_offsets="0"):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         handler = ArrowUDTFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf(conf))
-        handler._on_udfs_assigned(
-            [
-                UDTF(
-                    udtf=udtf,
-                    args_offsets=list(args),
-                    kwargs_offsets=kwargs or {},
-                    return_type=self._RETURN_TYPE,
-                )
-            ]
-        )
+        handler._udfs = [
+            UDTF(
+                udtf=udtf,
+                args_offsets=list(args),
+                kwargs_offsets=kwargs or {},
+                return_type=self._RETURN_TYPE,
+            )
+        ]
+        handler._setup_udfs(handler._udfs)
         return handler
 
     def test_serializer(self):
@@ -421,16 +419,15 @@ class ArrowTableUDTFHandlerTestsMixin:
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
         )
-        handler._on_udfs_assigned(
-            [
-                UDTF(
-                    udtf=udtf,
-                    args_offsets=list(args),
-                    kwargs_offsets=kwargs or {},
-                    return_type=return_type or self._ROW_RETURN_TYPE,
-                )
-            ]
-        )
+        handler._udfs = [
+            UDTF(
+                udtf=udtf,
+                args_offsets=list(args),
+                kwargs_offsets=kwargs or {},
+                return_type=return_type or self._ROW_RETURN_TYPE,
+            )
+        ]
+        handler._setup_udfs(handler._udfs)
         return handler
 
     def _run(self, handler, *columns):

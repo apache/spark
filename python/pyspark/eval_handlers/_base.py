@@ -158,6 +158,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def __init__(self, runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
+        self._udfs: list[Any] = []
 
     def assign_udfs(self, udfs: "list[tuple[Callable[..., Any], DataType, UDFInfo]]") -> None:
         """Assign the UDFs to this handler, each given as its unpickled (and chained) function,
@@ -179,12 +180,12 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                     return_type=return_type,
                 )
             )
-        self._on_udfs_assigned(records)
+        self._udfs = records
+        self._setup_udfs(records)
 
-    def _on_udfs_assigned(self, udfs: list[Any]) -> None:
-        """Set the handler up for its assigned ``UDF`` (or ``UDTF``) records; handlers extend it
-        to derive their per-UDF state."""
-        self._udfs = udfs
+    def _setup_udfs(self, udfs: list[Any]) -> None:
+        """Set the handler up for the ``UDF`` (or ``UDTF``) records just assigned to it, deriving
+        its per-UDF state; a no-op unless overridden."""
 
     def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is
