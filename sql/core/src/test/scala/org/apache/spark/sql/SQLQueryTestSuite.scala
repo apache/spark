@@ -64,6 +64,12 @@ import org.apache.spark.util.Utils
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
+ * The commands above exclude inputs under "streaming/". To re-generate their execution and
+ * analyzer golden files, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.StreamingSQLQueryTestSuite"
+ * }}}
+ *
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolons by default. If the semicolon cannot effectively
  *     separate the SQL queries in the test file(e.g. bracketed comments), please use

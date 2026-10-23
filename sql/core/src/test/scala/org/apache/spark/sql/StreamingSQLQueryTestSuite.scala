@@ -60,6 +60,16 @@ import org.apache.spark.util.Utils
  *   build/sbt "sql/testOnly org.apache.spark.sql.StreamingSQLQueryTestSuite -- -z available-now-to-table.sql"
  * }}}
  *
+ * To re-generate all execution and analyzer golden files for streaming inputs, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.StreamingSQLQueryTestSuite"
+ * }}}
+ *
+ * To re-generate both golden files for one streaming input, run:
+ * {{{
+ *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.StreamingSQLQueryTestSuite -- -z available-now-to-table.sql"
+ * }}}
+ *
  * For example:
  * {{{
  *   CREATE TABLE source (id INT, value STRING) USING parquet;
