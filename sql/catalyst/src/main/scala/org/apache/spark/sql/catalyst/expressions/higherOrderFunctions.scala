@@ -244,16 +244,26 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
 
   override lazy val canonicalized: Expression = {
     var currExprId = -1
-    // Number the lambda variables of this higher-order function, but only those not already
-    // canonicalized. A canonical `NamedLambdaVariable` carries `value = null` (see the rename
-    // below); an original one carries an `AtomicReference`. When this HOF is nested inside another,
-    // the enclosing HOF's `canonicalized` renames every variable in the whole subtree first, then
-    // canonicalizes the children - which re-enters this method on the nested HOF. Re-numbering the
-    // already-renamed variables here would give a reference to an *enclosing* lambda's variable a
-    // different id than its binding, leaking it into `references`; skipping them keeps a variable
-    // and its references in agreement across nesting levels.
+    // Number the lambda variables bound in this higher-order function: the arguments of its lambda
+    // functions, including those of nested higher-order functions. A free variable, bound by an
+    // enclosing lambda function, keeps its exprId. Otherwise `filter(ys, y -> y > x1)` and
+    // `filter(ys, y -> y > x2)` would be semantically equal whenever `x1` and `x2` have the same
+    // data type and nullability.
+    //
+    // Only variables not already canonicalized are numbered. A canonical `NamedLambdaVariable`
+    // carries `value = null` (see the rename below); an original one carries an `AtomicReference`.
+    // When this HOF is nested inside another, the enclosing HOF's `canonicalized` renames the
+    // variables bound in its whole subtree first, then canonicalizes the children - which re-enters
+    // this method on the nested HOF. Its variables are then already numbered uniquely across the
+    // nesting levels, and numbering them again here could make them collide with the variables of
+    // the enclosing lambda functions.
+    val boundExprIds = functions.flatMap(_.collect {
+      case f: LambdaFunction => f.arguments.collect {
+        case l: NamedLambdaVariable if l.value != null => l.exprId
+      }
+    }.flatten).toSet
     val argumentMap = functions.flatMap(_.collect {
-      case l: NamedLambdaVariable if l.value != null =>
+      case l: NamedLambdaVariable if l.value != null && boundExprIds.contains(l.exprId) =>
         currExprId += 1
         l.exprId -> currExprId
     }).toMap

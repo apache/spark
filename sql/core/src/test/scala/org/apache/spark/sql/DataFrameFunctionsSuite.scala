@@ -6211,6 +6211,32 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-60508: nested higher-order functions capturing different lambda variables") {
+    // A file source, because a `LocalRelation` is evaluated before the optimizer simplifies the
+    // expressions below.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS " +
+        "SELECT array(1, 5) AS xs1, array(3, 2) AS xs2, array(1, 2, 3, 4, 5) AS ys")
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "IF(x1 > x2, filter(ys, y -> y > x1), filter(ys, y -> y > x2))) FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "CASE WHEN x1 > x2 THEN filter(ys, y -> y > x1) ELSE filter(ys, y -> y > x2) END) " +
+          "FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "exists(ys, y -> y > x1) OR exists(ys, y -> y > x2)) FROM t"),
+        Row(Seq(true, true)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "filter(ys, y -> y > x1) <=> filter(ys, y -> y > x2)) FROM t"),
+        Row(Seq(false, false)))
+    }
+  }
+
   test("from_json - invalid schema string") {
     checkError(
       exception = intercept[AnalysisException] {
