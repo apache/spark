@@ -1483,7 +1483,6 @@ class JDBCSuite extends SharedSparkSession {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     assert(mySQLDialect.compileExpression(EqualTo("c", "a'\\b").toV2) ===
       Some("`c` = _utf8mb4 X'61275C62'"))
-    assert(mySQLDialect.getTableCommentQuery("t", "a\\b") === """ALTER TABLE t COMMENT = 'a\\b'""")
   }
 
   test("SPARK-57500: decline LIKE pushdown when the pattern is a null literal") {

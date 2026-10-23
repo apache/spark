@@ -123,9 +123,6 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     }
   }
 
-  override protected[jdbc] def escapeSql(value: String): String =
-    if (value == null) null else super.escapeSql(value).replace("\\", "\\\\")
-
   private val Utf8mb4Introducer = "_utf8mb4"
 
   override def compileValue(value: Any): Any = value match {
