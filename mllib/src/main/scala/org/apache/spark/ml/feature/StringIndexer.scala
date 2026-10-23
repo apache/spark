@@ -307,7 +307,7 @@ class StringIndexerModel (
   // For ml connect only
   private[ml] def this() = this("", Array.empty[Array[String]])
 
-  @deprecated("`labels` is deprecated and will be removed in 3.1.0. Use `labelsArray` " +
+  @deprecated("`labels` is deprecated and will be removed in the future. Use `labelsArray` " +
     "instead.", "3.0.0")
   @Since("1.5.0")
   def labels: Array[String] = {

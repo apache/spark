@@ -77,7 +77,7 @@ There are no deprecations.
 **Deprecations**
 
 * [SPARK-11215](https://issues.apache.org/jira/browse/SPARK-11215):
-`labels` in `StringIndexerModel` is deprecated and will be removed in 3.1.0. Use `labelsArray` instead.
+`labels` in `StringIndexerModel` is deprecated and will be removed in the future. Use `labelsArray` instead.
 * [SPARK-25758](https://issues.apache.org/jira/browse/SPARK-25758):
 `computeCost` in `BisectingKMeansModel` is deprecated and will be removed in future versions. Use `ClusteringEvaluator` instead.
 
