@@ -392,6 +392,46 @@ class GroupBasedMergeIntoTableSuite extends MergeIntoTableSuiteBase {
     }
   }
 
+  test("merge does not push predicates with a join-only ON condition") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "finance" }
+          |{ "pk": 4, "salary": 400, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // the ON condition has no target-only part, so any target row can match a source row and
+      // the whole table has to be read even though the NOT MATCHED BY SOURCE clause is
+      // conditional; pushing only that clause's condition would lose the update in "software"
+      val (cond, groupFilterCond) = executeAndKeepConditions {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk
+             |WHEN MATCHED THEN
+             | UPDATE SET t.salary = t.salary + 1
+             |WHEN NOT MATCHED BY SOURCE AND t.dep IN ('hr', 'finance') THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(cond == TrueLiteral, s"unexpected pushable condition: $cond")
+      assert(groupFilterCond.isEmpty, "runtime group filtering must stay disabled")
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 101, "hr"), // update
+          Row(2, 201, "software"))) // update outside of NOT MATCHED BY SOURCE condition
+
+      checkReplacedPartitions(Seq("hr", "software", "finance"))
+    }
+  }
+
   test("merge does not double plan table (group filter enabled)") {
     withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "true") {
       withTempView("source") {
