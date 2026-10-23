@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{PlanWithUnresolvedIdentifier, UnresolvedExecuteImmediate}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, ExecutableDuringAnalysis, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, ExecutableDuringAnalysis, InsertIntoDir, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
@@ -174,6 +174,7 @@ private[connect] object PipelinesHandler extends Logging {
       queryPlan.isInstanceOf[CreateTable] ||
       queryPlan.isInstanceOf[CreateView] ||
       queryPlan.isInstanceOf[InsertIntoStatement] ||
+      queryPlan.isInstanceOf[InsertIntoDir] ||
       queryPlan.isInstanceOf[RenameTable] ||
       queryPlan.isInstanceOf[CreateNamespace] ||
       queryPlan.isInstanceOf[DropView]

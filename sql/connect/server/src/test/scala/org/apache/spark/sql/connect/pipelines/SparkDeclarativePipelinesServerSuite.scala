@@ -944,4 +944,66 @@ class SparkDeclarativePipelinesServerSuite
           relation.getCommand.getSqlCommand.getInput)
     }
   }
+
+  // Helper to build a SqlCommand ExecutePlanRequest with PipelineAnalysisContext. A flow name
+  // marks the request as coming from inside a pipeline flow function.
+  private def buildSqlCommandRequestWithPipelineContext(
+      graphId: String,
+      input: proto.Relation,
+      flowName: Option[String] = None): proto.ExecutePlanRequest = {
+    val contextBuilder = proto.PipelineAnalysisContext
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+    flowName.foreach(contextBuilder.setFlowName)
+    val context = contextBuilder.build()
+    val userContext = proto.UserContext
+      .newBuilder()
+      .addExtensions(com.google.protobuf.Any.pack(context))
+      .setUserId("test_user")
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(
+        proto.Command
+          .newBuilder()
+          .setSqlCommand(proto.SqlCommand.newBuilder().setInput(input).build())
+          .build())
+      .build()
+    proto.ExecutePlanRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setPlan(plan)
+      .setSessionId(UUID.randomUUID().toString)
+      .build()
+  }
+
+  // Helper to build a SQL Relation.
+  private def sqlRelation(query: String): proto.Relation =
+    proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery(query))
+      .build()
+
+  namedGridTest(
+    "SPARK-60481: blockUnsupportedSqlCommand catches INSERT OVERWRITE DIRECTORY " +
+      "without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        withTempDir { dir =>
+          val graphId = createDataflowGraph
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = sqlRelation(
+              s"INSERT OVERWRITE DIRECTORY '${dir.toURI}' USING parquet SELECT 1 AS id"))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the directory was not overwritten as a side effect.
+          assert(dir.listFiles().isEmpty)
+        }
+      }
+  }
 }
