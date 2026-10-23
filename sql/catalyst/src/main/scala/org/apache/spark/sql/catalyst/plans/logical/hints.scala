@@ -85,10 +85,14 @@ object JoinHint {
  * @param runtimeFilterSource Whether this side was hinted as a runtime filter source, i.e. the
  *                            side a runtime filter should be built from to prune the other side
  *                            of the join.
+ * @param runtimeFilterDecided Whether `InjectRuntimeFilter` has applied or reported the runtime
+ *                             filter hint. Kept in the hint so that it survives a rule rebuilding
+ *                             the join, and not shown, as it is not part of the hint as written.
  */
 case class HintInfo(
     strategy: Option[JoinStrategyHint] = None,
-    runtimeFilterSource: Boolean = false) {
+    runtimeFilterSource: Boolean = false,
+    runtimeFilterDecided: Boolean = false) {
 
   /**
    * Combine this [[HintInfo]] with another [[HintInfo]] and return the new [[HintInfo]].
@@ -113,7 +117,8 @@ case class HintInfo(
     }
     HintInfo(
       strategy = this.strategy.orElse(other.strategy),
-      runtimeFilterSource = this.runtimeFilterSource || other.runtimeFilterSource)
+      runtimeFilterSource = this.runtimeFilterSource || other.runtimeFilterSource,
+      runtimeFilterDecided = this.runtimeFilterDecided || other.runtimeFilterDecided)
   }
 
   override def toString: String = {
