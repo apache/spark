@@ -587,6 +587,29 @@ class ColumnTestsMixin:
             [10, 20],
         )
 
+    def test_select_reselected_hidden_join_key_with_reused_dataframe(self):
+        # `sel` re-selects `dim["dk"]`, the hidden right key of a USING join, so in
+        # `sel` that attribute is in both `p.output` and the `p.metadataOutput`
+        # inherited from the USING-join wrapper. `sel` is then reused: once directly
+        # (in `q`) and once as the right side of another USING join on `dk` (in `r`),
+        # where its `dk` is hidden. Resolving `sel["dk"]` must treat the `q` candidate
+        # as regular and prefer it over the hidden `r` one, not throw
+        # AMBIGUOUS_COLUMN_REFERENCE.
+        fact = self.spark.createDataFrame([(1, 10), (2, 20)], ["fid", "dk"])
+        dim = self.spark.createDataFrame([(10, "a"), (20, "b")], ["dk", "name"])
+        # No `other` row has dk 20, so `r` drops fid 2 and the left join below yields
+        # NULL on the `r` side for it. If `sel["dk"]` were resolved to the hidden `r`
+        # candidate, the second row would be NULL instead of 20.
+        other = self.spark.createDataFrame([(1, 10, 7), (2, 30, 8)], ["fid", "dk", "qty"])
+        sel = fact.join(dim, "dk", "left").select(fact["fid"], dim["dk"])
+        q = sel.join(other.select("fid", "qty"), "fid")
+        r = other.select("dk", "qty").join(sel, "dk")
+        result = q.join(r, "fid", "left").sort("fid").select(sel["dk"])
+        self.assertEqual(
+            [row["dk"] for row in result.collect()],
+            [10, 20],
+        )
+
     def test_drop_notexistent_col(self):
         df1 = self.spark.createDataFrame(
             [("a", "b", "c")],

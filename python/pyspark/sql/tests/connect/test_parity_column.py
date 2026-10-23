@@ -40,6 +40,43 @@ class ColumnParityTests(ColumnTestsMixin, ReusedConnectTestCase):
     def test_validate_column_types(self):
         super().test_validate_column_types()
 
+    # Plan-id resolution of hidden USING join keys that `AddMetadataColumns` adds to
+    # the output of the wrapper that hides them. Classic rejects these self-joins
+    # through its own ambiguity check.
+
+    def test_select_hidden_join_key_widened_by_reuse(self):
+        # A hidden USING join key that a later select re-selects is added to the
+        # output of the USING join wrapper that hides it. Such a candidate must stay
+        # hidden, so the direct candidate is still preferred.
+        a = self.spark.createDataFrame([(1, 1), (2, 1)], ["k", "x"])
+        b = self.spark.createDataFrame([(1, "p"), (2, "q")], ["k", "y"])
+        other = self.spark.createDataFrame([(1, "z")], ["x", "w"])
+        w = a.join(b.alias("b"), "k")
+        s = w.select(w["x"], w["b.k"]).join(other, "x")
+        # `w["b.k"]` resolves to the direct `w`, so both `s` rows join its row with k 1.
+        # Resolving it to the `k` in `s` would instead keep only the `s` row with k 1
+        # and join it to both `w` rows.
+        result = s.join(w, s["x"] == w["b.k"])
+        self.assertEqual(
+            sorted(tuple(r) for r in result.collect()),
+            [(1, 1, "z", 1, 1, "p"), (1, 2, "z", 1, 1, "p")],
+        )
+
+    def test_select_reused_dataframe_hidden_key_reselected_in_natural_join(self):
+        # The SPARK-56632 shape, where `enriched` re-selects the hidden `df2["id"]`,
+        # which adds it to the output of the USING join wrapper that hides it.
+        df1 = self.spark.createDataFrame([(10, "T1"), (20, "T2")], ["key", "val"])
+        df2 = self.spark.createDataFrame([(10,), (20,), (30,)], ["id"])
+        df3 = self.spark.createDataFrame([(10, "T1"), (99, "T2")], ["id", "val"])
+        enriched = df3.join(df2, "id", "left").select(df3["val"], df2["id"])
+        result = (
+            df1.join(df2, df1["key"] == df2["id"], "left")
+            .join(enriched, "val", "full_outer")
+            .sort("val")
+            .select(df2["id"])
+        )
+        self.assertEqual([r["id"] for r in result.collect()], [10, 20])
+
     def test_resolve_after_union(self):
         # Connect diverges from Classic here: Union is treated as a leaf when
         # walking the plan tree for plan-id resolution, so the left-side plan
