@@ -385,6 +385,14 @@ class ArrowPythonUDFTestsMixin(BaseUDFTestsMixin):
         self.assertIsNotNone(result["interval_field"])
         self.assertEqual(result["name"], "test_name")
 
+    def test_udf_with_output_batch_slicing(self):
+        # Each result row is joined with the next queued input row, so the sliced 10-row result
+        # batch must be output once and in order.
+        df = self.spark.range(0, 10, 1, 1)
+        with self.sql_conf({"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"}):
+            result = df.select(col("id"), udf(lambda x: x + 1, "long")(col("id")))
+            assertDataFrameEqual(result, [Row(i, i + 1) for i in range(10)])
+
 
 @unittest.skipIf(
     not have_pandas or not have_pyarrow, pandas_requirement_message or pyarrow_requirement_message

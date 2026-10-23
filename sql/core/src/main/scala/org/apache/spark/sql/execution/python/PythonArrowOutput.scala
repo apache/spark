@@ -44,6 +44,9 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
 
+  // The limits for slicing the batches returned from Python. A runner whose consumer cannot take
+  // a batch split into several, e.g. one that pairs each batch with one input row, overrides both
+  // to -1, as `ArrowPythonUDTFRunner` does.
   protected def arrowMaxRecordsPerOutputBatch: Int = SQLConf.get.arrowMaxRecordsPerOutputBatch
 
   protected def arrowMaxBytesPerOutputBatch: Int = SQLConf.get.arrowMaxBytesPerOutputBatch.toInt
@@ -210,8 +213,7 @@ abstract class BaseSliceArrowOutputProcessor(
   extends ArrowOutputProcessorImpl(reader, pythonMetrics) {
 
   protected var currentRowIdx = -1
-  protected var prevRoot: VectorSchemaRoot = null
-  protected var prevVectors: Array[ColumnVector] = _
+  protected var prevRoot: VectorSchemaRoot = root
 
   override def loadBatch(): Boolean = {
     if (rowCount > 0 && currentRowIdx < rowCount) {
@@ -228,25 +230,25 @@ abstract class BaseSliceArrowOutputProcessor(
     closePrevSlice()
     prevRoot = batchRoot
 
-    val vectors = getVectors(batchRoot)
-    prevVectors = vectors
-
-    val batch = new ColumnarBatch(vectors)
+    val batch = new ColumnarBatch(getVectors(batchRoot))
     batch.setNumRows(batchRoot.getRowCount)
     batch
   }
 
   protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = {
-    root.getFieldVectors.asScala.map { vector =>
-      new ArrowColumnVector(vector)
-    }.toArray[ColumnVector]
+    if (root eq this.root) {
+      super.getVectors(root)
+    } else {
+      root.getFieldVectors.asScala.map { vector =>
+        new ArrowColumnVector(vector)
+      }.toArray[ColumnVector]
+    }
   }
 
-  // Releases the previous output batch if it is a slice. The reader root is reused for every
-  // input batch, so it must not be closed here; `ArrowOutputProcessorImpl.close` closes it.
+  // Releases the previous output batch if it is a slice. The reader loads every batch from Python
+  // into the same root, so it must not be closed here; `ArrowOutputProcessorImpl.close` closes it.
   private def closePrevSlice(): Unit = {
-    if (prevRoot != null && (prevRoot ne root)) {
-      prevVectors.foreach(_.close())
+    if (prevRoot ne root) {
       prevRoot.close()
     }
   }

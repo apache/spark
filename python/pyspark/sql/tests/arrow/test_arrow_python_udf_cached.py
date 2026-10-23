@@ -107,22 +107,6 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
         finally:
             df.unpersist()
 
-    def test_udf_on_cached_input_with_output_batch_slicing(self):
-        # The columnar path pairs each result batch with one input batch, so the 10-row result
-        # of the single cached batch must not be sliced under the configs below.
-        df = self.spark.range(0, 10, 1, 1).cache()
-        try:
-            for conf in [
-                {"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"},
-                {"spark.sql.execution.arrow.maxBytesPerOutputBatch": "3"},
-            ]:
-                with self.subTest(conf=conf), self.sql_conf(conf):
-                    result = df.select(col("id"), udf(lambda x: x + 1, "long")(col("id")))
-                    self._assert_columnar_arrow_eval(result, expected_nodes=1)
-                    assertDataFrameEqual(result, [Row(i, i + 1) for i in range(10)])
-        finally:
-            df.unpersist()
-
     def test_udf_on_cached_strings(self):
         # Cache-scan vectors use standard 32-bit var-width offsets, matching the default
         # interchange schema: the columnar fast path forwards them verbatim.
@@ -146,6 +130,22 @@ class ArrowPythonUDFCachedInputTests(ReusedSQLTestCase):
             result = df.select(col("s"), udf(lambda x: x + 1, "long")(col("i")))
             self._assert_columnar_arrow_eval(result, expected_nodes=1)
             assertDataFrameEqual(result, [Row("a", 2), Row("b", 3)])
+        finally:
+            df.unpersist()
+
+    def test_udf_on_cached_input_with_output_batch_slicing(self):
+        # The columnar path pairs each result batch with one input batch, so the 10-row result
+        # of the single cached batch must not be sliced under the configs below.
+        df = self.spark.range(0, 10, 1, 1).cache()
+        try:
+            for conf in [
+                {"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"},
+                {"spark.sql.execution.arrow.maxBytesPerOutputBatch": "3"},
+            ]:
+                with self.subTest(conf=conf), self.sql_conf(conf):
+                    result = df.select(col("id"), udf(lambda x: x + 1, "long")(col("id")))
+                    self._assert_columnar_arrow_eval(result, expected_nodes=1)
+                    assertDataFrameEqual(result, [Row(i, i + 1) for i in range(10)])
         finally:
             df.unpersist()
 

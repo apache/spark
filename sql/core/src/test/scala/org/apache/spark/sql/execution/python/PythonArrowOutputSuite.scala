@@ -101,6 +101,8 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     reader.close(false)
     // Fails if any slice made by the processor was leaked.
     allocator.close()
+    // `PythonArrowOutput` closes the processor again in its task completion listener.
+    processor.close()
     assert(metrics("pythonNumRowsReceived").value === batchSizes.sum)
     output.toSeq
   }
@@ -141,7 +143,7 @@ class PythonArrowOutputSuite extends SparkFunSuite {
       val output = readAll(batchSizes, (reader, metrics) =>
         new SliceBytesArrowOutputProcessorImpl(reader, metrics, maxBytes))
       checkAllRowsOnceInOrder(batchSizes, output)
-      // The large input batches must have been sliced.
+      // Guards the choice of cases: each has a batch that does not fit, which must be sliced.
       assert(output.size > batchSizes.size)
       assert(output.forall { case (rows, bytes) => rows.size <= 1 || bytes < maxBytes })
     }
