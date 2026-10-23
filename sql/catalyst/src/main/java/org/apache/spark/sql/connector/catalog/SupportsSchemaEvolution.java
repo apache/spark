@@ -42,6 +42,11 @@ public interface SupportsSchemaEvolution extends Table {
    * Returns whether the given column change can be applied to the table during automatic schema
    * evolution. This should return {@code true} when the data source can physically apply the
    * change, for example adding a new column or performing a lossless type widening.
+   * <p>
+   * An accepted {@link TableChange.AddColumn} may be assigned a
+   * {@link TableChange.ColumnPosition} after this check, before the change is applied through
+   * {@link TableCatalog#alterTable}. Implementations that cannot honor positioned adds may
+   * reject the final change there.
    */
   boolean supportsColumnChange(ColumnChange change);
 }

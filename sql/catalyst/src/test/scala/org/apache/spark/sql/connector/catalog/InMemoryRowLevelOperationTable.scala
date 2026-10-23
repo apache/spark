@@ -197,8 +197,13 @@ class InMemoryRowLevelOperationTable private (
     override protected def doCommit(
         messages: Array[WriterCommitMessage]): Unit = dataMap.synchronized {
       val newData = messages.map(_.asInstanceOf[BufferedRows])
-      val readRows = scan.data.flatMap(_.asInstanceOf[BufferedRows].rows)
-      val readPartitions = readRows.map(r => getKey(r, schema)).distinct
+      // Stored rows follow each split's write schema, which may lag the table schema
+      // after schema evolution: positions come from the split schema while key values
+      // must be read back as the evolved field types to match stored partition keys.
+      val readPartitions = scan.data.flatMap { split =>
+        val buffered = split.asInstanceOf[BufferedRows]
+        buffered.rows.map(r => getKey(r, buffered.schema, schema))
+      }.distinct
       dataMap --= readPartitions
       replacedPartitions = readPartitions
       withData(newData, schema)

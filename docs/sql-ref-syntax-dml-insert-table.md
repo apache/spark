@@ -38,7 +38,13 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REP
 
     Enables automatic schema evolution for this `INSERT` operation. When enabled, the schema
     of the target table is automatically evolved to add new columns and widen data types based
-    on the source query, subject to the capabilities of the underlying connector.
+    on the source query, subject to the capabilities of the underlying connector. Columns added
+    by schema evolution are appended at the end of the target schema by default; setting
+    `spark.sql.schemaEvolution.preserveColumnOrder` to `true` places each new column immediately
+    after the nearest preceding source column that exists in the target or is added by the same
+    statement, or first if there is none; existing columns keep their order. This applies to
+    by-name inserts, including by-name DataFrame writes; by-position inserts keep appending new
+    columns.
 
 * **table_identifier**
 
