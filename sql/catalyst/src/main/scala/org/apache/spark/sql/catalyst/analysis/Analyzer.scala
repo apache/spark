@@ -427,15 +427,6 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  private def toUnresolvedRelation(target: UnresolvedInsertTarget): UnresolvedRelation = {
-    val relation = withOrigin(target.origin) {
-      UnresolvedRelation(target.multipartIdentifier, target.options)
-        .requireWritePrivileges(target.writePrivileges)
-    }
-    relation.copyTagsFrom(target)
-    relation
-  }
-
   /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
     runWithSessionConf {
@@ -446,7 +437,7 @@ class Analyzer(
       withOrigin(insert.origin) {
         identifierResolvedTarget match {
           case target: UnresolvedInsertTarget =>
-            insert.toInsertIntoStatement(toUnresolvedRelation(target))
+            insert.toInsertIntoStatement(target.toUnresolvedRelation)
           case target if !target.fastEquals(insert.table) =>
             val updated = insert.copy(table = target)
             updated.copyTagsFrom(insert)
@@ -1466,7 +1457,7 @@ class Analyzer(
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
-        insert.toInsertIntoStatement(toUnresolvedRelation(target))
+        insert.toInsertIntoStatement(target.toUnresolvedRelation)
     }
   }
 

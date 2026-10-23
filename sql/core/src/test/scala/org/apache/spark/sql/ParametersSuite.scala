@@ -2570,7 +2570,7 @@ class ParametersSuite extends SharedSparkSession {
   // definitions on the input query.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
-    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedRelation`.
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to a static target.
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """WITH transformation AS (SELECT 99 AS a)
         |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
@@ -2598,6 +2598,11 @@ class ParametersSuite extends SharedSparkSession {
     val regularInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO target_table SELECT 1")
     assert(regularInsert.isInstanceOf[InsertIntoStatement])
+
+    // A literal IDENTIFIER is a static target, so it parses to the same plan as a bare name.
+    val literalIdentifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER('target_table') SELECT 1")
+    assert(literalIdentifierInsert === regularInsert)
 
     val identifierInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO IDENTIFIER(lower('TESTCAT.NS.TARGET_TABLE')) SELECT 1")
