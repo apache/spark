@@ -3383,6 +3383,54 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-60493: Disallow Hive incompatible partition column types in Hive serde tables") {
+    val tbl = "tbl_with_incompatible_partition"
+    def checkUnsupported(columnType: String)(createTable: => Unit): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](createTable),
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`pt`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+      assert(!spark.catalog.tableExists(tbl))
+    }
+    withTable(tbl, "src") {
+      Seq(
+        "TIMESTAMP_NTZ",
+        "INTERVAL YEAR",
+        "INTERVAL DAY TO SECOND",
+        "TIMESTAMP_NTZ(9)",
+        "TIMESTAMP_LTZ(9)",
+        "TIME(6)").foreach { dataType =>
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (i INT) PARTITIONED BY (pt $dataType) STORED AS PARQUET")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (i INT, pt $dataType) USING HIVE PARTITIONED BY (pt)")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl PARTITIONED BY (pt) STORED AS TEXTFILE " +
+            s"AS SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+        }
+        checkUnsupported(dataType) {
+          sql(s"SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+            .write.format("hive").partitionBy("pt").saveAsTable(tbl)
+        }
+        sql(s"CREATE TABLE src (i INT, pt $dataType) USING PARQUET PARTITIONED BY (pt)")
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl LIKE src STORED AS ORC")
+        }
+        sql("DROP TABLE src")
+      }
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl (i INT) PARTITIONED BY (pt TIMESTAMP) STORED AS AVRO")
+        }
+      }
+    }
+  }
+
   test("SPARK-52272: V2SessionCatalog does not alter schema on Hive Catalog") {
     val spyCatalog = spy(spark.sessionState.catalog.externalCatalog)
     val v1SessionCatalog = new SessionCatalog(spyCatalog)

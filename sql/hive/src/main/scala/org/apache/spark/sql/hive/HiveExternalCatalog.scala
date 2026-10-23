@@ -44,6 +44,7 @@ import org.apache.spark.sql.catalyst.catalog.ExternalCatalogUtils._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, QuotingUtils}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{PartitioningUtils, SourceOptions}
 import org.apache.spark.sql.hive.client.HiveClient
@@ -270,6 +271,14 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         hiveTable.withNewStorage(locationUri = tableLocation),
         ignoreIfExists)
     } else {
+      // Hive incompatible partition column types are stored with a placeholder type in Hive
+      // metastore (see `HiveClientImpl.toHiveTable`), which only data source tables can restore.
+      schemaWithNoCollation
+        .filter(f => tableDefinition.partitionColumnNames.contains(f.name))
+        .find(f => !isHiveCompatibleDataType(f.dataType))
+        .foreach { f =>
+          throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("Hive", f)
+        }
       val hiveCompatibleSchema = schemaWithNoCollation match {
         // Spark-created views do not have to be Hive compatible. If the data type is not
         // Hive compatible, we can set schema to empty so that Spark can still read this
