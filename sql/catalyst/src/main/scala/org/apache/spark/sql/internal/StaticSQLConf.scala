@@ -163,7 +163,10 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  private[spark] val DEFAULT_EXTENSIONS_LIST = "spark.sql.extensions.defaultList"
+
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
+    .withPrepended(DEFAULT_EXTENSIONS_LIST, separator = ",")
     .doc("A comma-separated list of classes that implement " +
       "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
       "classes must have a no-args constructor. If multiple extensions are specified, they are " +
