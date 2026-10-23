@@ -129,7 +129,7 @@ class ExecutorPythonWorkerSuite extends SparkFunSuite with SharedSparkContext {
           worker.stop()
         }
         // Also retire factories if the regression fails before session cleanup reaches them.
-        env.removePythonWorkerFactories(uuid)
+        env.removeExecutorPythonWorkerFactories(uuid)
         if (session != null) {
           session.markEvicted()
           session.release()
