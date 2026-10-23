@@ -1411,13 +1411,17 @@ class PythonPipelineSuite
   private val unsupportedSqlCommandList: Seq[String] = Seq(
     "SET CATALOG some_catalog",
     "USE SCHEMA some_schema",
+    "USE SCHEMA IDENTIFIER('some_' || 'schema')",
     "SET `test_conf` = `true`",
     "CREATE TABLE some_table (id INT)",
+    "EXECUTE IMMEDIATE 'CREATE TABLE some_table (id INT)'",
     "CREATE VIEW some_view AS SELECT * FROM some_table",
+    "CREATE TEMPORARY VIEW IDENTIFIER('some_view') AS SELECT 1",
     "INSERT INTO some_table VALUES (1)",
     "ALTER TABLE some_table RENAME TO some_new_table",
     "CREATE NAMESPACE some_namespace",
     "DROP VIEW some_view",
+    "CALL some_catalog.some_schema.some_procedure()",
     "CREATE MATERIALIZED VIEW some_view AS SELECT * FROM some_table",
     "CREATE STREAMING TABLE some_table AS SELECT * FROM some_table")
 
@@ -1455,12 +1459,14 @@ class PythonPipelineSuite
     "SHOW TBLPROPERTIES spark_catalog.default.src",
     "SHOW NAMESPACES",
     "SHOW COLUMNS FROM spark_catalog.default.src",
+    "SHOW COLUMNS FROM IDENTIFIER('spark_catalog.default.' || 'src')",
     "SHOW FUNCTIONS",
     "SHOW VIEWS",
     "SHOW CATALOGS",
     "SHOW CREATE TABLE spark_catalog.default.src",
     "SELECT * FROM RANGE(5)",
-    "SELECT * FROM spark_catalog.default.src")
+    "SELECT * FROM spark_catalog.default.src",
+    "TABLE IDENTIFIER('spark_catalog.default.' || 'src')")
 
   gridTest("Supported SQL command outside query function should work")(supportedSqlCommandList) {
     supportedSqlCommand =>
