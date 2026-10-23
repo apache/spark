@@ -116,7 +116,8 @@ case class AdaptiveSparkPlanExec(
         CostEvaluator.instantiate(className, context.session.sparkContext.getConf)
       case _ => SimpleCostEvaluator(
         conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
-        conf.costEvaluatorCountLocalSortEnabled)
+        conf.costEvaluatorCountLocalSortEnabled,
+        conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED))
     }
 
   // Read once for this execution so that the union barriers in the lists below, which run per
@@ -153,7 +154,8 @@ case class AdaptiveSparkPlanExec(
       // `StampUnionDecisions`, which would freeze a rebuilt union's partitioning before the
       // rewrite can take it. It shares the instance above, which carries the root distribution
       // the rewrite must keep.
-      PushDownShuffleExchangeThroughUnion(unionConf, ensureRequirements),
+      PushDownShuffleExchangeThroughUnion(
+        unionConf, ensureRequirements, context.queryContainsSubqueries),
       // Must run after `EnsureRequirements` and the shuffle push-down: it fixes each `UnionExec`'s
       // partitioning decision, so every rule below and the execution itself read the answer the
       // exchanges above it were planned against.
@@ -1290,6 +1292,8 @@ object AdaptiveSparkPlanExec {
  * The execution context shared between the main query and all sub-queries.
  */
 case class AdaptiveExecutionContext(session: SparkSession, qe: QueryExecution) {
+  @volatile private[adaptive] var queryContainsSubqueries: Boolean = false
+
   /**
    * The subquery-reuse map shared across the entire query.
    */

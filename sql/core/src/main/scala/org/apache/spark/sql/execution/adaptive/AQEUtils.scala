@@ -20,10 +20,22 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, HashPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.{CollectMetricsExec, DeserializeToObjectExec, FilterExec, ProjectExec, SortExec, SparkPlan}
-import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec}
+import org.apache.spark.sql.execution.exchange.{REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec}
 
 object AQEUtils {
+
+  private[adaptive] val PUSHED_DOWN_SHUFFLE = TreeNodeTag[Boolean]("unionPushedDownShuffle")
+  private[adaptive] val PUSHED_THROUGH_UNION = TreeNodeTag[Boolean]("shufflePushedThroughUnion")
+
+  private[adaptive] def isPushedDownShuffle(plan: SparkPlan): Boolean = {
+    plan.getTagValue(PUSHED_DOWN_SHUFFLE).contains(true)
+  }
+
+  private[adaptive] def isPushedThroughUnion(plan: SparkPlan): Boolean = {
+    plan.getTagValue(PUSHED_THROUGH_UNION).contains(true)
+  }
 
   /**
    * Canonicalized forms of shuffle exchanges occurring more than once across the plan,
@@ -42,22 +54,12 @@ object AQEUtils {
    */
   private[adaptive] def duplicatedShuffleForms(plan: SparkPlan): Set[SparkPlan] = {
     val counts = mutable.HashMap.empty[SparkPlan, Int]
-    def count(exchange: ShuffleExchangeExec): Unit = {
-      val canonical = exchange.canonicalized
+    def count(canonical: SparkPlan): Unit = {
       counts.update(canonical, counts.getOrElse(canonical, 0) + 1)
     }
     def visit(p: SparkPlan): Unit = p.foreach {
-      case exchange: ShuffleExchangeExec => count(exchange)
-      case stage: ShuffleQueryStageExec =>
-        stage.plan match {
-          case exchange: ShuffleExchangeExec => count(exchange)
-          case reused: ReusedExchangeExec =>
-            reused.child match {
-              case exchange: ShuffleExchangeExec => count(exchange)
-              case _ =>
-            }
-          case _ =>
-        }
+      case exchange: ShuffleExchangeExec => count(exchange.canonicalized)
+      case stage: ShuffleQueryStageExec => count(stage.canonicalized)
       case _ =>
     }
     visit(plan)
