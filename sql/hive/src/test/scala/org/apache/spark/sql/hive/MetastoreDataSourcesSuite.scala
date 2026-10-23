@@ -18,6 +18,7 @@
 package org.apache.spark.sql.hive
 
 import java.io.File
+import java.time.LocalTime
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -1592,6 +1593,66 @@ class MetastoreDataSourcesSuite extends QueryTest
           StructField("c12", MapType(IntegerType, DayTimeIntervalType(DAY))),
           StructField("c13", MapType(DayTimeIntervalType(MINUTE, SECOND), StringType)),
           StructField("c14", TimestampNTZType))))
+    }
+  }
+
+  test("SPARK-60482: TIME columns are stored in Spark SQL specific format") {
+    withTable("t") {
+      val logAppender = new LogAppender("Check that TIME types are reported as Hive incompatible")
+      logAppender.setThreshold(Level.WARN)
+      withLogAppender(logAppender) {
+        sql(
+          """
+            |CREATE TABLE t(
+            |  c1 TIME,
+            |  c2 TIME(0),
+            |  c3 ARRAY<TIME(3)>,
+            |  c4 STRUCT<a: INT, b: TIME>,
+            |  c5 MAP<TIME, STRING>
+            |) USING Parquet""".stripMargin)
+      }
+      val expectedMsg = "Hive incompatible types found: time(6), time(0), array<time(3)>, " +
+        "struct<a:int,b:time(6)>, map<time(6),string>. " +
+        s"Persisting data source table `$SESSION_CATALOG_NAME`.`default`.`t` into Hive " +
+        "metastore in Spark SQL specific format, which is NOT compatible with Hive."
+      val actualMessages = logAppender.loggingEvents
+        .map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("incompatible"))
+      assert(actualMessages.contains(expectedMsg))
+      assert(hiveClient.getTable("default", "t").schema
+        .forall(_.dataType == ArrayType(StringType)))
+      assert(sql("SELECT * FROM t").schema ===
+        StructType(Seq(
+          StructField("c1", TimeType()),
+          StructField("c2", TimeType(0)),
+          StructField("c3", ArrayType(TimeType(3))),
+          StructField("c4",
+            StructType(Seq(
+              StructField("a", IntegerType),
+              StructField("b", TimeType())))),
+          StructField("c5", MapType(TimeType(), StringType)))))
+    }
+  }
+
+  test("SPARK-60482: TIME partition columns are stored in Spark SQL specific format") {
+    withTable("t") {
+      sql("CREATE TABLE t(id INT, p TIME) USING Parquet PARTITIONED BY (p)")
+      // The partition column is stored with INCOMPATIBLE_PARTITION_TYPE_PLACEHOLDER, which the
+      // raw catalog view filters out. The real schema is restored from table properties.
+      assert(hiveClient.getTable("default", "t").schema
+        .forall(_.dataType == ArrayType(StringType)))
+      assert(sql("SELECT * FROM t").schema ===
+        StructType(Seq(
+          StructField("id", IntegerType),
+          StructField("p", TimeType()))))
+
+      sql("INSERT INTO t PARTITION (p = TIME'12:34:56') VALUES (1)")
+      sql("INSERT INTO t VALUES (2, TIME'01:02:03.456789')")
+      checkAnswer(sql("SELECT * FROM t"),
+        Seq(Row(1, LocalTime.of(12, 34, 56)), Row(2, LocalTime.of(1, 2, 3, 456789000))))
+      checkAnswer(sql("SELECT id FROM t WHERE p = TIME'12:34:56'"), Row(1))
+      checkAnswer(sql("SHOW PARTITIONS t"),
+        Seq(Row("p=01%3A02%3A03.456789"), Row("p=12%3A34%3A56")))
     }
   }
 
