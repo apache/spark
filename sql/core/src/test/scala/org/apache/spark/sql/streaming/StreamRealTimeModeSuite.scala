@@ -661,38 +661,43 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
         .select($"_1")
 
       testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
-        AddData(inputData, ("expired", 1), ("a", 15), ("clock", 30)),
+        AddData(inputData,
+          ("expired", 1), ("expired2", 2), ("expired3", 3), ("a", 15), ("clock", 30)),
         StartStream(),
-        CheckAnswerWithTimeout(60000, "expired", "a", "clock"),
+        CheckAnswerWithTimeout(60000, "expired", "expired2", "expired3", "a", "clock"),
         advanceRealTimeClock,
         WaitUntilBatchProcessed(0),
 
         AddData(inputData, ("advance", 40)),
-        CheckAnswerWithTimeout(60000, "expired", "a", "clock", "advance"),
+        CheckAnswerWithTimeout(60000, "expired", "expired2", "expired3", "a", "clock", "advance"),
         advanceRealTimeClock,
         WaitUntilBatchProcessed(1),
         Execute { q =>
           // Cleanup uses the late-events watermark (0), not the eviction watermark (20).
           val operator = q.lastProgress.stateOperators.head
-          assert(operator.numRowsTotal === 4)
+          assert(operator.numRowsTotal === 6)
           assert(operator.numRowsRemoved === 0)
         },
 
-        // At the 20-second late-events watermark, "expired" can be removed but "a" (expiry 25)
-        // must stay: the non-late duplicate at 24 is within 10 seconds of its first event.
-        AddData(inputData, ("probe", 40), ("a", 24), ("a", 20)),
-        CheckAnswerWithTimeout(60000, "expired", "a", "clock", "advance", "probe"),
+        // At the 20-second late-events watermark, three entries expire but "a" (expiry 25)
+        // must stay: its non-late duplicate at 24 is within 10 seconds of its first event.
+        // Two surviving inputs remove two entries incrementally; completion must remove the last.
+        // The emitted "probe" comes last so seeing it confirms the whole input was consumed.
+        AddData(inputData, ("a", 24), ("a", 20), ("probe", 40)),
+        CheckAnswerWithTimeout(
+          60000, "expired", "expired2", "expired3", "a", "clock", "advance", "probe"),
         advanceRealTimeClock,
         WaitUntilBatchProcessed(2),
-        CheckAnswerWithTimeout(60000, "expired", "a", "clock", "advance", "probe"),
+        CheckAnswerWithTimeout(
+          60000, "expired", "expired2", "expired3", "a", "clock", "advance", "probe"),
         Execute { q =>
           assertAllExchangesPipelined(q)
           val operator = q.lastProgress.stateOperators.head
           assert(operator.numRowsTotal === 4)
           assert(operator.numRowsUpdated === 1)
           assert(operator.numRowsDroppedByWatermark === 1)
-          assert(operator.numRowsRemoved === 1)
-          assert(operator.customMetrics.get("numRowsIncrementallyRemoved").longValue() === 1)
+          assert(operator.numRowsRemoved === 3)
+          assert(operator.customMetrics.get("numRowsIncrementallyRemoved").longValue() === 2)
         },
         StopStream
       )
