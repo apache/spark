@@ -24,6 +24,7 @@ import scala.collection.immutable.BitSet
 import scala.collection.mutable
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.QueryPlan
@@ -2389,8 +2390,11 @@ case class KeyedShuffleSpec(
         case (left: TransformExpression, right: TransformExpression) =>
           if (allowReduce && canReduceKeys) left.isCompatible(right)
           else left.isSameFunction(right)
-        case (_: AttributeReference, _: TransformExpression) |
-             (_: TransformExpression, _: AttributeReference) => allowReduce && canReduceKeys
+        // The reduce evaluates `t` on the identity side's partition keys, see `reducersBothWays`.
+        case (_: AttributeReference, t: TransformExpression) =>
+          allowReduce && canReduceKeys && canEvaluate(t)
+        case (t: TransformExpression, _: AttributeReference) =>
+          allowReduce && canReduceKeys && canEvaluate(t)
         case _ => false
       }
     }
@@ -2414,6 +2418,23 @@ case class KeyedShuffleSpec(
    */
   private def argumentsAreColumns(transform: TransformExpression): Boolean =
     transform.children.forall(_.isInstanceOf[Attribute])
+
+  /**
+   * Whether Spark can evaluate `transform` itself. An identity reduce evaluates it on the identity
+   * side's partition keys, and a one-side shuffle on each row of the side it shuffles. Only a
+   * `ScalarFunction` can be evaluated (see `TransformExpression.resolvedFunction`), while a
+   * connector may bind its transform to any `BoundFunction`. Rebuilding the transform over
+   * another key keeps its function, so asking this of the reported transform answers it for the
+   * rebuilt one too.
+   *
+   * Resolving a `ScalarFunction` throws when Spark finds no method to call on it, e.g. one that
+   * inherits `produceResult` from a base class. That counts as cannot evaluate, not as a failure:
+   * the gates ask this of every candidate, including ones that end up not being chosen.
+   */
+  private def canEvaluate(transform: TransformExpression): Boolean =
+    try transform.resolvedFunction.isDefined catch {
+      case _: AnalysisException => false
+    }
 
   /**
    * `transform`, whose arguments are bare columns, with each replaced by `key`, which may be any
@@ -2523,9 +2544,10 @@ case class KeyedShuffleSpec(
 
       // Identity transform on this side, arbitrary transform on the other side: create a reducer
       // that applies the other's transform to the raw identity values. `areKeysCompatible` admitted
-      // this pair, so `t`'s argument is one bare column. `isExpressionCompatible` refuses any other
-      // argument here, and `keyPositions` maps an expression with more references to no position.
-      // `IdentityReducer` binds `a` to ordinal 0.
+      // this pair, so `t`'s argument is one bare column and Spark can evaluate `t`.
+      // `isExpressionCompatible` refuses any other argument or function here, and `keyPositions`
+      // maps an expression with more references to no position. `IdentityReducer` binds `a` to
+      // ordinal 0.
       case (a: AttributeReference, t: TransformExpression) =>
         (Some(KeyReducer(IdentityReducer(rebuiltOver(t, a)), t)), None)
 
@@ -2570,8 +2592,8 @@ case class KeyedShuffleSpec(
         // `createPartitioning` replaces a transform's argument with the other child's cluster key,
         // which drops whatever surrounds the key, e.g. the `+ 1` of `bucket(4, b + 1)` or the `.a`
         // of `bucket(4, s.a)`. Such a spec's own child would then be laid out differently from the
-        // children shuffled onto it.
-        case t: TransformExpression => argumentsAreColumns(t)
+        // children shuffled onto it. Those children are routed by evaluating it, too.
+        case t: TransformExpression => argumentsAreColumns(t) && canEvaluate(t)
         case _ => false
       } &&
       // Shuffling another child onto these keys evaluates the partition expressions per row to

@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HASH_ROUTING, KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, ROUTING_LOST, SPLIT_FOR_JOIN}
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -1789,6 +1789,77 @@ class KeyGroupedPartitioningSuite
         checkAnswer(df,
           bs.filter(b => (0L until 8L).contains(keyOf(b))).map(b => Row(keyOf(b), b, b)))
       }
+    }
+  }
+
+  test("SPARK-60522: a transform Spark cannot evaluate is not reduced onto or shuffled onto") {
+    // With `UnboundBucketFunction`, the first join reduces `ident` onto `bucket(4, id)`, and the
+    // second shuffles `plain` onto it, both by evaluating `bucket`. A connector may bind `bucket`
+    // to a function that is not a `ScalarFunction`, or to one Spark finds nothing to call on, and
+    // Spark cannot evaluate either. Then both joins shuffle both sides.
+    Seq(
+      UnboundBucketFunction -> (0, 1),
+      UnboundNonScalarBucketFunction -> (2, 2),
+      UnboundInheritedBucketFunction -> (2, 2)
+    ).foreach {
+      case (fn, (reduceShuffles, oneSideShuffles)) =>
+        withFunction(fn) {
+          createBucketedIdTable("bucket4", 4, numIds = 8)
+          createIdentityIdTable()
+          createPlainTable()
+
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+              SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+            val df = sql(
+              "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.id = i.id")
+            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
+              fn.name())
+          }
+
+          withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+            val df = sql(
+              "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.id = p.b")
+            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
+              fn.name())
+          }
+          catalog.clearTables()
+        }
+    }
+  }
+
+  test("SPARK-60522: a child Spark cannot evaluate leaves the other child as the shuffle target") {
+    // `bucket8` lives in a second catalog, whose `bucket` Spark can evaluate. Picking the target,
+    // `EnsureRequirements` asks every child whether it can serve as one, and `bucket4`'s must
+    // answer no, not throw, so that `bucket4` is shuffled onto `bucket8`.
+    val catalogName = "spark60522cat"
+    spark.conf.set(s"spark.sql.catalog.$catalogName", classOf[InMemoryCatalog].getName)
+    val catalog2 = spark.sessionState.catalogManager.catalog(catalogName)
+      .asInstanceOf[InMemoryCatalog]
+    try {
+      withFunction(UnboundInheritedBucketFunction) {
+        catalog2.createFunction(Identifier.of(Array.empty, "bucket"), UnboundBucketFunction)
+        createBucketedIdTable("bucket4", 4, numIds = 8)
+        createTable("bucket8", Array(Column.create("id", LongType)), Array(bucket(8, "id")),
+          catalog = catalog2)
+        sql(s"INSERT INTO $catalogName.ns.bucket8 VALUES " +
+          (0 until 8).map(i => s"($i)").mkString(", "))
+
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          Seq(s"testcat.ns.bucket4 a JOIN $catalogName.ns.bucket8 b",
+              s"$catalogName.ns.bucket8 b JOIN testcat.ns.bucket4 a").foreach { join =>
+            val df = sql(s"SELECT a.id FROM $join ON a.id = b.id")
+            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1, join)
+          }
+        }
+      }
+    } finally {
+      catalog2.clearTables()
+      catalog2.clearFunctions()
+      spark.conf.unset(s"spark.sql.catalog.$catalogName")
     }
   }
 
