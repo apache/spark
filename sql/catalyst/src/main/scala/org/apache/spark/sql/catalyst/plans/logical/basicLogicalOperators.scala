@@ -2755,7 +2755,7 @@ object AsOfJoin {
       rightOperand: Expression,
       normalizedOp: MatchComparisonOperator)
       : (Expression, Expression, Seq[Expression], Seq[Expression]) = {
-    val (coercedLeft, coercedRight) = coerceMatchLeafOperands(leftOperand, rightOperand)
+    val (coercedLeft, coercedRight) = coerceMatchOperands(leftOperand, rightOperand)
     val (asOfCondition, orderExpression) =
       buildMatchExpressions(coercedLeft, coercedRight, normalizedOp)
     val (leftSortExprs, rightSortExprs) = matchSortExpressions(coercedLeft, coercedRight)
@@ -2763,24 +2763,46 @@ object AsOfJoin {
   }
 
   /**
-   * Casts a scalar operand pair to the comparison operator's common type so the comparison,
-   * ordering, and sort keys agree (needed for string vs DATE/TIMESTAMP/number, where the buffer
-   * would otherwise sort by a different type). STRUCT/ARRAY operands are left uncoerced.
+   * Aligns sort keys with comparison coercion for mixed timestamp types and scalar string pairs.
+   * NTZ-to-LTZ casts can change the sort order at DST transitions, including inside STRUCT/ARRAY.
    */
-  private def coerceMatchLeafOperands(
+  private def coerceMatchOperands(
       leftOperand: Expression,
       rightOperand: Expression): (Expression, Expression) = {
     val leftType = leftOperand.dataType
     val rightType = rightOperand.dataType
-    if (MatchConditionTypes.isCompositeOperand(leftType, rightType)) {
-      (leftOperand, rightOperand)
+    val (leftTarget, rightTarget) = if (
+        MatchConditionTypes.isCompositeOperand(leftType, rightType)) {
+      coerceMatchTimestampTypes(leftType, rightType)
     } else {
       MatchConditionTypes.stringComparisonCommonType(leftType, rightType) match {
-        case Some(commonType) =>
-          (castMatchOperand(leftOperand, commonType), castMatchOperand(rightOperand, commonType))
-        case None => (leftOperand, rightOperand)
+        case Some(commonType) => (commonType, commonType)
+        case None => coerceMatchTimestampTypes(leftType, rightType)
       }
     }
+    (castMatchOperand(leftOperand, leftTarget), castMatchOperand(rightOperand, rightTarget))
+  }
+
+  /** Coerces mixed timestamp leaves while preserving other types and field properties. */
+  private def coerceMatchTimestampTypes(
+      leftType: DataType,
+      rightType: DataType): (DataType, DataType) = (leftType, rightType) match {
+    case (left: StructType, right: StructType) if left.length == right.length =>
+      val (leftFields, rightFields) = left.fields.zip(right.fields).map { case (l, r) =>
+        val (leftTarget, rightTarget) = coerceMatchTimestampTypes(l.dataType, r.dataType)
+        (l.copy(dataType = leftTarget), r.copy(dataType = rightTarget))
+      }.unzip
+      (StructType(leftFields), StructType(rightFields))
+    case (left: ArrayType, right: ArrayType) =>
+      val (leftTarget, rightTarget) =
+        coerceMatchTimestampTypes(left.elementType, right.elementType)
+      (left.copy(elementType = leftTarget), right.copy(elementType = rightTarget))
+    case (left, right) if
+        (TimestampFamily.isLtz(left) && TimestampFamily.isNtz(right)) ||
+        (TimestampFamily.isNtz(left) && TimestampFamily.isLtz(right)) =>
+      MatchConditionTypes.tightestCommonType(left, right)
+        .map(commonType => (commonType, commonType)).getOrElse((left, right))
+    case _ => (leftType, rightType)
   }
 
   private def castMatchOperand(operand: Expression, targetType: DataType): Expression =
@@ -2807,13 +2829,13 @@ object AsOfJoin {
       }
     }
 
-    /** True when either operand is a STRUCT or ARRAY, left uncoerced under the strict rule. */
+    /** True when either operand is a STRUCT or ARRAY. */
     private[catalyst] def isCompositeOperand(
         leftType: DataType,
         rightType: DataType): Boolean =
       Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
 
-    /** True when exactly one operand is a string, the only pair that needs comparison coercion. */
+    /** True when exactly one operand is a string. */
     private def isExactlyOneStringPair(leftType: DataType, rightType: DataType): Boolean =
       leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
 
@@ -2881,13 +2903,12 @@ object AsOfJoin {
 
   /**
    * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
-   * right-side buffer is ordered consistently with the MATCH_CONDITION comparison (scalar
-   * operands are already coerced to a common type).
+   * right-side buffer is ordered consistently with the MATCH_CONDITION comparison.
    *
    * Each side picks its own keys, because the two sides are never compared key by key. A SQL
-   * tuple `(t.a, t.b)` sorts by its parts. A tuple is never NULL, so this keeps the comparison
-   * order. Anything else sorts as one value, so a NULL struct comes before a struct of NULL
-   * fields, the same as in the comparison.
+   * tuple `(t.a, t.b)` without an enclosing cast sorts by its parts. A tuple is never NULL, so this
+   * keeps the comparison order. Other expressions sort as one value, with a NULL struct before a
+   * struct of NULL fields, as in the comparison.
    * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
    */
   def matchSortExpressions(
@@ -2895,7 +2916,7 @@ object AsOfJoin {
       rightOperand: Expression): (Seq[Expression], Seq[Expression]) =
     (matchSortKeys(leftOperand), matchSortKeys(rightOperand))
 
-  /** A SQL tuple becomes [[CreateNamedStruct]] and sorts by its parts. */
+  /** An uncast SQL tuple becomes [[CreateNamedStruct]] and sorts by its parts. */
   private def matchSortKeys(operand: Expression): Seq[Expression] = operand match {
     case tuple: CreateNamedStruct if tuple.valExprs.nonEmpty => tuple.valExprs
     case other => Seq(other)

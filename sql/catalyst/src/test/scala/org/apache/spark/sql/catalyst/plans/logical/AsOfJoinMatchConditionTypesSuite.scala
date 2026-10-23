@@ -18,10 +18,59 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.plans.GreaterThanOrEqualOp
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.types._
 
 class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
+
+  test("mixed timestamp sort keys use the comparison precision and time zone family") {
+    for {
+      ltzType <- Seq(TimestampType, TimestampLTZNanosType(9))
+      ntzType <- Seq(TimestampNTZType, TimestampNTZNanosType(7))
+      (leftType, rightType) <- Seq((ltzType, ntzType), (ntzType, ltzType))
+    } {
+      val expected = MatchConditionTypes.tightestCommonType(leftType, rightType).get
+      val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(
+        leftOperand = AttributeReference("l", leftType)(),
+        rightOperand = AttributeReference("r", rightType)(),
+        normalizedOp = GreaterThanOrEqualOp
+      )
+      assert(TimestampFamily.isLtz(expected))
+      assert(leftKeys.map(_.dataType) == Seq(expected))
+      assert(rightKeys.map(_.dataType) == Seq(expected))
+    }
+  }
+
+  test("timestamp coercion preserves other composite field types and properties") {
+    val timestampField = StructField(
+      name = "ts",
+      dataType = TimestampNTZType,
+      nullable = false,
+      metadata = new MetadataBuilder().putString("comment", "timestamp key").build()
+    )
+    val leftFields = Seq(
+      timestampField,
+      StructField(name = "d", dataType = DecimalType(38, 30), nullable = false),
+      StructField(name = "n", dataType = IntegerType, nullable = false))
+    val rightFields = Seq(
+      StructField("ts", TimestampType),
+      StructField("d", DecimalType(38, 30)),
+      StructField("n", LongType))
+    val leftType = ArrayType(StructType(leftFields), containsNull = false)
+    val rightType = ArrayType(StructType(rightFields), containsNull = true)
+    val expectedLeft = ArrayType(
+      StructType(timestampField.copy(dataType = TimestampType) +: leftFields.tail),
+      containsNull = false)
+    val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(
+      leftOperand = AttributeReference("l", leftType)(),
+      rightOperand = AttributeReference("r", rightType)(),
+      normalizedOp = GreaterThanOrEqualOp
+    )
+    assert(leftKeys.map(_.dataType) == Seq(expectedLeft))
+    assert(rightKeys.map(_.dataType) == Seq(rightType))
+  }
 
   test("scalar types widen via TypeCoercion") {
     assert(MatchConditionTypes.areOperandsCompatible(IntegerType, LongType))

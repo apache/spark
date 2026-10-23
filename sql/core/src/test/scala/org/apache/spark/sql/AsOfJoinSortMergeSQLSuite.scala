@@ -164,6 +164,97 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  gridTest("SQL ASOF JOIN sorts mixed timestamp keys across DST")(
+    for {
+      singlePass <- Seq(false, true)
+      ansiEnabled <- Seq(false, true)
+    } yield (singlePass, ansiEnabled)
+  ) { case (singlePass, ansiEnabled) =>
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true"
+    ) {
+      val ltzRows =
+        """(TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1),
+          |(TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2)""".stripMargin
+      // 02:50 becomes 10:50Z, after both 03:00 (10:00Z) and 03:15 (10:15Z).
+      val ntzRows =
+        """(TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+          |(TIMESTAMP_NTZ '2024-03-10 03:00:00', 2),
+          |(TIMESTAMP_NTZ '2024-03-10 03:15:00', 3)""".stripMargin
+      val keyExpressions = Seq(
+        "scalar" -> "ts",
+        "tuple" -> "ts",
+        "struct" -> "named_struct('ts', ts, 'n', 0)",
+        "array" -> "array(ts)",
+        "nested" -> "named_struct('items', array(named_struct('ts', ts)))")
+      for {
+        (shape, key) <- keyExpressions
+        // Top-level ARRAY operands require lambda resolution in the fixed-point analyzer.
+        if !singlePass || shape != "array"
+        ltzOnLeft <- Seq(false, true)
+        op <- Seq(">=", "<=")
+      } {
+        withClue(s"shape=$shape, ltzOnLeft=$ltzOnLeft, op=$op: ") {
+          val (leftRows, rightRows) = if (ltzOnLeft) (ltzRows, ntzRows) else (ntzRows, ltzRows)
+          val leftKey = if (shape == "tuple") "(l.k, 0)" else "l.k"
+          val rightKey = if (shape == "tuple") "(r.k, 0)" else "r.k"
+          val query = sql(
+            s"""SELECT l.id, r.id
+               |FROM (SELECT $key AS k, id FROM VALUES $leftRows AS v(ts, id)) l
+               |LEFT ASOF JOIN
+               |  (SELECT $key AS k, id FROM VALUES $rightRows AS v(ts, id)) r
+               |MATCH_CONDITION ($leftKey $op $rightKey)
+               |""".stripMargin
+          )
+          val expected = (ltzOnLeft, op == ">=") match {
+            case (true, true) => Seq(Row(1, 2), Row(2, 1))
+            case (true, false) => Seq(Row(1, 3), Row(2, null))
+            case (false, true) => Seq(Row(1, 1), Row(2, null), Row(3, 1))
+            case (false, false) => Seq(Row(1, 2), Row(2, 1), Row(3, 2))
+          }
+          assertUsesSortMergeAsOfJoin(query)
+          QueryTest.checkAnswer(df = query, expectedAnswer = expected, checkToRDD = false)
+        }
+      }
+
+      def nullStructRows(timestampType: String): Seq[String] = Seq(
+        s"(CAST(NULL AS STRUCT<ts: $timestampType>), 1)",
+        s"(named_struct('ts', CAST(NULL AS $timestampType)), 2)")
+
+      for {
+        (leftType, rightType) <- Seq(
+          ("TIMESTAMP_LTZ", "TIMESTAMP_NTZ"), ("TIMESTAMP_NTZ", "TIMESTAMP_LTZ"))
+        op <- Seq(">=", "<=")
+        reverseRightRows <- Seq(false, true)
+      } {
+        withClue(s"leftType=$leftType, op=$op, reverseRightRows=$reverseRightRows: ") {
+          val leftRows = nullStructRows(leftType).mkString(", ")
+          val rightRows = nullStructRows(rightType)
+          val orderedRightRows = if (reverseRightRows) rightRows.reverse else rightRows
+          val query = sql(
+            s"""SELECT l.id, r.id
+               |FROM VALUES $leftRows AS l(k, id)
+               |LEFT ASOF JOIN VALUES ${orderedRightRows.mkString(", ")} AS r(k, id)
+               |MATCH_CONDITION (l.k $op r.k)
+               |""".stripMargin
+          )
+          assertUsesSortMergeAsOfJoin(query)
+          QueryTest.checkAnswer(
+            df = query,
+            expectedAnswer = Seq(Row(1, null), Row(2, 2)),
+            checkToRDD = false
+          )
+        }
+      }
+    }
+  }
+
   test("LEFT ASOF JOIN preserves unmatched left rows") {
     setupTradeQuoteViews()
     checkSortMergeAsOf(
