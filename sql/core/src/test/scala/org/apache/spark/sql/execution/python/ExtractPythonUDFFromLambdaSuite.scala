@@ -266,6 +266,32 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(df).size == 1)
   }
 
+  test("SPARK-60509: lifted UDFs of different nesting depths are not chained") {
+    // `transform(values, x -> transform(f(x), y -> g(y)))`: `f(x)` is the inner function's
+    // argument, so it lifts to depth 1 over `values`, while `g` lifts onto `f(x)` and then again
+    // onto `values`, ending at depth 2 over `f`'s lifted result. A chain `g(f(...))` runs in the
+    // worker as one function under the outer UDF's depth, so `g` must instead be evaluated by a
+    // later operator over `f`'s result column.
+    val f = UserDefinedPythonFunction("f", new DummyUDF, ArrayType(IntegerType),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val g = UserDefinedPythonFunction("g", new DummyUDF, IntegerType,
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val df = arrayDF.select(transform(col("values"), x => transform(f(x), y => g(y))).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    // `collect` is pre-order, so the upper operator comes first.
+    val evals = df.queryExecution.optimizedPlan.collect { case a: ArrowEvalPython => a }
+    assert(evals.map(_.udfs.map(u => u.name -> u.elementwiseNestingDepth)) ==
+      Seq(Seq("g" -> 2), Seq("f" -> 1)))
+    assert(evals.head.udfs.head.children == evals.last.resultAttrs)
+
+    // Lifted UDFs of the same depth are still chained, here both at depth 2.
+    val sameDepth = Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
+      .select(transform(col("values"), row => transform(row, x => g(g(x)))).as("r"))
+    val lifted = liftedUDFs(sameDepth)
+    assert(lifted.map(_.elementwiseNestingDepth).toSet == Set(2))
+    assert(lifted.exists(_.children.exists(_.isInstanceOf[PythonUDF])))
+  }
+
   test("a lambda with no Python UDF is left unchanged") {
     val df = arrayDF.select(transform(col("values"), x => x + lit(1)).as("r"))
     val analyzed = df.queryExecution.analyzed
