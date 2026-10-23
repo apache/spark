@@ -42,8 +42,8 @@ OutputBatch = TypeVar("OutputBatch")
 
 @dataclass(frozen=True)
 class UDF:
-    """One UDF as built by ``EvalTypeHandler.create_udf``; each handler takes the fields it
-    needs."""
+    """One UDF as assigned to a handler by ``EvalTypeHandler.assign_udfs``; each handler takes
+    the fields it needs."""
 
     # The chained function wrapped for profiling and, for most eval types, in
     # fail_on_stopiteration.
@@ -67,7 +67,7 @@ class UDTFInstance(Protocol):
 
 @dataclass(frozen=True)
 class UDTF:
-    """The UDTF as built by ``UDTFHandlerBase.create_udtf``."""
+    """The UDTF as assigned to a handler by ``UDTFHandlerBase.assign_udtf``."""
 
     # Wrapped in the handler's partition_wrapper when its TABLE argument has PARTITION BY
     # expressions.

@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     import pyarrow as pa
 
     from pyspark.eval_handlers._typing import UDF
-    from pyspark.worker_util import EvalConf, RunnerConf
+    from pyspark.worker_util import RunnerConf
 
 
 def _elementwise_input_schema(
@@ -180,11 +180,11 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
         # clear message rather than a bare ImportError from `import pyarrow`.
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         # Element-wise UDFs back higher-order lambdas like transform(arr, x -> udf(x)).
         # ExtractPythonUDFFromLambda rewrites them so the UDF receives *all* array elements
@@ -195,7 +195,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # Example: array<array<int>> -> udf(depth 2) -> array<array<int>>.
 
         # UDF preparation
-        nesting = eval_conf.elementwise_nesting
+        nesting = self._eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
             udf_return_type = udf.return_type
@@ -209,10 +209,10 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                 ArrowTableToRowsConversion._create_converter(
                     field.dataType,
                     none_on_identity=True,
-                    binary_as_bytes=runner_conf.binary_as_bytes,
+                    binary_as_bytes=self._runner_conf.binary_as_bytes,
                 )
                 for field in _elementwise_input_schema(
-                    eval_conf.input_type, args_kwargs_offsets, depth
+                    self._eval_conf.input_type, args_kwargs_offsets, depth
                 )
             ]
             self._udf_infos.append(
@@ -226,12 +226,12 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     to_arrow_type(
                         udf_return_type,
                         timezone="UTC",
-                        prefers_large_types=runner_conf.use_large_var_types,
+                        prefers_large_types=self._runner_conf.use_large_var_types,
                     ),
                     LocalDataToArrowConversion._create_converter(
                         udf_return_type,
                         none_on_identity=True,
-                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                        int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
                     ),
                 )
             )
@@ -307,9 +307,9 @@ class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     whole flat columns. The conversions below are the Arrow flavor (``pa.Array`` in and out);
     ``_PandasElementwiseUDFHandler`` overrides them for pandas."""
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
     def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
         """Adapt one flattened input batch (one aligned leaf Array per argument) to the UDF's
@@ -387,22 +387,22 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     ``array<R>`` using the input's offsets - one row in, one row out, one Python round trip per
     batch. Subclasses supply the flavor's conversions and result check."""
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def _init_udfs(self, udfs: list[UDF]) -> None:
+        super()._init_udfs(udfs)
 
-        nesting = eval_conf.elementwise_nesting
+        nesting = self._eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 udf.func, udf.args_offsets, udf.kwargs_offsets
             )
-            udf_output_schema = _elementwise_output_schema(udf_return_type, runner_conf)
+            udf_output_schema = _elementwise_output_schema(udf_return_type, self._runner_conf)
             depth = nesting[udf_index] if nesting is not None else 1
             # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
             # element type ``T`` reached by peeling ``depth`` array levels.
             udf_input_schema = _elementwise_input_schema(
-                eval_conf.input_type, args_kwargs_offsets, depth
+                self._eval_conf.input_type, args_kwargs_offsets, depth
             )
             self._udf_infos.append(
                 (
@@ -513,8 +513,8 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
     _iter_based = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def _init_udfs(self, udfs: list[UDF]) -> None:
+        super()._init_udfs(udfs)
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
         udf = udfs[0]
@@ -525,12 +525,12 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
         # element type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned
         # array). ``depth`` > 1 for a UDF lifted out of nested lambdas.
-        nesting = eval_conf.elementwise_nesting
+        nesting = self._eval_conf.elementwise_nesting
         self._depth = nesting[0] if nesting is not None else 1
         self._udf_input_schema = _elementwise_input_schema(
-            eval_conf.input_type, self._args_offsets, self._depth
+            self._eval_conf.input_type, self._args_offsets, self._depth
         )
-        self._udf_output_schema = _elementwise_output_schema(self._return_type, runner_conf)
+        self._udf_output_schema = _elementwise_output_schema(self._return_type, self._runner_conf)
 
     @abstractmethod
     def _verify_return_type(self, results: Any) -> Iterator[Any]:

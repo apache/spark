@@ -116,8 +116,9 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
-        return handler_cls(
-            udfs=[
+        handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=cls._eval_conf())
+        handler._init_udfs(
+            [
                 UDF(
                     func=udf,
                     raw_func=udf,
@@ -125,10 +126,9 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
                     kwargs_offsets={},
                     return_type=cls._RETURN_TYPE,
                 )
-            ],
-            runner_conf=runner_conf or RunnerConf({}),
-            eval_conf=cls._eval_conf(),
+            ]
         )
+        return handler
 
     def _assert_client_constructed(self):
         self.client_cls.assert_called_once_with(1234, self._KEY_SCHEMA, auth_secret="secret")
@@ -234,8 +234,12 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
 
     @classmethod
     def _handler(cls, udf, runner_conf=None):
-        return PandasGroupedMapWithStateUDFHandler(
-            udfs=[
+        handler = PandasGroupedMapWithStateUDFHandler(
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
+        )
+        handler._init_udfs(
+            [
                 UDF(
                     func=udf,
                     raw_func=udf,
@@ -243,10 +247,9 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
                     kwargs_offsets={},
                     return_type=cls._RETURN_TYPE,
                 )
-            ],
-            runner_conf=runner_conf or RunnerConf({}),
-            eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
+            ]
         )
+        return handler
 
     @staticmethod
     def _decode(batches):

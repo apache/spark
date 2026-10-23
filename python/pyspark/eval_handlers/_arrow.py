@@ -69,7 +69,6 @@ if TYPE_CHECKING:
     import pyarrow as pa
 
     from pyspark.eval_handlers._typing import UDF, CoGroupedBatch, GroupedBatch
-    from pyspark.worker_util import EvalConf, RunnerConf
 
 
 class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
@@ -79,9 +78,9 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One COGROUPED_MAP_ARROW UDF expected here."
         udf = udfs[0]
         self._cogrouped_udf = udf.func
@@ -91,7 +90,9 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         self._left_key_cols, self._left_val_cols = parsed_offsets[0]
         self._right_key_cols, self._right_val_cols = parsed_offsets[1]
         self._arrow_return_schema = to_arrow_schema(
-            udf.return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            udf.return_type,
+            timezone="UTC",
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[CoGroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -137,9 +138,9 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
     _iter_based = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW_ITER UDF expected here."
         udf = udfs[0]
         self._grouped_udf = udf.func
@@ -152,7 +153,9 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
         self._arrow_return_schema = to_arrow_schema(
-            udf.return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            udf.return_type,
+            timezone="UTC",
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -208,9 +211,9 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW UDF expected here."
         udf = udfs[0]
         self._grouped_udf = udf.func
@@ -221,7 +224,9 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
         self._arrow_return_schema = to_arrow_schema(
-            udf.return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            udf.return_type,
+            timezone="UTC",
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -276,14 +281,14 @@ class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._return_schema = to_arrow_schema(
             StructType([StructField(n, udf.return_type) for n, udf in zip(self._col_names, udfs)]),
             timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -309,16 +314,16 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One GROUPED_AGG_ARROW_ITER UDF expected here."
         udf = udfs[0]
         self._udf_func, self._args_offsets = udf.func, udf.args_offsets
         self._return_schema = to_arrow_schema(
             StructType([StructField("_0", udf.return_type)]),
             timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -348,15 +353,15 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-        self._window_bound_types = runner_conf.window_bound_types
+        super()._init_udfs(udfs)
+        self._window_bound_types = self._runner_conf.window_bound_types
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._return_schema = to_arrow_schema(
             StructType([StructField(n, udf.return_type) for n, udf in zip(self._col_names, udfs)]),
             timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
@@ -418,12 +423,12 @@ class ArrowGroupedAggIncrementalPartialUDFHandler(BatchEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         # The leading `num_grouping_keys` input columns are the grouping keys (see the operator);
         # `grouping_key_schema` carries their names/types so the emitted key columns round-trip.
-        grouping_key_schema = eval_conf.grouping_key_schema
+        grouping_key_schema = self._eval_conf.grouping_key_schema
         self._num_grouping_keys = (
             len(grouping_key_schema.fields) if grouping_key_schema is not None else 0
         )
@@ -436,7 +441,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandler(BatchEvalTypeHandler["pa.Recor
             to_arrow_type(
                 agg.bufferSchema,
                 timezone="UTC",
-                prefers_large_types=runner_conf.use_large_var_types,
+                prefers_large_types=self._runner_conf.use_large_var_types,
             )
             for agg in self._aggs
         ]
@@ -465,7 +470,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandler(BatchEvalTypeHandler["pa.Recor
         # because the FINAL stage re-groups the emitted partial buffers authoritatively after the
         # shuffle and merges any duplicate keys that early flushes produce. A non-positive
         # maxRecordsPerBatch means "unbounded" (mirroring the reader side).
-        max_records = runner_conf.arrow_max_records_per_batch
+        max_records = self._runner_conf.arrow_max_records_per_batch
         self._cap = max_records if max_records > 0 else None
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
@@ -546,14 +551,14 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._return_schema = to_arrow_schema(
             StructType([StructField(n, udf.return_type) for n, udf in zip(self._col_names, udfs)]),
             timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
         # The Aggregator object itself, unwrapped (see ArrowGroupedAggIncrementalPartialUDFHandler).
         self._aggs = [udf.raw_func for udf in udfs]
@@ -598,15 +603,15 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
-        self._window_bound_types = runner_conf.window_bound_types
+        super()._init_udfs(udfs)
+        self._window_bound_types = self._runner_conf.window_bound_types
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._return_schema = to_arrow_schema(
             StructType([StructField(n, udf.return_type) for n, udf in zip(self._col_names, udfs)]),
             timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
         # The Aggregator object itself, unwrapped (see ArrowGroupedAggIncrementalPartialUDFHandler).
         self._aggs = [udf.raw_func for udf in udfs]
@@ -684,9 +689,9 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
     _iter_based = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One MAP_ARROW_ITER UDF expected here."
         self._udf_func = udfs[0].func
 
@@ -726,14 +731,16 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
     _iter_based = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One SCALAR_ARROW_ITER UDF expected here."
         udf = udfs[0]
         self._udf_func, self._args_offsets = udf.func, udf.args_offsets
         self._arrow_return_type = to_arrow_type(
-            udf.return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            udf.return_type,
+            timezone="UTC",
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
@@ -781,14 +788,14 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         self._col_names = ["_%d" % i for i in range(len(udfs))]
         self._combined_arrow_schema = to_arrow_schema(
             StructType([StructField(n, udf.return_type) for n, udf in zip(self._col_names, udfs)]),
             timezone="UTC",
-            prefers_large_types=runner_conf.use_large_var_types,
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
@@ -823,9 +830,9 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         # --- UDF preparation ---
         self._udf_infos = []
@@ -842,12 +849,12 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     to_arrow_type(
                         udf.return_type,
                         timezone="UTC",
-                        prefers_large_types=runner_conf.use_large_var_types,
+                        prefers_large_types=self._runner_conf.use_large_var_types,
                     ),
                     LocalDataToArrowConversion._create_converter(
                         udf.return_type,
                         none_on_identity=True,
-                        int_to_decimal_coercion_enabled=runner_conf.int_to_decimal_coercion_enabled,
+                        int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
                     ),
                 )
             )
@@ -857,9 +864,9 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # --- Input preparation ---
         self._arrow_to_py_converters = [
             ArrowTableToRowsConversion._create_converter(
-                f.dataType, none_on_identity=True, binary_as_bytes=runner_conf.binary_as_bytes
+                f.dataType, none_on_identity=True, binary_as_bytes=self._runner_conf.binary_as_bytes
             )
-            for f in eval_conf.input_type  # type: ignore[union-attr]
+            for f in self._eval_conf.input_type  # type: ignore[union-attr]
         ]
 
     @property

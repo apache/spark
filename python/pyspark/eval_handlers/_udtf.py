@@ -18,7 +18,7 @@
 """Handlers for the user-defined table function (UDTF) eval types, and the wrappers that
 implement TABLE argument PARTITION BY semantics on top of a UDTF instance.
 
-Each handler receives the single ``UDTF`` record its ``create_udtf`` returns, which holds
+Each handler is assigned the single ``UDTF`` record ``assign_udtf`` builds, which holds
 the instantiated UDTF.
 
 pyarrow is imported lazily (inside the handlers and the type-checking block) so the module
@@ -71,7 +71,6 @@ if TYPE_CHECKING:
     import pyarrow as pa
 
     from pyspark.worker_message import UDTFInfo
-    from pyspark.worker_util import EvalConf, RunnerConf
 
 
 class PartitionedUDTF(metaclass=ABCMeta):
@@ -602,20 +601,18 @@ def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None
 
 
 class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
-    """Base for every UDTF eval type handler; ``create_udtf`` builds the ``UDTF`` record the
-    handler is constructed with."""
+    """Base for every UDTF eval type handler; ``assign_udtf`` assigns the UDTF to the handler."""
 
     # Wraps the UDTF when its TABLE argument has PARTITION BY expressions.
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 
-    @classmethod
-    def create_udtf(
-        cls, udtf_cls: object, udtf_info: UDTFInfo, pickle_ser: FramedSerializer
-    ) -> UDTF:
-        """Prepare ``udtf_cls``, the unpickled UDTF class of ``udtf_info``, for evaluation: wrap
+    def assign_udtf(
+        self, udtf_cls: object, udtf_info: UDTFInfo, pickle_ser: FramedSerializer
+    ) -> None:
+        """Assign ``udtf_cls``, the unpickled UDTF class of ``udtf_info``, to this handler: wrap
         the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in
-        ``partition_wrapper`` when its TABLE argument has PARTITION BY expressions), and check
-        the 'eval' signature against the call arguments."""
+        ``partition_wrapper`` when its TABLE argument has PARTITION BY expressions), check the
+        'eval' signature against the call arguments, then set the handler up for it."""
         if not isinstance(udtf_cls, type):
             raise PySparkRuntimeError(
                 f"Invalid UDTF handler type. Expected a class (type 'type'), but "
@@ -660,7 +657,7 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
         # Instantiate the UDTF class.
         try:
             if len(udtf_info.partition_child_indexes) > 0:
-                udtf = cls.partition_wrapper(handler, udtf_info.partition_child_indexes)
+                udtf = self.partition_wrapper(handler, udtf_info.partition_child_indexes)
             else:
                 udtf = handler()
         except Exception as e:
@@ -687,11 +684,15 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
                 messageParameters={"name": udtf_info.name, "reason": str(e)},
             ) from None
 
-        return UDTF(
-            udtf=udtf,
-            args_offsets=udtf_info.args,
-            kwargs_offsets=udtf_info.kwargs,
-            return_type=return_type,
+        self._init_udfs(
+            [
+                UDTF(
+                    udtf=udtf,
+                    args_offsets=udtf_info.args,
+                    kwargs_offsets=udtf_info.kwargs,
+                    return_type=return_type,
+                )
+            ]
         )
 
 
@@ -703,8 +704,8 @@ class UDTFEvalTypeHandler(UDTFHandlerBase[InputBatch, OutputBatch]):
     ``cleanup``. Subclasses implement the two hooks and pick the serializer.
     """
 
-    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def _init_udfs(self, udfs: list[UDTF]) -> None:
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One UDTF expected here."
         udtf = udfs[0].udtf
         self._return_type = udfs[0].return_type
@@ -745,8 +746,8 @@ class TableUDTFHandler(UDTFHandlerBase[Any, tuple]):
 
     eval_type = PythonEvalType.SQL_TABLE_UDF
 
-    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def _init_udfs(self, udfs: list[UDTF]) -> None:
+        super()._init_udfs(udfs)
         assert len(udfs) == 1, "One UDTF expected here."
         udtf, return_type = udfs[0].udtf, udfs[0].return_type
         self._check_output_row_against_schema = build_null_checker(return_type)
@@ -871,18 +872,20 @@ class ArrowUDTFHandler(
     eval_type = PythonEvalType.SQL_ARROW_UDTF
     partition_wrapper = ArrowUDTFWithPartition
 
-    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDTF]) -> None:
         import pyarrow as pa
 
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         arrow_return_type = to_arrow_type(
-            self._return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            self._return_type,
+            timezone="UTC",
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
         self._return_type_size = len(self._return_type)
         self._target_schema = pa.schema(list(arrow_return_type))
 
         self._table_arg_offsets = (
-            set(eval_conf.table_arg_offsets) if eval_conf.table_arg_offsets else set()
+            set(self._eval_conf.table_arg_offsets) if self._eval_conf.table_arg_offsets else set()
         )
 
     def _verify_result(self, result: pa.RecordBatch, method_name: str) -> pa.RecordBatch:
@@ -981,8 +984,8 @@ class ArrowTableUDTFHandler(
     ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``. Subclasses implement
     ``_to_columns`` and ``_convert_result``."""
 
-    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def _init_udfs(self, udfs: list[UDTF]) -> None:
+        super()._init_udfs(udfs)
         self._return_type_size = len(self._return_type)
         self._check_output_row_against_schema = build_null_checker(self._return_type)
 
@@ -1033,10 +1036,10 @@ class ArrowTableUDTFLegacyPandasHandler(ArrowTableUDTFHandler):
     variant_conf = "use_legacy_pandas_udtf_conversion"
     variant_value = True
 
-    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDTF]) -> None:
         import pandas  # noqa: F401
 
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         # The output pandas DataFrame is converted as a single struct column named
         # "_0" against this schema.
         self._output_schema = StructType([StructField("_0", self._return_type)])
@@ -1143,20 +1146,22 @@ class ArrowTableUDTFArrowHandler(ArrowTableUDTFHandler):
     variant_conf = "use_legacy_pandas_udtf_conversion"
     variant_value = False
 
-    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDTF]) -> None:
         import pyarrow  # noqa: F401
 
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
         self._arrow_return_type = to_arrow_type(
-            self._return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
+            self._return_type,
+            timezone="UTC",
+            prefers_large_types=self._runner_conf.use_large_var_types,
         )
         self._converters = [
             ArrowTableToRowsConversion._create_converter(
                 f.dataType,
                 none_on_identity=True,
-                binary_as_bytes=runner_conf.binary_as_bytes,
+                binary_as_bytes=self._runner_conf.binary_as_bytes,
             )
-            for f in eval_conf.input_type  # type: ignore[union-attr]
+            for f in self._eval_conf.input_type  # type: ignore[union-attr]
         ]
 
     def _verify_result(self, result: pa.Table, method_name: str) -> pa.Table:

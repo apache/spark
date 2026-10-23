@@ -27,7 +27,6 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
 
 from pyspark.eval_handlers._typing import (
     UDF,
-    UDTF,
     CoGroupedBatch,
     GroupedBatch,
     InputBatch,
@@ -152,55 +151,59 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
-    # Whether create_udf wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
+    # Whether assign_udfs wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
     # user code fails the task instead of silently ending the loop that calls the UDF.
     _fail_on_stopiteration: ClassVar[bool] = True
 
-    @classmethod
-    def create_udf(
-        cls,
-        chained_func: Callable[..., Any],
-        return_type: "DataType",
-        udf_info: "UDFInfo",
-        runner_conf: "RunnerConf",
-    ) -> UDF:
-        """Build the ``UDF`` record of ``udf_info`` from ``chained_func``, its unpickled (and
-        chained) function, wrapping it for profiling and in ``fail_on_stopiteration``."""
-        profiling_func = cls._with_profiler(chained_func, udf_info.result_id, runner_conf)
-        return UDF(
-            func=(
-                fail_on_stopiteration(profiling_func)
-                if cls._fail_on_stopiteration
-                else profiling_func
-            ),
-            raw_func=chained_func,
-            args_offsets=udf_info.args,
-            kwargs_offsets=udf_info.kwargs,
-            return_type=return_type,
-        )
+    def __init__(self, runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
+        self._runner_conf = runner_conf
+        self._eval_conf = eval_conf
 
-    @classmethod
-    def _with_profiler(
-        cls, f: Callable[..., Any], result_id: int, runner_conf: "RunnerConf"
-    ) -> Callable[..., Any]:
+    def assign_udfs(self, udfs: "list[tuple[Callable[..., Any], DataType, UDFInfo]]") -> None:
+        """Assign the UDFs to this handler, each given as its unpickled (and chained) function,
+        return type and ``UDFInfo``: wrap each function for profiling and in
+        ``fail_on_stopiteration``, then set the handler up for them."""
+        records = []
+        for chained_func, return_type, udf_info in udfs:
+            profiling_func = self._with_profiler(chained_func, udf_info.result_id)
+            records.append(
+                UDF(
+                    func=(
+                        fail_on_stopiteration(profiling_func)
+                        if self._fail_on_stopiteration
+                        else profiling_func
+                    ),
+                    raw_func=chained_func,
+                    args_offsets=udf_info.args,
+                    kwargs_offsets=udf_info.kwargs,
+                    return_type=return_type,
+                )
+            )
+        self._init_udfs(records)
+
+    def _init_udfs(self, udfs: list[Any]) -> None:
+        """Set the handler up for its assigned ``UDF`` (or ``UDTF``) records; handlers extend it
+        to derive their per-UDF state."""
+        self._udfs = udfs
+
+    def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is
         set."""
         # If f is from pyspark.sql.worker, it is to read/write data source.
         # In this case, we check the data_source_profiler config.
         module = getattr(f, "__module__", "")
         if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
-            profiler = runner_conf.data_source_profiler
+            profiler = self._runner_conf.data_source_profiler
         else:
-            profiler = runner_conf.udf_profiler
+            profiler = self._runner_conf.udf_profiler
         if profiler == "perf":
-            return cls._with_perf_profiler(f, result_id)
+            return self._with_perf_profiler(f, result_id)
         elif profiler == "memory":
-            return cls._with_memory_profiler(f, result_id)
+            return self._with_memory_profiler(f, result_id)
         else:
             return f
 
-    @classmethod
-    def _with_perf_profiler(cls, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+    def _with_perf_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         from pyspark.accumulators import SpecialAccumulatorIds, _deserialize_accumulator
         from pyspark.sql.profiler import (
             ProfileResultsParam,
@@ -215,7 +218,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
             SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
         )
 
-        if cls.is_iter_based:
+        if self._iter_based:
 
             def profiling_func(*args: Any, **kwargs: Any) -> Any:
                 iterator = iter(f(*args, **kwargs))
@@ -236,8 +239,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
 
         return profiling_func
 
-    @classmethod
-    def _with_memory_profiler(cls, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+    def _with_memory_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         import pyspark.memory_profiler_ext
         from pyspark.accumulators import SpecialAccumulatorIds, _deserialize_accumulator
         from pyspark.sql.profiler import (
@@ -257,7 +259,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
             SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
         )
 
-        if cls.is_iter_based:
+        if self._iter_based:
 
             def profiling_func(*args: Any, **kwargs: Any) -> Any:
                 g = f(*args, **kwargs)
@@ -281,13 +283,6 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                 return ret
 
         return profiling_func
-
-    def __init__(
-        self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
-    ) -> None:
-        self._udfs: list[Any] = udfs
-        self._runner_conf = runner_conf
-        self._eval_conf = eval_conf
 
     @property
     @abstractmethod

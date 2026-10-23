@@ -28,7 +28,6 @@ from typing import Any, BinaryIO, Callable
 from pyspark import shuffle
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import UDTFHandlerBase
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.messages import (
@@ -129,7 +128,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
         # UDF and UDTF runners fold profiling into func at construction time (see
-        # EvalTypeHandler.create_udf); only the classic RDD command carries a profiler of its own.
+        # EvalTypeHandler.assign_udfs); only the classic RDD command carries a profiler of its own.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))
@@ -140,20 +139,19 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             handler_cls = get_eval_type_handler(eval_type, runner_conf)
             if handler_cls is None:
                 raise ValueError("Unknown eval type: {}".format(eval_type))
-            udfs: list[UDF] | list[UDTF]
+            handler = handler_cls(runner_conf=runner_conf, eval_conf=eval_conf)
             if isinstance(init_info.udf_info, UDTFInfo):
-                assert issubclass(handler_cls, UDTFHandlerBase)
+                assert isinstance(handler, UDTFHandlerBase)
                 udtf_cls = read_command(pickleSer, init_info.udf_info.handler)
-                udfs = [handler_cls.create_udtf(udtf_cls, init_info.udf_info, pickleSer)]
+                handler.assign_udtf(udtf_cls, init_info.udf_info, pickleSer)
             else:
                 assert isinstance(init_info.udf_info, list)
-                udfs = [
-                    handler_cls.create_udf(
-                        *unpickle_and_chain(pickleSer, udf_info.udfs), udf_info, runner_conf
-                    )
-                    for udf_info in init_info.udf_info
-                ]
-            handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+                handler.assign_udfs(
+                    [
+                        (*unpickle_and_chain(pickleSer, udf_info.udfs), udf_info)
+                        for udf_info in init_info.udf_info
+                    ]
+                )
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 

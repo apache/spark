@@ -68,7 +68,6 @@ if TYPE_CHECKING:
     import pyarrow as pa
 
     from pyspark.eval_handlers._typing import UDF
-    from pyspark.worker_util import EvalConf, RunnerConf
 
 
 class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
@@ -98,10 +97,10 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         ]
     )
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         assert len(udfs) == 1, "One GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF expected here."
 
@@ -112,9 +111,9 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
 
-        self._state_object_schema = eval_conf.state_value_schema
+        self._state_object_schema = self._eval_conf.state_value_schema
 
-        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        arrow_max_records_per_batch = self._runner_conf.arrow_max_records_per_batch
         self._arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         )
@@ -420,10 +419,10 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -440,16 +439,16 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
         self._output_schema = StructType([StructField("_0", self._return_type)])
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port,  # type: ignore[arg-type]
-            eval_conf.grouping_key_schema,  # type: ignore[arg-type]
-            auth_secret=eval_conf.state_server_auth_secret,
+            self._eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            self._eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=self._eval_conf.state_server_auth_secret,
         )
 
-        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        arrow_max_records_per_batch = self._runner_conf.arrow_max_records_per_batch
         self._arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         )
-        self._arrow_max_bytes_per_batch = runner_conf.arrow_max_bytes_per_batch
+        self._arrow_max_bytes_per_batch = self._runner_conf.arrow_max_bytes_per_batch
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         """Apply transformWithStateInPandas UDF.
@@ -573,10 +572,10 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -594,16 +593,16 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         self._output_schema = StructType([StructField("_0", self._return_type)])
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port,  # type: ignore[arg-type]
-            eval_conf.grouping_key_schema,  # type: ignore[arg-type]
-            auth_secret=eval_conf.state_server_auth_secret,
+            self._eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            self._eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=self._eval_conf.state_server_auth_secret,
         )
 
-        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        arrow_max_records_per_batch = self._runner_conf.arrow_max_records_per_batch
         self._arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         )
-        self._arrow_max_bytes_per_batch = runner_conf.arrow_max_bytes_per_batch
+        self._arrow_max_bytes_per_batch = self._runner_conf.arrow_max_bytes_per_batch
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         """Apply transformWithStateInPandas UDF with initial state.
@@ -793,9 +792,9 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -806,9 +805,9 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         self._key_offsets = parsed_offsets[0][0]
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port,  # type: ignore[arg-type]
-            eval_conf.grouping_key_schema,  # type: ignore[arg-type]
-            auth_secret=eval_conf.state_server_auth_secret,
+            self._eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            self._eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=self._eval_conf.state_server_auth_secret,
         )
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
@@ -900,9 +899,9 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def _init_udfs(self, udfs: list[UDF]) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super()._init_udfs(udfs)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
         self._func, self._return_type = udfs[0].func, udfs[0].return_type
@@ -919,12 +918,12 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         self._init_key_offsets = parsed_offsets[1][0]
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
-            eval_conf.state_server_socket_port,  # type: ignore[arg-type]
-            eval_conf.grouping_key_schema,  # type: ignore[arg-type]
-            auth_secret=eval_conf.state_server_auth_secret,
+            self._eval_conf.state_server_socket_port,  # type: ignore[arg-type]
+            self._eval_conf.grouping_key_schema,  # type: ignore[arg-type]
+            auth_secret=self._eval_conf.state_server_auth_secret,
         )
 
-        arrow_max_records_per_batch = runner_conf.arrow_max_records_per_batch
+        arrow_max_records_per_batch = self._runner_conf.arrow_max_records_per_batch
         self._arrow_max_records_per_batch = (
             arrow_max_records_per_batch if arrow_max_records_per_batch > 0 else 2**31 - 1
         )
