@@ -525,7 +525,7 @@ org.apache.spark.sql.AnalysisException
   "errorClass" : "UNSUPPORTED_GENERATOR.OUTSIDE_SELECT",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "plan" : "'AsOfJoin (trade_time#x >= quote_time#x), isnotnull(explode(array(symbol#x, symbol#x))), Inner"
+    "plan" : "AsOfJoin (trade_time#x >= quote_time#x), isnotnull(explode(array(symbol#x, symbol#x))), Inner"
   }
 }
 
@@ -540,7 +540,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
   "sqlState" : "42K0E",
   "messageParameters" : {
-    "sqlExprs" : "\"(trade_time >= quote_time)\", \"((symbol = symbol) AND (rand() > 0.5))\", \"(trade_time - quote_time)\", \"trade_time\", \"quote_time\""
+    "sqlExprs" : "\"(trade_time >= quote_time)\", \"((symbol = symbol) AND (rand() > 0.5))\", \"trade_time\", \"quote_time\""
   },
   "queryContext" : [ {
     "objectType" : "",

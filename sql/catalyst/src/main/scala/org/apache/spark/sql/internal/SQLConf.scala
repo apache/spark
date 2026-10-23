@@ -9788,14 +9788,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
-  /**
-   * Whether to keep [[AsOfJoin]] for the sort-merge physical operator instead of the
-   * correlated-subquery rewrite. SQL ASOF JOIN always requires sort-merge; the DataFrame
-   * API is gated separately on [[sortMergeAsOfJoinEnabled]].
-   */
-  def useSortMergeAsOfJoinOperator(requiresSortMergeAsOfJoin: Boolean): Boolean =
-    sortMergeAsOfJoinEnabled || requiresSortMergeAsOfJoin
-
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
