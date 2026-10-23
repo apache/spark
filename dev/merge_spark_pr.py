@@ -2026,7 +2026,7 @@ _SPARK_ID_RE = re.compile(r"^SPARK-\d+$", re.IGNORECASE)
 _VERSION_TAG_RE = re.compile(r"^\d+\.(\d+|X)$")
 _LEADING_TAGS = frozenset({"MINOR", "TRIVIAL"})
 # A SPARK id that opens a title without brackets, e.g. the old subject "SPARK-49004".
-_BARE_SPARK_ID_RE = re.compile(r"SPARK-[0-9]+\b", re.IGNORECASE)
+_BARE_SPARK_ID_RE = re.compile(r"SPARK-[0-9]+\b", re.IGNORECASE | re.ASCII)
 # A Revert "..." / Reapply "..." wrapper, which main() keeps verbatim in the PR title.
 _WRAPPER_RE = re.compile(r'(?:Revert|Reapply) "(.*)"', re.DOTALL)
 
@@ -2221,6 +2221,8 @@ def leading_jira_ids(title: str) -> List[str]:
     ['SPARK-1234', 'SPARK-5678']
     >>> leading_jira_ids("[SPARK-1234][spark-1234] Fix")
     ['SPARK-1234']
+    >>> leading_jira_ids("[SPARK-123456][SQL] Fix")
+    ['SPARK-123456']
     >>> leading_jira_ids("[SPARK-1234][SQL][MINOR] Fix")
     ['SPARK-1234']
     >>> leading_jira_ids('Revert " [SPARK-1234][SQL][MINOR] Fix"')
@@ -2956,13 +2958,15 @@ __test__ = {
     ...     confirm.assert_not_called()
 
     Nested wrappers are unwrapped before the skip-tag and id checks, so an inner
-    skip tag is still honored and an inner id still reaches the revert path.
+    skip tag is still honored and an inner id still reaches the revert path. A
+    revert of a reapply is used here because it is a revert both by its outermost
+    wrapper, which is how main() sets is_revert today, and by wrapper nesting.
 
-    >>> update('Revert "Revert "[MINOR][SQL] Fix""', ["master"], is_revert=True)
+    >>> update('Revert "Reapply "[MINOR][SQL] Fix""', ["master"], is_revert=True)
     >>> reverter.assert_not_called()
     >>> resolver.assert_not_called()
     >>> confirm.assert_not_called()
-    >>> update('Revert "Revert "[SPARK-1234][SQL] Fix""', ["master"], is_revert=True)
+    >>> update('Revert "Reapply "[SPARK-1234][SQL] Fix""', ["master"], is_revert=True)
     >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
 
     Ordinary merges and reapplies still resolve the issue or add fix versions.
