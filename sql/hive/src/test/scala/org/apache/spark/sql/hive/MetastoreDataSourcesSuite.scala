@@ -1324,6 +1324,39 @@ class MetastoreDataSourcesSuite extends QueryTest
     }
   }
 
+  test("SPARK-60515: saveAsTable with mode Overwrite keeps the existing hive table when " +
+      "Hive rejects the new table") {
+    def checkKeepsTable(fileFormat: String, columns: String*): Unit = {
+      withTable("t", "t2") {
+        spark.range(3).write.format("hive").saveAsTable("t")
+        def newWriter = spark.range(5).selectExpr(columns: _*).write.format("hive")
+          .option("fileFormat", fileFormat)
+        val e = intercept[AnalysisException] {
+          newWriter.mode(SaveMode.Overwrite).saveAsTable("t")
+        }
+        assert(e.getCondition === "_LEGACY_ERROR_TEMP_3065")
+        // The same error as creating a new table.
+        val expected = intercept[AnalysisException](newWriter.saveAsTable("t2"))
+        assert(e.getMessage === expected.getMessage)
+        checkAnswer(table("t"), spark.range(3).toDF())
+      }
+    }
+    // The Hive SerDe can't parse these types.
+    Seq("TIME(6)", "TIMESTAMP_NTZ", "TIMESTAMP_NTZ(9)", "VARIANT").foreach { dataType =>
+      checkKeepsTable("textfile", "id", s"CAST(NULL AS $dataType) AS c")
+    }
+    // The Parquet Hive SerDe doesn't support the void type.
+    checkKeepsTable("parquet", "id", "CAST(NULL AS VOID) AS c")
+    // The Hive SerDe can't parse the nested field name.
+    checkKeepsTable("textfile", "id", "CAST(NULL AS STRUCT<`a-b`: INT>) AS c")
+    // The Avro Hive SerDe doesn't allow a space in a field name.
+    checkKeepsTable("avro", "id", "CAST(NULL AS STRUCT<`a b`: INT>) AS c")
+    // Hive column names are case insensitive.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      checkKeepsTable("textfile", "id", "id AS ID")
+    }
+  }
+
   test("insertInto - source and target are the same table") {
     val tableName = "tab1"
     withTable(tableName) {
