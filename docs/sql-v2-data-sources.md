@@ -55,7 +55,7 @@ There are two ways to plug a data source into Spark:
 
 | Entry Point | Use Case |
 |-------------|----------|
-| [`TableProvider`](#tableprovider) | The simpler entry point, for sources that identify a table by **options** (e.g. a file path or Kafka topic) rather than through a catalog. Can implement `SupportsCatalogOptions` to also participate in DDL via the session catalog. |
+| [`TableProvider`](#tableprovider) | The simpler entry point, for sources that identify a table by **options** (e.g. a file path or Kafka topic) rather than through a catalog. Can implement `SupportsCatalogOptions` to map reader and writer options to a table in a catalog. |
 | [`CatalogPlugin`](#catalogplugin) | Typically used by external data sources that manage their own **catalog** of namespaces, tables, and optionally views and functions (e.g. Iceberg, Delta Lake). Registered via `spark.sql.catalog.<name>=com.example.MyCatalog`. |
 
 
@@ -74,9 +74,9 @@ The key methods are:
 
 A `TableProvider` can also implement
 [`SupportsCatalogOptions`](api/java/org/apache/spark/sql/connector/catalog/SupportsCatalogOptions.html)
-to participate in DDL such as `CREATE TABLE` by extracting a catalog identifier from the
-user-supplied options. This bridges option-based sources to the session catalog, which is how
-built-in file data sources (Parquet, ORC, etc.) support table creation.
+so that `DataFrameReader.load` and `DataFrameWriter.save` resolve the user-supplied options to an
+identifier in a catalog (the session catalog unless the options name another), which enables
+existence checks and create-on-save for those calls.
 
 
 ### CatalogPlugin
@@ -120,15 +120,14 @@ categories of metadata operations through Spark SQL.
 | `createTable(ident, tableInfo)` | Create a new table from a [`TableInfo`](api/java/org/apache/spark/sql/connector/catalog/TableInfo.html) carrying columns, partitioning, properties, and constraints |
 | `alterTable(ident, changes...)` | Alter a table's schema, properties, or constraints |
 | `dropTable(ident)` | Drop a table |
+| `renameTable(oldIdent, newIdent)` | Rename a table |
 
-`createTable(ident, tableInfo)` is the form Spark calls (since 4.1.0). The older overloads
-`createTable(ident, columns, partitions, properties)` and `createTable(ident, schema, partitions, properties)`
-are deprecated (since 4.1.0 and 3.4.0 respectively); their default implementations delegate down the
-chain, so a catalog that implements only `TableCatalog` serves `CREATE TABLE`, `REPLACE TABLE`, and
-CTAS by overriding the `TableInfo` form alone. A [`StagingTableCatalog`](#stagingtablecatalog) is
-different: for CTAS, RTAS, and `REPLACE TABLE`, Spark calls `stageCreate`, `stageReplace`, or
-`stageCreateOrReplace` instead of `createTable`, and each has its own `TableInfo` overload that must
-be overridden, since the defaults delegate to the deprecated forms and throw.
+Spark calls `createTable(ident, tableInfo)` (since 4.1.0) for `CREATE TABLE`, `REPLACE TABLE`, and
+CTAS, so a new catalog overrides that form. Its default forwards to the deprecated
+`createTable(ident, columns, partitions, properties)` and then
+`createTable(ident, schema, partitions, properties)` (deprecated since 4.1.0 and 3.4.0), which keeps
+older catalogs working but drops the table's constraints. A
+[`StagingTableCatalog`](#stagingtablecatalog) is reached through its own methods instead.
 
 ### StagingTableCatalog
 
@@ -138,7 +137,8 @@ extends `TableCatalog` and enables **atomic** `CREATE TABLE AS SELECT` and
 `commitStagedChanges()` is called. If the write fails, the catalog remains unchanged. Spark reaches
 these paths through `stageCreate(ident, tableInfo)`, `stageReplace(ident, tableInfo)`, and
 `stageCreateOrReplace(ident, tableInfo)` rather than `createTable`, so a staging catalog overrides
-those three in addition to the `TableCatalog` methods.
+those three in addition to the `TableCatalog` methods; their defaults forward to the deprecated
+forms and throw.
 
 ### SupportsNamespaces
 
@@ -163,17 +163,17 @@ tables and views in a single shared identifier namespace implement
 (since 4.2.0), which extends both `TableCatalog` and `ViewCatalog` and adds
 `loadRelation(ident)` so a lookup that may be either kind resolves in one round trip. A catalog
 that implements `TableCatalog` and `ViewCatalog` directly, without `RelationCatalog`, is rejected
-when it is initialized. A view's metadata is represented by [`ViewInfo`](#view).
+when it is initialized. A view's metadata is represented by [`View`](#view).
 
 | Method | Description |
 |--------|-------------|
 | `listViews(namespace)` | List views in a namespace |
-| `loadView(ident)` | Load a view's `ViewInfo` by identifier |
+| `loadView(ident)` | Load a view's `View` by identifier |
 | `viewExists(ident)` | Test whether a view exists (has a default implementation) |
 | `invalidateView(ident)` | Invalidate cached metadata for a view (has a default implementation) |
 | `createView(ident, info)` | Create a new view |
 | `replaceView(ident, info)` | Atomically replace an existing view (`ALTER VIEW ... AS`) |
-| `createOrReplaceView(ident, info)` | Create a view, or atomically replace it if it exists (`CREATE OR REPLACE VIEW`; has a default implementation) |
+| `createOrReplaceView(ident, info)` | Create a view, or replace it if it exists (`CREATE OR REPLACE VIEW`); the default calls `replaceView` and falls back to `createView`, which is not atomic, so override it for an atomic swap |
 | `dropView(ident)` | Drop a view |
 | `renameView(oldIdent, newIdent)` | Rename a view |
 
@@ -243,12 +243,12 @@ Additional mix-ins enable further capabilities:
 
 ## View
 
-[`ViewInfo`](api/java/org/apache/spark/sql/connector/catalog/ViewInfo.html) is the metadata
+[`View`](api/java/org/apache/spark/sql/connector/catalog/View.html) (since 4.2.0) is the metadata
 abstraction for a view &mdash; a named SQL query managed through a [`ViewCatalog`](#viewcatalog).
 Unlike a [`Table`](#table), a view has no data of its own: it stores a SQL query along with the
 context needed to resolve and expand that query consistently whenever the view is referenced.
 
-A `ViewInfo` provides:
+A `View` provides:
 
 | Method | Description |
 |--------|-------------|
@@ -288,15 +288,17 @@ point for configuring a read. Spark calls `build()` to obtain the final `Scan`.
 Before calling `build()`, Spark negotiates operator pushdown with the scan builder by checking
 for mix-in interfaces. The pushdown order is:
 
-1. **Sample** (`SupportsPushDownSample`)
+1. **Sample** (`SupportsPushDownTableSample`)
 2. **Filter** (`SupportsPushDownV2Filters` / `SupportsPushDownFilters`)
-3. **Aggregate** (`SupportsPushDownAggregates`)
-4. **Limit / Top-N** (`SupportsPushDownLimit` / `SupportsPushDownTopN`)
-5. **Offset** (`SupportsPushDownOffset`)
-6. **Column pruning** (`SupportsPushDownRequiredColumns`)
+3. **Join** (`SupportsPushDownJoin`, since 4.1.0)
+4. **Aggregate** (`SupportsPushDownAggregates`)
+5. **Variant extraction** (`SupportsPushDownVariantExtractions`, since 4.1.0)
+6. **Limit, top-N and offset** (`SupportsPushDownLimit`, `SupportsPushDownTopN`, `SupportsPushDownOffset`)
+7. **Column pruning** (`SupportsPushDownRequiredColumns`)
 
-Each mix-in has a method that Spark calls with the candidate operator, and the return value tells
-Spark what it must still evaluate itself after the scan:
+Spark offers aggregate, limit, top-N and offset pushdown only when no filter is left to evaluate
+above the scan, so a filter returned by `pushPredicates` blocks them. For the operators that can be
+partly handled, the return value tells Spark what it must still evaluate itself:
 
 - [`SupportsPushDownV2Filters`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownV2Filters.html):
   `pushPredicates(predicates)` receives the candidate [`Predicate`](#expressions) instances and
@@ -321,7 +323,7 @@ Spark what it must still evaluate itself after the scan:
   and
   [`SupportsPushDownAggregates`](api/java/org/apache/spark/sql/connector/read/SupportsPushDownAggregates.html)`.pushAggregation`
   return `true` when the source accepts the operator. For limit and top-N, `isPartiallyPushed()`
-  tells Spark whether it must keep the operator above the scan. For aggregation,
+  (default `true`) tells Spark whether it must keep the operator above the scan. For aggregation,
   `supportCompletePushDown(aggregation)` tells Spark whether the source handles the aggregation
   completely.
 
@@ -419,10 +421,12 @@ two-phase commit protocol for batch writes:
 
 1. `createBatchWriterFactory(info)` &mdash; creates a `DataWriterFactory` that is serialized and
    sent to executors.
-2. On each executor, the factory creates a `DataWriter` per partition. If all rows are written
-   successfully, the writer calls `commit()`; otherwise it calls `abort()`.
-3. After all tasks complete, the driver calls either `commit(messages[])` (if all tasks
-   succeeded) or `abort(messages[])` (if any task failed).
+2. On each executor, the factory creates a `DataWriter` per task attempt. When the attempt has
+   written its rows and the commit coordinator allows it, Spark calls `commit()`, which returns a
+   `WriterCommitMessage`; if the attempt fails, Spark calls `abort()`. Failed tasks are retried.
+3. On the driver, `onDataWriterCommit(message)` runs as each task's message arrives. If every task
+   commits, Spark calls `commit(messages[])`; if the job fails after task retries, or
+   `onDataWriterCommit` or `commit` throws, it calls `abort(messages[])`.
 
 Data written by individual tasks should not be visible to readers until the driver-level `commit`
 succeeds.
@@ -449,7 +453,7 @@ predicate are removed without rewriting individual records.
 
 | Method | Description |
 |--------|-------------|
-| `canDeleteWhere(predicates)` | Returns whether the data source can efficiently delete rows matching the given predicates. If this returns `false`, Spark falls back to row-level rewriting (see below) |
+| `canDeleteWhere(predicates)` | Returns whether the data source can efficiently delete rows matching the given predicates. If this returns `false`, Spark falls back to row-level rewriting (see below) when the table also implements `SupportsRowLevelOperations`; otherwise the `DELETE` fails |
 | `deleteWhere(predicates)` | Deletes all rows matching the predicates |
 
 This approach is well-suited for data sources that can drop entire partitions or files without
@@ -485,7 +489,8 @@ Data sources fall into two categories:
 The `org.apache.spark.sql.connector.expressions` package provides a neutral expression
 representation used across the DSV2 API:
 
-- **Transforms** (`IdentityTransform`, `BucketTransform`, `YearsTransform`, etc.)
+- **Transforms** (`Transform`, built with factory methods on `Expressions` such as `identity`,
+  `bucket` and `years`)
   describe table partitioning schemes.
 - **Sort orders** (`SortOrder`) describe ordering requirements.
 - **Filter predicates** (`Predicate` and subclasses) represent pushed-down filter conditions.
@@ -509,8 +514,7 @@ A `Table` that declares `STREAMING_WRITE` supports streaming writes through
 
 ## Building a Connector
 
-The sections above describe the interfaces one at a time. This section puts them together in
-the order a connector author needs them, using the connectors Spark tests itself with:
+Spark's own test connectors make a working example of each step:
 [`JavaSimpleDataSourceV2`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaSimpleDataSourceV2.java)
 for a minimal read,
 [`JavaAdvancedDataSourceV2WithV2Filter`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaAdvancedDataSourceV2WithV2Filter.java)
@@ -518,9 +522,12 @@ for pushdown, and
 [`JavaSimpleWritableDataSource`](https://github.com/apache/spark/blob/master/sql/core/src/test/java/test/org/apache/spark/sql/connector/JavaSimpleWritableDataSource.java)
 for writes, exercised by
 [`DataSourceV2Suite`](https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/connector/DataSourceV2Suite.scala).
-The three share a few test helpers: `TestingV2Source` is a `TableProvider` whose schema is two
-`int` columns, `i` and `j`; `JavaSimpleBatchTable` is a `Table` that declares `BATCH_READ` and
-returns that schema; `JavaRangeInputPartition` carries a `start` and `end`; and
+The three share a few test helpers. `TestingV2Source` is a test trait over `TableProvider`: it
+implements `inferSchema` (two `int` columns, `i` and `j`) and forwards
+`getTable(schema, partitioning, properties)` to a one-argument `getTable(options)`, which is what
+the excerpts override; a connector implements the three-argument form. `JavaSimpleBatchTable` is a
+`Table` that declares `BATCH_READ` and returns that schema (through the deprecated `schema()`; a
+new `Table` implements `columns()`); `JavaRangeInputPartition` carries a `start` and `end`; and
 `JavaSimpleScanBuilder` is a `ScanBuilder` that is also its own `Scan` and `Batch`.
 
 ### Step 1: A Minimal Batch Read
@@ -582,13 +589,14 @@ return new PartitionReader<InternalRow>() {
 };
 {% endhighlight %}
 
-A `PartitionReader<InternalRow>` produces
-[`InternalRow`](api/java/org/apache/spark/sql/catalyst/InternalRow.html), which holds each column
+A `PartitionReader<InternalRow>` produces `InternalRow`, which holds each column
 in Spark's internal representation rather than the external one a `Row` carries: a boxed `int`
 is fine for an `IntegerType` column as above, but a `StringType` column holds `UTF8String` (not
 `java.lang.String`), `DecimalType` holds `Decimal`, `DateType` holds an `int` of days,
 `TimestampType` a `long` of microseconds, `BinaryType` a `byte[]`, and nested types hold
-`ArrayData`, `MapData` and `InternalRow`. The accessor names on `InternalRow` (`getUTF8String`,
+`ArrayData`, `MapData` and `InternalRow`. `InternalRow` and `GenericInternalRow` live in Spark's
+internal `catalyst` package and have no API docs, but they are the row types the connector API
+uses. The accessor names on `InternalRow` (`getUTF8String`,
 `getDecimal`, `getInt`, `getLong`, `getBinary`, `getArray`, `getMap`, `getStruct`) are the
 reference for each type. `GenericInternalRow` takes `Object[]`, so a value of the wrong
 representation compiles and fails on the executor with a `ClassCastException`.
@@ -602,11 +610,11 @@ projection and the filter itself, above the scan.
 A connector that can skip columns or rows adds the pushdown mix-ins to its `ScanBuilder`. The
 list, the order Spark applies them in, and the residual-filter contract are under
 [ScanBuilder](#scanbuilder). `JavaAdvancedDataSourceV2WithV2Filter` accepts only
-`i > <int literal>` and returns everything else for Spark to evaluate. The version below is
-adapted from it. The test connector asserts the shape of its own test inputs; a connector has to
-check the shape instead, because Spark can push `i > j` (two column references) as the same `>`
-predicate, and an unchecked cast would throw rather than hand the filter back. It also matches on
-the public `NamedReference` interface rather than the test's `FieldReference`:
+`i > <int literal>` and returns everything else for Spark to evaluate. Unlike the test, which
+asserts the shapes it expects, the version below checks them, because Spark can also push `i > j`
+as a `>` predicate; it also matches on the public `NamedReference` rather than the test's
+`FieldReference`. Replacing `predicates` on each call is right while `supportsIterativePushdown()`
+returns `false` (the default); an iterative source accumulates them instead:
 
 {% highlight java %}
 @Override
@@ -644,36 +652,30 @@ public void pruneColumns(StructType requiredSchema) {
 }
 {% endhighlight %}
 
-`pushedPredicates()` is what the query plan reports; the `Batch` in the same class uses the
+`pushedPredicates()` reports what the source accepted. The `Batch` in the same class uses the
 accepted predicate to plan fewer partitions, and its reader fills only the columns in
 `requiredSchema`. The "advanced implementation with V2 Filter" test in
 [`DataSourceV2Suite`](https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/connector/DataSourceV2Suite.scala)
-checks the planned `Batch` for a few `filter` and `select` combinations. To see the same on a
-connector of your own, override `Scan.description()`, which renders inside the `BatchScan` node
-of `EXPLAIN` after the output columns; the default is the class name.
+checks the planned `Batch` for a few `filter` and `select` combinations. `EXPLAIN` does not show
+`pushedPredicates()`; it shows `Scan.description()` inside the `BatchScan` node, after the output
+columns. Its default is `getClass().toString()`, so override it to include the accepted predicates
+and the pruned columns.
 
 ### Step 3: Batch Writes
 
-A writable table declares `BATCH_WRITE` and implements `SupportsWrite`; it adds `TRUNCATE` and
-`SupportsTruncate` on the builder if `SaveMode.Overwrite` should work (the full list is under
-[Table](#table) and in
-[`TableCapability`](api/java/org/apache/spark/sql/connector/catalog/TableCapability.html)).
-Spark checks the capability set during analysis, before calling any builder, so a missing value
-fails the query even when the mix-in is implemented. `JavaSimpleWritableDataSource` declares all
-three.
+A writable table declares `BATCH_WRITE` and implements `SupportsWrite`. For `SaveMode.Overwrite`
+it also declares `TRUNCATE` (or `OVERWRITE_BY_FILTER`) and implements the matching builder mix-in,
+such as `SupportsTruncate`; see
+[`TableCapability`](api/java/org/apache/spark/sql/connector/catalog/TableCapability.html) for the
+others. Spark checks the capability set during analysis, before calling any builder, so a missing
+value fails the query even when the mix-in is implemented. `JavaSimpleWritableDataSource` declares
+`BATCH_READ`, `BATCH_WRITE` and `TRUNCATE`. A `TableProvider` supports only the `append` and
+`overwrite` save modes; the default, `errorifexists`, and `ignore` fail with
+`UNSUPPORTED_DATA_SOURCE_SAVE_MODE`.
 
-The write is split across the driver and the executors:
-
-```
-driver:    WriteBuilder.build() -> Write.toBatch() -> BatchWrite.createBatchWriterFactory(info)
-executor:  DataWriterFactory.createWriter(partitionId, taskId)
-           DataWriter.write(row) per row
-           DataWriter.commit() -> WriterCommitMessage       (or abort() on failure)
-driver:    BatchWrite.commit(messages[])                     (or abort(messages[]))
-```
-
-Each `DataWriter` writes its task's output to a staging location, and `BatchWrite.commit` on the
-driver publishes the staged files. The staging location must be reachable from both sides:
+The write then follows the protocol under [BatchWrite](#batchwrite). A file-based connector
+typically has each `DataWriter` write its task's output to a staging location, and
+`BatchWrite.commit` on the driver publish the staged files. The staging location must be reachable from both sides:
 executors write there and the driver renames or registers from there, usually on different
 machines. `JavaSimpleWritableDataSource` stages under `<path>/_temporary/<queryId>` on the
 table's own file system, writes one file per task
@@ -684,6 +686,13 @@ and commits by renaming the staged files into the table directory one at a time
 reader listing the directory between two renames sees a partial result. A connector that needs
 all-or-nothing visibility has to provide it itself, for example by writing a manifest or
 committing a transaction as the last step.
+
+Two shortcuts in the test connector are not safe outside a test. Its `commit` publishes every file
+under the staging directory rather than the ones named in `messages`, so a partial file left by an
+executor lost mid-task would be published next to the retry's file; a real connector commits only
+the files its messages name. And it truncates eagerly in `Write.toBatch()`, before any task runs,
+so a failed overwrite leaves the table empty; a real connector defers the delete to
+`BatchWrite.commit`.
 
 A [`WriterCommitMessage`](api/java/org/apache/spark/sql/connector/write/WriterCommitMessage.html)
 is returned by `DataWriter.commit()` on an executor and delivered to `BatchWrite.commit` on the
@@ -700,9 +709,9 @@ output; it receives `null` entries for tasks that never committed and must toler
 
 A `TableProvider` is reached by class name from `spark.read.format(...)`. To reach the same
 tables through SQL identifiers and DDL (`CREATE TABLE demo.db.t`, `INSERT INTO demo.db.t`,
-`SHOW TABLES IN demo.db`), implement [`TableCatalog`](#tablecatalog) and register it by name.
-Every configuration key under the catalog's prefix is passed to
-`CatalogPlugin.initialize(name, options)` with the prefix removed:
+`SHOW TABLES IN demo.db`), implement [`TableCatalog`](#tablecatalog), whose `loadTable` returns
+the same `Table` class the `TableProvider` builds, and register it as under
+[CatalogPlugin](#catalogplugin):
 
 ```
 spark.sql.catalog.demo=com.example.DemoCatalog
