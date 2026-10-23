@@ -3091,7 +3091,7 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
       }
-    // Left-side WHERE predicate can run before the ASOF join, but a right-side one can not
+    // Left-side WHERE predicate can run before the ASOF join, but a right-side one cannot
     case f @ Filter(filterCondition, j: AsOfJoin) =>
       val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
         split(splitConjunctivePredicates(filterCondition), j.left, j.right)
