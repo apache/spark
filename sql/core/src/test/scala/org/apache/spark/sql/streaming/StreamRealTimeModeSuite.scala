@@ -648,6 +648,57 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     )
   }
 
+  test("pipelined shuffle: dedup within watermark supports incremental cleanup") {
+    withSQLConf(
+      SQLConf.STREAMING_STATE_INCREMENTAL_CLEANUP_FACTOR.key -> "1",
+      SQLConf.STATE_STORE_PROVIDER_CLASS.key -> classOf[RocksDBStateStoreProvider].getName,
+      SQLConf.SHUFFLE_PARTITIONS.key -> "1") {
+      val inputData = LowLatencyMemoryStream.singlePartition[(String, Int)]
+      val result = inputData.toDF()
+        .withColumn("eventTime", timestamp_seconds($"_2"))
+        .withWatermark("eventTime", "10 seconds")
+        .dropDuplicatesWithinWatermark("_1")
+        .select($"_1")
+
+      testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+        AddData(inputData, ("expired", 1), ("a", 15), ("clock", 30)),
+        StartStream(),
+        CheckAnswerWithTimeout(60000, "expired", "a", "clock"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(0),
+
+        AddData(inputData, ("advance", 40)),
+        CheckAnswerWithTimeout(60000, "expired", "a", "clock", "advance"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(1),
+        Execute { q =>
+          // Cleanup uses the late-events watermark (0), not the eviction watermark (20).
+          val operator = q.lastProgress.stateOperators.head
+          assert(operator.numRowsTotal === 4)
+          assert(operator.numRowsRemoved === 0)
+        },
+
+        // At the 20-second late-events watermark, "expired" can be removed but "a" (expiry 25)
+        // must stay: the non-late duplicate at 24 is within 10 seconds of its first event.
+        AddData(inputData, ("probe", 40), ("a", 24), ("a", 20)),
+        CheckAnswerWithTimeout(60000, "expired", "a", "clock", "advance", "probe"),
+        advanceRealTimeClock,
+        WaitUntilBatchProcessed(2),
+        CheckAnswerWithTimeout(60000, "expired", "a", "clock", "advance", "probe"),
+        Execute { q =>
+          assertAllExchangesPipelined(q)
+          val operator = q.lastProgress.stateOperators.head
+          assert(operator.numRowsTotal === 4)
+          assert(operator.numRowsUpdated === 1)
+          assert(operator.numRowsDroppedByWatermark === 1)
+          assert(operator.numRowsRemoved === 1)
+          assert(operator.customMetrics.get("numRowsIncrementallyRemoved").longValue() === 1)
+        },
+        StopStream
+      )
+    }
+  }
+
   test("pipelined shuffle: multi-key dedup runs in Real-Time Mode over a pipelined shuffle") {
     // dropDuplicates on more than one column: the hash-partitioning is by the composite key.
     // Confirms the pipelined path is not specific to a single dedup column.
