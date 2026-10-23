@@ -116,9 +116,8 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
-        handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=cls._eval_conf())
-        handler.assign_udfs(
-            [
+        handler = handler_cls(
+            udfs=[
                 UDF(
                     func=udf,
                     args_offsets=arg_offsets,
@@ -126,7 +125,9 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
                     return_type=cls._RETURN_TYPE,
                     result_id=0,
                 )
-            ]
+            ],
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=cls._eval_conf(),
         )
         return handler
 
@@ -235,11 +236,7 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
     @classmethod
     def _handler(cls, udf, runner_conf=None):
         handler = PandasGroupedMapWithStateUDFHandler(
-            runner_conf=runner_conf or RunnerConf({}),
-            eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
-        )
-        handler.assign_udfs(
-            [
+            udfs=[
                 UDF(
                     func=udf,
                     args_offsets=cls._ARG_OFFSETS,
@@ -247,7 +244,9 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
                     return_type=cls._RETURN_TYPE,
                     result_id=0,
                 )
-            ]
+            ],
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
         )
         return handler
 

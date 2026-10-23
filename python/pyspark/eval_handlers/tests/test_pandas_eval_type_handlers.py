@@ -92,11 +92,10 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
-        """Build a grouped/cogrouped-map handler. The function ``assign_udfs`` wraps loses its
+        """Build a grouped/cogrouped-map handler. The function the handler wraps loses its
         signature, so the handler reads it from the record's unwrapped ``func``."""
-        handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=None)
-        handler.assign_udfs(
-            [
+        handler = handler_cls(
+            udfs=[
                 UDF(
                     func=udf,
                     args_offsets=arg_offsets,
@@ -104,7 +103,9 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
                     return_type=cls._GROUPED_RETURN_TYPE,
                     result_id=0,
                 )
-            ]
+            ],
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=None,
         )
         return handler
 
@@ -115,7 +116,7 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @staticmethod
     def _udf(func, return_type=None, args=(0,), kwargs=None):
-        """A pandas UDF as ``assign_udfs`` takes it."""
+        """A ``UDF`` record for a pandas UDF, as the worker builds it."""
         return UDF(
             func=func,
             args_offsets=list(args),
@@ -127,8 +128,9 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @staticmethod
     def _agg_handler(handler_cls, *udfs, runner_conf=None):
         """Build a grouped-agg/window-agg handler from one or more ``_udf`` UDFs."""
-        handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=None)
-        handler.assign_udfs(list(udfs))
+        handler = handler_cls(
+            udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
+        )
         return handler
 
     @staticmethod
@@ -175,10 +177,10 @@ class ArrowBatchedUDFLegacyPandasHandlerTests(PandasEvalTypeHandlerTestCase):
     def _handler(self, *udfs, runner_conf=None, input_type=None):
         """Build the handler from one or more ``_udf`` UDFs."""
         handler = ArrowBatchedUDFLegacyPandasHandler(
+            udfs=list(udfs),
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"input_type": (input_type or self._INPUT_TYPE).json()}),
         )
-        handler.assign_udfs(list(udfs))
         return handler
 
     def test_invokes_udf_per_row(self):
@@ -235,8 +237,9 @@ class PandasScalarUDFHandlerTests(PandasEvalTypeHandlerTestCase):
     @staticmethod
     def _handler(*udfs, runner_conf=None):
         """Build a PandasScalarUDFHandler from one or more ``_udf`` UDFs."""
-        handler = PandasScalarUDFHandler(runner_conf=runner_conf or RunnerConf({}), eval_conf=None)
-        handler.assign_udfs(list(udfs))
+        handler = PandasScalarUDFHandler(
+            udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
+        )
         return handler
 
     def test_invokes_udf_per_batch(self):
@@ -321,9 +324,10 @@ class PandasScalarIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
     def _handler(udf, return_type=None, args=(0,), runner_conf=None):
         """Build a PandasScalarIterUDFHandler whose one UDF reads the given arg offsets."""
         handler = PandasScalarIterUDFHandler(
-            runner_conf=runner_conf or RunnerConf({}), eval_conf=None
+            udfs=[PandasEvalTypeHandlerTestCase._udf(udf, return_type, args)],
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=None,
         )
-        handler.assign_udfs([PandasEvalTypeHandlerTestCase._udf(udf, return_type, args)])
         return handler
 
     def test_invokes_udf_over_batch_stream(self):
@@ -402,8 +406,11 @@ class PandasMapUDFHandlerTests(PandasEvalTypeHandlerTestCase):
     @staticmethod
     def _handler(udf, return_type, runner_conf=None):
         """Build a PandasMapUDFHandler; map UDFs take no arg offsets."""
-        handler = PandasMapUDFHandler(runner_conf=runner_conf or RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([PandasEvalTypeHandlerTestCase._udf(udf, return_type, args=())])
+        handler = PandasMapUDFHandler(
+            udfs=[PandasEvalTypeHandlerTestCase._udf(udf, return_type, args=())],
+            runner_conf=runner_conf or RunnerConf({}),
+            eval_conf=None,
+        )
         return handler
 
     def test_maps_batch_stream(self):

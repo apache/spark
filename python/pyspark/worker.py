@@ -28,7 +28,7 @@ from typing import Any, BinaryIO, Callable
 from pyspark import shuffle
 from pyspark.accumulators import _accumulatorRegistry
 from pyspark.errors import PySparkRuntimeError
-from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._base import EvalTypeHandler, get_eval_type_handler
 from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import UDTFHandlerBase
 from pyspark.logger.worker_io import capture_outputs
@@ -130,7 +130,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
         # UDF and UDTF runners fold profiling into func at construction time (see
-        # EvalTypeHandler.assign_udfs); only the classic RDD command carries a profiler of its own.
+        # EvalTypeHandler.__init__); only the classic RDD command carries a profiler of its own.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))
@@ -141,9 +141,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             handler_cls = get_eval_type_handler(eval_type, runner_conf)
             if handler_cls is None:
                 raise ValueError("Unknown eval type: {}".format(eval_type))
-            handler = handler_cls(runner_conf=runner_conf, eval_conf=eval_conf)
+            handler: EvalTypeHandler
             if isinstance(init_info.udf_info, UDTFInfo):
-                assert isinstance(handler, UDTFHandlerBase)
+                assert issubclass(handler_cls, UDTFHandlerBase)
                 udtf_info = init_info.udf_info
                 udtf_cls = read_command(pickleSer, udtf_info.handler)
                 return_type = _parse_datatype_json_string(udtf_info.return_type)
@@ -165,7 +165,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result=analyze_result,
                     name=udtf_info.name,
                 )
-                handler.assign_udtf(udtf)
+                handler = handler_cls(udfs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf)
             else:
                 assert isinstance(init_info.udf_info, list)
                 udfs = []
@@ -180,7 +180,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                             result_id=udf_info.result_id,
                         )
                     )
-                handler.assign_udfs(udfs)
+                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 

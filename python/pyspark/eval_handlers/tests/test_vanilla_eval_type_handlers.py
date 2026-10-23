@@ -17,7 +17,7 @@
 
 """Tests for the plain Python (pickle) UDF eval type handler (``_vanilla``).
 
-The handler is assigned its UDFs with ``assign_udfs`` and fed
+The handler is built from ``UDF`` records and fed
 pickled-row input via ``run(0, <rows>)``.
 """
 
@@ -42,9 +42,8 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
     @staticmethod
     def _handler(*udfs, kwargs_offsets=None, return_type=None):
         """Build the handler from ``(arg_offsets, func)`` pairs."""
-        handler = BatchedUDFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
-        handler.assign_udfs(
-            [
+        handler = BatchedUDFHandler(
+            udfs=[
                 UDF(
                     func=f,
                     args_offsets=arg_offsets,
@@ -53,7 +52,9 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
                     result_id=0,
                 )
                 for arg_offsets, f in udfs
-            ]
+            ],
+            runner_conf=RunnerConf({}),
+            eval_conf=EvalConf({}),
         )
         return handler
 

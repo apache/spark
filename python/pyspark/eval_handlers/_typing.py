@@ -43,11 +43,11 @@ OutputBatch = TypeVar("OutputBatch")
 
 @dataclass(frozen=True)
 class UDF:
-    """One UDF, as the worker builds it from the unpickled (and chained) function and assigns it
-    to a handler with ``EvalTypeHandler.assign_udfs``; each handler takes the fields it needs."""
+    """One UDF as the worker reads it; each handler takes the fields it needs."""
 
-    # The chained function, unwrapped: the pickled object itself (an incremental Aggregator) with
-    # its signature. assign_udfs keeps the wrapped function on the handler.
+    # The chained function before any wrapping: the pickled object itself (an incremental
+    # Aggregator) with its signature. EvalTypeHandler.__init__ keeps it wrapped for profiling and,
+    # for most eval types, in fail_on_stopiteration, as the handler's _funcs.
     func: Any
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
@@ -67,8 +67,8 @@ class UDTFInstance(Protocol):
 
 @dataclass(frozen=True)
 class UDTF:
-    """The UDTF, as the worker builds it from the unpickled class and assigns it to a handler with
-    ``UDTFHandlerBase.assign_udtf``, which keeps the instance on the handler."""
+    """The UDTF as the worker reads it; ``UDTFHandlerBase.__init__`` instantiates it as the
+    handler's ``_udtf``."""
 
     # The user's UDTF class, as unpickled.
     udtf_cls: type

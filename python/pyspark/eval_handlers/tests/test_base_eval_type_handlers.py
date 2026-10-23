@@ -60,7 +60,7 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             CoGroupedEvalTypeHandler,
         ):
             with self.assertRaises(TypeError):
-                base(RunnerConf({}), None)
+                base([], RunnerConf({}), None)
 
     def test_category_bases_are_not_registered(self):
         # Only concrete subclasses that declare an eval type are registered.
@@ -88,10 +88,12 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             def run(self, split_index, data):
                 return data
 
-        self.assertIsInstance(_Batch(RunnerConf({}), None).serializer, ArrowStreamSerializer)
-        self.assertIsInstance(_Grouped(RunnerConf({}), None).serializer, ArrowStreamGroupSerializer)
+        self.assertIsInstance(_Batch([], RunnerConf({}), None).serializer, ArrowStreamSerializer)
         self.assertIsInstance(
-            _CoGrouped(RunnerConf({}), None).serializer, ArrowStreamCoGroupSerializer
+            _Grouped([], RunnerConf({}), None).serializer, ArrowStreamGroupSerializer
+        )
+        self.assertIsInstance(
+            _CoGrouped([], RunnerConf({}), None).serializer, ArrowStreamCoGroupSerializer
         )
 
     def test_run_produces_output(self):
@@ -100,7 +102,7 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
                 for item in data:
                     yield item * 2
 
-        handler = _Doubler(RunnerConf({}), None)
+        handler = _Doubler([], RunnerConf({}), None)
         self.assertEqual(list(handler.run(0, iter([1, 2, 3]))), [2, 4, 6])
 
     def test_duplicate_eval_type_rejected(self):
@@ -268,7 +270,7 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
-class AssignUDFsTests(PySparkBaseTestCase):
+class HandlerUDFsTests(PySparkBaseTestCase):
     class _Handler(BatchEvalTypeHandler["pa.RecordBatch"]):
         def run(self, split_index, data):
             return data
@@ -277,9 +279,8 @@ class AssignUDFsTests(PySparkBaseTestCase):
     def _stop(x):
         raise StopIteration(x)
 
-    def _assign(self, handler_cls, runner_conf=None):
-        handler = handler_cls(runner_conf or RunnerConf({}), None)
-        handler.assign_udfs(
+    def _new(self, handler_cls, runner_conf=None):
+        handler = handler_cls(
             [
                 UDF(
                     func=self._stop,
@@ -288,12 +289,14 @@ class AssignUDFsTests(PySparkBaseTestCase):
                     return_type=LongType(),
                     result_id=0,
                 )
-            ]
+            ],
+            runner_conf or RunnerConf({}),
+            None,
         )
         return handler
 
-    def test_assigns_udfs(self):
-        handler = self._assign(self._Handler)
+    def test_wraps_udfs(self):
+        handler = self._new(self._Handler)
         udf = handler._udfs[0]
 
         self.assertIsInstance(udf, UDF)
@@ -325,7 +328,7 @@ class AssignUDFsTests(PySparkBaseTestCase):
             _fail_on_stopiteration = False
 
         with self.assertRaises(StopIteration):
-            self._assign(_NotWrapped)._funcs[0](1)
+            self._new(_NotWrapped)._funcs[0](1)
 
     def test_profiler_selected_by_conf(self):
         def f(x):
@@ -337,7 +340,7 @@ class AssignUDFsTests(PySparkBaseTestCase):
         data_source_f.__module__ = "pyspark.sql.worker.plan_data_source_read"
 
         def with_profiler(func, conf):
-            return self._Handler(RunnerConf(conf), None)._with_profiler(func, 0)
+            return self._Handler([], RunnerConf(conf), None)._with_profiler(func, 0)
 
         udf_conf = {"spark.sql.pyspark.udf.profiler": "perf"}
         data_source_conf = {"spark.sql.pyspark.dataSource.profiler": "perf"}

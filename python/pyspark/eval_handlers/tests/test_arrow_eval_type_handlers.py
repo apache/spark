@@ -126,7 +126,7 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @staticmethod
     def _udf(func, args_offsets, kwargs_offsets=None, return_type=None):
-        """A UDF as ``assign_udfs`` takes it."""
+        """A ``UDF`` record as the worker builds it."""
         return UDF(
             func=func,
             args_offsets=args_offsets,
@@ -137,11 +137,14 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):
-        """Build a grouped/cogrouped-map handler with the shared return type. The function
-        ``assign_udfs`` wraps loses its signature, so the handler reads it from the record's
-        unwrapped ``func``."""
-        handler = handler_cls(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([cls._udf(udf, arg_offsets, return_type=cls._RETURN_TYPE)])
+        """Build a grouped/cogrouped-map handler with the shared return type. The function the
+        handler wraps loses its signature, so the handler reads it from the record's unwrapped
+        ``func``."""
+        handler = handler_cls(
+            udfs=[cls._udf(udf, arg_offsets, return_type=cls._RETURN_TYPE)],
+            runner_conf=RunnerConf({}),
+            eval_conf=None,
+        )
         return handler
 
 
@@ -193,10 +196,10 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
     def _handler(self, *udfs, runner_conf=None, input_type=None):
         """Build the handler from ``(func, args_offsets, kwargs_offsets, return_type)`` tuples."""
         handler = ArrowBatchedUDFArrowHandler(
+            udfs=[self._udf(*u) for u in udfs],
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"input_type": (input_type or self._INPUT_TYPE).json()}),
         )
-        handler.assign_udfs([self._udf(*u) for u in udfs])
         return handler
 
     def test_serializer(self):
@@ -381,8 +384,9 @@ class ArrowScalarUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int64())
 
-        handler = ArrowScalarUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(add_one, [0])])
+        handler = ArrowScalarUDFHandler(
+            udfs=[self._udf(add_one, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._batch(a=[1, 2, 3])])))
         self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3, 4]])
 
@@ -391,8 +395,9 @@ class ArrowScalarUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def add_one(col):
             return pa.array([v.as_py() + 1 for v in col], type=pa.int32())
 
-        handler = ArrowScalarUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(add_one, [0])])
+        handler = ArrowScalarUDFHandler(
+            udfs=[self._udf(add_one, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._batch(a=[10, 20])])))
         self.assertEqual(out[0].schema.field(0).type, pa.int64())
         self.assertEqual(out[0].column(0).to_pylist(), [11, 21])
@@ -405,8 +410,9 @@ class ArrowScalarIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             for col in col_iter:
                 yield pa.array([v.as_py() + 1 for v in col], type=pa.int64())
 
-        handler = ArrowScalarIterUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(add_one, [0])])
+        handler = ArrowScalarIterUDFHandler(
+            udfs=[self._udf(add_one, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._batch(a=[1, 2]), self._batch(a=[3])])))
         self.assertEqual([b.column(0).to_pylist() for b in out], [[2, 3], [4]])
 
@@ -416,8 +422,9 @@ class ArrowScalarIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             for col in col_iter:
                 yield pa.array(list(range(len(col) + 1)), type=pa.int64())
 
-        handler = ArrowScalarIterUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(too_many, [0])])
+        handler = ArrowScalarIterUDFHandler(
+            udfs=[self._udf(too_many, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         with self.assertRaises(PySparkRuntimeError):
             list(handler.run(0, iter([self._batch(a=[1, 2])])))
 
@@ -430,8 +437,9 @@ class ArrowMapUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             for batch in batch_iter:
                 yield self._batch(v=[c.as_py() * 2 for c in batch.column("v")])
 
-        handler = ArrowMapUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(double_v, [])])
+        handler = ArrowMapUDFHandler(
+            udfs=[self._udf(double_v, [])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, iter([self._struct_batch(v=[1, 2, 3])])))
         self.assertEqual(out[0].column(0).field("v").to_pylist(), [2, 4, 6])
 
@@ -539,8 +547,9 @@ class ArrowGroupedAggUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def sum_udf(col):
             return sum(c.as_py() for c in col)
 
-        handler = ArrowGroupedAggUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(sum_udf, [0])])
+        handler = ArrowGroupedAggUDFHandler(
+            udfs=[self._udf(sum_udf, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, self._one_group(self._batch(v=[1, 2, 3]), self._batch(v=[4]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [10])
 
@@ -552,8 +561,9 @@ class ArrowGroupedAggIterUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         def sum_iter_udf(col_iter):
             return sum(c.as_py() for col in col_iter for c in col)
 
-        handler = ArrowGroupedAggIterUDFHandler(runner_conf=RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([self._udf(sum_iter_udf, [0])])
+        handler = ArrowGroupedAggIterUDFHandler(
+            udfs=[self._udf(sum_iter_udf, [0])], runner_conf=RunnerConf({}), eval_conf=None
+        )
         out = list(handler.run(0, self._one_group(self._batch(v=[10]), self._batch(v=[20]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [30])
 
@@ -566,9 +576,10 @@ class ArrowWindowAggUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return sum(c.as_py() for c in col)
 
         handler = ArrowWindowAggUDFHandler(
-            runner_conf=RunnerConf({"window_bound_types": "unbounded"}), eval_conf=None
+            udfs=[self._udf(sum_udf, [0])],
+            runner_conf=RunnerConf({"window_bound_types": "unbounded"}),
+            eval_conf=None,
         )
-        handler.assign_udfs([self._udf(sum_udf, [0])])
         out = list(handler.run(0, self._one_group(self._batch(v=[1, 2, 3]))))
         self.assertEqual(out[0].column("_0").to_pylist(), [6, 6, 6])
 
@@ -578,9 +589,10 @@ class ArrowWindowAggUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
             return sum(c.as_py() for c in col)
 
         handler = ArrowWindowAggUDFHandler(
-            runner_conf=RunnerConf({"window_bound_types": "bounded"}), eval_conf=None
+            udfs=[self._udf(sum_udf, [0, 1, 2])],
+            runner_conf=RunnerConf({"window_bound_types": "bounded"}),
+            eval_conf=None,
         )
-        handler.assign_udfs([self._udf(sum_udf, [0, 1, 2])])
         # Row 0 frame [0, 1) -> [10]; row 1 frame [0, 2) -> [10, 20].
         out = list(
             handler.run(0, self._one_group(self._batch(begin=[0, 0], end=[1, 2], v=[10, 20])))
@@ -598,10 +610,10 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
         # The handler takes the Aggregator itself from the record's unwrapped func.
         agg = _SumAggregator()
         handler = ArrowGroupedAggIncrementalPartialUDFHandler(
+            udfs=[self._udf(agg, [1])],
             runner_conf=RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": str(cap)}),
             eval_conf=EvalConf({"grouping_key_schema": self._KEY_SCHEMA.json()}),
         )
-        handler.assign_udfs([self._udf(agg, [1])])
         return handler
 
     @staticmethod
@@ -658,12 +670,12 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
         )
         agg = _SumAggregator()
         handler = ArrowGroupedAggIncrementalPartialUDFHandler(
+            udfs=[self._udf(agg, [1])],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf(
                 {"grouping_key_schema": StructType([StructField("k", DoubleType())]).json()}
             ),
         )
-        handler.assign_udfs([self._udf(agg, [1])])
         out = list(handler.run(0, iter([batch])))
         self.assertEqual(out[0].num_rows, 1)
         self.assertEqual(out[0].column("_0").to_pylist(), [{"s": 3, "c": 2}])
@@ -682,9 +694,8 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
         # The handler takes the Aggregator itself from the record's unwrapped func.
         agg = _SumAggregator()
         handler = ArrowGroupedAggIncrementalFinalUDFHandler(
-            runner_conf=RunnerConf({}), eval_conf=None
+            udfs=[self._udf(agg, [0])], runner_conf=RunnerConf({}), eval_conf=None
         )
-        handler.assign_udfs([self._udf(agg, [0])])
         return handler
 
     def test_merges_partial_buffers_per_group(self):
@@ -709,10 +720,10 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
 class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
     def _handler(self, agg, bound_type, args_offsets):
         handler = ArrowWindowAggIncrementalUDFHandler(
-            runner_conf=RunnerConf({"window_bound_types": bound_type}), eval_conf=None
+            udfs=[self._udf(agg, args_offsets)],
+            runner_conf=RunnerConf({"window_bound_types": bound_type}),
+            eval_conf=None,
         )
-        # The handler takes the Aggregator itself from the record's unwrapped func.
-        handler.assign_udfs([self._udf(agg, args_offsets)])
         return handler
 
     def test_unbounded_frame_repeats_one_value(self):

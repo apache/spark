@@ -18,8 +18,8 @@
 """Handlers for the user-defined table function (UDTF) eval types, and the wrappers that
 implement TABLE argument PARTITION BY semantics on top of a UDTF instance.
 
-Each handler is assigned the single ``UDTF`` record ``assign_udtf`` builds, which holds
-the instantiated UDTF.
+Each handler receives the single ``UDTF`` record the worker reads, and instantiates the
+UDTF from it.
 
 pyarrow is imported lazily (inside the handlers and the type-checking block) so the module
 stays importable and its handlers register without pyarrow installed.
@@ -67,6 +67,8 @@ from pyspark.util import PythonEvalType
 if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
+
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 
 class PartitionedUDTF(metaclass=ABCMeta):
@@ -597,17 +599,20 @@ def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None
 
 
 class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
-    """Base for every UDTF eval type handler; ``assign_udtf`` assigns the UDTF to the handler."""
+    """Base for every UDTF eval type handler; ``__init__`` creates the UDTF instance as
+    ``_udtf``."""
 
     # Wraps the UDTF when its TABLE argument has PARTITION BY expressions.
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 
-    def assign_udtf(self, udtf: UDTF) -> None:
-        """Assign the UDTF to this handler: keep the record as ``_udfs[0]`` and, as ``_udtf``, the
-        instance of ``udtf.udtf_cls`` (wrapped in ``partition_wrapper`` when its TABLE argument
-        has PARTITION BY expressions, its constructor given the AnalyzeResult when it takes one)
-        after checking the 'eval' signature against the call arguments, then set the handler up
-        for it."""
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+        """Create, as ``_udtf``, the instance of the UDTF's class (wrapped in
+        ``partition_wrapper`` when its TABLE argument has PARTITION BY expressions, its
+        constructor given the AnalyzeResult when it takes one), and check its 'eval' signature
+        against the call arguments."""
+        super().__init__(udfs, runner_conf, eval_conf)
+        assert len(udfs) == 1, "One UDTF expected here."
+        udtf = udfs[0]
         udtf_cls = udtf.udtf_cls
         if not isinstance(udtf_cls, type):
             raise PySparkRuntimeError(
@@ -671,9 +676,7 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
                 messageParameters={"name": udtf.name, "reason": str(e)},
             ) from None
 
-        self._udfs = [udtf]
         self._udtf: UDTFInstance = instance
-        self._setup_udfs(self._udfs)
 
 
 class UDTFEvalTypeHandler(UDTFHandlerBase[InputBatch, OutputBatch]):
@@ -684,7 +687,8 @@ class UDTFEvalTypeHandler(UDTFHandlerBase[InputBatch, OutputBatch]):
     ``cleanup``. Subclasses implement the two hooks and pick the serializer.
     """
 
-    def _setup_udfs(self, udfs: list[UDTF]) -> None:
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+        super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One UDTF expected here."
         udtf = self._udtf
         self._return_type = udfs[0].return_type
@@ -725,7 +729,8 @@ class TableUDTFHandler(UDTFHandlerBase[Any, tuple]):
 
     eval_type = PythonEvalType.SQL_TABLE_UDF
 
-    def _setup_udfs(self, udfs: list[UDTF]) -> None:
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+        super().__init__(udfs, runner_conf, eval_conf)
         assert len(udfs) == 1, "One UDTF expected here."
         udtf, return_type = self._udtf, udfs[0].return_type
         self._check_output_row_against_schema = build_null_checker(return_type)
@@ -850,20 +855,18 @@ class ArrowUDTFHandler(
     eval_type = PythonEvalType.SQL_ARROW_UDTF
     partition_wrapper = ArrowUDTFWithPartition
 
-    def _setup_udfs(self, udfs: list[UDTF]) -> None:
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         import pyarrow as pa
 
-        super()._setup_udfs(udfs)
+        super().__init__(udfs, runner_conf, eval_conf)
         arrow_return_type = to_arrow_type(
-            self._return_type,
-            timezone="UTC",
-            prefers_large_types=self._runner_conf.use_large_var_types,
+            self._return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
         self._return_type_size = len(self._return_type)
         self._target_schema = pa.schema(list(arrow_return_type))
 
         self._table_arg_offsets = (
-            set(self._eval_conf.table_arg_offsets) if self._eval_conf.table_arg_offsets else set()
+            set(eval_conf.table_arg_offsets) if eval_conf.table_arg_offsets else set()
         )
 
     def _verify_result(self, result: pa.RecordBatch, method_name: str) -> pa.RecordBatch:
@@ -962,8 +965,8 @@ class ArrowTableUDTFHandler(
     ``spark.sql.legacy.execution.pythonUDTF.pandas.conversion.enabled``. Subclasses implement
     ``_to_columns`` and ``_convert_result``."""
 
-    def _setup_udfs(self, udfs: list[UDTF]) -> None:
-        super()._setup_udfs(udfs)
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+        super().__init__(udfs, runner_conf, eval_conf)
         self._return_type_size = len(self._return_type)
         self._check_output_row_against_schema = build_null_checker(self._return_type)
 
@@ -1014,10 +1017,10 @@ class ArrowTableUDTFLegacyPandasHandler(ArrowTableUDTFHandler):
     variant_conf = "use_legacy_pandas_udtf_conversion"
     variant_value = True
 
-    def _setup_udfs(self, udfs: list[UDTF]) -> None:
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         import pandas  # noqa: F401
 
-        super()._setup_udfs(udfs)
+        super().__init__(udfs, runner_conf, eval_conf)
         # The output pandas DataFrame is converted as a single struct column named
         # "_0" against this schema.
         self._output_schema = StructType([StructField("_0", self._return_type)])
@@ -1124,22 +1127,20 @@ class ArrowTableUDTFArrowHandler(ArrowTableUDTFHandler):
     variant_conf = "use_legacy_pandas_udtf_conversion"
     variant_value = False
 
-    def _setup_udfs(self, udfs: list[UDTF]) -> None:
+    def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         import pyarrow  # noqa: F401
 
-        super()._setup_udfs(udfs)
+        super().__init__(udfs, runner_conf, eval_conf)
         self._arrow_return_type = to_arrow_type(
-            self._return_type,
-            timezone="UTC",
-            prefers_large_types=self._runner_conf.use_large_var_types,
+            self._return_type, timezone="UTC", prefers_large_types=runner_conf.use_large_var_types
         )
         self._converters = [
             ArrowTableToRowsConversion._create_converter(
                 f.dataType,
                 none_on_identity=True,
-                binary_as_bytes=self._runner_conf.binary_as_bytes,
+                binary_as_bytes=runner_conf.binary_as_bytes,
             )
-            for f in self._eval_conf.input_type  # type: ignore[union-attr]
+            for f in eval_conf.input_type  # type: ignore[union-attr]
         ]
 
     def _verify_result(self, result: pa.Table, method_name: str) -> pa.Table:

@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
 
 from pyspark.eval_handlers._typing import (
     UDF,
+    UDTF,
     CoGroupedBatch,
     GroupedBatch,
     InputBatch,
@@ -149,34 +150,27 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
-    # Whether assign_udfs wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
+    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
     # user code fails the task instead of silently ending the loop that calls the UDF.
     _fail_on_stopiteration: ClassVar[bool] = True
 
-    def __init__(self, runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
+    def __init__(
+        self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
+        self._udfs: list[Any] = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        self._udfs: list[Any] = []
+        # Each UDF's function wrapped for profiling and in fail_on_stopiteration, at the indexes
+        # of _udfs; empty for a UDTF.
         self._funcs: list[Callable[..., Any]] = []
-
-    def assign_udfs(self, udfs: list[UDF]) -> None:
-        """Assign the UDFs to this handler: keep the records as ``_udfs`` and, in ``_funcs`` at
-        the same indexes, each function wrapped for profiling and in ``fail_on_stopiteration``,
-        then set the handler up for them."""
-        self._udfs = udfs
-        self._funcs = []
         for udf in udfs:
-            profiling_func = self._with_profiler(udf.func, udf.result_id)
-            self._funcs.append(
-                fail_on_stopiteration(profiling_func)
-                if self._fail_on_stopiteration
-                else profiling_func
-            )
-        self._setup_udfs(udfs)
-
-    def _setup_udfs(self, udfs: list[Any]) -> None:
-        """Set the handler up for the ``UDF`` (or ``UDTF``) records just assigned to it, deriving
-        its per-UDF state; a no-op unless overridden."""
+            if isinstance(udf, UDF):
+                profiling_func = self._with_profiler(udf.func, udf.result_id)
+                self._funcs.append(
+                    fail_on_stopiteration(profiling_func)
+                    if self._fail_on_stopiteration
+                    else profiling_func
+                )
 
     def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is

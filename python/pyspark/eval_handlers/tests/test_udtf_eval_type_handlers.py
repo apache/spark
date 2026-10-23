@@ -17,7 +17,7 @@
 
 """Tests for the UDTF eval type handlers (``_udtf``).
 
-Each test assigns a UDTF class to the handler with ``assign_udtf``, calls
+Each test builds the handler from the ``UDTF`` record of a UDTF class, calls
 ``run(0, <input batches>)`` and asserts on the output batches.
 """
 
@@ -111,8 +111,7 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
     _RETURN_TYPE = StructType([StructField("x", LongType())])
 
     @staticmethod
-    def _assign_udtf(
-        handler,
+    def _udtf_record(
         udtf_cls,
         return_type,
         args=(0,),
@@ -120,8 +119,8 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
         partition_child_indexes=(),
         analyze_result=None,
     ):
-        """Assign ``udtf_cls`` to ``handler`` and return the handler."""
-        udtf = UDTF(
+        """The ``UDTF`` record the worker builds for ``udtf_cls``."""
+        return UDTF(
             udtf_cls=udtf_cls,
             args_offsets=list(args),
             kwargs_offsets=kwargs or {},
@@ -130,12 +129,10 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
             analyze_result=analyze_result,
             name="test_udtf",
         )
-        handler.assign_udtf(udtf)
-        return handler
 
     @staticmethod
     def _udtf(handler):
-        """The UDTF instance ``assign_udtf`` created for ``handler``."""
+        """The UDTF instance the handler created."""
         return handler._udtf
 
 
@@ -169,13 +166,8 @@ class TableUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     _ROW_RETURN_TYPE = StructType([StructField("x", LongType()), StructField("y", LongType())])
 
     def _handler(self, udtf_cls, args=(0,), kwargs=None, return_type=None):
-        return self._assign_udtf(
-            TableUDTFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({})),
-            udtf_cls,
-            return_type or self._ROW_RETURN_TYPE,
-            args,
-            kwargs,
-        )
+        udtf = self._udtf_record(udtf_cls, return_type or self._ROW_RETURN_TYPE, args, kwargs)
+        return TableUDTFHandler(udfs=[udtf], runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
 
     def _run(self, handler, *rows):
         # Each input row is a list of argument values; each output is the tuple of rows one
@@ -283,14 +275,8 @@ class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
         self, udtf_cls, args=(0,), kwargs=None, table_arg_offsets="0", partition_child_indexes=()
     ):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
-        return self._assign_udtf(
-            ArrowUDTFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf(conf)),
-            udtf_cls,
-            self._RETURN_TYPE,
-            args,
-            kwargs,
-            partition_child_indexes,
-        )
+        udtf = self._udtf_record(udtf_cls, self._RETURN_TYPE, args, kwargs, partition_child_indexes)
+        return ArrowUDTFHandler(udfs=[udtf], runner_conf=RunnerConf({}), eval_conf=EvalConf(conf))
 
     def test_serializer(self):
         self.assertIsInstance(self._handler(_RecordingUDTF).serializer, ArrowStreamSerializer)
@@ -456,15 +442,11 @@ class ArrowTableUDTFHandlerTestsMixin:
     _ROW_INPUT_TYPE = StructType([StructField("a", LongType())])
 
     def _handler(self, udtf_cls, args=(0,), kwargs=None, return_type=None):
-        return self._assign_udtf(
-            self.handler_cls(
-                runner_conf=RunnerConf({}),
-                eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
-            ),
-            udtf_cls,
-            return_type or self._ROW_RETURN_TYPE,
-            args,
-            kwargs,
+        udtf = self._udtf_record(udtf_cls, return_type or self._ROW_RETURN_TYPE, args, kwargs)
+        return self.handler_cls(
+            udfs=[udtf],
+            runner_conf=RunnerConf({}),
+            eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
         )
 
     def _run(self, handler, *columns):
@@ -575,18 +557,18 @@ class ArrowTableUDTFLegacyPandasHandlerTests(
     handler_cls = ArrowTableUDTFLegacyPandasHandler if have_pyarrow else None
 
 
-class AssignUDTFTests(UDTFEvalTypeHandlerTestCase):
-    def _assign(self, handler_cls, udtf_cls, **kwargs):
-        """Assign ``udtf_cls`` to a new ``handler_cls`` and return the handler."""
-        handler = handler_cls(RunnerConf({}), EvalConf({}))
-        return self._assign_udtf(handler, udtf_cls, self._RETURN_TYPE, **kwargs)
+class UDTFHandlerInitTests(UDTFEvalTypeHandlerTestCase):
+    def _new(self, handler_cls, udtf_cls, **kwargs):
+        """A new ``handler_cls`` for ``udtf_cls``."""
+        udtf = self._udtf_record(udtf_cls, self._RETURN_TYPE, **kwargs)
+        return handler_cls([udtf], RunnerConf({}), EvalConf({}))
 
-    def test_assigns_udtf_record(self):
+    def test_creates_udtf_instance(self):
         class Udtf:
             def eval(self, x):
                 yield (x,)
 
-        handler = self._assign(TableUDTFHandler, Udtf)
+        handler = self._new(TableUDTFHandler, Udtf)
         self.assertIsInstance(self._udtf(handler), Udtf)
         udtf = handler._udfs[0]
         self.assertIsInstance(udtf, UDTF)
@@ -603,7 +585,7 @@ class AssignUDTFTests(UDTFEvalTypeHandlerTestCase):
                 yield (x,)
 
         analyze_result = AnalyzeResult(schema=self._RETURN_TYPE)
-        handler = self._assign(TableUDTFHandler, Udtf, analyze_result=analyze_result)
+        handler = self._new(TableUDTFHandler, Udtf, analyze_result=analyze_result)
         self.assertEqual(self._udtf(handler).analyze_result, analyze_result)
 
     def test_wrapped_in_partition_wrapper(self):
@@ -611,7 +593,7 @@ class AssignUDTFTests(UDTFEvalTypeHandlerTestCase):
             def eval(self, row):
                 yield (row,)
 
-        handler = self._assign(TableUDTFHandler, Udtf, partition_child_indexes=[0])
+        handler = self._new(TableUDTFHandler, Udtf, partition_child_indexes=[0])
         self.assertIsInstance(self._udtf(handler), UDTFWithPartitions)
 
     @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
@@ -620,7 +602,7 @@ class AssignUDTFTests(UDTFEvalTypeHandlerTestCase):
             def eval(self, table):
                 yield table
 
-        handler = self._assign(ArrowUDTFHandler, Udtf, partition_child_indexes=[0])
+        handler = self._new(ArrowUDTFHandler, Udtf, partition_child_indexes=[0])
         self.assertIsInstance(self._udtf(handler), ArrowUDTFWithPartition)
 
     def test_invalid_udtf(self):
@@ -632,11 +614,11 @@ class AssignUDTFTests(UDTFEvalTypeHandlerTestCase):
                 yield (x,)
 
         with self.assertRaisesRegex(PySparkRuntimeError, "Invalid UDTF handler type"):
-            self._assign(TableUDTFHandler, Udtf())
+            self._new(TableUDTFHandler, Udtf())
         with self.assertRaisesRegex(PySparkRuntimeError, "'eval' method"):
-            self._assign(TableUDTFHandler, NoEval)
+            self._new(TableUDTFHandler, NoEval)
         with self.assertRaises(PySparkRuntimeError) as ctx:
-            self._assign(TableUDTFHandler, Udtf, args=(0, 1))
+            self._new(TableUDTFHandler, Udtf, args=(0, 1))
         self.assertEqual(
             ctx.exception.getCondition(), "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE"
         )

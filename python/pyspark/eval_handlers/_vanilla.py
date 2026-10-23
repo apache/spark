@@ -31,6 +31,7 @@ from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     from pyspark.eval_handlers._typing import UDF
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 
 class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
@@ -42,7 +43,8 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
 
     eval_type = PythonEvalType.SQL_BATCHED_UDF
 
-    def _setup_udfs(self, udfs: "list[UDF]") -> None:
+    def __init__(self, udfs: "list[UDF]", runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
+        super().__init__(udfs, runner_conf, eval_conf)
         self._udf_infos = [self._prepare_udf(udf, func) for udf, func in zip(udfs, self._funcs)]
 
     @staticmethod
