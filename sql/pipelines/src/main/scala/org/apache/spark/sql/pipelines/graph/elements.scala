@@ -184,10 +184,10 @@ case class VirtualTableInput(
    */
   def load(asStreaming: Boolean): DataFrame = {
     val deducedSchema = specifiedSchema match {
-      // For a declared AUTO CDC target, materialization drops the user's reserved column(s) and
-      // appends the engine-owned shape (see DatasetManager.materializeTable). Produce that same
-      // schema here so a same-graph downstream consumer plans against the columns the target is
-      // actually created with, rather than the declaration verbatim.
+      // For a declared AUTO CDC target, materialization reconciles the user's reserved column(s)
+      // in place and appends any the declaration omitted (see DatasetManager.materializeTable).
+      // Produce that same schema here so a same-graph downstream consumer plans against the columns
+      // the target is actually created with, rather than the declaration verbatim.
       case Some(ss) if availableFlows.exists(GraphElementTypeUtils.isAutoCdcFlow) =>
         val flowInferredSchema = SchemaInferenceUtils.inferSchemaFromFlows(
           tableIdentifier = identifier,

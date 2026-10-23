@@ -333,9 +333,10 @@ object DatasetManager extends Logging {
     val outputSchema = table.specifiedSchema match {
       case Some(ss) if autoCdcAuxTableSpecOpt.isDefined =>
         // The user schema describes the logical AUTO CDC target; the engine owns the reserved
-        // metadata column(s). Drop whatever reserved column(s) the user declared and append the
-        // engine-owned shape, so the created table always has exactly the reserved column(s) the
-        // AUTO CDC MERGE writes, even if the user declared it with a different type/nullability.
+        // metadata column(s). Reconcile each declared reserved column in place (keeping its
+        // spelling, position, and metadata but taking the engine-owned type/nullability) and append
+        // the engine-owned column(s) the declaration omitted, so the created table carries exactly
+        // the reserved column(s) the AUTO CDC MERGE writes.
         // `inferredSchemas` here is flow-only (DataflowGraph.inferSchemas passes
         // userSpecifiedSchema = None), unlike the merged inferredSchema in GraphValidations, so the
         // appended fields are exactly the engine-produced columns, never a user-declared one.

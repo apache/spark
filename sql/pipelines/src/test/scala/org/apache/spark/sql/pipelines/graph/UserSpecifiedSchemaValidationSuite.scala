@@ -271,4 +271,55 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     autoCdcGraph("target", Some(declaredWithoutReserved), ScdType.Type2)
       .validate(spark.sessionState.conf.caseSensitiveAnalysis)
   }
+
+  /** The engine-owned reserved metadata field from the inferred AUTO CDC schema. */
+  private def metadataField: StructField =
+    autoCdcInferredSchema("target").fields
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+
+  test("a declared schema with an unknown reserved-prefixed column is rejected for an AUTO CDC " +
+    "flow") {
+    // A reserved-prefixed column the engine never produces (a typo, or an extra reserved-namespace
+    // column) is rejected up front rather than surviving reconciliation into the target.
+    val schema = StructType(
+      dataSchema.fields :+ StructField(s"${AutoCdcReservedNames.prefix}bogus", IntegerType))
+    val ex = intercept[AnalysisException](
+      validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema))))
+    assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_COLUMN")
+  }
+
+  test("a declared schema with case-duplicate reserved metadata columns is rejected for an " +
+    "AUTO CDC flow") {
+    // Under case-insensitive analysis both spellings resolve to the one engine-owned metadata
+    // column, which reconciliation cannot honor.
+    val meta = metadataField
+    val schema = StructType(dataSchema.fields ++
+      Array(meta, meta.copy(name = meta.name.toUpperCase(java.util.Locale.ROOT))))
+    val ex = intercept[AnalysisException](
+      validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema))))
+    assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_COLUMN")
+  }
+
+  test("a declared reserved metadata column with an unknown nested field is rejected for an " +
+    "AUTO CDC flow") {
+    val meta = metadataField
+    val metaStruct = meta.dataType.asInstanceOf[StructType]
+    val schema = StructType(
+      dataSchema.fields :+ meta.copy(dataType = metaStruct.add("bogus", IntegerType)))
+    val ex = intercept[AnalysisException](
+      validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema))))
+    assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_NESTED_FIELD")
+  }
+
+  test("a declared reserved metadata column with case-duplicate nested fields is rejected for an " +
+    "AUTO CDC flow") {
+    val meta = metadataField
+    val metaStruct = meta.dataType.asInstanceOf[StructType]
+    val nested = metaStruct.fields.head
+    val schema = StructType(dataSchema.fields :+ meta.copy(
+      dataType = metaStruct.add(nested.name.toUpperCase(java.util.Locale.ROOT), nested.dataType)))
+    val ex = intercept[AnalysisException](
+      validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema))))
+    assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_NESTED_FIELD")
+  }
 }

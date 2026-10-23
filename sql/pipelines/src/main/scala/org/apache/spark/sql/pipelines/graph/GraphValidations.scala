@@ -291,6 +291,19 @@ trait GraphValidations extends Logging {
         // so the comparison is exact -- otherwise a reserved-prefixed column a non-CDC flow
         // produces but the declaration omits would be wrongly accepted (then dropped later).
         val schemasMatch = if (flows.exists(GraphElementTypeUtils.isAutoCdcFlow)) {
+          // Reject a malformed declared reserved column (unknown/typo'd, case-duplicate, or an
+          // unknown nested field) with a user-facing error before the strip-and-compare below hides
+          // it, so the materialization and read-path reconcilers can assume a well-formed shape.
+          // Validate against the flow-only inferred schema (userSpecifiedSchema = None): the merged
+          // `inferredSchema` above already folds the declaration's reserved column in, so a junk
+          // nested field would appear on both sides and escape detection.
+          val flowInferredSchema = SchemaInferenceUtils.inferSchemaFromFlows(
+            tableIdentifier = t.identifier,
+            flows,
+            userSpecifiedSchema = None,
+            sessionCaseSensitive = sessionCaseSensitive)
+          AutoCdcReservedNames.validateDeclaredReservedFields(
+            t.identifier.unquotedString, ss, flowInferredSchema, resolver)
           AutoCdcReservedNames.stripReservedFields(inferredSchema, resolver) ==
             AutoCdcReservedNames.stripReservedFields(ss, resolver)
         } else {
