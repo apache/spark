@@ -29,7 +29,6 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import ArrayType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
@@ -42,6 +41,7 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pandas and have_pyarrow:
@@ -103,17 +103,16 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
         )
-        handler._udfs = [
-            UDF(
-                func=func,
-                raw_func=func,
-                args_offsets=args_offsets,
-                kwargs_offsets=kwargs_offsets,
-                return_type=return_type,
-            )
-            for func, args_offsets, kwargs_offsets, return_type in udfs
-        ]
-        handler._setup_udfs(handler._udfs)
+        handler.assign_udfs(
+            [
+                (
+                    func,
+                    return_type,
+                    UDFInfo(udfs=[], args=args_offsets, kwargs=kwargs_offsets, result_id=0),
+                )
+                for func, args_offsets, kwargs_offsets, return_type in udfs
+            ]
+        )
         return handler
 
     @staticmethod

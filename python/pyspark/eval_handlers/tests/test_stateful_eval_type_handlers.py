@@ -30,7 +30,6 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers._typing import UDF
 from pyspark.serializers import CPickleSerializer
 from pyspark.sql.types import LongType, Row, StructField, StructType
 from pyspark.testing.utils import (
@@ -43,6 +42,7 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pandas and have_pyarrow:
@@ -117,16 +117,9 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
     @classmethod
     def _handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
         handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=cls._eval_conf())
-        handler._udfs = [
-            UDF(
-                func=udf,
-                raw_func=udf,
-                args_offsets=arg_offsets,
-                kwargs_offsets={},
-                return_type=cls._RETURN_TYPE,
-            )
-        ]
-        handler._setup_udfs(handler._udfs)
+        handler.assign_udfs(
+            [(udf, cls._RETURN_TYPE, UDFInfo(udfs=[], args=arg_offsets, kwargs={}, result_id=0))]
+        )
         return handler
 
     def _assert_client_constructed(self):
@@ -237,16 +230,15 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
         )
-        handler._udfs = [
-            UDF(
-                func=udf,
-                raw_func=udf,
-                args_offsets=cls._ARG_OFFSETS,
-                kwargs_offsets={},
-                return_type=cls._RETURN_TYPE,
-            )
-        ]
-        handler._setup_udfs(handler._udfs)
+        handler.assign_udfs(
+            [
+                (
+                    udf,
+                    cls._RETURN_TYPE,
+                    UDFInfo(udfs=[], args=cls._ARG_OFFSETS, kwargs={}, result_id=0),
+                )
+            ]
+        )
         return handler
 
     @staticmethod

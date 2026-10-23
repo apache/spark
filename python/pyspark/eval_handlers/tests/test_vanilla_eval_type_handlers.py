@@ -17,7 +17,7 @@
 
 """Tests for the plain Python (pickle) UDF eval type handler (``_vanilla``).
 
-The handler is built from ``UDF`` records, as ``assign_udfs`` builds them, and fed
+The handler is assigned its UDFs with ``assign_udfs`` and fed
 pickled-row input via ``run(0, <rows>)``.
 """
 
@@ -27,7 +27,6 @@ import os
 from unittest.mock import patch
 
 from pyspark.eval_handlers._base import get_eval_type_handler
-from pyspark.eval_handlers._typing import UDF
 from pyspark.eval_handlers._vanilla import BatchedUDFHandler
 from pyspark.serializers import BatchedSerializer, CPickleSerializer
 from pyspark.sql.types import DateType, LongType
@@ -35,6 +34,7 @@ from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
+    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
@@ -43,17 +43,16 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
     def _handler(*udfs, kwargs_offsets=None, return_type=None):
         """Build the handler from ``(arg_offsets, func)`` pairs."""
         handler = BatchedUDFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
-        handler._udfs = [
-            UDF(
-                func=f,
-                raw_func=f,
-                args_offsets=arg_offsets,
-                kwargs_offsets=kwargs_offsets or {},
-                return_type=return_type or LongType(),
-            )
-            for arg_offsets, f in udfs
-        ]
-        handler._setup_udfs(handler._udfs)
+        handler.assign_udfs(
+            [
+                (
+                    f,
+                    return_type or LongType(),
+                    UDFInfo(udfs=[], args=arg_offsets, kwargs=kwargs_offsets or {}, result_id=0),
+                )
+                for arg_offsets, f in udfs
+            ]
+        )
         return handler
 
     def test_registered(self):
