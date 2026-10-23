@@ -20,6 +20,7 @@ package org.apache.spark.sql
 import java.sql.{Date, Timestamp}
 
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
+import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
@@ -84,6 +85,26 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
         |       (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
         |       (TIMESTAMP '2026-06-29 10:00:08', 'MSFT', 420.50)
         |""".stripMargin)
+  }
+
+  /** Copies the trade and quote views into parquet tables, so a pushed filter reaches a scan. */
+  private def withTradeQuoteTables(f: => Unit): Unit = {
+    setupTradeQuoteViews()
+    withTable("trades_t", "quotes_t") {
+      sql("CREATE TABLE trades_t USING parquet AS SELECT * FROM trades")
+      sql("CREATE TABLE quotes_t USING parquet AS SELECT * FROM quotes")
+      f
+    }
+  }
+
+  /** Names of the columns that the scan of `table` filters on. */
+  private def scanFilterColumns(df: DataFrame, table: String): Set[String] = {
+    val plan = df.queryExecution.executedPlan
+    val scans = collect(plan) {
+      case scan: FileSourceScanExec if scan.tableIdentifier.exists(_.table == table) => scan
+    }
+    assert(scans.length == 1, s"Expected one scan of $table in plan:\n$plan")
+    scans.head.dataFilters.flatMap(_.references.map(_.name)).toSet
   }
 
   /** Runs `f` with temp view `r` over `rows`, kept in input order so ties keep that order. */
@@ -951,6 +972,73 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  ON FALSE
           |""".stripMargin),
       Row(4L) :: Nil)
+  }
+
+  test("WHERE on the left input is pushed into the left scan") {
+    withTradeQuoteTables {
+      val query = sql(
+        """
+          |SELECT t.trade_time, t.symbol, q.bid_price
+          |FROM trades_t t LEFT ASOF JOIN quotes_t q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol
+          |WHERE t.quantity > 100
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        query,
+        Row(Timestamp.valueOf("2026-06-29 10:00:11"), "AAPL", 180.20) :: Nil)
+      assert(scanFilterColumns(query, "trades_t").contains("quantity"))
+    }
+  }
+
+  test("WHERE on the right input runs after the closest match, unlike the same ON predicate") {
+    withTradeQuoteTables {
+      // The 10:00:11 trade's closest quote is 180.20. WHERE drops the trade, while ON skips
+      // that quote and matches the older 180.15 one.
+      val whereQuery = sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades_t t ASOF JOIN quotes_t q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol
+          |WHERE q.bid_price < 180.18
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        whereQuery,
+        Row(Timestamp.valueOf("2026-06-29 10:00:05"), 180.10) :: Nil)
+      assert(!scanFilterColumns(whereQuery, "quotes_t").contains("bid_price"))
+
+      val onQuery = sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades_t t ASOF JOIN quotes_t q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol AND q.bid_price < 180.18
+          |""".stripMargin)
+      checkSortMergeAsOf(
+        onQuery,
+        Seq(
+          Row(Timestamp.valueOf("2026-06-29 10:00:05"), 180.10),
+          Row(Timestamp.valueOf("2026-06-29 10:00:11"), 180.15)))
+      assert(scanFilterColumns(onQuery, "quotes_t").contains("bid_price"))
+    }
+  }
+
+  test("ON predicate on the left input keeps every row of a LEFT ASOF JOIN") {
+    setupTradeQuoteViews()
+    checkSortMergeAsOf(
+      sql(
+        """
+          |SELECT t.trade_time, q.bid_price
+          |FROM trades t LEFT ASOF JOIN quotes q
+          |  MATCH_CONDITION (t.trade_time >= q.quote_time)
+          |  ON t.symbol = q.symbol AND t.quantity > 100
+          |""".stripMargin),
+      Seq(
+        Row(Timestamp.valueOf("2026-06-29 09:59:59"), null),
+        Row(Timestamp.valueOf("2026-06-29 10:00:05"), null),
+        Row(Timestamp.valueOf("2026-06-29 10:00:11"), 180.20),
+        Row(Timestamp.valueOf("2026-06-29 10:00:12"), null)))
   }
 
   test("LEFT ASOF JOIN null-pads NOT NULL right catalog columns") {
