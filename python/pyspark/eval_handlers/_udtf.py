@@ -36,7 +36,7 @@ from typing import TYPE_CHECKING, Any, Callable, ClassVar, Optional, Tuple
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import BatchEvalTypeHandler, EvalTypeHandler
-from pyspark.eval_handlers._typing import UDTF, InputBatch, OutputBatch
+from pyspark.eval_handlers._typing import UDTF, InputBatch, OutputBatch, UDTFInstance
 from pyspark.eval_handlers.utils import wrap_kwargs_support
 from pyspark.eval_handlers.verification import verify_arrow_result, verify_pandas_result
 from pyspark.serializers import (
@@ -603,10 +603,11 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 
     def assign_udtf(self, udtf: UDTF) -> None:
-        """Assign the UDTF to this handler: wrap the constructor of ``udtf.udtf_cls`` to receive
-        the AnalyzeResult, instantiate the UDTF (wrapped in ``partition_wrapper`` when its TABLE
-        argument has PARTITION BY expressions), check the 'eval' signature against the call
-        arguments, then set the handler up for it."""
+        """Assign the UDTF to this handler: keep the record as ``_udfs[0]`` and, as ``_udtf``, the
+        instance of ``udtf.udtf_cls`` (wrapped in ``partition_wrapper`` when its TABLE argument
+        has PARTITION BY expressions, its constructor given the AnalyzeResult when it takes one)
+        after checking the 'eval' signature against the call arguments, then set the handler up
+        for it."""
         udtf_cls = udtf.udtf_cls
         if not isinstance(udtf_cls, type):
             raise PySparkRuntimeError(
@@ -670,7 +671,8 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
                 messageParameters={"name": udtf.name, "reason": str(e)},
             ) from None
 
-        self._udfs = [dataclasses.replace(udtf, udtf=instance)]
+        self._udfs = [udtf]
+        self._udtf: UDTFInstance = instance
         self._setup_udfs(self._udfs)
 
 
@@ -684,7 +686,7 @@ class UDTFEvalTypeHandler(UDTFHandlerBase[InputBatch, OutputBatch]):
 
     def _setup_udfs(self, udfs: list[UDTF]) -> None:
         assert len(udfs) == 1, "One UDTF expected here."
-        udtf = udfs[0].udtf
+        udtf = self._udtf
         self._return_type = udfs[0].return_type
         self._eval_method, self._args_kwargs_offsets = wrap_kwargs_support(
             udtf.eval, udfs[0].args_offsets, udfs[0].kwargs_offsets
@@ -725,7 +727,7 @@ class TableUDTFHandler(UDTFHandlerBase[Any, tuple]):
 
     def _setup_udfs(self, udfs: list[UDTF]) -> None:
         assert len(udfs) == 1, "One UDTF expected here."
-        udtf, return_type = udfs[0].udtf, udfs[0].return_type
+        udtf, return_type = self._udtf, udfs[0].return_type
         self._check_output_row_against_schema = build_null_checker(return_type)
 
         eval_func_kwargs_support, self._args_kwargs_offsets = wrap_kwargs_support(

@@ -21,7 +21,6 @@ This leaf module imports only ``_typing``, the serializers and ``pyspark.util``,
 package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
-import dataclasses
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
@@ -158,27 +157,22 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
         self._udfs: list[Any] = []
+        self._funcs: list[Callable[..., Any]] = []
 
     def assign_udfs(self, udfs: list[UDF]) -> None:
-        """Assign the UDFs to this handler: wrap each function for profiling and in
-        ``fail_on_stopiteration``, keeping the unwrapped one as ``raw_func``, then set the
-        handler up for them."""
-        records = []
+        """Assign the UDFs to this handler: keep the records as ``_udfs`` and, in ``_funcs`` at
+        the same indexes, each function wrapped for profiling and in ``fail_on_stopiteration``,
+        then set the handler up for them."""
+        self._udfs = udfs
+        self._funcs = []
         for udf in udfs:
             profiling_func = self._with_profiler(udf.func, udf.result_id)
-            records.append(
-                dataclasses.replace(
-                    udf,
-                    func=(
-                        fail_on_stopiteration(profiling_func)
-                        if self._fail_on_stopiteration
-                        else profiling_func
-                    ),
-                    raw_func=udf.func,
-                )
+            self._funcs.append(
+                fail_on_stopiteration(profiling_func)
+                if self._fail_on_stopiteration
+                else profiling_func
             )
-        self._udfs = records
-        self._setup_udfs(records)
+        self._setup_udfs(udfs)
 
     def _setup_udfs(self, udfs: list[Any]) -> None:
         """Set the handler up for the ``UDF`` (or ``UDTF``) records just assigned to it, deriving

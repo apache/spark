@@ -99,9 +99,9 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
             # Process: evaluate each UDF column-wise on pandas Series.
             results = []
-            for udf in self._udfs:
+            for udf, func in zip(self._udfs, self._funcs):
                 return_type = udf.return_type
-                result = udf.func(
+                result = func(
                     *[pandas_columns[o] for o in udf.args_offsets],
                     **{k: pandas_columns[v] for k, v in udf.kwargs_offsets.items()},
                 )
@@ -156,7 +156,7 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         assert len(self._udfs) == 1, "One SCALAR_PANDAS_ITER UDF expected here."
         udf = self._udfs[0]
-        self._udf_func, self._args_offsets = udf.func, udf.args_offsets
+        self._udf_func, self._args_offsets = self._funcs[0], udf.args_offsets
         self._return_type = udf.return_type
         self._return_schema = StructType([StructField("_0", self._return_type)])
         self._expected_iter_type = (
@@ -225,7 +225,7 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         assert len(self._udfs) == 1, "One MAP_PANDAS_ITER UDF expected here."
-        self._udf_func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        self._udf_func, self._return_type = self._funcs[0], self._udfs[0].return_type
         self._return_schema = StructType([StructField("_0", self._return_type)])
         self._expected_iter_type = (
             Iterator[pd.DataFrame]
@@ -294,9 +294,9 @@ class PandasCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         assert len(self._udfs) == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
         udf = self._udfs[0]
-        self._cogrouped_udf, self._return_type = udf.func, udf.return_type
+        self._cogrouped_udf, self._return_type = self._funcs[0], udf.return_type
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         self._left_key_offsets, self._left_value_offsets = parsed_offsets[0]
         self._right_key_offsets, self._right_value_offsets = parsed_offsets[1]
@@ -370,9 +370,9 @@ class PandasGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         assert len(self._udfs) == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
         udf = self._udfs[0]
-        self._grouped_udf, self._return_type = udf.func, udf.return_type
+        self._grouped_udf, self._return_type = self._funcs[0], udf.return_type
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for GROUPED_MAP_PANDAS_ITER UDF."
@@ -448,9 +448,9 @@ class PandasGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         assert len(udfs) == 1, "One GROUPED_MAP_PANDAS UDF expected here."
         udf = udfs[0]
-        self._grouped_udf, self._return_type = udf.func, udf.return_type
+        self._grouped_udf, self._return_type = self._funcs[0], udf.return_type
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_PANDAS UDF."
         self._key_offsets, self._value_offsets = parsed_offsets[0]
@@ -546,11 +546,11 @@ class PandasGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
                 prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
             )
             results = [
-                udf.func(
+                func(
                     *[all_series[o] for o in udf.args_offsets],
                     **{k: all_series[v] for k, v in udf.kwargs_offsets.items()},
                 )
-                for udf in self._udfs
+                for udf, func in zip(self._udfs, self._funcs)
             ]
             yield PandasToArrowConversion.from_pandas(
                 [pd.Series([r]) for r in results],
@@ -577,7 +577,7 @@ class PandasGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         assert len(self._udfs) == 1, "One GROUPED_AGG_PANDAS_ITER UDF expected here."
         udf = self._udfs[0]
-        self._udf_func, self._args_offsets = udf.func, udf.args_offsets
+        self._udf_func, self._args_offsets = self._funcs[0], udf.args_offsets
         self._return_schema = StructType([StructField("_0", udf.return_type)])
 
         import pandas as pd
@@ -647,7 +647,7 @@ class PandasWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
 
             result_series = []
             for udf_index, udf in enumerate(self._udfs):
-                udf_func = udf.func
+                udf_func = self._funcs[udf_index]
                 args_offsets, kwargs_offsets = udf.args_offsets, udf.kwargs_offsets
                 bound_type = self._window_bound_types[udf_index]
                 if bound_type == "unbounded":
@@ -722,10 +722,10 @@ class ArrowBatchedUDFLegacyPandasHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
         # --- UDF preparation ---
         self._udf_infos = []
-        for udf in self._udfs:
+        for udf, func in zip(self._udfs, self._funcs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf.func, udf.args_offsets, udf.kwargs_offsets
+                func, udf.args_offsets, udf.kwargs_offsets
             )
             zero_arg = len(args_kwargs_offsets) == 0
             # Legacy coerces String/Binary for Arrow compatibility

@@ -290,20 +290,22 @@ class AssignUDFsTests(PySparkBaseTestCase):
                 )
             ]
         )
-        return handler._udfs[0]
+        return handler
 
-    def test_assigns_udf_records(self):
-        udf = self._assign(self._Handler)
+    def test_assigns_udfs(self):
+        handler = self._assign(self._Handler)
+        udf = handler._udfs[0]
 
         self.assertIsInstance(udf, UDF)
         self.assertEqual(udf.args_offsets, [1])
         self.assertEqual(udf.kwargs_offsets, {"y": 2})
         self.assertEqual(udf.return_type, LongType())
-        # func is wrapped in fail_on_stopiteration; raw_func is the unwrapped function.
+        # The handler keeps the function wrapped in fail_on_stopiteration; the record keeps it
+        # unwrapped.
         with self.assertRaises(PySparkRuntimeError):
-            udf.func(1)
+            handler._funcs[0](1)
         with self.assertRaises(StopIteration):
-            udf.raw_func(1)
+            udf.func(1)
 
     def test_fail_on_stopiteration_per_handler(self):
         not_wrapped = {
@@ -323,7 +325,7 @@ class AssignUDFsTests(PySparkBaseTestCase):
             _fail_on_stopiteration = False
 
         with self.assertRaises(StopIteration):
-            self._assign(_NotWrapped).func(1)
+            self._assign(_NotWrapped)._funcs[0](1)
 
     def test_profiler_selected_by_conf(self):
         def f(x):

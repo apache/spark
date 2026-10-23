@@ -43,12 +43,11 @@ OutputBatch = TypeVar("OutputBatch")
 
 @dataclass(frozen=True)
 class UDF:
-    """One UDF: the worker builds it from the unpickled (and chained) function, and
-    ``EvalTypeHandler.assign_udfs`` completes it for the handler; each handler takes the fields
-    it needs."""
+    """One UDF, as the worker builds it from the unpickled (and chained) function and assigns it
+    to a handler with ``EvalTypeHandler.assign_udfs``; each handler takes the fields it needs."""
 
-    # The chained function; assign_udfs wraps it for profiling and, for most eval types, in
-    # fail_on_stopiteration.
+    # The chained function, unwrapped: the pickled object itself (an incremental Aggregator) with
+    # its signature. assign_udfs keeps the wrapped function on the handler.
     func: Callable[..., Any]
     # The DataType of the last function in the chain; a StructType for the eval types that
     # return rows.
@@ -57,9 +56,6 @@ class UDF:
     kwargs_offsets: dict[str, int]
     # The id the profiler reports the UDF's results under.
     result_id: int
-    # Set by assign_udfs to the chained function before any wrapping, for handlers that need the
-    # pickled object itself (an incremental Aggregator) or its signature.
-    raw_func: Any = None
 
 
 class UDTFInstance(Protocol):
@@ -71,8 +67,8 @@ class UDTFInstance(Protocol):
 
 @dataclass(frozen=True)
 class UDTF:
-    """The UDTF: the worker builds it from the unpickled class, and
-    ``UDTFHandlerBase.assign_udtf`` completes it with the instance."""
+    """The UDTF, as the worker builds it from the unpickled class and assigns it to a handler with
+    ``UDTFHandlerBase.assign_udtf``, which keeps the instance on the handler."""
 
     # The user's UDTF class, as unpickled.
     udtf_cls: type
@@ -85,6 +81,3 @@ class UDTF:
     analyze_result: Optional["AnalyzeResult"]
     # The UDTF's name in error messages.
     name: str
-    # Set by assign_udtf to the UDTFInstance it created from udtf_cls, wrapped in the handler's
-    # partition_wrapper when its TABLE argument has PARTITION BY expressions.
-    udtf: Any = None

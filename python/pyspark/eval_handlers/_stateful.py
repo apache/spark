@@ -112,7 +112,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
 
         # See FlatMapGroupsInPandasWithStateExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
-        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        self._func, self._return_type = self._funcs[0], self._udfs[0].return_type
         parsed_offsets = extract_key_value_indexes(self._udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
@@ -429,7 +429,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
         require_minimum_pyarrow_version()
 
         assert len(self._udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
-        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        self._func, self._return_type = self._funcs[0], self._udfs[0].return_type
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
@@ -582,7 +582,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         require_minimum_pyarrow_version()
 
         assert len(self._udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
-        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        self._func, self._return_type = self._funcs[0], self._udfs[0].return_type
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -798,7 +798,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
 
         assert len(self._udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
-        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        self._func, self._return_type = self._funcs[0], self._udfs[0].return_type
 
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -907,7 +907,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         assert len(self._udfs) == 1, (
             "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
         )
-        self._func, self._return_type = self._udfs[0].func, self._udfs[0].return_type
+        self._func, self._return_type = self._funcs[0], self._udfs[0].return_type
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.

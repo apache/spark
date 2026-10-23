@@ -137,8 +137,9 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):
-        """Build a grouped/cogrouped-map handler with the shared return type. ``assign_udfs``
-        wraps ``func`` (losing the signature) while ``raw_func`` keeps it."""
+        """Build a grouped/cogrouped-map handler with the shared return type. The function
+        ``assign_udfs`` wraps loses its signature, so the handler reads it from the record's
+        unwrapped ``func``."""
         handler = handler_cls(runner_conf=RunnerConf({}), eval_conf=None)
         handler.assign_udfs([cls._udf(udf, arg_offsets, return_type=cls._RETURN_TYPE)])
         return handler
@@ -594,7 +595,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
     _KEY_SCHEMA = StructType([StructField("k", LongType())])
 
     def _handler(self, cap=10000):
-        # assign_udfs wraps func; raw_func is the Aggregator itself.
+        # The handler takes the Aggregator itself from the record's unwrapped func.
         agg = _SumAggregator()
         handler = ArrowGroupedAggIncrementalPartialUDFHandler(
             runner_conf=RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": str(cap)}),
@@ -678,7 +679,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
         return pa.RecordBatch.from_arrays([pa.array(buffers, type=self._BUFFER_TYPE)], ["buf"])
 
     def _handler(self):
-        # assign_udfs wraps func; raw_func is the Aggregator itself.
+        # The handler takes the Aggregator itself from the record's unwrapped func.
         agg = _SumAggregator()
         handler = ArrowGroupedAggIncrementalFinalUDFHandler(
             runner_conf=RunnerConf({}), eval_conf=None
@@ -710,7 +711,7 @@ class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
         handler = ArrowWindowAggIncrementalUDFHandler(
             runner_conf=RunnerConf({"window_bound_types": bound_type}), eval_conf=None
         )
-        # assign_udfs wraps func; raw_func is the Aggregator itself.
+        # The handler takes the Aggregator itself from the record's unwrapped func.
         handler.assign_udfs([self._udf(agg, args_offsets)])
         return handler
 

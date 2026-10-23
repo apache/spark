@@ -199,7 +199,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         for udf_index, udf in enumerate(self._udfs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf.func, udf.args_offsets, udf.kwargs_offsets
+                self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
             )
             depth = nesting[udf_index] if nesting is not None else 1
             # Each argument arrives as ``array^depth<T>``; convert its leaves with the element type
@@ -392,7 +392,7 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         for udf_index, udf in enumerate(udfs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf.func, udf.args_offsets, udf.kwargs_offsets
+                self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
             )
             udf_output_schema = _elementwise_output_schema(udf_return_type, self._runner_conf)
             depth = nesting[udf_index] if nesting is not None else 1
@@ -515,7 +515,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
         udf = udfs[0]
-        self._udf_func, self._args_offsets = udf.func, udf.args_offsets
+        self._udf_func, self._args_offsets = self._funcs[0], udf.args_offsets
         self._return_type = udf.return_type
         assert not udf.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
 
