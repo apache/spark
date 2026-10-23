@@ -1728,6 +1728,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57838: cast nanosecond timestamps at the range boundaries") {
+    // The calendar range, the int64 epoch-nanosecond limits of Parquet/Avro and the
+    // epoch-microsecond (Long) limits. Years beyond 9999 are accepted, as for the micro types.
+    Seq(
+      "0001-01-01 00:00:00" -> nanosVal(-62135596800000000L, 0),
+      "9999-12-31 23:59:59.999999999" -> nanosVal(253402300799999999L, 999),
+      "+10000-01-01 00:00:00.000000001" -> nanosVal(253402300800000000L, 1),
+      "1677-09-21 00:12:43.145224192" -> nanosVal(-9223372036854776L, 192),
+      "2262-04-11 23:47:16.854775807" -> nanosVal(9223372036854775L, 807),
+      "-290308-12-21 19:59:05.224192" -> nanosVal(Long.MinValue, 0),
+      "+294247-01-10 04:00:54.775807999" -> nanosVal(Long.MaxValue, 999)).foreach {
+      case (str, v) =>
+        checkEvaluation(cast(Literal(str), TimestampNTZNanosType(9)), v)
+        checkEvaluation(cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), UTC_OPT), v)
+        checkEvaluation(cast(Literal.create(v, TimestampNTZNanosType(9)), StringType), str)
+        checkEvaluation(
+          cast(Literal.create(v, TimestampLTZNanosType(9)), StringType, UTC_OPT), str)
+        // To and from the micro type keeps the epoch-microseconds part.
+        checkEvaluation(
+          cast(Literal.create(v, TimestampNTZNanosType(9)), TimestampNTZType), v.epochMicros)
+        checkEvaluation(
+          cast(Literal.create(v.epochMicros, TimestampNTZType), TimestampNTZNanosType(9)),
+          nanosVal(v.epochMicros, 0))
+    }
+  }
+
   test("SPARK-57323: cast between date and timestamp_ntz with nanosecond precision") {
     // NTZ casts use a fixed UTC wall-clock grid, independent of the session time zone.
     val date = LocalDate.of(2020, 1, 1)

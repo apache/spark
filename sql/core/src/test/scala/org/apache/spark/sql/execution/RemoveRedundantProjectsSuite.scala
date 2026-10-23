@@ -18,12 +18,8 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{DataFrame, Row}
-import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{GreaterThanOrEqual, Literal}
-import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.connector.SimpleWritableDataSource
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, DisableAdaptiveExecutionSuite, EnableAdaptiveExecutionSuite}
-import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StructType
@@ -236,27 +232,6 @@ abstract class RemoveRedundantProjectsSuiteBase
     // The ProjectExec above the GenerateExec should not be removed because
     // they have different logical links.
     assertProjectExec(query, enabled = 2, disabled = 3)
-  }
-
-  test("identity projects over scan grouping can still be redundant") {
-    val df = spark.range(0, 3, 1, 3).selectExpr("id % 2 AS id")
-    val scan = RDDScanExec(df.queryExecution.analyzed.output, df.queryExecution.toRdd,
-      "grouped rows", KeyedPartitioning(df.queryExecution.analyzed.output,
-        Seq(InternalRow(0L), InternalRow(1L), InternalRow(0L))))
-    scan.setLogicalLink(df.queryExecution.optimizedPlan)
-    val group = GroupPartitionsExec(scan, preserveScanGrouping = true)
-    group.setLogicalLink(df.queryExecution.optimizedPlan)
-    Seq(false, true).foreach { filter =>
-      val child = if (filter) {
-        FilterExec(GreaterThanOrEqual(group.output.head, Literal(0L)), group)
-      } else {
-        group
-      }
-      child.setLogicalLink(df.queryExecution.optimizedPlan)
-      val optimized = RemoveRedundantProjects(ProjectExec(child.output, child))
-      assert(!optimized.isInstanceOf[ProjectExec])
-      assert(optimized.executeCollect().map(_.getLong(0)).sorted.toSeq === Seq(0L, 0L, 1L))
-    }
   }
 
   Seq("true", "false").foreach { codegenEnabled =>

@@ -29,6 +29,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import ArrayType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
@@ -99,7 +100,16 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         if nesting is not None:
             eval_conf["elementwise_nesting"] = ",".join(map(str, nesting))
         return handler_cls(
-            udfs=list(udfs),
+            udfs=[
+                UDF(
+                    func=func,
+                    raw_func=func,
+                    args_offsets=args_offsets,
+                    kwargs_offsets=kwargs_offsets,
+                    return_type=return_type,
+                )
+                for func, args_offsets, kwargs_offsets, return_type in udfs
+            ],
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
         )
@@ -217,11 +227,8 @@ class ScalarElementwiseUDFHandlerTestsMixin:
 
     handler_cls: type
 
-    def _scalar_handler(self, *udfs, **kwargs):
-        return self._handler(self.handler_cls, *udfs, **kwargs)
-
     def test_serializer(self):
-        handler = self._scalar_handler((lambda x: x, [0], {}, LongType()))
+        handler = self._handler(self.handler_cls, (lambda x: x, [0], {}, LongType()))
         self.assertIsInstance(handler.serializer, ArrowStreamSerializer)
 
     def test_invokes_udf_per_batch(self):
@@ -231,21 +238,22 @@ class ScalarElementwiseUDFHandlerTestsMixin:
             calls.append(len(x))
             return self._add(x, 1)
 
-        handler = self._scalar_handler((udf, [0], {}, LongType()))
+        handler = self._handler(self.handler_cls, (udf, [0], {}, LongType()))
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(calls, [3])
         self.assertEqual(out[0].schema.names, ["_0"])
         self.assertEqual(self._column(out), self._A_PLUS_ONE)
 
     def test_nesting_greater_than_one(self):
-        handler = self._scalar_handler(
-            (lambda x: self._add(x, 1), [1], {}, LongType()), nesting=[2]
+        handler = self._handler(
+            self.handler_cls, (lambda x: self._add(x, 1), [1], {}, LongType()), nesting=[2]
         )
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_fused_udfs_renest_by_own_shape(self):
-        handler = self._scalar_handler(
+        handler = self._handler(
+            self.handler_cls,
             (lambda x: self._add(x, 1), [0], {}, LongType()),
             (lambda x: self._add(x, 1), [1], {}, LongType()),
             (lambda x, y: self._mul(x, y), [0, 2], {}, LongType()),
@@ -258,31 +266,35 @@ class ScalarElementwiseUDFHandlerTestsMixin:
         self.assertEqual(self._column(out, 2), self._A_TIMES_C * 2)
 
     def test_passes_arg_by_keyword_offset(self):
-        handler = self._scalar_handler((lambda x, y: self._mul(x, y), [0], {"y": 2}, LongType()))
+        handler = self._handler(
+            self.handler_cls, (lambda x, y: self._mul(x, y), [0], {"y": 2}, LongType())
+        )
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(self._column(out), self._A_TIMES_C)
 
     def test_preserves_large_list(self):
-        handler = self._scalar_handler(
-            (lambda x: self._add(x, 1), [1], {}, LongType()), nesting=[2]
+        handler = self._handler(
+            self.handler_cls, (lambda x: self._add(x, 1), [1], {}, LongType()), nesting=[2]
         )
         out = list(handler.run(0, iter([self._batch(large_list=True)])))
         self.assertEqual(out[0].schema.field(0).type, pa.large_list(pa.large_list(pa.int64())))
         self.assertEqual(self._column(out), self._B_PLUS_ONE)
 
     def test_all_empty_and_null_arrays(self):
-        handler = self._scalar_handler((lambda x: self._add(x, 1), [0], {}, LongType()))
+        handler = self._handler(self.handler_cls, (lambda x: self._add(x, 1), [0], {}, LongType()))
         batch = self._batch(a=[[], None], b=[None, None], c=[[], None])
         out = list(handler.run(0, iter([batch])))
         self.assertEqual(self._column(out), [[], None])
 
     def test_rejects_result_length_mismatch(self):
-        handler = self._scalar_handler((lambda x, y: self._mul(x, y)[:1], [0, 2], {}, LongType()))
+        handler = self._handler(
+            self.handler_cls, (lambda x, y: self._mul(x, y)[:1], [0, 2], {}, LongType())
+        )
         with self.assertRaisesRegex(PySparkRuntimeError, "RESULT_ROWS_MISMATCH"):
             list(handler.run(0, iter([self._batch()])))
 
     def test_rejects_non_array_like_result(self):
-        handler = self._scalar_handler((lambda x: 1, [0], {}, LongType()))
+        handler = self._handler(self.handler_cls, (lambda x: 1, [0], {}, LongType()))
         with self.assertRaisesRegex(PySparkTypeError, "UDF_RETURN_TYPE"):
             list(handler.run(0, iter([self._batch()])))
 
@@ -310,13 +322,15 @@ class ArrowScalarElementwiseUDFHandlerTests(
             seen.append(x)
             return x
 
-        handler = self._scalar_handler((udf, [0], {}, LongType()))
+        handler = self._handler(self.handler_cls, (udf, [0], {}, LongType()))
         list(handler.run(0, iter([self._batch()])))
         self.assertIsInstance(seen[0], pa.Array)
         self.assertEqual(seen[0].to_pylist(), [1, 2, 3])
 
     def test_coerces_result_to_return_type(self):
-        handler = self._scalar_handler((lambda x: pc.cast(x, pa.int32()), [0], {}, LongType()))
+        handler = self._handler(
+            self.handler_cls, (lambda x: pc.cast(x, pa.int32()), [0], {}, LongType())
+        )
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(out[0].schema.field(0).type, pa.list_(pa.int64()))
         self.assertEqual(self._column(out), self._A)
@@ -345,7 +359,7 @@ class PandasScalarElementwiseUDFHandlerTests(
             seen.append(x)
             return x
 
-        handler = self._scalar_handler((udf, [0], {}, LongType()))
+        handler = self._handler(self.handler_cls, (udf, [0], {}, LongType()))
         list(handler.run(0, iter([self._batch()])))
         self.assertIsInstance(seen[0], pd.Series)
         self.assertIsNone(seen[0].name)
@@ -358,20 +372,22 @@ class PandasScalarElementwiseUDFHandlerTests(
             [pa.array([[{"v": 1}, {"v": 2}], None], type=pa.list_(pa.struct([("v", pa.int64())])))],
             ["s"],
         )
-        handler = self._scalar_handler(
-            (lambda df: df["v"] + 1, [0], {}, LongType()), input_type=input_type
+        handler = self._handler(
+            self.handler_cls, (lambda df: df["v"] + 1, [0], {}, LongType()), input_type=input_type
         )
         self.assertEqual(self._column(list(handler.run(0, iter([batch])))), [[2, 3], None])
 
     def test_struct_return_type_requires_dataframe(self):
         return_type = StructType([StructField("v", LongType())])
-        handler = self._scalar_handler((lambda x: x, [0], {}, return_type))
+        handler = self._handler(self.handler_cls, (lambda x: x, [0], {}, return_type))
         with self.assertRaises(PySparkValueError):
             list(handler.run(0, iter([self._batch()])))
 
     def test_struct_return_type(self):
         return_type = StructType([StructField("v", LongType())])
-        handler = self._scalar_handler((lambda x: pd.DataFrame({"v": x + 1}), [0], {}, return_type))
+        handler = self._handler(
+            self.handler_cls, (lambda x: pd.DataFrame({"v": x + 1}), [0], {}, return_type)
+        )
         out = list(handler.run(0, iter([self._batch()])))
         self.assertEqual(self._column(out), [[{"v": 2}, {"v": 3}], [], None, [{"v": 4}]])
 

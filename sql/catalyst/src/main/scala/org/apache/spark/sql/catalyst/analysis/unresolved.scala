@@ -197,7 +197,10 @@ object UnresolvedRelation {
 
 /**
  * An inline table that has not been resolved yet. Once resolved, it is turned by the analyzer into
- * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]].
+ * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]], or into an
+ * [[org.apache.spark.sql.catalyst.plans.logical.Expand]] over a
+ * [[org.apache.spark.sql.catalyst.plans.logical.OneRowRelation]] if some of its expressions are
+ * evaluated when the query runs.
  *
  * @param names list of column names
  * @param rows expressions for the data
