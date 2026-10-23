@@ -199,8 +199,8 @@ abstract class SchemaPruningThroughGenerateSuite
 
   testPruning("SPARK-47230: only inner-element fields") {
     checkPrunedQuery(
-      "select id, part.pid, part.label, part.price from base",
-      "struct<id:int,items:array<struct<active:boolean," +
+      "select part.pid, part.label, part.price from base",
+      "struct<items:array<struct<active:boolean," +
         "parts:array<struct<inStock:boolean,pid:int,label:string,price:double>>>>>")
   }
 
