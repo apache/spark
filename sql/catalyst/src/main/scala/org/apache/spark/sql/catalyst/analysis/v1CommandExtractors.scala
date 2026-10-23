@@ -76,6 +76,15 @@ object ResolvedV1TableOrViewIdentifier {
   }
 }
 
+/** Extracts a V1 command identifier, rejecting namespaces that cannot be represented in V1. */
+object ResolvedV1CommandIdentifier {
+  def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
+    case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
+      Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
+    case _ => None
+  }
+}
+
 /**
  * Extractor for resolved identifiers in the session catalog.
  * Rejects multi-part namespaces and builtin namespace targets with appropriate errors.
