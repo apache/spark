@@ -405,6 +405,7 @@ class PythonPipelineSuite
   }
 
   test("SPARK-60494: referencing internal datasets through DataFrame arguments of spark.sql") {
+    // `d` and `e` have the SQL with DataFrame arguments under another relation.
     val unresolvedGraph = buildGraph("""
       |@dp.materialized_view
       |def src():
@@ -425,11 +426,20 @@ class PythonPipelineSuite
       |@dp.materialized_view
       |def c():
       |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("view_src"))
+      |
+      |@dp.materialized_view
+      |def d():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src")).where("id > 0")
+      |
+      |@dp.materialized_view
+      |def e():
+      |  inner = spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |  return spark.sql("SELECT * FROM {x}", x=inner)
       |""".stripMargin)
     val graph = unresolvedGraph.resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
 
     // dependency is properly tracked
-    Seq("a", "b").foreach { flowName =>
+    Seq("a", "b", "d", "e").foreach { flowName =>
       assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src")))
     }
     assert(graph.resolvedFlow(graphIdentifier("c")).inputs == Set(TableIdentifier("view_src")))
@@ -440,9 +450,10 @@ class PythonPipelineSuite
       new PipelineUpdateContextImpl(unresolvedGraph, _ => (), storageRoot = storageRoot)
     updateContext.pipelineExecution.runPipeline()
     updateContext.pipelineExecution.awaitCompletion()
-    Seq("a", "b", "c").foreach { table =>
+    Seq("a", "b", "c", "e").foreach { table =>
       assert(spark.table(table).collect().map(_.getLong(0)).toSet == (0L until 5L).toSet)
     }
+    assert(spark.table("d").collect().map(_.getLong(0)).toSet == (1L until 5L).toSet)
   }
 
   test(
@@ -527,9 +538,13 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM src")
+        |
+        |@dp.materialized_view
+        |def f():
+        |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
         |""".stripMargin).resolve(sessionCaseSensitive)
 
-    assert(graph.resolutionFailedFlows.size == 5)
+    assert(graph.resolutionFailedFlows.size == 6)
     graph.resolutionFailedFlows.foreach { flow =>
       assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
       assert(flow.failure.head.getMessage.contains("`src`"))
