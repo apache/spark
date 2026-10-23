@@ -126,7 +126,7 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @staticmethod
     def _agg_handler(handler_cls, *udfs, runner_conf=None):
-        """Build a grouped-agg/window-agg handler from one or more ``_udf`` UDFs."""
+        """Build a grouped-agg/window-agg handler from one or more ``_udf`` records."""
         return handler_cls(
             udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
         )
@@ -173,7 +173,7 @@ class ArrowBatchedUDFLegacyPandasHandlerTests(PandasEvalTypeHandlerTestCase):
     _INPUT_TYPE = StructType([StructField("a", LongType()), StructField("b", LongType())])
 
     def _handler(self, *udfs, runner_conf=None, input_type=None):
-        """Build the handler from one or more ``_udf`` UDFs."""
+        """Build the handler from one or more ``_udf`` records."""
         return ArrowBatchedUDFLegacyPandasHandler(
             udfs=list(udfs),
             runner_conf=runner_conf or RunnerConf({}),
@@ -233,7 +233,7 @@ class ArrowBatchedUDFLegacyPandasHandlerTests(PandasEvalTypeHandlerTestCase):
 class PandasScalarUDFHandlerTests(PandasEvalTypeHandlerTestCase):
     @staticmethod
     def _handler(*udfs, runner_conf=None):
-        """Build a PandasScalarUDFHandler from one or more ``_udf`` UDFs."""
+        """Build a PandasScalarUDFHandler from one or more ``_udf`` records."""
         return PandasScalarUDFHandler(
             udfs=list(udfs), runner_conf=runner_conf or RunnerConf({}), eval_conf=None
         )
