@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.lang.{Float => JFloat}
+
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -674,11 +676,74 @@ object VectorAvg {
         newCount: Long): Unit = {
       // Update running average: new_avg = old_avg + (new_value - old_avg) / new_count
       val invCount = 1.0f / newCount
+      if (dim < 4) {
+        updateRemainingElements(accBytes, inputArray, 0, dim, invCount)
+      } else {
+        updateElementsInBlocks(accBytes, inputArray, dim, invCount)
+      }
+    }
+
+    private def updateElementsInBlocks(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        dim: Int,
+        invCount: Float): Unit = {
       var i = 0
+      while (i <= dim - 4) {
+        val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
+        val oldAvg0 = Platform.getFloat(accBytes, off)
+        val delta0 = inputArray.getFloat(i) - oldAvg0
+        val oldAvg1 = Platform.getFloat(accBytes, off + 4)
+        val delta1 = inputArray.getFloat(i + 1) - oldAvg1
+        val oldAvg2 = Platform.getFloat(accBytes, off + 8)
+        val delta2 = inputArray.getFloat(i + 2) - oldAvg2
+        val oldAvg3 = Platform.getFloat(accBytes, off + 12)
+        val delta3 = inputArray.getFloat(i + 3) - oldAvg3
+        // A finite sum guarantees finite deltas; sum overflow only triggers a scalar fallback.
+        val deltaSum = (delta0 + delta1) + (delta2 + delta3)
+        if (!JFloat.isFinite(deltaSum)) {
+          updateRemainingElements(accBytes, inputArray, i, dim, invCount)
+          return
+        }
+        Platform.putFloat(accBytes, off, oldAvg0 + delta0 * invCount)
+        Platform.putFloat(accBytes, off + 4, oldAvg1 + delta1 * invCount)
+        Platform.putFloat(accBytes, off + 8, oldAvg2 + delta2 * invCount)
+        Platform.putFloat(accBytes, off + 12, oldAvg3 + delta3 * invCount)
+        i += 4
+      }
+      if (i < dim) {
+        updateRemainingElements(accBytes, inputArray, i, dim, invCount)
+      }
+    }
+
+    private def updateRemainingElements(
+        accBytes: Array[Byte],
+        inputArray: ArrayData,
+        start: Int,
+        dim: Int,
+        invCount: Float): Unit = {
+      var i = start
       while (i < dim) {
         val off = Platform.BYTE_ARRAY_OFFSET + i.toLong * 4
         val oldAvg = Platform.getFloat(accBytes, off)
-        Platform.putFloat(accBytes, off, oldAvg + (inputArray.getFloat(i) - oldAvg) * invCount)
+        val value = inputArray.getFloat(i)
+        val delta = value - oldAvg
+        val newAvg = if (JFloat.isFinite(delta)) {
+          oldAvg + delta * invCount
+        } else if (JFloat.isFinite(oldAvg) && JFloat.isFinite(value)) {
+          // Scale before subtracting when opposite finite values overflow the delta.
+          // For oldAvg = Float.MaxValue, value = -Float.MaxValue and invCount = 0.5f,
+          // the delta is -Infinity, but scaling first gives the correct average of 0.0f.
+          oldAvg + (value * invCount - oldAvg * invCount)
+        } else {
+          // IEEE addition handles these cases in either operand order:
+          // Inf + Inf -> Inf; -Inf + (-Inf) -> -Inf.
+          // Inf + (-Inf) -> NaN.
+          // NaN + any value -> NaN.
+          // Inf + finite -> Inf; -Inf + finite -> -Inf.
+          oldAvg + value
+        }
+        Platform.putFloat(accBytes, off, newAvg)
         i += 1
       }
     }

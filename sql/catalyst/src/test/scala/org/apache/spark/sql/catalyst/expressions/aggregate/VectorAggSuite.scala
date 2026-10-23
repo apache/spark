@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
-import java.lang.{Double => JDouble}
+import java.lang.{Double => JDouble, Float => JFloat}
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -60,7 +60,7 @@ class VectorAggSuite extends SparkFunSuite {
   }
 
   // Helper to create input row with array containing null elements
-  def createInputRowWithNullElement(values: Array[java.lang.Float]): InternalRow = {
+  def createInputRowWithNullElement(values: Array[JFloat]): InternalRow = {
     val arrayData = new GenericArrayData(values.map {
       case null => null
       case v => v.floatValue().asInstanceOf[AnyRef]
@@ -86,7 +86,7 @@ class VectorAggSuite extends SparkFunSuite {
   // Asserts that two floats are approximately equal within a tolerance.
   def assertFloatEquals(actual: Float, expected: Float, tolerance: Float = 1e-5f): Unit = {
     assert(
-      java.lang.Float.isNaN(expected) && java.lang.Float.isNaN(actual) ||
+      JFloat.isNaN(expected) && JFloat.isNaN(actual) ||
         math.abs(actual - expected) <= tolerance,
       s"Expected $expected but got $actual (tolerance: $tolerance)"
     )
@@ -405,6 +405,151 @@ class VectorAggSuite extends SparkFunSuite {
     assert(result(1) === 3.0f)
   }
 
+  test("VectorAvg - opposite extreme values do not overflow") {
+    val (agg, buffer, _) = createVectorAvg()
+    agg.update(buffer, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
+    agg.update(buffer, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
+    assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer))
+
+    val (_, buffer1, _) = createVectorAvg()
+    val (_, buffer2, _) = createVectorAvg()
+    agg.update(buffer1, createInputRow(Array(Float.MaxValue, -Float.MaxValue)))
+    agg.update(buffer2, createInputRow(Array(-Float.MaxValue, Float.MaxValue)))
+    agg.merge(buffer1, buffer2)
+    assertResult(Array(0.0f, 0.0f))(evalAsFloatArray(agg, buffer1))
+  }
+
+  test("VectorAvg - finite overflow preserves cumulative weights") {
+    val (agg, buffer, _) = createVectorAvg()
+    val first = Array(Float.MaxValue, -Float.MaxValue)
+    agg.update(buffer, createInputRow(first))
+    agg.update(buffer, createInputRow(first))
+    // The third update overflows the delta. An unweighted midpoint would incorrectly return zero.
+    agg.update(buffer, createInputRow(first.map(-_)))
+    val expected = (Float.MaxValue.toDouble / 3).toFloat
+    assertFloatArrayEquals(
+      evalAsFloatArray(agg, buffer),
+      Array(expected, -expected),
+      tolerance = math.ulp(expected) * 2)
+  }
+
+  test("VectorAvg - non-finite results do not depend on input order") {
+    val first =
+      Array(Float.PositiveInfinity, 1.0f, Float.NegativeInfinity, Float.PositiveInfinity)
+    val second = Array(1.0f, Float.PositiveInfinity, 1.0f, Float.NegativeInfinity)
+    def checkResult(result: Array[Float]): Unit = {
+      assertResult(Float.PositiveInfinity)(result(0))
+      assertResult(Float.PositiveInfinity)(result(1))
+      assertResult(Float.NegativeInfinity)(result(2))
+      assert(result(3).isNaN)
+    }
+
+    Seq(Seq(first, second), Seq(second, first)).foreach { vectors =>
+      val (agg, buffer, _) = createVectorAvg()
+      vectors.foreach(v => agg.update(buffer, createInputRow(v)))
+      checkResult(evalAsFloatArray(agg, buffer))
+      agg.update(buffer, createInputRow(Array(2.0f, 2.0f, 2.0f, 2.0f)))
+      checkResult(evalAsFloatArray(agg, buffer))
+
+      val (_, buffer1, _) = createVectorAvg()
+      val (_, buffer2, _) = createVectorAvg()
+      agg.update(buffer1, createInputRow(vectors.head))
+      agg.update(buffer2, createInputRow(vectors(1)))
+      agg.merge(buffer1, buffer2)
+      checkResult(evalAsFloatArray(agg, buffer1))
+    }
+  }
+
+  test("VectorAvg - finite elements around non-finite deltas") {
+    val first = Array(1.0f, Float.MaxValue, 3.0f, Float.PositiveInfinity, 5.0f,
+      Float.NegativeInfinity, 7.0f, Float.PositiveInfinity, 9.0f, Float.NaN, 11.0f)
+    val second = Array(3.0f, -Float.MaxValue, 5.0f, 1.0f, 7.0f, 1.0f, 9.0f,
+      Float.NegativeInfinity, 11.0f, 2.0f, 13.0f)
+    val expected = Array(2.0f, 0.0f, 4.0f, Float.PositiveInfinity, 6.0f,
+      Float.NegativeInfinity, 8.0f, Float.NaN, 10.0f, Float.NaN, 12.0f)
+
+    Seq(false, true).foreach { useGenericArray =>
+      val (agg, buffer, _) = createVectorAvg()
+      Seq(first, second).foreach { values =>
+        val array = if (useGenericArray) {
+          new GenericArrayData(values)
+        } else {
+          ArrayData.toArrayData(values)
+        }
+        agg.update(buffer, InternalRow(array))
+      }
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
+    }
+  }
+
+  test("VectorAvg - finite updates preserve running-average rounding") {
+    Seq(false, true).foreach { includeInfinity =>
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.tabulate(17)(i => if (i % 2 == 0) 1.0f else -1.0f)
+      val last = first.map(_ * 6)
+      val expected = Array.tabulate(17)(i => if (i % 2 == 0) 0x402aaaab else 0xc02aaaab)
+      if (includeInfinity) {
+        first(8) = Float.PositiveInfinity
+        last(8) = 1.0f
+        expected(8) = 0x7f800000
+      }
+      agg.update(buffer, createInputRow(first))
+      agg.update(buffer, createInputRow(first))
+      agg.update(buffer, createInputRow(last))
+      assertResult(expected)(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToRawIntBits))
+    }
+  }
+
+  test("VectorAvg - non-finite deltas at different positions") {
+    val cases = Seq(
+      (Float.MaxValue, -Float.MaxValue, 0.0f),
+      (Float.PositiveInfinity, 1.0f, Float.PositiveInfinity),
+      (Float.NegativeInfinity, 1.0f, Float.NegativeInfinity),
+      (Float.PositiveInfinity, Float.PositiveInfinity, Float.PositiveInfinity),
+      (Float.NegativeInfinity, Float.NegativeInfinity, Float.NegativeInfinity),
+      (Float.PositiveInfinity, Float.NegativeInfinity, Float.NaN),
+      (Float.NaN, Float.NaN, Float.NaN),
+      (Float.NaN, Float.PositiveInfinity, Float.NaN),
+      (Float.NaN, Float.NegativeInfinity, Float.NaN),
+      (Float.NaN, 1.0f, Float.NaN))
+    for {
+      dim <- Seq(1, 3, 4, 5, 7, 8, 9, 17)
+      index <- 0 until dim
+      (left, right, expectedValue) <- cases
+      (oldAvg, value) <- Seq((left, right), (right, left))
+      useGenericArray <- Seq(false, true)
+    } {
+      val (agg, buffer, _) = createVectorAvg()
+      val first = Array.fill(dim)(1.0f)
+      val second = Array.fill(dim)(3.0f)
+      val expected = Array.fill(dim)(2.0f)
+      first(index) = oldAvg
+      second(index) = value
+      expected(index) = expectedValue
+      val rows = Seq(first, second).map { values =>
+        val array = if (useGenericArray) {
+          new GenericArrayData(values)
+        } else {
+          ArrayData.toArrayData(values)
+        }
+        InternalRow(array)
+      }
+      rows.foreach(row => agg.update(buffer, row))
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer).map(JFloat.floatToIntBits))
+
+      val (_, buffer1, _) = createVectorAvg()
+      val (_, buffer2, _) = createVectorAvg()
+      agg.update(buffer1, rows.head)
+      agg.update(buffer2, rows(1))
+      agg.merge(buffer1, buffer2)
+      assertResult(expected.map(JFloat.floatToIntBits))(
+        evalAsFloatArray(agg, buffer1).map(JFloat.floatToIntBits))
+    }
+  }
+
   test("VectorAvg - numerical stability with running average") {
     val (agg, buffer, _) = createVectorAvg()
     // Add many vectors to test numerical stability of running average
@@ -516,7 +661,7 @@ class VectorAggSuite extends SparkFunSuite {
 
   test("VectorSum - large vector with null element is skipped") {
     val (agg, buffer, _) = createVectorSum()
-    val vec1 = Array[java.lang.Float](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
+    val vec1 = Array[JFloat](1.0f, 2.0f, 3.0f, 4.0f, 5.0f, null, 7.0f, 8.0f,
                      9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f, 15.0f, 16.0f)
     val vec2 = Array(16.0f, 15.0f, 14.0f, 13.0f, 12.0f, 11.0f, 10.0f, 9.0f,
                      8.0f, 7.0f, 6.0f, 5.0f, 4.0f, 3.0f, 2.0f, 1.0f)
