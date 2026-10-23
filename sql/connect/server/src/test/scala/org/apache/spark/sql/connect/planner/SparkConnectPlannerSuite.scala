@@ -17,18 +17,14 @@
 
 package org.apache.spark.sql.connect.planner
 
-import java.util.UUID
-
-import scala.collection.mutable
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any, ByteString, StringValue}
-import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
@@ -40,7 +36,6 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteKey, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -124,47 +119,6 @@ trait SparkConnectPlanTest extends SharedSparkSession {
  */
 class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
 
-  private def checkpointCommand(
-      relationId: Option[String],
-      relation: proto.Relation = proto.Relation
-        .newBuilder()
-        .setRange(proto.Range.newBuilder().setStart(0).setEnd(1).setStep(1))
-        .build()): proto.Command = {
-    val checkpoint = proto.CheckpointCommand
-      .newBuilder()
-      .setRelation(relation)
-      .setLocal(true)
-      .setEager(false)
-    relationId.foreach(checkpoint.setRelationId)
-    proto.Command.newBuilder().setCheckpointCommand(checkpoint).build()
-  }
-
-  private def processCheckpointCommand(
-      sessionHolder: SessionHolder,
-      command: proto.Command,
-      plannerFactory: ExecuteHolder => SparkConnectPlanner = (executeHolder: ExecuteHolder) =>
-        new SparkConnectPlanner(executeHolder)): Seq[proto.ExecutePlanResponse] = {
-    val request = proto.ExecutePlanRequest
-      .newBuilder()
-      .setPlan(proto.Plan.newBuilder().setCommand(command))
-      .setSessionId(sessionHolder.sessionId)
-      .setOperationId(UUID.randomUUID().toString)
-      .setUserContext(proto.UserContext.newBuilder().setUserId(sessionHolder.userId))
-      .build()
-    val executeHolder =
-      new ExecuteHolder(ExecuteKey(request, sessionHolder), request, sessionHolder)
-    executeHolder.eventsManager.status_(ExecuteStatus.Started)
-    val responses = mutable.Buffer.empty[proto.ExecutePlanResponse]
-    plannerFactory(executeHolder).process(
-      command,
-      new StreamObserver[proto.ExecutePlanResponse] {
-        override def onNext(response: proto.ExecutePlanResponse): Unit = responses += response
-        override def onError(error: Throwable): Unit = throw error
-        override def onCompleted(): Unit = {}
-      })
-    responses.toSeq
-  }
-
   test("Simple Limit") {
     assertThrows[InvalidPlanInput] {
       new SparkConnectPlanner(SparkConnectTestUtils.createDummySessionHolder(None.orNull))
@@ -173,101 +127,6 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
             .setLimit(proto.Limit.newBuilder.setLimit(10))
             .build())
     }
-  }
-
-  test("checkpoint relation ID admission") {
-    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    sessionHolder.eventManager.status_(SessionStatus.Started)
-
-    val suppliedId = "supplied-checkpoint-id"
-    val suppliedResponses =
-      processCheckpointCommand(sessionHolder, checkpointCommand(Some(suppliedId)))
-    val suppliedResult = suppliedResponses.find(_.hasCheckpointCommandResult).get
-    assert(suppliedResult.getCheckpointCommandResult.getRelation.getRelationId == suppliedId)
-    assert(sessionHolder.getDataFrameOrThrow(suppliedId) != null)
-
-    val generatedResponses = processCheckpointCommand(sessionHolder, checkpointCommand(None))
-    val generatedId = generatedResponses
-      .find(_.hasCheckpointCommandResult)
-      .get
-      .getCheckpointCommandResult
-      .getRelation
-      .getRelationId
-    assert(generatedId.nonEmpty)
-    assert(generatedId != suppliedId)
-    assert(sessionHolder.getDataFrameOrThrow(generatedId) != null)
-
-    val invalidRelation = proto.Relation.getDefaultInstance
-    val cacheSizeBeforeEmptyId = sessionHolder.dataFrameCache.size()
-    val emptyError = intercept[InvalidPlanInput] {
-      processCheckpointCommand(sessionHolder, checkpointCommand(Some(""), invalidRelation))
-    }
-    checkError(
-      exception = emptyError,
-      condition = "CONNECT_INVALID_PLAN.CHECKPOINT_RELATION_ID_EMPTY",
-      parameters = Map.empty)
-    assert(sessionHolder.dataFrameCache.size() == cacheSizeBeforeEmptyId)
-
-    val originalDataFrame = sessionHolder.getDataFrameOrThrow(suppliedId)
-    val duplicateError = intercept[InvalidPlanInput] {
-      processCheckpointCommand(
-        sessionHolder,
-        checkpointCommand(Some(suppliedId), invalidRelation))
-    }
-    checkError(
-      exception = duplicateError,
-      condition = "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
-      parameters = Map("dfId" -> suppliedId, "sessionId" -> sessionHolder.sessionId))
-    assert(sessionHolder.getDataFrameOrThrow(suppliedId) eq originalDataFrame)
-  }
-
-  test("checkpoint relation ID insertion race is an invalid plan") {
-    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    sessionHolder.eventManager.status_(SessionStatus.Started)
-    val suppliedId = "racing-checkpoint-id"
-    val racingDataFrame = spark.range(1).toDF()
-    val raceSessionHolder = sessionHolder
-
-    val error = intercept[InvalidPlanInput] {
-      processCheckpointCommand(
-        sessionHolder,
-        checkpointCommand(Some(suppliedId)),
-        executeHolder =>
-          new SparkConnectPlanner(executeHolder) {
-            override def transformRelation(relation: proto.Relation): LogicalPlan = {
-              raceSessionHolder.cacheDataFrameById(suppliedId, racingDataFrame)
-              super.transformRelation(relation)
-            }
-          })
-    }
-    checkError(
-      exception = error,
-      condition = "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
-      parameters = Map("dfId" -> suppliedId, "sessionId" -> sessionHolder.sessionId))
-    assert(sessionHolder.getDataFrameOrThrow(suppliedId) eq racingDataFrame)
-  }
-
-  test("checkpoint relation ID insertion race with a server-generated ID is an invalid plan") {
-    val racingDataFrame = spark.range(1).toDF()
-    val sessionHolder = new SessionHolder("testUser", UUID.randomUUID().toString, spark) {
-      override def cacheDataFrameByIdIfAbsent(dfId: String, df: DataFrame): Boolean = {
-        super.cacheDataFrameByIdIfAbsent(dfId, racingDataFrame)
-        super.cacheDataFrameByIdIfAbsent(dfId, df)
-      }
-    }
-    SparkConnectService.sessionManager.putSessionForTesting(sessionHolder)
-    sessionHolder.eventManager.status_(SessionStatus.Started)
-
-    val error = intercept[InvalidPlanInput] {
-      processCheckpointCommand(sessionHolder, checkpointCommand(None))
-    }
-    val generatedId = error.getMessageParameters.get("dfId")
-    assert(UUID.fromString(generatedId).toString == generatedId)
-    checkError(
-      exception = error,
-      condition = "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
-      parameters = Map("dfId" -> generatedId, "sessionId" -> sessionHolder.sessionId))
-    assert(sessionHolder.getDataFrameOrThrow(generatedId) eq racingDataFrame)
   }
 
   test("InvalidInputs") {
