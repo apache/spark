@@ -319,42 +319,38 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertTrue(with_id.checkpoint_command.HasField("relation_id"))
         self.assertEqual(with_id.checkpoint_command.relation_id, "checkpoint-relation-id")
 
-    def test_checkpoint_relation_id_mismatch_removes_returned_relation(self):
+    def test_checkpoint_uses_returned_relation_id(self):
         from unittest.mock import MagicMock, patch
 
-        from pyspark.errors import PySparkAssertionError
         from pyspark.sql.connect import plan
         from pyspark.sql.connect.dataframe import DataFrame
 
         requested_id = uuid.uuid4()
-        returned_id = "server-generated-checkpoint-id"
         for method in ["checkpoint", "localCheckpoint"]:
-            with self.subTest(method=method):
-                session = MagicMock()
-                source = DataFrame(plan.Range(0, 1, 1, None), session)
-                session.client.execute_command.side_effect = [
-                    (None, {"checkpoint_command_result": returned_id}, None),
-                    (None, {}, None),
-                ]
+            for returned_id in [str(requested_id), "server-generated-checkpoint-id"]:
+                with self.subTest(method=method, returned_id=returned_id):
+                    session = MagicMock()
+                    source = DataFrame(plan.Range(0, 1, 1, None), session)
+                    session.client.execute_command.return_value = (
+                        None,
+                        {"checkpoint_command_result": returned_id},
+                        None,
+                    )
 
-                with patch("pyspark.sql.connect.dataframe.uuid.uuid4", return_value=requested_id):
-                    with self.assertRaisesRegex(
-                        PySparkAssertionError,
-                        "Checkpoint relation ID does not match the requested ID",
+                    with patch(
+                        "pyspark.sql.connect.dataframe.uuid.uuid4", return_value=requested_id
                     ):
-                        getattr(source, method)()
+                        checkpointed = getattr(source, method)()
 
-                self.assertEqual(session.client.execute_command.call_count, 2)
-                checkpoint = session.client.execute_command.call_args_list[0].args[0]
-                cleanup = session.client.execute_command.call_args_list[1].args[0]
-                self.assertEqual(
-                    checkpoint.checkpoint_command.relation_id,
-                    str(requested_id),
-                )
-                self.assertEqual(
-                    cleanup.remove_cached_remote_relation_command.relation.relation_id,
-                    returned_id,
-                )
+                    session.client.execute_command.assert_called_once()
+                    checkpoint = session.client.execute_command.call_args.args[0]
+                    self.assertEqual(checkpoint.checkpoint_command.relation_id, str(requested_id))
+                    self.assertIs(checkpointed.sparkSession, session)
+                    self.assertIs(checkpointed._plan._spark_session, session)
+                    self.assertEqual(
+                        checkpointed._plan.plan(session.client).cached_remote_relation.relation_id,
+                        returned_id,
+                    )
 
     def test_command_iterator_yields_extension(self):
         response = proto.ExecutePlanResponse()

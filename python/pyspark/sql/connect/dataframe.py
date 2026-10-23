@@ -48,7 +48,6 @@ import pyspark.sql.connect.plan as plan
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
 from pyspark.errors import (
-    PySparkAssertionError,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
@@ -2436,26 +2435,9 @@ class DataFrame(ParentDataFrame):
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
-        returned_relation_id = properties.get("checkpoint_command_result")
-        if returned_relation_id != relation_id:
-            if returned_relation_id:
-                try:
-                    remove_cmd = plan.RemoveRemoteCachedRelation(returned_relation_id)
-                    self._session.client.execute_command(remove_cmd.command(self._session.client))
-                except Exception as error:
-                    logger.warning(
-                        "Failed to remove checkpoint relation %s after the server returned an "
-                        "unexpected relation ID: %s",
-                        returned_relation_id,
-                        error,
-                    )
-            raise PySparkAssertionError(
-                "Checkpoint relation ID does not match the requested ID: "
-                f"{returned_relation_id} != {relation_id}. The Spark Connect server must "
-                "support client-generated checkpoint relation IDs."
-            )
+        returned_relation_id = properties["checkpoint_command_result"]
         return DataFrame(
-            plan=plan.CachedRemoteRelation(relation_id, self._session),
+            plan=plan.CachedRemoteRelation(returned_relation_id, self._session),
             session=self._session,
         )
 
