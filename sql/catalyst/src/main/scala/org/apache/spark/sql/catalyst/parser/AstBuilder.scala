@@ -3388,61 +3388,30 @@ class AstBuilder extends DataTypeAstBuilder
     Option(ctx).map(c => c.sourceName.identifier.getText)
   }
 
-  override def visitStreamTableName(ctx: StreamTableNameContext): LogicalPlan = {
-    val ident = visitMultipartIdentifier(ctx.multipartIdentifier)
-    val relation = createUnresolvedRelation(
-      ctx = ctx,
-      ident = ident,
-      optionsClause = Option(ctx.optionsClause),
-      writePrivileges = Set.empty,
-      isStreaming = true)
-
-    Option(ctx.streamChangesClause) match {
-      case Some(changesCtx) =>
-        // Streaming CDC: wrap in RelationChanges and NamedStreamingRelation
-        val options = resolveOptions(Option(ctx.optionsClause))
-        val changelogContext = buildStreamChangelogContext(changesCtx, options)
-        val result = RelationChanges(relation, changelogContext)
-        val table = mayApplyAliasPlan(ctx.tableAlias, result)
-        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        NamedStreamingRelation.withUserProvidedName(tableWithWatermark, sourceNameOpt)
-      case None =>
-        // Regular streaming relation
-        val table = mayApplyAliasPlan(ctx.tableAlias, relation)
-        val tableWithWatermark = table.optionalMap(ctx.watermarkClause)(withWatermark)
-        val sourceNameOpt = extractSourceName(ctx.identifiedByClause)
-        tableWithWatermark.transformUp {
-          case r: UnresolvedRelation =>
-            NamedStreamingRelation.withUserProvidedName(
-              r.copy(isStreaming = true), sourceNameOpt)
-        }
-    }
-  }
-
-  /**
-   * Create a logical plan for a stream TVF.
-   * Handles two forms:
-   * 1. STREAM tableFunctionCallWithTrailingClauses - clauses are inside
-   * 2. STREAM(tableFunctionCall) clauses - clauses are outside STREAM() for consistency with
-   *    table names
-   */
-  override def visitStreamTableValuedFunction(ctx: StreamTableValuedFunctionContext): LogicalPlan =
+  override def visitStreamRelation(ctx: StreamRelationContext): LogicalPlan =
     withOrigin(ctx) {
-      Option(ctx.tableFunctionCallWithTrailingClauses).map { funcTable =>
-        // Form: STREAM tableFunctionCallWithTrailingClauses
-        val sourceName = extractSourceName(funcTable.identifiedByClause)
-        val tvfPlan = buildTvfFromTableFunctionCall(
-          funcTable.tableFunctionCall, funcTable.tableAlias, funcTable.watermarkClause)
-        tvfPlan.transformUp {
-          case tvf: UnresolvedTableValuedFunction =>
-            NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)
+      val source = ctx.streamSource
+      val sourceName = extractSourceName(ctx.identifiedByClause)
+      Option(source.multipartIdentifier).map { multipartIdentifier =>
+        val ident = visitMultipartIdentifier(multipartIdentifier)
+        var relation: LogicalPlan = createUnresolvedRelation(
+          ctx = ctx,
+          ident = ident,
+          optionsClause = Option(source.optionsClause),
+          writePrivileges = Set.empty,
+          isStreaming = true)
+
+        Option(source.streamChangesClause).foreach { changesCtx =>
+          val options = resolveOptions(Option(source.optionsClause))
+          val changelogContext = buildStreamChangelogContext(changesCtx, options)
+          relation = RelationChanges(relation, changelogContext)
         }
+        relation = NamedStreamingRelation.withUserProvidedName(relation, sourceName)
+        relation = mayApplyAliasPlan(ctx.tableAlias, relation)
+        relation.optionalMap(ctx.watermarkClause)(withWatermark)
       }.getOrElse {
-        // Form: STREAM(tableFunctionCall) identifiedByClause? watermarkClause? tableAlias
-        val sourceName = extractSourceName(ctx.identifiedByClause)
         val tvfPlan = buildTvfFromTableFunctionCall(
-          ctx.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
+          source.tableFunctionCall, ctx.tableAlias, ctx.watermarkClause)
         tvfPlan.transformUp {
           case tvf: UnresolvedTableValuedFunction =>
             NamedStreamingRelation.withUserProvidedName(tvf.copy(isStreaming = true), sourceName)

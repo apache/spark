@@ -653,6 +653,26 @@ class StreamRelationParserSuite extends AnalysisTest {
     assert(relationChanges.head.changelogContext.computeUpdates())
   }
 
+  test("STREAM(t) CHANGES is equivalent to the non-parenthesized form") {
+    val clauses = """CHANGES FROM VERSION 1
+                    |WITH (deduplicationMode = 'none', computeUpdates = 'true')
+                    |IDENTIFIED BY my_source
+                    |WATERMARK event_time DELAY OF INTERVAL 1 MINUTE
+                    |AS src""".stripMargin
+    comparePlans(
+      parsePlan(s"SELECT * FROM STREAM t $clauses"),
+      parsePlan(s"SELECT * FROM STREAM(t) $clauses"))
+  }
+
+  test("STREAM table-valued functions do not support CHANGES") {
+    Seq(
+      "SELECT * FROM STREAM range(1) CHANGES FROM VERSION 1",
+      "SELECT * FROM STREAM(range(1)) CHANGES FROM VERSION 1"
+    ).foreach { query =>
+      interceptParseException(parsePlan)(query)(None)
+    }
+  }
+
   test("STREAM t CHANGES - error: subquery in timestamp") {
     checkError(
       intercept[AnalysisException] {
