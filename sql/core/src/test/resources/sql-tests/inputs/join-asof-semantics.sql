@@ -321,3 +321,59 @@ FROM using_left l LEFT ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k)
 SELECT l.lts, d.k
 FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
   MATCH_CONDITION (l.k <= d.k);
+
+-- FVT-ASOF-2-043: an ASOF JOIN with USING passes up the hidden columns of its inputs
+SELECT l.lts, d.k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-044: a qualified star reads a hidden column from below an ASOF JOIN with USING
+SELECT d.*
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-045: a hidden column from below an ASOF JOIN with USING is a MATCH_CONDITION operand
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN (VALUES (1), (2)) AS x(k) MATCH_CONDITION (d.k >= x.k);
+
+-- FVT-ASOF-2-046: a hidden MATCH_CONDITION column whose table is also on the other side
+SELECT d.k, x.k
+FROM (using_right r LEFT JOIN using_keys d USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k);
+
+-- FVT-ASOF-2-047: same as FVT-ASOF-2-045, with the hidden column's table also on the other side
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k);
+
+-- FVT-ASOF-2-048: a JOIN above an ASOF JOIN with USING joins on a hidden column of its inputs
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  JOIN (VALUES (1), (2), (8)) AS x(k) ON d.k = x.k;
+
+-- FVT-ASOF-2-049: a LEFT ASOF JOIN with USING makes a NOT NULL hidden column of its inputs nullable
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-050: same as FVT-ASOF-2-046, with the hidden column on the right side. The first CTE
+-- reference keeps its IDs, so the copy on the left is the one that gets new IDs.
+WITH c AS (SELECT * FROM using_keys)
+SELECT x.k, d.k
+FROM using_keys x
+  ASOF JOIN (using_right r LEFT JOIN c d USING (k)) MATCH_CONDITION (x.k >= d.k);
+
+-- FVT-ASOF-2-051: a hidden MATCH_CONDITION column meets a copy of its table in a JOIN below
+SELECT d.k, z.k
+FROM ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  ASOF JOIN (VALUES (1), (2)) AS z(k) MATCH_CONDITION (d.k >= z.k);
+
+-- FVT-ASOF-2-052: same as FVT-ASOF-2-051, with that JOIN on the right side
+SELECT z.k, d.k
+FROM (VALUES (1), (2)) AS z(k)
+  ASOF JOIN ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  MATCH_CONDITION (z.k >= d.k);
