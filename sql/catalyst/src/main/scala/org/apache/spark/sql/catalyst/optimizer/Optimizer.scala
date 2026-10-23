@@ -2171,11 +2171,14 @@ object CollapseWindow extends Rule[LogicalPlan] {
  *   with order-sensitive frames.
  * - A rank filter can pin the top window so `InferWindowGroupLimit` retains its
  *   `Filter`-over-`Window` pattern. The pin requires a group-limit candidate for the
- *   normalized filter condition, and is skipped when the unpinned order already leaves the
- *   rank window riding a lower exchange, or when the pin would cost an exchange that
- *   order avoids (see `shouldPinTopWindow` and `pinPaysAnExchange`). Only the windows
- *   below the pin are reordered, in an order whose later collapse cannot merge into the
- *   pin and defeat the rewrite (see `groupLimitSafeOrder`).
+ *   normalized filter condition. A stack-reordered chain is then pinned unless the
+ *   unpinned order already leaves the rank window riding a lower exchange, or the pin
+ *   would cost an exchange that order avoids; a rejected chain is emitted by the
+ *   pairwise fallback instead and never in that order, so it is pinned whenever a
+ *   candidate exists (see `shouldPinTopWindow`, `topWindowRidesLowerExchangeUnpinned`
+ *   and `pinPaysAnExchange`). Only the windows below the pin are reordered, in an order
+ *   whose later collapse cannot merge into the pin and defeat the rewrite (see
+ *   `groupLimitSafeOrder`).
  * - The stack reordering is gated by `spark.sql.optimizer.windowReorder.enabled` (default
  *   false). When disabled, the rule only transposes adjacent window pairs whose upper
  *   partition spec is a proper subset of the lower one (see `transposeAdjacentPairs`).
@@ -2779,6 +2782,13 @@ object TransposeWindow extends Rule[LogicalPlan] {
    * `WindowGroupLimit` only saves post-shuffle work, so prefer the lower-exchange plan
    * instead of pinning.
    *
+   * The check reads `groups.order`, so it only answers for a chain that is emitted in it.
+   * A rejected chain goes to the pairwise fallback instead (see `reorderIfChainTop`),
+   * whose swaps can move the top window down whatever this check would conclude. The
+   * guard below therefore declines to answer for such a chain: `false` there means "not
+   * known to ride", which keeps the pin, just as `pinPaysAnExchange` declines to price
+   * the pin on the cost side.
+   *
    * This is evaluated against the actual unconstrained exchange-optimal target, not merely
    * the existence of some compatible lower spec. Empty partition specs are treated
    * conservatively here: they do not establish a keyed exchange the top window can be
@@ -2788,6 +2798,13 @@ object TransposeWindow extends Rule[LogicalPlan] {
       chain: WindowChain, groups: WindowGroups): Boolean = {
     val windows = chain.windows
     val topWindow = windows.last
+
+    // A rejected chain is emitted by the pairwise fallback, not in `groups.order`, so the
+    // reasoning below has no emitted order to describe. Keep the pin: `false` here is
+    // "not known to ride", not "known not to ride".
+    if (!reorderable(chain)) {
+      return false
+    }
 
     // Empty partition specs may still require AllTuples, but do not reuse keyed exchanges.
     if (topWindow.partitionSpec.isEmpty) {
@@ -2828,7 +2845,9 @@ object TransposeWindow extends Rule[LogicalPlan] {
    * - Even for a candidate, the pin is skipped when the unpinned order already leaves
    *   the top window on top riding a lower exchange (see
    *   `topWindowRidesLowerExchangeUnpinned`): preserving `WindowGroupLimit` then saves
-   *   only post-shuffle work, so the lower-exchange plan wins.
+   *   only post-shuffle work, so the lower-exchange plan wins. This skip and the next
+   *   one both read the order the unpinned path emits, so a rejected chain, which is
+   *   emitted by the pairwise fallback instead, is pinned whenever a candidate exists.
    * - The pin is also skipped when it costs an exchange the unpinned order avoids, which
    *   happens when the unpinned order lets the rank window share or avoid an exchange
    *   the pinned order cannot (see `pinPaysAnExchange`). `WindowGroupLimit` only saves
@@ -2895,6 +2914,10 @@ object TransposeWindow extends Rule[LogicalPlan] {
    */
   private def pinPaysAnExchange(
       chain: WindowChain, groups: WindowGroups, pinnedOrder: => Seq[Int]): Boolean = {
+    // A rejected chain is never emitted in `groups.order` (see `reorderIfChainTop`), so
+    // there is no unpinned order to price the pin against. Declining keeps the pin:
+    // `false` is "not known to pay", and pricing against an order the rule will not build
+    // could drop a pin for a saving that never materializes.
     if (!reorderable(chain)) {
       return false
     }

@@ -1004,8 +1004,8 @@ class TransposeWindowSuite extends PlanTest {
     // fallback swaps rn below the [k1, k2, k3] window ([k1, k2] is a proper subset of
     // [k1, k2, k3]), burying it away from the Filter and losing the WindowGroupLimit
     // rewrite; the pin bounds the fallback to the windows below rn. The running sum
-    // partitions by k3 so rn cannot ride a lower exchange -- if it could, the pin would
-    // be skipped by design (see `topWindowRidesLowerExchangeUnpinned`).
+    // partitions by k3 so rn cannot ride a lower exchange at all; the case where it can is
+    // covered by the test below (see `topWindowRidesLowerExchangeUnpinned`).
     val runningSumOnK3 = WindowExpression(
       sum(v),
       WindowSpecDefinition(Seq(k3), Seq.empty,
@@ -1014,6 +1014,32 @@ class TransposeWindowSuite extends PlanTest {
       .window(Seq(runningSumOnK3), Seq(k3), Seq.empty)
       .window(Seq(sum(v).as("sum_p")), Seq(k1, k2, k3), order)
       .window(Seq(rankOnK1K2), Seq(k1, k2), order)
+      .where($"rn" <= 1)
+
+    val analyzed = query.analyze
+    withSQLConf(SQLConf.WINDOW_REORDER_ENABLED.key -> "true") {
+      comparePlans(Optimize.execute(analyzed), analyzed)
+      assert(OptimizeWithGroupLimit.execute(analyzed)
+        .collect { case _: WindowGroupLimit => () }.nonEmpty)
+    }
+  }
+
+  test("rank filter pins the top window of a rejected chain that rides a lower exchange") {
+    // Same rejected chain as the test above, but rn now rides the [k1] sum's exchange: the
+    // stack-reordered order would leave rn last, riding that exchange, but this chain is
+    // never emitted in that order -- the pairwise fallback swaps rn below the [k1, k2]
+    // whole-partition sum and buries it away from the Filter. The pin is kept, and it costs
+    // nothing: the [k1] exchange below serves the [k1, k2] sum and rn alike either way, so
+    // both orders pay two exchanges and the pin only protects the rewrite.
+    val runningSumOnK3 = WindowExpression(
+      sum(v),
+      WindowSpecDefinition(Seq(k3), Seq.empty,
+        SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("run_sum")
+    val query = wideRelation
+      .window(Seq(runningSumOnK3), Seq(k3), Seq.empty)
+      .window(Seq(sum(v).as("sum_k1")), Seq(k1), Seq(k2.asc))
+      .window(Seq(wholePartitionSumOnK1K2), Seq(k1, k2), Seq.empty)
+      .window(Seq(rankOnK1OrderV), Seq(k1), Seq(v.asc))
       .where($"rn" <= 1)
 
     val analyzed = query.analyze
@@ -1366,6 +1392,14 @@ class TransposeWindowSuite extends PlanTest {
   private def rankOnK1OrderK2 = WindowExpression(
     RowNumber(),
     WindowSpecDefinition(Seq(k1), Seq(k2.asc),
+      SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
+
+  // Partitioned by [k1], but ordered by v so that a [k1] sum ordered by k2 does not satisfy
+  // it: the rank becomes its own chain start in the unpinned group, which is what leaves it
+  // last in that group while a lower window still keys the exchange it rides.
+  private def rankOnK1OrderV = WindowExpression(
+    RowNumber(),
+    WindowSpecDefinition(Seq(k1), Seq(v.asc),
       SpecifiedWindowFrame(RowFrame, UnboundedPreceding, CurrentRow))).as("rn")
 
   private def rankOnK1K2OrderV = WindowExpression(
