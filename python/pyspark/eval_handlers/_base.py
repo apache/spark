@@ -17,15 +17,14 @@
 
 """Base classes and registry for the eval type handlers.
 
-This module imports no other handler submodule, so the package ``__init__`` and the
-concrete-handler submodules can both import it.
+This leaf module imports only ``_typing``, the serializers and ``pyspark.util``, so the
+package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
 
-from pyspark.eval_handlers._profiler import wrap_memory_profiler, wrap_perf_profiler
 from pyspark.eval_handlers._typing import (
     UDF,
     UDTF,
@@ -45,6 +44,7 @@ from pyspark.util import fail_on_stopiteration
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
 
+    from pyspark.sql.types import DataType
     from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
@@ -159,34 +159,20 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     @classmethod
     def create_udf(
         cls,
-        func: Callable[..., Any],
-        return_type: Any,
+        chained_func: Callable[..., Any],
+        profiling_func: Callable[..., Any],
+        return_type: "DataType",
         udf_info: "UDFInfo",
-        runner_conf: "RunnerConf",
     ) -> UDF:
-        """Build the ``UDF`` record for ``func``, the unpickled (and chained) function of
-        ``udf_info``, wrapping it for profiling and in ``fail_on_stopiteration``."""
-        # A function from pyspark.sql.worker reads or writes a data source, so it is profiled by
-        # the data_source_profiler config.
-        module = getattr(func, "__module__", "")
-        if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
-            profiler = runner_conf.data_source_profiler
-        else:
-            profiler = runner_conf.udf_profiler
-        if profiler == "perf":
-            profiling_func = wrap_perf_profiler(func, cls.is_iter_based, udf_info.result_id)
-        elif profiler == "memory":
-            profiling_func = wrap_memory_profiler(func, cls.is_iter_based, udf_info.result_id)
-        else:
-            profiling_func = func
-
+        """Build the ``UDF`` record of ``udf_info`` from ``chained_func``, its unpickled (and
+        chained) function, and ``profiling_func``, that function wrapped for profiling."""
         return UDF(
             func=(
                 fail_on_stopiteration(profiling_func)
                 if cls._fail_on_stopiteration
                 else profiling_func
             ),
-            raw_func=func,
+            raw_func=chained_func,
             args_offsets=udf_info.args,
             kwargs_offsets=udf_info.kwargs,
             return_type=return_type,

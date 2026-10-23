@@ -609,7 +609,9 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 
     @classmethod
-    def create_udtf(cls, udtf_cls: Any, udtf_info: UDTFInfo, pickle_ser: FramedSerializer) -> UDTF:
+    def create_udtf(
+        cls, udtf_cls: object, udtf_info: UDTFInfo, pickle_ser: FramedSerializer
+    ) -> UDTF:
         """Prepare ``udtf_cls``, the unpickled UDTF class of ``udtf_info``, for evaluation: wrap
         the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in
         ``partition_wrapper`` when its TABLE argument has PARTITION BY expressions), and check

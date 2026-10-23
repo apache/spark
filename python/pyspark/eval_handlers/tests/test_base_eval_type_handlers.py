@@ -45,7 +45,7 @@ from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import unpickle_and_chain
+    from pyspark.worker import read_single_udf, unpickle_and_chain
     from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import RunnerConf, pickleSer
 
@@ -276,12 +276,10 @@ class CreateUDFTests(PySparkBaseTestCase):
     def _stop(x):
         raise StopIteration(x)
 
-    def _udf_info(self):
-        return UDFInfo(udfs=[], args=[1], kwargs={"y": 2}, result_id=0)
+    def _udf_info(self, udfs=()):
+        return UDFInfo(udfs=list(udfs), args=[1], kwargs={"y": 2}, result_id=0)
 
-    def test_returns_udf_record(self):
-        udf = EvalTypeHandler.create_udf(self._stop, LongType(), self._udf_info(), RunnerConf({}))
-
+    def _check_udf_record(self, udf):
         self.assertIsInstance(udf, UDF)
         self.assertEqual(udf.args_offsets, [1])
         self.assertEqual(udf.kwargs_offsets, {"y": 2})
@@ -291,6 +289,16 @@ class CreateUDFTests(PySparkBaseTestCase):
             udf.func(1)
         with self.assertRaises(StopIteration):
             udf.raw_func(1)
+
+    def test_returns_udf_record(self):
+        udf = EvalTypeHandler.create_udf(self._stop, self._stop, LongType(), self._udf_info())
+        self._check_udf_record(udf)
+
+    def test_read_single_udf(self):
+        udf_info = self._udf_info([CloudPickleSerializer().dumps((self._stop, LongType()))])
+        handler_cls = get_eval_type_handler(PythonEvalType.SQL_BATCHED_UDF, RunnerConf({}))
+        udf = read_single_udf(pickleSer, udf_info, handler_cls, RunnerConf({}))
+        self._check_udf_record(udf)
 
     def test_fail_on_stopiteration_per_handler(self):
         not_wrapped = {
@@ -302,7 +310,7 @@ class CreateUDFTests(PySparkBaseTestCase):
             for handler_cls in variants.values():
                 with self.subTest(handler=handler_cls.__name__):
                     udf = handler_cls.create_udf(
-                        self._stop, LongType(), self._udf_info(), RunnerConf({})
+                        self._stop, self._stop, LongType(), self._udf_info()
                     )
                     expected = (
                         StopIteration
