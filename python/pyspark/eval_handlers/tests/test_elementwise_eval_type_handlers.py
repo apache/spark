@@ -102,7 +102,7 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         return handler_cls(
             udfs=[
                 UDF(
-                    func=func,
+                    raw_func=func,
                     args_offsets=args_offsets,
                     kwargs_offsets=kwargs_offsets,
                     return_type=return_type,

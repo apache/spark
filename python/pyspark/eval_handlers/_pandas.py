@@ -297,7 +297,7 @@ class PandasCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         assert len(udfs) == 1, "One COGROUPED_MAP_PANDAS UDF expected here."
         udf = udfs[0]
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         self._left_key_offsets, self._left_value_offsets = parsed_offsets[0]
         self._right_key_offsets, self._right_value_offsets = parsed_offsets[1]
@@ -379,7 +379,7 @@ class PandasGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         assert len(udfs) == 1, "One GROUPED_MAP_PANDAS_ITER UDF expected here."
         udf = udfs[0]
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for GROUPED_MAP_PANDAS_ITER UDF."
@@ -459,7 +459,7 @@ class PandasGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         assert len(udfs) == 1, "One GROUPED_MAP_PANDAS UDF expected here."
         udf = udfs[0]
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_PANDAS UDF."
         self._key_offsets, self._value_offsets = parsed_offsets[0]

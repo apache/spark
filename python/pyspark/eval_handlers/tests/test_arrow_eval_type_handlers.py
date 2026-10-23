@@ -128,7 +128,7 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     def _udf(func, args_offsets, kwargs_offsets=None, return_type=None):
         """A ``UDF`` record as the worker builds it."""
         return UDF(
-            func=func,
+            raw_func=func,
             args_offsets=args_offsets,
             kwargs_offsets=kwargs_offsets or {},
             return_type=return_type or LongType(),
@@ -138,8 +138,8 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):
         """Build a grouped/cogrouped-map handler with the shared return type. The function the
-        handler wraps loses its signature, so the handler reads it from the record's unwrapped
-        ``func``."""
+        handler wraps loses its signature, so the handler reads it from the record's
+        ``raw_func``."""
         return handler_cls(
             udfs=[cls._udf(udf, arg_offsets, return_type=cls._RETURN_TYPE)],
             runner_conf=RunnerConf({}),
@@ -605,7 +605,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
     _KEY_SCHEMA = StructType([StructField("k", LongType())])
 
     def _handler(self, cap=10000):
-        # The handler takes the Aggregator itself from the record's unwrapped func.
+        # The handler takes the Aggregator itself from the record's raw_func.
         return ArrowGroupedAggIncrementalPartialUDFHandler(
             udfs=[self._udf(_SumAggregator(), [1])],
             runner_conf=RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": str(cap)}),
@@ -686,7 +686,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
         return pa.RecordBatch.from_arrays([pa.array(buffers, type=self._BUFFER_TYPE)], ["buf"])
 
     def _handler(self):
-        # The handler takes the Aggregator itself from the record's unwrapped func.
+        # The handler takes the Aggregator itself from the record's raw_func.
         return ArrowGroupedAggIncrementalFinalUDFHandler(
             udfs=[self._udf(_SumAggregator(), [0])], runner_conf=RunnerConf({}), eval_conf=None
         )

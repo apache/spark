@@ -165,7 +165,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._funcs: list[Callable[..., Any]] = []
         for udf in udfs:
             if isinstance(udf, UDF):
-                profiling_func = self._with_profiler(udf.func, udf.result_id)
+                profiling_func = self._with_profiler(udf.raw_func, udf.result_id)
                 self._funcs.append(
                     fail_on_stopiteration(profiling_func)
                     if self._fail_on_stopiteration

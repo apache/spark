@@ -178,7 +178,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
                     udfs.append(
                         UDF(
-                            func=chained_func,
+                            raw_func=chained_func,
                             args_offsets=udf_info.args,
                             kwargs_offsets=udf_info.kwargs,
                             return_type=return_type,

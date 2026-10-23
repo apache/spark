@@ -48,7 +48,7 @@ class UDF:
     # The chained function before any wrapping: the pickled object itself (an incremental
     # Aggregator) with its signature. EvalTypeHandler.__init__ keeps it wrapped for profiling and,
     # for most eval types, in fail_on_stopiteration, as the handler's _funcs.
-    func: Any
+    raw_func: Any
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
     # The DataType of the last function in the chain; a StructType for the eval types that

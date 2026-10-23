@@ -283,7 +283,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         return handler_cls(
             [
                 UDF(
-                    func=self._stop,
+                    raw_func=self._stop,
                     args_offsets=[1],
                     kwargs_offsets={"y": 2},
                     return_type=LongType(),
@@ -307,7 +307,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         with self.assertRaises(PySparkRuntimeError):
             handler._funcs[0](1)
         with self.assertRaises(StopIteration):
-            udf.func(1)
+            udf.raw_func(1)
 
     def test_fail_on_stopiteration_per_handler(self):
         not_wrapped = {

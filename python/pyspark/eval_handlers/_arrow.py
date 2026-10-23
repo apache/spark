@@ -85,7 +85,7 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         assert len(udfs) == 1, "One COGROUPED_MAP_ARROW UDF expected here."
         udf = udfs[0]
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         self._left_key_cols, self._left_val_cols = parsed_offsets[0]
         self._right_key_cols, self._right_val_cols = parsed_offsets[1]
@@ -142,7 +142,7 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW_ITER UDF expected here."
         udf = udfs[0]
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for GROUPED_MAP_ARROW_ITER UDF."
@@ -212,7 +212,7 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         assert len(udfs) == 1, "One GROUPED_MAP_ARROW UDF expected here."
         udf = udfs[0]
         # signature was lost when wrapping it
-        self._num_udf_args = len(inspect.getfullargspec(udf.func).args)
+        self._num_udf_args = len(inspect.getfullargspec(udf.raw_func).args)
         parsed_offsets = extract_key_value_indexes(udf.args_offsets)
         assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_ARROW UDF."
         self._key_offsets = parsed_offsets[0][0]
@@ -425,7 +425,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandler(BatchEvalTypeHandler["pa.Recor
 
         # The pickled function is the Aggregator object itself, whose zero/reduce/merge/finish
         # methods are called directly, so take it unwrapped rather than as a plain callable.
-        self._aggs = [udf.func for udf in udfs]
+        self._aggs = [udf.raw_func for udf in udfs]
         self._buffer_col_names = ["_%d" % i for i in range(len(udfs))]
         self._buffer_arrow_types = [
             to_arrow_type(
@@ -551,7 +551,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
             prefers_large_types=runner_conf.use_large_var_types,
         )
         # The Aggregator object itself, unwrapped (see ArrowGroupedAggIncrementalPartialUDFHandler).
-        self._aggs = [udf.func for udf in udfs]
+        self._aggs = [udf.raw_func for udf in udfs]
         # Buffer field names are invariant across groups and batches; compute once per aggregator.
         self._field_names_by_udf = [[f.name for f in agg.bufferSchema.fields] for agg in self._aggs]
 
@@ -604,7 +604,7 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
             prefers_large_types=runner_conf.use_large_var_types,
         )
         # The Aggregator object itself, unwrapped (see ArrowGroupedAggIncrementalPartialUDFHandler).
-        self._aggs = [udf.func for udf in udfs]
+        self._aggs = [udf.raw_func for udf in udfs]
 
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
