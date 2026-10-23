@@ -3600,6 +3600,88 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-60232: ordering a subset-key SPJ keeps the join's key positions") {
+    val cols = Array(Column.create("a", IntegerType), Column.create("b", IntegerType))
+    createTable("oa3", cols, Array(identity("a"), identity("b")))
+    sql("INSERT INTO testcat.ns.oa3 VALUES (1, 10), (2, 20), (3, 10), (4, 30)")
+
+    createTable("ob3", cols, Array(identity("b")))
+    sql("INSERT INTO testcat.ns.ob3 VALUES (0, 10), (0, 20)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(oa3, ob3) */ oa3.b, oa3.a, ob3.a
+            |FROM testcat.ns.oa3 LEFT JOIN testcat.ns.ob3 ON oa3.b = ob3.b
+            |ORDER BY oa3.b
+            |""".stripMargin)
+
+        // Rows with the same b may come in either order, so check the order on b alone.
+        val rows = df.collect().toSeq
+        assert(rows.map(_.getInt(0)) == Seq(10, 10, 20, 30), "rows should be ordered by b")
+        assert(rows.toSet ==
+          Set(Row(10, 1, 0), Row(10, 3, 0), Row(20, 2, 0), Row(30, 4, null)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ sees a reduced scan through an alias") {
+    val idCols = Array(Column.create("id", LongType))
+    Seq("l12" -> 12, "l4" -> 4, "l3" -> 3).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(x, l3) */ x.id2, x.id4, l3.id
+            |FROM (
+            |  SELECT /*+ MERGE(l12, l4) */ l12.id AS id2, l4.id AS id4
+            |  FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id) x
+            |JOIN testcat.ns.l3 ON x.id2 = l3.id
+            |""".stripMargin)
+        checkAnswer(df, (0L until 24L).map(i => Row(i, i, i)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ shuffles a compatible nested join built on a reduced scan") {
+    val idCols = Array(Column.create("id", LongType))
+    Seq("nb4" -> 4, "nb12" -> 12).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+    createTable("nc6", idCols, Array(bucket(6, "id")))
+    sql("INSERT INTO testcat.ns.nc6 VALUES (0), (1), (2), (3), (6)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(nb4, nb12, nc6) */ nb4.id, nb12.id, nc6.id
+            |FROM testcat.ns.nb4 JOIN testcat.ns.nb12 ON nb4.id = nb12.id
+            |JOIN testcat.ns.nc6 ON nb12.id = nc6.id
+            |""".stripMargin)
+        checkAnswer(df, Seq(0L, 1L, 2L, 3L, 6L).map(i => Row(i, i, i)))
+      }
+    }
+  }
+
   test("SPARK-48012: one-side shuffle with partition transforms") {
     val items_partitions = Array(bucket(2, "id"), identity("arrive_time"))
     val items_partitions2 = Array(identity("arrive_time"), bucket(2, "id"))

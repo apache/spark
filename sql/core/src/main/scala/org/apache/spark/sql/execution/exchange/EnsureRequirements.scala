@@ -209,8 +209,14 @@ case class EnsureRequirements(
       // from one member, otherwise the sides end up grouped on different keys, or on a key set the
       // child does not even have. Pick that member once, preferring the finest when several
       // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
+      // A child whose matching member comes from a reduced scan only looks compatible on the
+      // transform the scan still reports, so it is shuffled onto the best spec instead.
       lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
-        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)))
+        childrenIndexes.filter(i => best.isCompatibleWith(specs(i)) &&
+          !flattenSpec(specs(i)).exists {
+            case k: KeyGroupedShuffleSpec => isBuiltFromReducedScan(children(i), k)
+            case _ => false
+          })
       }
       lazy val bestMemberOpt = bestSpecOpt.flatMap { best =>
         val matchedMembers = matchedIndexes.map(i => flattenSpec(specs(i)))
@@ -356,10 +362,11 @@ case class EnsureRequirements(
           },
           Nil)
         // Sort 'commonPartitionValues' and use this mechanism to ensure BatchScan's
-        // output partitions are ordered
+        // output partitions are ordered. A join below may already have pushed key positions and
+        // reducers that these values are expressed in, so keep them rather than reset them.
         val sorted = partitionValues.sorted(partitionOrdering)
-        populateCommonPartitionInfo(plan, sorted.map((_, 1)),
-          None, None, applyPartialClustering = false, replicatePartitions = false)
+        populateSpjParams(plan, commonPartitionValues = Some(sorted.map((_, 1))),
+          joinKeyPositions = None)
       case _ => plan
       }
   }
@@ -828,7 +835,15 @@ case class EnsureRequirements(
           (reportedLayout(scan.spjParams), scan.spjParams.reducers) match {
             case (Some(layout), Some(reducers)) =>
               layout.zip(reducers).exists { case (e, r) =>
-                r.isDefined && specExpressions.exists(_.semanticEquals(e))
+                // A `Project` between the joins can rename the column under the transform, so
+                // match a transform by its function rather than by the column it reads.
+                r.isDefined && specExpressions.exists {
+                  case s: TransformExpression => e match {
+                    case t: TransformExpression => s.isSameFunction(t)
+                    case _ => false
+                  }
+                  case s => s.semanticEquals(e)
+                }
               }
             case _ => false
           }
@@ -836,29 +851,6 @@ case class EnsureRequirements(
       }
       case _ => false
     }
-  }
-
-  // Populate the common partition information down to the scan nodes, overwriting SPJ params.
-  private def populateCommonPartitionInfo(
-      plan: SparkPlan,
-      values: Seq[(InternalRow, Int)],
-      joinKeyPositions: Option[Seq[Int]],
-      reducers: Option[Seq[Option[Reducer[_, _]]]],
-      applyPartialClustering: Boolean,
-      replicatePartitions: Boolean): SparkPlan = plan match {
-    case scan: BatchScanExec =>
-      scan.copy(
-        spjParams = scan.spjParams.copy(
-          commonPartitionValues = Some(values),
-          joinKeyPositions = joinKeyPositions,
-          reducers = reducers,
-          applyPartialClustering = applyPartialClustering,
-          replicatePartitions = replicatePartitions
-        )
-      )
-    case node =>
-      node.mapChildren(child => populateCommonPartitionInfo(
-        child, values, joinKeyPositions, reducers, applyPartialClustering, replicatePartitions))
   }
 
   /**
