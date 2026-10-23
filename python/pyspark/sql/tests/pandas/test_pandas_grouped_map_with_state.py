@@ -34,6 +34,7 @@ from pyspark.sql.types import (
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
+    assertDataFrameEqual,
     eventually,
     have_pandas,
     have_pyarrow,
@@ -208,12 +209,12 @@ class GroupedApplyInPandasWithStateTestsMixin:
                 {"key": [f"{key[0]}_{i}" for i in range(5)], "countAsString": list("01234")}
             )
 
-        expected = sorted(
+        expected = [
             Row(key=f"{k}_{i}", countAsString=str(i)) for k in ["hello", "this"] for i in range(5)
-        )
+        ]
 
         def check_results(batch_df, _):
-            assert sorted(batch_df.collect()) == expected
+            assertDataFrameEqual(batch_df, expected)
 
         for conf in [
             {"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"},

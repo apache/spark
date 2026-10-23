@@ -268,7 +268,7 @@ class SliceBytesArrowOutputProcessorImpl(
   protected override def getRoot: VectorSchemaRoot = {
     // Output the whole root only if no row of this batch has been output yet.
     if (currentRowIdx == 0 && getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
-      currentRowIdx = currentRowIdx + root.getRowCount
+      currentRowIdx = rowCount
       root
     } else {
       // We iteratively slice the batch by 90% until we reach a batch with required byte size.
