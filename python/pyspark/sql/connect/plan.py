@@ -759,9 +759,7 @@ class CachedRemoteRelation(LogicalPlan):
         # If session is already closed, all cached DataFrame should be released.
         if session is not None and not session.client.is_closed and self._relation_id is not None:
             try:
-                command = RemoveRemoteCachedRelation(self._relation_id).command(
-                    session=session.client
-                )
+                command = RemoveRemoteCachedRelation(self).command(session=session.client)
                 req = session.client._execute_plan_request_with_metadata()
                 if session.client._user_id:
                     req.user_context.user_id = session.client._user_id
@@ -2319,15 +2317,13 @@ class WriteStreamOperation(LogicalPlan):
 
 
 class RemoveRemoteCachedRelation(LogicalPlan):
-    def __init__(self, relation: Union[CachedRemoteRelation, str]) -> None:
+    def __init__(self, relation: CachedRemoteRelation) -> None:
         super().__init__(None)
-        self._relation_id = (
-            relation._relation_id if isinstance(relation, CachedRemoteRelation) else relation
-        )
+        self._relation = relation
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         plan = self._create_proto_relation()
-        plan.cached_remote_relation.relation_id = self._relation_id
+        plan.cached_remote_relation.relation_id = self._relation._relation_id
         cmd = proto.Command()
         cmd.remove_cached_remote_relation_command.relation.CopyFrom(plan.cached_remote_relation)
         return cmd
