@@ -167,6 +167,8 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: through a SELECT * view") {
+    // only `pid` is used from `part`, so GeneratorNestedColumnAliasing rewrites the inner
+    // explode to explode(item.parts.pid), whose size() filter needs no extra smallest field
     checkPrunedQuery(
       "select id, item.sku, part.pid from base",
       "struct<id:int,items:array<struct<active:boolean,sku:string," +
