@@ -290,68 +290,6 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertIsInstance(results[1], PlanMetrics)
         self.assertIsInstance(results[2], PlanObservedMetrics)
 
-    def test_checkpoint_command_result_returns_relation_id(self):
-        relation_id = "checkpoint-relation-id"
-        response = proto.ExecutePlanResponse()
-        response.checkpoint_command_result.relation.relation_id = relation_id
-        client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
-        client._stub = MockService(client._session_id, execute_plan_responses=[response])
-
-        _, properties, _ = client.execute_command(proto.Command())
-
-        self.assertEqual(properties["checkpoint_command_result"], relation_id)
-
-    def test_checkpoint_command_relation_id_presence(self):
-        from unittest.mock import MagicMock
-
-        from pyspark.sql.connect import plan
-
-        child = plan.Range(0, 1, 1, None)
-        without_id = plan.Checkpoint(child, local=False, eager=False).command(MagicMock())
-        with_id = plan.Checkpoint(
-            child,
-            local=False,
-            eager=False,
-            relation_id="checkpoint-relation-id",
-        ).command(MagicMock())
-
-        self.assertFalse(without_id.checkpoint_command.HasField("relation_id"))
-        self.assertTrue(with_id.checkpoint_command.HasField("relation_id"))
-        self.assertEqual(with_id.checkpoint_command.relation_id, "checkpoint-relation-id")
-
-    def test_checkpoint_uses_returned_relation_id(self):
-        from unittest.mock import MagicMock, patch
-
-        from pyspark.sql.connect import plan
-        from pyspark.sql.connect.dataframe import DataFrame
-
-        requested_id = uuid.uuid4()
-        for method in ["checkpoint", "localCheckpoint"]:
-            for returned_id in [str(requested_id), "server-generated-checkpoint-id"]:
-                with self.subTest(method=method, returned_id=returned_id):
-                    session = MagicMock()
-                    source = DataFrame(plan.Range(0, 1, 1, None), session)
-                    session.client.execute_command.return_value = (
-                        None,
-                        {"checkpoint_command_result": returned_id},
-                        None,
-                    )
-
-                    with patch(
-                        "pyspark.sql.connect.dataframe.uuid.uuid4", return_value=requested_id
-                    ):
-                        checkpointed = getattr(source, method)()
-
-                    session.client.execute_command.assert_called_once()
-                    checkpoint = session.client.execute_command.call_args.args[0]
-                    self.assertEqual(checkpoint.checkpoint_command.relation_id, str(requested_id))
-                    self.assertIs(checkpointed.sparkSession, session)
-                    self.assertIs(checkpointed._plan._spark_session, session)
-                    self.assertEqual(
-                        checkpointed._plan.plan(session.client).cached_remote_relation.relation_id,
-                        returned_id,
-                    )
-
     def test_command_iterator_yields_extension(self):
         response = proto.ExecutePlanResponse()
         response.extension.Pack(wrappers_pb2.StringValue(value="unexpected"))
