@@ -918,11 +918,22 @@ case class HashAggregateExec(
     // For adaptive partial aggregation pass-through, each bypassed row is emitted as a single-row
     // partial buffer: start from the initial aggregation buffer, apply the update expressions once,
     // and output `key ++ buffer` for the Final aggregate to merge. This projects the initial
-    // buffer.
-    val emptyAggBufferCode = if (adaptivePartialAggEnabled) {
-      GenerateUnsafeProjection.createCode(ctx, declFunctions.flatMap(f => f.initialValues))
+    // buffer, in its own method: the projection's code grows with the number of buffer slots, and
+    // inlining it into the per-row consume method could push a wide aggregation's consume method
+    // past the JIT's huge-method limit.
+    val makeEmptyAggBufferFunc = if (adaptivePartialAggEnabled) {
+      val emptyAggBufferCode =
+        GenerateUnsafeProjection.createCode(ctx, declFunctions.flatMap(f => f.initialValues))
+      val makeEmptyAggBuffer = ctx.freshName("makeEmptyAggBuffer")
+      ctx.addNewFunction(makeEmptyAggBuffer,
+        s"""
+           |private UnsafeRow $makeEmptyAggBuffer() {
+           |  ${emptyAggBufferCode.code}
+           |  return ${emptyAggBufferCode.value};
+           |}
+         """.stripMargin)
     } else {
-      null
+      ""
     }
     // Per-row local flag marking that the current row is being streamed through (held by no map).
     val adaptiveRowBypassedTerm = ctx.freshName("adaptiveRowBypassed")
@@ -1121,8 +1132,7 @@ case class HashAggregateExec(
            |  }
            |} else if ($adaptivePassThroughTerm) {
            |  $adaptiveRowBypassedTerm = true;
-           |  ${emptyAggBufferCode.code}
-           |  $unsafeRowBuffer = ${emptyAggBufferCode.value};
+           |  $unsafeRowBuffer = $makeEmptyAggBufferFunc();
            |}
          """.stripMargin
       } else {
