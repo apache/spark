@@ -1444,8 +1444,9 @@ class StreamingShuffleSuite
     TaskContext.unset()
   }
 
-  // With the CompletableFuture approach, the reader's cleanupResources runs because
-  // markTaskFailed is called from the task thread (no race with the completion listener).
+  // With the ErrorNotifier, the reader's cleanupResources runs on the task thread because
+  // markTaskFailed is called from the task thread too, so task completion does not wait for a
+  // background thread running the failure listeners.
   test("reader resources are cleaned up when client creation fails") {
     class FailingClientReader[K, C](
         handle: ShuffleHandle,
@@ -1484,8 +1485,8 @@ class StreamingShuffleSuite
 
       // Simulate the task framework (runTaskWithListeners): markTaskFailed then
       // markTaskCompleted, both on the task thread. With the fix, the background
-      // thread does NOT call markTaskFailed, so there's no contention on the
-      // listenerInvocationThread guard, and completion listeners run normally.
+      // thread does NOT call markTaskFailed, so no other thread holds the listener
+      // invocation, and the completion listeners run without waiting.
       readerContext.markTaskFailed(error)
       readerContext.markTaskCompleted(Some(error))
 
@@ -1497,9 +1498,9 @@ class StreamingShuffleSuite
   // On the writer side: when a background Netty thread records an error via
   // errorNotifier.markError (instead of calling context.markTaskFailed directly), the
   // writer's write() method surfaces the error on the task thread. Because markTaskFailed
-  // and markTaskCompleted are both called from the task thread, there is no contention on
-  // the listenerInvocationThread guard in TaskContextImpl, and the completion listener
-  // (cleanupResources) runs normally.
+  // and markTaskCompleted are both called from the task thread, no other thread holds the
+  // listener invocation in TaskContextImpl, and the completion listener (cleanupResources)
+  // runs without waiting.
   test("writer resources are cleaned up when server handler " +
     "receive fails via errorNotifier") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
@@ -1558,9 +1559,9 @@ class StreamingShuffleSuite
 
       // Simulate the task framework (runTaskWithListeners): markTaskFailed then
       // markTaskCompleted, both on the task thread.  With the ErrorNotifier fix, the
-      // background Netty thread does NOT call markTaskFailed, so there is no contention
-      // on the listenerInvocationThread guard, and the completion listener
-      // (cleanupResources) runs normally.
+      // background Netty thread does NOT call markTaskFailed, so no other thread holds
+      // the listener invocation, and the completion listener (cleanupResources) runs
+      // without waiting.
       writerContext.markTaskFailed(writeError)
       writerContext.markTaskCompleted(Some(writeError))
 
