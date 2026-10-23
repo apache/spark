@@ -635,11 +635,11 @@ class HiveDDLSuite
         LocalDateTime.of(2018, 11, 17, 13, 33, 33)),
       ("TIME", "TIME '12:34:56'", LocalTime.of(12, 34, 56))
     ).foreach { case (dataType, literal, value) =>
-      def checkTable(partitionColumnNames: Seq[String]): Unit = {
+      def checkTable(partitionColumnNames: Seq[String], expected: Row): Unit = {
         val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
         assert(table.properties.get("k").contains("v"))
         assert(table.partitionColumnNames == partitionColumnNames)
-        checkAnswer(spark.table("t2"), Row(1, "a", value))
+        checkAnswer(spark.table("t2"), expected)
       }
       withTable("t", "t2") {
         sql(s"CREATE TABLE t (i INT, pt $dataType) USING PARQUET PARTITIONED BY (pt)")
@@ -649,7 +649,7 @@ class HiveDDLSuite
         sql(s"INSERT INTO t SELECT 1, 'a', $literal")
         sql("MSCK REPAIR TABLE t")
         sql("ALTER TABLE t RENAME TO t2")
-        checkTable(Seq("pt"))
+        checkTable(Seq("pt"), Row(1, "a", value))
       }
       withTable("t", "t2") {
         sql(s"CREATE TABLE t (i INT, P1 STRING, P2 $dataType) USING PARQUET " +
@@ -658,7 +658,16 @@ class HiveDDLSuite
         sql(s"INSERT INTO t SELECT 1, 'a', $literal")
         sql("MSCK REPAIR TABLE t")
         sql("ALTER TABLE t RENAME TO t2")
-        checkTable(Seq("P1", "P2"))
+        checkTable(Seq("P1", "P2"), Row(1, "a", value))
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, P1 STRING, P2 $dataType) USING PARQUET " +
+          "PARTITIONED BY (P2, P1)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, $literal, 'a'")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("P2", "P1"), Row(1, value, "a"))
       }
     }
   }
