@@ -280,7 +280,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         raise StopIteration(x)
 
     def _new(self, handler_cls, runner_conf=None):
-        handler = handler_cls(
+        return handler_cls(
             [
                 UDF(
                     func=self._stop,
@@ -293,7 +293,6 @@ class HandlerUDFsTests(PySparkBaseTestCase):
             runner_conf or RunnerConf({}),
             None,
         )
-        return handler
 
     def test_wraps_udfs(self):
         handler = self._new(self._Handler)

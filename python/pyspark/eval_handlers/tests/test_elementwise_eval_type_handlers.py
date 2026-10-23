@@ -99,7 +99,7 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         eval_conf = {"input_type": (input_type or self._INPUT_TYPE).json()}
         if nesting is not None:
             eval_conf["elementwise_nesting"] = ",".join(map(str, nesting))
-        handler = handler_cls(
+        return handler_cls(
             udfs=[
                 UDF(
                     func=func,
@@ -113,7 +113,6 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),
         )
-        return handler
 
     @staticmethod
     def _column(out, index=0):
