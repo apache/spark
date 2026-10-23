@@ -242,13 +242,17 @@ def _convert_arrow_table_to_pandas(
     """
     import pandas as pd
 
+    from pyspark.loose_version import LooseVersion
     from pyspark.sql.pandas.types import _create_converter_to_pandas
 
     # Build pandas options
     # Pandas DataFrame created from PyArrow uses datetime64[ns] for date type
     # values, but we should use datetime.date to match the behavior with when
     # Arrow optimization is disabled.
-    pandas_options = {"coerce_temporal_nanoseconds": True}
+    # Keep coercing to nanoseconds on pandas < 3 for backward compatibility. pandas >= 3
+    # uses microseconds (see _to_corrected_pandas_type), and coercing would fail or overflow
+    # for values outside 1677-09-21 to 2262-04-11.
+    pandas_options = {"coerce_temporal_nanoseconds": LooseVersion(pd.__version__) < "3.0.0"}
     if date_as_object:
         pandas_options["date_as_object"] = True
 
