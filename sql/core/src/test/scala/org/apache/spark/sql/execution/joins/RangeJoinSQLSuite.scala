@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.DoubleType
 
 /**
  * Planner and end-to-end coverage for broadcast range join.
@@ -172,16 +173,21 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
    * long-specialized) never reaches.
    */
   private def setupDoubleIntervalViews(): Unit = {
+    // An unsuffixed literal like `1.0` resolves to DECIMAL, not DOUBLE (only `1.0D` or a
+    // cast does), and DECIMAL(2, 1) maps to LongIntervalIndex, defeating the point of this
+    // view. The `D` suffix keeps these columns on the boxed IntervalIndex path.
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_ranges_a(lo, hi) AS VALUES
-        |  (-1.0, 0.0), (0.0, 1.0), (0.0, 2.0), (1.0, 5.0)
+        |  (-1.0D, 0.0D), (0.0D, 1.0D), (0.0D, 2.0D), (1.0D, 5.0D)
         |""".stripMargin)
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_ranges_b(lo, hi) AS VALUES
-        |  (-2.0, -1.0), (-4.0, -2.0), (1.0, 3.0), (5.0, 7.0)
+        |  (-2.0D, -1.0D), (-4.0D, -2.0D), (1.0D, 3.0D), (5.0D, 7.0D)
         |""".stripMargin)
+    assert(sql("SELECT lo, hi FROM dbl_ranges_a").schema.fields.forall(_.dataType == DoubleType))
+    assert(sql("SELECT lo, hi FROM dbl_ranges_b").schema.fields.forall(_.dataType == DoubleType))
   }
 
   private def setupDecimalViews(): Unit = {
@@ -398,12 +404,28 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     val operators = Seq("<", "<=", ">", ">=")
     val joinTypes = Seq("JOIN", "LEFT SEMI JOIN", "LEFT ANTI JOIN")
     for (op <- operators; joinType <- joinTypes) {
+      // BROADCAST(b) pins dup_dates as the build side (BuildRight). Left semi/anti
+      // already require BuildRight, but a plain JOIN would otherwise pick probe_dates
+      // (the smaller side) as build, leaving the duplicated keys on the streamed side.
       val query =
-        s"SELECT p.d FROM probe_dates p $joinType dup_dates b ON p.d $op b.d"
+        s"SELECT /*+ BROADCAST(b) */ p.d FROM probe_dates p $joinType dup_dates b ON p.d $op b.d"
       val expected = sql(query).collect()
       withRangeJoin() {
         val df = sql(query)
         assert(findRangeJoin(df.queryExecution.executedPlan).size == 1, query)
+        checkAnswer(df, expected)
+      }
+    }
+    // Inner joins can also build the left side; repeat with dup_dates on the left and
+    // pinned as build so the strict scan is exercised under BuildLeft too.
+    for (op <- operators) {
+      val query =
+        s"SELECT /*+ BROADCAST(b) */ p.d FROM dup_dates b JOIN probe_dates p ON b.d $op p.d"
+      val expected = sql(query).collect()
+      withRangeJoin() {
+        val df = sql(query)
+        val joins = findRangeJoin(df.queryExecution.executedPlan)
+        assert(joins.size == 1 && joins.head.buildSide == BuildLeft, query)
         checkAnswer(df, expected)
       }
     }

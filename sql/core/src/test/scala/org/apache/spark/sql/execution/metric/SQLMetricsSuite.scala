@@ -632,6 +632,26 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
     }
   }
 
+  test("BroadcastRangeJoin metrics") {
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      withTempView("rangeProbe", "rangeBuild") {
+        sql("CREATE OR REPLACE TEMP VIEW rangeProbe(p) AS VALUES (5), (15), (25)")
+        sql("CREATE OR REPLACE TEMP VIEW rangeBuild(lo, hi) AS VALUES (0, 10), (10, 20), (20, 30)")
+        // ... -> BroadcastRangeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val query = "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe p " +
+          "JOIN rangeBuild b ON p.p >= b.lo AND p.p <= b.hi"
+        Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
+          val df = spark.sql(query)
+          testSparkPlanMetrics(df, 2, Map(
+            nodeId -> ("BroadcastRangeJoin", Map(
+              "number of output rows" -> 3L))),
+            enableWholeStage
+          )
+        }
+      }
+    }
+  }
+
   test("BroadcastLeftSemiJoinHash metrics") {
     val df1 = Seq((1, "1"), (2, "2")).toDF("key", "value")
     val df2 = Seq((1, "1"), (2, "2"), (3, "3"), (4, "4")).toDF("key2", "value")
