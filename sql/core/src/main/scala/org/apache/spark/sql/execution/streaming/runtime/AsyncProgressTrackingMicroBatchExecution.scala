@@ -356,17 +356,38 @@ class AsyncProgressTrackingMicroBatchExecution(
   }
 
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
-    try {
+    val executionError = try {
       super.runActivatedStream(sparkSessionForStream)
+      None
     } catch {
       case e: Throwable =>
-        throw getAsyncOperationFailure(
+        Some(getAsyncOperationFailure(
           thrownError = e,
           isInterruption = StreamExecution.isInterruptionException(
             e, sparkSession.sparkContext),
           interruptingError = Option(interruptingAsyncError.get()),
-          notifierError = errorNotifier.getError()).getOrElse(e)
+          notifierError = errorNotifier.getError()).getOrElse(e))
     }
+    // The remaining offsets are committed here rather than in `cleanup()`, so that they are
+    // committed before the sources are stopped and a commit failure fails the query.
+    val commitError = try {
+      queryExecutionThread.runUninterruptibly {
+        stopAsyncWrites()
+        commitAllSources()
+      }
+      None
+    } catch {
+      case e: Throwable => Some(e)
+    }
+    val isStoppedByUser = state.get == TERMINATED &&
+      executionError.exists(StreamExecution.isInterruptionException(_, sparkSession.sparkContext))
+    val error = (executionError, commitError) match {
+      case (Some(e), Some(commitFailure)) if !isStoppedByUser =>
+        e.addSuppressed(commitFailure)
+        Some(e)
+      case _ => commitError.orElse(executionError)
+    }
+    error.foreach(e => throw e)
   }
 
   // need to look at the number of files on disk
@@ -382,7 +403,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     commitLog.purge(commitLog.writtenToDurableStorage.peek())
   }
 
-  override def cleanup(): Unit = {
+  private def stopAsyncWrites(): Unit = {
     if (trigger.isInstanceOf[RealTimeTrigger] && errorNotifier.getError().isDefined) {
       // No pending tasks in the queue should be executed if there was an error.
       asyncWritesExecutorService.shutdownNow()
@@ -400,11 +421,13 @@ class AsyncProgressTrackingMicroBatchExecution(
       logWarning(log"Async progress tracking executor for query " +
         log"${MDC(PRETTY_ID_STRING, prettyIdString)} did not terminate in 30 seconds")
     }
-    try {
-      commitAllSources()
-    } finally {
-      super.cleanup()
-    }
+  }
+
+  override def cleanup(): Unit = {
+    // `runActivatedStream` stops the async writes, but does not run if the query is stopped while
+    // it is initializing.
+    asyncWritesExecutorService.shutdown()
+    super.cleanup()
   }
 
   // used for testing

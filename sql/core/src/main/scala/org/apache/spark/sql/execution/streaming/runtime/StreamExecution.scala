@@ -377,7 +377,22 @@ abstract class StreamExecution(
         }
 
         try {
-          streamDeathCause = detailedStreamDeathCause(cause, message)
+          streamDeathCause = new StreamingQueryException(
+            toDebugString(includeLogicalPlan = isInitialized),
+            cause = cause,
+            getLatestExecutionContext().startOffsets
+              .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
+                getLatestExecutionContext().offsetSeqMetadata)
+              .toString,
+            getLatestExecutionContext().endOffsets
+              .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
+                getLatestExecutionContext().offsetSeqMetadata)
+              .toString,
+            errorClass = "STREAM_FAILED",
+            messageParameters = Map(
+              "id" -> id.toString,
+              "runId" -> runId.toString,
+              "message" -> message))
         } catch {
           // If building the detailed exception fails (e.g. a source's `toString` throws), the
           // query failure must still be reported instead of the query looking stopped cleanly.
@@ -412,36 +427,8 @@ abstract class StreamExecution(
       initializationLatch.countDown()
 
       try {
-        // Releasing the query's resources can fail, e.g. when committing a source. The failure
-        // fails the query, but must not skip the rest of the termination, or the query would stay
-        // registered as active and could not be restarted.
-        val releaseFailures = Seq(() => stopSources(), () => cleanup()).flatMap { release =>
-          try {
-            release()
-            None
-          } catch {
-            case t: Throwable => Some(t)
-          }
-        }
-        releaseFailures.foreach { e =>
-          logError(log"Query ${MDC(PRETTY_ID_STRING, prettyIdString)} failed to release its " +
-            log"resources", e)
-          if (streamDeathCause == null) {
-            val message = if (e.getMessage == null) "" else e.getMessage
-            streamDeathCause = try {
-              detailedStreamDeathCause(e, message)
-            } catch {
-              case buildFailure: Throwable => fallbackStreamDeathCause(e, message, buildFailure)
-            }
-            errorClassOpt = e match {
-              case t: SparkThrowable => Option(t.getCondition)
-              case _ => None
-            }
-            getLatestExecutionContext().updateStatusMessage(s"Terminated with exception: $message")
-          } else {
-            streamDeathCause.addSuppressed(e)
-          }
-        }
+        stopSources()
+        cleanup()
         state.set(TERMINATED)
         getLatestExecutionContext().currentStatus =
           status.copy(isTriggerActive = false, isDataAvailable = false)
@@ -474,9 +461,6 @@ abstract class StreamExecution(
               logWarning(log"Cannot delete ${MDC(PATH, checkpointPath)}", e)
           }
         }
-
-        // Like a fatal query failure, hand fatal errors to the `UncaughtExceptionHandler`.
-        releaseFailures.find(!NonFatal(_)).foreach(e => throw e)
       } finally {
         awaitProgressLock.lock()
         try {
@@ -757,28 +741,6 @@ abstract class StreamExecution(
 
   override def toString: String = {
     s"Streaming Query $prettyIdString [state = $state]"
-  }
-
-  /** The query failure with the query debug string and its current offsets. */
-  private def detailedStreamDeathCause(
-      cause: Throwable,
-      message: String): StreamingQueryException = {
-    new StreamingQueryException(
-      toDebugString(includeLogicalPlan = isInitialized),
-      cause = cause,
-      getLatestExecutionContext().startOffsets
-        .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-          getLatestExecutionContext().offsetSeqMetadata)
-        .toString,
-      getLatestExecutionContext().endOffsets
-        .toOffsets(sources.toSeq, sourceToIdMap.map(_.swap),
-          getLatestExecutionContext().offsetSeqMetadata)
-        .toString,
-      errorClass = "STREAM_FAILED",
-      messageParameters = Map(
-        "id" -> id.toString,
-        "runId" -> runId.toString,
-        "message" -> message))
   }
 
   /** The query failure without the debug string and offsets that could not be built. */
