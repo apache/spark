@@ -26,15 +26,15 @@ license: |
 
 A metric view is a view that defines business metrics once, as aggregate expressions over a source table or query, so that every query can ask for them at whatever level of detail it needs without restating the aggregation. The definition names the **dimensions** a query may group and filter by (region, day, product) and the **measures** it may ask for (revenue, distinct customers, a return rate). A query reads a measure with the `MEASURE()` aggregate function, and Spark evaluates the measure's expression over the source rows, grouped by whatever the query groups by.
 
-Consider a `return_rate` defined as returned orders divided by all orders. Written by hand, it has to be restated in every report (`SUM(CAST(returned AS INT)) / COUNT(1)`), and a report that averages per-region rates to get a company-wide rate gets a different, wrong, answer. In a metric view, the ratio is written once as a measure. `SELECT MEASURE(return_rate) FROM order_metrics` returns the company-wide rate; add `GROUP BY region` and it returns each region's rate, computed from that region's rows. Same for a distinct count: `COUNT(DISTINCT customer_id)` counts each customer once at whichever grain the query asks for, and never sums daily counts into an inflated monthly one.
+Consider a `return_rate` defined as returned orders divided by all orders. Written by hand, it has to be restated in every report (`SUM(CAST(returned AS INT)) / COUNT(1)`), and a report that averages per-region rates to get a company-wide rate gets a different, wrong, answer. In a metric view, the ratio is written once as a measure. `SELECT MEASURE(return_rate) FROM order_metrics` returns the company-wide rate; add `GROUP BY region` and it returns each region's rate, computed from that region's rows. A distinct count works the same way: `COUNT(DISTINCT customer_id)` counts each customer once at whichever grain the query asks for, and never sums daily counts into an inflated monthly one.
 
-Metric views are ordinary catalog objects. They are created with `CREATE VIEW ... WITH METRICS LANGUAGE YAML`, listed by `SHOW VIEWS`, described by `DESCRIBE`, and dropped by `DROP VIEW`. They store no data: each query is rewritten into an aggregation over the source and runs as any Spark SQL query does. Any client that sends SQL to Spark, whether `spark-sql`, Spark Connect, or a BI tool over the Thrift JDBC/ODBC server, can query them with plain SQL.
+Metric views are ordinary catalog objects. They are created with [`CREATE VIEW ... WITH METRICS LANGUAGE YAML`](sql-ref-syntax-ddl-create-metric-view.html), listed by `SHOW VIEWS`, described by `DESCRIBE`, and dropped by `DROP VIEW`. They store no data: each query is rewritten into an aggregation over the source and runs as any Spark SQL query does. Any client that sends SQL to Spark, whether `spark-sql`, Spark Connect, or a BI tool over the Thrift JDBC/ODBC server, can query them with plain SQL.
 
-Metric views are available since Spark 4.2.0. The statement is documented on the [CREATE METRIC VIEW](sql-ref-syntax-ddl-create-metric-view.html) reference page.
+Metric views are available since Spark 4.2.0.
 
 ## Quick Start
 
-Create a table of orders, define a metric view over it, and query the view at three levels of detail.
+Create a table of orders, define a metric view over it, and query it with and without `GROUP BY`.
 
 ```sql
 CREATE TABLE orders (
@@ -127,7 +127,7 @@ Customer 3 ordered on each of the three days. Each daily count counts them once,
 
 ### Source
 
-The source is the relation the measures aggregate over. It is either the name of a table or view, or a SQL query. A query source can join tables, derive columns, or aggregate another metric view (see [Modeling Patterns](#modeling-patterns)). The source's columns are not exposed by the view; a query sees only dimensions and measures.
+The source is the relation the measures aggregate over. It is either the name of a table or of a view other than a metric view, or a SQL query. A query source can join tables, derive columns, or aggregate another metric view (see [Modeling Patterns](#modeling-patterns)). The source's columns are not exposed by the view; a query sees only dimensions and measures.
 
 ### Dimensions
 
@@ -135,7 +135,7 @@ A dimension is a named, non-aggregate expression over the source: a column, or a
 
 ### Measures
 
-A measure is a named aggregate expression over the source, such as `SUM(amount)`, `COUNT(DISTINCT customer_id)`, or a ratio of aggregates such as `SUM(amount) / COUNT(1)`. A measure has no value of its own. A query reads it with `MEASURE(name)`, and only inside an aggregation.
+A measure is a named aggregate expression over the source, such as `SUM(amount)`, `COUNT(DISTINCT customer_id)`, or a ratio of aggregates such as `SUM(amount) / COUNT(1)`. A query reads it with `MEASURE(name)`, and only inside an aggregation.
 
 ### Filter
 
@@ -143,44 +143,9 @@ An optional boolean expression over the source, applied to every query before th
 
 ### Grain
 
-The grain of a query is the set of dimensions it groups by. A measure is always evaluated at the grain of the query that calls `MEASURE()`: Spark replaces each `MEASURE(name)` in the query's `SELECT` list with the measure's expression, and the resulting aggregation runs over the source rows, grouped by the query's `GROUP BY`. `EXPLAIN` shows the rewrite:
+The grain of a query is the set of dimensions it groups by. A measure is always evaluated at the grain of the query that calls `MEASURE()`: Spark replaces each `MEASURE(name)` in the query's `SELECT` list with the measure's expression, and the resulting aggregation runs over the source rows, grouped by the query's `GROUP BY`. `SELECT region, MEASURE(revenue) FROM order_metrics GROUP BY region` runs as `SELECT region, SUM(amount) FROM orders GROUP BY region`, which `EXPLAIN` shows.
 
-```sql
-EXPLAIN SELECT region, MEASURE(revenue) AS revenue FROM order_metrics GROUP BY region;
-== Physical Plan ==
-AdaptiveSparkPlan isFinalPlan=false
-+- HashAggregate(keys=[region#22], functions=[sum(amount#25)])
-   +- Exchange hashpartitioning(region#22, 200), ENSURE_REQUIREMENTS, [plan_id=886]
-      +- HashAggregate(keys=[region#22], functions=[partial_sum(amount#25)])
-         +- FileScan parquet spark_catalog.default.orders[region#22,amount#25] ...
-```
-
-This is what makes non-additive measures safe to ask for at any grain. The distinct customer count over all orders is 6:
-
-```sql
-SELECT MEASURE(customers) AS customers FROM order_metrics;
-+---------+
-|customers|
-+---------+
-|6        |
-+---------+
-```
-
-The output of `MEASURE()` is an ordinary column to an enclosing query. Summing the daily counts in an outer query is ordinary arithmetic over the inner result, and counts a customer once per day they ordered:
-
-```sql
-SELECT SUM(customers) AS summed_daily_customers
-FROM (SELECT order_date, MEASURE(customers) AS customers
-      FROM order_metrics
-      GROUP BY order_date);
-+----------------------+
-|summed_daily_customers|
-+----------------------+
-|9                     |
-+----------------------+
-```
-
-Likewise for a rate. The regional rates and their average:
+The output of `MEASURE()` is an ordinary column to an enclosing query, so aggregating it again is ordinary arithmetic over the inner result, not a re-evaluation of the measure. For a rate, the regional rates and their average:
 
 ```sql
 SELECT region, ROUND(MEASURE(return_rate), 2) AS return_rate
@@ -216,19 +181,9 @@ SELECT ROUND(MEASURE(return_rate), 2) AS return_rate FROM order_metrics;
 +-----------+
 ```
 
-## Defining Metric Views in SQL
+## Defining a Metric View
 
-A metric view is created with `CREATE VIEW ... WITH METRICS LANGUAGE YAML`. The body is a YAML document inside a dollar-quoted string, `$$ ... $$`. The document has these keys and no others:
-
-| Key | Required | Content |
-|---|---|---|
-| `version` | yes | The definition format version. `0.1` is the only version accepted. |
-| `source` | yes | A table or view name, optionally qualified, or a SQL query. |
-| `filter` | no | A boolean expression over the source, applied to every query. |
-| `dimensions` | no | A list of `{ name, expr }` entries; `expr` is a non-aggregate expression. |
-| `measures` | no | A list of `{ name, expr }` entries; `expr` is an aggregate expression. |
-
-Each dimension and measure takes only `name` and `expr`. Names must be unique across both lists. The view's columns are the dimensions followed by the measures, and their types are derived when the view is created: Spark analyzes an aggregation over the source grouped by every dimension, which is why `COUNT` measures are `BIGINT`, `SUM` of a `DECIMAL(10, 2)` is `DECIMAL(20, 2)`, and `AVG` is `DOUBLE`.
+A metric view is created with `CREATE VIEW ... WITH METRICS LANGUAGE YAML`. The body is a YAML document inside a dollar-quoted string, `$$ ... $$`, with the keys `version` (`0.1`), `source`, an optional `filter`, and lists of `dimensions` and `measures`, each entry a `name` and an `expr`; the [reference page](sql-ref-syntax-ddl-create-metric-view.html) describes each key. The view's columns are the dimensions followed by the measures. Their types are fixed when the view is created, from the result types of the expressions: `COUNT` is `BIGINT`, `SUM` of a `DECIMAL(10, 2)` is `DECIMAL(20, 2)`, and `AVG` is `DOUBLE`.
 
 ```sql
 DESCRIBE order_metrics;
@@ -339,12 +294,13 @@ SELECT sales_region, MEASURE(orders) AS orders FROM sales_metrics GROUP BY sales
 
 A query over a metric view is an aggregate query. The rules follow from the rewrite described under [Grain](#grain):
 
-- Read a measure with `MEASURE(name)` in the `SELECT` list, optionally inside another expression (`ROUND(MEASURE(return_rate), 2)`). A measure selected by name alone, or `SELECT *`, has nothing to return and fails.
+- Read a measure with `MEASURE(name)` in the `SELECT` list, optionally inside another expression (`ROUND(MEASURE(return_rate), 2)`). Selecting a measure by name alone, or `SELECT *`, is not supported.
 - Every dimension in the `SELECT` list must be in `GROUP BY` (`GROUP BY ALL` works). A query with only `MEASURE()` calls needs no `GROUP BY`.
 - Filter with `WHERE` on dimensions. Source columns that are not dimensions are not part of the view; to filter on one, use the view's `filter` key or a query source.
 - To filter or sort on a measure, alias it in the `SELECT` list and use the alias in `HAVING` and `ORDER BY` (`ORDER BY` also takes the column's position, as in `ORDER BY 2`). `MEASURE()` itself is not resolved in `WHERE`, `HAVING` or `ORDER BY`.
 - `COUNT(*)` counts source rows (after the view's filter); it does not go through `MEASURE()`.
-- To combine a metric view with another table, aggregate the metric view first, in a subquery or common table expression, and join the result.
+- A metric view cannot be joined with another relation in the same query. Aggregate it first, in a subquery or common table expression, and join the result.
+- `MEASURE()` applies only to a metric view's measures, not to a column of a table or an ordinary view.
 
 ```sql
 -- HAVING and ORDER BY use the alias.
@@ -393,7 +349,7 @@ SELECT COUNT(*) AS source_rows FROM order_metrics;
 
 ### In Python
 
-`spark.table()` reads a metric view like any table. `MEASURE()` is reached through SQL expressions, with `F.expr` inside `agg` or with `selectExpr`, and the SQL rules carry over: a measure needs `MEASURE()` inside an aggregation, dimension filters go in `where` before the aggregation, and measure filters go in `where` after it, on the alias.
+`spark.table()` returns a DataFrame over the metric view. `MEASURE()` is reached through SQL expressions, with `F.expr` inside `agg` or with `selectExpr`, and the SQL rules carry over: a measure needs `MEASURE()` inside an aggregation, dimension filters go in `where` before the aggregation, and measure filters go in `where` after it, on the alias.
 
 ```python
 from pyspark.sql import functions as F
@@ -539,11 +495,11 @@ GROUP BY order_month;
 
 ### Derived Dimensions in a SQL Source
 
-When a dimension needs more than an expression over one row, such as a join to a lookup table or a window over the source, put it in a query source, as `size` is in [kept_order_metrics](#a-sql-query-as-the-source-with-a-filter). The query runs as part of every query over the view, so keep it to what the dimensions and measures need.
+When a dimension needs more than an expression over one row, such as a join to a lookup table or a window over the source, put it in a query source, as `size` is in [kept_order_metrics](#a-sql-query-as-the-source-with-a-filter).
 
 ### A Metric View over a Metric View
 
-A query source may aggregate another metric view with `MEASURE()`. This is the way to define metrics about groups, such as the average revenue of a region, where the inner grain is fixed by the source and the outer measures aggregate over those groups:
+A query source may aggregate another metric view with `MEASURE()`; naming a metric view directly as the source is not supported. Use this to define metrics about groups, such as the average revenue of a region, where the inner grain is fixed by the source and the outer measures aggregate over those groups:
 
 ```sql
 CREATE VIEW region_metrics
@@ -579,7 +535,7 @@ FROM region_metrics;
 
 ### Changing a Definition
 
-There is no `ALTER VIEW` form for the YAML body. In a Data Source V2 catalog, `CREATE OR REPLACE VIEW ... WITH METRICS` replaces an existing metric view. In the session catalog (`spark_catalog`), `OR REPLACE` does not yet replace an existing metric view: the statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS` and the definition is unchanged, so drop the view and create it again.
+To change the YAML, replace the view. In a catalog that implements `ViewCatalog`, `CREATE OR REPLACE VIEW ... WITH METRICS` does that. In the session catalog (`spark_catalog`), `OR REPLACE` is ignored and the statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS`, so drop the view and create it again:
 
 ```sql
 DROP VIEW order_metrics;
@@ -601,31 +557,11 @@ $$;
 
 ### Inspecting a Definition
 
-`DESCRIBE EXTENDED` shows the view's type, the YAML document as `View Text`, and properties that record the source and filter: `metric_view.from.type` is `ASSET` for a named table or view and `SQL` for a query, with the name or query in `metric_view.from.name` or `metric_view.from.sql`, and `metric_view.where` holds the filter. `SHOW CREATE TABLE` is not supported on a metric view; `View Text` is the way to read a definition back.
-
-```sql
-DESCRIBE EXTENDED order_metrics;
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
-|col_name                    |data_type                                                                                                                             |comment|
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
-|region                      |string                                                                                                                                |NULL   |
-|revenue                     |decimal(20,2)                                                                                                                         |NULL   |
-|                            |                                                                                                                                      |       |
-|# Detailed Table Information|                                                                                                                                      |       |
-|Catalog                     |spark_catalog                                                                                                                         |       |
-|Database                    |default                                                                                                                               |       |
-|Table                       |order_metrics                                                                                                                         |       |
-|...                         |                                                                                                                                      |       |
-|Type                        |METRIC_VIEW                                                                                                                           |       |
-|View Text                   |\nversion: 0.1\nsource: orders\ndimensions:\n  - name: region\n    expr: region\nmeasures:\n  - name: revenue\n    expr: SUM(amount)\n|       |
-|Language                    |YAML                                                                                                                                  |       |
-|Table Properties            |[metric_view.from.name=orders, metric_view.from.type=ASSET]                                                                           |       |
-+----------------------------+--------------------------------------------------------------------------------------------------------------------------------------+-------+
-```
+`DESCRIBE EXTENDED` shows the view's type (`METRIC_VIEW`), the YAML document as `View Text`, and properties that record the source and filter; the [reference page](sql-ref-syntax-ddl-create-metric-view.html#examples) shows the output. `SHOW CREATE TABLE` is not supported on a metric view, so `View Text` is the way to read a definition back.
 
 ### Renaming, Properties and Dropping
 
-`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` are the `ALTER VIEW` forms that apply to a metric view; `ALTER VIEW ... AS` is for SQL views and should not be used on one. `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
+`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` work as they do for other views. `ALTER VIEW ... AS query` is not rejected on a metric view, but it replaces the YAML with the query text and every later query on the view fails with `INVALID_METRIC_VIEW_YAML`; replace the view as above instead. `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
 
 ```sql
 ALTER VIEW order_metrics SET TBLPROPERTIES ('team' = 'finance');
@@ -648,13 +584,3 @@ SHOW VIEWS LIKE 'order_metrics*';
 
 DROP VIEW order_metrics_2026;
 ```
-
-## Considerations
-
-- **No joins in a query over a metric view.** Joining a metric view with another relation in the same query is not supported. Aggregate it in a subquery, a common table expression, or an ordinary view, and join the result.
-- **No temporary form.** `CREATE TEMPORARY VIEW ... WITH METRICS` is a syntax error. A metric view is always persisted in the catalog, and its source cannot be a temporary view or a session variable.
-- **A measure cannot reference a measure.** Each measure's expression resolves against the source's columns. Repeat the aggregate, or move the shared expression into a query source.
-- **Only `name` and `expr` on a column, and only `version`, `source`, `filter`, `dimensions` and `measures` at the top level.** There is no key for a display name, a format, a description, or a join; unknown keys are rejected.
-- **No `ALTER` of the YAML body.** Replace the view instead; in the session catalog, drop and recreate it.
-- **`SHOW CREATE TABLE` is not supported.** Use `DESCRIBE EXTENDED` and read `View Text`.
-- **`MEASURE()` applies only to a metric view's measures.** Applying it to a column of a table or an ordinary view is not supported.

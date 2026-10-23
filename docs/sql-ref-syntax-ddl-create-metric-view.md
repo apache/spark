@@ -22,7 +22,7 @@ license: |
 ### Description
 
 A metric view is a persistent view whose definition is a YAML document rather than a query.
-The document names a source (a table, a view, or a SQL query), an optional filter, a list of
+The document names a source (a table, a view other than a metric view, or a SQL query), an optional filter, a list of
 **dimensions** (expressions a query can group and filter by) and a list of **measures**
 (aggregate expressions). A query reads a measure with the `MEASURE()` aggregate function, and
 Spark evaluates the measure's expression over the source at the grain of that query's `GROUP BY`,
@@ -39,21 +39,19 @@ view is queried, how `MEASURE()` is evaluated, and how to model dimensions and m
 ```sql
 CREATE [ OR REPLACE ] VIEW [ IF NOT EXISTS ] view_identifier
     [ ( column_name [ COMMENT column_comment ], ... ) ]
-    WITH METRICS
-    LANGUAGE YAML
-    [ COMMENT view_comment ]
-    [ TBLPROPERTIES ( property_name = property_value [ , ... ] ) ]
-    AS $$ yaml_definition $$
+    create_metric_view_clauses AS $[tag]$ yaml_definition $[tag]$
 ```
 
 ### Parameters
 
 * **OR REPLACE**
 
-    If a view of the same name already exists in a Data Source V2 catalog, it is replaced. In the
-    session catalog (`spark_catalog`), `OR REPLACE` does not replace an existing metric view: the
-    statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS` and the existing definition is kept, so
-    drop the view and create it again. `OR REPLACE` cannot be combined with `IF NOT EXISTS`.
+    In a catalog that implements `ViewCatalog`, an existing view of the same name is replaced. In
+    the session catalog (`spark_catalog`), `OR REPLACE` is ignored: if a table or view of that name
+    exists, the statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS`, so drop the view and create it
+    again. `OR REPLACE` cannot be combined with `IF NOT EXISTS`. A Data Source V2 catalog that does
+    not implement `ViewCatalog` rejects `CREATE VIEW ... WITH METRICS` with
+    `MISSING_CATALOG_ABILITY.VIEWS`.
 
 * **IF NOT EXISTS**
 
@@ -62,7 +60,7 @@ CREATE [ OR REPLACE ] VIEW [ IF NOT EXISTS ] view_identifier
 
 * **view_identifier**
 
-    Specifies a view name, optionally qualified with a database name (or a catalog and database).
+    Specifies a view name, optionally qualified with a namespace (or a catalog and namespace).
     If the name is not qualified the view is created in the current schema.
 
     **Syntax:** `[ catalog_name. ] [ database_name. ] view_name`
@@ -74,29 +72,24 @@ CREATE [ OR REPLACE ] VIEW [ IF NOT EXISTS ] view_identifier
     definition declares. A query refers to a dimension or measure by the name in this list, not by
     its name in the YAML document.
 
-* **WITH METRICS**
+* **create_metric_view_clauses**
 
-    Marks the view as a metric view. This clause is required.
+    These clauses are order insensitive, and each may appear at most once. `WITH METRICS` and
+    `LANGUAGE YAML` are required.
 
-* **LANGUAGE YAML**
+    * `WITH METRICS` marks the view as a metric view.
+    * `LANGUAGE YAML` names the language of the body; `YAML` is the only language accepted.
+    * `[ COMMENT view_comment ]` describes the view.
+    * `[ TBLPROPERTIES ( property_name = property_value [ , ... ] ) ]` adds metadata key-value
+      pairs. Spark adds its own: `metric_view.from.type` (`ASSET` for a table or view name, `SQL`
+      for a query), `metric_view.from.name` or `metric_view.from.sql`, and `metric_view.where` when
+      the definition has a filter. These are descriptive: the SQL and filter values are truncated
+      to 1024 characters, and a user-supplied value for one of these keys is overwritten.
 
-    The language of the body. This clause is required and `YAML` is the only language accepted.
-    `WITH METRICS`, `LANGUAGE`, `COMMENT` and `TBLPROPERTIES` may appear in any order.
+* **yaml_definition**
 
-* **COMMENT view_comment**
-
-    A `STRING` literal describing the view.
-
-* **TBLPROPERTIES ( property_name = property_value [ , ... ] )**
-
-    Metadata key-value pairs stored with the view. Spark adds its own properties:
-    `metric_view.from.type` (`ASSET` for a table or view name, `SQL` for a query),
-    `metric_view.from.name` or `metric_view.from.sql`, and `metric_view.where` when the
-    definition has a filter.
-
-* **$$ yaml_definition $$**
-
-    The definition, as a dollar-quoted string literal. The document has these keys and no others;
+    The definition, as a dollar-quoted string (`$$ ... $$`, or `$tag$ ... $tag$` with any tag).
+    The document has these keys and no others;
     any other key, at the top level or on a column, fails with `INVALID_METRIC_VIEW_YAML`.
 
     * **version**
@@ -105,8 +98,10 @@ CREATE [ OR REPLACE ] VIEW [ IF NOT EXISTS ] view_identifier
 
     * **source**
 
-      Required. Either the name of a table or view, optionally qualified, or a SQL query. Spark
-      first tries to read the value as a multi-part identifier and otherwise parses it as a query.
+      Required. Either the name of a table or of a view other than a metric view, optionally
+      qualified, or a SQL query. Spark first tries to read the value as a multi-part identifier and
+      otherwise parses it as a query. To build on a metric view, use a query source that reads it
+      with `MEASURE()`.
       A persistent metric view cannot reference temporary views or session variables
       (`INVALID_TEMP_OBJ_REFERENCE`).
 
@@ -153,7 +148,7 @@ INSERT INTO orders VALUES
     ('west', DATE'2026-01-05', 6,  40.00, false),
     ('west', DATE'2026-01-05', 3,  25.00, false);
 
--- A metric view over `orders` with two dimensions and four measures.
+-- Column names and comments, a view comment and table properties.
 CREATE VIEW order_metrics
     (region COMMENT 'Sales region', order_date, order_count, revenue, customers, return_rate)
     WITH METRICS
@@ -215,18 +210,7 @@ DESCRIBE EXTENDED order_metrics;
 |Table Properties            |[metric_view.from.name=orders, metric_view.from.type=ASSET, team=sales]|            |
 +----------------------------+-----------------------------------------------------------------------+------------+
 
--- Without GROUP BY, each measure is evaluated over the whole source.
-SELECT MEASURE(order_count) AS order_count,
-       MEASURE(revenue) AS revenue,
-       MEASURE(customers) AS customers
-FROM order_metrics;
-+-----------+-------+---------+
-|order_count|revenue|customers|
-+-----------+-------+---------+
-|9          |780.49 |6        |
-+-----------+-------+---------+
-
--- The same measures, once per region. ORDER BY refers to the measure's alias.
+-- Measures at the grain of the GROUP BY. See the programming guide for the querying rules.
 SELECT region,
        MEASURE(revenue) AS revenue,
        MEASURE(customers) AS customers,
@@ -240,20 +224,6 @@ ORDER BY revenue DESC;
 |west  |534.99 |4        |0.17       |
 |east  |245.50 |2        |0.33       |
 +------+-------+---------+-----------+
-
--- WHERE on a dimension, grouped by another dimension.
-SELECT order_date, MEASURE(customers) AS customers
-FROM order_metrics
-WHERE region = 'west'
-GROUP BY order_date
-ORDER BY order_date;
-+----------+---------+
-|order_date|customers|
-+----------+---------+
-|2026-01-03|1        |
-|2026-01-04|2        |
-|2026-01-05|3        |
-+----------+---------+
 
 -- A SQL query as the source, with a filter applied to every query.
 CREATE VIEW kept_order_metrics
@@ -275,19 +245,6 @@ measures:
     expr: SUM(amount)
 $$;
 
-SELECT region, size, MEASURE(revenue) AS revenue
-FROM kept_order_metrics
-GROUP BY region, size
-ORDER BY region, size;
-+------+-----+-------+
-|region|size |revenue|
-+------+-----+-------+
-|east  |large|120.00 |
-|east  |small|45.50  |
-|west  |large|300.00 |
-|west  |small|135.00 |
-+------+-----+-------+
-
 -- IF NOT EXISTS keeps the existing definition.
 CREATE VIEW IF NOT EXISTS order_metrics WITH METRICS LANGUAGE YAML AS $$
 version: 0.1
@@ -297,12 +254,6 @@ measures:
     expr: SUM(amount)
 $$;
 
--- ALTER VIEW can rename a metric view and set or unset its properties.
-ALTER VIEW order_metrics SET TBLPROPERTIES ('team' = 'finance');
-ALTER VIEW order_metrics RENAME TO order_metrics_v1;
-
-DROP VIEW order_metrics_v1;
-DROP VIEW kept_order_metrics;
 ```
 
 ### Related Statements
