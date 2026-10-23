@@ -158,9 +158,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result = None
                 udtf = UDTF(
                     udtf_cls=udtf_cls,
-                    return_type=return_type,
                     args_offsets=udtf_info.args,
                     kwargs_offsets=udtf_info.kwargs,
+                    return_type=return_type,
                     partition_child_indexes=udtf_info.partition_child_indexes,
                     analyze_result=analyze_result,
                     name=udtf_info.name,
@@ -174,9 +174,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     udfs.append(
                         UDF(
                             func=chained_func,
-                            return_type=return_type,
                             args_offsets=udf_info.args,
                             kwargs_offsets=udf_info.kwargs,
+                            return_type=return_type,
                             result_id=udf_info.result_id,
                         )
                     )

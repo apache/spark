@@ -123,9 +123,9 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
         """Assign ``udtf_cls`` to ``handler`` and return the handler."""
         udtf = UDTF(
             udtf_cls=udtf_cls,
-            return_type=return_type,
             args_offsets=list(args),
             kwargs_offsets=kwargs or {},
+            return_type=return_type,
             partition_child_indexes=list(partition_child_indexes),
             analyze_result=analyze_result,
             name="test_udtf",

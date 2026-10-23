@@ -121,9 +121,9 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
             [
                 UDF(
                     func=udf,
-                    return_type=cls._RETURN_TYPE,
                     args_offsets=arg_offsets,
                     kwargs_offsets={},
+                    return_type=cls._RETURN_TYPE,
                     result_id=0,
                 )
             ]
@@ -242,9 +242,9 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
             [
                 UDF(
                     func=udf,
-                    return_type=cls._RETURN_TYPE,
                     args_offsets=cls._ARG_OFFSETS,
                     kwargs_offsets={},
+                    return_type=cls._RETURN_TYPE,
                     result_id=0,
                 )
             ]

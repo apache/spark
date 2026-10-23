@@ -99,9 +99,9 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
             [
                 UDF(
                     func=udf,
-                    return_type=cls._GROUPED_RETURN_TYPE,
                     args_offsets=arg_offsets,
                     kwargs_offsets={},
+                    return_type=cls._GROUPED_RETURN_TYPE,
                     result_id=0,
                 )
             ]
@@ -118,9 +118,9 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
         """A pandas UDF as ``assign_udfs`` takes it."""
         return UDF(
             func=func,
-            return_type=return_type or LongType(),
             args_offsets=list(args),
             kwargs_offsets=dict(kwargs or {}),
+            return_type=return_type or LongType(),
             result_id=0,
         )
 

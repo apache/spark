@@ -283,9 +283,9 @@ class AssignUDFsTests(PySparkBaseTestCase):
             [
                 UDF(
                     func=self._stop,
-                    return_type=LongType(),
                     args_offsets=[1],
                     kwargs_offsets={"y": 2},
+                    return_type=LongType(),
                     result_id=0,
                 )
             ]

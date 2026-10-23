@@ -129,9 +129,9 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
         """A UDF as ``assign_udfs`` takes it."""
         return UDF(
             func=func,
-            return_type=return_type or LongType(),
             args_offsets=args_offsets,
             kwargs_offsets=kwargs_offsets or {},
+            return_type=return_type or LongType(),
             result_id=0,
         )
 

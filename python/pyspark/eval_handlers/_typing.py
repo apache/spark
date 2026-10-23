@@ -49,11 +49,11 @@ class UDF:
     # The chained function, unwrapped: the pickled object itself (an incremental Aggregator) with
     # its signature. assign_udfs keeps the wrapped function on the handler.
     func: Callable[..., Any]
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
     # The DataType of the last function in the chain; a StructType for the eval types that
     # return rows.
     return_type: Any
-    args_offsets: list[int]
-    kwargs_offsets: dict[str, int]
     # The id the profiler reports the UDF's results under.
     result_id: int
 
@@ -72,9 +72,9 @@ class UDTF:
 
     # The user's UDTF class, as unpickled.
     udtf_cls: type
-    return_type: "StructType"
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
+    return_type: "StructType"
     # The child indexes of the TABLE argument's PARTITION BY expressions, if any.
     partition_child_indexes: list[int]
     # Passed to the UDTF's __init__ when it takes one argument.
