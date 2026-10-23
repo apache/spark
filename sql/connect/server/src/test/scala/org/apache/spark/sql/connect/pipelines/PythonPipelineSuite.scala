@@ -1641,6 +1641,8 @@ class PythonPipelineSuite
     "WITH v AS (SELECT 1 AS id) UPDATE some_table SET id = 2 WHERE id IN (SELECT id FROM v)",
     "WITH v AS (SELECT 1 AS id) DELETE FROM some_table WHERE id IN (SELECT id FROM v)",
     "FROM some_view INSERT INTO some_table SELECT * INSERT INTO some_new_table SELECT *",
+    "WITH v AS (SELECT 1 AS id) FROM v INSERT INTO some_table SELECT * " +
+      "INSERT INTO some_new_table SELECT *",
     "ALTER TABLE some_table RENAME TO some_new_table",
     "CREATE NAMESPACE some_namespace",
     "DROP VIEW some_view",
