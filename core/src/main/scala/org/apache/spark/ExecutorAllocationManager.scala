@@ -835,7 +835,8 @@ private[spark] class ExecutorAllocationManager(
     private val recoveredStageAttempts = ConcurrentHashMap.newKeySet[StageAttempt]()
 
     // Stages already completed here, so reconcile() cannot resurrect one from a stale
-    // AppStatusStore snapshot. A StageAttempt is two Ints, so the bound is a few tens of MB.
+    // AppStatusStore snapshot. The cache grows with the number of completed stage attempts,
+    // about 100 bytes each, so it holds about 100 MB only if it reaches the bound.
     private val recentlyCompletedStageAttempts = CacheBuilder.newBuilder()
       .maximumSize(1000000)
       .build[StageAttempt, java.lang.Boolean]()
