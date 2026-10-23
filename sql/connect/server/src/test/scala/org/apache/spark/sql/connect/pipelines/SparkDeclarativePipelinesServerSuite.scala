@@ -1339,4 +1339,27 @@ class SparkDeclarativePipelinesServerSuite
       assert(response.hasSqlCommandResult)
     }
   }
+
+  namedGridTest(
+    "SPARK-60481: blockUnsupportedSqlCommand catches INSERT OVERWRITE DIRECTORY " +
+      "without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        withTempDir { dir =>
+          val graphId = createDataflowGraph
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = sqlRelation(
+              s"INSERT OVERWRITE DIRECTORY '${dir.toURI}' USING parquet SELECT 1 AS id"))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the directory was not overwritten as a side effect.
+          assert(dir.listFiles().isEmpty)
+        }
+      }
+  }
 }
