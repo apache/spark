@@ -308,8 +308,8 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: aggregate lambda is not narrowed") {
-    // TODO: narrow the input of a higher-order `aggregate`; today it is read whole even
-    // though only `parts` sizes are needed
+    // Not narrowed today, independently of generators: nested pruning does not look inside a
+    // higher-order `aggregate`, so `items` is read whole although only `parts` sizes are needed
     checkPrunedQuery(
       "select id, aggregate(items, 0L, (acc, i) -> acc + size(i.parts)) as total_parts " +
         "from orders",
@@ -344,7 +344,7 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: exists subquery over an explode is not pruned") {
-    // TODO: prune through the semi join an exists subquery is rewritten into; today it
+    // Not pruned through yet (follow-up): the semi join an exists subquery is rewritten into
     // blocks pruning on both sides
     checkPrunedQuery(
       """select id, item.sku
@@ -377,9 +377,10 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: rollup over exploded fields prunes only the outer element") {
-    // TODO: have NestedColumnAliasing push aggregate-input extractions below the Expand.
-    // It extracts `part.price` above the Expand but grouping keys below it, so the bare
-    // `part` element flows through the Expand whole and the full inner struct is read.
+    // Not pruned through yet (follow-up): NestedColumnAliasing could push aggregate-input
+    // extractions below the Expand. It extracts `part.price` above the Expand but grouping
+    // keys below it, so the bare `part` element flows through the Expand whole and the full
+    // inner struct is read.
     // In the cube test below the inner field is a grouping key instead, so both
     // generators are narrowed before the Expand matters
     checkPrunedQuery(
@@ -510,7 +511,7 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: an explode of a map in the chain reads the map whole") {
-    // TODO: prune the map through its explode; today maps are read whole. The array
+    // Not pruned through yet (follow-up): a map is read whole through its explode. The array
     // explode in the same chain still prunes, and `item.sku` being the single field used
     // lets GeneratorNestedColumnAliasing narrow `explode(items)` itself, so no size()
     // field is needed either
@@ -523,7 +524,8 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: map_keys and map_values read the map whole") {
-    // TODO: narrow the map's value struct to `score`; today it is read whole
+    // Not narrowed today, independently of generators: the map's value struct is read whole
+    // although only `score` is used
     checkPrunedQuery(
       "select id, map_keys(tags)[0] as k0, map_values(tags)[0].score as s0 from orders",
       s"struct<id:int,tags:$fullTagsType>")
@@ -737,8 +739,8 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: an explode above a join is not pruned through") {
-    // TODO: prune through generators that sit above a Join instead of directly over the
-    // scan. Today the whole `items` column is read; the join itself still prunes
+    // Not pruned through yet (follow-up): generators that sit above a Join instead of directly
+    // over the scan. The whole `items` column is read; the join itself still prunes
     // top-level columns. This shape (join a dimension table, then LATERAL VIEW) is
     // common in production ETL.
     checkPrunedQuery(
@@ -815,7 +817,8 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: nested transform rebuilding slim structs") {
-    // TODO: narrow the inner transform lambda; today only the outer one is narrowed
+    // Not narrowed today, independently of generators: nested pruning through `transform`
+    // narrows the outer lambda only, not the inner one
     checkPrunedQuery(
       """select id, transform(items,
         |  i -> struct(i.sku as sku,
@@ -838,8 +841,8 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: a null filter on the inner array reads that array whole") {
-    // TODO: `item.parts is not null` needs only the array's nullability, but today it
-    // keeps every field of `parts`; the element itself is narrowed
+    // Not pruned yet (follow-up): `item.parts is not null` needs only the array's nullability,
+    // but it keeps every field of `parts`; the element itself is narrowed
     checkPrunedQuery(
       """select item.sku
         |from orders
