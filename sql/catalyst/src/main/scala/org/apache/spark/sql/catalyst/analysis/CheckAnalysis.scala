@@ -1296,10 +1296,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
   }
 
   /**
-   * Checks that user-defined routines that are not created by SQL DDL, such as Python UDFs and
-   * registered Scala UDFs, declare only a plain FILE in their return type, as
-   * [[TypeUtils.checkNoQualifierInRegisteredRoutineReturnType]] does when they are registered.
-   * A non-scalar Python UDF is skipped, as its data type is the schema of the rows it returns.
+   * Checks that the [[UserDefinedExpression]]s in a query declare only a plain FILE in their
+   * return type, as [[TypeUtils.checkNoQualifierInRegisteredRoutineReturnType]] does when a
+   * routine is registered. This covers routines whose signature is not checked when they are
+   * created, such as UDFs that are not registered and UDAF classes registered with
+   * `CREATE FUNCTION ... AS`. SQL functions are checked by `CREATE FUNCTION`. V2 catalog functions
+   * are covered only when they are bound as an [[ApplyFunctionExpression]]. A non-scalar Python
+   * UDF is skipped, as its data type is the schema of the rows it returns.
    */
   private def checkFileTypeInUserDefinedRoutines(plan: LogicalPlan): Unit = {
     if (SQLConf.get.isFileTypeEnabled) {

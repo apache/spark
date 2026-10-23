@@ -358,14 +358,16 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       case _ => cls
     }
 
-  // FILE has no defined ordering, so it cannot be a partition or clustering column.
+  // FILE has no defined ordering, so it cannot be a partition, bucket or clustering column. A
+  // bucket column is reported as a partition column, as for the V2 `bucket` transform.
   private def checkNoFileTypePartitionOrClusteringColumn(
       schema: StructType,
       table: CatalogTable): Unit = {
-    table.partitionColumnNames.foreach { name =>
-      schema.find(f => conf.resolver(f.name, name))
-        .foreach(checkNoFileTypeInColumnUsage(_, "PARTITION_COLUMN"))
-    }
+    (table.partitionColumnNames ++ table.bucketSpec.toSeq.flatMap(_.bucketColumnNames))
+      .foreach { name =>
+        schema.find(f => conf.resolver(f.name, name))
+          .foreach(checkNoFileTypeInColumnUsage(_, "PARTITION_COLUMN"))
+      }
     table.clusterBySpec.foreach(checkNoFileTypeClusteringColumn(schema, _, conf.resolver))
   }
 

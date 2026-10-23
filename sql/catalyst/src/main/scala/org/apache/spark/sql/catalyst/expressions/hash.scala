@@ -398,8 +398,7 @@ abstract class HashExpression[E] extends Expression {
         messageParameters = Map("functionName" -> toSQLId(prettyName)))
     } else if (children.exists(child => hasFileType(child.dataType))) {
       // FILE is not comparable, so hashing it with a hash function such as `hash` or `xxhash64` is
-      // rejected rather than hashing the underlying struct. Grouping, joining and partitioning by
-      // a FILE are rejected by the analyzer.
+      // rejected. Grouping, joining and partitioning by a FILE are rejected by the analyzer.
       DataTypeMismatch(
         errorSubClass = "HASH_FILE_TYPE",
         messageParameters = Map("functionName" -> toSQLId(prettyName)))

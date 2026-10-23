@@ -188,9 +188,27 @@ object TypeUtils extends QueryErrorsBase {
    * holds a FILE without a qualifier, as a table cannot store one.
    */
   def checkNoUnknownFileTypeWrite(columns: Seq[Attribute]): Unit = {
-    val unknownCols = columns.filter(c => containsUnknownFileType(c.dataType))
+    checkNoUnknownFileTypeInColumns(columns.map(c => Seq(c.name) -> c.dataType))
+  }
+
+  /**
+   * Fails if a column of `schema`, which a command such as CREATE TABLE LIKE stores in a new
+   * table, holds a FILE without a qualifier.
+   */
+  def checkNoUnknownFileTypeInTableSchema(schema: StructType): Unit = {
+    checkNoUnknownFileTypeInColumns(schema.fields.toSeq.map(f => Seq(f.name) -> f.dataType))
+  }
+
+  /**
+   * Fails if any of `columns`, given as the path of a column and the type it would be stored
+   * with, holds a FILE without a qualifier.
+   */
+  def checkNoUnknownFileTypeInColumns(columns: Seq[(Seq[String], DataType)]): Unit = {
+    val unknownCols = columns.collect {
+      case (path, dataType) if containsUnknownFileType(dataType) => path
+    }
     if (unknownCols.nonEmpty) {
-      throw QueryCompilationErrors.fileTypeUnknownWriteError(unknownCols.map(_.name))
+      throw QueryCompilationErrors.fileTypeUnknownWriteError(unknownCols)
     }
   }
 

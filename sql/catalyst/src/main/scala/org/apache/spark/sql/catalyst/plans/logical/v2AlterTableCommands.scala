@@ -274,6 +274,8 @@ case class AlterColumns(
     table: LogicalPlan,
     specs: Seq[AlterColumnSpec],
     fromCommentOn: Boolean = false) extends AlterTableCommand {
+  specs.foreach(_.newDataType.foreach(TypeUtils.checkFileTypeHasQualifier))
+
   override def changes: Seq[TableChange] = {
     specs.flatMap { spec =>
       val column = spec.column

@@ -549,7 +549,7 @@ class Resolver(
   /**
    * [[Distinct]] operator doesn't require any special resolution.
    * We validate results of the resolution using the [[OperatorWithUncomparableTypeValidator]]
-   * ([[MapType]] and [[VariantType]] are not supported under [[Distinct]] operator).
+   * ([[MapType]], [[VariantType]] and [[FileType]] are not supported under [[Distinct]] operator).
    *
    * `hiddenOutput` and `availableAliases` are reset when [[Distinct]] is reached during tree
    * traversal.

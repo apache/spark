@@ -5184,11 +5184,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
-  def fileTypeUnknownWriteError(colNames: Seq[String]): Throwable = {
+  def fileTypeUnknownWriteError(colNames: Seq[Seq[String]]): Throwable = {
     new AnalysisException(
       errorClass = "FILE_TYPE_UNKNOWN_WRITE",
-      messageParameters = Map(
-        "colNames" -> colNames.map(quoteIdentifier).mkString("[", ", ", "]")))
+      messageParameters = Map("colNames" -> colNames.map(toSQLId).mkString("[", ", ", "]")))
   }
 
   def fileTypeUnsupportedColumnUsageError(field: StructField, usage: String): Throwable = {

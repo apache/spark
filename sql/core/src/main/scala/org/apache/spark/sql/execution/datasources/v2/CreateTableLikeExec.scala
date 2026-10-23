@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.CatalogUtils
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.SerdeInfo
-import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, Identifier, Table, TableCatalog, TableInfo, V1Table}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -60,6 +60,9 @@ case class CreateTableLikeExec(
   override def output: Seq[Attribute] = Seq.empty
 
   override protected def run(): Seq[InternalRow] = {
+    // A view can hold a FILE without a qualifier, which a table cannot store.
+    TypeUtils.checkNoUnknownFileTypeInTableSchema(
+      CatalogV2Util.v2ColumnsToStructType(targetColumns))
     if (!targetCatalog.tableExists(targetIdent)) {
       try {
         val tableInfo = new TableInfo.Builder()
