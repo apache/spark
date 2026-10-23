@@ -21,6 +21,7 @@ import java.io.IOException;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
@@ -130,6 +131,19 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
       InputSplit inputSplit,
       TaskAttemptContext taskAttemptContext,
       OrcTail orcTail) throws IOException {
+    initialize(inputSplit, taskAttemptContext, orcTail, null);
+  }
+
+  /**
+   * Initialize ORC file reader and batch record reader with the search argument to push down,
+   * or null if there is none.
+   * Please note that `initBatch` is needed to be called after this.
+   */
+  public void initialize(
+      InputSplit inputSplit,
+      TaskAttemptContext taskAttemptContext,
+      OrcTail orcTail,
+      SearchArgument sarg) throws IOException {
     FileSplit fileSplit = (FileSplit)inputSplit;
     Configuration conf = taskAttemptContext.getConfiguration();
     Reader reader = OrcFile.createReader(
@@ -140,6 +154,11 @@ public class OrcColumnarBatchReader extends RecordReader<Void, ColumnarBatch> {
         .orcTail(orcTail));
     Reader.Options options =
       OrcInputFormat.buildOptions(conf, reader, fileSplit.getStart(), fileSplit.getLength());
+    if (sarg != null) {
+      // Set it directly rather than with `OrcInputFormat.setSearchArgument`, whose Kryo round
+      // trip truncates timestamp values to milliseconds.
+      options.searchArgument(sarg, reader.getSchema().getFieldNames().toArray(new String[0]));
+    }
     recordReader = reader.rows(options);
   }
 

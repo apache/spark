@@ -147,9 +147,11 @@ case class ExpandExec(
     // Tracks whether a column has the same output for all rows.
     // Size of sameOutput array should equal N.
     // If sameOutput(i) is true, then the i-th column has the same value for all output rows given
-    // an input row.
+    // an input row. Equal nondeterministic expressions can still produce a different value for
+    // every output row.
     val sameOutput: Array[Boolean] = output.indices.map { colIndex =>
-      projections.map(p => p(colIndex)).toSet.size == 1
+      val column = projections.map(p => p(colIndex))
+      column.toSet.size == 1 && column.head.deterministic
     }.toArray
 
     // Bind all the branch expressions once up front, so that identical expressions appearing in
