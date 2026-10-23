@@ -701,10 +701,17 @@ spark
 
 </div>
 
-Records that pass deduplication are emitted as they are processed, while watermark advancement and
-state eviction take effect at Real-time Mode batch boundaries. The trigger duration therefore
-determines how often cleanup has an opportunity to remove state after the watermark advances past a
-key's expiry.
+Records that pass deduplication are emitted as they are processed. Watermarks advance at Real-time
+Mode batch boundaries, and state eviction also runs at batch end by default. Setting
+`spark.sql.streaming.statefulOperator.incrementalCleanupFactor` to a positive value spreads eviction
+across input-record processing, with any remaining eligible state removed at batch end. Incremental
+cleanup uses the late-events watermark, which can trail the batch-end eviction watermark by one
+batch, so the trigger duration still determines when more state becomes eligible for removal.
+
+Incremental cleanup preserves duplicate suppression within the guaranteed watermark-delay interval.
+For records with the same key outside that interval, whether the old entry still suppresses a record
+can depend on cleanup progress and state-store iteration order. Leave the cleanup factor at its
+default of `0` to retain the batch-end-only behavior.
 
 ### Streaming aggregation
 
