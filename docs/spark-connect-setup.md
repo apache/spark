@@ -59,9 +59,10 @@ downloaded previously. In this example, Spark {{site.SPARK_VERSION_SHORT}} with 
 
 The script accepts the same options as `spark-submit`, so `--master`, `--jars`, `--packages`
 and `--conf` work as they do for any other Spark application. Everything that the server
-reads at startup, such as `spark.sql.extensions`, `spark.sql.catalog.*` definitions, `spark.jars`
-and `spark.jars.packages`, is set here: clients can only change runtime configuration of their
-own session.
+reads at startup, such as `spark.sql.extensions`, `spark.jars`, `spark.jars.packages` and the
+JARs that catalogs load, is set here. Clients can only change runtime configuration of their own
+session; that includes defining a catalog (`spark.sql.catalog.<name>`) whose JAR is already on the
+server.
 
 By default the server listens on port 15002 on all interfaces and runs as a background daemon
 (`./sbin/stop-connect-server.sh` stops it). Pass `--wait` as the first argument to keep it in

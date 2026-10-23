@@ -82,7 +82,7 @@ There are three ways to get one, in order of effort.
 
 ### In your own process
 
-Full PySpark can start a Spark Connect server inside the Python process, which is the Spark
+PySpark with the Connect dependencies can start a Spark Connect server inside the Python process, which is the Spark
 Connect code path without a separate server. It is the quickest way to try things and to run tests:
 
 ```python
@@ -91,7 +91,7 @@ from pyspark.sql import SparkSession
 spark = SparkSession.builder.remote("local[*]").getOrCreate()
 ```
 
-This needs the full `pyspark` package and Java installed, because the server still has to run
+This needs `pyspark[connect]` (or `pyspark-connect`) and Java installed, because the server still has to run
 somewhere. The server starts inside the Python process, on port 15002, and ends with it;
 `spark.stop()` shuts it down too. If something else already holds port 15002, the start fails
 with `java.net.BindException`. To keep one local server running across runs instead, see
@@ -202,8 +202,8 @@ python my_pipeline.py
 ```
 
 `pyspark-client` contains only the client: no JARs, no Py4J, no JVM needed, and it requires
-Python 3.11 or later. It accepts only `sc://` connection strings; the `local[*]` form needs the
-full `pyspark` package. [What you need locally](#what-you-need-locally) compares the packages.
+Python 3.11 or later. It accepts only `sc://` connection strings; the `local[*]` form needs
+`pyspark[connect]` or `pyspark-connect`. [What you need locally](#what-you-need-locally) compares the packages.
 
 ### Sessions
 
@@ -399,8 +399,9 @@ The `spark-pipelines` command line takes the server with `--remote`:
 spark-pipelines run --spec spark-pipeline.yml --remote sc://localhost:15002
 ```
 
-`spark-pipelines` ships with the full `pyspark` package and ignores `SPARK_REMOTE`. With only the
-thin client, run `python -m pyspark.pipelines.cli run --spec spark-pipeline.yml`, which has no
+`spark-pipelines` ships with the `pyspark` package and needs its `pipelines` extra
+(`pip install pyspark[pipelines]`); it ignores `SPARK_REMOTE`. With only the thin client, which
+includes those dependencies, run `python -m pyspark.pipelines.cli run --spec spark-pipeline.yml`, which has no
 `--remote` option and connects to whatever `SPARK_REMOTE` names.
 
 ## Configuring the session
@@ -423,8 +424,8 @@ spark.sparkContext.setLogLevel("WARN")
 
 Under Spark Connect that block splits in two, because some of those settings describe the driver,
 and the driver is not yours any more. Anything the server reads once when it starts (packages and
-JARs, `spark.sql.extensions`, catalog implementations, Hive support) moves to the command that
-starts the server:
+JARs, including the ones catalogs load, `spark.sql.extensions`, Hive support) moves to the command
+that starts the server:
 
 ```bash
 ./sbin/start-connect-server.sh \
@@ -448,8 +449,9 @@ spark.conf.set("spark.sql.session.timeZone", "UTC")
 The log level moves to the server as well (its `conf/log4j2.properties`), since the logs are the
 server's now.
 
-Spark Connect does not stop a client from asking for a startup-only setting; through the builder it
-warns and carries on without it. Asking for a package from the client produces this, and no package:
+In PySpark, Spark Connect does not stop a client from asking for a startup-only setting; through the
+builder it warns and carries on without it. Asking for a package from the client produces this, and
+no package:
 
 ```
 UserWarning: Failed to set spark.jars.packages (CANNOT_MODIFY_CONFIG)
@@ -460,8 +462,13 @@ the key and the condition are the stable parts.)
 
 `enableHiveSupport()` does the same with `CANNOT_MODIFY_STATIC_CONFIG` and hands back a session
 without Hive, which may go unnoticed until a table is missing. The same keys set after the session
-exists, with `spark.conf.set()`, raise instead of warning. The rule: a setting that describes how
-the server starts belongs wherever the server starts.
+exists, with `spark.conf.set()`, raise instead of warning.
+
+The Scala builder raises from the start: `.config("spark.jars.packages", ...)` makes
+`getOrCreate()` fail with `CANNOT_MODIFY_CONFIG`, and a static key such as `spark.sql.extensions`
+with `CANNOT_MODIFY_STATIC_CONFIG`. Its `enableHiveSupport()` never reaches the server; the client
+logs a warning and the session keeps the default catalog. Either way, the rule is the same: a
+setting that describes how the server starts belongs wherever the server starts.
 
 Catalogs are the case that looks like an exception. `spark.sql.catalog.<name>` is runtime
 configuration, so a client can set it and read it back, but the value is a class the server loads
@@ -613,21 +620,18 @@ DataFrame API, so they can be made while the application still runs on Spark Cla
 `NOT_IMPLEMENTED` with the full `pyspark` packages. Either is the signal that a line needs one of
 the replacements above.
 
-A session builder that works in both modes reads the connection string from the environment and
-falls back to a classic session, so the same file runs under `spark-submit` today and as a client
-tomorrow. Leave the master out of the builder: under `spark-submit` the master comes from the
+The same file can run under `spark-submit` today and as a client tomorrow without branching:
+`getOrCreate()` returns a Spark Connect session when `SPARK_REMOTE` is set and a classic one
+otherwise. Leave the master out of the builder. Under `spark-submit` the master comes from the
 command line, and a builder option would override it (builder options are set on the `SparkConf`,
 which takes precedence over `spark-submit`). Run as plain `python job.py` without `SPARK_REMOTE`,
 the classic session defaults to `local[*]`.
 
 ```python
-import os
-
 def build_session(app_name):
-    builder = SparkSession.builder.appName(app_name)
-    if "SPARK_REMOTE" in os.environ:   # a Spark Connect client
-        return builder.getOrCreate()
-    return builder.getOrCreate()       # Spark Classic; the master comes from spark-submit
+    # getOrCreate() connects to SPARK_REMOTE when it is set and otherwise builds a
+    # classic session, whose master comes from spark-submit.
+    return SparkSession.builder.appName(app_name).getOrCreate()
 ```
 
 One behavioral difference affects code that migrates without an error: Spark Classic checks a
@@ -677,11 +681,11 @@ in order.
 
 **Check which server answered.** Nothing in `sc://localhost:15002` says which Spark is supposed to
 be there, and a server left running from an earlier project will answer a newer client with errors
-that look like bugs. Print `spark.version` first. The related trap is `getOrCreate()` returning the
-process's existing session for a different URL, described under [Sessions](#sessions). A
-connection string that looks fine but is not is reported by the Python client as
-`INVALID_CONNECT_URL`: the part after the port must be empty, and parameter values cannot
-contain `/`.
+that look like bugs. Print `spark.version` first. The related trap in PySpark is `getOrCreate()`
+returning the process's existing session for a different URL, described under [Sessions](#sessions).
+A connection string that looks fine but is not is reported by the Python client as
+`INVALID_CONNECT_URL`: the path must be empty (`/;key=value` parameters are fine), and parameter
+values cannot contain `/`.
 
 **Read the error's name.** Spark Connect errors carry an error class in square brackets that says
 which side of the boundary the problem is on. `JVM_ATTRIBUTE_NOT_SUPPORTED` (or `NOT_IMPLEMENTED`
@@ -690,9 +694,9 @@ the local JVM (`sparkContext`, `rdd`, `_jvm`); use the replacement from
 [Migrating existing code](#migrating-existing-code). `PYTHON_VERSION_MISMATCH` and a
 `ModuleNotFoundError` inside a UDF point at the server's Python environment.
 `CANNOT_MODIFY_CONFIG` and `CANNOT_MODIFY_STATIC_CONFIG` mean the setting belongs to the server's
-startup command. `UNSUPPORTED_LOCAL_CONNECTION_STRING` means `create()` was called with `local[*]`.
-And one that does not raise at all: `enableHiveSupport()` warns and hands back a session without
-Hive, so read the warnings.
+startup command. In PySpark, `UNSUPPORTED_LOCAL_CONNECTION_STRING` means `create()` was called with
+`local[*]`. And one that does not raise at all: `enableHiveSupport()` hands back a session without
+Hive (PySpark warns; the Scala client only logs), so read the warnings.
 
 **Errors arrive late.** A typo in a column name fails at the first action, schema access or
 `explain()`, not on the line with the typo, and a `try`/`except` around the definition catches

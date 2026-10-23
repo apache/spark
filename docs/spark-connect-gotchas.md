@@ -461,8 +461,9 @@ If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColu
 # Session and Configuration Gotchas
 
 The gotchas above come from deferred analysis. The following three come from the session being a
-handle to a server rather than a process-local object. The first two produce no error; the third
-fails at startup or, with the port moved, silently reaches a different server. The
+handle to a server rather than a process-local object. In PySpark the first two produce no error
+(the Scala builder raises for the second); the third fails at startup or, with the port moved,
+silently reaches a different server. The
 [Spark Connect Programming Guide](spark-connect-programming-guide.html) describes the intended
 usage of each API.
 
@@ -493,9 +494,11 @@ rejects `local[*]` with `UNSUPPORTED_LOCAL_CONNECTION_STRING`.
 A client can only change runtime SQL configuration of its own session. Static SQL configuration
 (`spark.sql.catalogImplementation`, `spark.sql.extensions`) and core configuration
 (`spark.jars`, `spark.jars.packages`) are fixed when the server starts. `spark.conf.set()` on such a
-key raises `CANNOT_MODIFY_STATIC_CONFIG` or `CANNOT_MODIFY_CONFIG`, but the same key on the
-builder does not: the builder applies its options after the session exists, and a static one
-produces a `UserWarning` and no change.
+key raises `CANNOT_MODIFY_STATIC_CONFIG` or `CANNOT_MODIFY_CONFIG`, but in PySpark the same key on
+the builder does not: the builder applies its options after the session exists, and a static one
+produces a `UserWarning` and no change. The Scala builder raises the same error from
+`getOrCreate()` instead, except for `enableHiveSupport()`, which the Scala client drops with a log
+warning before contacting the server.
 
 ```python
 spark = SparkSession.builder.remote("sc://localhost:15002").enableHiveSupport().getOrCreate()
