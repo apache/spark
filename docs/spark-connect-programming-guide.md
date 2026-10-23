@@ -92,10 +92,10 @@ spark = SparkSession.builder.remote("local[*]").getOrCreate()
 ```
 
 This needs the full `pyspark` package and Java installed, because the server still has to run
-somewhere. The first call starts a server on port 15002 that stays up after the program exits and
-is reused by later runs; see [Faster local iteration with a persistent Connect server](spark-connect-setup.html#faster-local-iteration-with-a-persistent-connect-server)
-for how to stop it. Any server already listening on that port is reused the same way, whatever
-its version, so print `spark.version` when in doubt.
+somewhere. The server starts inside the Python process, on port 15002, and ends with it;
+`spark.stop()` shuts it down too. If something else already holds port 15002, the start fails
+with `java.net.BindException`. To keep one local server running across runs instead, see
+[Faster local iteration with a persistent Connect server](spark-connect-setup.html#faster-local-iteration-with-a-persistent-connect-server).
 
 ### From a Spark download
 
@@ -121,9 +121,9 @@ can reach the server. On a shared network, restrict it:
 ./sbin/start-connect-server.sh --conf spark.connect.grpc.binding.address=127.0.0.1
 ```
 
-Packages, JARs, SQL extensions, catalogs and Hive support are all passed to this command, because
-they describe the server's JVM; [Configuring the session](#configuring-the-session) explains why
-they cannot be set from a client.
+Packages, JARs, SQL extensions, the JARs a catalog loads, and Hive support are all passed to this
+command, because they describe the server's JVM; [Configuring the session](#configuring-the-session)
+explains why they cannot be set from a client.
 
 ### In a container
 
@@ -207,8 +207,8 @@ full `pyspark` package. [What you need locally](#what-you-need-locally) compares
 
 ### Sessions
 
-`getOrCreate()` returns the process's active session whenever one exists, even when the builder
-names a different server. A program that talks to several servers, or needs isolated sessions on
+`getOrCreate()` returns the existing session whenever one exists (the thread's active session,
+otherwise the process default), even when the builder names a different server. A program that talks to several servers, or needs isolated sessions on
 one server, uses `create()`, which always opens a new session:
 
 ```python
@@ -218,7 +218,8 @@ c = SparkSession.builder.remote("sc://server-b:15002").create()        # a new s
 ```
 
 Each session has its own temporary views, runtime configuration and uploaded files. `spark.stop()`
-releases that one session on the server; the server and every other session keep running. A client
+releases that one session on the server; the server and every other session keep running (with
+`local[*]`, where the server lives in the client process, `stop()` shuts it down as well). A client
 that exits without `stop()` leaves its session on the server until the server's session timeout
 expires it.
 
@@ -243,10 +244,23 @@ val orders = spark.createDataFrame(Seq(
 orders.groupBy("region").agg(round(avg("total"), 2).as("avg_ticket")).show()
 ```
 
-Run it as any JVM application; `spark-submit` is not involved. The Scala client caches sessions by
-their builder configuration, so two builders with different connection strings give different
-sessions, and `create()` always opens a new one. `spark-shell --remote sc://localhost:15002`
-gives an interactive shell against the server.
+Run it as any JVM application; `spark-submit` is not involved. Two things about the JVM side that
+`spark-submit` and `spark-shell` normally hide:
+
+- Depend on `spark-connect-client-jvm` only. `org.apache.spark.sql.SparkSession.builder()` is
+  shared between Spark Classic and Spark Connect, and when `spark-sql` is also on the classpath
+  it builds a classic session and ignores `remote()`. If both have to be present, set
+  `spark.api.mode` to `connect` on the builder (see
+  [Switching between Spark Connect and Spark Classic](spark-connect-setup.html#switching-between-spark-connect-and-spark-classic)).
+- On JDK 17 and later, start the JVM with `--add-opens=java.base/java.nio=ALL-UNNAMED`. The client
+  moves results as Arrow batches, and Arrow's memory layer needs that package open; without it
+  the first `createDataFrame` or `collect` fails with `sun.misc.Unsafe or
+  java.nio.DirectByteBuffer.<init>(long, int) not available`. `spark-submit` and
+  `spark-shell --remote` pass the flag for you.
+
+The Scala client caches sessions by their builder configuration, so two builders with different
+connection strings give different sessions, and `create()` always opens a new one.
+`spark-shell --remote sc://localhost:15002` gives an interactive shell against the server.
 
 UDFs and other operations that reference classes from your own build need those classes on the
 server; see [Shipping code and files](#shipping-code-and-files).
@@ -323,7 +337,7 @@ which is what a scheduler or CI step checks.
 export SPARK_REMOTE="sc://spark-connect.example.com:15002"
 
 python my_pipeline.py          # Python: the client package only
-java -jar my-pipeline.jar      # Scala or Java: a jar built against spark-connect-client-jvm
+java --add-opens=java.base/java.nio=ALL-UNNAMED -jar my-pipeline.jar   # Scala or Java, JDK 17+
 ./target/release/my-pipeline   # Rust: a plain binary
 ```
 
@@ -352,8 +366,8 @@ For a Python file the `spark.api.mode=connect` setting is required: without it `
 starts the program as a classic job, which fails with `MASTER_URL_NOT_SET` because there is no
 master. Setting `SPARK_REMOTE` in the environment instead of passing `--remote` has the same
 effect, since the Python process inherits it. For a jar, `--remote` alone is enough; do not add
-`spark.api.mode=connect` there, because for JVM programs that setting starts (or reuses) a local
-server instead of connecting to the one in `--remote`.
+`spark.api.mode=connect` there, because for JVM programs that setting starts a local server
+instead of connecting to the one in `--remote`.
 
 Each run of `spark-submit` still launches a JVM on the submitting machine, so a plain
 `python my_pipeline.py` with `SPARK_REMOTE` set is lighter and needs no Spark download.
@@ -436,8 +450,7 @@ Spark Connect does not stop a client from asking for a startup-only setting; thr
 warns and carries on without it. Asking for a package from the client produces this, and no package:
 
 ```
-UserWarning: Failed to set spark.jars.packages to Some(org.apache.spark:spark-sql-kafka-0-10_2.13:{{site.SPARK_VERSION_SHORT}})
-due to [CANNOT_MODIFY_CONFIG] Cannot modify the value of the Spark config ...
+UserWarning: Failed to set spark.jars.packages ... [CANNOT_MODIFY_CONFIG] ...
 ```
 
 `enableHiveSupport()` does the same with `CANNOT_MODIFY_STATIC_CONFIG` and hands back a session
@@ -517,7 +530,7 @@ Python on the executors, such as built-in functions and `toPandas()`, do not car
 Packages the UDF imports have to be installed in the server's Python too; `addArtifact` covers
 pure-Python modules, as shown above. Since Spark 4.2 Python UDFs are Arrow-optimized by default, so
 the server's Python needs PyArrow even for UDFs that never use Arrow themselves. On a server
-without it, every Python UDF fails on the executor with `ModuleNotFoundError: No module named
+without it, a Python UDF fails on the executor with `ModuleNotFoundError: No module named
 'pyarrow'` while `toPandas()` keeps working. Install PyArrow on the server, or declare the UDF with
 `useArrow=False`.
 
@@ -533,8 +546,8 @@ file system, object storage, or a file shipped with `addArtifact(..., file=True)
 to checkpoint locations and output paths.
 
 Local data goes the other way. `spark.createDataFrame(rows)` uploads the rows to the server, so it
-is the right tool for small lookup tables and test fixtures, and `spark.read.json(df)` (also `csv`
-and `xml`, since Spark 4.2) parses a DataFrame with a single string column, replacing
+is the right tool for small lookup tables and test fixtures, and `spark.read.json(df)`, `csv(df)` and
+`xml(df)` (all since Spark 4.2) parse a DataFrame with a single string column, replacing
 `spark.read.json(rdd)`:
 
 ```python
@@ -619,7 +632,7 @@ works through each case and how to write code that behaves the same in both mode
 ## What you need locally
 
 Much less than before: Python, the same minor version as the server's, and the `pyspark-client`
-package with its dependencies (PyArrow, pandas, NumPy, gRPC). No Java, no Spark download, no
+package with its dependencies (PyArrow, pandas, NumPy, gRPC, PyYAML, zstandard). No Java, no Spark download, no
 `SPARK_HOME`; that all lives on the server.
 
 The thing worth getting right is which package to install, because PyPI has four with nearly
@@ -643,9 +656,9 @@ and `PYTHONPATH` before starting, or they can shadow the thin client.
 The client and the server do not have to run the same Spark version. The supported direction is an
 older client against a newer server: the server's RPC definitions are kept backwards compatible,
 which is what lets a server be upgraded without touching its applications. The other way round can
-fail wherever the newer client relies on an RPC or a setting the server does not have; a 4.3 client
-on a 4.1 server runs SQL and reads tables but cannot build a DataFrame from a local list, because
-the older server reports a size limit in a format the newer client does not parse. Keep the client
+fail wherever the newer client relies on an RPC or a setting the server does not have; a 4.2 or
+later client on a 4.1 server runs SQL and reads tables but cannot build a DataFrame from a local
+list, because the older server reports a size limit in a format the newer client does not parse. Keep the client
 at or below the server's version, and print `spark.version` at startup in any application that can
 be pointed at servers of different versions.
 
@@ -658,8 +671,9 @@ in order.
 be there, and a server left running from an earlier project will answer a newer client with errors
 that look like bugs. Print `spark.version` first. The related trap is `getOrCreate()` returning the
 process's existing session for a different URL, described under [Sessions](#sessions). A
-connection string that looks fine but is not is reported as `INVALID_CONNECT_URL`: the part after
-the port must be empty, and parameter values cannot contain `/`.
+connection string that looks fine but is not is reported by the Python client as
+`INVALID_CONNECT_URL`: the part after the port must be empty, and parameter values cannot
+contain `/`.
 
 **Read the error's name.** Spark Connect errors carry an error class in square brackets that says
 which side of the boundary the problem is on. `JVM_ATTRIBUTE_NOT_SUPPORTED` means the code reached
