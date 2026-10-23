@@ -514,8 +514,8 @@ class DataFrameJoinSuite extends SharedSparkSession
           val statement = s"SELECT /*+ BROADCASTJOIN(t) */ * FROM $db1Name.t, $db2Name.t " +
             s"WHERE $db1Name.t.id = $db2Name.t.id"
           sql(statement).queryExecution.optimizedPlan match {
-            case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST), _)),
-              Some(HintInfo(Some(BROADCAST), _)))) =>
+            case Join(_, _, _, _, JoinHint(Some(HintInfo(Some(BROADCAST), _, _)),
+              Some(HintInfo(Some(BROADCAST), _, _)))) =>
             case _ => fail("broadcast hint not found in both tables")
           }
         }

@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern.{BLOOM_FILTER_MIGHT_CONTAIN, DYNAMIC_PRUNING_SUBQUERY, INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.internal.SQLConf
@@ -54,11 +53,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
 
   private def hintErrorHandler = conf.hintErrorHandler
 
-  // Marks a hinted join whose hint has been applied or reported. The optimizer runs this rule on
-  // a subquery before hoisting it into the main plan, where the join is visited again. A rule
-  // that rebuilds the join in between drops the tag, so a Bloom filter already built from the
-  // hinted side also counts as the hint applied.
-  private val HINT_DECIDED = TreeNodeTag[Unit]("runtimeFilterHintDecided")
+  // The optimizer runs this rule on a subquery before hoisting it into the main plan, where the
+  // join is visited again, possibly rebuilt by another rule in between. The join's hint records
+  // that its runtime filter hint was applied or reported, so it is not decided again.
+  private def isRuntimeFilterHintDecided(hint: JoinHint): Boolean =
+    hint.leftHint.exists(_.runtimeFilterDecided) || hint.rightHint.exists(_.runtimeFilterDecided)
+
+  private def markRuntimeFilterHintDecided(join: Join): Join = {
+    def mark(hintInfo: Option[HintInfo]): Option[HintInfo] = hintInfo.map { h =>
+      if (h.runtimeFilterSource) h.copy(runtimeFilterDecided = true) else h
+    }
+    val marked = join.copy(hint = JoinHint(mark(join.hint.leftHint), mark(join.hint.rightHint)))
+    marked.copyTagsFrom(join)
+    marked
+  }
 
   private case class FilterCreationSide(
       key: Expression,
@@ -465,27 +473,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   /**
-   * Whether `plan` has a Bloom filter on `key`, built from `creationKey` when that is given.
+   * Whether `plan` constrains `key` to a literal, e.g. a partition key fixed by a static partition
+   * filter. Every row then has the same key, so a filter on it prunes next to nothing.
    */
-  private def hasBloomFilter(
-      plan: LogicalPlan,
-      key: Expression,
-      creationKey: Option[Expression] = None): Boolean = {
-    def builtFrom(bloomFilter: Expression, creationKey: Expression): Boolean = {
-      bloomFilter.exists {
-        case s: ScalarSubquery => s.plan.exists(_.expressions.exists(_.exists {
-          case BloomFilterAggregate(XxHash64(Seq(k), _), _, _, _, _) =>
-            k.semanticEquals(creationKey)
-          case _ => false
-        }))
-        case _ => false
-      }
+  private def isFixedByLiteral(plan: LogicalPlan, key: Expression): Boolean = {
+    def fixes(l: Expression, r: Expression): Boolean =
+      l.semanticEquals(key) && r.foldable || r.semanticEquals(key) && l.foldable
+    plan.constraints.exists {
+      case EqualTo(l, r) => fixes(l, r)
+      case EqualNullSafe(l, r) => fixes(l, r)
+      case _ => false
     }
+  }
+
+  /** Whether `plan` has a Bloom filter on `key`. */
+  private def hasBloomFilter(plan: LogicalPlan, key: Expression): Boolean = {
     plan.exists {
       case Filter(condition, _) =>
         splitConjunctivePredicates(condition).exists {
-          case BloomFilterMightContain(bloomFilter, XxHash64(Seq(valueExpression), _))
-            if valueExpression.fastEquals(key) => creationKey.forall(builtFrom(bloomFilter, _))
+          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _)) =>
+            valueExpression.fastEquals(key)
           case _ => false
         }
       case _ => false
@@ -497,7 +504,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val numFilterThreshold = conf.getConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD)
     val bloomFilterEnabled = conf.runtimeFilterBloomFilterEnabled
     plan transformUp {
-      case join: Join if join.getTagValue(HINT_DECIDED).isDefined => join
+      case join: Join if isRuntimeFilterHintDecided(join.hint) => join
       // Only a hinted join has anything to do with Bloom filters disabled.
       case join: Join if !bloomFilterEnabled && !hasRuntimeFilterHint(join.hint) => join
       case join @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, _, _, left, right, hint) =>
@@ -529,8 +536,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         // 2. The application side is not the hinted source, which is never itself filtered
         // 3. The join is a shuffle join, or a broadcast join with a shuffle below it -- an
         //    estimate of whether the filter pays off, so a hint waives it
-        // 4. There is no Bloom filter on the application side's key yet, or, from a hinted
-        //    creation side, none built from that side
+        // 4. There is no Bloom filter on the application side's key yet, and the key is not fixed
+        //    by a literal, unless the creation side is hinted
         def tryInject(
             applicationSide: LogicalPlan,
             currentApplicationSide: LogicalPlan,
@@ -555,12 +562,6 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           } else if (creationHinted ||
             !(applicationHinted || hasShuffle || probablyHasShuffle(applicationSide))) {
             None
-          } else if (applicationHinted &&
-            hasBloomFilter(currentApplicationSide, applicationSideKey, Some(creationSideKey))) {
-            // Built from the hinted side in an earlier pass, before a rule rebuilt the join and
-            // dropped its HINT_DECIDED tag.
-            appliedHint = true
-            None
           } else if (!applicationHinted &&
             hasBloomFilter(currentApplicationSide, applicationSideKey)) {
             // The heuristics add one filter per key; a hinted side adds its own even then.
@@ -568,6 +569,10 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           } else {
             extractBeneficialFilterCreatePlan(applicationSide, creationSide,
               applicationSideKey, creationSideKey, applicationHinted)
+              // Checked last, as computing the constraints may be costly.
+              .filterOrElse(
+                _ => applicationHinted || !isFixedByLiteral(applicationSide, applicationSideKey),
+                "the key is fixed by a literal")
               .flatMap(injectFilter(applicationSideKey, currentApplicationSide, _))
               .fold(reason => blocked(reason), Some(_))
           }
@@ -624,9 +629,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           reportHintNotApplied(join,
             notAppliedReason.getOrElse("no runtime filter could be built from the hinted side"))
         }
-        val result = join.withNewChildren(Seq(newLeft, newRight))
-        if (hasRuntimeFilterHint(hint)) result.setTagValue(HINT_DECIDED, ())
-        result
+        val result = join.withNewChildren(Seq(newLeft, newRight)).asInstanceOf[Join]
+        if (hasRuntimeFilterHint(hint)) markRuntimeFilterHintDecided(result) else result
       case join @ Join(_, _, _, _, hint) if hasRuntimeFilterHint(hint) =>
         // A runtime filter is built from the join keys, so a join without equi-join keys has
         // nothing to build from.
@@ -635,8 +639,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         } else {
           "no equi-join keys"
         })
-        join.setTagValue(HINT_DECIDED, ())
-        join
+        markRuntimeFilterHintDecided(join)
     }
   }
 
