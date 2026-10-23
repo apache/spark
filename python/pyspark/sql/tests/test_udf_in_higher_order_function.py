@@ -152,6 +152,36 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: times_ten(-plus_one(x))).alias("r")),
             df.select(sf.transform("values", lambda x: (-(x + 1)) * 10).alias("r")),
         )
+        # Reads the index and the inner result, but not the element itself.
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x, i: times_ten(plus_one(x) + i)).alias("r")),
+            df.select(sf.transform("values", lambda x, i: ((x + 1) + i) * 10).alias("r")),
+        )
+
+    def test_nested_udf_two_levels_inside_composite_argument(self):
+        # `f(g(h(x)) + 1)`: the composite argument of `f` holds the lifted call `g(h(x))`, which
+        # itself holds the lifted call `h(x)`. `g(h(x))` must be substituted whole; a raw `g` left
+        # behind could not be lifted again over a nondeterministic `h` and failed at runtime.
+        import random
+
+        df = self.spark.createDataFrame([([1, 2, 3],)], "values array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        times_ten = udf(lambda x: x * 10, IntegerType())
+        # Nondeterministic, but returns its input unchanged so the expected result is known.
+        same = udf(lambda x: x + 0 * random.randint(0, 1), IntegerType()).asNondeterministic()
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda x: times_ten(plus_one(plus_one(x)) + 1)).alias("r")
+            ),
+            df.select(sf.transform("values", lambda x: ((x + 2) + 1) * 10).alias("r")),
+        )
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda x: times_ten(plus_one(same(x)) + 1)).alias("r")
+            ),
+            df.select(sf.transform("values", lambda x: ((x + 1) + 1) * 10).alias("r")),
+        )
 
     def test_udf_with_outer_column_argument(self):
         # A non-element argument must be broadcast to every element of its row.
@@ -249,6 +279,38 @@ class UDFInHigherOrderFunctionTestsMixin:
             ),
             [([3, 2, 1],), ([],), (None,)],
         )
+
+    def test_array_sort_with_nondeterministic_udf_key(self):
+        # A per-element key is computed once per element, even by a nondeterministic UDF, so that
+        # an element has the same key on either side of a comparison. With a draw per call, the
+        # comparator would be inconsistent and the sort could fail with "Comparison method
+        # violates its general contract!".
+        import random
+
+        # Nondeterministic, but returns its input negated so the expected order is known.
+        negate = udf(lambda x: -x + 0 * random.randint(0, 1), IntegerType()).asNondeterministic()
+        keep = udf(lambda x: x, IntegerType())
+        df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
+        assertDataFrameEqual(
+            df.select(
+                sf.array_sort("values", lambda a, b: keep(negate(a)) - keep(negate(b))).alias("r")
+            ),
+            [([3, 2, 1],)],
+        )
+
+        # A random key: any order is valid, but the sort must succeed and keep every element.
+        key = udf(lambda x: random.randint(0, 1_000_000), IntegerType()).asNondeterministic()
+        values = list(range(1000))
+        df = self.spark.createDataFrame([(values,)], "values array<int>")
+        row = df.select(
+            sf.array_sort(
+                "values",
+                lambda a, b: sf.when(key(a) < key(b), sf.lit(-1))
+                .when(key(a) > key(b), sf.lit(1))
+                .otherwise(sf.lit(0)),
+            ).alias("r")
+        ).collect()[0]
+        self.assertEqual(sorted(row["r"]), values)
 
     def test_array_sort_pairwise_comparator(self):
         # One UDF call receiving both elements has no per-element key, so the UDF is precomputed
@@ -353,6 +415,32 @@ class UDFInHigherOrderFunctionTestsMixin:
         ).collect()[0]
         # If the two calls were deduplicated, every element would be exactly 0.
         self.assertTrue(any(v != 0 for v in row["r"]), row["r"])
+
+    def test_deterministic_udf_over_nondeterministic_udf_calls_are_distinct(self):
+        # `keep` is deterministic, but each `keep(draw(x))` wraps its own independent draw, so the
+        # two sides must not be collapsed into one call compared with itself. The same holds when
+        # the calls are re-lifted out of a nested lambda.
+        import uuid
+
+        draw = udf(lambda x: uuid.uuid4().hex, StringType()).asNondeterministic()
+        keep = udf(lambda s: s, StringType())
+
+        df = self.spark.createDataFrame([([1, 2, 3],)], "values array<int>")
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: keep(draw(x)) == keep(draw(x))).alias("r")),
+            [([False, False, False],)],
+        )
+
+        nested = self.spark.createDataFrame([([[1, 2], [3]],)], "values array<array<int>>")
+        assertDataFrameEqual(
+            nested.select(
+                sf.transform(
+                    "values",
+                    lambda a: sf.transform(a, lambda x: keep(draw(x)) == keep(draw(x))),
+                ).alias("r")
+            ),
+            [([[False, False], [False]],)],
+        )
 
     def test_fused_transforms_with_different_lengths(self):
         # SPARK-27052: two transforms over arrays of different per-row lengths and null layouts get
@@ -713,6 +801,59 @@ class UDFInHigherOrderFunctionTestsMixin:
         )
         # (1+1)+(2+1) + (3+1) = 9
         assertDataFrameEqual(grouped, [(9,)])
+
+    def test_udf_in_lambda_over_aggregate_result(self):
+        # Once lifted out of the lambda, the UDF reads the aggregate's result, so it must be
+        # evaluated above the aggregate. Below it, neither an aggregate function nor the grouped
+        # value of a grouping key exists, and the query failed at runtime.
+        df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3)], "k int, v int")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.groupBy("k").agg(
+                sf.sort_array(sf.transform(sf.collect_list("v"), lambda x: plus_one(x))).alias("r")
+            ),
+            [(1, [2, 3]), (2, [4])],
+        )
+        assertDataFrameEqual(
+            df.groupBy("k").agg(
+                sf.transform(sf.array(sf.sum("v")), lambda x: plus_one(x)).alias("r")
+            ),
+            [(1, [4]), (2, [4])],
+        )
+
+        arrays = self.spark.createDataFrame([([1, 2],), ([1, 2],), ([3],)], "values array<int>")
+        assertDataFrameEqual(
+            arrays.groupBy("values").agg(sf.transform("values", lambda x: plus_one(x)).alias("r")),
+            [([1, 2], [2, 3]), ([3], [4])],
+        )
+
+    def test_udf_in_lambda_in_outer_join_condition(self):
+        # A left outer join keeps a predicate over only its left side in the join condition. Once
+        # lifted, the UDF reads only the left side and is evaluated there, like a plain UDF.
+        left = self.spark.createDataFrame([(1, [1, 2]), (2, [3])], "k int, values array<int>")
+        right = self.spark.createDataFrame([(1, "a"), (2, "b")], "k int, v string")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        joined = left.join(
+            right,
+            (left.k == right.k) & sf.exists(left["values"], lambda x: plus_one(x) > 3),
+            "left_outer",
+        ).select(left.k, right.v)
+        assertDataFrameEqual(joined, [(1, None), (2, "b")])
+
+    def test_udf_in_lambda_in_inner_join_condition(self):
+        # The predicate reads both sides, so it stays in the join condition. Once lifted, the UDF
+        # reads only the left side and is evaluated there, as a plain one-side UDF is.
+        left = self.spark.createDataFrame([(1, [1, 2]), (2, [3])], "k int, values array<int>")
+        right = self.spark.createDataFrame([(1, 3), (2, 3), (2, 5)], "k int, t int")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        joined = left.join(
+            right,
+            (left.k == right.k) & sf.exists(left["values"], lambda x: plus_one(x) > right.t),
+        ).select(left.k, right.t)
+        assertDataFrameEqual(joined, [(2, 3)])
 
     def test_mixed_with_plain_python_udf(self):
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
