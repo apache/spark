@@ -602,24 +602,35 @@ projection and the filter itself, above the scan.
 A connector that can skip columns or rows adds the pushdown mix-ins to its `ScanBuilder`. The
 list, the order Spark applies them in, and the residual-filter contract are under
 [ScanBuilder](#scanbuilder). `JavaAdvancedDataSourceV2WithV2Filter` accepts only
-`i > <int literal>` and returns everything else for Spark to evaluate (the test's
-`assertInstanceOf` checks and the mirror-image `unsupported` stream are elided here):
+`i > <int literal>` and returns everything else for Spark to evaluate. The version below is
+adapted from it. The test connector asserts the shape of its own test inputs; a connector has to
+check the shape instead, because Spark can push `i > j` (two column references) as the same `>`
+predicate, and an unchecked cast would throw rather than hand the filter back. It also matches on
+the public `NamedReference` interface rather than the test's `FieldReference`:
 
 {% highlight java %}
 @Override
 public Predicate[] pushPredicates(Predicate[] predicates) {
-  Predicate[] supported = Arrays.stream(predicates).filter(f -> {
-    if (f.name().equals(">")) {
-      FieldReference column = (FieldReference) f.children()[0];
-      Literal value = (Literal) f.children()[1];
-      return column.describe().equals("i") && value.value() instanceof Integer;
+  List<Predicate> supported = new ArrayList<>();
+  List<Predicate> unsupported = new ArrayList<>();
+  for (Predicate p : predicates) {
+    if (isIGreaterThanInt(p)) {
+      supported.add(p);
     } else {
-      return false;
+      unsupported.add(p);
     }
-  }).toArray(Predicate[]::new);
-  Predicate[] unsupported = /* the complement of supported */;
-  this.predicates = supported;
-  return unsupported;
+  }
+  this.predicates = supported.toArray(new Predicate[0]);
+  return unsupported.toArray(new Predicate[0]);
+}
+
+private static boolean isIGreaterThanInt(Predicate p) {
+  return p.name().equals(">")
+      && p.children()[0] instanceof NamedReference column
+      && column.fieldNames().length == 1
+      && column.fieldNames()[0].equals("i")
+      && p.children()[1] instanceof Literal<?> value
+      && value.value() instanceof Integer;
 }
 
 @Override
