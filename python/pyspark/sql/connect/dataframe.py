@@ -2417,19 +2417,12 @@ class DataFrame(ParentDataFrame):
     def offset(self, num: int) -> ParentDataFrame:
         return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
-    def _checkpoint(
-        self,
-        *,
-        local: bool,
-        eager: bool,
-        storage_level: Optional[StorageLevel] = None,
-    ) -> ParentDataFrame:
+    def checkpoint(self, eager: bool = True) -> ParentDataFrame:
         relation_id = str(uuid.uuid4())
         cmd = plan.Checkpoint(
             child=self._plan,
-            local=local,
+            local=False,
             eager=eager,
-            storage_level=storage_level,
             relation_id=relation_id,
         )
         _, properties, self._execution_info = self._session.client.execute_command(
@@ -2441,16 +2434,24 @@ class DataFrame(ParentDataFrame):
             session=self._session,
         )
 
-    def checkpoint(self, eager: bool = True) -> ParentDataFrame:
-        return self._checkpoint(local=False, eager=eager)
-
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        return self._checkpoint(
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
             local=True,
             eager=eager,
             storage_level=storageLevel,
+            relation_id=relation_id,
+        )
+        _, properties, self._execution_info = self._session.client.execute_command(
+            cmd.command(self._session.client)
+        )
+        returned_relation_id = properties["checkpoint_command_result"]
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(returned_relation_id, self._session),
+            session=self._session,
         )
 
     def toJSON(self) -> ParentDataFrame:
