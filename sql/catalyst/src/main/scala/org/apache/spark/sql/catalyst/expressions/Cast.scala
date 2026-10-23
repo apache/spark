@@ -438,10 +438,14 @@ object Cast extends QueryErrorsBase {
   }
 
   /**
-   * Whether rendering a value of this type as a string reads the session time zone. Only the LTZ
-   * families carry an absolute instant that has to be localized; TIMESTAMP_NTZ, DATE and TIME
-   * render on a fixed grid, and a nested VARIANT renders through `VariantVal.toString` at UTC
-   * (only a top-level VARIANT reads the zone, via the `(VariantType, _)` arm).
+   * Whether this type node reads the session time zone when rendered as a string.
+   * ARRAY/MAP/STRUCT nodes return false; the caller uses `existsRecursively` to inspect
+   * nested types, while Python UDTs recursively check their `sqlType`.
+   *
+   * Only the LTZ families carry an absolute instant that has to be localized;
+   * TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders
+   * through `VariantVal.toString` at UTC (only a top-level VARIANT reads the zone,
+   * via the `(VariantType, _)` arm).
    */
   private def needsTimeZoneToString(dt: DataType): Boolean = dt match {
     case TimestampType | _: TimestampLTZNanosType => true
