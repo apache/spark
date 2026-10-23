@@ -19,12 +19,14 @@ package org.apache.spark.sql.execution.datasources
 
 import scala.annotation.tailrec
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.planning.ScanOperation
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Generate, LeafNode, LogicalPlan,
   Project}
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.catalyst.trees.TreePattern.GENERATE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
@@ -84,6 +86,10 @@ object SchemaPruning extends Rule[LogicalPlan] {
    */
   private[sql] object GeneratorsOverScan {
     def unapply(plan: LogicalPlan): Option[(Seq[Segment], Seq[Generate], LogicalPlan)] = {
+      if (!plan.containsPattern(GENERATE) || !conf.nestedSchemaPruningEnabled ||
+          !conf.nestedSchemaPruningThroughGenerateEnabled) {
+        return None
+      }
       @tailrec
       def collect(p: LogicalPlan, segments: Seq[Segment], generators: Seq[Generate])
           : Option[(Seq[Segment], Seq[Generate], LogicalPlan)] = p match {
@@ -119,13 +125,21 @@ object SchemaPruning extends Rule[LogicalPlan] {
     if (!conf.nestedSchemaPruningEnabled || !conf.nestedSchemaPruningThroughGenerateEnabled) {
       None
     } else {
-      // e.g. the `size(arr) > 0` filters inferred for a non-outer explode
-      op.transformAllExpressions {
-        case s @ Size(child, _) => s.copy(child = lengthOnly(child))
-      } match {
-        case sized @ GeneratorsOverScan(segments, generators, _) =>
-          pruneThroughGeneratorsImpl(sized, segments, generators, scanRelation)(pruneScan)
-        case _ => None
+      try {
+        // e.g. the `size(arr) > 0` filters inferred for a non-outer explode
+        op.transformAllExpressions {
+          case s @ Size(child, _) => s.copy(child = lengthOnly(child))
+        } match {
+          case sized @ GeneratorsOverScan(segments, generators, _) =>
+            pruneThroughGeneratorsImpl(sized, segments, generators, scanRelation)(pruneScan)
+          case _ => None
+        }
+      } catch {
+        // A missed optimization, not a failed query: keep the plan as it is.
+        case NonFatal(e) =>
+          logWarning(log"Failed to prune nested fields through generators; " +
+            log"the scan is pruned without them", e)
+          None
       }
     }
   }
@@ -199,7 +213,7 @@ object SchemaPruning extends Rule[LogicalPlan] {
           scanRootFields += field
         case _ =>
           inputReads += input
-          scanRootFields ++= scanRootFieldsOf(input, scanRelation, lowerElements)
+          scanRootFields ++= scanRootFieldsOf(input, scanRelation)
       }
     }
     pruneScan(segments.last, inputs.last._2, scanRootFields.toSeq)
@@ -207,14 +221,15 @@ object SchemaPruning extends Rule[LogicalPlan] {
       .filter(newOp => newOp.resolved && newOp.schema == op.schema)
   }
 
-  /** The root fields of scan columns that `expr` reads, ignoring generator elements. */
+  /** The root fields of scan columns that `expr` reads. */
   private def scanRootFieldsOf(
       expr: Expression,
-      scanRelation: LogicalPlan,
-      elements: Set[ExprId]): Seq[RootField] = {
-    // a name no scan column has, so that an element is not mistaken for a column of its name
+      scanRelation: LogicalPlan): Seq[RootField] = {
+    // Give every other attribute, e.g. a generator's element or the position of a posexplode,
+    // a name no scan column has, so that it is not mistaken for a column of its name.
     val renamed = expr.transform {
-      case a: Attribute if elements.contains(a.exprId) => a.withName(s"${a.name}#${a.exprId.id}")
+      case a: Attribute if !scanRelation.outputSet.contains(a) =>
+        a.withName(s"${a.name}#${a.exprId.id}")
     }
     val scanColumns = scanRelation.output.map(_.name).toSet
     identifyRootFields(Nil, Seq(renamed)).filter(f => scanColumns.contains(f.field.name))
@@ -224,6 +239,11 @@ object SchemaPruning extends Rule[LogicalPlan] {
    * Replaces `bottom` in `plan` with `newBottom`, whose output types are narrower, and
    * re-resolves every operator from there up: references take their child's new type, nested
    * field accesses are re-resolved by name and generator outputs take the new element type.
+   *
+   * Every access collected through [[SelectedField]] must be rewritten here by
+   * [[ProjectionOverSchema]]. A missed rewrite usually fails resolution or the output schema
+   * check, but a stale ordinal that lands on a sibling field of the same type would not, which
+   * is why references are matched by exprId rather than by name.
    */
   private def rebuildAbove(
       plan: LogicalPlan,

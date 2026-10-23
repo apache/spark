@@ -106,6 +106,12 @@ abstract class SchemaPruningSuite
   val ordersWithNulls =
     Order(0, Array(null, Item(1, "a", null), Item(2, "b", Array(null, Part(1, "p1", 1.5))))) ::
     Order(1, null) :: Nil
+  // a column named like the position output of a posexplode over another column
+  case class Point(a: Int, b: Int)
+  case class Pair(x: Int, y: Int)
+  case class Positioned(pos: Point, items: Array[Pair])
+  val positioned = Positioned(Point(1, 2), Array(Pair(10, 20), Pair(30, 40))) :: Nil
+
   case class Matrix(id: Int, rows: Array[Array[Part]])
   val matrices =
     Matrix(0, Array(Array(Part(1, "p1", 1.5)), Array(Part(2, "p2", 2.5), Part(3, "p3", 3.5)))) ::
@@ -783,6 +789,41 @@ abstract class SchemaPruningSuite
           Row(1, "p1") :: Row(2, "p2") :: Row(null, null) :: Row(null, null) :: Nil)
       } finally {
         q.stop()
+      }
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: a posexplode position named like a scan column") {
+    withDataSourceTable(positioned, "positioned") {
+      // `pos` below is both a struct column and the position of the posexplode; the generator
+      // input that is not a field path reads the position, not the column
+      val query = sql("select positioned.pos.a, t2.y from positioned " +
+        "lateral view posexplode(items) t1 as pos, item " +
+        "lateral view explode(array(t1.pos + item.x)) t2 as y")
+      checkScan(query, "struct<pos:struct<a:int>,items:array<struct<x:int>>>")
+      checkAnswer(query, Row(1, 10) :: Row(1, 31) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: size() rewritten in a generator chain with ANSI mode on") {
+    withDataSourceTable(orders, "orders") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+        // not outer: the inferred `size(...) > 0` filters read only the smallest fields
+        val query1 = sql("select part.pid from orders " +
+          "lateral view explode(items) t1 as item lateral view explode(item.parts) t2 as part")
+        checkScan(query1, "struct<items:array<struct<qty:int,parts:array<struct<pid:int>>>>>")
+        checkAnswer(query1, Row(1) :: Row(2) :: Nil)
+
+        // `size` of a null array is null under ANSI, with and without the rewrite
+        val sizes = s"select item.sku, size(item.parts) $explodeOrderParts"
+        val expected = withSQLConf(
+            SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED.key -> "false") {
+          sql(sizes).collect().toSeq
+        }
+        val query2 = sql(sizes)
+        checkScan(query2, "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
+        checkAnswer(query2, expected)
+        assert(expected.exists(_.isNullAt(1)))
       }
     }
   }
