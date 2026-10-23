@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateNamedStruct, Literal}
 import org.apache.spark.sql.catalyst.plans.GreaterThanOrEqualOp
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.types._
@@ -43,6 +43,34 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     }
   }
 
+  test("mixed timestamp tuples keep separate sort keys") {
+    val metadata = new MetadataBuilder().putString("comment", "timestamp key").build()
+    for {
+      (leftType, rightType) <- Seq(
+        (TimestampType, TimestampNTZType), (TimestampNTZType, TimestampType))
+    } {
+      val leftTimestamp = AttributeReference(
+        name = "ts", dataType = leftType, nullable = false, metadata = metadata)()
+      val rightTimestamp = AttributeReference(
+        name = "ts", dataType = rightType, nullable = false, metadata = metadata)()
+      val leftNumber = AttributeReference("n", IntegerType)()
+      val rightNumber = AttributeReference("n", LongType)()
+      val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(
+        leftOperand = CreateNamedStruct(Seq(
+          Literal("ts"), leftTimestamp, Literal("n"), leftNumber)),
+        rightOperand = CreateNamedStruct(Seq(
+          Literal("ts"), rightTimestamp, Literal("n"), rightNumber)),
+        normalizedOp = GreaterThanOrEqualOp
+      )
+      assert(leftKeys.length == 2)
+      assert(rightKeys.length == 2)
+      assert(leftKeys.head.dataType == TimestampType)
+      assert(rightKeys.head.dataType == TimestampType)
+      assert(leftKeys(1) == leftNumber)
+      assert(rightKeys(1) == rightNumber)
+    }
+  }
+
   test("timestamp coercion preserves other composite field types and properties") {
     val timestampField = StructField(
       name = "ts",
@@ -55,9 +83,9 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
       StructField(name = "d", dataType = DecimalType(38, 30), nullable = false),
       StructField(name = "n", dataType = IntegerType, nullable = false))
     val rightFields = Seq(
-      StructField("ts", TimestampType),
-      StructField("d", DecimalType(38, 30)),
-      StructField("n", LongType))
+      StructField(name = "ts", dataType = TimestampType),
+      StructField(name = "d", dataType = DecimalType(38, 30)),
+      StructField(name = "n", dataType = LongType))
     val leftType = ArrayType(StructType(leftFields), containsNull = false)
     val rightType = ArrayType(StructType(rightFields), containsNull = true)
     val expectedLeft = ArrayType(

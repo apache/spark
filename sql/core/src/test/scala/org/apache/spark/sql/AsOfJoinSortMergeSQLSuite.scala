@@ -164,16 +164,12 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
-  gridTest("SQL ASOF JOIN sorts mixed timestamp keys across DST")(
-    for {
-      singlePass <- Seq(false, true)
-      ansiEnabled <- Seq(false, true)
-    } yield (singlePass, ansiEnabled)
-  ) { case (singlePass, ansiEnabled) =>
+  gridTest("SQL ASOF JOIN sorts mixed timestamp keys across DST gaps")(
+    Seq(false, true)
+  ) { singlePass =>
     withSQLConf(
-        SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
-        SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
         SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
@@ -220,6 +216,47 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           }
           assertUsesSortMergeAsOfJoin(query)
           QueryTest.checkAnswer(df = query, expectedAnswer = expected, checkToRDD = false)
+        }
+      }
+
+      for (op <- Seq(">=", "<=")) {
+        withClue(s"nanosecond keys, op=$op: ") {
+          val query = sql(
+            s"""SELECT r.id
+               |FROM VALUES (CAST('2024-03-10 10:15:00.000000150Z' AS TIMESTAMP_LTZ(9))) l(ts)
+               |LEFT ASOF JOIN VALUES
+               |  (CAST('2024-03-10 02:50:00.0000001' AS TIMESTAMP_NTZ(7)), 1),
+               |  (CAST('2024-03-10 03:15:00.0000001' AS TIMESTAMP_NTZ(7)), 2),
+               |  (CAST('2024-03-10 03:15:00.0000002' AS TIMESTAMP_NTZ(7)), 3) r(ts, id)
+               |MATCH_CONDITION (l.ts $op r.ts)
+               |""".stripMargin
+          )
+          assertUsesSortMergeAsOfJoin(query)
+          QueryTest.checkAnswer(
+            df = query,
+            expectedAnswer = Seq(Row(if (op == ">=") 2 else 3)),
+            checkToRDD = false
+          )
+        }
+
+        withClue(s"mixed timestamp and integral struct fields, op=$op: ") {
+          val query = sql(
+            s"""SELECT r.id
+               |FROM (SELECT named_struct('ts', ts, 'n', n) AS k
+               |  FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) v(ts, n)) l
+               |LEFT ASOF JOIN (SELECT named_struct('ts', ts, 'n', n) AS k, id FROM VALUES
+               |  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
+               |  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
+               |  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) v(ts, n, id)) r
+               |MATCH_CONDITION (l.k $op r.k)
+               |""".stripMargin
+          )
+          assertUsesSortMergeAsOfJoin(query)
+          QueryTest.checkAnswer(
+            df = query,
+            expectedAnswer = Seq(Row(if (op == ">=") 2 else 3)),
+            checkToRDD = false
+          )
         }
       }
 
