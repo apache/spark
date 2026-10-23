@@ -7441,6 +7441,35 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-60497: a map-stage job that depends on a pipelined shuffle is rejected") {
+    // A map-stage job runs its missing ancestor stages, so a pipelined producer below its
+    // dependency would be co-scheduled without any of the pipelined-group setup of a result job.
+    // As in the result-job path, a pipelined shuffle below a regular one is rejected up front,
+    // both when the map stage reads it directly and when it sits below another regular shuffle.
+    // No stage is submitted and no partial state remains.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    // consumer --[regular, the map-stage job's dependency]-->
+    val directDep = new ShuffleDependency(consumerRdd, new HashPartitioner(2))
+    // consumer --[regular]--> mid --[regular, the map-stage job's dependency]-->
+    val midRdd = new MyRDD(sc, 2, List(new ShuffleDependency(consumerRdd, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val deepDep = new ShuffleDependency(midRdd, new HashPartitioner(2))
+    for (dep <- Seq(directDep, deepDep)) {
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submitMapStage(dep, listener = failListener)
+      assertPipelinedUnsupported(
+        failure.get(), "a map-stage job that depends on a pipelined shuffle")
+    }
+    assert(taskSets.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
   test("regular shuffle map-stage job with speculation enabled is NOT rejected (inertness)") {
     // The map-stage speculation fail-fast must be inert for a regular ShuffleDependency.
     sc.conf.set(config.SPECULATION_ENABLED, true)
