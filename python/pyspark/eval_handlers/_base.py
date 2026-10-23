@@ -160,12 +160,13 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def create_udf(
         cls,
         chained_func: Callable[..., Any],
-        profiling_func: Callable[..., Any],
         return_type: "DataType",
         udf_info: "UDFInfo",
+        runner_conf: "RunnerConf",
     ) -> UDF:
         """Build the ``UDF`` record of ``udf_info`` from ``chained_func``, its unpickled (and
-        chained) function, and ``profiling_func``, that function wrapped for profiling."""
+        chained) function, wrapping it for profiling and in ``fail_on_stopiteration``."""
+        profiling_func = cls._with_profiler(chained_func, udf_info.result_id, runner_conf)
         return UDF(
             func=(
                 fail_on_stopiteration(profiling_func)
@@ -177,6 +178,109 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
             kwargs_offsets=udf_info.kwargs,
             return_type=return_type,
         )
+
+    @classmethod
+    def _with_profiler(
+        cls, f: Callable[..., Any], result_id: int, runner_conf: "RunnerConf"
+    ) -> Callable[..., Any]:
+        """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is
+        set."""
+        # If f is from pyspark.sql.worker, it is to read/write data source.
+        # In this case, we check the data_source_profiler config.
+        module = getattr(f, "__module__", "")
+        if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
+            profiler = runner_conf.data_source_profiler
+        else:
+            profiler = runner_conf.udf_profiler
+        if profiler == "perf":
+            return cls._with_perf_profiler(f, result_id)
+        elif profiler == "memory":
+            return cls._with_memory_profiler(f, result_id)
+        else:
+            return f
+
+    @classmethod
+    def _with_perf_profiler(cls, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+        from pyspark.accumulators import SpecialAccumulatorIds, _deserialize_accumulator
+        from pyspark.sql.profiler import (
+            ProfileResultsParam,
+            ProfileResultsParamV2,
+            WorkerPerfProfiler,
+        )
+
+        accumulator = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        )
+        accumulator_v2 = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
+        )
+
+        if cls.is_iter_based:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                iterator = iter(f(*args, **kwargs))
+                while True:
+                    try:
+                        with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
+                            item = next(iterator)
+                        yield item
+                    except StopIteration:
+                        break
+
+        else:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
+                    ret = f(*args, **kwargs)
+                return ret
+
+        return profiling_func
+
+    @classmethod
+    def _with_memory_profiler(cls, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
+        import pyspark.memory_profiler_ext
+        from pyspark.accumulators import SpecialAccumulatorIds, _deserialize_accumulator
+        from pyspark.sql.profiler import (
+            ProfileResultsParam,
+            ProfileResultsParamV2,
+            WorkerMemoryProfiler,
+        )
+
+        if not pyspark.memory_profiler_ext.has_memory_profiler:
+            return f
+
+        accumulator = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
+        )
+
+        accumulator_v2 = _deserialize_accumulator(
+            SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
+        )
+
+        if cls.is_iter_based:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                g = f(*args, **kwargs)
+                iterator = iter(g)
+
+                while True:
+                    try:
+                        with WorkerMemoryProfiler(
+                            accumulator, accumulator_v2, result_id, g.gi_code
+                        ):
+                            item = next(iterator)
+                        yield item
+                    except StopIteration:
+                        break
+
+        else:
+
+            def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, f):
+                    ret = f(*args, **kwargs)
+                return ret
+
+        return profiling_func
 
     def __init__(
         self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"

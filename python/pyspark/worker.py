@@ -26,12 +26,8 @@ import warnings
 from typing import Any, BinaryIO, Callable
 
 from pyspark import shuffle
-from pyspark.accumulators import (
-    SpecialAccumulatorIds,
-    _accumulatorRegistry,
-    _deserialize_accumulator,
-)
-from pyspark.eval_handlers._base import EvalTypeHandler, get_eval_type_handler
+from pyspark.accumulators import _accumulatorRegistry
+from pyspark.eval_handlers._base import get_eval_type_handler
 from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import UDTFHandlerBase
 from pyspark.logger.worker_io import capture_outputs
@@ -53,7 +49,7 @@ from pyspark.util import (
     start_faulthandler_periodic_traceback,
     with_faulthandler,
 )
-from pyspark.worker_message import UDFInfo, UDTFInfo, WorkerInitInfo
+from pyspark.worker_message import UDTFInfo, WorkerInitInfo
 from pyspark.worker_metrics import WorkerMetrics
 from pyspark.worker_util import (
     EvalConf,
@@ -81,81 +77,6 @@ def chain(f: Callable[..., Any], g: Callable[..., Any]) -> Callable[..., Any]:
     return lambda *a: g(f(*a))
 
 
-def wrap_perf_profiler(f, iter_based, result_id):
-    from pyspark.sql.profiler import ProfileResultsParam, ProfileResultsParamV2, WorkerPerfProfiler
-
-    accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
-    )
-    accumulator_v2 = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
-    )
-
-    if iter_based:
-
-        def profiling_func(*args, **kwargs):
-            iterator = iter(f(*args, **kwargs))
-            while True:
-                try:
-                    with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
-                        item = next(iterator)
-                    yield item
-                except StopIteration:
-                    break
-
-    else:
-
-        def profiling_func(*args, **kwargs):
-            with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
-                ret = f(*args, **kwargs)
-            return ret
-
-    return profiling_func
-
-
-def wrap_memory_profiler(f, iter_based, result_id):
-    import pyspark.memory_profiler_ext
-    from pyspark.sql.profiler import (
-        ProfileResultsParam,
-        ProfileResultsParamV2,
-        WorkerMemoryProfiler,
-    )
-
-    if not pyspark.memory_profiler_ext.has_memory_profiler:
-        return f
-
-    accumulator = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER, None, ProfileResultsParam
-    )
-
-    accumulator_v2 = _deserialize_accumulator(
-        SpecialAccumulatorIds.SQL_UDF_PROFIER_V2, {}, ProfileResultsParamV2
-    )
-
-    if iter_based:
-
-        def profiling_func(*args, **kwargs):
-            g = f(*args, **kwargs)
-            iterator = iter(g)
-
-            while True:
-                try:
-                    with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, g.gi_code):
-                        item = next(iterator)
-                    yield item
-                except StopIteration:
-                    break
-
-    else:
-
-        def profiling_func(*args, **kwargs):
-            with WorkerMemoryProfiler(accumulator, accumulator_v2, result_id, f):
-                ret = f(*args, **kwargs)
-            return ret
-
-    return profiling_func
-
-
 def unpickle_and_chain(
     pickleSer: FramedSerializer, pickled_udfs: list[memoryview]
 ) -> tuple[Callable[..., Any], DataType]:
@@ -166,35 +87,6 @@ def unpickle_and_chain(
         f, return_type = read_command(pickleSer, udf)
         chained_func = chain(chained_func, f)
     return chained_func, return_type
-
-
-def read_single_udf(
-    pickleSer: FramedSerializer,
-    udf_info: UDFInfo,
-    handler_cls: type[EvalTypeHandler],
-    runner_conf: RunnerConf,
-) -> UDF:
-    chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
-
-    # If chained_func is from pyspark.sql.worker, it is to read/write data source.
-    # In this case, we check the data_source_profiler config.
-    module = getattr(chained_func, "__module__", "")
-    if isinstance(module, str) and module.startswith("pyspark.sql.worker."):
-        profiler = runner_conf.data_source_profiler
-    else:
-        profiler = runner_conf.udf_profiler
-    if profiler == "perf":
-        profiling_func = wrap_perf_profiler(
-            chained_func, handler_cls.is_iter_based, udf_info.result_id
-        )
-    elif profiler == "memory":
-        profiling_func = wrap_memory_profiler(
-            chained_func, handler_cls.is_iter_based, udf_info.result_id
-        )
-    else:
-        profiling_func = chained_func
-
-    return handler_cls.create_udf(chained_func, profiling_func, return_type, udf_info)
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
@@ -237,7 +129,7 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
         # UDF and UDTF runners fold profiling into func at construction time (see
-        # read_single_udf); only the classic RDD command carries a profiler of its own.
+        # EvalTypeHandler.create_udf); only the classic RDD command carries a profiler of its own.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))
@@ -256,7 +148,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             else:
                 assert isinstance(init_info.udf_info, list)
                 udfs = [
-                    read_single_udf(pickleSer, udf_info, handler_cls, runner_conf)
+                    handler_cls.create_udf(
+                        *unpickle_and_chain(pickleSer, udf_info.udfs), udf_info, runner_conf
+                    )
                     for udf_info in init_info.udf_info
                 ]
             handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
