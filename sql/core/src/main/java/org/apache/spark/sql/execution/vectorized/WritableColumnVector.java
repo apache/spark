@@ -130,8 +130,9 @@ public abstract class WritableColumnVector extends ColumnVector {
   }
 
   /**
-   * Returns true if this column vector holds no reference to data buffers.
+   * Returns true if this vector's own data buffers are released; vectors it owns are not checked.
    */
+  @VisibleForTesting
   public abstract boolean isFree();
 
   public void reserveAdditional(int additionalCapacity) {

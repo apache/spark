@@ -22,6 +22,7 @@ import java.util.{Optional, PrimitiveIterator}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.language.implicitConversions
+import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapred.FileSplit
@@ -1156,8 +1157,9 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
       reader.enableReturningBatches()
       reader.initialize(split, context)
     } catch {
-      case _: Throwable =>
+      case NonFatal(e) =>
         reader.close()
+        throw e
     }
 
     reader
@@ -1166,7 +1168,7 @@ class ParquetVectorizedSuite extends ParquetTest with SharedSparkSession {
   private def checkColumnVectorsAreClosed(reader: VectorizedParquetRecordReader): Unit = {
     val columnVectors = ParquetTestAccess.columnVectors(reader)
     if (columnVectors != null) {
-      columnVectors.foreach(checkIsClosed)
+      columnVectors.foreach(v => checkIsClosed(v.asInstanceOf[ParquetColumnVector]))
     }
   }
 

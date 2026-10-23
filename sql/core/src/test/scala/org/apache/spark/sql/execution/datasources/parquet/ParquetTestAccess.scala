@@ -245,8 +245,8 @@ object ParquetTestAccess {
     f
   }
 
-  def columnVectors(reader: VectorizedParquetRecordReader): Array[ParquetColumnVector] = {
-    columnVectorsField.get(reader).asInstanceOf[Array[ParquetColumnVector]]
+  def columnVectors(reader: VectorizedParquetRecordReader): Array[AnyRef] = {
+    columnVectorsField.get(reader).asInstanceOf[Array[AnyRef]]
   }
 
   private lazy val columnVectorCls = SparkClassUtils.classForName[Any](
