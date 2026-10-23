@@ -66,7 +66,8 @@ private[sql] case class RowLevelOperationTable(
 
   /**
    * Builds the operation for another table from the same info, for a rule that redirects the
-   * write after the rewrite, such as to a branch of the table.
+   * write after the rewrite, such as to a branch of the table. Call it once and use the result
+   * for the write relation and for every read of this table.
    */
   def withTable(newTable: Table with SupportsRowLevelOperations): RowLevelOperationTable = {
     val newOperation = newTable.newRowLevelOperationBuilder(operationInfo).build()

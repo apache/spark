@@ -4638,6 +4638,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("nullableRowIdAttrs" -> nullableRowIdAttrs.mkString(", ")))
   }
 
+  private def columnSQLId(parts: Seq[String]): String =
+    if (parts.isEmpty) "<empty>" else toSQLId(parts)
+
+  private def columnSQLIds(columns: Seq[Seq[String]]): String =
+    columns.map(columnSQLId).mkString("[", ", ", "]")
+
   def emptyRequiredDataAttributesError(connectorClass: String): Throwable = {
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES",
@@ -4651,7 +4657,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_DUPLICATE_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "duplicateAttributes" -> duplicateAttributes.map(toSQLId).mkString("[", ", ", "]")))
+        "duplicateAttributes" -> columnSQLIds(duplicateAttributes)))
   }
 
   def metadataRequiredDataAttributeError(
@@ -4661,7 +4667,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_METADATA_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "metadataAttributes" -> metadataAttributes.map(toSQLId).mkString("[", ", ", "]")))
+        "metadataAttributes" -> columnSQLIds(metadataAttributes)))
   }
 
   def nestedRequiredDataAttributeError(
@@ -4671,7 +4677,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_NESTED_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "nestedAttributes" -> nestedAttributes.map(toSQLId).mkString("[", ", ", "]")))
+        "nestedAttributes" -> columnSQLIds(nestedAttributes)))
   }
 
   def requiredDataAttributesMissingUpdatedColumnsError(
@@ -4681,7 +4687,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "missingColumns" -> missingColumns.map(toSQLId).mkString("[", ", ", "]")))
+        "missingColumns" -> columnSQLIds(missingColumns)))
   }
 
   def splitUpdateRowIdNotDeclaredError(
@@ -4691,7 +4697,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_NOT_DECLARED",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "rowIds" -> rowIds.map(toSQLId).mkString("[", ", ", "]")))
+        "rowIds" -> columnSQLIds(rowIds)))
   }
 
   def splitUpdateRowIdReassignmentError(
@@ -4701,7 +4707,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "rowIds" -> rowIds.map(toSQLId).mkString("[", ", ", "]")))
+        "rowIds" -> columnSQLIds(rowIds)))
   }
 
   def unknownRequiredDataAttributeError(
@@ -4711,7 +4717,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "COLUMN_UPDATE_UNKNOWN_REQUIRED_DATA_ATTRIBUTE",
       messageParameters = Map(
         "connector" -> connectorClass,
-        "unknownAttributes" -> unknownAttributes.map(toSQLId).mkString("[", ", ", "]")))
+        "unknownAttributes" -> columnSQLIds(unknownAttributes)))
   }
 
   /**
@@ -4722,9 +4728,8 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       columns: Seq[(Seq[String], Option[String])]): Throwable = {
     val names = columns.map {
-      case (Seq(), _) => "<empty>"
-      case (parts, None) => toSQLId(parts)
-      case (parts, Some(condition)) => s"${toSQLId(parts)} ($condition)"
+      case (parts, Some(condition)) if parts.nonEmpty => s"${toSQLId(parts)} ($condition)"
+      case (parts, _) => columnSQLId(parts)
     }
     new AnalysisException(
       errorClass = "COLUMN_UPDATE_UNDECLARED_WRITE_REQUIREMENT_COLUMNS",

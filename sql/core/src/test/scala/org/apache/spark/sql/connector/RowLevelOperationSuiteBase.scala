@@ -101,6 +101,17 @@ abstract class RowLevelOperationSuiteBase
   protected def noMetadata: Boolean =
     extraTableProps.getOrDefault("no-metadata", "false") == "true"
 
+  // `extraTableProps` as the TBLPROPERTIES clause of a CREATE TABLE statement
+  protected def extraTablePropertiesClause: String = {
+    if (extraTableProps.isEmpty) {
+      ""
+    } else {
+      extraTableProps.asScala
+        .map { case (key, value) => s"'$key' = '$value'" }
+        .mkString("TBLPROPERTIES (", ", ", ")")
+    }
+  }
+
   protected def catalog: InMemoryRowLevelOperationTableCatalog = {
     val catalog = spark.sessionState.catalogManager.catalog("cat")
     catalog.asTableCatalog.asInstanceOf[InMemoryRowLevelOperationTableCatalog]
@@ -128,41 +139,28 @@ abstract class RowLevelOperationSuiteBase
     createTable(columns, transforms)
   }
 
-  // `extraTableProps` as the TBLPROPERTIES clause of a CREATE TABLE statement
-  protected def extraTablePropertiesClause: String = {
-    if (extraTableProps.isEmpty) {
-      ""
-    } else {
-      extraTableProps.asScala
-        .map { case (key, value) => s"'$key' = '$value'" }
-        .mkString("TBLPROPERTIES (", ", ", ")")
-    }
-  }
-
-  protected def createTable(columns: Array[Column], transforms: Array[Transform]): Unit = {
+  protected def createTable(
+      columns: Array[Column],
+      transforms: Array[Transform],
+      tableProps: java.util.Map[String, String] = extraTableProps): Unit = {
     val tableInfo = new TableInfo.Builder()
       .withColumns(columns)
       .withPartitions(transforms)
-      .withProperties(extraTableProps)
+      .withProperties(tableProps)
       .build()
     catalog.createTable(ident, tableInfo)
   }
 
   protected def createAndInitTable(schemaString: String, jsonData: String): Unit = {
-    createTable(schemaString)
-    append(schemaString, jsonData)
+    createAndInitTable(schemaString, jsonData, extraTableProps)
   }
 
   protected def createAndInitTable(
       schemaString: String,
       jsonData: String,
       tableProps: java.util.Map[String, String]): Unit = {
-    val tableInfo = new TableInfo.Builder()
-      .withColumns(CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString)))
-      .withPartitions(Array[Transform](identity(reference(Seq("dep")))))
-      .withProperties(tableProps)
-      .build()
-    catalog.createTable(ident, tableInfo)
+    val columns = CatalogV2Util.structTypeToV2Columns(StructType.fromDDL(schemaString))
+    createTable(columns, Array[Transform](identity(reference(Seq("dep")))), tableProps)
     append(schemaString, jsonData)
   }
 

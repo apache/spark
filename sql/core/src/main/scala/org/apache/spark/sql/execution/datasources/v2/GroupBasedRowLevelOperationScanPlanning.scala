@@ -111,8 +111,8 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
     val readNames = tableReads(plan, table).flatMap { case (projects, filters, read) =>
       val references = AttributeSet((projects ++ filters).flatMap(_.references))
       read.output.filter(references.contains).map(_.name)
-    }
-    relation.output.filter(attr => readNames.exists(conf.resolver(_, attr.name)))
+    }.toSet
+    relation.output.filter(attr => readNames.contains(attr.name))
   }
 
   private def tableReads(

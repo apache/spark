@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import java.util.Locale
-
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
@@ -36,7 +34,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{CaseInsensitiveStringMap, SchemaUtils}
 import org.apache.spark.util.ArrayImplicits._
 
 trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
@@ -139,16 +137,6 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       case other => other
     }
     key.semanticEquals(valueWithoutAlias)
-  }
-
-  /**
-   * Returns the table attributes that these assignments set to a new value, skipping identity
-   * assignments.
-   */
-  protected def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
-    assignments.collect {
-      case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
-    }
   }
 
   protected def deltaDeleteOutput(
@@ -370,9 +358,9 @@ object RewriteRowLevelCommand extends SQLConfHelper {
 
   /**
    * Resolves the connector-declared required data attributes for column-update writes against
-   * the given relation, in declared order and with the relation's spelling. An empty declaration,
-   * nested fields, duplicate columns, columns that do not exist in the relation and metadata
-   * columns are rejected with an `AnalysisException`.
+   * the given relation, in declared order and with the relation's spelling. An empty array,
+   * nested fields, duplicate columns, columns that do not exist in the relation (including a
+   * reference with no name parts) and metadata columns are rejected with an `AnalysisException`.
    */
   private[sql] def resolveRequiredDataAttrs(
       relation: LogicalPlan,
@@ -381,15 +369,18 @@ object RewriteRowLevelCommand extends SQLConfHelper {
     if (refs.isEmpty) {
       throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
     }
-    val nested = refs.filter(_.fieldNames.length != 1).map(_.fieldNames.toSeq)
+    val nameless = refs.filter(_.fieldNames.isEmpty).map(_ => Seq.empty[String])
+    if (nameless.nonEmpty) {
+      throw QueryCompilationErrors.unknownRequiredDataAttributeError(
+        operation.getClass.getName, nameless)
+    }
+    val nested = refs.filter(_.fieldNames.length > 1).map(_.fieldNames.toSeq)
     if (nested.nonEmpty) {
       throw QueryCompilationErrors.nestedRequiredDataAttributeError(
         operation.getClass.getName, nested)
     }
-    val normalizedNames = refs.map { ref =>
-      val name = ref.fieldNames.head
-      if (conf.caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
-    }
+    val normalizedNames =
+      refs.map(ref => SchemaUtils.foldName(ref.fieldNames.head, conf.caseSensitiveAnalysis))
     val counts = normalizedNames.groupBy(identity).view.mapValues(_.size).toMap
     val duplicates = refs.zip(normalizedNames)
       .filter { case (_, name) => counts(name) > 1 }

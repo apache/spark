@@ -245,6 +245,16 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
+   * Returns the table attributes that these assignments set to a new value, skipping identity
+   * assignments.
+   */
+  private def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
+    assignments.collect {
+      case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
+    }
+  }
+
+  /**
    * Returns the output of the write relation, which is the layout of the data rows the connector
    * receives. If the operation opts into column updates, this is the connector's
    * `requiredDataAttributes()`, validated against the updated columns. Otherwise it is the full

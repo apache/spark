@@ -17,15 +17,20 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.SparkRuntimeException
-import org.apache.spark.sql.Row
+import org.apache.spark.{SparkException, SparkRuntimeException}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
-import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
+import org.apache.spark.sql.catalyst.plans.logical.Union
+import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, InMemoryRowLevelOperationTable}
+import org.apache.spark.sql.connector.write.{RowLevelOperation, RowLevelOperationTable}
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, V2Writes}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 // Column-update tests that hold for both delta-based and group-based operations; each suite
 // supplies its column-update table properties through `extraTableProps`.
-trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
+trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
 
   // the properties of a column-update table whose connector declares exactly `reqAttrs`
   protected def reqAttrsTableProps(reqAttrs: String): java.util.Map[String, String]
@@ -36,6 +41,13 @@ trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
   // the metadata columns the scan of a column-update table reads, in DDL form
   protected def scanMetadataColumns: String = ", _partition STRING, index INT"
 
+  // the class name of the operation that `reqAttrsTableProps` builds
+  protected def reqAttrsOperationClass: String = if (deltaUpdate) {
+    classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateOperationWithReqAttrs].getName
+  } else {
+    classOf[InMemoryRowLevelOperationTable#PartitionBasedColumnUpdateOperationWithReqAttrs].getName
+  }
+
   // t(pk, id, dep, salary, bonus, extra) with CHECK (extra > 0), partitioned by dep
   protected def createAndInitTableWithProps(props: java.util.Map[String, String]): Unit = {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING, salary INT, bonus INT, extra INT",
@@ -45,6 +57,121 @@ trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
         |""".stripMargin,
       props)
     sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
+  }
+
+  test("column-update: undeclared columns are not written and keep their values") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
+        |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
+
+    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq ==
+      Seq("pk", "dep", "salary"))
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, -1, 10, "hr") ::
+      Row(2, 200, 20, "software") ::
+      Row(3, -1, 30, "hr") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
+  }
+
+  test("column-update: write relation has the declared columns in declared order") {
+    createAndInitTableWithProps(reqAttrsTableProps("salary,pk"))
+
+    val write = executeAndKeepAnalyzedWrite {
+      sql(s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'")
+    }
+
+    assert(!write.query.exists(_.isInstanceOf[Union]))
+    checkColumnUpdateWrite(write, "salary", "pk")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 1, "hr", 110, 10, 1) ::
+      Row(2, 2, "hr", 220, 20, 1) ::
+      Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
+  test("column-update: the plan writes the declared columns and scans the referenced ones") {
+    createAndInitTableWithProps(reqAttrsTableProps("pk,salary"))
+
+    // `id` is neither declared nor referenced; `dep`, `bonus` and `extra` are read for the
+    // condition, the assignment and the CHECK constraint
+    val write = executeAndKeepAnalyzedWrite {
+      executeAndCheckScan(
+        s"UPDATE $tableNameAsString SET salary = salary + bonus WHERE dep = 'hr'",
+        s"pk INT, dep STRING, salary INT, bonus INT, extra INT$scanMetadataColumns")
+    }
+
+    val writeNodeName = if (deltaUpdate) "WriteDelta" else "ReplaceData"
+    val header = write.simpleString(Int.MaxValue)
+    assert(header.matches(s"""$writeNodeName RelationV2\\[pk#\\d+, salary#\\d+\\] .*"""), header)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 1, "hr", 110, 10, 1) ::
+      Row(2, 2, "hr", 220, 20, 1) ::
+      Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
+  test("column-update: undeclared, differently-cased columns in the RHS and WHERE clause are " +
+    "read with the table's own spelling") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, extra INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "extra": 5, "dep": "hr" }
+        |{ "pk": 2, "salary": 200, "bonus": 20, "extra": 5, "dep": "hr" }
+        |""".stripMargin)
+
+    executeAndCheckScan(
+      s"UPDATE $tableNameAsString SET salary = salary + BONUS WHERE pk = 1 AND EXTRA > 3",
+      s"pk INT, salary INT, bonus INT, extra INT, dep STRING$scanMetadataColumns")
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+      Row(1, 110, 10, 5, "hr") :: Row(2, 200, 20, 5, "hr") :: Nil)
+  }
+
+  test("column-update: assigned column outside requiredDataAttributes is rejected") {
+    createAndInitTableWithProps(reqAttrsTableProps("pk,salary"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET bonus = 0 WHERE dep = 'hr'")
+      },
+      condition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+      parameters = Map("connector" -> reqAttrsOperationClass, "missingColumns" -> "[`bonus`]"))
+  }
+
+  test("column-update: an operation replaced after the rewrite is rejected") {
+    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "dep": "hr" }
+        |""".stripMargin)
+
+    val write = executeAndKeepAnalyzedWrite {
+      sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+    }
+    val relation = write.table.asInstanceOf[DataSourceV2Relation]
+    val operationTable = relation.table.asInstanceOf[RowLevelOperationTable]
+    val t = table
+    val replacements: Seq[(RowLevelOperation, String)] = if (deltaUpdate) {
+      Seq(
+        t.DeltaBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
+        new t.DeltaBasedColumnUpdateOperation(UPDATE) -> "[pk, dep]")
+    } else {
+      Seq(
+        t.PartitionBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
+        new t.PartitionBasedColumnUpdateOperation(UPDATE) -> "[pk, dep]")
+    }
+    replacements.foreach { case (operation, expectedNames) =>
+      val replaced = write.withNewTable(
+        relation.copy(table = operationTable.copy(operation = operation)(
+          operationTable.operationInfo)))
+      checkError(
+        exception = intercept[SparkException](V2Writes(replaced)),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" ->
+          (s"The write relation of operation ${operation.getClass.getName} has columns " +
+            s"[pk, dep, salary], but the operation expects $expectedNames.")))
+    }
   }
 
   test("column-update: nested struct field update narrows to the root struct column") {
@@ -79,6 +206,20 @@ trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
       Row(3, 3, "software", 300, 30, 1) :: Nil)
   }
 
+  test("column-update: reassigning a declared row-ID column keeps the row's other columns") {
+    createAndInitTableWithProps(reqAttrsTableProps("pk,salary"))
+
+    sql(s"UPDATE $tableNameAsString SET pk = 2, salary = 0 WHERE pk = 1")
+
+    // the copy-on-write fixture finds original rows by `pk`, so it falls back to full-width rows
+    assert(table.lastWriteInfo.columnUpdateSchema().isPresent == deltaUpdate)
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString ORDER BY pk, id"),
+      Row(2, 1, "hr", 0, 10, 1) ::
+      Row(2, 2, "hr", 200, 20, 1) ::
+      Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
   test("column-update: other operations keep a full-width write relation") {
     createAndInitTableWithProps(fullWidthTableProps)
 
@@ -104,6 +245,7 @@ trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
     assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
       s"DELETE must not report a column update schema: " +
         s"${table.lastWriteInfo.columnUpdateSchema()}")
+    checkLastUpdatedColumns()
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       remainingRows)
@@ -162,14 +304,17 @@ trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
         |""".stripMargin)
     sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_id CHECK (id > 0)")
 
-    val ex = intercept[SparkRuntimeException] {
-      sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
-    }
-    assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION",
-      s"expected CHECK_CONSTRAINT_VIOLATION but got: ${ex.getCondition}")
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+      },
+      condition = "CHECK_CONSTRAINT_VIOLATION",
+      sqlState = "23001",
+      parameters = Map(
+        "constraintName" -> "positive_id", "expression" -> "id > 0", "values" -> " - id : -1"))
   }
 
-  test("column-update: CHECK constraint on a nested field narrows correctly") {
+  test("column-update: a CHECK constraint on a nested field is read and enforced") {
     createAndInitTable("pk INT NOT NULL, id INT, s STRUCT<c1: INT, c2: INT>, dep STRING",
       """{ "pk": 1, "id": 1, "s": { "c1": 1, "c2": 2 }, "dep": "hr" }
         |""".stripMargin)
@@ -181,11 +326,14 @@ trait ColumnUpdateTableSharedTests extends RowLevelOperationSuiteBase {
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, Row(1, 2), "hr") :: Nil)
 
-    val ex = intercept[SparkRuntimeException] {
-      sql(s"UPDATE $tableNameAsString SET s.c1 = -1 WHERE pk = 1")
-    }
-    assert(ex.getCondition == "CHECK_CONSTRAINT_VIOLATION",
-      s"expected CHECK_CONSTRAINT_VIOLATION but got: ${ex.getCondition}")
+    checkError(
+      exception = intercept[SparkRuntimeException] {
+        sql(s"UPDATE $tableNameAsString SET s.c1 = -1 WHERE pk = 1")
+      },
+      condition = "CHECK_CONSTRAINT_VIOLATION",
+      sqlState = "23001",
+      parameters = Map(
+        "constraintName" -> "positive_c1", "expression" -> "s.c1 > 0", "values" -> " - s.c1 : -1"))
   }
 
   test("column-update: scan that returns unrequested columns still writes narrow rows") {

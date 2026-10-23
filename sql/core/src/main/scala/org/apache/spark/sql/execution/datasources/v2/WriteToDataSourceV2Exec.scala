@@ -380,7 +380,7 @@ case class ReplaceDataExec(
     write: Write,
     rowLevelCommand: RowLevelOperation.Command,
     tableName: String,
-    useWriteColumnUpdate: Boolean = false,
+    useWriteColumnUpdate: Boolean,
     transaction: Option[Transaction] = None) extends RowLevelWriteExec {
 
   override def writingTask: WritingSparkTask[_] = {

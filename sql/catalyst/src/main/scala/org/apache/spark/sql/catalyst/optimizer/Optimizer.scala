@@ -1539,8 +1539,9 @@ object ColumnPruning extends Rule[LogicalPlan] {
 
     // prune unused columns from the query of ReplaceData/WriteDelta for row-level operations
     case w: RowLevelWrite if !w.query.outputSet.subsetOf(w.references) =>
-      val output = w.query.output
-      val keptOrdinals = output.indices.filter(i => w.references.contains(output(i)))
+      val keptOrdinals = w.query.output.zipWithIndex.collect {
+        case (attr, i) if w.references.contains(attr) => i
+      }
       w.withPrunedQuery(prunedChild(w.query, w.references), keptOrdinals.zipWithIndex.toMap)
 
     // prune unrequired references

@@ -365,10 +365,10 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
    * projections, by ordinal. Any other query column can be pruned with [[withPrunedQuery]].
    */
   override lazy val references: AttributeSet = {
-    val output = query.output
+    val output = query.output.toIndexedSeq
     val readOrdinals = (0 +: queryProjections.flatMap(_.colOrdinals)).distinct
     AttributeSet(readOrdinals.map { ordinal =>
-      if (ordinal >= output.length) {
+      if (!output.isDefinedAt(ordinal)) {
         throw SparkException.internalError(
           s"A projection of $nodeName reads ordinal $ordinal of a query with ${output.length} " +
             "columns.")
