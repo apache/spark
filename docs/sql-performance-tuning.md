@@ -641,6 +641,25 @@ The following SQL properties enable Storage Partition Join in different join que
       <td>3.3.0</td>
     </tr>
     <tr>
+      <td><code>spark.sql.sources.v2.bucketing.coalesceScanPartitions.enabled</code></td>
+      <td>false</td>
+      <td>
+        When enabled, apply a narrow coalesce immediately before a required shuffle to reduce
+        tasks in a keyed V2 scan pipeline to the number of distinct full reported partition keys.
+        At least one reported partition key must survive scan column pruning.
+        This compatibility option can reduce per-task overhead for small splits, but has no
+        byte-size limit and can reduce useful parallelism for large inputs or skewed keys.
+        Splits are not grouped by key; coalesced output does not retain keyed partitioning or
+        ordering. The rule follows projections, filters, batch aggregates and local sorts;
+        it stops at joins, unions, exchanges, grouping operators and existing coalesces.
+        It does not apply before user-requested repartition exchanges.
+        This setting is not required for storage-partitioned joins, which already apply grouping
+        when needed to satisfy their distribution. Requires
+        <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
+      </td>
+      <td>4.4.0</td>
+    </tr>
+    <tr>
       <td><code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code></td>
       <td>true</td>
       <td>

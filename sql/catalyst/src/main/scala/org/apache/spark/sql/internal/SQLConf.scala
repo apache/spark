@@ -2644,6 +2644,22 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val V2_BUCKETING_COALESCE_SCAN_PARTITIONS_ENABLED =
+    buildConf("spark.sql.sources.v2.bucketing.coalesceScanPartitions.enabled")
+      .doc("When enabled, use a narrow coalesce before a required shuffle to reduce the tasks " +
+        "in a keyed V2 scan pipeline to the number of distinct reported partition keys. " +
+        "This is a default-off compatibility option for workloads affected by the removal of " +
+        "unconditional scan grouping in Spark 4.2. Splits are not grouped by key, and the " +
+        "coalesced output does not retain keyed partitioning or ordering. This can reduce " +
+        "per-task overhead for small splits, but can reduce parallelism for large inputs or " +
+        "skewed keys. It does not apply across joins, unions, existing coalesces or grouping " +
+        "operators, or before user-requested repartition exchanges. Requires " +
+        s"${V2_BUCKETING_ENABLED.key} to be enabled.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val V2_BUCKETING_PUSH_PART_VALUES_ENABLED =
     buildConf("spark.sql.sources.v2.bucketing.pushPartValues.enabled")
       .doc(s"Whether to pushdown common partition values when ${V2_BUCKETING_ENABLED.key} is " +
