@@ -865,7 +865,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * Whether the plain-scan path ([[pruneColumns]]) carries a pushdown that a Spark-side scan merge
    * (see `TableCapability.SCAN_MERGING`) cannot reproduce by
    * rebuilding the scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned
-   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`).
+   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`),
+   * which also keeps storage filters away from such a scan, see `DataSourceV2Strategy`.
    *
    * Scan merging is default-safe: [[DataSourceV2ScanRelation.mergeableScan]] defaults to false and
    * this is the ONLY site that ever sets it true. Every other scan-relation build path -- the

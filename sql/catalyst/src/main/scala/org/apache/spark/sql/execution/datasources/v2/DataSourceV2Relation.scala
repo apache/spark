@@ -187,7 +187,8 @@ case class DataSourceV2Relation(
  *                      non-reproducible pushdown (aggregate, join, variant extraction, limit,
  *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
  *                      so merging is safe by construction -- a new scan-relation build site need
- *                      not opt out.
+ *                      not opt out. Storage filters rely on it too: a scan that is not mergeable
+ *                      is offered none, since its readers would filter ahead of such a pushdown.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,

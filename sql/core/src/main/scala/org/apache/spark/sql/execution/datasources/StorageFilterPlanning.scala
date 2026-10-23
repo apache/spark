@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, If, Literal}
+import org.apache.spark.sql.connector.read.SupportsStorageFilters
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.BooleanType
@@ -31,7 +32,7 @@ object StorageFilterPlanning {
 
   /** Whether one of `names` is the checked column's, in which case no filter is offered. */
   def clashesWithCheckedColumn(names: Seq[String]): Boolean =
-    names.exists(_.equalsIgnoreCase(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME))
+    names.exists(_.equalsIgnoreCase(SupportsStorageFilters.CHECKED_COLUMN_NAME))
 
   /**
    * The conjuncts of `filters` offered to the scan, each once, as an `ExpressionSet` counts them.
@@ -69,7 +70,7 @@ object StorageFilterPlanning {
       offered: Seq[Expression],
       output: Seq[Attribute]): Option[AttributeReference] = {
     if (offered.isEmpty) return None
-    val checked = AttributeReference(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME, BooleanType)()
+    val checked = AttributeReference(SupportsStorageFilters.CHECKED_COLUMN_NAME, BooleanType)()
     Option.when(conf.wholeStageEnabled &&
       !WholeStageCodegenExec.isTooManyFields(conf, (output :+ checked).toStructType))(checked)
   }

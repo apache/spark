@@ -141,7 +141,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // its readers filter ahead of it. `V2ScanRelationPushDown` leaves every such scan, and any scan
     // a later pushdown builds, not mergeable.
     if (!relation.mergeableScan) return Nil
-    // Over the whole table, as on the file-source side, since `output` is matched by name later.
+    // Over the whole table, as on the file-source side, since `SupportsStorageFilters` reserves
+    // the name.
     if (StorageFilterPlanning.clashesWithCheckedColumn(relation.relation.output.map(_.name))) {
       return Nil
     }

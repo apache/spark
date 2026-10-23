@@ -75,7 +75,8 @@ public abstract class StorageFilter extends Predicate {
    * Evaluates the filter on one row holding the values of {@link #references()}, in that order.
    *
    * @return false when the row is rejected, so a reader may drop it and skip any read only that
-   *         row needed
+   *         row needed. A row the reader keeps anyway is not marked checked, see
+   *         {@link StorageFilterRequest#appendsCheckedColumn()}.
    * @throws StorageFilterNotAppliedException when the filter cannot be applied to this row. The
    *         reader then reads the rest of the unit without the filter. Any other exception, such
    *         as a task kill, must propagate.

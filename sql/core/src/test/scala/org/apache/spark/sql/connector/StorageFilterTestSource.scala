@@ -26,7 +26,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, Transform}
+import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference, SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.{StorageFilter, StorageFilterNotAppliedException}
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
@@ -46,7 +46,8 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  *  - `declared`: the comma-separated storage-filter columns, `k` by default, a dot separating a
  *    nested field;
  *  - `valueName`: the name of the value column, `v` by default;
- *  - `pushLimit`: takes a pushed limit whole without applying it, for planning tests only.
+ *  - `push`: the comma-separated pushed operations it takes whole without applying them, of
+ *    `limit`, `offset`, `topN` and `sample`, for planning tests only.
  *
  * A filter that throws `StorageFilterNotAppliedException` is given up for the rest of the
  * partition too. The counters below record what the readers got, evaluated and returned.
@@ -106,16 +107,31 @@ class StorageFilterTestTable(tableSchema: StructType) extends Table with Support
       marksAllChecked = options.getBoolean("markAllChecked", false))
     val declared = options.getOrDefault("declared", "k").split(",").filter(_.nonEmpty).toSeq
     val scan = () => new StorageFilterTestScan(tableSchema, factory, declared)
-    if (options.getBoolean("pushLimit", false)) new StorageFilterTestLimitScanBuilder(scan) else {
-      () => scan()
-    }
+    val pushes = options.getOrDefault("push", "").split(",").filter(_.nonEmpty).toSet
+    if (pushes.nonEmpty) new StorageFilterTestPushingScanBuilder(scan, pushes) else () => scan()
   }
 }
 
-/** Takes a pushed limit whole. Its scan does not apply it, so it serves planning tests only. */
-class StorageFilterTestLimitScanBuilder(scan: () => Scan) extends SupportsPushDownLimit {
+/**
+ * Takes the pushed operations named in `pushes` whole. Its scan does not apply them, so it serves
+ * planning tests only.
+ */
+class StorageFilterTestPushingScanBuilder(scan: () => Scan, pushes: Set[String])
+  extends SupportsPushDownLimit
+  with SupportsPushDownOffset
+  with SupportsPushDownTopN
+  with SupportsPushDownTableSample {
+
   override def build(): Scan = scan()
-  override def pushLimit(limit: Int): Boolean = true
+  override def pushLimit(limit: Int): Boolean = pushes("limit")
+  override def pushOffset(offset: Int): Boolean = pushes("offset")
+  override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = pushes("topN")
+  override def pushTableSample(
+      lowerBound: Double,
+      upperBound: Double,
+      withReplacement: Boolean,
+      seed: Long,
+      sampleMethod: SampleMethod): Boolean = pushes("sample")
   override def isPartiallyPushed: Boolean = false
 }
 

@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, Divide, EvalMode, GreaterThan, If, Literal, NumericEvalContext, Rand}
-import org.apache.spark.sql.execution.{BaseLimitExec, FilterExec, SparkPlan}
+import org.apache.spark.sql.execution.{BaseLimitExec, FilterExec, SampleExec, SparkPlan, TakeOrderedAndProjectExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{FileFormat, StorageFilterPlanning}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -269,21 +269,29 @@ class StorageFilterPushDownSuite
     }
   }
 
-  test("nothing is offered to a scan that took a pushed limit") {
-    // The reader would filter ahead of the limit, which picks other rows.
-    withBloomJoin() {
-      val probe = v2Probe("columnar" -> "true", "pushLimit" -> "true").limit(100)
-      val plan = bloomJoin(probe).queryExecution.executedPlan
-      assert(collect(plan) { case l: BaseLimitExec => l }.isEmpty,
-        s"the limit must be pushed into the scan whole:\n$plan")
-      val scan = scanOf(plan)
-      assert(scan.storageFilters.isEmpty && scan.checkedColumn.isEmpty,
-        s"the scan must get no storage filter:\n$plan")
-      assert(bloomsAbove(plan) == (1, 0), s"the Filter must keep the bloom as it is:\n$plan")
+  // The reader would filter ahead of the operation, which then picks other rows.
+  Seq[(String, DataFrame => DataFrame)](
+    "limit" -> (_.limit(100)),
+    "offset" -> (_.offset(10)),
+    "topN" -> (_.orderBy("v").limit(100)),
+    "sample" -> (_.sample(0.5))
+  ).foreach { case (op, apply) =>
+    test(s"nothing is offered to a scan that took a pushed $op") {
+      withBloomJoin() {
+        val probe = apply(v2Probe("columnar" -> "true", "push" -> op))
+        val plan = bloomJoin(probe).queryExecution.executedPlan
+        assert(collect(plan) {
+          case p @ (_: BaseLimitExec | _: TakeOrderedAndProjectExec | _: SampleExec) => p
+        }.isEmpty, s"the $op must be pushed into the scan whole:\n$plan")
+        val scan = scanOf(plan)
+        assert(scan.storageFilters.isEmpty && scan.checkedColumn.isEmpty,
+          s"the scan must get no storage filter:\n$plan")
+        assert(bloomsAbove(plan) == (1, 0), s"the Filter must keep the bloom as it is:\n$plan")
+      }
     }
   }
 
-  test("a declared column the scan does not read is ignored") {
+  test("a declared name that matches no column of the scan is ignored") {
     withBloomJoin() {
       val (result, plan) = runBloomJoin("columnar" -> "true", "declared" -> "k,w")
       assert(scanOf(plan).storageFilters.size == 1,
