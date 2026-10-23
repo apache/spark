@@ -430,8 +430,9 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *  </li>
  *  <li>Name: <code>CHAR_READ_SIDE_PADDING</code>
  *   <ul>
- *    <li>SQL semantic: <code>RPAD(str, len, ' ')</code> on a CHAR scan column when
- *        read-side padding is on. Spark only emits this in <code>=</code>,
+ *    <li>SQL semantic: right-pads <code>str</code> with spaces to <code>len</code>
+ *        characters; values of <code>len</code> or more characters are returned
+ *        unchanged. Spark only emits this in <code>=</code>,
  *        <code>&lt;=&gt;</code>, <code>&lt;&gt;</code>, and <code>IN</code> against
  *        a string of length <code>len</code>. JDBC sources that store CHAR already
  *        padded may compile it as the raw column.</li>
