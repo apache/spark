@@ -135,6 +135,34 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
   }
 
   /**
+   * Get the raw table metadata with all the partition columns in Hive metastore. The raw table
+   * metadata does not contain the Hive incompatible partition columns, which are stored in Hive
+   * metastore with a placeholder type (see `HiveClientImpl.toHiveTable`). Here we restore them
+   * from the table properties, so that we can write the raw table metadata back to Hive
+   * metastore, which does not allow changing the partition columns. Note that data source tables
+   * created by Spark 2.0 or prior have the partition columns only in the table properties.
+   */
+  private def getRawTableWithAllPartitionColumns(db: String, table: String): CatalogTable = {
+    val rawHiveTable = client.getRawHiveTable(db, table)
+    val rawTable = rawHiveTable.toCatalogTable
+    val partitionColumnNames = rawHiveTable.hivePartitionColumnNames()
+    if (partitionColumnNames.length > rawTable.partitionColumnNames.length) {
+      val partitionSchema =
+        rawTable.partitionSchema ++ restoreTableMetadata(rawTable).partitionSchema
+      val partitionFields = partitionColumnNames.flatMap { name =>
+        // Hive metastore is not case preserving and keeps partition columns with lower cased
+        // names, while the table properties keep the original names.
+        partitionSchema.find(_.name.equalsIgnoreCase(name)).map(_.copy(name = name))
+      }
+      rawTable.copy(
+        schema = StructType(rawTable.dataSchema ++ partitionFields),
+        partitionColumnNames = partitionFields.map(_.name))
+    } else {
+      rawTable
+    }
+  }
+
+  /**
    * If the given table properties contains datasource properties, throw an exception. We will do
    * this check when create or alter a table, i.e. when we try to write table metadata to Hive
    * metastore.
@@ -549,7 +577,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       db: String,
       oldName: String,
       newName: String): Unit = withClient {
-    val rawTable = getRawTable(db, oldName)
+    val rawTable = getRawTableWithAllPartitionColumns(db, oldName)
 
     // Note that Hive serde tables don't use path option in storage properties to store the value
     // of table location, but use `locationUri` field to store it directly. And `locationUri` field
@@ -625,7 +653,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           client.alterTable(newTable.copy(schema = EMPTY_DATA_SCHEMA))
       }
     } else {
-      val oldTableDef = getRawTable(db, tableDefinition.identifier.table)
+      val oldTableDef = getRawTableWithAllPartitionColumns(db, tableDefinition.identifier.table)
 
       val newStorage = if (DDLUtils.isHiveTable(tableDefinition)) {
         tableDefinition.storage
@@ -693,19 +721,12 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
       val newTableProps =
         propsFromOldTable ++ tableDefinition.properties + partitionProviderProp ++ newFormatIfExists
 
-      val (newSchema, partitionColumnNames) = if (oldTableDef.schema == EMPTY_DATA_SCHEMA) {
-        val restoredOldTable = restoreTableMetadata(oldTableDef)
-        (StructType(EMPTY_DATA_SCHEMA ++ restoredOldTable.partitionSchema),
-          restoredOldTable.partitionColumnNames)
-      } else {
-        (oldTableDef.schema, oldTableDef.partitionColumnNames)
-      }
       // // Add old table's owner if we need to restore
       val owner = Option(tableDefinition.owner).filter(_.nonEmpty).getOrElse(oldTableDef.owner)
       val newDef = tableDefinition.copy(
         storage = newStorage,
-        schema = newSchema,
-        partitionColumnNames = partitionColumnNames,
+        schema = oldTableDef.schema,
+        partitionColumnNames = oldTableDef.partitionColumnNames,
         bucketSpec = oldTableDef.bucketSpec,
         properties = newTableProps,
         owner = owner)
