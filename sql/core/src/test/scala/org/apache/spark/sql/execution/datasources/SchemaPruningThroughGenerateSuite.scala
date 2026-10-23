@@ -34,8 +34,8 @@ import org.apache.spark.tags.ExtendedSQLTest
 
 /**
  * End-to-end query-shape coverage for nested schema pruning through generators (SPARK-47230):
- * each test runs a SQL query typical of analytics over arrays of structs — explode chains,
- * views, CTEs, windows, grouping sets, subqueries, higher-order functions — and checks both
+ * each test runs a SQL query typical of analytics over arrays of structs - explode chains,
+ * views, CTEs, windows, grouping sets, subqueries, higher-order functions - and checks both
  * the scan schema and that the results match the ones produced with
  * [[SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED]] disabled.
  *
