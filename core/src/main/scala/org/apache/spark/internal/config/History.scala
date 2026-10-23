@@ -145,6 +145,20 @@ private[spark] object History {
     .stringConf
     .createOptional
 
+  val SNAPSHOT_MAX_RECORD_SIZE_LIMIT: Int = 512 * 1024 * 1024
+
+  val SNAPSHOT_MAX_RECORD_SIZE = ConfigBuilder("spark.history.snapshot.maxRecordSize")
+    .doc("Maximum size of a single serialized record the History Server reads when restoring " +
+      "a history snapshot. Snapshots with larger records are not used, and the event log is " +
+      "replayed instead. This bounds the memory a corrupt or unexpectedly large snapshot can " +
+      s"use. Must be positive and at most $SNAPSHOT_MAX_RECORD_SIZE_LIMIT bytes (512 MiB).")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .bytesConf(ByteUnit.BYTE)
+    .checkValue(v => v > 0 && v <= SNAPSHOT_MAX_RECORD_SIZE_LIMIT,
+      s"must be positive and at most $SNAPSHOT_MAX_RECORD_SIZE_LIMIT bytes")
+    .createWithDefaultString("256m")
+
   val MAX_LOCAL_DISK_USAGE = ConfigBuilder("spark.history.store.maxDiskUsage")
     .version("2.3.0")
     .doc("Maximum disk usage for the local directory where the cache application history " +

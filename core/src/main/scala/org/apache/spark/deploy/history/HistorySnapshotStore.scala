@@ -31,7 +31,9 @@ import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys._
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Status._
 import org.apache.spark.status._
 import org.apache.spark.status.api.v1
 import org.apache.spark.status.protobuf.KVStoreProtobufSerializer
@@ -60,6 +62,9 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
 
   private val serializer = new KVStoreProtobufSerializer()
 
+  // Only read by the History Server, so an invalid value does not affect application startup.
+  private lazy val maxRecordSize = conf.get(SNAPSHOT_MAX_RECORD_SIZE)
+
   /**
    * Writes a versioned history snapshot for an application attempt and returns the manifest path.
    *
@@ -83,6 +88,9 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
         manifest.setProperty("schemaVersion", SNAPSHOT_SCHEMA_VERSION.toString)
         manifest.setProperty("snapshotDir", dataDir.getName)
         manifest.setProperty("classNames", entries.map(_.className).mkString(","))
+        retentionLimits(conf).foreach { case (key, limit) =>
+          manifest.setProperty(RETENTION_PREFIX + key, limit.toString)
+        }
         entries.foreach { entry =>
           manifest.setProperty(s"${entry.className}.file", entry.fileName)
         }
@@ -130,6 +138,7 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
     val schemaVersion = manifest.getProperty("schemaVersion", "-1").toInt
     require(schemaVersion == SNAPSHOT_SCHEMA_VERSION,
       s"Unsupported history snapshot version $schemaVersion at $manifestPath")
+    checkRetention(manifestPath, manifest)
 
     val dataRoot = snapshotDataRoot(manifestPath, manifest)
     manifestEntries(manifestPath, manifest).foreach { entry =>
@@ -182,6 +191,22 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
           s"Snapshot path for app $appId / $attemptId escapes the snapshot directory")
       }
       dir
+    }
+  }
+
+  /**
+   * Checks that the snapshot retains at least as much UI data as this History Server keeps when
+   * replaying the event log. The snapshot holds the application's already pruned status store,
+   * so it cannot provide entries that the application's retention limits removed.
+   */
+  private def checkRetention(manifestPath: Path, manifest: Properties): Unit = {
+    retentionLimits(conf).foreach { case (key, limit) =>
+      Option(manifest.getProperty(RETENTION_PREFIX + key)).map(_.toLong).foreach { captured =>
+        if (captured < limit) {
+          throw new IOException(s"History snapshot $manifestPath was written with " +
+            s"$key=$captured, which retains less than this server's $key=$limit")
+        }
+      }
     }
   }
 
@@ -355,8 +380,8 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
 
   /**
    * Restores one entity file by replaying its length-delimited protobuf records into the store.
-   * Record sizes are checked against the remaining file length before allocating, so a corrupt
-   * size fails with an IOException rather than an OutOfMemoryError.
+   * Record sizes are checked against the remaining file length and the maximum record size before
+   * allocating, so a corrupt size fails with an IOException rather than an OutOfMemoryError.
    */
   private def readEntityFile(store: KVStore, klass: Class[_], path: Path): Unit = {
     var remaining = fs.getFileStatus(path).getLen
@@ -366,6 +391,10 @@ private[spark] class HistorySnapshotStore(conf: SparkConf, hadoopConf: Configura
         remaining -= Integer.BYTES
         if (size < 0 || size > remaining) {
           throw new IOException(s"Invalid record size $size in snapshot file $path")
+        }
+        if (size > maxRecordSize) {
+          throw new IOException(s"Record size $size in snapshot file $path exceeds " +
+            s"${SNAPSHOT_MAX_RECORD_SIZE.key}=$maxRecordSize")
         }
         val bytes = new Array[Byte](size)
         in.readFully(bytes)
@@ -406,6 +435,32 @@ private[spark] object HistorySnapshotStore extends Logging {
     "org.apache.spark.sql.streaming.ui.StreamingQueryData",
     "org.apache.spark.sql.streaming.ui.StreamingQueryProgressWrapper")
 
+  private val RETENTION_PREFIX = "retention."
+
+  // Limits on how much UI data the status listeners retain. The SQL limits are looked up by key
+  // because the SQL module may be absent; StaticSQLConf registers the streaming ones.
+  private val CORE_RETENTION_CONFIGS: Seq[ConfigEntry[_]] = Seq(
+    MAX_RETAINED_JOBS,
+    MAX_RETAINED_STAGES,
+    MAX_RETAINED_TASKS_PER_STAGE,
+    MAX_RETAINED_DEAD_EXECUTORS,
+    MAX_RETAINED_ROOT_NODES)
+
+  private val SQL_RETENTION_CONFIG_KEYS = Seq(
+    "spark.sql.ui.retainedExecutions",
+    "spark.sql.streaming.ui.retainedQueries",
+    "spark.sql.streaming.ui.retainedProgressUpdates")
+
+  private lazy val retentionConfigs: Seq[ConfigEntry[_]] = {
+    try {
+      Utils.classForName("org.apache.spark.sql.internal.StaticSQLConf$", initialize = true)
+    } catch {
+      case _: ClassNotFoundException =>
+    }
+    CORE_RETENTION_CONFIGS ++
+      SQL_RETENTION_CONFIG_KEYS.flatMap(key => Option(ConfigEntry.findEntry(key)))
+  }
+
   private case class SnapshotEntry(className: String, fileName: String)
 
   def isEnabled(conf: SparkConf): Boolean = {
@@ -420,6 +475,11 @@ private[spark] object HistorySnapshotStore extends Logging {
    */
   def shouldWriteSnapshot(appInfo: v1.ApplicationInfo): Boolean = {
     appInfo != null && appInfo.attempts.lastOption.exists(_.completed)
+  }
+
+  /** Returns the effective UI retention limits of a configuration, keyed by config key. */
+  private def retentionLimits(conf: SparkConf): Seq[(String, Long)] = {
+    retentionConfigs.map(entry => entry.key -> conf.get(entry).toString.toLong)
   }
 
   /** Returns the entity classes that should be materialized into every history snapshot. */

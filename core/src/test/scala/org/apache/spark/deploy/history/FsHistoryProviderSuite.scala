@@ -45,6 +45,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
 import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPRESS}
 import org.apache.spark.internal.config.History._
+import org.apache.spark.internal.config.Status.MAX_RETAINED_JOBS
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
 import org.apache.spark.scheduler._
@@ -347,6 +348,49 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       new HistorySnapshotStore(conf).restoreSnapshot(new InMemoryStore(), manifest)
     }
     assert(e.getMessage.contains("Invalid record size"))
+  }
+
+  test("snapshot restore rejects records larger than the maximum record size") {
+    val conf = createSnapshotTestConf()
+    val manifest = writeTestSnapshot(conf, "snap-max-record-id")
+
+    val e = intercept[IOException] {
+      new HistorySnapshotStore(conf.clone.set(SNAPSHOT_MAX_RECORD_SIZE, 1L))
+        .restoreSnapshot(new InMemoryStore(), manifest)
+    }
+    assert(e.getMessage.contains(SNAPSHOT_MAX_RECORD_SIZE.key))
+  }
+
+  test("snapshots that retain less than the server are replaced by event log replay") {
+    val conf = createSnapshotTestConf()
+    val appId = "snap-retention-id"
+    val jobStarts = (1 to 3).map(id => SparkListenerJobStart(id, id, Nil, null))
+    val jobEnds = (1 to 3).map(id => SparkListenerJobEnd(id, id, JobSucceeded))
+    val logFile = newLogFile("snap-retention", None, inProgress = false)
+    writeFile(logFile, None,
+      Seq(SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None)) ++
+        jobStarts.zip(jobEnds).flatMap { case (start, end) => Seq(start, end) } ++
+        Seq(SparkListenerApplicationEnd(10L)): _*)
+
+    val provider = new FsHistoryProvider(conf)
+    val limitedProvider = new FsHistoryProvider(conf.clone.set(MAX_RETAINED_JOBS, 1))
+    Seq(provider, limitedProvider).foreach { p =>
+      updateAndCheck(p) { list =>
+        list.map(_.id) should contain (appId)
+      }
+    }
+    writeTestSnapshot(conf.clone.set(MAX_RETAINED_JOBS, 1), appId, listener =>
+      jobStarts.zip(jobEnds).foreach { case (start, end) =>
+        listener.onJobStart(start)
+        listener.onJobEnd(end)
+      })
+
+    // The server retains more jobs than the snapshot, so it replays the event log.
+    provider.getAppUI(appId, None).get.ui.store.jobsList(null).size should be (3)
+
+    // A server with the same retention uses the snapshot, even without the event log.
+    assert(logFile.delete())
+    limitedProvider.getAppUI(appId, None) should not be None
   }
 
   test("snapshots redact the application environment") {

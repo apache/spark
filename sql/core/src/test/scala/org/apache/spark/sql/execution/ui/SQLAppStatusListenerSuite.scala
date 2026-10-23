@@ -202,6 +202,22 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     }
   }
 
+  test("history snapshots are not restored by servers that retain more SQL data") {
+    val snapshotConf = sparkContext.conf.clone()
+      .set(SNAPSHOT_ENABLED, true)
+      .set(SNAPSHOT_PATH, Utils.createTempDir().getAbsolutePath)
+    createStatusStore()
+    Seq(UI_RETAINED_EXECUTIONS.key, "spark.sql.streaming.ui.retainedQueries").foreach { key =>
+      val manifestPath = new HistorySnapshotStore(snapshotConf.clone().set(key, "1"))
+        .writeSnapshot(kvstore, "sql-retention-app", None)
+      val serverSnapshots = new HistorySnapshotStore(snapshotConf.clone().set(key, "10"))
+      val e = intercept[java.io.IOException] {
+        serverSnapshots.restoreSnapshot(new InMemoryStore(), manifestPath.get)
+      }
+      assert(e.getMessage.contains(s"$key=1"))
+    }
+  }
+
   test("live executions are flushed on close when history snapshots are enabled") {
     val snapshotConf = sparkContext.conf.clone()
       .set(SNAPSHOT_ENABLED, true)
