@@ -92,10 +92,16 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
 
   private val triggeredFlowTimeoutMs = TimeUnit.MINUTES.toMillis(10)
 
+  private case class ResolvedTableName(
+      catalog: String,
+      namespace: Seq[String],
+      table: String)
+
   private case class TriggeredFlow(
       flowName: Seq[String],
       query: LogicalPlan,
-      targetTable: String)
+      targetTable: String,
+      resolvedTargetTable: ResolvedTableName)
 
   private sealed trait TriggeredFlowStatement
   private case class CreateTriggeredFlow(command: CreateFlowCommand)
@@ -128,7 +134,30 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
     }
   }
 
-  private def parseCreateTriggeredFlow(command: CreateFlowCommand): TriggeredFlow = {
+  private def resolveTableName(
+      session: SparkSession,
+      multipartIdentifier: Seq[String]): ResolvedTableName = {
+    val analyzer = session.sessionState.analyzer
+    import analyzer.CatalogAndIdentifier
+
+    val CatalogAndIdentifier(catalog, identifier) = multipartIdentifier
+    ResolvedTableName(catalog.name(), identifier.namespace().toSeq, identifier.name())
+  }
+
+  private def sameTableName(
+      session: SparkSession,
+      left: ResolvedTableName,
+      right: ResolvedTableName): Boolean = {
+    val resolver = session.sessionState.conf.resolver
+    resolver(left.catalog, right.catalog) &&
+      left.namespace.length == right.namespace.length &&
+      left.namespace.zip(right.namespace).forall { case (l, r) => resolver(l, r) } &&
+      resolver(left.table, right.table)
+  }
+
+  private def parseCreateTriggeredFlow(
+      session: SparkSession,
+      command: CreateFlowCommand): TriggeredFlow = {
     val flowName = command.name match {
       case identifier: UnresolvedIdentifier => identifier.nameParts
       case _ =>
@@ -147,14 +176,15 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         !insert.withSchemaEvolution,
       "SQL golden triggered flows require CREATE FLOW AS INSERT INTO ... BY NAME SELECT.")
 
-    val targetTable = insert.table match {
+    val (targetTable, resolvedTargetTable) = insert.table match {
       case target: UnresolvedInsertTarget =>
-        target.multipartIdentifier.map(quoteIdentifier).mkString(".")
+        val targetTable = target.multipartIdentifier.map(quoteIdentifier).mkString(".")
+        targetTable -> resolveTableName(session, target.multipartIdentifier)
       case _ =>
         throw new IllegalArgumentException(
           "SQL golden triggered flows require a static table identifier as the INSERT target.")
     }
-    TriggeredFlow(flowName, insert.query, targetTable)
+    TriggeredFlow(flowName, insert.query, targetTable, resolvedTargetTable)
   }
 
   private def registerTriggeredFlow(
@@ -162,11 +192,11 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       command: CreateFlowCommand,
       flows: mutable.Map[Seq[String], TriggeredFlow]): TriggeredFlow = {
     session.withActive {
-      val flow = parseCreateTriggeredFlow(command)
+      val flow = parseCreateTriggeredFlow(session, command)
       require(!flows.keys.exists(sameFlowName(session, _, flow.flowName)),
         s"Triggered flow ${formatFlowName(flow.flowName)} is already defined in this test run.")
       flows.values.find { registeredFlow =>
-        session.sessionState.conf.resolver(registeredFlow.targetTable, flow.targetTable)
+        sameTableName(session, registeredFlow.resolvedTargetTable, flow.resolvedTargetTable)
       }.foreach { registeredFlow =>
         throw new IllegalArgumentException(
           s"SQL golden triggered flow target table '${flow.targetTable}' is already written by " +
@@ -191,11 +221,13 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
 
   private def parseRefreshTriggeredFlowStatement(
       session: SparkSession,
-      name: String): Option[RefreshTriggeredFlow] = {
+      name: String): RefreshTriggeredFlow = {
     try {
-      Some(RefreshTriggeredFlow(session.sessionState.sqlParser.parseMultipartIdentifier(name)))
+      RefreshTriggeredFlow(session.sessionState.sqlParser.parseMultipartIdentifier(name))
     } catch {
-      case _: ParseException => None
+      case e: ParseException =>
+        throw new IllegalArgumentException(
+          s"REFRESH FLOW requires a valid flow name, but '$name' is invalid.", e)
     }
   }
 
@@ -214,7 +246,7 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         parsedPlan match {
           case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
           case None if tokens.length == 3 && tokens(0).equalsIgnoreCase("REFRESH") =>
-            parseRefreshTriggeredFlowStatement(session, tokens(2))
+            Some(parseRefreshTriggeredFlowStatement(session, tokens(2)))
           case _ => None
         }
       } else {
@@ -347,7 +379,7 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       """-- ordinary comment
         |SELECT 1;
         |CREATE FLOW test_flow AS
-        |INSERT INTO `catalog`.`schema`.`sink-table` BY NAME
+        |INSERT INTO `spark_catalog`.`default`.`sink-table` BY NAME
         |SELECT * FROM STREAM(source);
         |REFRESH FLOW test_flow;
         |SELECT 2;
@@ -355,7 +387,7 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
     assert(specs.map(_._1) == Seq(
       "SELECT 1",
       """CREATE FLOW test_flow AS
-        |INSERT INTO `catalog`.`schema`.`sink-table` BY NAME
+        |INSERT INTO `spark_catalog`.`default`.`sink-table` BY NAME
         |SELECT * FROM STREAM(source)""".stripMargin,
       "REFRESH FLOW test_flow",
       "SELECT 2"))
@@ -364,7 +396,7 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
     registerTriggeredFlow(spark, createFlowCommand(specs(1)._1), flows)
     val flowName = refreshFlowName(specs(2)._1)
     val flow = resolveTriggeredFlow(spark, flowName, flows)
-    assert(flow.targetTable == "`catalog`.`schema`.`sink-table`")
+    assert(flow.targetTable == "`spark_catalog`.`default`.`sink-table`")
     assert(resolveTriggeredFlow(spark, flowName, flows) eq flow)
     assert(parseTriggeredFlow(specs.head._1).isEmpty)
     assert(parseTriggeredFlow("select interval 10 nanoseconds").isEmpty)
@@ -377,6 +409,12 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       parseTriggeredFlow("REFRESH FLOW")
     }
     assert(missingRefreshNameError.getMessage.contains("requires a flow name"))
+    Seq("my-flow", "a b").foreach { invalidName =>
+      val invalidRefreshNameError = intercept[IllegalArgumentException] {
+        parseTriggeredFlow(s"REFRESH FLOW $invalidName")
+      }
+      assert(invalidRefreshNameError.getMessage.contains(s"'$invalidName' is invalid"))
+    }
 
     val debugSpec = querySpecs(
       """--DEBUG
@@ -422,15 +460,18 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         "CREATE FLOW first_flow AS INSERT INTO shared_sink BY NAME " +
           "SELECT * FROM STREAM(first_source)"),
       sharedTargetFlows)
-    val sharedTargetError = intercept[IllegalArgumentException] {
-      registerTriggeredFlow(
-        spark,
-        createFlowCommand(
-          "CREATE FLOW second_flow AS INSERT INTO shared_sink BY NAME " +
-            "SELECT * FROM STREAM(second_source)"),
-        sharedTargetFlows)
-    }
-    assert(sharedTargetError.getMessage.contains("already written by flow `first_flow`"))
+    Seq("shared_sink", "default.shared_sink", "spark_catalog.default.shared_sink")
+      .zipWithIndex.foreach { case (targetTable, index) =>
+        val sharedTargetError = intercept[IllegalArgumentException] {
+          registerTriggeredFlow(
+            spark,
+            createFlowCommand(
+              s"CREATE FLOW second_flow_$index AS INSERT INTO $targetTable BY NAME " +
+                "SELECT * FROM STREAM(second_source)"),
+            sharedTargetFlows)
+        }
+        assert(sharedTargetError.getMessage.contains("already written by flow `first_flow`"))
+      }
 
     withTable("by_name_source", "by_name_sink") {
       spark.sql("CREATE TABLE by_name_source (second INT, first INT) USING parquet")
@@ -536,6 +577,15 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         Nil,
         flows)
       checkAnswer(spark.table("provider_sink"), Seq(Row(1, "a"), Row(2, "b")))
+      spark.table("provider_sink")
+        .selectExpr("part", "input_file_name() AS file")
+        .collect()
+        .foreach { row =>
+          val part = row.getString(0)
+          val file = row.getString(1)
+          assert(file.contains(s"/part=$part/"),
+            s"Expected row for partition '$part' to be stored in its partition directory: $file")
+        }
     }
 
     withTable("retry_source", "retry_sink") {
