@@ -84,12 +84,19 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
     SparkSession.builder().config(conf).getOrCreate()
   }
 
-  /** Synthetic inference-request rows keyed by user. */
+  /**
+   * Synthetic inference-request rows keyed by user. The user modulus is prime, so none of
+   * the other `id % k` columns is a function of `user_id`: with a 1000000 modulus, `id % 2`,
+   * `id % 4` and `id % 5` would all be, and the three specs below would collapse back onto
+   * the user key instead of grouping rows differently. The user count is small enough that
+   * the widest spec `(user_id, model, priority)` still groups several rows per partition
+   * rather than degenerating into singleton groups.
+   */
   private def prepareServingTable(name: String, n: Long): Unit = {
     spark.range(n)
       .selectExpr(
         "id as req_id",
-        "cast(id % 1000000 as long) as user_id",
+        "cast(id % 99989 as long) as user_id",
         "cast(id % 2 as int) as is_primary",
         "cast(id % 3 as int) as tier",
         "cast(id % 5 as int) as model",
@@ -119,13 +126,14 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
 
   /**
    * Fewer users than the serving table, so each COLLECT_LIST partition holds enough
-   * events for the wide-output shuffle cost to be observable.
+   * events for the wide-output shuffle cost to be observable. The user modulus is prime
+   * for the same reason as in `prepareServingTable`.
    */
   private def prepareSessionTable(name: String, n: Long): Unit = {
     spark.range(n)
       .selectExpr(
         "id as req_id",
-        "cast(id % 50000 as long) as user_id",
+        "cast(id % 49999 as long) as user_id",
         "cast(id % 2 as int) as is_primary",
         "cast(id % 3 as int) as model",
         "cast(id % 4 as int) as priority",
