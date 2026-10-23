@@ -95,7 +95,9 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
   private case class ResolvedTableName(
       catalog: String,
       namespace: Seq[String],
-      table: String)
+      table: String) {
+    def sql: String = (catalog +: namespace :+ table).map(quoteIdentifier).mkString(".")
+  }
 
   private case class TriggeredFlow(
       flowName: Seq[String],
@@ -270,18 +272,19 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       flows: mutable.Map[Seq[String], TriggeredFlow]): (String, Seq[String]) = {
     session.withActive {
       val flow = resolveTriggeredFlow(session, flowName, flows)
+      val targetTableName = flow.resolvedTargetTable.sql
       val df = classic.Dataset.ofRows(
         session.asInstanceOf[classic.SparkSession], flow.query.clone())
       require(df.isStreaming,
         s"SQL golden triggered flow ${formatFlowName(flow.flowName)} requires a streaming query, " +
           "but its CREATE FLOW query reads no streaming source.")
-      require(session.catalog.tableExists(flow.targetTable),
+      require(session.catalog.tableExists(targetTableName),
         s"SQL golden triggered flow target table '${flow.targetTable}' does not exist.")
       val queryName = triggeredFlowQueryName(testCase, sparkConfigSet, flow.flowName)
-      val targetTable = loadV1Table(session, flow.targetTable)
+      val targetTable = loadV1Table(session, targetTableName)
       val alignedQuery = TableOutputResolver.resolveOutputColumns(
-        flow.targetTable,
-        session.table(flow.targetTable).queryExecution.analyzed.output,
+        targetTableName,
+        session.table(targetTableName).queryExecution.analyzed.output,
         df.queryExecution.analyzed,
         byName = true,
         session.sessionState.conf,
@@ -301,11 +304,12 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
           throw new IllegalArgumentException(
             s"SQL golden triggered flow target table '${flow.targetTable}' has no provider.")
         })
+        writer.options(table.storage.properties)
         if (table.partitionColumnNames.nonEmpty) {
           writer.partitionBy(table.partitionColumnNames: _*)
         }
       }
-      val query = writer.toTable(flow.targetTable)
+      val query = writer.toTable(targetTableName)
       Utils.tryWithSafeFinally {
         try {
           if (!query.awaitTermination(triggeredFlowTimeoutMs)) {
@@ -517,7 +521,9 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
             incompatibleFlows)
         },
         condition = "INCOMPATIBLE_DATA_FOR_TABLE.EXTRA_COLUMNS",
-        parameters = Map("tableName" -> "`incompatible_sink`", "extraColumns" -> "`id`"))
+        parameters = Map(
+          "tableName" -> "`spark_catalog`.`default`.`incompatible_sink`",
+          "extraColumns" -> "`id`"))
     }
 
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
@@ -586,6 +592,73 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
           assert(file.contains(s"/part=$part/"),
             s"Expected row for partition '$part' to be stored in its partition directory: $file")
         }
+    }
+
+    withTable("options_source", "options_sink") {
+      spark.sql("CREATE TABLE options_source (id STRING, value STRING) USING parquet")
+      spark.sql("INSERT INTO options_source VALUES ('1', 'a'), ('2', 'b')")
+      spark.sql(
+        "CREATE TABLE options_sink (id STRING, value STRING) USING csv OPTIONS(delimiter = '|')")
+      val flows = mutable.Map.empty[Seq[String], TriggeredFlow]
+      registerTriggeredFlow(
+        spark,
+        createFlowCommand(
+          spark,
+          "CREATE FLOW options_flow AS INSERT INTO options_sink BY NAME " +
+            "SELECT id, value FROM STREAM(options_source)"),
+        flows)
+      runTriggeredFlow(
+        spark,
+        Seq("options_flow"),
+        RegularTestCase("options", "", ""),
+        Nil,
+        flows)
+      checkAnswer(spark.table("options_sink"), Seq(Row("1", "a"), Row("2", "b")))
+    }
+
+    withTable("qualified_source") {
+      spark.sql("CREATE TABLE qualified_source (id INT) USING parquet")
+      spark.sql("INSERT INTO qualified_source VALUES (1)")
+      val (firstDb, secondDb) = ("triggered_flow_db1", "triggered_flow_db2")
+      withDatabase(firstDb, secondDb) {
+        spark.sql(s"CREATE DATABASE $firstDb")
+        spark.sql(s"CREATE DATABASE $secondDb")
+        spark.sql(s"CREATE TABLE $firstDb.sink (id INT) USING parquet")
+        spark.sql(s"CREATE TABLE $secondDb.sink (id INT) USING parquet")
+        val flows = mutable.Map.empty[Seq[String], TriggeredFlow]
+
+        spark.sql(s"USE $firstDb")
+        registerTriggeredFlow(
+          spark,
+          createFlowCommand(
+            spark,
+            "CREATE FLOW first_qualified_flow AS INSERT INTO sink BY NAME " +
+              "SELECT id FROM STREAM(spark_catalog.default.qualified_source)"),
+          flows)
+
+        spark.sql(s"USE $secondDb")
+        registerTriggeredFlow(
+          spark,
+          createFlowCommand(
+            spark,
+            "CREATE FLOW second_qualified_flow AS INSERT INTO sink BY NAME " +
+              "SELECT id FROM STREAM(spark_catalog.default.qualified_source)"),
+          flows)
+        runTriggeredFlow(
+          spark,
+          Seq("first_qualified_flow"),
+          RegularTestCase("qualified-target", "", ""),
+          Nil,
+          flows)
+        runTriggeredFlow(
+          spark,
+          Seq("second_qualified_flow"),
+          RegularTestCase("qualified-target", "", ""),
+          Nil,
+          flows)
+        checkAnswer(spark.table(s"$firstDb.sink"), Row(1))
+        checkAnswer(spark.table(s"$secondDb.sink"), Row(1))
+      }
     }
 
     withTable("retry_source", "retry_sink") {
