@@ -525,6 +525,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
         )
 
+      case insert: UnresolvedInsert =>
+        throw SparkException.internalError(
+          s"UnresolvedInsert target was not lowered during analysis: ${insert.table.nodeName}")
+
       case c: CacheTableAsSelect if c.tempViewName.resolved =>
         // The parser builds `tempViewName` as either a `Literal[StringType]` (for direct
         // identifiers and `IDENTIFIER('literal')`) or an `ExpressionWithUnresolvedIdentifier`

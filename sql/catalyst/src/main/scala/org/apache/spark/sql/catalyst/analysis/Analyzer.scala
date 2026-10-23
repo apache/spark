@@ -436,7 +436,7 @@ class Analyzer(
     relation
   }
 
-  /** Lowers a parsed INSERT enough for transaction detection to inspect its target. */
+  /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
     runWithSessionConf {
       val identifierResolvedTarget = insert.table match {
@@ -1461,7 +1461,7 @@ class Analyzer(
     }
   }
 
-  /** Lower a parsed INSERT as soon as its target identifier expression has been evaluated. */
+  /** Lower an INSERT as soon as its target identifier expression has been evaluated. */
   object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
