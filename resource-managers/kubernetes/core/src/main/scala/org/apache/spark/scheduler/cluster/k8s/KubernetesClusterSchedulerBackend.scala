@@ -132,6 +132,26 @@ private[spark] class KubernetesClusterSchedulerBackend(
       super.stop()
     }
 
+    var interrupted = false
+    try {
+      try {
+        Utils.tryLogNonFatalError {
+          podAllocator.stopAllocation()
+        }
+      } catch {
+        case _: InterruptedException =>
+          // awaitTermination clears the interrupt flag. Finish resource cleanup before restoring
+          // it, otherwise subsequent blocking cleanup calls can fail immediately.
+          interrupted = true
+          logWarning("Interrupted while waiting for executor pod creation to stop")
+      }
+      stopKubernetesResources()
+    } finally {
+      if (interrupted) Thread.currentThread().interrupt()
+    }
+  }
+
+  private def stopKubernetesResources(): Unit = {
     Utils.tryLogNonFatalError {
       snapshotsStore.stop()
     }
