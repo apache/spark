@@ -1227,9 +1227,10 @@ object SQLConf {
       "nested loop joins if the build side is eligible for broadcast. Supported join types " +
       "include inner, left outer, right outer, left semi, and left anti. Broadcast range joins " +
       "build an index on the broadcast side to significantly accelerate selective range probes, " +
-      "but perform worse than nested loop joins when half or more of the build intervals " +
-      "overlap each probe, not only when nearly all of them do: about 0.7X-0.8X on long " +
-      "keys and 0.5X-0.6X on boxed keys. This is disabled by default.")
+      "but perform worse than nested loop joins when most, but not all, of the build intervals " +
+      "overlap each probe: about 0.7X-0.8X on long keys and 0.5X-0.6X on boxed keys. Builds " +
+      "where every interval overlaps each probe run at about parity instead. This is " +
+      "disabled by default.")
     .version("4.4.0")
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
