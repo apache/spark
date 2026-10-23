@@ -50,9 +50,9 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
         (TimestampType, TimestampNTZType), (TimestampNTZType, TimestampType))
     } {
       val leftTimestamp = AttributeReference(
-        name = "ts", dataType = leftType, nullable = false, metadata = metadata)()
+        name = "ts", dataType = leftType, metadata = metadata)()
       val rightTimestamp = AttributeReference(
-        name = "ts", dataType = rightType, nullable = false, metadata = metadata)()
+        name = "ts", dataType = rightType, metadata = metadata)()
       val leftNumber = AttributeReference("n", IntegerType)()
       val rightNumber = AttributeReference("n", LongType)()
       val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(

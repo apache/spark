@@ -2839,7 +2839,7 @@ object AsOfJoin {
     }
 
     /** True when either operand is a STRUCT or ARRAY. */
-    private[catalyst] def isCompositeOperand(
+    private def isCompositeOperand(
         leftType: DataType,
         rightType: DataType): Boolean =
       Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
