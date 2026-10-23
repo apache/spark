@@ -21,6 +21,7 @@ use std::sync::Arc;
 use arrow_schema::{DataType, Field, FieldRef, Fields, Schema, SchemaRef, TimeUnit};
 use parquet::arrow::arrow_reader::{ArrowReaderMetadata, ArrowReaderOptions};
 use parquet::basic::Type as PhysicalType;
+use parquet::file::metadata::PageIndexPolicy;
 use parquet::schema::types::SchemaDescriptor;
 use spark_native_source::Result;
 
@@ -28,9 +29,12 @@ use spark_native_source::Result;
 /// conversion of its Parquet schema, ignoring any Arrow schema that a writer embedded, except
 /// for INT96 timestamps. Spark writes timestamps as INT96 by default, which arrow-rs reads as
 /// nanoseconds without a time zone; the source reads them as the microseconds since the epoch
-/// that they are to Spark, which also covers the years that nanoseconds overflow.
-pub(crate) fn load(file: &File) -> Result<ArrowReaderMetadata> {
-    let options = ArrowReaderOptions::new().with_skip_arrow_metadata(true);
+/// that they are to Spark, which also covers the years that nanoseconds overflow. With
+/// `page_index`, also loads the column and offset indexes of the pages, if the file has them.
+pub(crate) fn load(file: &File, page_index: bool) -> Result<ArrowReaderMetadata> {
+    let options = ArrowReaderOptions::new()
+        .with_skip_arrow_metadata(true)
+        .with_page_index_policy(PageIndexPolicy::from(page_index));
     let metadata = ArrowReaderMetadata::load(file, options)?;
     let mut leaf = 0;
     let fields: Fields = metadata

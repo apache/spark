@@ -36,9 +36,18 @@ The pushed predicates that the reader can evaluate as Spark does become an arrow
 [`RowFilter`][row-filter]. For the row groups of a task, the reader decodes the columns of the first
 predicate and evaluates it, then decodes the columns of the next predicate only for the rows that
 passed, and the other columns only for the rows that pass every predicate. Spark's own vectorized
-reader can skip row groups and pages by their statistics, but decodes every row of the pages that it
-reads, and filters afterwards. Spark evaluates the pushed predicates again on the rows that the
-source returns.
+reader decodes every row of the pages that it reads, and filters afterwards. Spark evaluates the
+pushed predicates again on the rows that the source returns.
+
+Before it decodes, the reader skips the row groups and pages in which, by their statistics, no row
+passes the predicates, as Spark's reader does with the statistics of row groups and the column
+indexes of pages. For each predicate and range of rows, it finds whether the predicate may be true
+and whether it may be false, so that it also skips under `NOT`, and it skips a range of nulls for a
+comparison and its negation alike. It uses the bounds of comparisons and `IN` lists and the null
+counts of `IS_NULL` and `IS_NOT_NULL`, but not the bounds of INT96 columns, which have no defined
+order, nor of string, binary, and decimal columns in files that define no column order, whose
+bounds old writers ordered by signed bytes. The page indexes select ranges of rows, which arrow-rs
+reads only from the pages that hold them, also in the other columns.
 
 The reader evaluates these predicates on top-level columns, with literals of the type of their
 column:
@@ -73,7 +82,7 @@ which Spark converts or rejects.
 | `path` | Required | Absolute path of a Parquet file, or of a directory of Parquet files |
 | `batchSize` | `8192` | Maximum number of rows of a batch |
 | `maxPartitionBytes` | `134217728` | Maximum number of bytes of a file that one task reads |
-| `rowFilter` | `true` | Whether to evaluate the pushed predicates in a `RowFilter` |
+| `rowFilter` | `true` | Whether to evaluate the pushed predicates, by statistics and per row |
 
 In a directory, the source skips the files whose names start with `_` or `.`, such as `_SUCCESS` and
 checksums, and empty files, and rejects subdirectories. Unknown options are rejected.
@@ -127,13 +136,14 @@ Package a release build for the benchmark: a debug build is many times slower.
 
 The files must be on a local POSIX filesystem, or on a shared filesystem at the same absolute path
 on all hosts. Object-store URLs are unsupported. The source does not discover partition directories,
-merge schemas, rebase dates and timestamps that Spark wrote in the legacy hybrid calendar, or skip
-row groups and pages by their statistics. It matches the names of columns by case, and requires
-valid UTF-8 in string columns, which arrow-rs checks and Spark does not. It reports no statistics,
-so Spark does not plan to broadcast its tables in joins without a hint. The reader evaluates the row
-filter with the synchronous reader of arrow-rs, which decodes the columns of the predicates again,
-for the rows that pass, when Spark also reads them; the predicate cache of arrow-rs serves only its
-asynchronous reader. Native memory is not reserved through Spark's memory manager.
+merge schemas, or rebase dates and timestamps that Spark wrote in the legacy hybrid calendar. It
+skips no pages by the prefixes of `STARTS_WITH` or by bloom filters, which Spark's reader can. It
+matches the names of columns by case, and requires valid UTF-8 in string columns, which arrow-rs
+checks and Spark does not. It reports no statistics to Spark, so Spark does not plan to broadcast
+its tables in joins without a hint. The reader evaluates the row filter with the synchronous reader
+of arrow-rs, which decodes the columns of the predicates again, for the rows that pass, when Spark
+also reads them; the predicate cache of arrow-rs serves only its asynchronous reader. Native memory
+is not reserved through Spark's memory manager.
 
 [sdk]: ../../../../../sql/native/rust/README.md
 [native-source-pr]: https://github.com/apache/spark/pull/59424

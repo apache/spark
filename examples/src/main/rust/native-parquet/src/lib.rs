@@ -18,9 +18,11 @@
 //! The driver splits the files of a path into byte ranges, as Spark splits the files of its own
 //! sources, and each task reads the row groups whose middle falls in its range. Pushed predicates
 //! become an arrow-rs `RowFilter`: the reader decodes the columns of the predicates first, and
-//! the other columns only for the rows that pass.
+//! the other columns only for the rows that pass. Before it decodes, the reader skips the row
+//! groups and pages in which, by their statistics, no row passes the predicates.
 
 mod filter;
+mod prune;
 mod schema;
 
 use std::fs::{self, File};
@@ -192,13 +194,25 @@ impl PartitionReaderFactory for ParquetReaderFactory {
         let path = partition.path.display().to_string();
         let in_file = |error: Box<dyn std::error::Error + Send + Sync>| format!("{path}: {error}");
         let file = File::open(&partition.path).map_err(|error| in_file(error.into()))?;
-        let metadata = schema::load(&file).map_err(in_file)?;
+        let metadata = schema::load(&file, !self.predicates.is_empty()).map_err(in_file)?;
+        let file_schema = metadata.schema().clone();
+        let parquet_schema = metadata.parquet_schema().clone();
+        let filters = self
+            .predicates
+            .iter()
+            .map(|predicate| {
+                // The scan checked the predicates on the schema to read, which the file has.
+                Filter::new(predicate, &file_schema).ok_or_else(|| {
+                    format!("{path}: The predicate {predicate:?} does not apply to the file")
+                })
+            })
+            .collect::<std::result::Result<Vec<_>, _>>()?;
         let row_groups = row_groups_in(&metadata, partition.start, partition.end);
+        let (row_groups, selection) =
+            prune::prune(&filters, &metadata, row_groups).map_err(|error| in_file(error.into()))?;
         if row_groups.is_empty() {
             return Ok(Box::new(std::iter::empty()));
         }
-        let file_schema = metadata.schema().clone();
-        let parquet_schema = metadata.parquet_schema().clone();
 
         // The reader returns the projected columns in the order of the file; `order` restores
         // the order of the schema to read.
@@ -223,13 +237,12 @@ impl PartitionReaderFactory for ParquetReaderFactory {
             .with_row_groups(row_groups)
             .with_projection(ProjectionMask::roots(&parquet_schema, indices))
             .with_batch_size(self.batch_size);
-        if !self.predicates.is_empty() {
+        if let Some(selection) = selection {
+            builder = builder.with_row_selection(selection);
+        }
+        if !filters.is_empty() {
             let mut predicates: Vec<Box<dyn ArrowPredicate>> = Vec::new();
-            for predicate in &self.predicates {
-                // The scan checked the predicates on the schema to read, which the file has.
-                let filter = Filter::new(predicate, &file_schema).ok_or_else(|| {
-                    format!("{path}: The predicate {predicate:?} does not apply to the file")
-                })?;
+            for filter in filters {
                 let mut columns = Vec::new();
                 filter.columns(&mut columns);
                 let columns = columns
@@ -312,7 +325,7 @@ fn data_files(path: &Path) -> Result<Vec<(PathBuf, u64)>> {
 
 fn load(path: &Path) -> Result<ArrowReaderMetadata> {
     let file = File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
-    schema::load(&file)
+    schema::load(&file, false)
 }
 
 /// The row groups whose middle falls in `[start, end)`, as Spark assigns row groups to the
@@ -385,6 +398,10 @@ mod tests {
         let properties = WriterProperties::builder()
             .set_max_row_group_row_count(Some(rows_per_group))
             .build();
+        write_with(path, batches, properties);
+    }
+
+    fn write_with(path: &Path, batches: &[RecordBatch], properties: WriterProperties) {
         let file = File::create(path).unwrap();
         let mut writer = ArrowWriter::try_new(file, batches[0].schema(), Some(properties)).unwrap();
         for batch in batches {
@@ -678,6 +695,65 @@ mod tests {
         let unfiltered = read(&unfiltered, columns, &predicates, None).unwrap();
         assert_eq!(unfiltered.support, [FilterSupport::Unsupported; 3]);
         assert_eq!(unfiltered.ids(), (0..1000).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn returns_the_rows_that_pass_when_statistics_skip_row_groups_and_pages() {
+        let directory = TempDirectory::new();
+        let properties = WriterProperties::builder()
+            .set_max_row_group_row_count(Some(100))
+            .set_data_page_row_count_limit(10)
+            .set_write_batch_size(10)
+            .build();
+        write_with(
+            &directory.join("rows.parquet"),
+            &[rows(0, 1000)],
+            properties,
+        );
+        let id = |op, value: i64| function(op, vec![column("id"), literal("bigint", json!(value))]);
+        let not = |child| function("NOT", vec![child]);
+        let label_is_not_null = function("IS_NOT_NULL", vec![column("label")]);
+        let k = function("=", vec![column("k"), literal("int", json!(3))]);
+        let in_list = function(
+            "IN",
+            vec![
+                column("id"),
+                literal("bigint", json!(5)),
+                literal("bigint", json!(512)),
+            ],
+        );
+        // The predicates, and the ids that pass them.
+        type Case = (Vec<Value>, fn(i64) -> bool);
+        let cases: [Case; 5] = [
+            (vec![id("<", 55)], |id| id < 55),
+            (vec![not(id(">=", 55)), label_is_not_null], |id| {
+                id < 55 && id % 7 != 0
+            }),
+            (vec![function("OR", vec![id(">", 990), k])], |id| {
+                id > 990 || id % 10 == 3
+            }),
+            (vec![in_list], |id| id == 5 || id == 512),
+            (vec![id(">", 300), id("<", 305)], |id| id > 300 && id < 305),
+        ];
+        for batch_size in ["8192", "7"] {
+            let source = source(&directory.0, &[("batchsize", batch_size)]);
+            for (predicates, passes) in &cases {
+                let columns = Some(&["label", "id", "k"][..]);
+                let read = read(&source, columns, predicates, None).unwrap();
+                let expected: Vec<i64> = (0..1000).filter(|&id| passes(id)).collect();
+                assert_eq!(read.ids(), expected, "{predicates:?}");
+                for batch in read.batches() {
+                    let labels = batch
+                        .column(0)
+                        .as_any()
+                        .downcast_ref::<StringArray>()
+                        .unwrap();
+                    for (row, id) in ids(batch).into_iter().enumerate() {
+                        assert_eq!(labels.is_valid(row), id % 7 != 0);
+                    }
+                }
+            }
+        }
     }
 
     #[test]
