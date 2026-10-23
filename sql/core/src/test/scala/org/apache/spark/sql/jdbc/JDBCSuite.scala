@@ -1472,29 +1472,23 @@ class JDBCSuite extends SharedSparkSession {
     // "c" LIKE '%a\\b%' ESCAPE '\'
     assert(defaultSQL(StringContains("c", "a\\b")) === """"c" LIKE '%a\\b%' ESCAPE '\'""")
 
-    // MySQL treats backslash as an escape character inside string literals, so every backslash is
-    // doubled again: the ESCAPE clause uses `\\` and a literal backslash in the value becomes four
-    // backslashes (escapeSpecialCharsForLikePattern doubles it, then escapeSql doubles each of
-    // those). The wildcard escaping for `%`/`_` is unchanged from the default.
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
-    // `c` LIKE 'ab\\\\%' ESCAPE '\\'
-    assert(mySQLSQL(StringStartsWith("c", "ab\\")) === """`c` LIKE 'ab\\\\%' ESCAPE '\\'""")
-    // `c` LIKE '%\\\\ab' ESCAPE '\\'
-    assert(mySQLSQL(StringEndsWith("c", "\\ab")) === """`c` LIKE '%\\\\ab' ESCAPE '\\'""")
-    // `c` LIKE '%a\\\\b%' ESCAPE '\\'
-    assert(mySQLSQL(StringContains("c", "a\\b")) === """`c` LIKE '%a\\\\b%' ESCAPE '\\'""")
-    // Wildcards stay escaped: the `\` that escapeSpecialCharsForLikePattern puts before `%`/`_` is
-    // itself doubled for MySQL's string-literal layer, so it parses back to `\%`/`\_` (literal
-    // wildcards) before the LIKE engine, matching the default dialect's semantics.
-    // `c` LIKE 'a\\%b\\_%' ESCAPE '\\'
-    assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
+    val mySQLEscape = "ESCAPE _utf8mb4 X'5C'"
+    assert(mySQLSQL(StringStartsWith("c", "ab\\")) ===
+      s"`c` LIKE _utf8mb4 X'61625C5C25' $mySQLEscape")
+    assert(mySQLSQL(StringEndsWith("c", "\\ab")) ===
+      s"`c` LIKE _utf8mb4 X'255C5C6162' $mySQLEscape")
+    assert(mySQLSQL(StringContains("c", "a\\b")) ===
+      s"`c` LIKE _utf8mb4 X'25615C5C6225' $mySQLEscape")
+    assert(mySQLSQL(StringStartsWith("c", "a%b_")) ===
+      s"`c` LIKE _utf8mb4 X'615C25625C5F25' $mySQLEscape")
   }
 
-  test("SPARK-57500: escape backslash in pushed-down string literals for MySQL") {
+  test("SPARK-57500: push down MySQL string literals containing a backslash as hex strings") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     assert(mySQLDialect.compileExpression(EqualTo("c", "a'\\b").toV2) ===
-      Some("""`c` = 'a''\\b'"""))
+      Some("`c` = _utf8mb4 X'61275C62'"))
     assert(mySQLDialect.getTableCommentQuery("t", "a\\b") === """ALTER TABLE t COMMENT = 'a\\b'""")
   }
 
