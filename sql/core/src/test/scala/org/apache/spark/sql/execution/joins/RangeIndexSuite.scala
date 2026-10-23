@@ -143,8 +143,10 @@ class RangeIndexSuite extends SparkFunSuite {
   test("IntervalIndex.build defends against a build-side iterator reusing its row buffer") {
     // If build() captured keys or rows by reference instead of copying them, every stored
     // entry would collapse to the iterator's last value once the shared buffer is mutated
-    // again after the build-side iterator is drained -- exactly what a broadcast's row
-    // iterator does once BroadcastExchangeExec finishes feeding it to RangeRelationBroadcastMode.
+    // again after the build-side iterator is drained -- the hazard guarded against is any
+    // producer whose rows or projected keys alias a reused buffer (e.g. a typed UDF result),
+    // not specifically BroadcastExchangeExec: its own row iterator decodes a fresh UnsafeRow
+    // per record.
     val n = 50
     val buildKeys = Seq(
       BoundReference(0, IntegerType, nullable = true),
@@ -396,7 +398,7 @@ class RangeIndexSuite extends SparkFunSuite {
 
   test("-0.0 and 0.0 are treated as one key") {
     // Double's own `==` already treats -0.0 and 0.0 as equal, so `PhysicalDataType.ordering`
-    // (which SQL requires to distinguish them from no other value, but not from each other)
+    // (which SQL requires to distinguish them from every other value, but not from each other)
     // merges them exactly like the UTF8String/Array[Byte] keys above: a probe on either
     // sign finds rows stored under both.
     val negZero: Any = -0.0
@@ -416,16 +418,36 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("a nested probe does not drop rows from the outer iterator") {
-    val index = buildIntervals((0 until 32).map(i => span(i, i + 10, i)))
-    val outer = index.overlapping(0, 100)
+    val spans = (0 until 32).map(i => span(i, i + 10, i))
+    val index = buildIntervals(spans)
+    val longIdx = RangeRelationBroadcastMode(
+      Seq(BoundReference(0, IntegerType, nullable = true),
+        BoundReference(1, IntegerType, nullable = true)),
+      IntervalIndexKind)
+      .transform(spans.map(t => InternalRow(t._1, t._2, t._3.getInt(0))).toArray)
+      .asInstanceOf[LongIntervalIndex]
+
+    // [0, 15] does not cover every span (the core is [31, 10]), so this walks the tree
+    // instead of taking the all-covering shortcut: proof that two concurrent walks can
+    // run on one index, the shape two interval joins fused in one whole-stage rely on.
+    val expectedOuter = (0 to 15).toList
+    val outer = index.overlapping(0, 15)
+    assert(outer.isInstanceOf[OverlapIterator])
     val seen = scala.collection.mutable.ArrayBuffer.empty[Int]
-    // The inner probe runs while the outer iterator still has rows, the same
-    // shape as two interval joins fused in one whole-stage.
     while (outer.hasNext) {
       seen += outer.next().getInt(0)
       assert(ids(index.overlapping(0, 5)).sorted == (0 to 5).toList)
     }
-    assert(seen.sorted == (0 until 32).toList)
+    assert(seen.sorted == expectedOuter)
+
+    val longOuter = longIdx.overlapping(0L, 15L)
+    assert(longOuter.isInstanceOf[LongOverlapIterator])
+    val longSeen = scala.collection.mutable.ArrayBuffer.empty[Int]
+    while (longOuter.hasNext) {
+      longSeen += longOuter.next().getInt(2)
+      assert(longIdx.overlapping(0L, 5L).map(_.getInt(2)).toList.sorted == (0 to 5).toList)
+    }
+    assert(longSeen.sorted == expectedOuter)
   }
 
   test("a point probe of disjoint intervals returns only the containing row") {
@@ -931,16 +953,14 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
-  test("LongIntervalIndex.coreLow/coreHigh use the empty-set identities, like the boxed family") {
+  test("LongIntervalIndex.coreLow/coreHigh use infinite-bound empty-set identities") {
     // Defensive consistency fix, not a live-bug regression test: overlapping()'s own
     // `if (lows.isEmpty) return Iterator.empty` guard already short-circuits before either
     // field is ever read on an empty index, so an all-covering probe window never actually
     // reaches this comparison for one - it would in fact pass (vacuously, for every window),
     // not fail, since probeLow <= Long.MaxValue and probeHigh >= Long.MinValue always hold.
-    // Kept anyway because it mirrors IntervalIndex.coreLow/coreHigh, which both return null
-    // for an empty index: a max-of-nothing is -infinity and a min-of-nothing is +infinity,
-    // and the two index families should agree on that convention even where neither
-    // currently depends on it.
+    // IntervalIndex.coreLow/coreHigh return null for an empty index instead: the two families
+    // use different empty-set sentinels, which is fine since neither currently depends on it.
     assert(LongIntervalIndex.coreLow(Array.empty[Long]) == Long.MinValue)
     assert(LongIntervalIndex.coreHigh(Array.empty[Long]) == Long.MaxValue)
   }
