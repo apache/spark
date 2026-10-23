@@ -35,7 +35,8 @@ object ValidateRequirements extends Logging {
   }
 
   def validate(plan: SparkPlan): Boolean = {
-    plan.children.forall(validate) && validateInternal(plan)
+    plan.children.forall(validate) && validateInternal(plan) &&
+      PartitioningOrigin.validateNode(plan)
   }
 
   private def validateInternal(plan: SparkPlan): Boolean = {

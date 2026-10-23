@@ -3878,7 +3878,8 @@ class AdaptiveQueryExecSuite
     def localSort(child: SparkPlan): SparkPlan =
       SortExec(SortOrder(child.output.head, Ascending) :: Nil, global = false, child)
 
-    val evaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = false, countLocalSort = true)
+    val evaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = false, countLocalSort = true, pushDownShuffleThroughUnion = false)
     def cost(plan: SparkPlan): Cost = evaluator.evaluateCost(plan)
 
     // Same number of shuffles: fewer local sorts is cheaper.
@@ -3894,7 +3895,7 @@ class AdaptiveQueryExecSuite
 
     // When countLocalSort is disabled, local sorts do not affect the cost.
     val noSortEvaluator = SimpleCostEvaluator(
-      forceOptimizeSkewedJoin = false, countLocalSort = false)
+      forceOptimizeSkewedJoin = false, countLocalSort = false, pushDownShuffleThroughUnion = false)
     assert(noSortEvaluator.evaluateCost(oneShuffleTwoSorts)
       .compare(noSortEvaluator.evaluateCost(oneShuffleNoSort)) === 0)
 
@@ -3903,7 +3904,8 @@ class AdaptiveQueryExecSuite
     // local sorts.
     def join(l: SparkPlan, r: SparkPlan, isSkew: Boolean): SparkPlan =
       SortMergeJoinExec(l.output.take(1), r.output.take(1), Inner, None, l, r, isSkewJoin = isSkew)
-    val skewEvaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = true, countLocalSort = true)
+    val skewEvaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = true, countLocalSort = true, pushDownShuffleThroughUnion = false)
     // Skew-join plan: 1 skew join, 3 shuffles, 2 local sorts.
     val withSkewJoin = skewEvaluator.evaluateCost(
       join(localSort(shuffle(shuffle(leaf))), localSort(shuffle(leaf)), isSkew = true))

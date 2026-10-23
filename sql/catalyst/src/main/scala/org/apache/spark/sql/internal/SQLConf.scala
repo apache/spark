@@ -8533,10 +8533,13 @@ object SQLConf {
         "hash partitioning added by EnsureRequirements on top of a UnionExec is pushed down " +
         "below the union, shuffling only the children that do not already report the picked " +
         "layout. The target count must be at least the smaller of the replaced exchange's " +
-        "count and spark.sql.shuffle.partitions. Removing the union's direct shuffle stage " +
+        "count and the effective initial shuffle partition count, including " +
+        "spark.sql.adaptive.coalescePartitions.initialPartitionNum when set. " +
+        "Removing the union's direct shuffle stage " +
         "can reduce AQE skew handling and join conversion opportunities. Keeping a shuffled " +
-        "join child's layout can make a skew split invalidate an ancestor's distribution, " +
-        "causing AQE to discard skew optimization for the round. Requires " +
+        "join child's layout can make skew join optimization or local shuffle reads invalidate " +
+        "an ancestor's distribution. AQE may discard that optimization or add another shuffle " +
+        "when skew optimization is forced. Join inputs and join branches are opt-in. Requires " +
         "spark.sql.unionOutputPartitioning to be enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -8562,10 +8565,10 @@ object SQLConf {
     buildConf(
       "spark.sql.optimizer.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled")
       .internal()
-      .doc("When set to true, union children may offer push-down targets even when the source " +
-        "check finds an unsupported shuffle origin or a non-shuffle leaf, such as a bucketed " +
-        "or cached scan. Keeping such a child can prevent coalescing of the consumer's " +
-        "compatible shuffle group, including the other side of a join. This only affects target " +
+      .doc("When set to true, fixed-count shuffles, bucketed or cached scans, and branches " +
+        "containing exploding joins may offer push-down targets. This can prevent coalescing " +
+        "of the consumer's compatible shuffle group or reduce its target partition size. " +
+        "Rebalance shuffles remain ineligible. This only affects target " +
         "selection when spark.sql.adaptive.coalescePartitions.enabled is on. Requires " +
         s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
       .version("4.4.0")
@@ -8576,15 +8579,75 @@ object SQLConf {
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES =
     buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.maxMovedBranches")
       .internal()
-      .doc("The maximum number of union children to shuffle for a push-down target. Each child " +
-        "that does not offer the target gets its own exchange; child count and order are " +
-        "preserved. Targets requiring more new exchanges are skipped. Zero only allows targets " +
+      .doc("The maximum number of union children to move onto a push-down target. Existing " +
+        "unshared requirement or column-repartition exchanges may be retargeted; other moved " +
+        "children get a new exchange. Child count and order are preserved. Targets requiring " +
+        "more moved children are skipped. Zero only allows targets " +
         "already offered by every child. Requires " +
         s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .intConf
+      .checkValue(_ >= 0, "The maximum number of moved branches must be non-negative.")
       .createWithDefault(3)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.maxUnionChildren")
+      .internal()
+      .doc("The maximum total number of union children eligible for shuffle push-down, " +
+        "including kept and moved children. Zero disables push-down. This bounds the number " +
+        "of branch tails executed sequentially within each union output task.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .intConf
+      .checkValue(_ >= 0, "The maximum number of union children must be non-negative.")
+      .createWithDefault(10)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion." +
+      "allowPartitionKeysSubsetOfClusterKeys.enabled")
+      .internal()
+      .doc("When true, shuffle push-down may use partition keys that are a subset of the " +
+        "consumer's clustering keys if spark.sql.requireAllClusterKeysForCoPartition is false " +
+        "and the consumer accepts that distribution. Such targets can concentrate rows in " +
+        "fewer partitions. When false, targets must match all clustering keys.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.allowWithSubqueries.enabled")
+      .internal()
+      .doc("When true, allows shuffle push-down in queries containing scalar, IN or dynamic " +
+        "pruning subqueries. Independent adaptive plans can make different rewrite decisions, " +
+        "reducing exchange reuse or disabling broadcast-only dynamic partition pruning. " +
+        "When false, push-down is disabled for the main query and all its subqueries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.allowJoinInputs.enabled")
+      .internal()
+      .doc("When true, allows shuffle push-down for inputs of shuffled joins. Removing a " +
+        "direct shuffle stage can prevent adaptive skew join optimization or join conversion.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED =
+    buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.keepJoinBranches.enabled")
+      .internal()
+      .doc("When true, union children may offer layouts produced by shuffled joins above their " +
+        "shuffle boundaries. Depending on those layouts can prevent skew optimization or local " +
+        "shuffle reads; forced skew optimization may add another shuffle above the union.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val SINGLE_TASK_EXECUTION_ENABLED =
     buildConf("spark.sql.optimizer.singleTaskExecution.enabled")
