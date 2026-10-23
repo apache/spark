@@ -21,7 +21,7 @@ The Arrow element types are forward refs so pyarrow stays a type-checking-only
 import at runtime, as elsewhere in the worker.
 """
 
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Protocol, TypeVar
 
@@ -48,7 +48,7 @@ class UDF:
 
     # The chained function, unwrapped: the pickled object itself (an incremental Aggregator) with
     # its signature. assign_udfs keeps the wrapped function on the handler.
-    func: Callable[..., Any]
+    func: Any
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
     # The DataType of the last function in the chain; a StructType for the eval types that

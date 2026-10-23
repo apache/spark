@@ -180,7 +180,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
 
-    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
+    def _setup_udfs(self, udfs: list[UDF]) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
         # clear message rather than a bare ImportError from `import pyarrow`.
         require_minimum_pyarrow_version()
@@ -196,7 +196,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # UDF preparation
         nesting = self._eval_conf.elementwise_nesting
         self._udf_infos = []
-        for udf_index, udf in enumerate(self._udfs):
+        for udf_index, udf in enumerate(udfs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
@@ -234,8 +234,9 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     ),
                 )
             )
-        self._col_names = [f"_{i}" for i in range(len(self._udfs))]
+        self._col_names = [f"_{i}" for i in range(len(udfs))]
 
+    def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
         @fail_on_stopiteration
