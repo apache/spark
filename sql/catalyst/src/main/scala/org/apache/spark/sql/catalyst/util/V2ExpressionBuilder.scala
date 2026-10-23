@@ -492,23 +492,14 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
   }
 
   // Identity compile is only valid vs a literal Spark already padded to the CHAR length.
-  private def charPadLength(invoke: StaticInvoke): Option[Int] = {
-    val len = invoke.arguments(1)
-    if (len.foldable) {
-      len.eval() match {
-        case n: Int => Some(n)
-        case _ => None
-      }
-    } else {
-      None
-    }
+  private def charPadLength(invoke: StaticInvoke): Option[Int] = invoke.arguments(1) match {
+    case Literal(n: Int, _) => Some(n)
+    case _ => None
   }
 
-  private def isFoldableStringOfLen(expr: Expression, n: Int): Boolean = {
-    expr.foldable && (expr.eval() match {
-      case s: UTF8String => s.numChars() == n
-      case _ => false
-    })
+  private def isFoldableStringOfLen(expr: Expression, n: Int): Boolean = expr match {
+    case Literal(s: UTF8String, _) => s.numChars() == n
+    case _ => false
   }
 
   private def generateCharPadColumn(invoke: StaticInvoke): Option[V2Expression] = {

@@ -1959,6 +1959,22 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     assert(nseq.isDefined)
     val in = new V2ExpressionBuilder(In(padded, Seq(Literal("Y"))), isPredicate = true).build()
     assert(in.isDefined)
+    val neq = new V2ExpressionBuilder(Not(EqualTo(padded, Literal("Y"))), isPredicate = true)
+      .build()
+    assert(neq.isDefined)
+    neq.get match {
+      case p: Predicate if p.name() == "<>" =>
+      case other => fail(s"expected '<>' predicate, got ${other.describe()}")
+    }
+    val inSet = new V2ExpressionBuilder(
+      InSet(padded, Set(UTF8String.fromString("Y"))), isPredicate = true).build()
+    assert(inSet.isDefined)
+    val inNull = new V2ExpressionBuilder(
+      In(padded, Seq(Literal("Y"), Literal(null, StringType))), isPredicate = true).build()
+    assert(inNull.isEmpty, "IN list with NULL should stay local")
+    val litLeft = new V2ExpressionBuilder(EqualTo(Literal("Y"), padded), isPredicate = true)
+      .build()
+    assert(litLeft.isDefined, "literal on the left of equality should still translate")
     assert(new V2ExpressionBuilder(EqualTo(padded, Literal("YY")), isPredicate = true)
       .build().isEmpty, "over-long literal should stay local")
     assert(new V2ExpressionBuilder(GreaterThan(padded, Literal("A")), isPredicate = true)

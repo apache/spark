@@ -430,12 +430,13 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
   }
 
   test("SPARK-60479: CHAR equality is pushed, including CJK") {
-    val table = s"$catalogName.char_pad"
+    val tableName = caseConvert("char_pad")
+    val table = s"$catalogName.$tableName"
     withTable(table) {
       // CHAR(n CHAR) so CJK occupies one length unit, matching Spark CHAR padding.
       Using.resource(getConnection()) { conn =>
         conn.prepareStatement(
-          "CREATE TABLE char_pad (id NUMBER, flag CHAR(4 CHAR))").executeUpdate()
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 CHAR))").executeUpdate()
       }
       // scalastyle:off nonascii
       sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, '日本')")

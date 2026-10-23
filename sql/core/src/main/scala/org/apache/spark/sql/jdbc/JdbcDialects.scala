@@ -479,12 +479,7 @@ abstract class JdbcDialect extends Serializable with Logging {
     }
 
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
-      funcName match {
-        // JDBC CHAR is stored padded. readSidePadding wrapped the column and blocked
-        // pushdown; compiling it as the column restores col = 'Y    ' (literal padded).
-        case CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => inputs(0)
-        case _ => s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
-      }
+      s"""${dialectFunctionName(funcName)}(${inputs.mkString(", ")})"""
     }
 
     override def visitAggregateFunction(
