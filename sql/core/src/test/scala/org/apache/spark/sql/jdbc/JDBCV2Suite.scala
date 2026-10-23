@@ -2036,6 +2036,17 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
         "PushedFilters: [CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN ('Y    ', 'N    ')]")
       checkAnswer(in, Seq(Row(1), Row(2)))
 
+      withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+        val inSetQ = sql(s"SELECT id FROM $table WHERE flag IN ('Y', 'N', 'X')")
+        checkFiltersRemoved(inSetQ)
+        checkPushedInfo(inSetQ,
+          "CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN",
+          "'Y    '",
+          "'N    '",
+          "'X    '")
+        checkAnswer(inSetQ, Seq(Row(1), Row(2)))
+      }
+
       val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
       checkFiltersRemoved(isNull)
       checkPushedInfo(isNull, "PushedFilters: [flag IS NULL]")

@@ -546,6 +546,16 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns whether the database supports function.
+   *
+   * For most names this means the remote can execute that SQL function.
+   * `CHAR_READ_SIDE_PADDING` is different: Spark only emits it as a CHAR scan
+   * column in `=`, `<=>`, `<>`, or `IN` against a literal already padded to the
+   * CHAR width. Returning true for that name means JDBC may compile it as the
+   * raw column, so the remote must compare that column with a blank-padded
+   * (PAD SPACE) CHAR literal the same way Spark compares the padded value.
+   * Dialects that strip trailing spaces or use a NO PAD collation must not
+   * opt in.
+   *
    * @param funcName Upper-cased function name
    * @return True if the database supports function.
    */
