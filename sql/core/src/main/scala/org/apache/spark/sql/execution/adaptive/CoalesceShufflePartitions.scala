@@ -36,7 +36,8 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
   override def conf: SQLConf = session.sessionState.conf
 
   override val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    CoalesceShufflePartitions.supportedShuffleOrigins
+    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
+      REBALANCE_PARTITIONS_BY_COL)
 
   override def isSupported(shuffle: ShuffleExchangeLike): Boolean = {
     shuffle.outputPartitioning != SinglePartition && super.isSupported(shuffle)
@@ -214,17 +215,6 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
       }.getOrElse(plan)
     case other => other.mapChildren(updateShuffleReads(_, specsMap))
   }
-}
-
-object CoalesceShufflePartitions {
-
-  /**
-   * The shuffles coalescing can change the partition count of. A shuffle of any other origin
-   * keeps its own count, so a chain holding one is not coalesced at all.
-   */
-  private[execution] val supportedShuffleOrigins: Seq[ShuffleOrigin] =
-    Seq(ENSURE_REQUIREMENTS, REPARTITION_BY_COL, REBALANCE_PARTITIONS_BY_NONE,
-      REBALANCE_PARTITIONS_BY_COL)
 }
 
 private class ShuffleStageInfo(
