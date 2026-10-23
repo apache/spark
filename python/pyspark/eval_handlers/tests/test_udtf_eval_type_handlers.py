@@ -44,8 +44,7 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_message import UDTFInfo
-    from pyspark.worker_util import EvalConf, RunnerConf, pickleSer
+    from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pyarrow:
     import pyarrow as pa
@@ -121,21 +120,15 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
         partition_child_indexes=(),
         analyze_result=None,
     ):
-        """Assign ``udtf_cls`` to ``handler`` as ``assign_udtf`` gets it from the worker."""
+        """Assign ``udtf_cls`` to ``handler`` and return the handler."""
         handler.assign_udtf(
             udtf_cls,
-            UDTFInfo(
-                args=list(args),
-                kwargs=kwargs or {},
-                partition_child_indexes=list(partition_child_indexes),
-                pickled_analyze_result=(
-                    pickleSer.dumps(analyze_result) if analyze_result is not None else None
-                ),
-                handler=memoryview(b""),
-                return_type=return_type.json(),
-                name="test_udtf",
-            ),
-            pickleSer,
+            return_type=return_type,
+            args_offsets=list(args),
+            kwargs_offsets=kwargs or {},
+            partition_child_indexes=list(partition_child_indexes),
+            analyze_result=analyze_result,
+            name="test_udtf",
         )
         return handler
 

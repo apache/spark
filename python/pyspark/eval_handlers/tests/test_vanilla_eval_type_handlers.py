@@ -34,7 +34,6 @@ from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
@@ -45,11 +44,7 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
         handler = BatchedUDFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
         handler.assign_udfs(
             [
-                (
-                    f,
-                    return_type or LongType(),
-                    UDFInfo(udfs=[], args=arg_offsets, kwargs=kwargs_offsets or {}, result_id=0),
-                )
+                (f, return_type or LongType(), arg_offsets, kwargs_offsets or {}, 0)
                 for arg_offsets, f in udfs
             ]
         )

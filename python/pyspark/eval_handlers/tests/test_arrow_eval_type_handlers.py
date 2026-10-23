@@ -37,7 +37,6 @@ from pyspark.util import PythonEvalType
 from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pyarrow:
@@ -127,11 +126,7 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @staticmethod
     def _udf(func, args_offsets, kwargs_offsets=None, return_type=None):
         """A UDF as ``assign_udfs`` takes it."""
-        return (
-            func,
-            return_type or LongType(),
-            UDFInfo(udfs=[], args=args_offsets, kwargs=kwargs_offsets or {}, result_id=0),
-        )
+        return (func, return_type or LongType(), args_offsets, kwargs_offsets or {}, 0)
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):

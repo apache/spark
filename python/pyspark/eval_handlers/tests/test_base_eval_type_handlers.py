@@ -46,7 +46,6 @@ from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker import unpickle_and_chain
-    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import RunnerConf, pickleSer
 
 
@@ -278,12 +277,9 @@ class AssignUDFsTests(PySparkBaseTestCase):
     def _stop(x):
         raise StopIteration(x)
 
-    def _udf_info(self):
-        return UDFInfo(udfs=[], args=[1], kwargs={"y": 2}, result_id=0)
-
     def _assign(self, handler_cls, runner_conf=None):
         handler = handler_cls(runner_conf or RunnerConf({}), None)
-        handler.assign_udfs([(self._stop, LongType(), self._udf_info())])
+        handler.assign_udfs([(self._stop, LongType(), [1], {"y": 2}, 0)])
         return handler._udfs[0]
 
     def test_assigns_udf_records(self):

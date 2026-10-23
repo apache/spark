@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
 
     from pyspark.sql.types import DataType
-    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 # eval type -> (variant_conf or None, {variant_value: handler class}), populated by
@@ -160,13 +159,16 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._eval_conf = eval_conf
         self._udfs: list[Any] = []
 
-    def assign_udfs(self, udfs: "list[tuple[Callable[..., Any], DataType, UDFInfo]]") -> None:
+    def assign_udfs(
+        self, udfs: "list[tuple[Callable[..., Any], DataType, list[int], dict[str, int], int]]"
+    ) -> None:
         """Assign the UDFs to this handler, each given as its unpickled (and chained) function,
-        return type and ``UDFInfo``: wrap each function for profiling and in
-        ``fail_on_stopiteration``, then set the handler up for them."""
+        return type, argument offsets, keyword argument offsets and profiler result id: wrap each
+        function for profiling and in ``fail_on_stopiteration``, then set the handler up for
+        them."""
         records = []
-        for chained_func, return_type, udf_info in udfs:
-            profiling_func = self._with_profiler(chained_func, udf_info.result_id)
+        for chained_func, return_type, args_offsets, kwargs_offsets, result_id in udfs:
+            profiling_func = self._with_profiler(chained_func, result_id)
             records.append(
                 UDF(
                     func=(
@@ -175,8 +177,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                         else profiling_func
                     ),
                     raw_func=chained_func,
-                    args_offsets=udf_info.args,
-                    kwargs_offsets=udf_info.kwargs,
+                    args_offsets=args_offsets,
+                    kwargs_offsets=kwargs_offsets,
                     return_type=return_type,
                 )
             )

@@ -41,7 +41,6 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pandas and have_pyarrow:
@@ -105,11 +104,7 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         )
         handler.assign_udfs(
             [
-                (
-                    func,
-                    return_type,
-                    UDFInfo(udfs=[], args=args_offsets, kwargs=kwargs_offsets, result_id=0),
-                )
+                (func, return_type, args_offsets, kwargs_offsets, 0)
                 for func, args_offsets, kwargs_offsets, return_type in udfs
             ]
         )

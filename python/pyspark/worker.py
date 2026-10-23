@@ -40,7 +40,7 @@ from pyspark.serializers import (
     write_int,
     write_with_length,
 )
-from pyspark.sql.types import DataType
+from pyspark.sql.types import DataType, _parse_datatype_json_string
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
     PythonEvalType,
@@ -142,16 +142,37 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             handler = handler_cls(runner_conf=runner_conf, eval_conf=eval_conf)
             if isinstance(init_info.udf_info, UDTFInfo):
                 assert isinstance(handler, UDTFHandlerBase)
-                udtf_cls = read_command(pickleSer, init_info.udf_info.handler)
-                handler.assign_udtf(udtf_cls, init_info.udf_info, pickleSer)
+                udtf_info = init_info.udf_info
+                udtf_cls = read_command(pickleSer, udtf_info.handler)
+                return_type = _parse_datatype_json_string(udtf_info.return_type)
+                if udtf_info.pickled_analyze_result is not None:
+                    analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
+                else:
+                    analyze_result = None
+                handler.assign_udtf(
+                    udtf_cls,
+                    return_type=return_type,
+                    args_offsets=udtf_info.args,
+                    kwargs_offsets=udtf_info.kwargs,
+                    partition_child_indexes=udtf_info.partition_child_indexes,
+                    analyze_result=analyze_result,
+                    name=udtf_info.name,
+                )
             else:
                 assert isinstance(init_info.udf_info, list)
-                handler.assign_udfs(
-                    [
-                        (*unpickle_and_chain(pickleSer, udf_info.udfs), udf_info)
-                        for udf_info in init_info.udf_info
-                    ]
-                )
+                udfs = []
+                for udf_info in init_info.udf_info:
+                    chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
+                    udfs.append(
+                        (
+                            chained_func,
+                            return_type,
+                            udf_info.args,
+                            udf_info.kwargs,
+                            udf_info.result_id,
+                        )
+                    )
+                handler.assign_udfs(udfs)
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 

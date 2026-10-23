@@ -42,7 +42,6 @@ from pyspark.eval_handlers.verification import verify_arrow_result, verify_panda
 from pyspark.serializers import (
     BatchedSerializer,
     CPickleSerializer,
-    FramedSerializer,
     Serializer,
 )
 from pyspark.sql.conversion import (
@@ -62,7 +61,6 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     _create_row,
-    _parse_datatype_json_string,
 )
 from pyspark.util import PythonEvalType
 
@@ -70,7 +68,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
 
-    from pyspark.worker_message import UDTFInfo
+    from pyspark.sql.udtf import AnalyzeResult
 
 
 class PartitionedUDTF(metaclass=ABCMeta):
@@ -607,23 +605,25 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 
     def assign_udtf(
-        self, udtf_cls: object, udtf_info: UDTFInfo, pickle_ser: FramedSerializer
+        self,
+        udtf_cls: object,
+        return_type: DataType,
+        args_offsets: list[int],
+        kwargs_offsets: dict[str, int],
+        partition_child_indexes: list[int],
+        analyze_result: Optional[AnalyzeResult],
+        name: str,
     ) -> None:
-        """Assign ``udtf_cls``, the unpickled UDTF class of ``udtf_info``, to this handler: wrap
-        the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in
-        ``partition_wrapper`` when its TABLE argument has PARTITION BY expressions), check the
-        'eval' signature against the call arguments, then set the handler up for it."""
+        """Assign ``udtf_cls``, the unpickled UDTF class, to this handler: wrap the constructor to
+        receive ``analyze_result``, instantiate the UDTF (wrapped in ``partition_wrapper`` when
+        its TABLE argument has PARTITION BY expressions, i.e. ``partition_child_indexes`` is not
+        empty), check the 'eval' signature against the call arguments, then set the handler up
+        for it. ``name`` is the UDTF's name in error messages."""
         if not isinstance(udtf_cls, type):
             raise PySparkRuntimeError(
                 f"Invalid UDTF handler type. Expected a class (type 'type'), but "
                 f"got an instance of {type(udtf_cls).__name__}."
             )
-        if udtf_info.pickled_analyze_result is not None:
-            pickled_analyze_result = pickle_ser.loads(udtf_info.pickled_analyze_result)
-        else:
-            pickled_analyze_result = None
-
-        return_type = _parse_datatype_json_string(udtf_info.return_type)
         if not isinstance(return_type, StructType):
             raise PySparkRuntimeError(
                 f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
@@ -635,29 +635,29 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
         # it wants to inspect the AnalyzeResult.
         handler: Callable[[], Any] = udtf_cls
         udtf_init_args = inspect.getfullargspec(udtf_cls)
-        if pickled_analyze_result is not None:
+        if analyze_result is not None:
             if len(udtf_init_args.args) > 2:
                 raise PySparkRuntimeError(
                     errorClass="UDTF_CONSTRUCTOR_INVALID_IMPLEMENTS_ANALYZE_METHOD",
-                    messageParameters={"name": udtf_info.name},
+                    messageParameters={"name": name},
                 )
             elif len(udtf_init_args.args) == 2:
 
                 def construct_udtf() -> Any:
                     # Here we pass the AnalyzeResult to the UDTF's __init__ method.
-                    return udtf_cls(dataclasses.replace(pickled_analyze_result))
+                    return udtf_cls(dataclasses.replace(analyze_result))
 
                 handler = construct_udtf
         elif len(udtf_init_args.args) > 1:
             raise PySparkRuntimeError(
                 errorClass="UDTF_CONSTRUCTOR_INVALID_NO_ANALYZE_METHOD",
-                messageParameters={"name": udtf_info.name},
+                messageParameters={"name": name},
             )
 
         # Instantiate the UDTF class.
         try:
-            if len(udtf_info.partition_child_indexes) > 0:
-                udtf = self.partition_wrapper(handler, udtf_info.partition_child_indexes)
+            if len(partition_child_indexes) > 0:
+                udtf = self.partition_wrapper(handler, partition_child_indexes)
             else:
                 udtf = handler()
         except Exception as e:
@@ -677,18 +677,18 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
         # Check that the arguments provided to the UDTF call match the expected parameters
         # defined in the 'eval' method signature.
         try:
-            inspect.signature(udtf.eval).bind(*udtf_info.args, **udtf_info.kwargs)
+            inspect.signature(udtf.eval).bind(*args_offsets, **kwargs_offsets)
         except TypeError as e:
             raise PySparkRuntimeError(
                 errorClass="UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
-                messageParameters={"name": udtf_info.name, "reason": str(e)},
+                messageParameters={"name": name, "reason": str(e)},
             ) from None
 
         self._udfs = [
             UDTF(
                 udtf=udtf,
-                args_offsets=udtf_info.args,
-                kwargs_offsets=udtf_info.kwargs,
+                args_offsets=args_offsets,
+                kwargs_offsets=kwargs_offsets,
                 return_type=return_type,
             )
         ]

@@ -42,7 +42,6 @@ from pyspark.testing.utils import (
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker_message import UDFInfo
     from pyspark.worker_util import EvalConf, RunnerConf
 
 if have_pandas and have_pyarrow:
@@ -95,15 +94,7 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
         """Build a grouped/cogrouped-map handler. ``assign_udfs`` wraps ``func`` (losing the
         signature) while ``raw_func`` keeps it."""
         handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=None)
-        handler.assign_udfs(
-            [
-                (
-                    udf,
-                    cls._GROUPED_RETURN_TYPE,
-                    UDFInfo(udfs=[], args=arg_offsets, kwargs={}, result_id=0),
-                )
-            ]
-        )
+        handler.assign_udfs([(udf, cls._GROUPED_RETURN_TYPE, arg_offsets, {}, 0)])
         return handler
 
     @staticmethod
@@ -114,11 +105,7 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @staticmethod
     def _udf(func, return_type=None, args=(0,), kwargs=None):
         """A pandas UDF as ``assign_udfs`` takes it."""
-        return (
-            func,
-            return_type or LongType(),
-            UDFInfo(udfs=[], args=list(args), kwargs=dict(kwargs or {}), result_id=0),
-        )
+        return (func, return_type or LongType(), list(args), dict(kwargs or {}), 0)
 
     @staticmethod
     def _agg_handler(handler_cls, *udfs, runner_conf=None):
