@@ -2020,29 +2020,37 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     assert(analyzed.getTagValue(Project.hiddenOutputTag).exists(_.map(_.name) == Seq("a")))
   }
 
-  test("SPARK-59146: a DataFrame column keeps a visible candidate of a hidden output visible") {
-    // Two plan nodes carry the same plan id, as the two sides of a Spark Connect self join do.
-    // On the left, `b` is visible and also hidden, the way pipe SET retains a source column it
-    // did not assign; on the right it is only visible. Both candidates are regular ones, so the
-    // reference is ambiguous. Treating the left one as hidden would instead silently resolve it
-    // to the right side.
-    val Seq(a, b) = testRelation2.output.take(2)
-    val set = Project(Seq(Alias(Literal("x"), "a")(), b), testRelation2)
-    set.setTagValue(Project.hiddenOutputTag, Seq(a, b).map(_.markAsQualifiedAccessOnly()))
-    set.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
-
-    val otherRelation = LocalRelation(AttributeReference("b", StringType)())
-    val other = Project(otherRelation.output, otherRelation)
-    other.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
-
+  test("SPARK-59146: DataFrame columns that pipe SET did not assign stay visible") {
+    // The Project of `|> SET a = 'x'` over `t(a, b)`, as a Spark Connect relation. Each use of the
+    // DataFrame is planned from a new relation, with new expression IDs and the same plan id.
+    def set(source: LocalRelation): LogicalPlan = {
+      val project = Project(
+        Seq(UnresolvedStarExceptOrReplace(
+          target = None,
+          excepts = Seq(Seq("a")),
+          replacements = Some(Seq(Alias(Literal("x"), "a")())),
+          retainExceptedColumnsAsHidden = true)),
+        source.subquery("t"))
+      project.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+      project
+    }
+    // The DataFrame is used directly, and as the right side of a USING join on `b` that hides its
+    // `b`. SET retains its whole source row as hidden output, but only to keep the column order,
+    // so the direct candidate is regular and wins. Treating it as hidden too would make the
+    // reference ambiguous.
+    val direct = LocalRelation($"a".string, $"b".string)
+    val reused = Join(
+      LocalRelation($"b".string, $"c".int),
+      set(LocalRelation($"a".string, $"b".string)),
+      UsingJoin(Inner, Seq("b")),
+      None,
+      JoinHint.NONE)
     val column = UnresolvedAttribute("b")
     column.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
-    val plan = Project(Seq(column), Join(set, other, Inner, None, JoinHint.NONE))
+    val plan = Project(Seq(column), Join(set(direct), reused, Inner, None, JoinHint.NONE))
 
-    checkError(
-      exception = intercept[AnalysisException](getAnalyzer.execute(plan)),
-      condition = "AMBIGUOUS_COLUMN_REFERENCE",
-      parameters = Map("name" -> "\"b\""))
+    val output = getAnalyzer.execute(plan).output
+    assert(output.map(_.exprId) == Seq(direct.output(1).exprId), output)
   }
 
   test("SPARK-59146: merge hidden and visible output for a qualified star") {

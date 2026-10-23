@@ -2202,7 +2202,8 @@ class Analyzer(
      * ahead of the visible output. Retaining only the excluded attributes would move them to the
      * front, so that `VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*` would return
      * `(b, a, c)`. Attributes that are also visible are emitted once by the star expansion, in
-     * their hidden position.
+     * their hidden position. The Project does not hide them, so they are also recorded in
+     * [[Project.visibleHiddenOutputTag]], which keeps them regular in DataFrame column resolution.
      */
     private def retainExceptedColumnsAsHiddenOutput(original: Project, expanded: Project): Unit = {
       val retain = original.projectList.exists {
@@ -2226,6 +2227,8 @@ class Analyzer(
             Project.hiddenOutputTag,
             sourceRow.map(_.markAsQualifiedAccessOnly()) ++
               child.metadataOutput.filterNot(a => sourceRowIds.contains(a.exprId)))
+          expanded.setTagValue(
+            Project.visibleHiddenOutputTag, sourceRow.filter(expanded.outputSet.contains))
         }
       }
     }
