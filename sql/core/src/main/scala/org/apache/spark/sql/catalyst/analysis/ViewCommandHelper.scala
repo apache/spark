@@ -24,29 +24,31 @@ import org.apache.spark.sql.execution.command.{DropTableCommand, DropTempViewCom
 
 /**
  * Rewrites resolved view commands to their session-catalog commands in [[ResolveSessionCatalog]].
- * Views in a [[ViewCatalog]] keep the V2 command.
+ * Views in a non-session [[ViewCatalog]] keep the V2 command.
  */
 object ViewCommandHelper {
 
   /**
    * Rewrites a resolved [[DropView]] to [[DropTempViewCommand]] for a temporary view or to
-   * [[DropTableCommand]] for a session-catalog view. Fails for a session-catalog target whose
-   * namespace does not have exactly one part, and for a catalog that cannot host views. Returns
-   * `dropView` itself if its target is in a [[ViewCatalog]] or is not resolved.
+   * [[DropTableCommand]] for a session-catalog view, matching temporary views first. Fails if a
+   * session-catalog target's namespace does not have exactly one part.
+   *
+   * For remaining resolved targets outside a [[ViewCatalog]], [[FakeSystemCatalog]] uses
+   * [[DropTempViewCommand]], sharing the execution path for session-qualified temporary views.
+   * Other catalogs fail with `MISSING_CATALOG_ABILITY.VIEWS`, matching `CheckViewReferences` for
+   * CREATE/ALTER VIEW and the analyzer gate on [[UnresolvedView]].
+   *
+   * Returns `dropView` itself for non-session [[ViewCatalog]] targets or unresolved targets.
+   * For non-session view catalogs, `DataSourceV2Strategy` routes DROP VIEW to
+   * `ViewCatalog.dropView`, including metric views persisted through the same interface.
    */
   def rewrite(dropView: DropView): LogicalPlan = dropView match {
-    // Session-qualified temp view: same execution path as FakeSystemCatalog DROP VIEW.
     case DropView(ResolvedTempView(ident, _), ifExists) =>
       DropTempViewCommand(ident, ifExists)
 
     case DropView(DropViewInSessionCatalog(ident), ifExists) =>
       DropTableCommand(ident, ifExists, isView = true, purge = false)
 
-    // ViewCatalog catalogs fall through to `DataSourceV2Strategy`, which routes DROP VIEW to
-    // `ViewCatalog.dropView` (this also covers METRIC_VIEW since metric views are persisted
-    // through the same ViewCatalog interface). Other non-session catalogs get
-    // `MISSING_CATALOG_ABILITY.VIEWS`, matching the error raised from `CheckViewReferences` for
-    // CREATE/ALTER VIEW and from the analyzer gate on UnresolvedView.
     case DropView(ResolvedIdentifier(catalog, ident), ifExists)
         if !catalog.isInstanceOf[ViewCatalog] =>
       if (catalog == FakeSystemCatalog) {

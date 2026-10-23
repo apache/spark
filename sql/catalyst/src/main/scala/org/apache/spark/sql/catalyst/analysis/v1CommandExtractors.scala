@@ -25,23 +25,24 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.CatalogV2Util.isSessionCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
 
-/** Extracts the V1 identifier of a resolved session-catalog persistent view or temporary view. */
+/**
+ * Extracts the V1 identifier of a resolved session-catalog persistent view or temporary view.
+ *
+ * Non-session-catalog persistent views produced for `DelegatingTable` are handled by dedicated
+ * V2 cases in `DataSourceV2Strategy`. ALTER VIEW AS, SET/UNSET TBLPROPERTIES, ALTER VIEW WITH
+ * SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS and DESCRIBE [COLUMN]
+ * use `ResolvedPersistentView.info` directly.
+ *
+ * Temporary views preserve their database so ALTER VIEW and DROP VIEW can find global temporary
+ * views. Local temporary views use only the table name. Session-qualified temporary views use
+ * the `session` database so `SessionCatalog` resolves them as temporary views.
+ */
 object ResolvedViewIdentifier {
-  // Only matches session-catalog persistent views. Non-session-catalog persistent views
-  // (produced for `DelegatingTable`) fall through and are picked up by dedicated v2 strategy
-  // cases in `DataSourceV2Strategy` -- AlterViewAs, SET/UNSET TBLPROPERTIES, ALTER VIEW ...
-  // WITH SCHEMA, RENAME TO, SHOW CREATE TABLE, SHOW TBLPROPERTIES, SHOW COLUMNS, DESCRIBE
-  // [COLUMN] all dispatch to v2 view execs that consume `ResolvedPersistentView.info`
-  // directly.
   def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
     case ResolvedPersistentView(catalog, ident, _) if isSessionCatalog(catalog) =>
       Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
 
     case ResolvedTempView(ident, _) =>
-      // Global temp views have a namespace (e.g. global_temp); preserve it so ALTER VIEW
-      // and DROP VIEW find the view. Local temp views are keyed by table name only.
-      // system.session.viewName -> use database "session" so SessionCatalog resolves
-      // it as a temp view.
       val db = CatalogManager.databaseForSessionQualifiedViewIdentifier(ident.namespace().toSeq)
       Some(TableIdentifier(ident.name(), db))
 
@@ -88,6 +89,7 @@ object ResolvedV1CommandIdentifier {
 /**
  * Extractor for resolved identifiers in the session catalog.
  * Rejects multi-part namespaces and builtin namespace targets with appropriate errors.
+ * Errors requiring a single-part namespace include the full identifier (namespace and name).
  *
  * @param statement the SQL statement (e.g. "CREATE", "DROP") for error messages
  * @param objectType the object type (e.g. "FUNCTION", "VIEW") for error messages
@@ -101,7 +103,6 @@ class ResolvedIdentifierInSessionCatalog(statement: String, objectType: String) 
           throw QueryCompilationErrors.operationNotAllowedOnBuiltinNamespaceError(
             statement, objectType, ident.name())
         }
-        // Pass full identifier (namespace + name) so error shows e.g. "`a`.`b`.`c`"
         throw QueryCompilationErrors
           .requiresSinglePartNamespaceError(ident.namespace().toSeq :+ ident.name())
       }
