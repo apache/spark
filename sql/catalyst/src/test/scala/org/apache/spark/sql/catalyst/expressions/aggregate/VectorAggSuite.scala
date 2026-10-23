@@ -487,8 +487,8 @@ class VectorAggSuite extends SparkFunSuite {
     Seq(false, true).foreach { includeInfinity =>
       val (agg, buffer, _) = createVectorAvg()
       val first = Array.tabulate(17)(i => if (i % 2 == 0) 1.0f else -1.0f)
-      val last = first.map(-_)
-      val expected = Array.tabulate(17)(i => if (i % 2 == 0) 0x3eaaaaaa else 0xbeaaaaaa)
+      val last = first.map(_ * 6)
+      val expected = Array.tabulate(17)(i => if (i % 2 == 0) 0x402aaaab else 0xc02aaaab)
       if (includeInfinity) {
         first(8) = Float.PositiveInfinity
         last(8) = 1.0f
