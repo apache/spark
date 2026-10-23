@@ -43,8 +43,8 @@ import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotApplied
  * rest of the unit once the filter throws {@link StorageFilterNotAppliedException}.
  * <p>
  * When {@link StorageFilterRequest#appendsCheckedColumn()} is true, the reader also marks the rows
- * it applied the filter to. Spark reserves the name {@code _tmp_storage_filter_checked} for that
- * column, so a scan of a table with a column of that name is offered no filter.
+ * it applied the filter to. Spark reserves the name {@link #CHECKED_COLUMN_NAME} for that column,
+ * so a scan of a table with a column of that name is offered no filter.
  * <p>
  * Spark does not see what a filter saves, or where a reader read without it. A scan reports that
  * through its own metrics, see {@link Scan#supportedCustomMetrics()}.
@@ -53,6 +53,9 @@ import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotApplied
  */
 @Evolving
 public interface SupportsStorageFilters extends Scan {
+
+  /** The name Spark reserves for the column a reader marks the rows it checked in. */
+  String CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked";
 
   /**
    * Returns the top-level columns this scan can evaluate a {@link StorageFilter} on. Spark offers

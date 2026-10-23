@@ -19,12 +19,13 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Cast, Divide, EqualTo, EvalMode, GreaterThan, Literal, NumericEvalContext, Remainder}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Cast, Divide, EqualTo, EvalMode, Expression, GreaterThan, Literal, NumericEvalContext, Remainder, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotAppliedException
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
-import org.apache.spark.sql.types.{DoubleType, LongType}
+import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, LongType}
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 /** Tests the Catalyst-backed [[StorageFilterImpl]] a connector's reader evaluates. */
@@ -108,6 +109,13 @@ class StorageFilterImplSuite extends SparkFunSuite {
     }
   }
 
+  test("an error holding a fatal one propagates as it is") {
+    val error = new RuntimeException("wrapper", new OutOfMemoryError("deep"))
+    val filter = StorageFilterImpl(ThrowingPredicate(k, error), Seq(k))
+    val e = intercept[RuntimeException](filter.eval(InternalRow(1L)))
+    assert(e eq error, s"got $e")
+  }
+
   test("an error during a task kill propagates as it is") {
     val context = TaskContext.empty()
     context.markInterrupted("test")
@@ -115,4 +123,13 @@ class StorageFilterImplSuite extends SparkFunSuite {
       intercept[SparkArithmeticException](positiveInverse.eval(InternalRow(0L)))
     }
   }
+}
+
+/** A predicate over `child` that throws `error`, for the paths an error takes out of a filter. */
+case class ThrowingPredicate(child: Expression, error: Throwable)
+  extends UnaryExpression with CodegenFallback {
+  override def dataType: DataType = BooleanType
+  override protected def nullSafeEval(input: Any): Any = throw error
+  override protected def withNewChildInternal(newChild: Expression): ThrowingPredicate =
+    copy(child = newChild)
 }

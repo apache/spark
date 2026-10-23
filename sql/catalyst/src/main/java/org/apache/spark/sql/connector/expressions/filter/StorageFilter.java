@@ -30,9 +30,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * of the rows it rejects. The reader reads the columns of {@link #references()} first, evaluates
  * the filter, and reads the remaining columns only for the rows it keeps.
  * <p>
- * The filter is a predicate on the rows the scan returns, after any operation pushed into it, such
- * as a limit, an offset, a top-N, a sample or an aggregate. A reader that applies such an
- * operation applies the filter to its result, or not at all.
+ * The filter is a predicate on the rows the scan returns. Spark offers none to a scan that took a
+ * pushed operation that decides which rows it returns, such as a limit, an offset, a top-N, a
+ * sample or an aggregate.
  * <p>
  * Spark implements the predicate, and the reader only supplies the values. For example, a scan
  * does not have to reproduce the Spark sketch and hash of a runtime bloom filter. The values must
@@ -80,7 +80,7 @@ public abstract class StorageFilter extends Predicate {
    *         reader then reads the rest of the unit without the filter. Any other exception, such
    *         as a task kill, must propagate.
    */
-  public abstract boolean eval(InternalRow row);
+  public abstract boolean eval(InternalRow row) throws StorageFilterNotAppliedException;
 
   /**
    * Evaluates the filter on every row of {@code batch}, whose columns hold the values of
@@ -96,7 +96,8 @@ public abstract class StorageFilter extends Predicate {
    * @throws StorageFilterNotAppliedException as {@link #eval(InternalRow)} does, which leaves
    *         {@code selected} undefined
    */
-  public int select(ColumnarBatch batch, int[] selected) {
+  public int select(ColumnarBatch batch, int[] selected)
+      throws StorageFilterNotAppliedException {
     int numRows = batch.numRows();
     int count = 0;
     for (int i = 0; i < numRows; i++) {

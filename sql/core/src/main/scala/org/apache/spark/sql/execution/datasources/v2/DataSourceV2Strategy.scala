@@ -137,6 +137,10 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       filters: Seq[Expression]): Seq[Expression] = {
     if (!session.sessionState.conf.v2StorageFilterPushdownEnabled) return Nil
     if (relation.storageFilterAttrs.isEmpty) return Nil
+    // A scan that took a pushed limit, offset, top-N or sample, or an aggregate or join, would have
+    // its readers filter ahead of it. `V2ScanRelationPushDown` leaves every such scan, and any scan
+    // a later pushdown builds, not mergeable.
+    if (!relation.mergeableScan) return Nil
     // Over the whole table, as on the file-source side, since `output` is matched by name later.
     if (StorageFilterPlanning.clashesWithCheckedColumn(relation.relation.output.map(_.name))) {
       return Nil

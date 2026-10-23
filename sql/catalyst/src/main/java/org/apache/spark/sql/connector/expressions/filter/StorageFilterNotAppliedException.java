@@ -29,14 +29,15 @@ import org.apache.spark.annotation.Evolving;
  * filtering, such as a file or a row group, without the filter. The cause is the error the filter
  * met.
  * <p>
- * It is an exception rather than a result, so a reader that does not catch it fails the task
- * instead of dropping or keeping rows the filter never decided on. Its error condition,
- * {@code STORAGE_FILTER_NOT_APPLIED}, then points at the data source's reader.
+ * It is checked, so a reader handles it where it can fall back to reading without the filter. A
+ * reader that lets it out anyway fails the task, instead of dropping or keeping rows the filter
+ * never decided on. Its error condition, {@code STORAGE_FILTER_NOT_APPLIED}, then points at the
+ * data source's reader.
  *
  * @since 5.0.0
  */
 @Evolving
-public class StorageFilterNotAppliedException extends RuntimeException implements SparkThrowable {
+public class StorageFilterNotAppliedException extends Exception implements SparkThrowable {
 
   private static final String CONDITION = "STORAGE_FILTER_NOT_APPLIED";
 

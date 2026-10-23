@@ -56,6 +56,10 @@ case class BatchScanExec(
     checkedColumn: Option[AttributeReference] = None
   ) extends DataSourceV2ScanExecBase {
 
+  // The readers are asked for the column only with storage filters, and append it last.
+  require(checkedColumn.isEmpty || (storageFilters.nonEmpty && output.lastOption == checkedColumn),
+    "A checked column comes with storage filters, last in the output")
+
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
   override protected lazy val sparkMetrics: Map[String, SQLMetric] = {

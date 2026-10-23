@@ -21,7 +21,7 @@ import scala.collection.mutable
 
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, Divide, EvalMode, GreaterThan, If, Literal, NumericEvalContext, Rand}
-import org.apache.spark.sql.execution.{FilterExec, SparkPlan}
+import org.apache.spark.sql.execution.{BaseLimitExec, FilterExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{FileFormat, StorageFilterPlanning}
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
@@ -245,7 +245,8 @@ class StorageFilterPushDownSuite
       assert(scan.verboseStringWithOperatorId().contains("StorageFilters:"),
         s"EXPLAIN FORMATTED must name the filters: ${scan.verboseStringWithOperatorId()}")
 
-      val plain = scan.copy(storageFilters = Nil)
+      intercept[IllegalArgumentException](scan.copy(storageFilters = Nil))
+      val plain = scan.copy(output = scan.output.init, storageFilters = Nil, checkedColumn = None)
       assert(scan != plain, "equals must see storageFilters")
       assert(!scan.sameResult(plain),
         s"a filtering scan must not be reusable as a plain one:\n${scan.canonicalized}\n" +
@@ -265,6 +266,20 @@ class StorageFilterPushDownSuite
         }))
       assert(scan.sameResult(twin),
         s"the same filtering scan must be reusable:\n${scan.canonicalized}\n${twin.canonicalized}")
+    }
+  }
+
+  test("nothing is offered to a scan that took a pushed limit") {
+    // The reader would filter ahead of the limit, which picks other rows.
+    withBloomJoin() {
+      val probe = v2Probe("columnar" -> "true", "pushLimit" -> "true").limit(100)
+      val plan = bloomJoin(probe).queryExecution.executedPlan
+      assert(collect(plan) { case l: BaseLimitExec => l }.isEmpty,
+        s"the limit must be pushed into the scan whole:\n$plan")
+      val scan = scanOf(plan)
+      assert(scan.storageFilters.isEmpty && scan.checkedColumn.isEmpty,
+        s"the scan must get no storage filter:\n$plan")
+      assert(bloomsAbove(plan) == (1, 0), s"the Filter must keep the bloom as it is:\n$plan")
     }
   }
 

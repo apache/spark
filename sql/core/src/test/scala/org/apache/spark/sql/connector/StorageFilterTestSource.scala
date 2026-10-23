@@ -45,7 +45,8 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  *    contract on purpose;
  *  - `declared`: the comma-separated storage-filter columns, `k` by default, a dot separating a
  *    nested field;
- *  - `valueName`: the name of the value column, `v` by default.
+ *  - `valueName`: the name of the value column, `v` by default;
+ *  - `pushLimit`: takes a pushed limit whole without applying it, for planning tests only.
  *
  * A filter that throws `StorageFilterNotAppliedException` is given up for the rest of the
  * partition too. The counters below record what the readers got, evaluated and returned.
@@ -104,8 +105,18 @@ class StorageFilterTestTable(tableSchema: StructType) extends Table with Support
       giveUp = options.getBoolean("giveUp", false),
       marksAllChecked = options.getBoolean("markAllChecked", false))
     val declared = options.getOrDefault("declared", "k").split(",").filter(_.nonEmpty).toSeq
-    () => new StorageFilterTestScan(tableSchema, factory, declared)
+    val scan = () => new StorageFilterTestScan(tableSchema, factory, declared)
+    if (options.getBoolean("pushLimit", false)) new StorageFilterTestLimitScanBuilder(scan) else {
+      () => scan()
+    }
   }
+}
+
+/** Takes a pushed limit whole. Its scan does not apply it, so it serves planning tests only. */
+class StorageFilterTestLimitScanBuilder(scan: () => Scan) extends SupportsPushDownLimit {
+  override def build(): Scan = scan()
+  override def pushLimit(limit: Int): Boolean = true
+  override def isPartiallyPushed: Boolean = false
 }
 
 class StorageFilterTestScan(

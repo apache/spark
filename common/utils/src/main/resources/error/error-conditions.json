@@ -7928,7 +7928,7 @@
     "message" : [
       "A storage filter could not be evaluated. The data source's reader should have read the rows without it instead of failing."
     ],
-    "sqlState" : "XX000"
+    "sqlState" : "KD000"
   },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [

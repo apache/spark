@@ -19,8 +19,10 @@ package org.apache.spark.sql.internal.connector
 
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, SparkException, TaskContext}
+import org.apache.spark.executor.Executor
 import org.apache.spark.internal.{Logging, LogKeys}
+import org.apache.spark.internal.config.KILL_ON_FATAL_ERROR_DEPTH
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Expression => CatalystExpression, Predicate => CatalystPredicate}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
@@ -53,9 +55,11 @@ class StorageFilterImpl private (
 
   /**
    * Wraps a non-fatal error in [[StorageFilterNotAppliedException]], unless the task is being
-   * killed. Each task logs the first one. A row of another width than [[references]] is a reader
-   * bug, which fails the task, since the predicate would read the wrong values.
+   * killed or a fatal error is in its cause chain. Each task logs the first one. A row of another
+   * width than [[references]] is a reader bug, which fails the task, since the predicate would read
+   * the wrong values.
    */
+  @throws[StorageFilterNotAppliedException]
   override def eval(row: InternalRow): Boolean = {
     // Outside the `try`, so a failure to build the predicate, or a row of another width, fails the
     // task.
@@ -68,7 +72,7 @@ class StorageFilterImpl private (
     try {
       predicate(row)
     } catch {
-      case NonFatal(e) if !StorageFilterImpl.taskKilled =>
+      case NonFatal(e) if !StorageFilterImpl.taskKilled && !StorageFilterImpl.hasFatalCause(e) =>
         if (!loggedFailure) {
           loggedFailure = true
           // The columns only, since a runtime bloom's literal would print every byte of the bloom.
@@ -111,6 +115,14 @@ object StorageFilterImpl {
     }
     new StorageFilterImpl(catalystExpr, referenced)
   }
+
+  /**
+   * Whether `e` holds a fatal error in its cause chain, as deep as the executor looks for one. As
+   * from the file-source reader, it goes out, since the JVM cannot be trusted after it.
+   */
+  private def hasFatalCause(e: Throwable): Boolean = Executor.isFatalError(e,
+    Option(SparkEnv.get).map(_.conf.get(KILL_ON_FATAL_ERROR_DEPTH))
+      .getOrElse(KILL_ON_FATAL_ERROR_DEPTH.defaultValue.get))
 
   /** Whether the running task is being killed, whose error must not be read as "not applied". */
   private def taskKilled: Boolean = {

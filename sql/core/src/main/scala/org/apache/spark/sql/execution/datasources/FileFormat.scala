@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.connector.read.SupportsStorageFilters
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
@@ -336,7 +337,7 @@ object FileFormat {
    * column's is. A relation with a column of that name is offered no storage filters, and a file
    * holding one outside the relation's schema is not supported.
    */
-  val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
+  val STORAGE_FILTER_CHECKED_COLUMN_NAME: String = SupportsStorageFilters.CHECKED_COLUMN_NAME
 
   /**
    * Schema of metadata struct that can be produced by every file format,
