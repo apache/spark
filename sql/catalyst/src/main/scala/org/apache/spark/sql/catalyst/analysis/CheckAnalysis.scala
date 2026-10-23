@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.expressions.ClusterByTransform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -144,6 +145,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     dt.existsRecursively(_.isInstanceOf[VariantType])
   }
 
+  protected def hasFileType(dt: DataType): Boolean = {
+    dt.existsRecursively(_.isInstanceOf[FileType])
+  }
+
   protected def mapColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
     case _: Intersect | _: Except | _: Distinct =>
       plan.output.find(a => hasMapType(a.dataType))
@@ -160,10 +165,28 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
     case _ => None
   }
 
+  protected def fileColumnInSetOperation(plan: LogicalPlan): Option[Attribute] = plan match {
+    case _: Intersect | _: Except | _: Distinct =>
+      plan.output.find(a => hasFileType(a.dataType))
+    case d: Deduplicate =>
+      d.keys.find(a => hasFileType(a.dataType))
+    case d: DeduplicateWithinWatermark =>
+      d.keys.find(a => hasFileType(a.dataType))
+    case _ => None
+  }
+
   protected def variantExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
     plan match {
       case r: RepartitionByExpression =>
         r.partitionExpressions.find(e => hasVariantType(e.dataType))
+      case _ => None
+    }
+
+  // Covers both REPARTITION / DISTRIBUTE BY and the REBALANCE hint.
+  protected def fileExprInPartitionExpression(plan: LogicalPlan): Option[Expression] =
+    plan match {
+      case r: HasPartitionExpressions =>
+        r.partitionExpressions.find(e => hasFileType(e.dataType))
       case _ => None
     }
 
@@ -1008,6 +1031,25 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
             TypeUtils.failUnsupportedDataType(create.tableSchema, SQLConf.get)
             SchemaUtils.checkIndeterminateCollationInSchema(create.tableSchema)
+            create match {
+              // The columns of CREATE TABLE AS SELECT come from its query, not from DDL.
+              case ctas: V2CreateTableAsSelectPlan =>
+                TypeUtils.checkNoUnknownFileTypeWrite(ctas.query.output)
+              case _ =>
+                TypeUtils.checkFileTypeHasQualifier(create.tableSchema)
+            }
+            // FILE has no defined ordering, so it cannot be a partition or clustering column.
+            create.partitioning.foreach { transform =>
+              val usage = transform match {
+                case _: ClusterByTransform => "CLUSTERING_COLUMN"
+                case _ => "PARTITION_COLUMN"
+              }
+              transform.references.foreach { ref =>
+                create.tableSchema.findNestedField(ref.fieldNames.toImmutableArraySeq).foreach {
+                  case (_, field) => TypeUtils.checkNoFileTypeInColumnUsage(field, usage)
+                }
+              }
+            }
 
             // Validate generated column expressions
             create.columns.foreach { col =>
@@ -1165,6 +1207,13 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               origin = operator.origin
             )
 
+          // FILE has no defined ordering, so it cannot be compared in a set operation.
+          case o if fileColumnInSetOperation(o).isDefined =>
+            throw QueryCompilationErrors.unsupportedSetOperationOnFileType(
+              fileCol = fileColumnInSetOperation(o).get,
+              origin = operator.origin
+            )
+
           case o if variantExprInPartitionExpression(o).isDefined =>
             val variantExpr = variantExprInPartitionExpression(o).get
             o.failAnalysis(
@@ -1172,6 +1221,15 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               messageParameters = Map(
                 "expr" -> toSQLExpr(variantExpr),
                 "dataType" -> toSQLType(variantExpr.dataType)))
+
+          // FILE is not comparable, so it cannot be a partitioning/DISTRIBUTE BY key.
+          case o if fileExprInPartitionExpression(o).isDefined =>
+            val fileExpr = fileExprInPartitionExpression(o).get
+            o.failAnalysis(
+              errorClass = "UNSUPPORTED_FEATURE.PARTITION_BY_FILE",
+              messageParameters = Map(
+                "expr" -> toSQLExpr(fileExpr),
+                "dataType" -> toSQLType(fileExpr.dataType)))
 
           case o if o.expressions.exists(!_.deterministic) &&
             !operatorAllowsNonDeterministicExpressions(o) &&
@@ -1231,6 +1289,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         }
     }
     checkCollectedMetrics(plan)
+    checkFileTypeInUserDefinedRoutines(plan)
     extendedCheckRules.foreach(_(plan))
     plan.foreachUp {
       case o if !o.resolved =>
@@ -1243,6 +1302,28 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
       case o if o.expressions.exists(_.containsPattern(LATERAL_COLUMN_ALIAS_REFERENCE)) =>
         checkNotContainingLCA(o.expressions, o)
       case _ =>
+    }
+  }
+
+  /**
+   * Checks that the [[UserDefinedExpression]]s in a query declare only a plain FILE in their
+   * return type, as [[TypeUtils.checkNoQualifierInRegisteredRoutineReturnType]] does when a
+   * routine is registered. This covers routines whose signature is not checked when they are
+   * created, such as UDFs that are not registered and UDAF classes registered with
+   * `CREATE FUNCTION ... AS`. SQL functions are checked by `CREATE FUNCTION`. V2 catalog functions
+   * are covered only when they are bound as an [[ApplyFunctionExpression]]. A non-scalar Python
+   * UDF is skipped, as its data type is the schema of the rows it returns.
+   */
+  private def checkFileTypeInUserDefinedRoutines(plan: LogicalPlan): Unit = {
+    if (SQLConf.get.isFileTypeEnabled) {
+      plan.foreach { operator =>
+        operator.expressions.foreach(_.foreach {
+          case udf: PythonUDF if !PythonUDF.isScalarPythonUDF(udf) =>
+          case routine: UserDefinedExpression =>
+            TypeUtils.checkNoQualifierInRegisteredRoutineReturnType(routine.dataType, routine.name)
+          case _ =>
+        })
+      }
     }
   }
 
@@ -1404,6 +1485,10 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
             }
           case _ =>
         }
+
+      // FILE has no defined ordering, so it cannot be a clustering column.
+      case AlterTableClusterBy(table: ResolvedTable, Some(clusterBySpec)) =>
+        TypeUtils.checkNoFileTypeClusteringColumn(table.schema, clusterBySpec, alter.conf.resolver)
       case _ =>
     }
   }

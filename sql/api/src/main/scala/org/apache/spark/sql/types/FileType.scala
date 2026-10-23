@@ -25,12 +25,11 @@ import org.apache.spark.annotation.Unstable
 /**
  * The data type representing a reference to a file, with metadata describing the file.
  *
- * In SQL the type is named `FILE`, and the `EXTERNAL` keyword is planned to be required when
- * declaring a table column, as in `CREATE TABLE t (f FILE EXTERNAL)`; until then a bare `FILE` is
- * accepted wherever a type is. Its JSON representation is `"file external"` for
- * `FileType.external` and `"file unknown"` for `FileType()`, except that an external file in a
- * struct field is the plain `"file"`. A bare `"file"` is read as external inside a struct field
- * and as unknown elsewhere.
+ * In SQL the type is named `FILE`. A table column must be declared with the `EXTERNAL` keyword,
+ * as in `CREATE TABLE t (f FILE EXTERNAL)`, while the signature of a function declares a bare
+ * `FILE`. Its JSON representation is `"file external"` for `FileType.external` and
+ * `"file unknown"` for `FileType()`, except that an external file in a struct field is the plain
+ * `"file"`. A bare `"file"` is read as external inside a struct field and as unknown elsewhere.
  *
  * FileType is planned to be physically stored as a struct with the following fields (see
  * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
@@ -45,10 +44,10 @@ import org.apache.spark.annotation.Unstable
  * (mode not yet determined, such as the result of a cast or of a UDF). Mode is part of type
  * identity - files with different modes are distinct under `equals`.
  *
- * FileType is planned to be not comparable -- it cannot be used in join expressions, grouping
- * expressions, or as a partition/clustering column. Users can extract the uri field for such
- * operations. This type currently only guarantees the schema-level pieces (DDL and JSON); the
- * physical representation and most of the restrictions are added by later parts.
+ * FileType is not comparable -- it cannot be the key of a map built in a query or of a map in the
+ * return type of a function, and it cannot be used in join expressions, grouping expressions, set
+ * operations, or as a partition/clustering column. Users can extract the uri field for such
+ * operations. The physical representation is added by a later part.
  *
  * @param mode
  *   the mode for this FileType column

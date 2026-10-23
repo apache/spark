@@ -271,6 +271,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
           "Schema may not be specified in a Create Table As Select (CTAS) statement")
 
         val analyzedQuery = query.get
+        checkNoUnknownFileTypeWrite(analyzedQuery.output)
+        checkNoFileTypePartitionOrClusteringColumn(analyzedQuery.schema, tableDesc)
         val normalizedTable = normalizeCatalogTable(analyzedQuery.schema, tableDesc)
 
         DDLUtils.checkTableColumns(tableDesc.copy(schema = analyzedQuery.schema))
@@ -293,6 +295,8 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
 
         c.copy(tableDesc = normalizedTable, query = Some(reorderedQuery))
       } else {
+        checkFileTypeHasQualifier(tableDesc.schema)
+        checkNoFileTypePartitionOrClusteringColumn(tableDesc.schema, tableDesc)
         DDLUtils.checkTableColumns(tableDesc)
 
         val normalizedTable = normalizeCatalogTable(tableDesc.schema, tableDesc)
@@ -353,6 +357,19 @@ case class PreprocessTableCreation(catalog: SessionCatalog) extends Rule[Logical
       case f: FileDataSourceV2 => f.fallbackFileFormat
       case _ => cls
     }
+
+  // FILE has no defined ordering, so it cannot be a partition, bucket or clustering column. A
+  // bucket column is reported as a partition column, as for the V2 `bucket` transform.
+  private def checkNoFileTypePartitionOrClusteringColumn(
+      schema: StructType,
+      table: CatalogTable): Unit = {
+    (table.partitionColumnNames ++ table.bucketSpec.toSeq.flatMap(_.bucketColumnNames))
+      .foreach { name =>
+        schema.find(f => conf.resolver(f.name, name))
+          .foreach(checkNoFileTypeInColumnUsage(_, "PARTITION_COLUMN"))
+      }
+    table.clusterBySpec.foreach(checkNoFileTypeClusteringColumn(schema, _, conf.resolver))
+  }
 
   private def normalizeCatalogTable(schema: StructType, table: CatalogTable): CatalogTable = {
     SchemaUtils.checkSchemaColumnNameDuplication(

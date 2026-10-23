@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.UNRESOLVED_ATTRIBUTE
+import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.MultipartIdentifierHelper
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -76,6 +77,15 @@ case class CreateSQLFunctionCommand(
 
     val inputParam = inputParamText.map(UserDefinedFunction.parseRoutineParam(_, parser, collation))
     val returnType = parseReturnTypeText(returnTypeText, isTableFunc, parser, collation)
+    // A FILE in the signature of a function is a plain FILE, without a qualifier, and the return
+    // type cannot hold a FILE in a map key.
+    val routineName = QueryCompilationErrors.toSQLId(name.nameParts)
+    def checkFileTypeInSignature(paramTypes: Seq[DataType], returnType: Option[DataType]): Unit = {
+      TypeUtils.checkNoQualifierInRoutineSignature(
+        paramTypes ++ returnType, routineType = "function", routineName = routineName)
+      returnType.foreach(TypeUtils.checkNoFileTypeMapKeyInReturnType(_, routineName))
+    }
+    checkFileTypeInSignature(inputParam.toSeq, returnType.map(_.fold(identity, identity)))
 
     val function = SQLFunction(
       name,
@@ -252,6 +262,10 @@ case class CreateSQLFunctionCommand(
 
         (plan, analyzed, Right(returnParam))
       }
+
+      // Without a RETURNS clause, or with a bare RETURNS TABLE, the return type is inferred from
+      // the function body, so it is checked as well.
+      checkFileTypeInSignature(Nil, Option(inferredReturnType.fold(identity, identity)))
 
       // A permanent function is not allowed to reference temporary objects.
       // This should be called after `qe.assertAnalyzed()` (i.e., `plan` can be resolved)
