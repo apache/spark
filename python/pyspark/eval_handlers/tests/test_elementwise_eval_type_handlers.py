@@ -29,6 +29,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.types import ArrayType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
@@ -104,7 +105,13 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
         )
         handler.assign_udfs(
             [
-                (func, return_type, args_offsets, kwargs_offsets, 0)
+                UDF(
+                    func=func,
+                    return_type=return_type,
+                    args_offsets=args_offsets,
+                    kwargs_offsets=kwargs_offsets,
+                    result_id=0,
+                )
                 for func, args_offsets, kwargs_offsets, return_type in udfs
             ]
         )

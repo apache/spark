@@ -31,6 +31,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.sql.types import BinaryType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import (
     PySparkBaseTestCase,
@@ -94,7 +95,17 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
         """Build a grouped/cogrouped-map handler. ``assign_udfs`` wraps ``func`` (losing the
         signature) while ``raw_func`` keeps it."""
         handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=None)
-        handler.assign_udfs([(udf, cls._GROUPED_RETURN_TYPE, arg_offsets, {}, 0)])
+        handler.assign_udfs(
+            [
+                UDF(
+                    func=udf,
+                    return_type=cls._GROUPED_RETURN_TYPE,
+                    args_offsets=arg_offsets,
+                    kwargs_offsets={},
+                    result_id=0,
+                )
+            ]
+        )
         return handler
 
     @staticmethod
@@ -105,7 +116,13 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @staticmethod
     def _udf(func, return_type=None, args=(0,), kwargs=None):
         """A pandas UDF as ``assign_udfs`` takes it."""
-        return (func, return_type or LongType(), list(args), dict(kwargs or {}), 0)
+        return UDF(
+            func=func,
+            return_type=return_type or LongType(),
+            args_offsets=list(args),
+            kwargs_offsets=dict(kwargs or {}),
+            result_id=0,
+        )
 
     @staticmethod
     def _agg_handler(handler_cls, *udfs, runner_conf=None):

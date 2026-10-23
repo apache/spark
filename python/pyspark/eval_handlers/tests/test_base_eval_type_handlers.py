@@ -279,7 +279,17 @@ class AssignUDFsTests(PySparkBaseTestCase):
 
     def _assign(self, handler_cls, runner_conf=None):
         handler = handler_cls(runner_conf or RunnerConf({}), None)
-        handler.assign_udfs([(self._stop, LongType(), [1], {"y": 2}, 0)])
+        handler.assign_udfs(
+            [
+                UDF(
+                    func=self._stop,
+                    return_type=LongType(),
+                    args_offsets=[1],
+                    kwargs_offsets={"y": 2},
+                    result_id=0,
+                )
+            ]
+        )
         return handler._udfs[0]
 
     def test_assigns_udf_records(self):

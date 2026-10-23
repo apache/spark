@@ -30,6 +30,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.serializers import CPickleSerializer
 from pyspark.sql.types import LongType, Row, StructField, StructType
 from pyspark.testing.utils import (
@@ -116,7 +117,17 @@ class TransformWithStateHandlerTestCase(PySparkBaseTestCase):
     @classmethod
     def _handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
         handler = handler_cls(runner_conf=runner_conf or RunnerConf({}), eval_conf=cls._eval_conf())
-        handler.assign_udfs([(udf, cls._RETURN_TYPE, arg_offsets, {}, 0)])
+        handler.assign_udfs(
+            [
+                UDF(
+                    func=udf,
+                    return_type=cls._RETURN_TYPE,
+                    args_offsets=arg_offsets,
+                    kwargs_offsets={},
+                    result_id=0,
+                )
+            ]
+        )
         return handler
 
     def _assert_client_constructed(self):
@@ -227,7 +238,17 @@ class PandasGroupedMapWithStateUDFHandlerTests(PySparkBaseTestCase):
             runner_conf=runner_conf or RunnerConf({}),
             eval_conf=EvalConf({"state_value_schema": cls._STATE_SCHEMA.json()}),
         )
-        handler.assign_udfs([(udf, cls._RETURN_TYPE, cls._ARG_OFFSETS, {}, 0)])
+        handler.assign_udfs(
+            [
+                UDF(
+                    func=udf,
+                    return_type=cls._RETURN_TYPE,
+                    args_offsets=cls._ARG_OFFSETS,
+                    kwargs_offsets={},
+                    result_id=0,
+                )
+            ]
+        )
         return handler
 
     @staticmethod

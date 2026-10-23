@@ -27,7 +27,9 @@ from typing import Any, BinaryIO, Callable
 
 from pyspark import shuffle
 from pyspark.accumulators import _accumulatorRegistry
+from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import UDTFHandlerBase
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.messages import (
@@ -40,7 +42,7 @@ from pyspark.serializers import (
     write_int,
     write_with_length,
 )
-from pyspark.sql.types import DataType, _parse_datatype_json_string
+from pyspark.sql.types import DataType, StructType, _parse_datatype_json_string
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
     PythonEvalType,
@@ -145,12 +147,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 udtf_info = init_info.udf_info
                 udtf_cls = read_command(pickleSer, udtf_info.handler)
                 return_type = _parse_datatype_json_string(udtf_info.return_type)
+                if not isinstance(return_type, StructType):
+                    raise PySparkRuntimeError(
+                        "The return type of a UDTF must be a struct type, but got "
+                        f"{type(return_type)}."
+                    )
                 if udtf_info.pickled_analyze_result is not None:
                     analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
                 else:
                     analyze_result = None
-                handler.assign_udtf(
-                    udtf_cls,
+                udtf = UDTF(
+                    udtf_cls=udtf_cls,
                     return_type=return_type,
                     args_offsets=udtf_info.args,
                     kwargs_offsets=udtf_info.kwargs,
@@ -158,18 +165,19 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result=analyze_result,
                     name=udtf_info.name,
                 )
+                handler.assign_udtf(udtf)
             else:
                 assert isinstance(init_info.udf_info, list)
                 udfs = []
                 for udf_info in init_info.udf_info:
                     chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
                     udfs.append(
-                        (
-                            chained_func,
-                            return_type,
-                            udf_info.args,
-                            udf_info.kwargs,
-                            udf_info.result_id,
+                        UDF(
+                            func=chained_func,
+                            return_type=return_type,
+                            args_offsets=udf_info.args,
+                            kwargs_offsets=udf_info.kwargs,
+                            result_id=udf_info.result_id,
                         )
                     )
                 handler.assign_udfs(udfs)

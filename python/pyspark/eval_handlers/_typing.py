@@ -23,12 +23,13 @@ import at runtime, as elsewhere in the worker.
 
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, Protocol, TypeVar
 
 if TYPE_CHECKING:
     import pyarrow as pa
 
     from pyspark.sql.types import StructType
+    from pyspark.sql.udtf import AnalyzeResult
 
 # Grouped-category input element, matching what the serializer yields: a group
 # serializer yields a lazy iterator; a co-group serializer materializes each side.
@@ -42,20 +43,23 @@ OutputBatch = TypeVar("OutputBatch")
 
 @dataclass(frozen=True)
 class UDF:
-    """One UDF as assigned to a handler by ``EvalTypeHandler.assign_udfs``; each handler takes
-    the fields it needs."""
+    """One UDF: the worker builds it from the unpickled (and chained) function, and
+    ``EvalTypeHandler.assign_udfs`` completes it for the handler; each handler takes the fields
+    it needs."""
 
-    # The chained function wrapped for profiling and, for most eval types, in
+    # The chained function; assign_udfs wraps it for profiling and, for most eval types, in
     # fail_on_stopiteration.
     func: Callable[..., Any]
-    # The chained function before any wrapping, for handlers that need the pickled object
-    # itself (an incremental Aggregator) or its signature.
-    raw_func: Any
-    args_offsets: list[int]
-    kwargs_offsets: dict[str, int]
     # The DataType of the last function in the chain; a StructType for the eval types that
     # return rows.
     return_type: Any
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    # The id the profiler reports the UDF's results under.
+    result_id: int
+    # Set by assign_udfs to the chained function before any wrapping, for handlers that need the
+    # pickled object itself (an incremental Aggregator) or its signature.
+    raw_func: Any = None
 
 
 class UDTFInstance(Protocol):
@@ -67,11 +71,20 @@ class UDTFInstance(Protocol):
 
 @dataclass(frozen=True)
 class UDTF:
-    """The UDTF as assigned to a handler by ``UDTFHandlerBase.assign_udtf``."""
+    """The UDTF: the worker builds it from the unpickled class, and
+    ``UDTFHandlerBase.assign_udtf`` completes it with the instance."""
 
-    # Wrapped in the handler's partition_wrapper when its TABLE argument has PARTITION BY
-    # expressions.
-    udtf: UDTFInstance
+    # The user's UDTF class, as unpickled.
+    udtf_cls: type
+    return_type: "StructType"
     args_offsets: list[int]
     kwargs_offsets: dict[str, int]
-    return_type: "StructType"
+    # The child indexes of the TABLE argument's PARTITION BY expressions, if any.
+    partition_child_indexes: list[int]
+    # Passed to the UDTF's __init__ when it takes one argument.
+    analyze_result: Optional["AnalyzeResult"]
+    # The UDTF's name in error messages.
+    name: str
+    # Set by assign_udtf to the UDTFInstance it created from udtf_cls, wrapped in the handler's
+    # partition_wrapper when its TABLE argument has PARTITION BY expressions.
+    udtf: Any = None

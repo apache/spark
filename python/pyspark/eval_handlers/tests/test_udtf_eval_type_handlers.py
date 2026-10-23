@@ -121,8 +121,8 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
         analyze_result=None,
     ):
         """Assign ``udtf_cls`` to ``handler`` and return the handler."""
-        handler.assign_udtf(
-            udtf_cls,
+        udtf = UDTF(
+            udtf_cls=udtf_cls,
             return_type=return_type,
             args_offsets=list(args),
             kwargs_offsets=kwargs or {},
@@ -130,6 +130,7 @@ class UDTFEvalTypeHandlerTestCase(PySparkBaseTestCase):
             analyze_result=analyze_result,
             name="test_udtf",
         )
+        handler.assign_udtf(udtf)
         return handler
 
     @staticmethod

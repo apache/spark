@@ -27,6 +27,7 @@ import os
 from unittest.mock import patch
 
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.eval_handlers._vanilla import BatchedUDFHandler
 from pyspark.serializers import BatchedSerializer, CPickleSerializer
 from pyspark.sql.types import DateType, LongType
@@ -44,7 +45,13 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
         handler = BatchedUDFHandler(runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
         handler.assign_udfs(
             [
-                (f, return_type or LongType(), arg_offsets, kwargs_offsets or {}, 0)
+                UDF(
+                    func=f,
+                    return_type=return_type or LongType(),
+                    args_offsets=arg_offsets,
+                    kwargs_offsets=kwargs_offsets or {},
+                    result_id=0,
+                )
                 for arg_offsets, f in udfs
             ]
         )

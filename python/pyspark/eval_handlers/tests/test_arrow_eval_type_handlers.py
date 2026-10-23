@@ -29,6 +29,7 @@ from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.eval_handlers.utils import hashable_grouping_key
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
@@ -126,7 +127,13 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
     @staticmethod
     def _udf(func, args_offsets, kwargs_offsets=None, return_type=None):
         """A UDF as ``assign_udfs`` takes it."""
-        return (func, return_type or LongType(), args_offsets, kwargs_offsets or {}, 0)
+        return UDF(
+            func=func,
+            return_type=return_type or LongType(),
+            args_offsets=args_offsets,
+            kwargs_offsets=kwargs_offsets or {},
+            result_id=0,
+        )
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):
