@@ -103,7 +103,8 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       flowName: Seq[String],
       query: LogicalPlan,
       targetTable: String,
-      resolvedTargetTable: ResolvedTableName)
+      resolvedTargetTable: ResolvedTableName,
+      checkpointLocation: String)
 
   private sealed trait TriggeredFlowStatement
   private case class CreateTriggeredFlow(command: CreateFlowCommand)
@@ -186,7 +187,15 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         throw new IllegalArgumentException(
           "SQL golden triggered flows require a static table identifier as the INSERT target.")
     }
-    TriggeredFlow(flowName, insert.query, targetTable, resolvedTargetTable)
+    val checkpointLocation = new Path(
+      session.sessionState.conf.warehousePath,
+      s"sql-query-test-checkpoint-${UUID.randomUUID()}").toString
+    TriggeredFlow(
+      flowName,
+      insert.query,
+      targetTable,
+      resolvedTargetTable,
+      checkpointLocation)
   }
 
   private def registerTriggeredFlow(
@@ -239,17 +248,18 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
       parsedPlan: => Option[LogicalPlan]): Option[TriggeredFlowStatement] = {
     session.withActive {
       val tokens = sql.trim.split("\\s+", 3)
-      val hasFlowCommandPrefix = tokens.length >= 2 && tokens(1).equalsIgnoreCase("FLOW") &&
-        (tokens(0).equalsIgnoreCase("CREATE") || tokens(0).equalsIgnoreCase("REFRESH"))
-      if (hasFlowCommandPrefix) {
-        if (tokens.length == 2 && tokens(0).equalsIgnoreCase("REFRESH")) {
-          throw new IllegalArgumentException("REFRESH FLOW requires a flow name.")
-        }
-        parsedPlan match {
-          case Some(command: CreateFlowCommand) => Some(CreateTriggeredFlow(command))
-          case None if tokens.length == 3 && tokens(0).equalsIgnoreCase("REFRESH") =>
-            Some(parseRefreshTriggeredFlowStatement(session, tokens(2)))
-          case _ => None
+      if (tokens.length >= 2 && tokens(1).equalsIgnoreCase("FLOW")) {
+        if (tokens(0).equalsIgnoreCase("REFRESH")) {
+          if (tokens.length == 2) {
+            throw new IllegalArgumentException("REFRESH FLOW requires a flow name.")
+          }
+          Some(parseRefreshTriggeredFlowStatement(session, tokens(2)))
+        } else if (tokens(0).equalsIgnoreCase("CREATE")) {
+          parsedPlan.collect {
+            case command: CreateFlowCommand => CreateTriggeredFlow(command)
+          }
+        } else {
+          None
         }
       } else {
         None
@@ -296,9 +306,7 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
         .outputMode(OutputMode.Append())
         .trigger(Trigger.AvailableNow())
         .queryName(queryName)
-        .option(
-          "checkpointLocation",
-          new Path(session.sessionState.conf.warehousePath, queryName).toString)
+        .option("checkpointLocation", flow.checkpointLocation)
       targetTable.foreach { table =>
         writer.format(table.provider.getOrElse {
           throw new IllegalArgumentException(
@@ -402,12 +410,22 @@ class StreamingSQLQueryTestSuite extends SQLQueryTestSuite {
     val flow = resolveTriggeredFlow(spark, flowName, flows)
     assert(flow.targetTable == "`spark_catalog`.`default`.`sink-table`")
     assert(resolveTriggeredFlow(spark, flowName, flows) eq flow)
+    val separatelyRegisteredFlow = registerTriggeredFlow(
+      spark,
+      createFlowCommand(specs(1)._1),
+      mutable.Map.empty)
+    assert(separatelyRegisteredFlow.checkpointLocation != flow.checkpointLocation)
     assert(parseTriggeredFlow(specs.head._1).isEmpty)
     assert(parseTriggeredFlow("select interval 10 nanoseconds").isEmpty)
     assert(parseTriggeredFlow(specs(1)._1)
       .exists(_.isInstanceOf[CreateTriggeredFlow]))
     assert(parseTriggeredFlow(specs(2)._1)
       .exists(_.isInstanceOf[RefreshTriggeredFlow]))
+    val refreshWithoutParsedPlan = parseTriggeredFlowStatement(
+      spark,
+      "REFRESH FLOW test_flow",
+      fail("REFRESH FLOW should not evaluate the Spark SQL parsed plan"))
+    assert(refreshWithoutParsedPlan.contains(RefreshTriggeredFlow(Seq("test_flow"))))
     assert(refreshFlowName("refresh flow `catalog`.`flow-name`") == Seq("catalog", "flow-name"))
     val missingRefreshNameError = intercept[IllegalArgumentException] {
       parseTriggeredFlow("REFRESH FLOW")
