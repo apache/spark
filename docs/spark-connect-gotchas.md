@@ -461,7 +461,8 @@ If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColu
 # Session and Configuration Gotchas
 
 The gotchas above come from deferred analysis. The following three come from the session being a
-handle to a server rather than a process-local object, and they also produce no error. The
+handle to a server rather than a process-local object. The first two produce no error; the third
+fails at startup or, with the port moved, silently reaches a different server. The
 [Spark Connect Programming Guide](spark-connect-programming-guide.html) describes the intended
 usage of each API.
 
@@ -498,10 +499,13 @@ produces a `UserWarning` and no change.
 
 ```python
 spark = SparkSession.builder.remote("sc://localhost:15002").enableHiveSupport().getOrCreate()
-# UserWarning: Failed to set spark.sql.catalogImplementation to Some(hive) due to
-#   [CANNOT_MODIFY_STATIC_CONFIG] ...
+# UserWarning: Failed to set spark.sql.catalogImplementation (CANNOT_MODIFY_STATIC_CONFIG)
 spark.conf.get("spark.sql.catalogImplementation")   # 'in-memory'
 ```
+
+The wording of the warning depends on the server: servers up to the 4.3 line say
+`Failed to set <key> to <value> due to [<condition>] ...`. The key and the condition are the
+parts to match on.
 
 A session that asked for Hive support, an extension or a JAR this way runs without it. Catalog
 definitions (`spark.sql.catalog.<name>`) are runtime configuration and read back as set, but the

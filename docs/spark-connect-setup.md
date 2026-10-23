@@ -171,6 +171,7 @@ Now you can run PySpark code in the shell to see Spark Connect in action:
 
 </div>
 
+<div data-lang="scala" markdown="1">
 For the Scala shell, we use an Ammonite-based REPL. Otherwise, very similar with PySpark shell.
 
 {% highlight bash %}

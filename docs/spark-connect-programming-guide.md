@@ -155,8 +155,8 @@ services:
 Note the image's Python version; it matters for the client, as described under
 [Python UDFs and the server's Python](#python-udfs-and-the-servers-python).
 
-Spark Connect servers also run on Kubernetes and, since Spark 4.2, on YARN; see
-[Setting up Spark Connect](spark-connect-setup.html). A single server holds many sessions, each
+Spark Connect servers also run on Kubernetes and, since Spark 4.2, on YARN. A single server holds
+many sessions, each
 isolated from the others but all sharing the server's memory and executors. Users who need stronger
 isolation than that need separate servers.
 
@@ -216,6 +216,8 @@ a = SparkSession.builder.remote("sc://server-a:15002").getOrCreate()
 b = SparkSession.builder.remote("sc://server-b:15002").getOrCreate()   # returns a
 c = SparkSession.builder.remote("sc://server-b:15002").create()        # a new session on server-b
 ```
+
+`spark.newSession()` also works, and opens another session over the same connection.
 
 Each session has its own temporary views, runtime configuration and uploaded files. `spark.stop()`
 releases that one session on the server; the server and every other session keep running (with
@@ -450,8 +452,11 @@ Spark Connect does not stop a client from asking for a startup-only setting; thr
 warns and carries on without it. Asking for a package from the client produces this, and no package:
 
 ```
-UserWarning: Failed to set spark.jars.packages ... [CANNOT_MODIFY_CONFIG] ...
+UserWarning: Failed to set spark.jars.packages (CANNOT_MODIFY_CONFIG)
 ```
+
+(Servers up to the 4.3 line word it as `Failed to set <key> to <value> due to [<condition>]`;
+the key and the condition are the stable parts.)
 
 `enableHiveSupport()` does the same with `CANNOT_MODIFY_STATIC_CONFIG` and hands back a session
 without Hive, which may go unnoticed until a table is missing. The same keys set after the session
@@ -601,25 +606,28 @@ DataFrame API, so they can be made while the application still runs on Spark Cla
 | `spark.read.json(rdd_of_strings)` | `spark.read.json(df)` on a string column (Spark 4.2) |
 | `sc.accumulator(0)` | `df.observe(Observation(...), ...)` |
 | `sc.broadcast(lookup)` | a broadcast join, `df.join(F.broadcast(lookup_df), ...)` |
-| `spark.newSession()` | `SparkSession.builder.remote(url).create()` |
 | `spark-submit job.py` | `python job.py` with `SPARK_REMOTE` set |
 
-`spark.sparkContext`, `df.rdd`, `spark._jvm` and `df._jdf` raise `JVM_ATTRIBUTE_NOT_SUPPORTED`
-in PySpark (`UNSUPPORTED_CONNECT_FEATURE` in Scala), which is the signal that a line needs one of
+`spark.sparkContext`, `spark._jvm` and `df._jdf` raise `JVM_ATTRIBUTE_NOT_SUPPORTED` in PySpark
+(`UNSUPPORTED_CONNECT_FEATURE` in Scala). `df.rdd` raises the same with `pyspark-client` and
+`NOT_IMPLEMENTED` with the full `pyspark` packages. Either is the signal that a line needs one of
 the replacements above.
 
 A session builder that works in both modes reads the connection string from the environment and
 falls back to a classic session, so the same file runs under `spark-submit` today and as a client
-tomorrow:
+tomorrow. Leave the master out of the builder: under `spark-submit` the master comes from the
+command line, and a builder option would override it (builder options are set on the `SparkConf`,
+which takes precedence over `spark-submit`). Run as plain `python job.py` without `SPARK_REMOTE`,
+the classic session defaults to `local[*]`.
 
 ```python
 import os
 
 def build_session(app_name):
     builder = SparkSession.builder.appName(app_name)
-    if "SPARK_REMOTE" in os.environ:                  # a Spark Connect client
+    if "SPARK_REMOTE" in os.environ:   # a Spark Connect client
         return builder.getOrCreate()
-    return builder.master("local[*]").getOrCreate()   # Spark Classic
+    return builder.getOrCreate()       # Spark Classic; the master comes from spark-submit
 ```
 
 One behavioral difference affects code that migrates without an error: Spark Classic checks a
@@ -676,8 +684,9 @@ connection string that looks fine but is not is reported by the Python client as
 contain `/`.
 
 **Read the error's name.** Spark Connect errors carry an error class in square brackets that says
-which side of the boundary the problem is on. `JVM_ATTRIBUTE_NOT_SUPPORTED` means the code reached
-for something that lived in the local JVM (`sparkContext`, `rdd`, `_jvm`); use the replacement from
+which side of the boundary the problem is on. `JVM_ATTRIBUTE_NOT_SUPPORTED` (or `NOT_IMPLEMENTED`
+for `df.rdd` with the full `pyspark` packages) means the code reached for something that lived in
+the local JVM (`sparkContext`, `rdd`, `_jvm`); use the replacement from
 [Migrating existing code](#migrating-existing-code). `PYTHON_VERSION_MISMATCH` and a
 `ModuleNotFoundError` inside a UDF point at the server's Python environment.
 `CANNOT_MODIFY_CONFIG` and `CANNOT_MODIFY_STATIC_CONFIG` mean the setting belongs to the server's

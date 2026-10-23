@@ -76,10 +76,12 @@ that developers need to be aware of when using Spark Connect:
    to the static Spark configuration or the SparkContext.
 
 Apart from these differences the Spark Connect API is code-compatible with classic Spark
-applications: client applications can be submitted and run in the same way as before, and the
-DataFrame code they contain does not change. The [Eager vs Lazy](spark-connect-gotchas.html)
-page describes the one behavioral difference that does affect existing code, the deferred
-analysis of query plans.
+applications: the DataFrame code they contain does not change. What changes is around that code:
+how the application is launched and configured, where its dependencies go, and when a plan is
+analyzed. The [Spark Connect Programming Guide](spark-connect-programming-guide.html) covers
+launching, configuration, dependencies and migration; the
+[Eager vs Lazy](spark-connect-gotchas.html) page covers the behavioral differences, starting with
+the deferred analysis of query plans.
 
 # Operational benefits of Spark Connect
 
