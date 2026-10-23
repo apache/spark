@@ -914,6 +914,14 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(!nested1.semanticEquals(transform(ys, y => filter(ys, z => z > y + x2))))
     assert(!nested1.semanticEquals(transform(ys, y => filter(ys, z => z > z + x1))))
 
+    // The optimizer works on a fresh copy of the plan, where every occurrence of a lambda variable
+    // has its own value.
+    Seq(filter1, nested1).foreach { e =>
+      val copied = e.freshCopyIfContainsStatefulExpression()
+      assert(copied.semanticEquals(e))
+      assert(copied.semanticHash() == e.semanticHash())
+    }
+
     // Canonicalizing the enclosing function numbers its own variables too, without colliding with
     // the variables of the nested functions.
     def zipWith(f: (Expression, Expression) => Expression): Expression =
@@ -926,6 +934,12 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(!zipWith((a, _) => transform(ys, y => y + a)).semanticEquals(
       zipWith((_, _) => transform(ys, y => y + y))))
     assert(zip1.canonicalized.references.isEmpty)
+
+    // A free variable never equals a renamed bound variable, even with the same name and exprId.
+    // `a` and `b` below are renamed to `none` with the exprIds 1 and 2.
+    val none1 = NamedLambdaVariable("none", IntegerType, nullable = true, exprId = ExprId(1))
+    val none2 = NamedLambdaVariable("none", IntegerType, nullable = true, exprId = ExprId(2))
+    assert(!zipWith((a, _) => a + none2).semanticEquals(zipWith((_, b) => none1 + b)))
   }
 
   test("SPARK-36740: ArraySort should handle NaN greater than non-NaN value") {

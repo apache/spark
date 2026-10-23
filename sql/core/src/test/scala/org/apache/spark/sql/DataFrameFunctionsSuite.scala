@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -6211,7 +6211,7 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     )
   }
 
-  test("SPARK-60508: nested higher-order functions capturing different lambda variables") {
+  test("SPARK-60508: nested higher-order functions capturing lambda variables") {
     // A file source, because a `LocalRelation` is evaluated before the optimizer simplifies the
     // expressions below.
     withTable("t") {
@@ -6234,6 +6234,14 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
           "filter(ys, y -> y > x1) <=> filter(ys, y -> y > x2)) FROM t"),
         Row(Seq(false, false)))
+
+      // The functions capturing the same variable are still simplified into one.
+      val df = sql("SELECT transform(xs1, x -> " +
+        "exists(ys, y -> y > x) AND exists(ys, y -> y > x)) FROM t")
+      checkAnswer(df, Row(Seq(true, false)))
+      assert(df.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case e: ArrayExists => e
+      }).size == 1)
     }
   }
 

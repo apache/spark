@@ -250,8 +250,8 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     // `filter(ys, y -> y > x2)` would be semantically equal whenever `x1` and `x2` have the same
     // data type and nullability.
     //
-    // Only variables not already canonicalized are numbered. A canonical `NamedLambdaVariable`
-    // carries `value = null` (see the rename below); an original one carries an `AtomicReference`.
+    // Only variables not already renamed are numbered. A renamed `NamedLambdaVariable` carries
+    // `value = null` (see the rename below); any other one carries an `AtomicReference`.
     // When this HOF is nested inside another, the enclosing HOF's `canonicalized` renames the
     // variables bound in its whole subtree first, then canonicalizes the children - which re-enters
     // this method on the nested HOF. Its variables are then already numbered uniquely across the
@@ -272,6 +272,12 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
         val newExprId = argumentMap(l.exprId)
         NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
+      // A free variable gets one shared value in place of its own. The optimizer works on a fresh
+      // copy of the plan, where every occurrence of a lambda variable has its own value, and the
+      // value takes part in the equality. The shared value is not null, so a free variable never
+      // equals a renamed bound variable.
+      case l: NamedLambdaVariable if l.value != null =>
+        l.copy(value = HigherOrderFunction.FreeVariableValue)
     }
     val canonicalizedChildren = cleaned.children.map(_.canonicalized)
     withNewChildren(canonicalizedChildren)
@@ -333,6 +339,11 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
       ${assignAtomic(indexAtomic, indexCode.value)}
     """
   }
+}
+
+object HigherOrderFunction {
+  // The value of every free lambda variable in a canonicalized higher-order function.
+  private val FreeVariableValue = new AtomicReference[Any]()
 }
 
 /**
