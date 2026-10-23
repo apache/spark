@@ -40,6 +40,21 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
     override def fieldNames(): Array[String] = names.toArray
   }
 
+  // A connector's own expression, which Spark renders with its `describe`.
+  private class ConnectorFunction(rendered: String, args: Expression*) extends Expression {
+    override def children(): Array[Expression] = args.toArray
+    override def describe(): String = rendered
+    override def toString: String = rendered
+  }
+
+  // A key whose arguments and `describe` both throw `error`.
+  private class UnrenderableTransform(error: () => Throwable) extends Transform {
+    override def name(): String = "unrenderable"
+    override def references(): Array[NamedReference] = Array.empty
+    override def arguments(): Array[Expression] = throw error()
+    override def toString: String = s"unrenderable(${arguments().mkString(", ")})"
+  }
+
   private val id = FieldReference("id")
 
   private def f(arg: Expression): Transform = transform("f", id, arg)
@@ -254,12 +269,59 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
       new GeneralScalarExpression("+", Array[Expression](id, literal(1))) -> "id + 1",
       new GeneralScalarExpression("+", Array[Expression](IdentityTransform(id), literal(1))) ->
         "identity(id) + 1",
-      new Cast(Expressions.bucket(16, "id"), StringType) -> "CAST(bucket(16, id) AS string)",
+      new Cast(Expressions.bucket(16, "id"), StringType) -> "CAST(bucket(16, id) AS STRING)",
+      new Cast(id, ArrayType(IntegerType)) -> "CAST(id AS ARRAY<INT>)",
       new UserDefinedScalarFunc("zorder_key", "zorder_key", Array[Expression](
         transform("zorder", id, FieldReference("b")))) -> "zorder_key(zorder(id, b))",
       new VariantGet(id, null, IntegerType, true, null) -> "variant_get(id, 'null', int)"
     ).foreach { case (e, rendered) =>
       assert(describeSortOrder(key(transform("f", e))) === s"f($rendered) ASC NULLS FIRST")
+    }
+  }
+
+  test("DESCRIBE renders a connector's own expression under a Spark expression with its describe") {
+    val truncate = new ConnectorFunction("truncate(4, id)", id, literal(4))
+    Seq(
+      new GeneralScalarExpression("ABS", Array[Expression](truncate)) -> "ABS(truncate(4, id))",
+      new GeneralScalarExpression("+", Array[Expression](truncate, literal(1))) ->
+        "(truncate(4, id)) + 1",
+      new Cast(truncate, IntegerType) -> "CAST(truncate(4, id) AS INT)",
+      new Extract("YEAR", truncate) -> "EXTRACT(YEAR FROM truncate(4, id))",
+      new GetArrayItem(truncate, literal(0), true) -> "truncate(4, id)[0]",
+      truncate -> "truncate(4, id)"
+    ).foreach { case (e, rendered) =>
+      assert(describeSortOrder(key(transform("f", e))) === s"f($rendered) ASC NULLS FIRST")
+      assert(describeSortOrder(key(e)) === s"$rendered ASC NULLS FIRST")
+    }
+  }
+
+  test("DESCRIBE renders a sort order that cannot be rendered with the class of its key") {
+    Seq[() => Throwable](
+      () => new IllegalStateException("broken"),
+      () => new NoClassDefFoundError("org/example/MissingClass"),
+      () => new StackOverflowError()
+    ).foreach { error =>
+      val unrenderable = new UnrenderableTransform(error)
+      assert(describeSortOrder(key(unrenderable)) ===
+        s"${classOf[UnrenderableTransform].getName} ASC NULLS FIRST", error().getClass.getName)
+      assert(emitted(unrenderable).isEmpty, error().getClass.getName)
+    }
+  }
+
+  test("DESCRIBE renders a null sort order as null") {
+    assert(describeSortOrder(null) === "null")
+  }
+
+  test("a replay that fails with an error is not emitted, however it fails") {
+    Seq[() => Throwable](
+      () => new IllegalStateException("broken"),
+      () => new NoClassDefFoundError("org/example/MissingClass"),
+      () => new StackOverflowError()
+    ).foreach { error =>
+      val failing = (_: String) => throw error()
+      assert(writeClausesSQL(
+        WriteDistributionMode.RANGE, Seq(key(id)), Seq.empty, schema, failing).isEmpty,
+        error().getClass.getName)
     }
   }
 
@@ -269,7 +331,7 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
       truncated -> "DATE_TRUNC(id)",
       new UserDefinedScalarFunc("my_udf", "my_udf", Array[Expression](truncated)) ->
         "my_udf(DATE_TRUNC(id))",
-      new Cast(truncated, IntegerType) -> "CAST(DATE_TRUNC(id) AS integer)",
+      new Cast(truncated, IntegerType) -> "CAST(DATE_TRUNC(id) AS INT)",
       new GetArrayItem(truncated, literal(0), true) -> "DATE_TRUNC(id)[0]",
       new VariantGet(truncated, "$.a", IntegerType, true, null) ->
         "variant_get(DATE_TRUNC(id), '$.a', int)",
@@ -279,7 +341,7 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
       new UserDefinedScalarFunc("my_udf", "my_udf", Array[Expression](
         new GeneralScalarExpression("+", Array[Expression](id, null)))) -> "my_udf(+(id, null))",
       new Cast(new GeneralScalarExpression("+", Array[Expression](id, null)), IntegerType) ->
-        "CAST(+(id, null) AS integer)"
+        "CAST(+(id, null) AS INT)"
     ).foreach { case (e, rendered) =>
       assert(describeSortOrder(key(transform("f", e))) === s"f($rendered) ASC NULLS FIRST")
       assert(emitted(transform("f", e)).isEmpty, rendered)

@@ -60,7 +60,9 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
    * This class does not override {@link #createTable(Identifier, TableInfo)}, so its default
    * implementation would drop the requested write distribution and ordering. A subclass that
    * overrides each {@link TableInfo} overload it can be reached through may add the capability
-   * back.
+   * back, but it has to reject the request itself for a table that it passes to the built-in
+   * session catalog; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    */
   @Override
   public Set<TableCatalogCapability> capabilities() {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util.Locale
+
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -238,7 +240,8 @@ case class DescribeTableExec(
       rows += emptyRow()
       rows += toCatalystRow("# Write Distribution and Ordering", "", "")
       if (writeDistributionMode != null) {
-        rows += toCatalystRow("Distribution", writeDistributionMode.toString, "")
+        rows += toCatalystRow(
+          "Distribution", writeDistributionMode.name().toLowerCase(Locale.ROOT), "")
       }
       if (writeOrdering.nonEmpty) {
         rows += toCatalystRow(

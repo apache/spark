@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.ZoneOffset
 
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
+import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.CreateTable
@@ -30,7 +31,7 @@ import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpr
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.connector.{ExpressionWithToString, ToStringSQLBuilder}
-import org.apache.spark.sql.types.{FloatType, StructType, TimestampLTZNanosType, TimestampType}
+import org.apache.spark.sql.types.{DataType, FloatType, StructField, StructType, TimestampLTZNanosType, TimestampType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 
@@ -39,6 +40,17 @@ import org.apache.spark.util.ArrayImplicits._
  * `CREATE`/`REPLACE TABLE ... DISTRIBUTED BY PARTITION / [LOCALLY] ORDERED BY`.
  */
 object WriteDistributionAndOrdering {
+
+  // Runs a call into a connector's expression or literal, or into the parser on text built from
+  // them. `NonFatal` does not cover a `LinkageError`, from a connector class whose dependency is
+  // missing, or a `StackOverflowError`, from a deeply nested expression, and neither should fail
+  // DESCRIBE or SHOW CREATE TABLE.
+  private def attempt[T](body: => T): Try[T] = {
+    try Success(body) catch {
+      case NonFatal(e) => Failure(e)
+      case e @ (_: LinkageError | _: StackOverflowError) => Failure(e)
+    }
+  }
 
   /** Names the write clauses in an error's operation, as in `CREATE TABLE ... <CLAUSES>`. */
   val CLAUSES = "DISTRIBUTED BY/ORDERED BY/UNORDERED"
@@ -86,12 +98,22 @@ object WriteDistributionAndOrdering {
   }
 
   /**
-   * Renders a requested sort key as SQL, for DESCRIBE, or with its `describe` when a connector
-   * expression in it fails to render.
+   * Renders a requested sort key as SQL, for DESCRIBE. When a connector expression in it fails to
+   * render, the sort order is rendered with its own `describe`, and when that fails too, with
+   * whichever of the class name of its key, its direction and its null ordering can be read, or
+   * with its own class name when none can.
    */
   def describeSortOrder(sortOrder: SortOrder): String = {
-    Try(sortOrderToSQL(sortOrder, quoteIfNeeded)).orElse(Try(sortOrder.describe))
-      .getOrElse(sortOrder.getClass.getName)
+    attempt(sortOrderToSQL(sortOrder, quoteIfNeeded)).orElse(attempt(sortOrder.describe))
+      .getOrElse(describeUnrenderable(sortOrder))
+  }
+
+  private def describeUnrenderable(sortOrder: SortOrder): String = {
+    val parts = Seq(
+      attempt(sortOrder.expression().getClass.getName),
+      attempt(sortOrder.direction().toString),
+      attempt(sortOrder.nullOrdering().toString)).flatMap(_.toOption)
+    if (parts.nonEmpty) parts.mkString(" ") else Option(sortOrder).fold("null")(_.getClass.getName)
   }
 
   /**
@@ -111,7 +133,7 @@ object WriteDistributionAndOrdering {
       replay: String => Option[(WriteDistributionMode, Seq[SortOrder])]): Option[String] = {
     lazy val partitioned = hasPartitioning(partitioning)
     Seq[String => String](quoteIfNeeded, quoteIdentifier).iterator.flatMap { quote =>
-      Try {
+      attempt {
         val orderBy = if (writeOrdering.nonEmpty) {
           Some(writeOrdering.map(sortOrderToSQL(_, quote)).mkString("ORDERED BY (", ", ", ")"))
         } else {
@@ -129,10 +151,10 @@ object WriteDistributionAndOrdering {
         }
       }.toOption.flatten
     }.find { clauses =>
-      replay(clauses).exists { case (mode, ordering) =>
+      attempt(replay(clauses).exists { case (mode, ordering) =>
         mode == writeDistributionMode && sameSortOrders(ordering, writeOrdering) &&
           unknownReferences(schema, ordering).isEmpty
-      }
+      }).getOrElse(false)
     }
   }
 
@@ -143,14 +165,11 @@ object WriteDistributionAndOrdering {
    */
   def replayWith(parser: ParserInterface)(
       clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
-    try {
-      parser.parsePlan(s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses") match {
+    attempt(parser.parsePlan(s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses")).toOption
+      .flatMap {
         case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
         case _ => None
       }
-    } catch {
-      case NonFatal(_) => None
-    }
   }
 
   /**
@@ -162,7 +181,21 @@ object WriteDistributionAndOrdering {
     writeOrdering
       .flatMap(_.expression().references().map(_.fieldNames().toImmutableArraySeq))
       .distinct
-      .filter(column => Try(schema.findNestedField(column)).toOption.flatten.isEmpty)
+      .filter(column => findColumn(schema, column).isEmpty)
+  }
+
+  /**
+   * Finds the column at path `column` in `schema`, matching names with `resolver`, as its path
+   * in the schema's spelling and its field. A path through a field that is not a struct is not
+   * in the schema either, although `findNestedField` throws for it. `PreprocessTableCreation`
+   * normalizes with the session resolver and CheckAnalysis rejects with an exact match, so both
+   * look a column up here.
+   */
+  def findColumn(
+      schema: StructType,
+      column: Seq[String],
+      resolver: Resolver = _ == _): Option[(Seq[String], StructField)] = {
+    Try(schema.findNestedField(column, resolver = resolver)).toOption.flatten
   }
 
   // True when two orderings declare the same keys: the same column names, transform names and
@@ -182,7 +215,7 @@ object WriteDistributionAndOrdering {
 
   private def keyOf(e: Expression): Any = e match {
     case r: NamedReference => r.fieldNames().toSeq
-    case l: Literal[_] => Try(CatalystLiteral.create(l.value, l.dataType)).toOption
+    case l: Literal[_] => attempt(CatalystLiteral.create(l.value, l.dataType)).toOption
     case t: Transform => (t.name, t.arguments().toSeq.map(keyOf))
     case other => other
   }
@@ -201,14 +234,13 @@ object WriteDistributionAndOrdering {
     case null => "null"
     case r: NamedReference => r.fieldNames.map(quote).mkString(".")
     case l: Literal[_] =>
-      try literalToSQL(CatalystLiteral.create(l.value, l.dataType)) catch {
-        case NonFatal(_) => describeLiteral(l)
-      }
+      attempt(literalToSQL(CatalystLiteral.create(l.value, l.dataType)))
+        .getOrElse(describeLiteral(l))
     case o: SortOrder => sortOrderToSQL(o, quote)
     case t: Transform =>
       t.arguments().map(toSQL(_, quote)).mkString(s"${quote(t.name)}(", ", ", ")")
     case _: ExpressionWithToString => new DescribingSQLBuilder(quote).build(e)
-    case other => Try(other.describe).getOrElse(childrenToSQL(other, quote))
+    case other => attempt(other.describe).getOrElse(childrenToSQL(other, quote))
   }
 
   private def childrenToSQL(e: Expression, quote: String => String): String = {
@@ -228,7 +260,7 @@ object WriteDistributionAndOrdering {
   // so that a parent keeps its own rendering.
   private class DescribingSQLBuilder(quote: String => String) extends ToStringSQLBuilder {
     override def build(expr: Expression): String = {
-      if (expr == null) "null" else Try(super.build(expr)).getOrElse(childrenToSQL(expr, quote))
+      if (expr == null) "null" else attempt(super.build(expr)).getOrElse(childrenToSQL(expr, quote))
     }
 
     override protected def visitLiteral(literal: Literal[_]): String = toSQL(literal, quote)
@@ -251,17 +283,24 @@ object WriteDistributionAndOrdering {
       childrenToSQL(predicate, quote)
     }
 
+    override protected def visitCast(
+        expr: String, exprDataType: DataType, dataType: DataType): String = {
+      s"CAST($expr AS ${dataType.sql})"
+    }
+
+    // `toSQL` renders an `ExpressionWithToString` with this builder, so one that reaches this
+    // method has to be rendered from its children to avoid recursing; any other node is a
+    // connector's own expression, which `toSQL` renders with its `describe`.
     override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
       case t: Transform => toSQL(t, quote)
-      case _ => childrenToSQL(expr, quote)
+      case _: ExpressionWithToString => childrenToSQL(expr, quote)
+      case _ => toSQL(expr, quote)
     }
   }
 
   // `LiteralValue.describe` also rejects a value that does not match its type.
   private def describeLiteral(l: Literal[_]): String = {
-    try l.describe catch {
-      case NonFatal(_) => String.valueOf(l.value)
-    }
+    attempt(l.describe).getOrElse(String.valueOf(l.value))
   }
 
   // Catalyst renders a FLOAT as a CAST, which the parser does not accept here, so a finite FLOAT

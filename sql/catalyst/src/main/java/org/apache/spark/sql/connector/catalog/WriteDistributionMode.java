@@ -43,14 +43,5 @@ public enum WriteDistributionMode {
    * {@code DISTRIBUTED BY PARTITION}: do not distribute, so any ordering holds within a write task
    * only.
    */
-  NONE;
-
-  @Override
-  public String toString() {
-    return switch (this) {
-      case HASH -> "hash";
-      case RANGE -> "range";
-      case NONE -> "none";
-    };
-  }
+  NONE
 }
