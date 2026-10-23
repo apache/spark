@@ -935,11 +935,27 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
       zipWith((_, _) => transform(ys, y => y + y))))
     assert(zip1.canonicalized.references.isEmpty)
 
+    // The canonical exprIds of the variables bound by each lambda function, outermost first.
+    def canonicalIds(e: Expression): Seq[Seq[ExprId]] = e.canonicalized.collect {
+      case f: LambdaFunction => f.arguments.map(_.exprId)
+    }
+
     // A free variable never equals a renamed bound variable, even with the same name and exprId.
-    // `a` and `b` below are renamed to `none` with the exprIds 1 and 2.
-    val none1 = NamedLambdaVariable("none", IntegerType, nullable = true, exprId = ExprId(1))
-    val none2 = NamedLambdaVariable("none", IntegerType, nullable = true, exprId = ExprId(2))
-    assert(!zipWith((a, _) => a + none2).semanticEquals(zipWith((_, b) => none1 + b)))
+    val Seq(abIds) = canonicalIds(zipWith((a, _) => a + x1))
+    assert(canonicalIds(zipWith((_, b) => x1 + b)) == Seq(abIds))
+    val Seq(noneA, noneB) =
+      abIds.map(id => NamedLambdaVariable("none", IntegerType, nullable = true, exprId = id))
+    assert(!zipWith((a, _) => a + noneB).semanticEquals(zipWith((_, b) => noneA + b)))
+
+    // A free variable keeps its exprId, even when it is the canonical exprId of a variable bound
+    // by a nested function, like `y` below.
+    val Seq(_, Seq(yId)) = canonicalIds(zipWith((_, _) => filter(ys, y => y > x1)))
+    val x = NamedLambdaVariable("x", IntegerType, nullable = true, exprId = yId)
+    val zip2 = zipWith((_, _) => filter(ys, y => y > x))
+    assert(canonicalIds(zip2).last == Seq(yId))
+    assert(zip2.canonicalized.collect {
+      case l: NamedLambdaVariable if l.name == "x" => l.exprId
+    } == Seq(yId))
   }
 
   test("SPARK-36740: ArraySort should handle NaN greater than non-NaN value") {

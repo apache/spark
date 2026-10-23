@@ -250,8 +250,8 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     // `filter(ys, y -> y > x2)` would be semantically equal whenever `x1` and `x2` have the same
     // data type and nullability.
     //
-    // Only variables not already renamed are numbered. A renamed `NamedLambdaVariable` carries
-    // `value = null` (see the rename below); any other one carries an `AtomicReference`.
+    // Only variables not already renamed are numbered or renamed. A renamed `NamedLambdaVariable`
+    // carries `value = null` (see the rename below); any other one carries an `AtomicReference`.
     // When this HOF is nested inside another, the enclosing HOF's `canonicalized` renames the
     // variables bound in its whole subtree first, then canonicalizes the children - which re-enters
     // this method on the nested HOF. Its variables are then already numbered uniquely across the
@@ -269,7 +269,7 @@ trait HigherOrderFunction extends Expression with ExpectsInputTypes {
     }).toMap
 
     val cleaned = this.transformUp {
-      case l: NamedLambdaVariable if argumentMap.contains(l.exprId) =>
+      case l: NamedLambdaVariable if l.value != null && argumentMap.contains(l.exprId) =>
         val newExprId = argumentMap(l.exprId)
         NamedLambdaVariable("none", l.dataType, l.nullable, exprId = ExprId(newExprId), null)
       // A free variable gets one shared value in place of its own. The optimizer works on a fresh
