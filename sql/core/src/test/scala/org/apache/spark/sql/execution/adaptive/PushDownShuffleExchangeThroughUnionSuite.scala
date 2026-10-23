@@ -23,9 +23,11 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
   Alias, Ascending, Attribute, AttributeReference, ExprId, GreaterThan, IsNotNull, Literal, Rand,
   RowNumber, SortOrder}
+import org.apache.spark.sql.catalyst.optimizer.BuildLeft
 import org.apache.spark.sql.catalyst.plans.physical.{
-  ClusteredDistribution, Distribution, HashPartitioning, NullAwareHashPartitioning, Partitioning,
-  RoundRobinPartitioning, UnknownPartitioning}
+  ClusteredDistribution, CoalescedBoundary, CoalescedHashPartitioning, Distribution,
+  HashPartitioning, NullAwareHashPartitioning, Partitioning, RoundRobinPartitioning,
+  UnknownPartitioning}
 import org.apache.spark.sql.execution.{
   FilterExec, InputAdapter, LocalLimitExec, ProjectExec, QueryExecution, ScalarSubquery, SortExec,
   SparkPlan, StampUnionDecisions, SubqueryExec, UnaryExecNode, UnionConfSnapshot, UnionExec,
@@ -44,7 +46,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
 
   // The suite exercises the rule itself, so it is on for every test whatever the default is.
   override protected def sparkConf =
-    super.sparkConf.set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key, "true")
+    super.sparkConf
+      .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key, "true")
+      .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key, "true")
+      .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key, "true")
+      .set(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key, "true")
+      .set(SQLConf
+        .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED.key,
+        "true")
+      .set(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key, "false")
 
   private val query: String =
     """
@@ -59,7 +69,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
   // A shuffle that moves a union as a whole, not one the rewrite puts under one of its children to
   // lay that child out on the target.
   private def numShufflesOnUnion(plan: SparkPlan): Int =
-    countShuffles(plan, underUnion = false) { s => isUnionPlan(s.child) }
+    plan.collect { case s: ShuffleExchangeExec if isUnionPlan(s.child) => s }.size
 
   // The union may be wrapped in a `WholeStageCodegenExec` by `CollapseCodegenStages`, or in an
   // `InputAdapter` when it feeds a codegen'd parent, so look through both when checking whether
@@ -104,12 +114,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
   private def pushDown(plan: SparkPlan, required: Option[Distribution] = None): SparkPlan = {
     val snapshot = UnionConfSnapshot(spark.sessionState.conf)
     PushDownShuffleExchangeThroughUnion(
-      snapshot, EnsureRequirements(requiredDistribution = required))(plan)
+      snapshot, EnsureRequirements(requiredDistribution = required),
+      queryContainsSubqueries = false)(plan)
   }
 
   private def withPushDown(f: => Unit): Unit = withSQLConf(
       SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true",
-      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true")(f)
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "true",
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+        "true")(f)
 
   private def attr(name: String): AttributeReference = AttributeReference(name, IntegerType)()
 
@@ -495,6 +508,9 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         createTables()
         val df = spark.sql(query)
         checkAnswer(df, expectedResult(query))
+        val finalPlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+          .executedPlan
+        assert(!finalPlan.exists(_.isInstanceOf[WholeStageCodegenExec]))
         assert(numShufflesOnUnion(aqeInitialPlan(df)) === 0,
           s"shuffle should be pushed below the union:\n${df.queryExecution.executedPlan}")
       }
@@ -571,12 +587,11 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
-  test("SPARK-60379: pick the partitioning produced by the most children") {
+  test("SPARK-60379: prefer the layout that keeps the most bytes") {
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       withTempView("t1", "t2", "t3") {
         // Two children share HashPartitioning(id); the third uses HashPartitioning(id, grp) and
-        // holds most of the data. The rule must pick the partitioning produced by the most
-        // children, not the one produced by the most data.
+        // holds most of the data, so its layout saves more shuffle bytes despite fewer offers.
         Seq((1, "a", 10)).toDF("id", "grp", "v").createOrReplaceTempView("t1")
         Seq((2, "b", 5)).toDF("id", "grp", "v").createOrReplaceTempView("t2")
         Seq((1, "a", 40), (2, "b", 8), (3, "c", 7), (4, "d", 6), (5, "e", 9))
@@ -602,8 +617,8 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         assert(union.outputPartitioning.isInstanceOf[HashPartitioning],
           s"the union should propagate a hash partitioning after the push-down:\n" +
             df.queryExecution.executedPlan)
-        assert(union.outputPartitioning.asInstanceOf[HashPartitioning].expressions.length === 1,
-          s"the target should be the single-column partitioning shared by two children:\n" +
+        assert(union.outputPartitioning.asInstanceOf[HashPartitioning].expressions.length === 2,
+          s"the target should keep the largest child's two-column layout:\n" +
             df.queryExecution.executedPlan)
       }
     }
@@ -615,8 +630,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       val a1 = attr("a")
       val a2 = attr("a")
       // hash(_, 2) is offered by two children, hash(_, 8) by one. Shuffling one child instead
-      // of two comes first, even though the finer layout would hand the operator above the
-      // parallelism the pushed shuffle had.
+      // of two comes first without size estimates, although the finer layout raises parallelism.
       val children = Seq(leaf(a, hash(a, 2)), leaf(a1, hash(a1, 2)), leaf(a2, hash(a2, 8)))
       val parent = TestPartitioningPlan(
         children = Seq(ensureShuffle(hash(a, 2), UnionExec(children))),
@@ -746,25 +760,29 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       val a = attr("a")
       val a1 = attr("a")
       val b = attr("b")
-      val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(a1)))
+      val a2 = attr("a")
+      val union = UnionExec(Seq(leaf(a, hash(a, 8)), leaf(a1, hash(a1, 8)),
+        leaf(a2, hash(a2, 16))))
       val other = leaf(b)
-      // The sibling is a shuffle (under a local sort) with no union below it.
+      // The most-offered layout passes the floor, but only 16 partitions pair with the sibling.
       val sibling = SortExec(
-        Seq(SortOrder(b, Ascending)), global = false, ensureShuffle(hash(b, 5), other))
+        Seq(SortOrder(b, Ascending)), global = false, ensureShuffle(hash(b, 16), other))
       val parent = TestPartitioningPlan(
-        children = Seq(ensureShuffle(hash(a, 5), union), sibling),
+        children = Seq(ensureShuffle(hash(a, 16), union), sibling),
         required = Seq(clustered(a), clustered(b)),
         output = Seq(a, b))
 
       val newPlan = pushDown(parent)
-      assert(newPlan.fastEquals(parent), s"incompatible sibling must prevent push-down:\n$newPlan")
+      assert(newPlan.children.head.outputPartitioning.numPartitions === 16)
+      assert(newPlan.children.head.isInstanceOf[UnionExec])
+      assert(newPlan.children(1).fastEquals(sibling))
 
       val compatible = parent.withNewChildren(Seq(
-        ensureShuffle(hash(a, 2), union),
-        sibling.withNewChildren(Seq(ensureShuffle(hash(b, 2), other)))))
+        ensureShuffle(hash(a, 8), union),
+        sibling.withNewChildren(Seq(ensureShuffle(hash(b, 8), other)))))
       val pushed = pushDown(compatible)
       val newUnion = pushed.children.head.asInstanceOf[UnionExec]
-      assertReshuffled(newUnion.children(1), hash(a1, 2), union.children(1))
+      assertReshuffled(newUnion.children(2), hash(a2, 8), union.children(2))
       assert(pushed.children(1).fastEquals(compatible.children(1)),
         s"the sibling shuffle and sort must remain unchanged:\n$pushed")
       assert(ValidateRequirements.validate(pushed), s"invalid plan:\n$pushed")
@@ -777,8 +795,8 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       val a1 = attr("a")
       val a2 = attr("a")
       val b = attr("b")
-      // hash(_, 2) is offered by two children, hash(_, 3) by one.
-      val children = Seq(leaf(a, hash(a, 2)), leaf(a1, hash(a1, 2)), leaf(a2, hash(a2, 3)))
+      // Both candidates pass the floor; only the sibling-compatible count may be selected.
+      val children = Seq(leaf(a, hash(a, 8)), leaf(a1, hash(a1, 8)), leaf(a2, hash(a2, 16)))
 
       def run(fixedPartitions: Int): UnionExec = {
         val parent = TestPartitioningPlan(
@@ -798,15 +816,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       }
 
       // Compatible with the fixed side: the most-offered layout wins.
-      val most = run(fixedPartitions = 2)
+      val most = run(fixedPartitions = 8)
       assert(most.children.head.fastEquals(children.head))
       assert(most.children(1).fastEquals(children(1)))
-      assertReshuffled(most.children(2), hash(a2, 2), children(2))
+      assertReshuffled(most.children(2), hash(a2, 8), children(2))
 
       // Incompatible with the fixed side: fall back to the layout that pairs with it.
-      val paired = run(fixedPartitions = 3)
-      assertReshuffled(paired.children.head, hash(a, 3), children.head)
-      assertReshuffled(paired.children(1), hash(a1, 3), children(1))
+      val paired = run(fixedPartitions = 16)
+      assertReshuffled(paired.children.head, hash(a, 16), children.head)
+      assertReshuffled(paired.children(1), hash(a1, 16), children(1))
       assert(paired.children(2).fastEquals(children(2)))
     }
   }
@@ -1210,7 +1228,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
             |  SELECT id, v FROM t2)
             |SELECT * FROM u u1 JOIN u u2 ON u1.id = u2.id""".stripMargin
         val df = spark.sql(sql)
-        df.collect()
+        checkAnswer(df, expectedResult(sql))
 
         val plan = aqeInitialPlan(df)
         assert(numShufflesOnUnion(plan) === 2,
@@ -1219,7 +1237,7 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         // With reuse off every exchange gets its own stage, so the rewrite goes ahead.
         withSQLConf(SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
           val noReuse = spark.sql(sql)
-          noReuse.collect()
+          checkAnswer(noReuse, expectedResult(sql))
           val noReusePlan = aqeInitialPlan(noReuse)
           assert(numShufflesOnUnion(noReusePlan) === 0,
             s"without exchange reuse there is no stage to protect:\n$noReusePlan")
@@ -1228,15 +1246,14 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     }
   }
 
-  test("SPARK-60379: duplicated shuffle forms include a shuffle query stage and a " +
-      "subquery plan") {
-    import testImplicits._
+  test("SPARK-60379: duplicated forms use pre-optimization stage keys and visible subqueries") {
     val leaf = spark.range(10).select($"id" as Symbol("k")).queryExecution.executedPlan
     val hp = HashPartitioning(leaf.output, 4)
 
     // A duplicate carried by a shuffle query stage, without materializing it.
     val staged = ShuffleExchangeExec(hp, leaf)
-    val stage = ShuffleQueryStageExec(0, staged, staged.canonicalized)
+    val optimized = staged.copy(child = ProjectExec(leaf.output, leaf))
+    val stage = ShuffleQueryStageExec(0, optimized, staged.canonicalized)
     val twin = ShuffleExchangeExec(hp, leaf)
     assert(AQEUtils.duplicatedShuffleForms(UnionExec(Seq(stage, twin))) ===
       Set(staged.canonicalized), "an exchange a stage holds is a duplicate")
@@ -1347,10 +1364,14 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
           Seq((1, 10), (1, 20), (2, 5)).toDF("id", "v").createOrReplaceTempView("t1")
           Seq(1, 2).toDF("id").createOrReplaceTempView("t2")
           Seq((1, 30), (3, 7)).toDF("id", "v").createOrReplaceTempView("t3")
+          val inputs = if (hint == "BROADCAST(b)") {
+            "(SELECT id, v FROM t1 DISTRIBUTE BY id) a JOIN t2 b ON a.id = b.id"
+          } else {
+            "t2 a JOIN (SELECT id, v FROM t1 DISTRIBUTE BY id) b ON a.id = b.id"
+          }
+          val columns = if (hint == "BROADCAST(b)") { "a.id, a.v" } else { "b.id, b.v" }
           val sql = s"""SELECT id, v, row_number() OVER (PARTITION BY id ORDER BY v) rn FROM (
-            | SELECT /*+ $hint */ a.id, a.v FROM
-            | (SELECT id, v FROM t1 DISTRIBUTE BY id) a JOIN
-            | (SELECT id FROM t2 DISTRIBUTE BY id) b ON a.id = b.id
+            | SELECT /*+ $hint */ $columns FROM $inputs
             | UNION ALL SELECT id, v FROM t3)""".stripMargin
           Seq(false, true).foreach { enabled =>
             withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString) {
@@ -1444,6 +1465,808 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       val newPlan = pushDown(parent)
       assert(newPlan.fastEquals(parent),
         s"a round-robin shuffle must not be pushed down:\n$newPlan")
+    }
+  }
+
+  test("SPARK-60379: rebalance sources keep their boundary with push-down enabled") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
+      withTempView("t1", "t2") {
+        spark.range(0, 1000, 1, 10).selectExpr("id % 2 id", "id v")
+          .createOrReplaceTempView("t1")
+        spark.range(20).selectExpr("id", "id v").createOrReplaceTempView("t2")
+        val sql = """SELECT id, v, row_number() OVER (PARTITION BY id ORDER BY v) rn FROM (
+          | SELECT /*+ REBALANCE(id) */ id, v FROM t1
+          | UNION ALL SELECT id, v FROM t2)""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        assert(numShufflesOnUnion(aqeInitialPlan(df)) === 1)
+      }
+    }
+  }
+
+  Seq(false, true).foreach { force =>
+    test(s"SPARK-60379: protected join branches preserve skew optimization with force=$force") {
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+          SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> force.toString,
+          SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+          SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+        withTempView("t1", "t2", "t3") {
+          spark.range(0, 300, 1, 10).selectExpr("id % 3 k", "id v")
+            .createOrReplaceTempView("t1")
+          spark.range(0, 30, 1, 10).selectExpr("id % 3 k", "id w")
+            .createOrReplaceTempView("t2")
+          spark.range(3).selectExpr("id k", "id v").createOrReplaceTempView("t3")
+          val sql = """SELECT k, v, rank() OVER (PARTITION BY k ORDER BY v) rn FROM (
+            | SELECT a.k, a.v FROM t1 a JOIN t2 b ON a.k = b.k
+            | UNION ALL SELECT k, v FROM t3)""".stripMargin
+          val df = spark.sql(sql)
+          checkAnswer(df, expectedResult(sql))
+          assert(numShufflesOnUnion(aqeInitialPlan(df)) === 1)
+          def skewJoins(p: SparkPlan): Seq[SortMergeJoinExec] = p match {
+            case stage: QueryStageExec => skewJoins(stage.plan)
+            case other => other.collect { case j: SortMergeJoinExec if j.isSkewJoin => j } ++
+              other.children.flatMap(skewJoins)
+          }
+          val finalPlan = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+            .executedPlan
+          assert(skewJoins(finalPlan).nonEmpty,
+            s"the protected inner join should split:\n$finalPlan")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: opted-in join branches restore a shuffle when skew optimization is forced") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(0, 300, 1, 10).selectExpr("id % 3 k", "id v")
+          .createOrReplaceTempView("t1")
+        spark.range(0, 30, 1, 10).selectExpr("id % 3 k", "id w")
+          .createOrReplaceTempView("t2")
+        spark.range(3).selectExpr("id k", "id v").createOrReplaceTempView("t3")
+        val sql = """SELECT k, v, rank() OVER (PARTITION BY k ORDER BY v) rn FROM (
+          | SELECT a.k, a.v FROM t1 a JOIN t2 b ON a.k = b.k
+          | UNION ALL SELECT k, v FROM t3)""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        assert(numShufflesOnUnion(aqeInitialPlan(df)) === 0)
+        def plans(p: SparkPlan): Seq[SparkPlan] = p match {
+          case stage: QueryStageExec => stage +: plans(stage.plan)
+          case other => other +: other.children.flatMap(plans)
+        }
+        val finalNodes = plans(df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan)
+        assert(finalNodes.exists {
+          case join: SortMergeJoinExec => join.isSkewJoin
+          case _ => false
+        })
+        assert(finalNodes.exists {
+          case shuffle: ShuffleExchangeExec => isUnionPlan(shuffle.child)
+          case _ => false
+        }, "forced skew optimization must restore the union distribution")
+      }
+    }
+  }
+
+  test("SPARK-60379: join-input protection retains direct consumer skew splitting") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "20",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100") {
+      withTempView("agg_src", "skewed", "other") {
+        spark.range(20).selectExpr("id % 3 k", "id v").createOrReplaceTempView("agg_src")
+        spark.range(0, 300, 1, 10).selectExpr("id % 3 k", "id v")
+          .createOrReplaceTempView("skewed")
+        spark.range(0, 30, 1, 10).selectExpr("id % 3 k", "id w")
+          .createOrReplaceTempView("other")
+        val sql = """SELECT /*+ MERGE(u, o) */ u.k, u.v, o.w FROM (
+          | SELECT k, sum(v) v FROM agg_src GROUP BY k
+          | UNION ALL SELECT k, v FROM skewed) u JOIN other o ON u.k = o.k""".stripMargin
+        val expected = expectedResult(sql)
+        Seq(false, true).foreach { allow =>
+          withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key ->
+              allow.toString) {
+            val df = spark.sql(sql)
+            checkAnswer(df, expected)
+            assert(numShufflesOnUnion(aqeInitialPlan(df)) === (if (allow) { 0 } else { 1 }))
+            def joins(p: SparkPlan): Seq[SortMergeJoinExec] = p match {
+              case stage: QueryStageExec => joins(stage.plan)
+              case join: SortMergeJoinExec => Seq(join)
+              case other => other.children.flatMap(joins)
+            }
+            val finalJoins = joins(df.queryExecution.executedPlan
+              .asInstanceOf[AdaptiveSparkPlanExec].executedPlan)
+            assert(finalJoins.size === 1)
+            assert(finalJoins.head.isSkewJoin === !allow)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: cached plans respect the output partitioning policy") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      withTempView("t1", "t2") {
+        createTables()
+        Seq(false, true).foreach { canChange =>
+          withSQLConf(
+              SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING.key -> canChange.toString) {
+            val cached = spark.sql(query).cache()
+            try {
+              cached.count()
+              val relation = cached.queryExecution.withCachedData.collectFirst {
+                case r: org.apache.spark.sql.execution.columnar.InMemoryRelation => r
+              }.get
+              val plan = relation.cacheBuilder.cachedPlan match {
+                case a: AdaptiveSparkPlanExec => a.initialPlan
+                case p => p
+              }
+              assert(numShufflesOnUnion(plan) === (if (canChange) { 0 } else { 1 }))
+            } finally {
+              cached.unpersist(blocking = true)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: union limits reject negative values") {
+    Seq(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN.key,
+      SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_MOVED_BRANCHES.key).foreach { key =>
+      intercept[IllegalArgumentException] {
+        withSQLConf(key -> "-1") {}
+      }
+    }
+  }
+
+  test("SPARK-60379: retarget an unshared branch exchange without stacking shuffles") {
+    withPushDown {
+      val a = attr("id")
+      val b = attr("id")
+      val c = attr("id")
+      val moved = ShuffleExchangeExec(hash(c, 8), leaf(c), REPARTITION_BY_COL)
+      val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(b, hash(b, 2)), moved))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      val result = pushDown(parent)
+      val retargeted = result.children.head.children(2).asInstanceOf[ShuffleExchangeExec]
+      assert(retargeted.outputPartitioning === hash(c, 2))
+      assert(retargeted.shuffleOrigin === REPARTITION_BY_COL)
+      assert(retargeted.child.fastEquals(moved.child))
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(
+        moved, hash(c, 8), REPARTITION_BY_COL)
+      val protectedResult = pushDown(parent)
+      val stacked = protectedResult.children.head.children(2).asInstanceOf[ShuffleExchangeExec]
+      assert(stacked.child.fastEquals(moved))
+      assert(ValidateRequirements.validate(protectedResult))
+    }
+  }
+
+  test("SPARK-60379: retargeting stops at projections, stages and fixed-count exchanges") {
+    withPushDown {
+      val a = attr("id")
+      val b = attr("id")
+      val c = attr("id")
+      val exchange = ShuffleExchangeExec(hash(c, 8), leaf(c), REPARTITION_BY_COL)
+      val stage = ShuffleQueryStageExec(0, exchange, exchange.canonicalized)
+      val projected = ProjectExec(Seq(Alias(c, "id")()), exchange)
+      val fixed = exchange.copy(shuffleOrigin = REPARTITION_BY_NUM)
+      Seq(projected, stage, fixed).foreach { moved =>
+        val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(b, hash(b, 2)), moved))
+        val parent = TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(a, 2), union)),
+          required = Seq(clustered(a)), output = Seq(a))
+        val result = pushDown(parent)
+        val outer = result.children.head.children(2).asInstanceOf[ShuffleExchangeExec]
+        assert(outer.shuffleOrigin === ENSURE_REQUIREMENTS)
+        assert(outer.child.fastEquals(moved))
+      }
+      val union = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(b, hash(b, 2)), exchange))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      val root = TestPartitioningPlan(children = Seq(parent, exchange.copy()))
+      val result = pushDown(root)
+      val outer = result.children.head.children.head.children(2).asInstanceOf[ShuffleExchangeExec]
+      assert(outer.child.fastEquals(exchange), "a shared branch exchange must not be retargeted")
+    }
+  }
+
+  test("SPARK-60379: origin validation distinguishes column and fixed-count repartitions") {
+    val a = attr("id")
+    val original = hash(a, 4)
+    val coalesced = CoalescedHashPartitioning(
+      original, Seq(CoalescedBoundary(0, 2),
+        CoalescedBoundary(2, 4)))
+    Seq(REPARTITION_BY_COL, REPARTITION_BY_NUM, ENSURE_REQUIREMENTS).foreach { origin =>
+      val plan = leaf(a, coalesced)
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(plan, original, origin)
+      assert(ValidateRequirements.validate(plan) === (origin != REPARTITION_BY_NUM))
+      val changed = leaf(a, hash(a, 8))
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(changed, original, origin)
+      assert(!ValidateRequirements.validate(changed))
+      val same = leaf(a, original)
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(same, original, origin)
+      assert(ValidateRequirements.validate(same))
+      val differentReducers = leaf(a, coalesced.copy(from = hash(a, 8)))
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(
+        differentReducers, original, origin)
+      assert(ValidateRequirements.validate(differentReducers) === (origin != REPARTITION_BY_NUM))
+      val wrongKey = leaf(a, coalesced.copy(from = hash(attr("other"), 8)))
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(wrongKey, original, origin)
+      assert(!ValidateRequirements.validate(wrongKey))
+      val fixedCount = leaf(a,
+        CoalescedHashPartitioning(
+          hash(a, 8), (0 until 4).map { index =>
+            CoalescedBoundary(index * 2, index * 2 + 2)
+          }))
+      org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(
+        fixedCount, original, origin)
+      assert(ValidateRequirements.validate(fixedCount))
+      val b = attr("other")
+      val twoKeys = HashPartitioning(Seq(a, b), 4)
+      Seq(HashPartitioning(Seq(b, a), 8), hash(a, 8)).foreach { from =>
+        val invalid = leaf(a, coalesced.copy(from = from))
+        org.apache.spark.sql.execution.exchange.PartitioningOrigin.record(invalid, twoKeys, origin)
+        assert(!ValidateRequirements.validate(invalid))
+      }
+    }
+  }
+
+  test("SPARK-60379: elision contracts survive rebuilding a tagged node") {
+    withPushDown {
+      val a = attr("id")
+      val child = PassThroughPlan(
+        ensureShuffle(hash(a, 2), UnionExec(Seq(leaf(a, hash(a, 8)), leaf(attr("id"))))),
+        clustered(a))
+      val user = ShuffleExchangeExec(hash(a, 2), child, REPARTITION_BY_COL)
+      val prepared = EnsureRequirements()(user)
+      assert(prepared.fastEquals(child))
+      assert(ValidateRequirements.validate(prepared))
+      assert(pushDown(prepared).fastEquals(prepared))
+      val id = attr("id")
+      val unprotected = PassThroughPlan(ensureShuffle(hash(id, 2),
+        UnionExec(Seq(leaf(id, hash(id, 8)), leaf(attr("id"))))), clustered(id))
+      assert(numShufflesOnUnion(pushDown(unprotected)) === 0)
+    }
+  }
+
+  test("SPARK-60379: preserve a user origin carried by the removed shuffle end to end") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      val previousStrategies = spark.experimental.extraStrategies
+      // Force the carrier shape: a user exchange above an equal requirement exchange. SQL
+      // normally plans only the user exchange here, so the strategy pins elision onto the carrier.
+      spark.experimental.extraStrategies = Seq(new org.apache.spark.sql.execution.SparkStrategy {
+        override def apply(
+            plan: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan): Seq[SparkPlan] = {
+          plan match {
+            case repartition: org.apache.spark.sql.catalyst.plans.logical.RepartitionByExpression
+                if repartition.optNumPartitions.contains(5) =>
+              val required = ensureShuffle(repartition.partitioning, planLater(repartition.child))
+              Seq(ShuffleExchangeExec(repartition.partitioning, required, REPARTITION_BY_NUM))
+            case _ => Nil
+          }
+        }
+      }) ++ previousStrategies
+      try {
+        val expected = (0L until 40L).map(i => (i % 7, i, 1))
+        for (userRepartition <- Seq(false, true); enabled <- Seq(false, true)) {
+          withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString) {
+            val first = spark.range(20).selectExpr("id % 7 k", "id v").repartition(8, $"k")
+            val second = spark.range(20, 40).selectExpr("id % 7 k", "id v")
+            val union = first.union(second)
+            val input = if (userRepartition) { union.repartition(5, $"k") } else { union }
+            val result = input.withColumn("rn", org.apache.spark.sql.functions.row_number().over(
+              org.apache.spark.sql.expressions.Window.partitionBy("k", "v").orderBy("v")))
+              .as[(Long, Long, Int)].mapPartitions(rows => rows)
+            assert(result.collect().sorted.toSeq === expected.sorted)
+            val adaptive = result.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+            val initial = adaptive.initialPlan
+            val expectedCount = if (enabled && !userRepartition) { 8 } else { 5 }
+            assert(result.rdd.getNumPartitions === expectedCount)
+            assert(numShufflesOnUnion(initial) ===
+              (if (enabled && !userRepartition) { 0 } else { 1 }), s"unexpected plan:\n$initial")
+            if (userRepartition) {
+              assert(!initial.exists {
+                case shuffle: ShuffleExchangeExec => shuffle.shuffleOrigin == REPARTITION_BY_NUM &&
+                  shuffle.outputPartitioning.numPartitions == 5
+                case _ => false
+              }, s"the user exchange must be elided:\n$initial")
+              val carrier = initial.collectFirst {
+                case shuffle: ShuffleExchangeExec if isUnionPlan(shuffle.child) => shuffle
+              }.get
+              val changed = carrier.copy(outputPartitioning = HashPartitioning(
+                carrier.outputPartitioning.asInstanceOf[HashPartitioning].expressions, 8))
+              changed.copyTagsFrom(carrier)
+              assert(!org.apache.spark.sql.execution.exchange.PartitioningOrigin
+                .validateNode(changed),
+                "the requirement exchange must carry the elided user's five-partition origin")
+            }
+          }
+        }
+      } finally {
+        spark.experimental.extraStrategies = previousStrategies
+      }
+    }
+  }
+
+  test("SPARK-60379: preserve an elided repartition below mapPartitions") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      val first = spark.range(20).selectExpr("id % 3 a", "id b", "id v")
+      val second = spark.range(20).selectExpr("id % 3 a", "id b", "id v")
+      Seq(false, true).foreach { enabled =>
+        withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString) {
+          val branch = first.repartition(8, $"a", $"b").union(second)
+            .withColumn("rn", org.apache.spark.sql.functions.row_number().over(
+              org.apache.spark.sql.expressions.Window.partitionBy("a", "b").orderBy("v")))
+          val other = second.withColumn("rn", org.apache.spark.sql.functions.row_number().over(
+            org.apache.spark.sql.expressions.Window.partitionBy("a", "b").orderBy("v")))
+          val result = branch.union(other).repartition($"a", $"b")
+            .as[(Long, Long, Long, Int)]
+            .mapPartitions(_.map(r => (r._1, r._2)).toVector.distinct.iterator)
+          assert(result.collect().sorted.toSeq === (0L until 20L).map(i => (i % 3, i)).sorted)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: exploding join sources require non-coalescible permission") {
+    withPushDown {
+      val a = attr("id")
+      val b = attr("id")
+      val join = org.apache.spark.sql.execution.joins.BroadcastNestedLoopJoinExec(
+        ensureShuffle(hash(a, 2), leaf(a)),
+        org.apache.spark.sql.execution.exchange.BroadcastExchangeExec(
+          org.apache.spark.sql.catalyst.plans.physical.IdentityBroadcastMode, leaf(b)),
+        org.apache.spark.sql.catalyst.optimizer.BuildRight,
+        org.apache.spark.sql.catalyst.plans.Inner, Some(GreaterThan(a, b)))
+      val child = ProjectExec(Seq(a), join)
+      val union = UnionExec(Seq(child, leaf(attr("id"))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+            "false") {
+        assert(pushDown(parent).fastEquals(parent))
+      }
+      assert(numShufflesOnUnion(pushDown(parent)) === 0)
+    }
+  }
+
+  test("SPARK-60379: protected join branches retain runtime local reads") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "100000",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+        SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      withTempView("t1", "t2", "t3") {
+        spark.range(100).selectExpr("id % 7 k", "id v").createOrReplaceTempView("t1")
+        spark.range(7).selectExpr("id k").createOrReplaceTempView("t2")
+        spark.range(7).selectExpr("id k", "id v").createOrReplaceTempView("t3")
+        val sql = """SELECT k, v, rank() OVER (PARTITION BY k ORDER BY v) rn FROM (
+          | SELECT a.k, a.v FROM t1 a JOIN t2 b ON a.k = b.k
+          | UNION ALL SELECT k, v FROM t3)""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        assert(aqeInitialPlan(df).exists(_.isInstanceOf[SortMergeJoinExec]))
+        def nodes(p: SparkPlan): Seq[SparkPlan] = p match {
+          case stage: QueryStageExec => stage +: nodes(stage.plan)
+          case other => other +: other.children.flatMap(nodes)
+        }
+        val finalNodes = nodes(df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan)
+        assert(finalNodes.exists(_.isInstanceOf[BroadcastHashJoinExec]))
+        assert(finalNodes.exists {
+          case read: AQEShuffleReadExec => read.isLocalRead
+          case _ => false
+        })
+      }
+    }
+  }
+
+  test("SPARK-60379: opted-in join layouts can roll back independent local shuffle reads") {
+    withSQLConf(
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_AUTO_BROADCASTJOIN_THRESHOLD.key -> "100000",
+        SQLConf.LOCAL_SHUFFLE_READER_ENABLED.key -> "true",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      withTempView("t1", "t2", "t3", "t4", "t5") {
+        spark.range(100).selectExpr("id % 7 k", "id v").createOrReplaceTempView("t1")
+        spark.range(7).selectExpr("id k").createOrReplaceTempView("t2")
+        spark.range(7).selectExpr("id k", "id v").createOrReplaceTempView("t3")
+        spark.range(100).selectExpr("id % 7 k", "id v").createOrReplaceTempView("t4")
+        spark.range(7).selectExpr("id k").createOrReplaceTempView("t5")
+        val sql = """SELECT k, v, rank() OVER (PARTITION BY k ORDER BY v) rn FROM (
+          | SELECT a.k, a.v FROM t1 a JOIN t2 b ON a.k = b.k
+          | UNION ALL SELECT k, v FROM t3)
+          | UNION ALL SELECT e.k, e.v, 0 FROM t4 e JOIN t5 f ON e.k = f.k""".stripMargin
+        val expected = expectedResult(sql)
+        Seq(false, true).foreach { enabled =>
+          withSQLConf(
+              SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString,
+              SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "true") {
+            val df = spark.sql(sql)
+            checkAnswer(df, expected)
+            assert(aqeInitialPlan(df).collect { case join: SortMergeJoinExec => join }.size === 2)
+            def plans(p: SparkPlan): Seq[SparkPlan] = p match {
+              case stage: QueryStageExec => stage +: plans(stage.plan)
+              case other => other +: other.children.flatMap(plans)
+            }
+            val finalNodes = plans(df.queryExecution.executedPlan
+              .asInstanceOf[AdaptiveSparkPlanExec].executedPlan)
+            assert(finalNodes.count(_.isInstanceOf[BroadcastHashJoinExec]) === 2)
+            val joins = finalNodes.collect { case join: BroadcastHashJoinExec => join }
+            val probeReads = joins.flatMap { join =>
+              val streamed = if (join.buildSide == BuildLeft) {
+                join.right
+              } else {
+                join.left
+              }
+              plans(streamed).collect { case read: AQEShuffleReadExec => read }
+            }
+            assert(probeReads.size === 2)
+            probeReads.foreach { read =>
+              assert(read.isLocalRead === !enabled,
+                s"enabled=$enabled final plan:\n${finalNodes.head}")
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: planned writes preserve an elided repartition count") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5") {
+      withTempPath { path =>
+        val first = spark.range(100).selectExpr("id % 7 a", "id v")
+        val second = spark.range(100, 200).selectExpr("id % 7 a", "id v")
+        val window = first.repartition(8, $"a").union(second)
+          .withColumn("rn", org.apache.spark.sql.functions.row_number().over(
+            org.apache.spark.sql.expressions.Window.partitionBy("a").orderBy("v")))
+        window.repartition($"a").write.parquet(path.getCanonicalPath)
+        val files = path.listFiles().filter(_.getName.endsWith(".parquet"))
+        assert(files.length <= 5, s"the user repartition must retain its five-partition layout")
+        assert(spark.read.parquet(path.getCanonicalPath).count() === 200)
+      }
+    }
+  }
+
+  test("SPARK-60379: full-key policy protects a join above relaxed windows") {
+    withPushDown {
+      val a = attr("a")
+      val b = attr("b")
+      val x = attr("x")
+      val y = attr("y")
+      def side(first: Attribute, second: Attribute): SparkPlan = {
+        val union = UnionExec(Seq(TestPartitioningPlan(
+          outputPartitioning = hash(first, 2), output = Seq(first, second)),
+          TestPartitioningPlan(output = Seq(attr("a"), attr("b")))))
+        PassThroughPlan(ensureShuffle(HashPartitioning(Seq(first, second), 2), union),
+          ClusteredDistribution(Seq(first, second)))
+      }
+      val parent = TestPartitioningPlan(children = Seq(side(a, b), side(x, y)),
+        required = Seq(ClusteredDistribution(Seq(a, b)), ClusteredDistribution(Seq(x, y))),
+        output = Seq(a, b, x, y))
+      withSQLConf(SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false") {
+        assert(pushDown(parent).fastEquals(parent))
+      }
+      assert(numShufflesOnUnion(pushDown(parent)) === 0)
+    }
+  }
+
+  test("SPARK-60379: two-key joins between unions respect both subset permissions") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true") {
+      withTempView("t1", "t2", "t3", "t4") {
+        Seq((1, 10), (1, 20), (2, 5)).toDF("a", "b").createOrReplaceTempView("t1")
+        Seq((1, 20), (3, 7)).toDF("a", "b").createOrReplaceTempView("t2")
+        Seq((1, 20), (2, 5)).toDF("x", "y").createOrReplaceTempView("t3")
+        Seq((1, 20), (3, 7)).toDF("x", "y").createOrReplaceTempView("t4")
+        val sql = """SELECT /*+ MERGE(u, w) */ u.a, u.b, w.x, w.y FROM (
+          | SELECT a, max(b) b FROM t1 GROUP BY a UNION ALL SELECT a, b FROM t2) u
+          | JOIN (SELECT x, max(y) y FROM t3 GROUP BY x UNION ALL SELECT x, y FROM t4) w
+          | ON u.a = w.x AND u.b = w.y""".stripMargin
+        val expected = expectedResult(sql)
+        for (allow <- Seq(false, true); allKeys <- Seq(false, true)) {
+          withSQLConf(SQLConf
+              .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+              .key -> allow.toString,
+              SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> allKeys.toString) {
+            val df = spark.sql(sql)
+            checkAnswer(df, expected)
+            assert(numShufflesOnUnion(aqeInitialPlan(df)) ===
+              (if (allow && !allKeys) { 0 } else { 2 }))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: subset targets require both permissions") {
+    withPushDown {
+      val a = attr("a")
+      val b = attr("b")
+      val union = UnionExec(Seq(
+        TestPartitioningPlan(outputPartitioning = hash(a, 2), output = Seq(a, b)),
+        TestPartitioningPlan(output = Seq(attr("a"), attr("b")))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(HashPartitioning(Seq(a, b), 2), union)),
+        required = Seq(ClusteredDistribution(Seq(a, b))), output = Seq(a, b))
+      for (allow <- Seq(false, true); allKeys <- Seq(false, true)) {
+        withSQLConf(
+            SQLConf
+              .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+              .key -> allow.toString,
+            SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> allKeys.toString) {
+          assert(!pushDown(parent).fastEquals(parent) === (allow && !allKeys))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: rebalance sources do not offer targets") {
+    withPushDown {
+      val a = attr("id")
+      val shuffle = ShuffleExchangeExec(hash(a, 2), leaf(a),
+        org.apache.spark.sql.execution.exchange.REBALANCE_PARTITIONS_BY_COL)
+      val union = UnionExec(Seq(shuffle, leaf(attr("id"))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      assert(pushDown(parent).fastEquals(parent))
+    }
+  }
+
+  test("SPARK-60379: join branches require explicit permission") {
+    withPushDown {
+      val a = attr("id")
+      val b = attr("id")
+      val join = SortMergeJoinExec(Seq(a), Seq(b),
+        org.apache.spark.sql.catalyst.plans.Inner, None,
+        SortExec(Seq(SortOrder(a, Ascending)), false, ensureShuffle(hash(a, 2), leaf(a))),
+        SortExec(Seq(SortOrder(b, Ascending)), false, ensureShuffle(hash(b, 2), leaf(b))))
+      val child = ProjectExec(Seq(a), join)
+      val union = UnionExec(Seq(child, leaf(attr("id"))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false") {
+        assert(pushDown(parent).fastEquals(parent))
+      }
+      assert(numShufflesOnUnion(pushDown(parent)) === 0)
+    }
+  }
+
+  test("SPARK-60379: join inputs require explicit permission") {
+    withPushDown {
+      val a = attr("id")
+      val b = attr("id")
+      val left = ensureShuffle(hash(a, 2), UnionExec(Seq(leaf(a, hash(a, 2)), leaf(attr("id")))))
+      val right = ensureShuffle(hash(b, 2), leaf(b))
+      val join = SortMergeJoinExec(Seq(a), Seq(b),
+        org.apache.spark.sql.catalyst.plans.Inner, None, left, right)
+      withSQLConf(
+          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "false") {
+        assert(pushDown(join).fastEquals(join))
+      }
+      assert(numShufflesOnUnion(pushDown(join)) === 0)
+    }
+  }
+
+  test("SPARK-60379: push-down cost preserves empty-branch replanning") {
+    withSQLConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+        SQLConf.EXCHANGE_REUSE_ENABLED.key -> "false") {
+      withTempView("t1", "t2", "empty_source") {
+        spark.range(20).selectExpr("id % 7 k", "id v").createOrReplaceTempView("t1")
+        spark.range(10).selectExpr("id k", "id v").createOrReplaceTempView("t2")
+        val never = org.apache.spark.sql.functions.udf((id: Long) => id < 0)
+        spark.range(10).filter(never($"id")).createOrReplaceTempView("empty_source")
+        val sql = """SELECT k, v, rank() OVER (PARTITION BY k ORDER BY v) rn FROM (
+          | SELECT k, sum(v) v FROM t1 GROUP BY k
+          | UNION ALL SELECT k, v FROM t2
+          | UNION ALL SELECT k, v + 1 FROM t2
+          | UNION ALL SELECT k, v + 2 FROM t2
+          | UNION ALL SELECT t.k, t.v FROM t2 t JOIN empty_source e ON t.k = e.id)""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        assert(numShufflesOnUnion(aqeInitialPlan(df)) === 1)
+        def plans(p: SparkPlan): Seq[SparkPlan] = p match {
+          case stage: QueryStageExec => stage +: plans(stage.plan)
+          case other => other +: other.children.flatMap(plans)
+        }
+        val finalNodes = plans(df.queryExecution.executedPlan
+          .asInstanceOf[AdaptiveSparkPlanExec].executedPlan)
+        assert(finalNodes.exists {
+          case union: UnionExec => union.children.length == 4
+          case _ => false
+        }, "the empty join branch must disappear")
+        assert(!finalNodes.exists {
+          case shuffle: ShuffleExchangeExec => isUnionPlan(shuffle.child)
+          case _ => false
+        }, "the new three-branch push-down must survive cost comparison")
+      }
+    }
+  }
+
+  test("SPARK-60379: shuffle cost counts pushed-through unions instead of added exchanges") {
+    withPushDown {
+      val a = attr("id")
+      val children = leaf(a, hash(a, 2)) +: (0 until 3).map(_ => leaf(attr("id")))
+      val union = UnionExec(children)
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      val rebuilt = pushDown(parent).children.head.asInstanceOf[UnionExec]
+      val evaluator = SimpleCostEvaluator(false, false, pushDownShuffleThroughUnion = true)
+      assert(evaluator.evaluateCost(rebuilt) === SimpleCost(0, 1, 0))
+      val disabled = SimpleCostEvaluator(false, false, pushDownShuffleThroughUnion = false)
+      assert(disabled.evaluateCost(rebuilt) === SimpleCost(0, 3, 0))
+      assert(evaluator.evaluateCost(ensureShuffle(hash(a, 2), rebuilt)) === SimpleCost(0, 2, 0))
+      val untagged = UnionExec(rebuilt.children)
+      assert(evaluator.evaluateCost(untagged) === SimpleCost(0, 0, 0))
+      val first = rebuilt.children(1).asInstanceOf[ShuffleExchangeExec]
+      val second = rebuilt.children(2).asInstanceOf[ShuffleExchangeExec]
+      val staged = rebuilt.withNewChildren(Seq(rebuilt.children.head,
+        ShuffleQueryStageExec(0, first, first.canonicalized),
+        ShuffleQueryStageExec(1, second, second.canonicalized), rebuilt.children(3)))
+      assert(evaluator.evaluateCost(staged) === SimpleCost(0, 1, 0))
+      val allStaged = staged.withNewChildren(staged.children.updated(3, {
+        val last = rebuilt.children(3).asInstanceOf[ShuffleExchangeExec]
+        ShuffleQueryStageExec(2, last, last.canonicalized)
+      }))
+      assert(evaluator.evaluateCost(allStaged) === SimpleCost(0, 1, 0))
+    }
+  }
+
+  test("SPARK-60379: a non-exchange sibling permits non-coalescible union targets") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+          "false") {
+      withTempView("t1", "t2", "t3", "cached_left", "cached_right") {
+        Seq((1, 10), (1, 20), (2, 5)).toDF("id", "v").createOrReplaceTempView("t1")
+        Seq((1, 30), (3, 7)).toDF("id", "v").createOrReplaceTempView("t2")
+        Seq((1, 100), (3, 300)).toDF("id", "w").createOrReplaceTempView("t3")
+        val left = spark.table("t1").repartition(4, $"id").cache()
+        val right = spark.table("t3").repartition(4, $"id").cache()
+        try {
+          left.count()
+          right.count()
+          left.createOrReplaceTempView("cached_left")
+          right.createOrReplaceTempView("cached_right")
+          val expected = Seq(Row(1, 10, 100), Row(1, 20, 100),
+            Row(1, 30, 100), Row(3, 7, 300))
+          for (cachedSibling <- Seq(false, true); enabled <- Seq(false, true)) {
+            withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> enabled.toString) {
+              val sibling = if (cachedSibling) { "cached_right" } else { "t3" }
+              val df = spark.sql(s"""SELECT /*+ MERGE(u, r) */ u.id, u.v, r.w FROM (
+                | SELECT id, v FROM cached_left
+                | UNION ALL SELECT id, v FROM t2) u JOIN $sibling r ON u.id = r.id""".stripMargin)
+              checkAnswer(df, expected)
+              val initial = aqeInitialPlan(df)
+              val join = initial.collectFirst { case j: SortMergeJoinExec => j }.get
+              assert(join.right.exists(_.isInstanceOf[ShuffleExchangeExec]) === !cachedSibling,
+                s"only the uncached sibling should require an exchange:\n$initial")
+              val pushed = enabled && cachedSibling
+              assert(numShufflesOnUnion(initial) === (if (pushed) { 0 } else { 1 }),
+                s"only an already non-coalescible consumer permits the cached target:\n$initial")
+            }
+          }
+        } finally {
+          left.unpersist(blocking = true)
+          right.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60379: a child without a target does not cancel its sibling") {
+    withPushDown {
+      val a = attr("id")
+      val b = attr("id")
+      val left = UnionExec(Seq(leaf(a, hash(a, 2)), leaf(attr("id"))))
+      val right = UnionExec(leaf(b, hash(b, 2)) +:
+        (0 until 4).map(_ => leaf(attr("id"))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), left), ensureShuffle(hash(b, 2), right)),
+        required = Seq(clustered(a), clustered(b)), output = Seq(a, b))
+      val result = pushDown(parent)
+      assert(result.children.head.isInstanceOf[UnionExec])
+      assert(result.children(1).fastEquals(parent.children(1)))
+      assert(ValidateRequirements.validate(result))
+    }
+  }
+
+  test("SPARK-60379: subquery policy applies to the entire adaptive query") {
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "false") {
+      withTempView("t1", "t2") {
+        createTables()
+        val df = spark.sql(query + " WHERE v > (SELECT min(v) FROM t2)")
+        checkAnswer(df, expectedResult(query + " WHERE v > (SELECT min(v) FROM t2)"))
+        val adaptive = df.queryExecution.executedPlan.asInstanceOf[AdaptiveSparkPlanExec]
+        assert(adaptive.context.queryContainsSubqueries)
+        val subqueries = adaptive.initialPlan.subqueriesAll.flatMap(_.collect {
+          case subquery: AdaptiveSparkPlanExec => subquery
+        })
+        assert(subqueries.nonEmpty)
+        assert(subqueries.forall(_.context eq adaptive.context))
+        assert(numShufflesOnUnion(adaptive.initialPlan) === 1)
+      }
+    }
+  }
+
+  test("SPARK-60379: total union child limit is independent of moved child limit") {
+    withPushDown {
+      val a = attr("id")
+      def plan(size: Int): SparkPlan = {
+        val children = (0 until size - 1).map { _ =>
+          val id = attr("id")
+          leaf(id, hash(id, 2))
+        } :+ leaf(attr("id"))
+        val union = UnionExec(children)
+        TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(union.output.head, 2), union)),
+          required = Seq(clustered(union.output.head)), output = Seq(a))
+      }
+      assert(numShufflesOnUnion(pushDown(plan(10))) === 0)
+      val tooMany = plan(11)
+      assert(pushDown(tooMany).fastEquals(tooMany))
+      withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN.key -> "11") {
+        assert(numShufflesOnUnion(pushDown(tooMany)) === 0)
+      }
     }
   }
 }
