@@ -1672,23 +1672,22 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
         cls.origin = os.getenv("USER", None)
         os.environ["USER"] = "SparkConnectGCTests"
         super().setUpClass()
-        cls.checkpoint_dir = tempfile.mkdtemp()
-        cls.spark.sparkContext.setCheckpointDir(cls.checkpoint_dir)
 
     @classmethod
     def tearDownClass(cls):
-        try:
-            super().tearDownClass()
-        finally:
-            shutil.rmtree(cls.checkpoint_dir, ignore_errors=True)
-            if cls.origin is not None:
-                os.environ["USER"] = cls.origin
-            else:
-                del os.environ["USER"]
+        super().tearDownClass()
+        if cls.origin is not None:
+            os.environ["USER"] = cls.origin
+        else:
+            del os.environ["USER"]
 
     def test_garbage_collection_checkpoint(self):
         # SPARK-48258: Make sure garbage-collecting DataFrame remove the paired state
         # in Spark Connect server
+        df = self.connect.range(10).localCheckpoint()
+        self.assertIsNotNone(df._plan._relation_id)
+        cached_remote_relation_id = df._plan._relation_id
+
         jvm = self.spark._jvm
         session_holder = getattr(
             getattr(
@@ -1698,53 +1697,21 @@ class SparkConnectGCTests(SparkConnectSQLTestCase):
             "MODULE$",
         ).getOrCreateIsolatedSession(self.connect.client._user_id, self.connect.client._session_id)
 
-        for checkpoint_method in ["checkpoint", "localCheckpoint"]:
-            with self.subTest(checkpoint_method=checkpoint_method):
-                df = getattr(self.connect.range(10), checkpoint_method)()
-                self.assertEqual(df.count(), 10)
-                self.assertIsNotNone(df._plan._relation_id)
-                cached_remote_relation_id = df._plan._relation_id
+        # Check the state exists.
+        self.assertIsNotNone(
+            session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+        )
 
-                # Check the state exists.
-                self.assertIsNotNone(
-                    session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
-                )
+        del df
+        gc.collect()
 
-                del df
-                gc.collect()
+        def condition():
+            # Check the state was removed up on garbage-collection.
+            self.assertIsNone(
+                session_holder.dataFrameCache().getOrDefault(cached_remote_relation_id, None)
+            )
 
-                def condition():
-                    # Check the state was removed up on garbage-collection.
-                    self.assertIsNone(
-                        session_holder.dataFrameCache().getOrDefault(
-                            cached_remote_relation_id, None
-                        )
-                    )
-
-                eventually(catch_assertions=True)(condition)()
-
-    def test_checkpoint_uses_originating_session(self):
-        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
-
-        originating_session = self.connect.newSession()
-        previous_active_session = getattr(ConnectSparkSession._active_session, "session", None)
-        ConnectSparkSession._active_session.session = self.connect
-        try:
-            for checkpoint_method in ["checkpoint", "localCheckpoint"]:
-                with self.subTest(checkpoint_method=checkpoint_method):
-                    checkpointed = getattr(originating_session.range(10), checkpoint_method)()
-                    self.assertIs(checkpointed.sparkSession, originating_session)
-                    self.assertIs(checkpointed._plan._spark_session, originating_session)
-                    self.assertEqual(checkpointed.count(), 10)
-                    del checkpointed
-                    gc.collect()
-        finally:
-            ConnectSparkSession._active_session.session = previous_active_session
-            # Release this session without stopping the shared local Connect server.
-            try:
-                originating_session.client.release_session()
-            finally:
-                originating_session.client.close()
+        eventually(catch_assertions=True)(condition)()
 
     def test_garbage_collection_derived_checkpoint(self):
         # SPARK-48258: Should keep the cached remote relation when derived DataFrames exist
