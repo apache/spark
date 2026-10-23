@@ -17,12 +17,16 @@
 
 package org.apache.spark
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
 import scala.jdk.CollectionConverters._
 
 import org.mockito.Answers.RETURNS_DEEP_STUBS
+import org.mockito.ArgumentMatchers.any
 import org.mockito.MockedConstruction
-import org.mockito.Mockito.{doThrow, mock, mockConstruction, never, times, verify, when}
+import org.mockito.Mockito.{doAnswer, doThrow, mock, mockConstruction, never, times, verify, when}
 
+import org.apache.spark.SparkEnv.PythonWorkersKey
 import org.apache.spark.api.python.{PythonWorker, PythonWorkerFactory}
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
@@ -31,6 +35,14 @@ import org.apache.spark.scheduler.OutputCommitCoordinator
 import org.apache.spark.storage.BlockManager
 
 class SparkEnvPythonWorkerSuite extends SparkFunSuite {
+
+  private def key(
+      uuid: String,
+      driverOwned: Boolean = false,
+      workerModule: String = "pyspark.worker"): PythonWorkersKey = {
+    PythonWorkersKey("python3", workerModule, PythonWorkerFactory.defaultDaemonModule,
+      Map("SPARK_JOB_ARTIFACT_UUID" -> uuid), driverOwned)
+  }
 
   private def withFactories(
       f: (SparkEnv, MockedConstruction[PythonWorkerFactory]) => Unit): Unit = {
@@ -45,6 +57,7 @@ class SparkEnvPythonWorkerSuite extends SparkFunSuite {
             factory: PythonWorkerFactory,
             context: MockedConstruction.Context): Unit = {
           when(factory.useDaemonEnabled).thenReturn(true)
+          when(factory.hasActiveWorkers).thenReturn(false)
         }
       })
     try {
@@ -58,112 +71,175 @@ class SparkEnvPythonWorkerSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-54055: session cleanup removes only matching Python worker factories") {
+  test("SPARK-54055: executor session cleanup removes only matching factories") {
     withFactories { (env, factories) =>
-      val first = Map("SPARK_JOB_ARTIFACT_UUID" -> "first")
-      val second = Map("SPARK_JOB_ARTIFACT_UUID" -> "second")
-      val default = Map("SPARK_JOB_ARTIFACT_UUID" -> "default")
       def create(envVars: Map[String, String], module: String = "pyspark.worker"): Unit = {
         env.createPythonWorker("python3", module, envVars, useDaemon = true)
       }
 
-      create(first)
-      create(first, "another.worker")
-      create(second)
-      create(default)
+      create(key("first").envVars)
+      create(key("first").envVars, "another.worker")
+      create(key("second").envVars)
+      create(key("default").envVars)
       create(Map.empty)
       val original = factories.constructed().asScala.toSeq
       assert(original.size == 5)
 
-      env.removePythonWorkerFactories("first")
+      env.removeExecutorPythonWorkerFactories("first")
       original.take(2).foreach(factory => verify(factory, times(1)).stop())
       original.drop(2).foreach(factory => verify(factory, never()).stop())
       // Repeated cleanup does not stop a factory twice.
-      env.removePythonWorkerFactories("first")
+      env.removeExecutorPythonWorkerFactories("first")
       original.take(2).foreach(factory => verify(factory, times(1)).stop())
 
-      create(second)
-      create(default)
+      create(key("second").envVars)
+      create(key("default").envVars)
       create(Map.empty)
       assert(factories.constructed().size() == 5)
       // A later task for an evicted session gets a fresh factory.
-      create(first)
+      create(key("first").envVars)
       assert(factories.constructed().size() == 6)
       verify(factories.constructed().get(5), never()).stop()
     }
   }
 
-  test("SPARK-54055: session cleanup preserves driver-owned factories in local mode") {
+  test("SPARK-54055: executor and driver-owned factories are separate") {
     withFactories { (env, factories) =>
-      val envVars = Map("SPARK_JOB_ARTIFACT_UUID" -> "session")
-      val workerModule = "pyspark.sql.worker.analyze_udtf"
-      val daemonModule = PythonWorkerFactory.defaultDaemonModule
-      def create(driverOwned: Boolean): Unit = {
-        env.createPythonWorker(
-          "python3", workerModule, daemonModule, envVars,
-          useDaemon = true, driverOwned = driverOwned)
-      }
-
       // Even identical launch parameters must not share a factory across ownership scopes.
-      create(driverOwned = false)
-      create(driverOwned = true)
-      val executorFactory = factories.constructed().get(0)
-      val plannerFactory = factories.constructed().get(1)
-      env.removePythonWorkerFactories("session")
-      verify(executorFactory, times(1)).stop()
-      verify(plannerFactory, never()).stop()
+      env.createPythonWorker(key("session"), useDaemon = true)
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      assert(factories.constructed().size() == 2)
+      val Seq(executorFactory, plannerFactory) = factories.constructed().asScala.toSeq
 
-      create(driverOwned = true)
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
       assert(factories.constructed().size() == 2)
       val worker = PythonWorker(null)
-      env.releasePythonWorker(
-        "python3", workerModule, daemonModule, envVars, worker, driverOwned = true)
+      env.releasePythonWorker(key("session", driverOwned = true), worker)
       verify(plannerFactory).releaseWorker(worker)
-      env.destroyPythonWorker(
-        "python3", workerModule, daemonModule, envVars, worker, driverOwned = true)
+      env.destroyPythonWorker(key("session", driverOwned = true), worker)
       verify(plannerFactory).stopWorker(worker)
       verify(executorFactory, never()).releaseWorker(worker)
       verify(executorFactory, never()).stopWorker(worker)
-
-      create(driverOwned = false)
-      assert(factories.constructed().size() == 3)
-      env.removePythonWorkerFactories("session")
-      verify(factories.constructed().get(2)).stop()
-      verify(plannerFactory, never()).stop()
     }
   }
 
-  test("SPARK-54055: SparkEnv shutdown stops both executor and driver-owned factories") {
+  test("SPARK-54055: executor session cleanup keeps busy driver planners in local mode") {
     withFactories { (env, factories) =>
-      val envVars = Map("SPARK_JOB_ARTIFACT_UUID" -> "session")
-      Seq(false, true).foreach { driverOwned =>
-        env.createPythonWorker(
-          "python3", "pyspark.worker", PythonWorkerFactory.defaultDaemonModule, envVars,
-          useDaemon = true, driverOwned = driverOwned)
+      env.createPythonWorker(key("session"), useDaemon = true)
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      val Seq(executorFactory, plannerFactory) = factories.constructed().asScala.toSeq
+      when(plannerFactory.hasActiveWorkers).thenReturn(true)
+
+      env.removeExecutorPythonWorkerFactories("session")
+      verify(executorFactory, times(1)).stop()
+      verify(plannerFactory, never()).stop()
+
+      // Once idle, a later executor cleanup retires the planner factory as well, so its daemon
+      // does not keep running in the deleted session directory.
+      when(plannerFactory.hasActiveWorkers).thenReturn(false)
+      env.removeExecutorPythonWorkerFactories("session")
+      verify(plannerFactory, times(1)).stop()
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      assert(factories.constructed().size() == 3)
+    }
+  }
+
+  test("SPARK-54055: driver session cleanup removes only that session's planner factories") {
+    withFactories { (env, factories) =>
+      env.createPythonWorker(key("session"), useDaemon = true)
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      env.createPythonWorker(
+        key("session", driverOwned = true, workerModule = "pyspark.sql.worker.analyze_udtf"),
+        useDaemon = true)
+      env.createPythonWorker(key("other", driverOwned = true), useDaemon = true)
+      val Seq(executorFactory, planner1, planner2, otherPlanner) =
+        factories.constructed().asScala.toSeq
+      // The session is closed by the user, so stop its planners even if one is still busy.
+      when(planner1.hasActiveWorkers).thenReturn(true)
+
+      env.removeDriverPythonWorkerFactories("session")
+      Seq(planner1, planner2).foreach(factory => verify(factory, times(1)).stop())
+      Seq(executorFactory, otherPlanner).foreach(factory => verify(factory, never()).stop())
+      env.removeDriverPythonWorkerFactories("session")
+      Seq(planner1, planner2).foreach(factory => verify(factory, times(1)).stop())
+    }
+  }
+
+  test("SPARK-54055: workers of a removed factory are closed on release or destroy") {
+    withFactories { (env, factories) =>
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      val plannerFactory = factories.constructed().get(0)
+      env.removeDriverPythonWorkerFactories("session")
+
+      Seq(
+        (w: PythonWorker) => env.releasePythonWorker(key("session", driverOwned = true), w),
+        (w: PythonWorker) => env.destroyPythonWorker(key("session", driverOwned = true), w)
+      ).foreach { releaseOrDestroy =>
+        val worker = mock(classOf[PythonWorker])
+        releaseOrDestroy(worker)
+        verify(worker, times(1)).stop()
       }
-      assert(factories.constructed().size() == 2)
+      verify(plannerFactory, never()).releaseWorker(any())
+      verify(plannerFactory, never()).stopWorker(any())
+    }
+  }
+
+  test("SPARK-54055: SparkEnv shutdown stops every factory despite failures") {
+    withFactories { (env, factories) =>
+      env.createPythonWorker(key("session"), useDaemon = true)
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      env.createPythonWorker(key("other"), useDaemon = true)
+      val original = factories.constructed().asScala.toSeq
+      doThrow(new RuntimeException("test factory stop failure")).when(original.head).stop()
+
       env.stop()
-      factories.constructed().asScala.foreach(factory => verify(factory, times(1)).stop())
+      original.foreach(factory => verify(factory, times(1)).stop())
       env.stop()
-      factories.constructed().asScala.foreach(factory => verify(factory, times(1)).stop())
+      original.foreach(factory => verify(factory, times(1)).stop())
     }
   }
 
   test("SPARK-54055: failure to stop one factory does not prevent session cleanup") {
     withFactories { (env, factories) =>
-      val envVars = Map("SPARK_JOB_ARTIFACT_UUID" -> "session")
       Seq("first.worker", "second.worker").foreach { module =>
-        env.createPythonWorker("python3", module, envVars, useDaemon = true)
+        env.createPythonWorker(key("session", workerModule = module), useDaemon = true)
       }
       val original = factories.constructed().asScala.toSeq
       doThrow(new RuntimeException("test factory stop failure")).when(original.head).stop()
 
-      env.removePythonWorkerFactories("session")
+      env.removeExecutorPythonWorkerFactories("session")
       original.foreach(factory => verify(factory, times(1)).stop())
-      env.removePythonWorkerFactories("session")
+      env.removeExecutorPythonWorkerFactories("session")
       original.foreach(factory => verify(factory, times(1)).stop())
-      env.createPythonWorker("python3", "first.worker", envVars, useDaemon = true)
+      env.createPythonWorker(key("session", workerModule = "first.worker"), useDaemon = true)
       assert(factories.constructed().size() == 3)
+    }
+  }
+
+  test("SPARK-54055: stopping a session's factories does not block other sessions") {
+    withFactories { (env, factories) =>
+      env.createPythonWorker(key("slow"), useDaemon = true)
+      val slowFactory = factories.constructed().get(0)
+      val stopping = new CountDownLatch(1)
+      val resume = new CountDownLatch(1)
+      doAnswer { _ =>
+        stopping.countDown()
+        assert(resume.await(10, TimeUnit.SECONDS))
+        null
+      }.when(slowFactory).stop()
+
+      val cleanup = new Thread(() => env.removeExecutorPythonWorkerFactories("slow"))
+      cleanup.start()
+      try {
+        assert(stopping.await(10, TimeUnit.SECONDS))
+        // The factory is stopped outside the SparkEnv lock.
+        env.createPythonWorker(key("other"), useDaemon = true)
+        assert(factories.constructed().size() == 2)
+      } finally {
+        resume.countDown()
+        cleanup.join(TimeUnit.SECONDS.toMillis(10))
+      }
+      assert(!cleanup.isAlive)
     }
   }
 }

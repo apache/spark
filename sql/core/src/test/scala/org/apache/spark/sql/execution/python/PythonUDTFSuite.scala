@@ -130,7 +130,7 @@ class PythonUDTFSuite extends SharedSparkSession {
       Some(StructType.fromDDL("v ARRAY<VARIANT>"))
     )
 
-  test("SPARK-54055: local session eviction does not stop an active Python UDTF planner") {
+  test("SPARK-54055: local session eviction stops a Python UDTF planner only once idle") {
     assume(shouldTestPythonUDFs && !Utils.isWindows)
     withTempDir { tempDir =>
       val uuid = UUID.randomUUID().toString
@@ -193,6 +193,12 @@ class PythonUDTFSuite extends SharedSparkSession {
         Files.writeString(resume.toPath, "resume")
         assert(ThreadUtils.awaitResult(planning, 10.seconds).schema ==
           StructType.fromDDL("value int"))
+
+        // Once the planner is idle, the next cleanup of the session also stops its daemon, so
+        // that it does not keep running in the deleted session directory.
+        SparkEnv.get.removeExecutorPythonWorkerFactories(uuid)
+        daemon.onExit().get(10, TimeUnit.SECONDS)
+        assert(!daemon.isAlive)
       } finally {
         Files.writeString(resume.toPath, "resume")
         pool.shutdown()
@@ -203,8 +209,52 @@ class PythonUDTFSuite extends SharedSparkSession {
           if (IsolatedSessionState.sessions.containsKey(uuid)) {
             session.markEvicted()
           }
-          SparkEnv.get.removePythonWorkerFactories(uuid)
+          SparkEnv.get.removeExecutorPythonWorkerFactories(uuid)
+          SparkEnv.get.removeDriverPythonWorkerFactories(uuid)
         }
+      }
+    }
+  }
+
+  test("SPARK-54055: closing a session stops its Python UDTF planner daemon") {
+    assume(shouldTestPythonUDFs && !Utils.isWindows)
+    withTempDir { tempDir =>
+      val started = new File(tempDir, "started")
+      val script = s"""
+        |import os
+        |from pyspark.sql.types import StructType
+        |from pyspark.sql.udtf import AnalyzeResult
+        |
+        |class PidAnalyze:
+        |    @staticmethod
+        |    def analyze():
+        |        with open("${started.getCanonicalPath}", "w") as started:
+        |            started.write(str(os.getpid()))
+        |        return AnalyzeResult(StructType().add("value", "integer"))
+        |
+        |    def eval(self):
+        |        yield 1,
+        |""".stripMargin
+      val udtf = createUserDefinedPythonTableFunction("PidAnalyze", script, None)
+      val session = spark.newSession()
+      val uuid = session.artifactManager.state.uuid
+      try {
+        session.artifactManager.withResources {
+          session.withActive {
+            new UserDefinedPythonTableFunctionAnalyzeRunner(
+              udtf.name, udtf.func, Seq.empty, Seq.empty, session.sessionState.sqlParser)
+              .runInPython(useDaemon = true)
+          }
+        }
+        val daemon = ProcessHandle.of(Files.readString(started.toPath).toLong).get()
+          .parent().get()
+        assert(daemon.isAlive)
+
+        session.artifactManager.cleanUpResourcesForTesting()
+        daemon.onExit().get(10, TimeUnit.SECONDS)
+        assert(!daemon.isAlive)
+      } finally {
+        SparkEnv.get.removeDriverPythonWorkerFactories(uuid)
       }
     }
   }

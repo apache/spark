@@ -214,9 +214,13 @@ private[spark] class IsolatedSessionState(
   }
 
   private def cleanup(): Unit = {
+    // SparkEnv is cleared once the executor shuts down. SparkEnv.stop() then stops the Python
+    // workers itself, and the session files go away with the executor's working directory.
+    val env = Option(SparkEnv.get)
+
     // Stop Python processes before deleting their session working directory. Cleanup runs only
     // after eviction and after every task using this session has released its reference.
-    SparkEnv.get.removePythonWorkerFactories(sessionUUID)
+    env.foreach(_.removeExecutorPythonWorkerFactories(sessionUUID))
 
     // Close the urlClassLoader to release resources.
     try {
@@ -233,9 +237,11 @@ private[spark] class IsolatedSessionState(
     }
 
     // Delete session files.
-    val sessionBasedRoot = new File(SparkFiles.getRootDirectory(), sessionUUID)
-    if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
-      Utils.deleteRecursively(sessionBasedRoot)
+    if (env.isDefined) {
+      val sessionBasedRoot = new File(SparkFiles.getRootDirectory(), sessionUUID)
+      if (sessionBasedRoot.isDirectory && sessionBasedRoot.exists()) {
+        Utils.deleteRecursively(sessionBasedRoot)
+      }
     }
 
     // Remove from authoritative sessions map after cleanup

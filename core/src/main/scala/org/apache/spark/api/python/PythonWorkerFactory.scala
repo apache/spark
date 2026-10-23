@@ -575,6 +575,12 @@ private[spark] class PythonWorkerFactory(
     }
   }
 
+  /** Whether a worker created by this factory is checked out, i.e. neither idle nor stopped. */
+  private[spark] def hasActiveWorkers: Boolean = self.synchronized {
+    val workers = if (useDaemon) daemonWorkers.keys else simpleWorkers.keys
+    workers.exists(worker => worker.channel.isOpen && !idleWorkers.contains(worker))
+  }
+
   def isWorkerStopped(worker: PythonWorker): Boolean = {
     assert(!useDaemon, "isWorkerStopped() is not supported for daemon mode")
     simpleWorkers.get(worker).exists(!_.isAlive)
