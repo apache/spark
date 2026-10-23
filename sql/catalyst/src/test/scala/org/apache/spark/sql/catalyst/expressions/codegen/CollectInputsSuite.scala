@@ -160,17 +160,37 @@ class CollectInputsSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
-  test("a slot handed out as a variable is refused where the policy asks for names, and fails " +
-      "the testing check where it does not") {
+  test("a slot handed out as a variable fails the testing check: while collecting where the " +
+      "policy asks for names, and in the method that takes it where it does not") {
     val ctx = context()
     val slot = ctx.addMutableState("UTF8String", "value")
     ctx.currentVars = Seq(ExprCode(EmptyBlock, FalseLiteral, JavaCode.variable(slot, StringType)))
     val expr = Length(BoundReference(0, StringType, nullable = false))
     for (policy <- Seq(InputPolicy.wholeStageSplit, commonExpr)) {
-      assert(ctx.collectInputs(Seq(expr), policy, Map.empty).isEmpty, policy)
+      val e = intercept[AssertionError](ctx.collectInputs(Seq(expr), policy, Map.empty))
+      assert(e.getMessage.contains(s"$slot cannot name a parameter") &&
+        e.getMessage.contains("JavaCode.global"), e.getMessage)
     }
-    val e = intercept[AssertionError](ctx.collectInputs(Seq(expr), operator, Map.empty))
-    assert(e.getMessage.contains(slot), e.getMessage)
+    // An operator may keep its code inline, so collecting does not check.
+    val parameters = names(ctx.collectInputs(Seq(expr), operator, Map.empty).get)
+    assert(parameters == Seq(slot))
+    val e = intercept[AssertionError](ctx.assertParametersAreNames(parameters, "m"))
+    assert(e.getMessage.contains(s"m takes $slot") && e.getMessage.contains("JavaCode.global"),
+      e.getMessage)
+    ctx.assertParametersAreNames(Seq("value_0", "isNull_0"), "m")
+  }
+
+  test("an INPUT_ROW that is a slot fails the testing check: while collecting for a common " +
+      "expression's method, and in an operator's method that takes it") {
+    val ctx = context()
+    ctx.INPUT_ROW = ctx.addMutableState("InternalRow", "row")
+    ctx.currentVars = Seq(evaluated(0))
+    val e1 = intercept[AssertionError](ctx.collectInputs(Seq(input(0)), commonExpr, Map.empty))
+    assert(e1.getMessage.contains("set INPUT_ROW to a local"), e1.getMessage)
+    val parameters = names(ctx.collectInputs(Seq(input(0)), operator, Map.empty).get)
+    assert(parameters.head == ctx.INPUT_ROW)
+    val e2 = intercept[AssertionError](ctx.assertParametersAreNames(parameters, "m"))
+    assert(e2.getMessage.contains("set INPUT_ROW to a local"), e2.getMessage)
   }
 
   test("the whole stage split walks below the state of a node that generates its child") {

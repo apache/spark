@@ -1753,28 +1753,11 @@ class WholeStageCodegenSuite extends SharedSparkSession
     // in a method of its own, which takes the local variables it reads as parameters. Taken for a
     // local variable, the slot became a parameter `UTF8String expand_mutableStateArray_0[1]` and
     // the stage did not compile. Handed out as a field, it is read as one, split on or off.
-    withTempView("t") {
-      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
-        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
-      val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
-        "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
-      def df: DataFrame =
-        sql(s"SELECT c, $f AS x, concat($f, 'z') AS y FROM t UNPIVOT (v FOR c IN (a, b))")
-      val expected = withoutWholeStage(df)
-      // A subexpression method also writes its own result into a slot of the same array, so the
-      // array's name alone does not show a read. `lpad` is called on the slot holding `v`.
-      val slotRead = "].lpad("
-      val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
-      Seq("true", "false").foreach { split =>
-        withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
-          val code = genCode(df)
-          assert(code.exists(c => methodsHolding(c, slotRead).exists(_.contains("subExpr"))), split)
-          assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty), split)
-          code.foreach(CodeGenerator.compile)
-          checkAnswer(df, expected)
-        }
-      }
-    }
+    val f = "concat(upper(v), lower(v), reverse(v), trim(v), ltrim(v), rtrim(v), initcap(v), " +
+      "repeat(v, 2), lpad(v, 10, 'x'), rpad(v, 10, 'y'))"
+    val stringParameter = "private void \\w*subExpr_\\d+\\([^)]*UTF8String ".r
+    checkExpandSlotRead("subExpr", unpivot => s"SELECT c, $f AS x, concat($f, 'z') AS y $unpivot",
+      code => assert(code.forall(c => stringParameter.findFirstIn(c.body).isEmpty)))
   }
 
   test("SPARK-60398: Expand compiles with its switch case functions spilled to nested classes") {
@@ -1808,34 +1791,15 @@ class WholeStageCodegenSuite extends SharedSparkSession
       "field") {
     // With the consume functions not split by operator, the consumer reads the UNPIVOT's output
     // directly, and a tiny threshold moves its code into methods: the switch cases of the Expand
-    // that `RewriteDistinctAggregates` adds, and the aggregate functions. `lpad` is called on the
-    // slot holding `v`.
+    // that `RewriteDistinctAggregates` adds, and the aggregate functions.
     withSQLConf(
         SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false",
         SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") {
-      withTempView("t") {
-        spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
-          "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
-        val unpivot = "FROM t UNPIVOT (v FOR c IN (a, b))"
-        Seq(
-          "switchCaseCode" ->
-            s"SELECT count(DISTINCT lpad(v, 10, 'x')), count(DISTINCT rpad(v, 10, 'y')) $unpivot",
-          "doAggregate_sum" -> (s"SELECT c, sum(length(lpad(v, 10, 'x'))), " +
-            s"sum(length(rpad(v, 10, 'y'))) $unpivot GROUP BY c")
-        ).foreach { case (method, query) =>
-          def df: DataFrame = sql(query)
-          val expected = withoutWholeStage(df)
-          Seq("true", "false").foreach { split =>
-            withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
-              val code = genCode(df)
-              assert(code.exists(c => methodsHolding(c, "].lpad(").exists(_.contains(method))),
-                s"$method $split")
-              code.foreach(CodeGenerator.compile)
-              checkAnswer(df, expected)
-            }
-          }
-        }
-      }
+      checkExpandSlotRead("switchCaseCode", unpivot =>
+        s"SELECT count(DISTINCT lpad(v, 10, 'x')), count(DISTINCT rpad(v, 10, 'y')) $unpivot")
+      checkExpandSlotRead("doAggregate_sum", unpivot =>
+        s"SELECT c, sum(length(lpad(v, 10, 'x'))), sum(length(rpad(v, 10, 'y'))) $unpivot " +
+          "GROUP BY c")
     }
   }
 
@@ -1996,6 +1960,36 @@ class WholeStageCodegenSuite extends SharedSparkSession
     withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
       query.collect().toSeq
     }
+
+  /**
+   * Checks the query `query` builds from a FROM clause that UNPIVOTs two string columns into
+   * `v`, with the whole stage split on and off: a method named like `method` calls `lpad` on the
+   * slot of the compacted mutable state array that `ExpandExec` holds `v` in, `check` holds of
+   * the code, the code compiles, and the rows match those computed without whole stage codegen.
+   */
+  private def checkExpandSlotRead(
+      method: String,
+      query: String => String,
+      check: Seq[CodeAndComment] => Unit = _ => ()): Unit = {
+    withTempView("t") {
+      spark.range(10).selectExpr("concat('a', CAST(id AS STRING)) AS a",
+        "concat('b', CAST(id AS STRING)) AS b").createOrReplaceTempView("t")
+      def df: DataFrame = sql(query("FROM t UNPIVOT (v FOR c IN (a, b))"))
+      val expected = withoutWholeStage(df)
+      Seq("true", "false").foreach { split =>
+        withSQLConf(SQLConf.WHOLESTAGE_SPLIT_EXPRESSIONS.key -> split) {
+          val code = genCode(df)
+          // A subexpression method or a switch case also writes into a slot of the same array,
+          // so the array's name alone does not show a read.
+          assert(code.exists(c => methodsHolding(c, "].lpad(").exists(_.contains(method))),
+            s"$method $split")
+          withClue(s"$method $split: ")(check(code))
+          code.foreach(CodeGenerator.compile)
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
 
   test("SPARK-33301: a CASE WHEN too large for one method is split under whole stage codegen") {
     // Inside a stage the inputs are local variables of the stage's method, and the branches were

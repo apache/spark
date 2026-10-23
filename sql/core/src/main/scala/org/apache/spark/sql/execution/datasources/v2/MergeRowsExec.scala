@@ -156,7 +156,7 @@ case class MergeRowsExec(
             |}
             |$rowIdBitmap.add(${currentRowId.value});
      """.stripMargin
-    ExprCode(code, FalseLiteral, JavaCode.variable(rowIdBitmap, bitmapClass))
+    ExprCode(code, FalseLiteral, JavaCode.global(rowIdBitmap, bitmapClass))
   }
 
   /**

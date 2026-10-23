@@ -123,7 +123,9 @@ case class SubExprCodes(
  * @param followCommonExprs follow a `With` and a `CommonExpressionRef` into the definitions the
  *                          code computes, rather than walk them like any other node.
  * @param onlyNames refuse a value no parameter can name, rather than pass over an expression and
- *                  pass a variable, which testing checks is a name.
+ *                  pass a variable. A variable the walk takes that is not a name fails testing
+ *                  either way: here under this policy, and otherwise where an operator builds a
+ *                  method taking it (`CodegenContext.assertParametersAreNames`).
  * @param fieldsNeedNoArgument leave a variable naming a field `addMutableState` registered out of
  *                             the arguments, the method reading it as it stands, rather than pass
  *                             it.
@@ -1328,21 +1330,22 @@ class CodegenContext extends Logging {
     // -- `posexplode_outer` gives its position the nullness `index == -1`, and a `Byte` or `Short`
     // literal's value is `(byte)1`. A field or a literal needs no parameter and is read as it
     // stands; so is a `VariableValue` naming a field `addMutableState` registered, where the
-    // policy says so, passing one being refused by the split methods' own check in tests. A slot
-    // of a compacted array is not a name at all, so it has to be handed out as a `GlobalValue`;
-    // where the policy does not ask for names, testing checks for one handed out as a variable.
+    // policy says so, passing one being refused by the whole stage split's own check (`splitCall`)
+    // in tests. A slot of a compacted array is not a name at all, so it has to be handed out as a
+    // `GlobalValue`, and `INPUT_ROW` cannot be one. Testing checks for one handed out as a
+    // variable: here, where the policy asks for names; elsewhere, in the method taking it
+    // (`assertParametersAreNames`).
     def take(v: ExprValue): Boolean = v match {
       case local: VariableValue =>
         val name = local.variableName
-        val isName = name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
-          name.forall(Character.isJavaIdentifierPart)
+        val isName = isJavaName(name)
+        if (Utils.isTesting && policy.onlyNames) {
+          assert(isName, s"$name cannot name a parameter of a method this code moves into; " +
+            nameFix(name))
+        }
         val isField = policy.fieldsNeedNoArgument && mutableStateNames.contains(name)
         val taken = isName || !policy.onlyNames
         if (taken && !isField) {
-          if (Utils.isTesting) {
-            assert(isName, s"$name is handed out as a local variable, but no parameter can " +
-              "carry it; hand out a field with JavaCode.global or isNullGlobal")
-          }
           args.getOrElseUpdate(name, local)
         }
         taken
@@ -1412,6 +1415,18 @@ class CodegenContext extends Logging {
         isValidParamLength(calculateParamLengthFromExprValues(arguments)))) {
       CollectedInputs(arguments, readsRow, inputsToEvaluate.toSeq)
     }
+  }
+
+  /** Whether `name` can name a parameter: a slot of a compacted array, `array[i]`, cannot. */
+  private def isJavaName(name: String): Boolean =
+    name.nonEmpty && Character.isJavaIdentifierStart(name.head) &&
+      name.forall(Character.isJavaIdentifierPart)
+
+  /** How the producer of `name`, a value that cannot name a parameter, can hand it out instead. */
+  private def nameFix(name: String): String = if (name == INPUT_ROW) {
+    "set INPUT_ROW to a local or a field added with forceInline = true"
+  } else {
+    "hand out a field with JavaCode.global or isNullGlobal"
   }
 
   /**
@@ -1921,6 +1936,19 @@ class CodegenContext extends Logging {
   }
 
   /**
+   * Under testing, asserts that each of `parameters`, the parameters of the method `method` an
+   * operator moves its code into, is a Java name. The parameters are the variables
+   * `InputPolicy.operatorMethod` collects, which passes a `VariableValue` whatever its name.
+   */
+  private[sql] def assertParametersAreNames(parameters: Seq[String], method: String): Unit = {
+    if (Utils.isTesting) {
+      parameters.foreach { p =>
+        assert(isJavaName(p), s"$method takes $p, which cannot name a parameter; ${nameFix(p)}")
+      }
+    }
+  }
+
+  /**
    * Splits the generated code of expressions into multiple sequences of String
    * based on a threshold of length of a String
    *
@@ -2214,6 +2242,7 @@ class CodegenContext extends Logging {
           // Generate the code for this expression tree and wrap it in a function.
           val fnName = freshName("subExpr")
           val inputVars = inputVarsForAllFuncs(i)
+          assertParametersAreNames(inputVars.map(_.variableName), fnName)
           assertSplitCallsWithin(eval.code.toString, inputVars.map(_.variableName), fnName)
           val argList =
             inputVars.map(v => s"${CodeGenerator.typeName(v.javaType)} ${v.variableName}")
