@@ -198,7 +198,9 @@ class PythonUDTFSuite extends SharedSparkSession {
         // that it does not keep running in the deleted session directory.
         SparkEnv.get.removeExecutorPythonWorkerFactories(uuid)
         daemon.onExit().get(10, TimeUnit.SECONDS)
+        child.onExit().get(10, TimeUnit.SECONDS)
         assert(!daemon.isAlive)
+        assert(!child.isAlive)
       } finally {
         Files.writeString(resume.toPath, "resume")
         pool.shutdown()

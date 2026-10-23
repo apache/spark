@@ -17,6 +17,7 @@
 
 package org.apache.spark
 
+import java.nio.channels.SocketChannel
 import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.jdk.CollectionConverters._
@@ -162,25 +163,68 @@ class SparkEnvPythonWorkerSuite extends SparkFunSuite {
       Seq(executorFactory, otherPlanner).foreach(factory => verify(factory, never()).stop())
       env.removeDriverPythonWorkerFactories("session")
       Seq(planner1, planner2).foreach(factory => verify(factory, times(1)).stop())
+
+      // Removed planner factories must not remain in the cache, while other factories do.
+      env.createPythonWorker(key("session"), useDaemon = true)
+      env.createPythonWorker(key("other", driverOwned = true), useDaemon = true)
+      assert(factories.constructed().size() == 4)
+      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
+      assert(factories.constructed().size() == 5)
     }
   }
 
-  test("SPARK-54055: workers of a removed factory are closed on release or destroy") {
+  gridTest("SPARK-54055: workers of a removed factory are closed on release or destroy")(
+      Seq(false, true)) { driverOwned =>
     withFactories { (env, factories) =>
-      env.createPythonWorker(key("session", driverOwned = true), useDaemon = true)
-      val plannerFactory = factories.constructed().get(0)
-      env.removeDriverPythonWorkerFactories("session")
+      val workerKey = key("session", driverOwned)
+      env.createPythonWorker(workerKey, useDaemon = true)
+      val factory = factories.constructed().get(0)
+      if (driverOwned) {
+        env.removeDriverPythonWorkerFactories("session")
+      } else {
+        env.removeExecutorPythonWorkerFactories("session")
+      }
 
       Seq(
-        (w: PythonWorker) => env.releasePythonWorker(key("session", driverOwned = true), w),
-        (w: PythonWorker) => env.destroyPythonWorker(key("session", driverOwned = true), w)
+        (w: PythonWorker) => env.releasePythonWorker(workerKey, w),
+        (w: PythonWorker) => env.destroyPythonWorker(workerKey, w)
       ).foreach { releaseOrDestroy =>
-        val worker = mock(classOf[PythonWorker])
-        releaseOrDestroy(worker)
-        verify(worker, times(1)).stop()
+        val channel = SocketChannel.open()
+        val worker = PythonWorker(channel)
+        try {
+          channel.configureBlocking(false)
+          worker.refresh()
+          val selector = worker.selector
+          val selectionKey = worker.selectionKey
+          assert(channel.isOpen && selector.isOpen && selectionKey.isValid)
+
+          releaseOrDestroy(worker)
+
+          assert(!channel.isOpen)
+          assert(!selector.isOpen)
+          assert(!selectionKey.isValid)
+        } finally {
+          worker.stop()
+        }
       }
-      verify(plannerFactory, never()).releaseWorker(any())
-      verify(plannerFactory, never()).stopWorker(any())
+      verify(factory, never()).releaseWorker(any())
+      verify(factory, never()).stopWorker(any())
+    }
+  }
+
+  gridTest("SPARK-54055: release and destroy use a still-registered factory")(
+      Seq(false, true)) { driverOwned =>
+    withFactories { (env, factories) =>
+      val workerKey = key("session", driverOwned)
+      env.createPythonWorker(workerKey, useDaemon = true)
+      val factory = factories.constructed().get(0)
+      val worker = mock(classOf[PythonWorker])
+
+      env.releasePythonWorker(workerKey, worker)
+      verify(factory, times(1)).releaseWorker(worker)
+      env.destroyPythonWorker(workerKey, worker)
+      verify(factory, times(1)).stopWorker(worker)
+      verify(worker, never()).stop()
     }
   }
 
