@@ -127,11 +127,11 @@ sealed trait Matrix extends Serializable {
   }
 
   /** A human readable representation of the matrix */
-  override def toString: String = asBreeze.toString()
+  override def toString: String = asML.toString
 
   /** A human readable representation of the matrix with maximum lines and width */
   @Since("1.4.0")
-  def toString(maxLines: Int, maxLineWidth: Int): String = asBreeze.toString(maxLines, maxLineWidth)
+  def toString(maxLines: Int, maxLineWidth: Int): String = asML.toString(maxLines, maxLineWidth)
 
   /**
    * Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -309,7 +309,7 @@ class DenseMatrix @Since("1.3.0") (
     this(numRows, numCols, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => asBreeze == m.asBreeze
+    case m: Matrix => asML == m.asML
     case _ => false
   }
 
@@ -617,11 +617,11 @@ class SparseMatrix @Since("1.3.0") (
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
   override def equals(o: Any): Boolean = o match {
-    case m: Matrix => asBreeze == m.asBreeze
+    case m: Matrix => asML == m.asML
     case _ => false
   }
 
-  override def hashCode(): Int = asBreeze.hashCode
+  override def hashCode(): Int = asML.hashCode()
 
   private[mllib] def asBreeze: BM[Double] = {
      if (!isTransposed) {

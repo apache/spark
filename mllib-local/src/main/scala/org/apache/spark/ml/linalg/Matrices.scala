@@ -127,11 +127,12 @@ sealed trait Matrix extends Serializable {
   }
 
   /** A human readable representation of the matrix */
-  override def toString: String = asBreeze.toString()
+  override def toString: String = MatrixFormatter.format(this)
 
   /** A human readable representation of the matrix with maximum lines and width */
   @Since("2.0.0")
-  def toString(maxLines: Int, maxLineWidth: Int): String = asBreeze.toString(maxLines, maxLineWidth)
+  def toString(maxLines: Int, maxLineWidth: Int): String =
+    MatrixFormatter.format(this, maxLines, maxLineWidth)
 
   /**
    * Map the values of this matrix using a function. Generates a new matrix. Performs the
@@ -327,10 +328,7 @@ class DenseMatrix @Since("2.0.0") (
   def this(numRows: Int, numCols: Int, values: Array[Double]) =
     this(numRows, numCols, values, false)
 
-  override def equals(o: Any): Boolean = o match {
-    case m: Matrix => asBreeze == m.asBreeze
-    case _ => false
-  }
+  override def equals(o: Any): Boolean = MatrixUtils.equals(this, o)
 
   override def hashCode: Int = {
     // Matches SparseMatrix.hashCode (Breeze's QuasiTensor.hashCode) so that equal dense and
@@ -669,12 +667,9 @@ class SparseMatrix @Since("2.0.0") (
       rowIndices: Array[Int],
       values: Array[Double]) = this(numRows, numCols, colPtrs, rowIndices, values, false)
 
-  override def hashCode(): Int = asBreeze.hashCode()
+  override def hashCode(): Int = MatrixUtils.hashCode(this)
 
-  override def equals(o: Any): Boolean = o match {
-    case m: Matrix => asBreeze == m.asBreeze
-    case _ => false
-  }
+  override def equals(o: Any): Boolean = MatrixUtils.equals(this, o)
 
   private[ml] def asBreeze: BM[Double] = {
      if (!isTransposed) {
@@ -769,14 +764,90 @@ class SparseMatrix @Since("2.0.0") (
    *                    order.
    */
   private[ml] override def toSparseMatrix(colMajor: Boolean): SparseMatrix = {
-    if (isColMajor && !colMajor) {
-      // it is col major and we want row major, use breeze to remove explicit zeros
-      val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]].t
-      Matrices.fromBreeze(breezeTransposed).transpose.asInstanceOf[SparseMatrix]
-    } else if (isRowMajor && colMajor) {
-      // it is row major and we want col major, use breeze to remove explicit zeros
-      val breezeTransposed = asBreeze.asInstanceOf[BSM[Double]]
-      Matrices.fromBreeze(breezeTransposed).asInstanceOf[SparseMatrix]
+    MatrixUtils.checkDimensions(this)
+    if (isColMajor != colMajor) {
+      val numPtrs = if (colMajor) numCols else numRows
+      val newColPtrs = new Array[Int](numPtrs + 1)
+      var j = 0
+      // Count the same pointer ranges used below, including shared or skipped backing entries.
+      while (j < colPtrs.length - 1) {
+        var idx = colPtrs(j)
+        val idxEnd = colPtrs(j + 1)
+        while (idx < idxEnd) {
+          if (values(idx) != 0.0) {
+            val newCol = rowIndices(idx)
+            require(newCol >= 0 && newCol < numPtrs,
+              s"Expected 0 <= inner index < $numPtrs, got $newCol.")
+            newColPtrs(newCol + 1) += 1
+          }
+          idx += 1
+        }
+        j += 1
+      }
+      var i = 0
+      while (i < numPtrs) {
+        newColPtrs(i + 1) += newColPtrs(i)
+        i += 1
+      }
+
+      val nnz = newColPtrs(numPtrs)
+      val newRowIndices = new Array[Int](nnz)
+      val newValues = new Array[Double](nnz)
+      j = 0
+      // Visiting the original rows or columns in order keeps the new indices sorted.
+      while (j < colPtrs.length - 1) {
+        var idx = colPtrs(j)
+        val idxEnd = colPtrs(j + 1)
+        while (idx < idxEnd) {
+          if (values(idx) != 0.0) {
+            val newCol = rowIndices(idx)
+            val newIdx = newColPtrs(newCol)
+            newRowIndices(newIdx) = j
+            newValues(newIdx) = values(idx)
+            newColPtrs(newCol) += 1
+          }
+          idx += 1
+        }
+        j += 1
+      }
+      // Restore the starts after using the pointers as insertion cursors.
+      i = numPtrs
+      while (i > 0) {
+        newColPtrs(i) = newColPtrs(i - 1)
+        i -= 1
+      }
+      newColPtrs(0) = 0
+
+      // Sum duplicate coordinates in stored order, retaining sums that become zero.
+      var newNnz = 0
+      j = 0
+      while (j < numPtrs) {
+        var idx = newColPtrs(j)
+        val idxEnd = newColPtrs(j + 1)
+        newColPtrs(j) = newNnz
+        while (idx < idxEnd) {
+          val row = newRowIndices(idx)
+          var value = newValues(idx)
+          idx += 1
+          while (idx < idxEnd && newRowIndices(idx) == row) {
+            value += newValues(idx)
+            idx += 1
+          }
+          newRowIndices(newNnz) = row
+          newValues(newNnz) = value
+          newNnz += 1
+        }
+        j += 1
+      }
+      newColPtrs(numPtrs) = newNnz
+      if (newNnz == nnz) {
+        new SparseMatrix(numRows, numCols, newColPtrs, newRowIndices, newValues,
+          isTransposed = !colMajor)
+      } else {
+        new SparseMatrix(numRows, numCols, newColPtrs,
+          Arrays.copyOf(newRowIndices, newNnz), Arrays.copyOf(newValues, newNnz),
+          isTransposed = !colMajor)
+      }
     } else {
       val nnz = numNonzeros
       if (nnz != numActives) {

@@ -112,7 +112,9 @@ sealed trait Vector extends Serializable {
    * @param i index
    */
   @Since("1.1.0")
-  def apply(i: Int): Double = asBreeze(i)
+  def apply(i: Int): Double = {
+    throw new UnsupportedOperationException(s"apply is not implemented for ${this.getClass}.")
+  }
 
   /**
    * Makes a deep copy of this vector.
