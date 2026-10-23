@@ -1544,6 +1544,7 @@ object HiveExternalCatalog {
     case _: AnyTimestampNanoType => false
     case _: TimeType => false
     case _: VariantType => false
+    case _: GeometryType | _: GeographyType => false
     case s: StructType =>
       s.forall { f =>
         // Because HMS thrift API passes StructType's catalog string in a whole, we can not
