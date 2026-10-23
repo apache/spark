@@ -27,10 +27,23 @@ class SparkConnectConnectionSuite extends ConnectFunSuite with RemoteSparkSessio
 
   override def jdbcUrl: String = s"jdbc:sc://localhost:$serverPort"
 
-  test("isValid checks the server, including when the timeout is zero") {
-    withConnection { connection =>
-      assert(connection.isValid(0))
-      assert(connection.isValid(5))
+  Seq(0, 5).foreach { timeout =>
+    test(s"isValid detects a server-closed session with timeout $timeout") {
+      withConnection { connection =>
+        val client = connection.asInstanceOf[SparkConnectConnection].client
+
+        // Ensure the server-side session exists before releasing it.
+        connection.getSchema()
+        assert(connection.isValid(timeout))
+
+        client.releaseSession()
+
+        // Local state alone must not reveal that the server closed the session.
+        assert(!connection.isClosed)
+        assert(client.isSessionValid)
+
+        assert(!connection.isValid(timeout))
+      }
     }
   }
 
