@@ -4083,8 +4083,7 @@ class SparkConnectPlanner(
   private def handleCheckpointCommand(
       checkpointCommand: CheckpointCommand,
       responseObserver: StreamObserver[proto.ExecutePlanResponse]): Unit = {
-    val clientSuppliedId = checkpointCommand.hasRelationId
-    val dfId = if (clientSuppliedId) {
+    val dfId = if (checkpointCommand.hasRelationId) {
       if (checkpointCommand.getRelationId.isEmpty) {
         throw InvalidPlanInput("CONNECT_INVALID_PLAN.CHECKPOINT_RELATION_ID_EMPTY", Map.empty)
       }
@@ -4111,12 +4110,8 @@ class SparkConnectPlanner(
     }
 
     logInfo(log"Caching DataFrame with id ${MDC(DATAFRAME_ID, dfId)}")
-    if (clientSuppliedId) {
-      if (!sessionHolder.cacheDataFrameByIdIfAbsent(dfId, checkpointed)) {
-        throw checkpointRelationIdAlreadyExists(dfId)
-      }
-    } else {
-      sessionHolder.cacheDataFrameById(dfId, checkpointed)
+    if (!sessionHolder.cacheDataFrameByIdIfAbsent(dfId, checkpointed)) {
+      throw checkpointRelationIdAlreadyExists(dfId)
     }
 
     executeHolder.eventsManager.postFinished()

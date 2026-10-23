@@ -28,7 +28,7 @@ import io.grpc.stub.StreamObserver
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
@@ -40,7 +40,7 @@ import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
-import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteKey, ExecuteStatus, SessionHolder, SessionStatus}
+import org.apache.spark.sql.connect.service.{ExecuteHolder, ExecuteKey, ExecuteStatus, SessionHolder, SessionStatus, SparkConnectService}
 import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
@@ -245,6 +245,29 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
       condition = "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
       parameters = Map("dfId" -> suppliedId, "sessionId" -> sessionHolder.sessionId))
     assert(sessionHolder.getDataFrameOrThrow(suppliedId) eq racingDataFrame)
+  }
+
+  test("checkpoint relation ID insertion race with a server-generated ID is an invalid plan") {
+    val racingDataFrame = spark.range(1).toDF()
+    val sessionHolder = new SessionHolder("testUser", UUID.randomUUID().toString, spark) {
+      override def cacheDataFrameByIdIfAbsent(dfId: String, df: DataFrame): Boolean = {
+        super.cacheDataFrameByIdIfAbsent(dfId, racingDataFrame)
+        super.cacheDataFrameByIdIfAbsent(dfId, df)
+      }
+    }
+    SparkConnectService.sessionManager.putSessionForTesting(sessionHolder)
+    sessionHolder.eventManager.status_(SessionStatus.Started)
+
+    val error = intercept[InvalidPlanInput] {
+      processCheckpointCommand(sessionHolder, checkpointCommand(None))
+    }
+    val generatedId = error.getMessageParameters.get("dfId")
+    assert(UUID.fromString(generatedId).toString == generatedId)
+    checkError(
+      exception = error,
+      condition = "CONNECT_INVALID_PLAN.DATAFRAME_ALREADY_EXISTS",
+      parameters = Map("dfId" -> generatedId, "sessionId" -> sessionHolder.sessionId))
+    assert(sessionHolder.getDataFrameOrThrow(generatedId) eq racingDataFrame)
   }
 
   test("InvalidInputs") {
