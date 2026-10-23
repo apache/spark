@@ -150,7 +150,7 @@ EXPLAIN SELECT region, MEASURE(revenue) AS revenue FROM order_metrics GROUP BY r
 == Physical Plan ==
 AdaptiveSparkPlan isFinalPlan=false
 +- HashAggregate(keys=[region#22], functions=[sum(amount#25)])
-   +- Exchange hashpartitioning(region#22, 2), ENSURE_REQUIREMENTS, [plan_id=886]
+   +- Exchange hashpartitioning(region#22, 200), ENSURE_REQUIREMENTS, [plan_id=886]
       +- HashAggregate(keys=[region#22], functions=[partial_sum(amount#25)])
          +- FileScan parquet spark_catalog.default.orders[region#22,amount#25] ...
 ```
@@ -342,7 +342,7 @@ A query over a metric view is an aggregate query. The rules follow from the rewr
 - Read a measure with `MEASURE(name)` in the `SELECT` list, optionally inside another expression (`ROUND(MEASURE(return_rate), 2)`). A measure selected by name alone, or `SELECT *`, has nothing to return and fails.
 - Every dimension in the `SELECT` list must be in `GROUP BY` (`GROUP BY ALL` works). A query with only `MEASURE()` calls needs no `GROUP BY`.
 - Filter with `WHERE` on dimensions. Source columns that are not dimensions are not part of the view; to filter on one, use the view's `filter` key or a query source.
-- To filter or sort on a measure, alias it in the `SELECT` list and use the alias in `HAVING` and `ORDER BY`. `MEASURE()` itself is not resolved in `WHERE`, `HAVING` or `ORDER BY`.
+- To filter or sort on a measure, alias it in the `SELECT` list and use the alias in `HAVING` and `ORDER BY` (`ORDER BY` also takes the column's position, as in `ORDER BY 2`). `MEASURE()` itself is not resolved in `WHERE`, `HAVING` or `ORDER BY`.
 - `COUNT(*)` counts source rows (after the view's filter); it does not go through `MEASURE()`.
 - To combine a metric view with another table, aggregate the metric view first, in a subquery or common table expression, and join the result.
 
@@ -444,11 +444,18 @@ metrics.count()
 # 9
 ```
 
-`metrics.show()` and `metrics.select("revenue")` fail, as `SELECT *` and a bare measure do in SQL, and `metrics.filter(F.expr("MEASURE(revenue) > 300"))` is rejected with `INVALID_WHERE_CONDITION`.
+`metrics.show()` and `metrics.select("revenue")` fail, as `SELECT *` and a bare measure do in SQL, and `metrics.filter(F.expr("MEASURE(revenue) > 300"))` is rejected, as `MEASURE()` in `WHERE` is in SQL.
 
 ### From BI and JDBC Clients
 
 A metric view needs nothing beyond SQL, so any client that submits SQL to Spark can use one: the Thrift JDBC/ODBC server, Spark Connect, or a BI tool's custom-SQL query. Dashboards that group by different dimensions issue the same `SELECT ... MEASURE(...) ... GROUP BY ...` shape, and each gets the measure at its own grain.
+
+Creating one is where clients differ, because the YAML body depends on indentation. Beeline strips the leading whitespace of each line when it reads a statement from a file (`-f`) or at its prompt, so a block-style definition fails there with `INVALID_METRIC_VIEW_YAML`; `beeline -e`, the JDBC driver itself, `spark-sql` and Spark Connect send the text as written. In beeline, write the definition in YAML flow style, which has no indentation to lose:
+
+```sql
+CREATE VIEW revenue_by_region WITH METRICS LANGUAGE YAML AS
+$${version: 0.1, source: orders, dimensions: [{name: region, expr: region}], measures: [{name: revenue, expr: SUM(amount)}]}$$;
+```
 
 ## Modeling Patterns
 
@@ -632,7 +639,7 @@ SELECT region, MEASURE(revenue) AS revenue FROM order_metrics_2026 GROUP BY regi
 |west  |534.99 |
 +------+-------+
 
-SHOW VIEWS;
+SHOW VIEWS LIKE 'order_metrics*';
 +---------+------------------+-----------+
 |namespace|viewName          |isTemporary|
 +---------+------------------+-----------+

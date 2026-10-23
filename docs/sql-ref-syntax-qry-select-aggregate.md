@@ -49,8 +49,8 @@ Please refer to the [Built-in Aggregation Functions](sql-ref-functions-builtin.h
 accepted only in the `SELECT` list of a query over a metric view, where Spark replaces it with the measure's
 aggregate expression, evaluated at the grain of the query's `GROUP BY`. It may be nested inside other
 expressions in the `SELECT` list, but it is not resolved in `WHERE`, `HAVING` or `ORDER BY`; alias the measure in
-the `SELECT` list and refer to the alias there. `MEASURE()` cannot be applied to a column of a table or an
-ordinary view.
+the `SELECT` list and refer to the alias there (`ORDER BY` also takes the column's position). `MEASURE()` cannot be
+applied to a column of a table or an ordinary view.
 
 #### Syntax
 
