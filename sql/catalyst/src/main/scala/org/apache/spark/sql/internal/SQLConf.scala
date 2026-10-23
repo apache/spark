@@ -4664,9 +4664,10 @@ object SQLConf {
   val ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS =
     buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minRows")
       .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
-        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Setting this to 0 " +
-        "disables the periodic evaluation. The ratio may still be evaluated when the aggregation " +
-        "map is about to spill.")
+        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The ratio is also " +
+        "evaluated when the aggregation map is about to spill, but only once the current map " +
+        "has processed at least this many rows. Setting this to 0 disables the periodic " +
+        "evaluation, leaving only the evaluation when the map is about to spill.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
