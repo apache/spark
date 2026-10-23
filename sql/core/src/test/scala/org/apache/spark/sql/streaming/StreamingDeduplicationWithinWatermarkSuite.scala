@@ -258,7 +258,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
       val inputData = MemoryStream[(String, Int)](1)
       val result = deduplicateWithinWatermark(inputData)
       val lastInput = if (onlyLateInput) "a" -> 20 else "probe" -> 40
-      val lastAnswer = if (onlyLateInput) Seq.empty else Seq("probe" -> 40)
+      val lastAnswer = if (onlyLateInput) CheckNewAnswer() else CheckNewAnswer("probe" -> 40)
 
       testStream(result, Append)(
         AddData(inputData, "a" -> 10, "clock" -> 30),
@@ -271,7 +271,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
         // The late-events watermark equals "a"'s expiration, 20. Even when all input is late,
         // the completion-time drain must evict the entry without counting it as incremental.
         AddData(inputData, lastInput),
-        CheckNewAnswer(lastAnswer: _*),
+        lastAnswer,
         assertNumStateRows(
           total = if (onlyLateInput) 2 else 3,
           updated = if (onlyLateInput) 0 else 1,
@@ -345,7 +345,7 @@ class StreamingDeduplicationWithinWatermarkSuite extends StateStoreMetricsTest
         // so a first-row duplicate is suppressed, but cleanup on "probe" can admit a later one.
         // The 18-second timestamp spread is outside the guaranteed 10-second interval.
         AddData(inputData, rows: _*),
-        CheckNewAnswer(expected: _*),
+        CheckNewAnswer(expected.head, expected.tail: _*),
         assertNumStateRows(
           total = if (duplicateFirst) 3 else 4, updated = if (duplicateFirst) 1 else 2),
         assertCleanupMetrics(removed = 1, incremental = 1)
