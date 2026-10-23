@@ -368,8 +368,6 @@ class AsyncProgressTrackingMicroBatchExecution(
           interruptingError = Option(interruptingAsyncError.get()),
           notifierError = errorNotifier.getError()).getOrElse(e))
     }
-    // The remaining offsets are committed here rather than in `cleanup()`, so that they are
-    // committed before the sources are stopped and a commit failure fails the query.
     val commitError = try {
       queryExecutionThread.runUninterruptibly {
         stopAsyncWrites()
@@ -424,8 +422,6 @@ class AsyncProgressTrackingMicroBatchExecution(
   }
 
   override def cleanup(): Unit = {
-    // `runActivatedStream` stops the async writes, but does not run if the query is stopped while
-    // it is initializing.
     asyncWritesExecutorService.shutdown()
     super.cleanup()
   }

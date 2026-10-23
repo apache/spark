@@ -994,7 +994,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
       .option("checkpointLocation", checkpointDir.getAbsolutePath)
       .start()
 
-  test("SPARK-XXXXX: a source commit failure on stop fails the query and still terminates it") {
+  test("SPARK-60524: a source commit failure on stop fails the query and still terminates it") {
     withTempDir { checkpointDir =>
       val inputData = new FailingMemoryStream(spark)
       val startQuery = () => startNoopQuery(inputData.toDF(), checkpointDir)
@@ -1017,7 +1017,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
   }
 
-  test("SPARK-XXXXX: a source commit failure of a failed query is suppressed") {
+  test("SPARK-60524: a source commit failure of a failed query is suppressed") {
     withTempDir { checkpointDir =>
       val inputData = new FailingMemoryStream(spark)
       val startQuery = () => startNoopQuery(inputData.toDF(), checkpointDir)
@@ -1032,7 +1032,7 @@ class AsyncProgressTrackingMicroBatchExecutionSuite
     }
   }
 
-  test("SPARK-XXXXX: the remaining source offsets are committed before the sources stop") {
+  test("SPARK-60524: the remaining source offsets are committed before the sources stop") {
     withTempDir { srcDir =>
       withTempDir { tmpDir =>
         withTempDir { checkpointDir =>
