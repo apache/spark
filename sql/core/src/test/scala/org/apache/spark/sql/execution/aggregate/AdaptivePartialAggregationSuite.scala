@@ -40,7 +40,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *      aggregate shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING SETS /
  *      multi-distinct). Order-sensitive aggregates are tested against the reference too, including
  *      under a fan-out child that queues its whole batch behind the frozen map.
- *   2. Triggering: the `numBypassingRows` metric proves the bypass actually fires when (and only
+ *   2. Triggering: the `numPassthroughRows` metric proves the bypass actually fires when (and only
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
  *      the feature switch and eligibility rules are honored, and both check points work.
  */
@@ -73,7 +73,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   // ones in `Partial`) that the feature now bypasses. It is a superset of the phases the feature
   // actually applies to: a pure `PartialMerge` de-duplication phase (excluded by its required
   // distribution) and an ineligible group-by-only `Final` (vacuously all-`Partial`) also match,
-  // but neither registers a `numBypassingRows` metric, so they add 0 to the bypass count below.
+  // but neither registers a `numPassthroughRows` metric, so they add 0 to the bypass count below.
   private def isPartialPhase(agg: HashAggregateExec): Boolean =
     agg.aggregateExpressions.forall(a => a.mode == Partial || a.mode == PartialMerge)
 
@@ -137,7 +137,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           df.collect()
           val skipped = collect(df.queryExecution.executedPlan) {
             case agg: HashAggregateExec if isPartialPhase(agg) =>
-              agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
+              agg.metrics.get("numPassthroughRows").map(_.value).getOrElse(0L)
           }.sum
           if (expectBypass) {
             assert(skipped > 0,
@@ -155,7 +155,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   /**
    * The observable per-run counters we assert on, all read from the partial `HashAggregateExec` in
    * a single execution so the metrics are not double-counted:
-   *   - `skipped`: our self-reported `numBypassingRows` metric.
+   *   - `skipped`: our self-reported `numPassthroughRows` metric.
    *   - `partialOutputRows`: the partial aggregate's own `numOutputRows`. An independent,
    *     pre-existing counter driven by the normal output path, so it is the ground truth for
    *     whether rows were streamed through -- it equals the distinct key count when aggregation is
@@ -200,7 +200,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     val counters = AggCounters(
       // The metric is only registered on aggregates the feature applies to; an aggregate without
       // it bypassed nothing.
-      skipped = partialAggs.map(_.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)).sum,
+      skipped = partialAggs.map(_.metrics.get("numPassthroughRows").map(_.value).getOrElse(0L)).sum,
       partialOutputRows = partialAggs.map(_.metrics("numOutputRows").value).sum,
       spillBytes = partialAggs.map(_.metrics("spillSize").value).sum,
       tasksFallBacked = partialAggs.map(_.metrics("numTasksFallBacked").value).sum)
@@ -208,7 +208,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     counters
   }
 
-  private def numBypassingRows(build: () => DataFrame): Long = runAndReadCounters(build).skipped
+  private def numPassthroughRows(build: () => DataFrame): Long = runAndReadCounters(build).skipped
 
   // Returns the bypassed-row count per partial `HashAggregateExec` phase, keyed by the number of
   // grouping keys, and verifies the run matches the feature-off reference. A `count(DISTINCT ...)`
@@ -221,7 +221,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     val byKeyCount = collect(df.queryExecution.executedPlan) {
       case agg: HashAggregateExec if isPartialPhase(agg) =>
         agg.groupingExpressions.length ->
-          agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
+          agg.metrics.get("numPassthroughRows").map(_.value).getOrElse(0L)
     }.groupBy(_._1).map { case (n, pairs) => n -> pairs.map(_._2).sum }
     // The pure `PartialMerge` de-duplication phase (grouping on key + distinct columns) is the one
     // phase the `exists(_.mode == Partial)` guard exists to exclude, and only when it carries
@@ -234,7 +234,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       case agg: HashAggregateExec if agg.aggregateExpressions.nonEmpty &&
         agg.aggregateExpressions.forall(_.mode == PartialMerge) => agg
     }
-    assert(dedupPhases.forall(!_.metrics.contains("numBypassingRows")),
+    assert(dedupPhases.forall(!_.metrics.contains("numPassthroughRows")),
       "the pure-PartialMerge de-duplication phase must stay ineligible")
     checkAgainstReference(df, build)
     byKeyCount
@@ -355,7 +355,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s", count(lit(1)) as "c")
       withClue(clue) {
-        assert(numBypassingRows(df) > 0,
+        assert(numPassthroughRows(df) > 0,
           "expected the equivalent spelling after the cutoff to bypass partial aggregation")
       }
     }
@@ -502,7 +502,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       df.collect()
       val skipped = collect(df.queryExecution.executedPlan) {
         case agg: HashAggregateExec if isPartialPhase(agg) =>
-          agg.metrics.get("numBypassingRows").map(_.value).getOrElse(0L)
+          agg.metrics.get("numPassthroughRows").map(_.value).getOrElse(0L)
       }.sum
       assert(skipped > 0,
         s"expected the large frozen map to eventually bypass, got $skipped bypassed rows")
@@ -616,7 +616,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(countDistinct($"v") as "cd")
       withClue(clue) {
-        assert(numBypassingRows(df) > 0,
+        assert(numPassthroughRows(df) > 0,
           "expected a distinct partial aggregation to bypass for high-cardinality input")
       }
     }
@@ -949,7 +949,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
-        assert(numBypassingRows(highCard) > 0,
+        assert(numPassthroughRows(highCard) > 0,
           "expected some rows to bypass partial aggregation for high-cardinality input")
       }
       // Few distinct keys, high reduction: partial aggregation is effective, nothing bypasses.
@@ -958,7 +958,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
-        assert(numBypassingRows(lowCard) == 0,
+        assert(numPassthroughRows(lowCard) == 0,
           "expected no rows to bypass partial aggregation for low-cardinality input")
       }
     }
@@ -968,7 +968,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     forEachCodegenAndMap() { clue =>
       val distinctKeys = () => spark.range(0, 200, 1, 1).select($"id" as "k").distinct()
       withClue(clue) {
-        assert(numBypassingRows(distinctKeys) > 0,
+        assert(numPassthroughRows(distinctKeys) > 0,
           "expected group-by-only rows to bypass partial aggregation for high-cardinality input")
       }
     }
@@ -987,7 +987,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           """SELECT k, sum(v) FILTER (WHERE v % 2 = 0) AS s
             |FROM t GROUP BY k""".stripMargin)
         withClue(clue) {
-          assert(numBypassingRows(df) > 0,
+          assert(numPassthroughRows(df) > 0,
             "expected filtered-aggregate rows to bypass partial aggregation for high-cardinality " +
               "input")
         }
@@ -1011,7 +1011,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
             |FROM t
             |GROUP BY k1, k2 GROUPING SETS ((k1), (k2))""".stripMargin)
         withClue(clue) {
-          assert(numBypassingRows(gs) > 0,
+          assert(numPassthroughRows(gs) > 0,
             "expected rows below an Expand to bypass partial aggregation for high-cardinality " +
               "input")
         }
@@ -1036,7 +1036,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           .groupBy($"k")
           .agg(sum($"v") as "s")
         withClue(s"wholeStage=$wholeStage twoLevelMap=$twoLevelMap") {
-          assert(numBypassingRows(df) == 0,
+          assert(numPassthroughRows(df) == 0,
             "no rows should bypass partial aggregation when the feature is disabled")
         }
       }
@@ -1051,7 +1051,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       val df = () => spark.range(0, 200, 1, 1)
         .agg(sum($"id") as "s", count(lit(1)) as "c")
       withClue(clue) {
-        assert(numBypassingRows(df) == 0,
+        assert(numPassthroughRows(df) == 0,
           "a global aggregation is not eligible and must never bypass")
       }
     }
@@ -1089,7 +1089,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
-        assert(numBypassingRows(df) == 0,
+        assert(numPassthroughRows(df) == 0,
           "an aggregation collapsing ~17 rows per key must not bypass; fast-map hits are " +
             "missing from the numerator if it does")
       }
@@ -1289,7 +1289,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
             .groupBy($"k")
             .agg(sum($"v") as "s")
           withClue(s"minCompaction=$minCompaction wholeStage=$wholeStage") {
-            numBypassingRows(df)
+            numPassthroughRows(df)
           }
         }
       }
@@ -1312,7 +1312,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
-        assert(numBypassingRows(df) > 0,
+        assert(numPassthroughRows(df) > 0,
           "an unreachable compaction ratio must bypass even a low-cardinality input")
       }
     }
@@ -1329,7 +1329,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
-        assert(numBypassingRows(df) == 0,
+        assert(numPassthroughRows(df) == 0,
           "minRows = 0 must disable the periodic check, so nothing may bypass without a spill")
       }
     }
@@ -1375,7 +1375,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         .groupBy($"k")
         .agg(sum($"v") as "s")
       withClue(clue) {
-        assert(numBypassingRows(df) == 0,
+        assert(numPassthroughRows(df) == 0,
           "no bypass expected before `minRows` rows have been processed")
       }
     }
@@ -1383,8 +1383,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
 
   test("partial aggregate output row count reflects the bypass (independent of the skip metric)") {
     // `numOutputRows` on the partial aggregate is the ground truth: it is driven by the normal
-    // aggregation output path, not by our self-reported `numBypassingRows` metric. This test cross
-    // checks the two and pins the observable data-side effect of bypassing.
+    // aggregation output path, not by our self-reported `numPassthroughRows` metric. This test
+    // cross checks the two and pins the observable data-side effect of bypassing.
     val numRows = 200
     forEachCodegenAndMap() { clue =>
       // Fully distinct keys: once the bypass fires the operator stops collapsing rows, so the
