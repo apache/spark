@@ -420,6 +420,40 @@ Security options for the Spark History Server are covered more detail in the
     <td>3.4.0</td>
   </tr>
   <tr>
+    <td>spark.history.snapshot.enabled</td>
+    <td>false</td>
+    <td>
+        Whether completed applications write a protobuf snapshot of their UI data, and whether the
+        History Server loads the UI from that snapshot instead of replaying the event log. Must be
+        set, together with <code>spark.history.snapshot.path</code>, for both applications and the
+        History Server. When the cleaner is enabled, snapshots are deleted with their event logs.
+        A snapshot holds the UI data the application retained, so the History Server replays the
+        event log instead when it is configured to retain more, for example with a higher
+        <code>spark.ui.retainedJobs</code> than the application used.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.snapshot.path</td>
+    <td>(none)</td>
+    <td>
+        Shared filesystem or object store path where applications write history snapshots and the
+        History Server reads them from.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.snapshot.maxRecordSize</td>
+    <td>256m</td>
+    <td>
+        Maximum size of a single serialized record the History Server reads when restoring a
+        history snapshot. Snapshots with larger records are not used, and the event log is
+        replayed instead. This bounds the memory a corrupt or unexpectedly large snapshot can use.
+        Must be positive and at most 512 MiB.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
     <td>spark.history.custom.executor.log.url</td>
     <td>(none)</td>
     <td>
