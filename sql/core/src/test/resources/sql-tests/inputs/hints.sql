@@ -3,8 +3,8 @@
 -- Covers the two families of hints Spark SQL understands:
 --   * Partitioning hints: COALESCE, REPARTITION, REPARTITION_BY_RANGE, REBALANCE and
 --     REBALANCE_BY_SIZE. These are resolved by ResolveHints.ResolveCoalesceHints.
---   * Join strategy hints: BROADCAST, MERGE, SHUFFLE_HASH and SHUFFLE_REPLICATE_NL (with their
---     aliases). These are resolved by ResolveHints.ResolveJoinStrategyHints.
+--   * Join hints: BROADCAST, MERGE, SHUFFLE_HASH and SHUFFLE_REPLICATE_NL (with their aliases),
+--     and RUNTIME_FILTER. These are resolved by ResolveHints.ResolveJoinHints.
 --
 -- Hint names are case-insensitive. Unrecognized hints, and hints that reference a relation not
 -- present in the query, are dropped during analysis (a warning is logged) and leave the plan
@@ -65,7 +65,7 @@ SELECT /*+ REBALANCE_BY_SIZE('10MB', c1) */ * FROM t1;
 SELECT /*+ REPARTITION(100), COALESCE(500), REPARTITION_BY_RANGE(3, c1) */ * FROM t1;
 
 -- ---------------------------------------------------------------------------------------------
--- Join strategy hints
+-- Join hints
 -- ---------------------------------------------------------------------------------------------
 
 -- BROADCAST and its aliases BROADCASTJOIN and MAPJOIN.
@@ -112,6 +112,12 @@ SELECT /*+ BROADCAST(t1), MERGE(t1, t2) */ * FROM t1 JOIN t2 ON t1.c1 = t2.c1;
 
 -- Join strategy and partitioning hints can be combined.
 SELECT /*+ BROADCAST(t1), COALESCE(2) */ * FROM t1 JOIN t2 ON t1.c1 = t2.c1;
+
+-- RUNTIME_FILTER names the side to build a runtime filter from.
+SELECT /*+ RUNTIME_FILTER(t2) */ * FROM t1 JOIN t2 ON t1.c1 = t2.c1;
+
+-- RUNTIME_FILTER is not a join strategy, so it combines with one on the same relation.
+SELECT /*+ MERGE(t2), RUNTIME_FILTER(t2) */ * FROM t1 JOIN t2 ON t1.c1 = t2.c1;
 
 -- ---------------------------------------------------------------------------------------------
 -- Negative and edge cases

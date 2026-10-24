@@ -230,6 +230,47 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
+  test("SPARK-59345: a pushed join with a pushed sample is not repeatable") {
+    val joinSampleCatalog = "testjoinsamplerepeatable"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    val t3 = s"$joinSampleCatalog.ns.t3"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t3 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      sql(s"INSERT INTO $t3 VALUES (3, 'p'), (4, 'q'), (5, 'r')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        def repeatableScans(df: DataFrame): Seq[Boolean] = {
+          checkJoinPushed(df)
+          df.queryExecution.optimizedPlan.collect {
+            case s: DataSourceV2ScanRelation => s.repeatableScan
+          }
+        }
+        assert(repeatableScans(sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")) ==
+          Seq(true))
+        Seq(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) JOIN $t2 ON $t1.id = $t2.id",
+          s"SELECT * FROM $t1 JOIN $t2 TABLESAMPLE BERNOULLI (50 PERCENT) ON $t1.id = $t2.id"
+        ).foreach { query =>
+          assert(repeatableScans(sql(query)) == Seq(false))
+        }
+        // In a cascaded join, a sample on the innermost side is nested two joins down.
+        def cascade(t1Sample: String): String =
+          s"SELECT * FROM $t1 $t1Sample JOIN $t2 ON $t1.id = $t2.id JOIN $t3 ON $t2.id = $t3.id"
+        assert(repeatableScans(sql(cascade(""))) == Seq(true))
+        assert(repeatableScans(sql(cascade("TABLESAMPLE SYSTEM (50 PERCENT)"))) == Seq(false))
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+      sql(s"DROP TABLE IF EXISTS $t3")
+    }
+  }
+
   test("SPARK-55978: 100% SYSTEM sample does not block join pushdown") {
     val joinSampleCatalog = "testjoinsample100"
     registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])

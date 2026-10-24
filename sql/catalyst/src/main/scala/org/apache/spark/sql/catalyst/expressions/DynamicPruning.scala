@@ -21,10 +21,19 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.plans.logical.{HintInfo, LogicalPlan}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 
 trait DynamicPruning extends Predicate
+
+object DynamicPruning {
+  /**
+   * Marks a [[DynamicPruningSubquery]] that honors a `RuntimeFilterHint` on its join, so later
+   * rules need not repeat the check on a plan that pushdown has since changed.
+   */
+  val HONORS_RUNTIME_FILTER_HINT: TreeNodeTag[Unit] = TreeNodeTag("honorsRuntimeFilterHint")
+}
 
 /**
  * The DynamicPruningSubquery expression is only used in join operations to prune one side of the

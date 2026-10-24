@@ -82,8 +82,17 @@ object JoinHint {
  * The hint attributes to be applied on a specific node.
  *
  * @param strategy The preferred join strategy.
+ * @param runtimeFilterSource Whether this side was hinted as a runtime filter source, i.e. the
+ *                            side a runtime filter should be built from to prune the other side
+ *                            of the join.
+ * @param runtimeFilterDecided Whether `InjectRuntimeFilter` has applied or reported the runtime
+ *                             filter hint. Kept in the hint so that it survives a rule rebuilding
+ *                             the join, and not shown, as it is not part of the hint as written.
  */
-case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
+case class HintInfo(
+    strategy: Option[JoinStrategyHint] = None,
+    runtimeFilterSource: Boolean = false,
+    runtimeFilterDecided: Boolean = false) {
 
   /**
    * Combine this [[HintInfo]] with another [[HintInfo]] and return the new [[HintInfo]].
@@ -95,17 +104,28 @@ case class HintInfo(strategy: Option[JoinStrategyHint] = None) {
    * [[HintInfo]] if defined, otherwise the strategy in the other [[HintInfo]]. The
    * `hintOverriddenCallback` will be called if this [[HintInfo]] and the other [[HintInfo]]
    * both have a strategy defined but the join strategies are different.
+   *
+   * A runtime filter hint is not a join strategy, so it composes with one rather than overriding
+   * it: the merged [[HintInfo]] is a runtime filter source if either side is, and only a strategy
+   * conflict is reported.
    */
   def merge(other: HintInfo, hintErrorHandler: HintErrorHandler): HintInfo = {
     if (this.strategy.isDefined &&
         other.strategy.isDefined &&
         this.strategy.get != other.strategy.get) {
-      hintErrorHandler.hintOverridden(other)
+      hintErrorHandler.hintOverridden(other.copy(runtimeFilterSource = false))
     }
-    HintInfo(strategy = this.strategy.orElse(other.strategy))
+    HintInfo(
+      strategy = this.strategy.orElse(other.strategy),
+      runtimeFilterSource = this.runtimeFilterSource || other.runtimeFilterSource,
+      runtimeFilterDecided = this.runtimeFilterDecided || other.runtimeFilterDecided)
   }
 
-  override def toString: String = strategy.map(s => s"(strategy=$s)").getOrElse("none")
+  override def toString: String = {
+    val fields = strategy.map(s => s"strategy=$s").toSeq ++
+      Option.when(runtimeFilterSource)(RuntimeFilterHint.hintName.toLowerCase(Locale.ROOT))
+    if (fields.isEmpty) "none" else fields.mkString("(", ", ", ")")
+  }
 }
 
 sealed abstract class JoinStrategyHint {
@@ -205,6 +225,21 @@ abstract class WindowHint
 abstract class SortHint
 
 /**
+ * The relation-level hint that marks a join side as a runtime filter source, i.e. the side a
+ * runtime filter is built from to prune the other side of the join, e.g.
+ * "RUNTIME_FILTER(dim)". Unlike a [[JoinStrategyHint]] this does not choose a join
+ * implementation, so it composes with one; it also does not name a filtering mechanism, leaving
+ * Spark free to pick one.
+ */
+object RuntimeFilterHint {
+  val hintName: String = "RUNTIME_FILTER"
+
+  def isRuntimeFilterHintName(name: String): Boolean = {
+    name.toUpperCase(Locale.ROOT) == hintName
+  }
+}
+
+/**
  * The callback for implementing customized strategies of handling hint errors.
  */
 trait HintErrorHandler {
@@ -233,8 +268,8 @@ trait HintErrorHandler {
   def joinNotFoundForJoinHint(hint: HintInfo): Unit
 
   /**
-   * Callback for a join hint specified on a join that doesn't support this build side or
-   * doesn't have equi-join keys for equi-join.
+   * Callback for a join hint that cannot be applied to its join, e.g. one that doesn't support
+   * this build side or doesn't have equi-join keys, with `reason` naming why.
    */
   def joinHintNotSupported(hint: HintInfo, reason: String): Unit
 
