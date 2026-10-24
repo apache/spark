@@ -336,8 +336,8 @@ case class DataSource(
     }
   }
 
-  /** Returns a sink that can be used to continually write data. */
-  def createSink(outputMode: OutputMode): Sink = {
+  /** Returns a sink that can be used to continually write data of the given schema. */
+  def createSink(outputMode: OutputMode, schema: StructType): Sink = {
     providingInstance() match {
       case s: StreamSinkProvider =>
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
@@ -349,6 +349,8 @@ case class DataSource(
         if (outputMode != OutputMode.Append) {
           throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
         }
+        PartitioningUtils.validatePartitionColumn(
+          schema, partitionColumns, conf.caseSensitiveAnalysis)
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
       case _ =>
