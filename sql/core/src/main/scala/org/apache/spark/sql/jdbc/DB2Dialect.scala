@@ -124,8 +124,11 @@ private case class DB2Dialect() extends JdbcDialect with SQLConfHelper with NoLe
   override def isCascadingTruncateTable(): Option[Boolean] = Some(false)
 
   // See https://www.ibm.com/docs/en/db2-for-zos/12.0.0?topic=codes-sqlstate-values-common-error
+  // Subclass 426 is DB2's syntax error family (42601 syntax error, 42602 invalid name,
+  // 42603 unterminated string, 42604 invalid constant, ...). The other class 42 subclasses are
+  // not syntax errors, e.g. 425xx (insufficient privilege) and 427xx (undefined object).
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    Option(exception.getSQLState).exists(_.startsWith("426"))
   }
 
   // scalastyle:off line.size.limit
