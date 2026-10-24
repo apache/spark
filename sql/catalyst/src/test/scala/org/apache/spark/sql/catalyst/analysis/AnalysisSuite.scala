@@ -1514,7 +1514,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\" or \"TIME\""),
       queryContext = Array(ExpectedContext("mean(t.c)", 65, 73)),
       caseSensitive = false
     )
@@ -1533,7 +1533,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
         "paramIndex" -> "first",
         "inputSql" -> "\"c\"",
         "inputType" -> "\"BOOLEAN\"",
-        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\""),
+        "requiredType" -> "\"NUMERIC\" or \"ANSI INTERVAL\" or \"TIME\""),
       queryContext = Array(ExpectedContext("mean(c)", 91, 97)),
       caseSensitive = false)
 
