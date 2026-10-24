@@ -97,4 +97,75 @@ class AutoCdcSchemaUtilsSuite extends SparkFunSuite {
   test("flattenStructFieldPaths returns an empty sequence for an empty schema") {
     assert(AutoCdcSchemaUtils.flattenStructFieldPaths(new StructType()) === Seq.empty)
   }
+
+  test("fieldPathsMissingFrom returns flattened paths absent from the other schema") {
+    val schema = new StructType()
+      .add("kept", StringType)
+      .add("dropped", StringType)
+      .add("profile", new StructType()
+        .add("City", StringType)
+        .add("zip", StringType))
+    val otherSchema = new StructType()
+      .add("profile", new StructType()
+        .add("city", StringType))
+      .add("KEPT", StringType)
+      .add("extra", StringType)
+
+    assert(AutoCdcSchemaUtils.fieldPathsMissingFrom(
+      schema,
+      otherSchema,
+      caseInsensitiveResolution) === Seq(Seq("dropped"), Seq("profile", "zip")))
+    assert(AutoCdcSchemaUtils.fieldPathsMissingFrom(
+      schema,
+      otherSchema,
+      caseSensitiveResolution) ===
+      Seq(Seq("kept"), Seq("dropped"), Seq("profile", "City"), Seq("profile", "zip")))
+  }
+
+  test("nestedFieldPathsMissingFrom returns paths to the outermost missing fields at any depth") {
+    val dataType = new StructType()
+      .add("kept", StringType)
+      .add("dropped", new StructType().add("street", StringType))
+      .add("profile", new StructType()
+        .add("city", StringType)
+        .add("zip", StringType))
+      .add("items", ArrayType(new StructType()
+        .add("x", IntegerType)
+        .add("Y", IntegerType)))
+      .add("byKey", MapType(new StructType()
+        .add("k", IntegerType)
+        .add("j", IntegerType), StringType))
+      .add("byName", MapType(StringType, new StructType()
+        .add("x", IntegerType)
+        .add("y", IntegerType)))
+    val otherType = new StructType()
+      .add("KEPT", StringType)
+      .add("profile", new StructType().add("city", StringType))
+      .add("items", ArrayType(new StructType()
+        .add("X", IntegerType)
+        .add("y", IntegerType)))
+      .add("byKey", MapType(new StructType().add("k", IntegerType), StringType))
+      .add("byName", MapType(StringType, new StructType().add("x", IntegerType)))
+      .add("extra", StringType)
+
+    assert(AutoCdcSchemaUtils.nestedFieldPathsMissingFrom(
+      dataType,
+      otherType,
+      caseInsensitiveResolution) === Seq(
+      Seq("dropped"),
+      Seq("profile", "zip"),
+      Seq("byKey", "key", "j"),
+      Seq("byName", "value", "y")))
+    assert(AutoCdcSchemaUtils.nestedFieldPathsMissingFrom(
+      dataType,
+      otherType,
+      caseSensitiveResolution) === Seq(
+      Seq("kept"),
+      Seq("dropped"),
+      Seq("profile", "zip"),
+      Seq("items", "element", "x"),
+      Seq("items", "element", "Y"),
+      Seq("byKey", "key", "j"),
+      Seq("byName", "value", "y")))
+  }
 }
