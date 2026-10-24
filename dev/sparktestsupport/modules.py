@@ -330,6 +330,8 @@ udf_worker = Module(
     ],
     sbt_test_goals=[
         "udf-worker-core/test",
+        "udf-worker-grpc/test",
+        "core/testOnly org.apache.spark.SparkEnvUDFDispatcherSuite",
     ],
 )
 
@@ -371,7 +373,7 @@ catalyst = Module(
 
 sql = Module(
     name="sql",
-    dependencies=[catalyst],
+    dependencies=[catalyst, udf_worker],
     source_file_regexes=[
         "sql/core/",
         "python/pyspark/sql/worker/",  # analyze_udtf is invoked and tested in JVM

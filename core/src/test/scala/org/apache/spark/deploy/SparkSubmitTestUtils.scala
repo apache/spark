@@ -43,7 +43,8 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       sparkHomeOpt: Option[String] = None,
       timeout: Span = defaultSparkSubmitTimeout,
       isSparkTesting: Boolean = true,
-      expectFailure: Boolean = false): Int = {
+      expectFailure: Boolean = false,
+      environmentOverrides: Map[String, Option[String]] = Map.empty): Int = {
     val sparkHome = sparkHomeOpt.getOrElse(
       sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!")))
     val history = ArrayBuffer.empty[String]
@@ -66,13 +67,35 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
       env.remove("SPARK_DIST_CLASSPATH")
     }
     env.put("SPARK_HOME", sparkHome)
+    val previousEnvironment = environmentOverrides.keysIterator.map { key =>
+      key -> Option(env.get(key))
+    }.toMap
+    environmentOverrides.foreach {
+      case (key, Some(value)) => env.put(key, value)
+      case (key, None) => env.remove(key)
+    }
 
     def captureOutput(source: String)(line: String): Unit = {
       logInfo(s"$source> $line")
       history += line
     }
 
-    val process = builder.start()
+    def restoreEnvironment(): Unit = {
+      previousEnvironment.foreach {
+        case (key, Some(value)) => env.put(key, value)
+        case (key, None) => env.remove(key)
+      }
+    }
+    val process = try {
+      builder.start()
+    } catch {
+      case throwable: Throwable =>
+        restoreEnvironment()
+        throw throwable
+    }
+    // The child copied the overridden environment at start. Put the parent back
+    // before waiting so later tests in this JVM keep their original exports.
+    restoreEnvironment()
     new ProcessOutputCapturer(process.getInputStream, captureOutput("stdout")).start()
     new ProcessOutputCapturer(process.getErrorStream, captureOutput("stderr")).start()
 
@@ -100,6 +123,7 @@ trait SparkSubmitTestUtils extends SparkFunSuite with TimeLimits {
           s"\n$historyLog", to)
       case t: Throwable => throw t
     } finally {
+      restoreEnvironment()
       // Ensure we still kill the process in case it timed out
       process.destroy()
     }

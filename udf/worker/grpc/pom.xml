@@ -46,14 +46,10 @@
     those modules via the proto messages, as it was before; only gRPC is
     removed from their classpath.)
 
-    Note: gRPC is kept off every shared classpath by the dependency graph
-    alone, since nothing on the runtime/assembly classpath depends on this
-    module yet. The gRPC runtime here is NOT shaded. Once the gRPC transport
-    is wired up and a runtime module depends on this one, the io.grpc and
-    protobuf classes should be relocated (mirroring the
-    org.sparkproject.spark_udf_worker.protobuf relocation in the proto module)
-    to avoid version clashes with Spark Connect's gRPC. That shading is
-    deferred to a follow-up.
+    The spark-udf-worker-runtime module packages this module for the Spark
+    distribution and relocates its gRPC and protobuf dependencies. This
+    module remains unshaded so its focused tests and engine integration tests
+    run against the normal development classpath.
   -->
   <dependencies>
     <dependency>

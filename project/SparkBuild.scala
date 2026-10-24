@@ -59,8 +59,9 @@ object BuildCommons {
     Seq("connect-common", "connect", "connect-client-jdbc", "connect-client-jvm", "connect-shims")
       .map(ProjectRef(buildLocation, _))
 
-  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore, udfWorkerGrpc) =
-    Seq("udf-worker-proto", "udf-worker-core", "udf-worker-grpc").map(ProjectRef(buildLocation, _))
+  val udfWorkerProjects@Seq(udfWorkerProto, udfWorkerCore, udfWorkerGrpc, udfWorkerRuntime) =
+    Seq("udf-worker-proto", "udf-worker-core", "udf-worker-grpc", "udf-worker-runtime")
+      .map(ProjectRef(buildLocation, _))
 
   val allProjects@Seq(
     core, graphx, mllib, mllibLocal, repl, networkCommon, networkShuffle, launcher, unsafe, tags, sketch, kvstore,
@@ -420,7 +421,7 @@ object SparkBuild extends PomBuild {
       unsafe, tags, tokenProviderKafka010, sqlKafka010, pipelines, connectCommon, connect,
       connectJdbc, connectClient, variant, connectShims, profiler, credentialAws,
       commonUtilsJava, sparkConfig,
-      udfWorkerProto, udfWorkerCore, udfWorkerGrpc
+      udfWorkerProto, udfWorkerCore, udfWorkerGrpc, udfWorkerRuntime
     ).contains(x)
   }
 
@@ -478,6 +479,9 @@ object SparkBuild extends PomBuild {
 
   /* UDF Worker gRPC settings */
   enable(UDFWorkerGrpc.settings)(udfWorkerGrpc)
+
+  /* UDF Worker distribution runtime settings */
+  enable(UDFWorkerRuntime.settings)(udfWorkerRuntime)
 
   /* Config module protobuf settings */
   enable(SparkConfig.settings)(sparkConfig)
@@ -1127,26 +1131,10 @@ object SparkProtobuf {
 }
 
 object UDFWorkerProto {
-  // Reuses SparkConnectCommon for proto codegen wiring; overrides the assembly
-  // fields that need the UDF-worker namespace and restricts code generation to
-  // protobuf-java messages only. The gRPC service stubs are generated in the
-  // separate udf-worker-grpc module, so this module (and its consumers) carry
-  // no gRPC dependency.
+  // Reuses SparkConnectCommon for proto codegen wiring and restricts code
+  // generation to protobuf-java messages only. The distribution runtime owns
+  // shading; this module and its consumers stay unshaded for compilation and tests.
   lazy val settings = SparkConnectCommon.settings ++ Seq(
-    // Include only this module's jar and protobuf-java in the assembly.
-    (assembly / assemblyExcludedJars) := {
-      val cp = (assembly / fullClasspath).value
-      val validPrefixes = Set("spark-udf-worker-proto", "protobuf-")
-      cp filterNot { v =>
-        validPrefixes.exists(v.data.getName.startsWith)
-      }
-    },
-
-    (assembly / assemblyShadeRules) := Seq(
-      ShadeRule.rename("com.google.protobuf.**" ->
-        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll
-    ),
-
     // Generate only protobuf-java messages here (overrides the java + grpc-java
     // targets inherited from SparkConnectCommon).
     (Compile / PB.targets) := Seq(
@@ -1199,6 +1187,82 @@ object UDFWorkerGrpc {
       )
     }
   }
+}
+
+object UDFWorkerRuntime {
+  lazy val settings = Seq(
+    (assembly / test) := { },
+
+    (assembly / logLevel) := Level.Info,
+
+    (assembly / assemblyPackageScala / assembleArtifact) := false,
+
+    // This needs to be consistent with udf/worker/runtime's maven-shade-plugin.
+    (assembly / assemblyExcludedJars) := {
+      val cp = (assembly / fullClasspath).value
+      val validPrefixes = Set(
+        "spark-udf-worker-", "grpc-", "proto-google-common-protos-",
+        "perfmark-api-", "annotations-", "animal-sniffer-annotations-", "gson-",
+        "guava-", "failureaccess-")
+      cp filterNot { v =>
+        val name = v.data.getName
+        validPrefixes.exists(name.startsWith) ||
+          (name.startsWith("protobuf-java-") && !name.startsWith("protobuf-java-util-"))
+      }
+    },
+
+    // These rules need to be consistent with udf/worker/runtime's maven-shade-plugin.
+    (assembly / assemblyShadeRules) := Seq(
+      ShadeRule.rename("com.google.protobuf.**" ->
+        "org.sparkproject.spark_udf_worker.protobuf.@1").inAll,
+      ShadeRule.rename("io.grpc.**" ->
+        "org.sparkproject.spark_udf_worker.grpc.@1").inAll,
+      ShadeRule.rename("io.perfmark.**" ->
+        "org.sparkproject.spark_udf_worker.io_perfmark.@1").inAll,
+      ShadeRule.rename("android.annotation.**" ->
+        "org.sparkproject.spark_udf_worker.android_annotation.@1").inAll,
+      ShadeRule.rename("org.codehaus.mojo.animal_sniffer.**" ->
+        "org.sparkproject.spark_udf_worker.animal_sniffer.@1").inAll,
+      ShadeRule.rename("com.google.gson.**" ->
+        "org.sparkproject.spark_udf_worker.gson.@1").inAll,
+      ShadeRule.rename("com.google.common.**" ->
+        "org.sparkproject.spark_udf_worker.guava.@1").inAll,
+      ShadeRule.rename("com.google.thirdparty.**" ->
+        "org.sparkproject.spark_udf_worker.guava.thirdparty.@1").inAll,
+      ShadeRule.rename("org.sparkproject.guava.**" ->
+        "org.sparkproject.spark_udf_worker.guava.@1").inAll,
+      ShadeRule.rename("com.google.api.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.api.@1").inAll,
+      ShadeRule.rename("com.google.apps.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.apps.@1").inAll,
+      ShadeRule.rename("com.google.cloud.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.cloud.@1").inAll,
+      ShadeRule.rename("com.google.geo.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.geo.@1").inAll,
+      ShadeRule.rename("com.google.logging.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.logging.@1").inAll,
+      ShadeRule.rename("com.google.longrunning.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.longrunning.@1").inAll,
+      ShadeRule.rename("com.google.rpc.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.rpc.@1").inAll,
+      ShadeRule.rename("com.google.shopping.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.shopping.@1").inAll,
+      ShadeRule.rename("com.google.type.**" ->
+        "org.sparkproject.spark_udf_worker.google_protos.type.@1").inAll
+    ),
+
+    (assembly / assemblyMergeStrategy) := {
+      case m if m.toLowerCase(Locale.ROOT).endsWith("manifest.mf") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).matches("meta-inf.*\\.(sf|dsa|rsa)$") =>
+        MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT)
+          .matches("meta-inf/versions/[^/]+/module-info\\.class") => MergeStrategy.discard
+      case m if m.toLowerCase(Locale.ROOT).startsWith("meta-inf/services/") =>
+        MergeStrategy.filterDistinctLines
+      case m if m.toLowerCase(Locale.ROOT).endsWith(".proto") => MergeStrategy.discard
+      case _ => MergeStrategy.first
+    }
+  )
 }
 
 object Unsafe {
@@ -1857,7 +1921,7 @@ object Unidoc {
       inAnyProject -- inProjects(OldDeps.project, repl, examples, tools, kubernetes,
         yarn, tags, streamingKafka010, sqlKafka010, connectCommon, connect, connectJdbc,
         connectClient, connectShims, protobuf, profiler, udfWorkerProto, udfWorkerCore,
-        udfWorkerGrpc),
+        udfWorkerGrpc, udfWorkerRuntime),
   )
 }
 
@@ -1891,6 +1955,7 @@ object CopyDependencies {
       val fid = (LocalProject("connect") / assembly).value
       val fidClient = (LocalProject("connect-client-jvm") / assembly).value
       val fidProtobuf = (LocalProject("protobuf") / assembly).value
+      val fidUdfWorkerRuntime = (LocalProject("udf-worker-runtime") / assembly).value
       val noProvidedSparkJars: Boolean = sys.env.getOrElse("NO_PROVIDED_SPARK_JARS", "1") == "1" ||
         sys.env.getOrElse("NO_PROVIDED_SPARK_JARS", "true")
           .toLowerCase(Locale.getDefault()) == "true"
@@ -1918,6 +1983,10 @@ object CopyDependencies {
             if (!noProvidedSparkJars) {
               Files.copy(fidProtobuf.toPath, destJar.toPath)
             }
+          } else if (jar.getName.contains("spark-udf-worker-runtime")) {
+            Files.copy(fidUdfWorkerRuntime.toPath, destJar.toPath)
+          } else if (jar.getName.contains("spark-udf-worker-")) {
+            // The shaded runtime contains proto, core, and gRPC worker classes.
           } else {
             Files.copy(jar.toPath(), destJar.toPath())
           }
