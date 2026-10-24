@@ -170,7 +170,15 @@ Data source options of XML can be set via:
   <tr>
     <td><code>timestampFormat</code></td>
     <td><code>yyyy-MM-dd'T'HH:mm:ss[.SSS][XXX]</code></td>
-    <td>Sets the string that indicates a timestamp format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to timestamp type.</td>
+    <td>Sets the string that indicates a timestamp format. Custom date formats follow the formats at <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html"> datetime pattern</a>. This applies to timestamp type.
+    With <code>spark.sql.legacy.timeParserPolicy=LEGACY</code>, XML timestamp reads first try
+    ISO-8601 timestamps carrying an offset, preserving their fractional seconds. An explicit
+    <code>timestampFormat</code> is tried next using legacy pattern semantics, the configured
+    <code>locale</code>, and <code>timeZone</code> (or the session time zone). Zone-less ISO
+    timestamps are tried last and interpreted as UTC, matching the external spark-xml connector.
+    For zone-less ISO values matched by a custom format ending in seconds (with or without a
+    fractional part), the input fraction is preserved independently of the format's fraction width.
+    This does not change <code>TIMESTAMP_NTZ</code> or nanosecond timestamp parsing.</td>
     <td>read/write</td>
   </tr>
 

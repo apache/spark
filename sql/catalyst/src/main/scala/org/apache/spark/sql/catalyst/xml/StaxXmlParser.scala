@@ -18,7 +18,9 @@ package org.apache.spark.sql.catalyst.xml
 
 import java.io.{BufferedReader, CharConversionException, FileNotFoundException, InputStream, InputStreamReader, IOException, StringReader}
 import java.nio.charset.{Charset, MalformedInputException}
-import java.text.NumberFormat
+import java.text.{NumberFormat, ParsePosition}
+import java.time.{Instant, ZoneOffset}
+import java.time.format.{DateTimeFormatter, DateTimeFormatterBuilder}
 import java.util
 import java.util.Locale
 import javax.xml.stream.{XMLEventReader, XMLStreamException}
@@ -41,11 +43,12 @@ import org.apache.spark.{SparkIllegalArgumentException, SparkUpgradeException}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{ExprUtils, GenericInternalRow, ToStringBase}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, BadRecordException, CharVarcharUtils, DateFormatter, DateTimeUtils, DropMalformedMode, FailureSafeParser, GenericArrayData, MapData, ParseMode, PartialResultArrayException, PartialResultException, PermissiveMode, TimeFormatter, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.FAST_DATE_FORMAT
 import org.apache.spark.sql.catalyst.xml.StaxXmlParser.convertStream
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
 import org.apache.spark.types.variant.{Variant, VariantBuilder}
 import org.apache.spark.types.variant.VariantBuilder.FieldEntry
@@ -63,6 +66,9 @@ class StaxXmlParser(
     options.locale,
     legacyFormat = FAST_DATE_FORMAT,
     isParsing = true)
+
+  private lazy val legacyTimeParser =
+    SQLConf.get.legacyTimeParserPolicy == LegacyBehaviorPolicy.LEGACY
 
   private lazy val timestampNTZFormatter = TimestampFormatter(
     options.timestampNTZFormatInRead,
@@ -784,7 +790,18 @@ class StaxXmlParser(
   }
 
   private def parseXmlTimestamp(value: String, options: XmlOptions): Long = {
-    timestampFormatter.parse(value)
+    if (legacyTimeParser) {
+      StaxXmlParser.parseLegacyTimestamp(
+        value,
+        options.parameters.get(XmlOptions.TIMESTAMP_FORMAT),
+        input => timestampFormatter.parseOptional(input)).getOrElse {
+        throw new SparkIllegalArgumentException(
+          errorClass = "_LEGACY_ERROR_TEMP_3260",
+          messageParameters = Map("s" -> value))
+      }
+    } else {
+      timestampFormatter.parse(value)
+    }
   }
 
   // TODO: This function unnecessarily does type dispatch. Should merge it with `castTo`.
@@ -1172,6 +1189,73 @@ class XmlTokenizer(
 }
 
 object StaxXmlParser {
+  private val legacyZonedTimestampFormatters = Seq(
+    DateTimeFormatter.ISO_OFFSET_DATE_TIME,
+    DateTimeFormatter.ISO_INSTANT)
+
+  private val legacyLocalTimestampFormatters = Seq(
+    new DateTimeFormatterBuilder()
+      .parseCaseInsensitive()
+      .append(DateTimeFormatter.ISO_LOCAL_DATE)
+      .appendLiteral(' ')
+      .append(DateTimeFormatter.ISO_LOCAL_TIME)
+      .toFormatter()
+      .withZone(ZoneOffset.UTC),
+    DateTimeFormatter.ISO_LOCAL_DATE_TIME.withZone(ZoneOffset.UTC))
+
+  private val legacySecondsSuffix = """s+(\.S+)?$""".r
+
+  private[xml] def parseLegacyTimestamp(
+      value: String,
+      customFormat: Option[String],
+      customTimestamp: String => Option[Long]): Option[Long] = {
+    def parseWithFormatter(format: DateTimeFormatter): Option[Long] = {
+      val position = new ParsePosition(0)
+      val parsed = format.parseUnresolved(value, position)
+      if (parsed != null && position.getIndex == value.length) {
+        // ISO parsing already produces proleptic-Gregorian instants; do not rebase them again.
+        Try(DateTimeUtils.instantToMicros(Instant.from(format.parse(value)))).toOption
+      } else {
+        None
+      }
+    }
+
+    def parseIsoTimestamp(formatters: Seq[DateTimeFormatter]): Option[Long] = {
+      if (value.nonEmpty && Character.isDigit(value.head)) {
+        formatters.iterator.map(parseWithFormatter)
+          .collectFirst { case Some(timestamp) => timestamp }
+      } else {
+        None
+      }
+    }
+
+    lazy val localTimestamp = parseIsoTimestamp(legacyLocalTimestampFormatters)
+
+    def parseCustomTimestamp(): Option[Long] = customFormat.flatMap { pattern =>
+      val fractionIndex = value.lastIndexOf('.')
+      val fractionalTimestamp = if (fractionIndex >= 0) {
+        for {
+          suffix <- legacySecondsSuffix.findFirstMatchIn(pattern)
+          if pattern.take(suffix.start).count(_ == '\'') % 2 == 0
+          timestamp <- localTimestamp
+          zeroFraction = Option(suffix.group(1)).map(s => "." + "0" * (s.length - 1))
+            .getOrElse("")
+          // Keep the custom calendar/timezone, but do not let its fraction width scale the digits.
+          wholeSecond <- customTimestamp(value.take(fractionIndex) + zeroFraction)
+          result <- Try(Math.addExact(
+            wholeSecond, Math.floorMod(timestamp, MICROS_PER_SECOND))).toOption
+        } yield result
+      } else {
+        None
+      }
+      fractionalTimestamp.orElse(customTimestamp(value))
+    }
+
+    parseIsoTimestamp(legacyZonedTimestampFormatters)
+      .orElse(parseCustomTimestamp())
+      .orElse(localTimestamp)
+  }
+
   /**
    * Parses a stream that contains CSV strings and turns it into an iterator of tokens.
    */
