@@ -39,6 +39,7 @@ import org.apache.spark.sql.connector.expressions.Expressions._
 import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{
+  CoalesceExec,
   ExtendedMode,
   FormattedMode,
   InputAdapter,
@@ -10897,6 +10898,8 @@ class KeyGroupedPartitioningSuite
     // by key while neither holds a key's whole group: consuming them as an aligned pair would zip
     // split i against split i and drop every match that crosses mappers. Validation has to refuse
     // the pair so that AQE keeps the full shuffle read instead.
+    // With compatibility scan coalescing enabled, the pre-shuffle pipeline instead reports no
+    // keyed layout. That must also preserve every match and never expose a keyed local read.
     val idCols = Array(Column.create("id", IntegerType), Column.create("data", StringType))
     createTable("lrt", idCols, Array(identity("id")))
     createTable("lrs1", idCols, Array.empty[Transform])
@@ -10950,9 +10953,21 @@ class KeyGroupedPartitioningSuite
       assert(shuffles.size == 3,
         s"one shared wide-side shuffle and one per narrow side:\n${plan.treeString}")
       val splitScans = shuffles
-        .flatMap(s => keyedPartitioningsOf(Seq(s.child))).filter(!_.isGrouped)
+        .flatMap(s => collectScans(s.child))
+        .flatMap(s => keyedPartitioningsOf(Seq(s))).filter(!_.isGrouped)
       assert(splitScans.nonEmpty,
-        s"test setup: a shuffled scan reports a key across splits:\n${plan.treeString}")
+        s"test setup: the underlying scan reports a key across splits:\n${plan.treeString}")
+      val preShuffleLayouts = shuffles.flatMap(s => keyedPartitioningsOf(Seq(s.child)))
+      if (conf.getConf(V2_BUCKETING_COALESCE_SCAN_PARTITIONS_ENABLED)) {
+        assert(preShuffleLayouts.isEmpty, "coalescing must withdraw the keyed input claim")
+        val coalesces = shuffles.flatMap(s => collect(s.child) { case c: CoalesceExec => c })
+        assert(coalesces.nonEmpty)
+        assert(coalesces.forall(c => c.numPartitions == 2 &&
+          c.outputPartitioning == physical.UnknownPartitioning(2)))
+      } else {
+        assert(preShuffleLayouts.exists(!_.isGrouped),
+          "without scan coalescing, the original split layout must remain exposed")
+      }
       assert(collect(plan) { case j: BroadcastHashJoinExec => j }.size == 2,
         s"test setup: both lower joins broadcast at runtime:\n${plan.treeString}")
 
