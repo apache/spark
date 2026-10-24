@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, Or, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, Or, PredicateHelper, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
@@ -64,7 +64,7 @@ import org.apache.spark.util.ArrayImplicits._
  * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
  * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
-object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
+object NormalizeFloatingNumbers extends Rule[LogicalPlan] with PredicateHelper {
 
   def apply(plan: LogicalPlan): LogicalPlan =
     plan.transformWithPruning(_.containsAnyPattern(WINDOW, JOIN)) {
@@ -86,7 +86,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
         val newConditions = newLeftJoinKeys.zip(newRightJoinKeys).map {
           case (l, r) => EqualTo(l, r)
         } ++ condition
-        j.copy(condition = Some(newConditions.reduce(And)))
+        j.copy(condition = Some(buildBalancedPredicate(newConditions, And)))
 
       // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
       case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
