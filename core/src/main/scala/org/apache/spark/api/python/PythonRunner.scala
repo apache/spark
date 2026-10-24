@@ -378,7 +378,8 @@ private[spark] object BasePythonRunner extends Logging {
       // An interrupt of this thread that arrives during the wait (e.g. a task kill) does not stop
       // it and is not passed on (see stopAndAwaitExit): the kill is already recorded in the
       // TaskContext, and the flag would make the blocking channel and lock operations of the
-      // completion listeners that run next fail and skip cleanup.
+      // completion listeners that run next fail and skip cleanup (see also
+      // TaskContextImpl.awaitListenerInvocationHandover, which passes interrupts on).
       val intervalNs = TimeUnit.MILLISECONDS.toNanos(warnIntervalMs)
       val startNs = System.nanoTime()
       var nextWarningNs = startNs + intervalNs

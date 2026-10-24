@@ -1372,68 +1372,81 @@ class StreamingShuffleSuite
     }
   }
 
-  // Demonstrates why background threads must not call context.markTaskFailed() directly:
-  // doing so can cause the task thread's markTaskCompleted() to silently skip completion
-  // listeners. In production, cleanupResources() is a completion listener, so skipping it
-  // leaks threads. The reader avoids this by routing background errors through a
-  // CompletableFuture so markTaskFailed/markTaskCompleted are both called from the task thread.
+  // Shows why background threads should not call context.markTaskFailed() directly: the
+  // failure listeners then run on that thread, and the task thread's markTaskCompleted() blocks
+  // until they finish before it runs the completion listeners. In production, cleanupResources()
+  // is a completion listener, so it waits for whatever the background thread's failure listeners
+  // wait for. The reader avoids this by routing background errors through an ErrorNotifier so
+  // that markTaskFailed/markTaskCompleted are both called from the task thread.
   test("background markTaskFailed races with task thread markTaskCompleted") {
     val readerContext = createTaskContext(sparkConf, partitionId = 0)
     TaskContext.setTaskContext(readerContext)
 
-    // Latches to force the exact interleaving that triggers the race.
+    // Latches to force the interleaving.
     val failureListenerEntered = new CountDownLatch(1)
     val failureListenerProceed = new CountDownLatch(1)
 
-    @volatile var completionListenerRan = false
+    @volatile var completionListenerThread: Thread = null
 
-    // Add a failure listener that blocks, holding the listenerInvocationThread guard.
+    // Add a failure listener that blocks, holding the listener invocation.
     readerContext.addTaskFailureListener(new org.apache.spark.util.TaskFailureListener {
       override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
         failureListenerEntered.countDown()
-        failureListenerProceed.await()
+        failureListenerProceed.await(1, TimeUnit.MINUTES)
       }
     })
 
     // Add a completion listener -- stands in for cleanupResources() in production.
     readerContext.addTaskCompletionListener[Unit] { _ =>
-      completionListenerRan = true
+      completionListenerThread = Thread.currentThread()
     }
 
     val error = new RuntimeException("background discovery failure")
 
-    // Background thread calls markTaskFailed -> enters invokeListeners -> acquires
-    // listenerInvocationThread guard -> blocks in the failure listener above.
+    // Background thread calls markTaskFailed -> runs the failure listeners -> holds the listener
+    // invocation while it blocks in the failure listener above.
     val bgThread = new Thread(() => {
       TaskContext.setTaskContext(readerContext)
       readerContext.markTaskFailed(error)
     })
+    bgThread.setDaemon(true)
     bgThread.start()
 
-    // Wait for the failure listener to start (background thread now holds the guard).
-    failureListenerEntered.await()
+    // Wait for the failure listener to start (background thread now holds the invocation).
+    assert(failureListenerEntered.await(1, TimeUnit.MINUTES))
 
-    // Task thread calls markTaskCompleted while the guard is held.
-    // invokeListeners sees listenerInvocationThread is set -> returns immediately,
-    // permanently skipping the completion listener.
-    readerContext.markTaskCompleted(Some(error))
+    // Stands in for the task thread: it calls markTaskCompleted while the invocation is held,
+    // and waits until the background thread hands the invocation over to it.
+    val taskThread = new Thread(() => {
+      TaskContext.setTaskContext(readerContext)
+      readerContext.markTaskCompleted(Some(error))
+    })
+    taskThread.setDaemon(true)
+    taskThread.start()
+    try {
+      eventually(Timeout(1.minute)) {
+        assert(taskThread.getState == Thread.State.TIMED_WAITING)
+      }
+      // The completion listener does not run while the failure listener blocks.
+      assert(completionListenerThread == null)
+    } finally {
+      // Release the failure listener, so that the background thread hands the invocation over.
+      failureListenerProceed.countDown()
+    }
+    taskThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!taskThread.isAlive)
+    bgThread.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!bgThread.isAlive)
 
-    // Release the failure listener so bgThread can finish.
-    failureListenerProceed.countDown()
-    bgThread.join()
-
-    // This documents the race: the completion listener was skipped. The reader avoids it by
-    // never calling markTaskFailed from a background thread.
-    assert(!completionListenerRan,
-      "Expected completion listener to be skipped due to the race condition. " +
-      "If this starts passing, TaskContextImpl.invokeListeners may have been fixed " +
-      "and this test can be updated.")
+    // The completion listener ran on the thread that called markTaskCompleted.
+    assert(completionListenerThread eq taskThread)
 
     TaskContext.unset()
   }
 
-  // With the CompletableFuture approach, the reader's cleanupResources runs because
-  // markTaskFailed is called from the task thread (no race with the completion listener).
+  // With the ErrorNotifier, the reader's cleanupResources runs on the task thread because
+  // markTaskFailed is called from the task thread too, so task completion does not wait for a
+  // background thread running the failure listeners.
   test("reader resources are cleaned up when client creation fails") {
     class FailingClientReader[K, C](
         handle: ShuffleHandle,
@@ -1472,8 +1485,8 @@ class StreamingShuffleSuite
 
       // Simulate the task framework (runTaskWithListeners): markTaskFailed then
       // markTaskCompleted, both on the task thread. With the fix, the background
-      // thread does NOT call markTaskFailed, so there's no contention on the
-      // listenerInvocationThread guard, and completion listeners run normally.
+      // thread does NOT call markTaskFailed, so no other thread holds the listener
+      // invocation, and the completion listeners run without waiting.
       readerContext.markTaskFailed(error)
       readerContext.markTaskCompleted(Some(error))
 
@@ -1485,9 +1498,9 @@ class StreamingShuffleSuite
   // On the writer side: when a background Netty thread records an error via
   // errorNotifier.markError (instead of calling context.markTaskFailed directly), the
   // writer's write() method surfaces the error on the task thread. Because markTaskFailed
-  // and markTaskCompleted are both called from the task thread, there is no contention on
-  // the listenerInvocationThread guard in TaskContextImpl, and the completion listener
-  // (cleanupResources) runs normally.
+  // and markTaskCompleted are both called from the task thread, no other thread holds the
+  // listener invocation in TaskContextImpl, and the completion listener (cleanupResources)
+  // runs without waiting.
   test("writer resources are cleaned up when server handler " +
     "receive fails via errorNotifier") {
     withSpark(new SparkContext("local", "StreamingShuffleSuite", sparkConf)) { sc =>
@@ -1546,9 +1559,9 @@ class StreamingShuffleSuite
 
       // Simulate the task framework (runTaskWithListeners): markTaskFailed then
       // markTaskCompleted, both on the task thread.  With the ErrorNotifier fix, the
-      // background Netty thread does NOT call markTaskFailed, so there is no contention
-      // on the listenerInvocationThread guard, and the completion listener
-      // (cleanupResources) runs normally.
+      // background Netty thread does NOT call markTaskFailed, so no other thread holds
+      // the listener invocation, and the completion listener (cleanupResources) runs
+      // without waiting.
       writerContext.markTaskFailed(writeError)
       writerContext.markTaskCompleted(Some(writeError))
 
