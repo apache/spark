@@ -187,8 +187,9 @@ class AbstractTranspiler(object):
         A plain :class:`Column` return is labeled with the ``param_categories``
         combo the caller passed in. A variety that works out its own input types
         returns ``(Column, list[str])`` instead -- one category per public param
-        (``"numeric"`` / ``"string"`` / ``"bool"`` / ``"binary"``) describing the
-        option it built, which the caller uses in place of the combo.
+        (``"numeric"`` / ``"string"`` / ``"bool"`` / ``"binary"`` /
+        ``"timestamp"`` / ``"map"`` / ``"array"``) describing the option it
+        built, which the caller uses in place of the combo.
 
         Decline with plain ``None``, not a tuple; a malformed return is refused
         so the UDF falls back to interpreted Python rather than breaking at
