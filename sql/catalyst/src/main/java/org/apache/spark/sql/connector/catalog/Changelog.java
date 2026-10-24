@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
 import org.apache.spark.sql.connector.read.ScanBuilder;
-import org.apache.spark.sql.connector.read.ScanContext;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -178,22 +177,6 @@ public interface Changelog {
    * @param options read options (case-insensitive string map)
    */
   ScanBuilder newScanBuilder(CaseInsensitiveStringMap options);
-
-  /**
-   * Returns a {@link ScanBuilder} for reading the change data with planning context.
-   *
-   * <p>The context describes the plan when Spark creates the scan builder. The default
-   * implementation delegates to {@link #newScanBuilder(CaseInsensitiveStringMap)}. Calls to the
-   * options-only overload do not provide this context.
-   *
-   * @param context the planning context when creating this scan builder
-   * @param options the options for reading, which is an immutable case-insensitive
-   *                string-to-string map
-   * @since 4.4.0
-   */
-  default ScanBuilder newScanBuilder(ScanContext context, CaseInsensitiveStringMap options) {
-    return newScanBuilder(options);
-  }
 
   /**
    * Returns the columns that uniquely identify a row, used for carry-over removal, update

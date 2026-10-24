@@ -21,11 +21,11 @@ import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.{GroupBasedRowLevelOperation, PhysicalOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, ReplaceData, Subquery}
+import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, ReplaceData}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.REPLACE_DATA
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Filter}
-import org.apache.spark.sql.connector.read.{ScanBuilder, ScanContext}
+import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.connector.PartitionPredicateField
@@ -49,8 +49,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
       assert(cond.deterministic, "row-level operation conditions must be deterministic")
 
       val table = relation.table.asRowLevelOperationTable
-      val context = new ScanContext(plan.isInstanceOf[Subquery])
-      val scanBuilder = table.newScanBuilder(context, relation.options)
+      val scanBuilder = table.newScanBuilder(relation.options)
       val partitionPredicateFields = PushDownUtils.getPartitionPredicateSchema(relation)
 
       val (pushedFilters, evaluatedFilters, postScanFilters) =

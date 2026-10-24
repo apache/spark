@@ -35,9 +35,8 @@ public class ScanContext {
   /**
    * Returns whether Spark is constructing this scan within a subquery.
    *
-   * <p>This describes the planning scope when the scan builder is created. Subsequent optimizer
-   * rewrites may move or reuse the scan in another scope. It does not guarantee the final query
-   * shape or that statistics will be recomputed.
+   * <p>The context describes the planning scope when the scan builder is created. Subsequent
+   * optimizer rewrites may move or reuse the scan in another scope.
    *
    * <p>Data sources can use this context to adjust planning work, such as statistics computation.
    * It must not change the rows returned by the scan.

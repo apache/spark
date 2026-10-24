@@ -22,7 +22,7 @@ import java.util
 import org.apache.spark.sql.connector.catalog.{Column, SupportsRead, SupportsRowLevelOperations, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.expressions.Transform
-import org.apache.spark.sql.connector.read.{ScanBuilder, ScanContext}
+import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
@@ -53,12 +53,6 @@ private[sql] case class RowLevelOperationTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     operation.newScanBuilder(options)
-  }
-
-  override def newScanBuilder(
-      context: ScanContext,
-      options: CaseInsensitiveStringMap): ScanBuilder = {
-    operation.newScanBuilder(context, options)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
