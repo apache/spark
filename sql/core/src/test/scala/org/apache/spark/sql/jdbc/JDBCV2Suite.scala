@@ -1487,6 +1487,12 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAnswer(df18, Seq(Row("abc\\def@gmail.com")))
   }
 
+  test("SPARK-57500: startsWith with a column pattern is evaluated in Spark") {
+    val df = spark.table("h2.test.address").filter($"email".startsWith($"email"))
+    checkFiltersRemoved(df, false)
+    checkAnswer(df, spark.table("h2.test.address"))
+  }
+
   test("scan with filter push-down with ansi mode") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
