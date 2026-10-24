@@ -253,6 +253,60 @@ start later.
   </tr>
 </table>
 
+## Rewriting sliding window sums
+
+For each output row, a bounded `ROWS` window re-aggregates every row currently inside the frame.
+A query that defines several nested sliding `sum` windows over the same `(PARTITION BY,
+ORDER BY)` key therefore pays roughly the sum of the frame widths in aggregate work per row.
+
+When enabled, the optimizer can rewrite a group of qualifying sliding `sum` expressions in one
+`Window` operator as a running `sum` over `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
+plus `lag` differences, so each frame is evaluated in constant time while keeping the same
+partition and order (no extra shuffle or sort). The rewrite is disabled by default; turn it on
+only after validating it on your workload.
+
+A window expression qualifies when it is a non-distinct `sum` over a byte, short, int, or long
+column, uses `ROWS BETWEEN n PRECEDING AND CURRENT ROW` with a literal `n`, and shares the same
+partition and order specification as the other members of the group. The window operator must have
+a non-empty `ORDER BY`. Floating-point and decimal sums are never rewritten. The rewrite applies
+only when `spark.sql.ansi.enabled` is `false`, because ANSI addition would throw on prefix
+magnitudes that bounded frames never reach. Spark also skips groups whose total qualifying frame
+width is below an internal cost threshold, so very small groups keep the original plan.
+
+For example, both sliding sums below can be rewritten when the configuration is enabled and the
+session is non-ANSI. Their combined frame width clears the internal cost threshold (frame
+widths 11 and 13, totaling 24), so the example is observable in `EXPLAIN` output:
+
+```sql
+SELECT
+  sum(v) OVER (PARTITION BY k ORDER BY o ROWS BETWEEN 10 PRECEDING AND CURRENT ROW),
+  sum(v) OVER (PARTITION BY k ORDER BY o ROWS BETWEEN 12 PRECEDING AND CURRENT ROW)
+FROM t
+```
+
+Compare `EXPLAIN` output with the flag on and off: a rewritten group shows a running-prefix
+window feeding the original window node. Results for qualifying expressions should match the
+legacy frame fold bit-for-bit, including wrapping overflow on integral sums.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.optimizer.windowPrefixRewrite.enabled</code></td>
+    <td>false</td>
+    <td>
+      When true, rewrite groups of sliding <code>ROWS BETWEEN n PRECEDING AND CURRENT ROW</code>
+      <code>sum</code> window frames over integer columns or expressions as one running
+      unbounded-preceding <code>sum</code> plus lag differences, when the total frame width of
+      the group is large enough (an internal cost threshold). Only plain <code>sum</code>
+      qualifies: <code>sum(DISTINCT ...)</code>, <code>sum(...) FILTER (WHERE ...)</code>, and
+      <code>try_sum</code> keep their original frames, as do floating-point and decimal sums.
+      The rewrite requires sums that wrap on overflow (Spark's default integer-overflow
+      behavior); the rewritten results are bit-identical to the original frames.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+</table>
+
 ## Optimizing the Join Strategy
 
 ### Automatically Broadcasting Joins
