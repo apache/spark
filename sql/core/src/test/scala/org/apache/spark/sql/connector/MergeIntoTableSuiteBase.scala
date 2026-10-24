@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{ReplaceData, WriteDelta}
 import org.apache.spark.sql.connector.catalog.{Aborted, Column, ColumnDefaultValue, Committed, InMemoryBaseTable, InMemoryTable, TableInfo}
 import org.apache.spark.sql.connector.expressions.{GeneralScalarExpression, LiteralValue}
 import org.apache.spark.sql.connector.write.MergeSummary
-import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.sql.execution.{SparkPlan, UnionExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, InsertOnlyMergeExec, MergeRowsExec}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
@@ -3038,6 +3038,41 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 100, "hr") :: Row(2, 200, "software") :: Row(3, 300, "hr") :: Nil)
+    }
+  }
+
+  test("SPARK-53618: merge with a never matching condition avoids a nested loop join") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq((4, 400, "hr"), (5, 500, "software")).toDF("pk", "salary", "dep")
+        .createOrReplaceTempView("source")
+
+      // a replaceWhere-style merge: the ON condition never matches, so the merge is
+      // rewritten to a full outer join with a false condition, which in turn becomes a
+      // union of both sides padded with nulls
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON 1 = 0
+             |WHEN NOT MATCHED THEN
+             | INSERT *
+             |WHEN NOT MATCHED BY SOURCE AND t.dep = 'hr' THEN
+             | DELETE
+             |""".stripMargin)
+      }
+
+      assert(collect(executedPlan) { case j: BroadcastNestedLoopJoinExec => j }.isEmpty)
+      assert(collect(executedPlan) { case u: UnionExec => u }.size == 1)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(2, 200, "software") :: Row(4, 400, "hr") :: Row(5, 500, "software") :: Nil)
     }
   }
 
