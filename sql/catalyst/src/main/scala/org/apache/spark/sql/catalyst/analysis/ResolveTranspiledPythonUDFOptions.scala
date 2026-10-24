@@ -92,6 +92,8 @@ object ResolveTranspiledPythonUDFOptions extends Rule[LogicalPlan] {
   //   collation (e.g. UTF8_LCASE) Spark's `=`/`<`/`concat` follow collation
   //   rules while Python compares codepoints, so `'abc' == 'ABC'` would return
   //   true where Python returns False.
+  // "map"/"array" need no collation gate: the transpiler refuses to lower any
+  // comparison of them, so no option observes an element type's collation.
   private def optionMatchesTypes(categories: Seq[String], argTypes: Seq[DataType]): Boolean = {
     if (categories.isEmpty) {
       true

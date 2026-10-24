@@ -2662,6 +2662,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("Mapping[str, str]", "map"),
             ("typing.Dict[str, str]", "map"),
             ('"dict"', "map"),
+            ('"dict[str, str]"', "map"),
+            ('"typing.Dict[str, str]"', "map"),
             ("list", "array"),
             ("List", "array"),
             ("Sequence", "array"),
@@ -2669,6 +2671,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             ("Sequence[int]", "array"),
             ("typing.List[int]", "array"),
             ('"list"', "array"),
+            ('"list[int]"', "array"),
             ("set", None),
             ("torch.float", None),
         ]:
@@ -2744,21 +2747,70 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def array_eq_none(a: list):
             return a == None  # noqa: E711
 
+        def none_eq_map(a: dict):
+            return None == a  # noqa: E711
+
         maps = "a map<string,string>, b map<string,string>"
         arrays = "a array<string>, b array<string>"
         with self.sql_conf(_TRANSPILE_ON):
-            for func, schema, rows, expected in (
-                (map_eq, maps, [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})], [True, False]),
-                (array_eq, arrays, [(["x"], ["x"]), (["x"], ["y"])], [True, False]),
-                (array_lt, arrays, [(["x"], ["y"]), (["y"], ["x"])], [True, False]),
-                (map_eq_none, "a map<string,string>", [({"k": "v"},), (None,)], [False, True]),
-                (map_ne_none, "a map<string,string>", [({"k": "v"},), (None,)], [True, False]),
-                (array_eq_none, "a array<string>", [(["x"],), (None,)], [False, True]),
+            for func, schema, rows, expected, needle in (
+                (
+                    map_eq,
+                    maps,
+                    [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})],
+                    [True, False],
+                    "map",
+                ),
+                (array_eq, arrays, [(["x"], ["x"]), (["x"], ["y"])], [True, False], "array"),
+                (array_lt, arrays, [(["x"], ["y"]), (["y"], ["x"])], [True, False], "array"),
+                (
+                    map_eq_none,
+                    "a map<string,string>",
+                    [({"k": "v"},), (None,)],
+                    [False, True],
+                    "map",
+                ),
+                (
+                    map_ne_none,
+                    "a map<string,string>",
+                    [({"k": "v"},), (None,)],
+                    [True, False],
+                    "map",
+                ),
+                (array_eq_none, "a array<string>", [(["x"],), (None,)], [False, True], "array"),
+                (
+                    none_eq_map,
+                    "a map<string,string>",
+                    [(None,), ({"k": "v"},)],
+                    [True, False],
+                    "map",
+                ),
             ):
                 with self.subTest(func=func.__name__):
-                    u, _ = self._fallback_reason(func, BooleanType())
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    # Assert the REASON names the map/array guard, so a fallback
+                    # for some new and unrelated cause fails here loudly.
+                    self.assertIn(needle, reasons)
                     df = self.spark.createDataFrame(rows, schema)
                     self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+    def test_udf_transpile_map_and_array_is_none_lowers(self):
+        # `is None`/`is not None` lower to isNull/isNotNull: the one lowered shape
+        # that references the map/array column itself, both analysis-valid and
+        # Python-faithful, so these must stay lowered (SPARK-55219).
+        def map_is_none(a: dict):
+            return a is None
+
+        def array_is_not_none(a: list):
+            return a is not None
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, expected in (
+                (map_is_none, "a map<string,string>", [({"k": "v"},), (None,)], [False, True]),
+                (array_is_not_none, "a array<string>", [(["x"],), (None,)], [True, False]),
+            ):
+                with self.subTest(func=func.__name__):
+                    self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
 
 
 if __name__ == "__main__":

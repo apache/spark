@@ -30,8 +30,9 @@ Python's ``+`` and ``*`` are overloaded for text (concat / repeat), so an
 untyped parameter is transpiled into one option per input-type category
 (numeric and string) and the JVM picks the one matching the bound column
 types -- falling back to interpreted Python when none fit. Annotating the
-UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
-keeps the option matrix small; prefer doing so. To bound plan growth,
+UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category --
+numeric, string, bool, binary, or map/array for dict/list annotations --
+and keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
@@ -469,7 +470,8 @@ class CatalystTranspiler(AbstractTranspiler):
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
-        """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
+        """Infer the category (``"numeric"``, ``"string"``, ``"bool"``,
+        ``"binary"``, ``"map"``, ``"array"``) for ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
         Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
@@ -969,7 +971,13 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     ):
         name = annotation.attr  # typing.Dict -> Dict, but not torch.float
     elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        name = annotation.value  # stringized annotation, e.g. def f(a: "int")
+        # Stringized annotation (def f(a: "int")); parse it so quoted subscripted
+        # and typing.-qualified forms resolve like their unquoted spellings.
+        # Anything unparseable or unrecognized falls out as None (untyped).
+        try:
+            return _annotation_category(ast.parse(annotation.value, mode="eval").body)
+        except (SyntaxError, ValueError):
+            return None
     # str -> "string", int/float -> "numeric", bool -> "bool", bytes -> "binary"
     # (matching the constant handling in ``_category``), dict/Dict/Mapping ->
     # "map", list/List/Sequence -> "array". Anything unrecognised returns None so
@@ -1252,7 +1260,8 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
-    list of per-option input-type categories (``"numeric"`` / ``"string"`` per
+    list of per-option input-type categories (one of ``"numeric"`` /
+    ``"string"`` / ``"bool"`` / ``"binary"`` / ``"map"`` / ``"array"`` per
     public param) -- the JVM picks the option whose categories match the bound
     column types, or falls back to the Python UDF when none match.
     list of the public parameter names Python forbids calling by keyword
