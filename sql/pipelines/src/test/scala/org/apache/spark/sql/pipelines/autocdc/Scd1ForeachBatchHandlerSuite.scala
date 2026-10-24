@@ -77,6 +77,17 @@ class Scd1ForeachBatchHandlerSuite
     targetTableIdentifier = defaultTargetTableIdentifier
   )
 
+  /** An ignore-null selection of `columnNames`. */
+  private def ignoreNullsIn(columnNames: String*): Option[ColumnSelection] =
+    Some(ColumnSelection.IncludeColumns(columnNames.map(UnqualifiedColumnName(_))))
+
+  /** An ignore-null selection of every column except `columnNames`. */
+  private def ignoreNullsExcept(columnNames: String*): Option[ColumnSelection] =
+    Some(ColumnSelection.ExcludeColumns(columnNames.map(UnqualifiedColumnName(_))))
+
+  private def versionMap(entries: (Seq[String], Long)*): Map[String, Long] =
+    entries.map { case (path, sequence) => Scd1VersionMap.serializeKey(path) -> sequence }.toMap
+
   // ===========================================================================================
   // Microbatch validation tests
   // ===========================================================================================
@@ -107,7 +118,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L)))
+    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L, null)))
   }
 
   test(
@@ -139,7 +150,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L)))
+    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L, null)))
   }
 
   test(
@@ -260,7 +271,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L)))
+    checkAnswer(resultTargetTable, Row(1, "old", Row(null, 10L, null)))
   }
 
   // ===========================================================================================
@@ -283,8 +294,8 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultAuxTable, Row(1, Row(10L, null)))
-    checkAnswer(resultTargetTable, Row(2, "fresh", Row(null, 20L)))
+    checkAnswer(resultAuxTable, Row(1, Row(10L, null, null)))
+    checkAnswer(resultTargetTable, Row(2, "fresh", Row(null, 20L, null)))
   }
 
   test(
@@ -301,7 +312,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultAuxTable, Row(1, Row(20L, null)))
+    checkAnswer(resultAuxTable, Row(1, Row(20L, null, null)))
     assert(resultTargetTable.collect().isEmpty)
   }
 
@@ -321,7 +332,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultAuxTable.collect().isEmpty)
-    checkAnswer(resultTargetTable, Row(1, "newer", Row(null, 20L)))
+    checkAnswer(resultTargetTable, Row(1, "newer", Row(null, 20L, null)))
   }
 
   test(
@@ -374,7 +385,7 @@ class Scd1ForeachBatchHandlerSuite
     excludeExec.execute(microbatchOf(sourceSchema)(Row(1, null, 2L, true)), batchId = 3L)
 
     val targetTableAfterBatch4 = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(targetTableAfterBatch4, Row(1, "dave", Row(null, 4L)))
+    checkAnswer(targetTableAfterBatch4, Row(1, "dave", Row(null, 4L, null)))
 
     // Batch 5: newer delete (seq=5) wipes the row from the target.
     excludeExec.execute(microbatchOf(sourceSchema)(Row(1, null, 5L, true)), batchId = 4L)
@@ -385,7 +396,7 @@ class Scd1ForeachBatchHandlerSuite
     val auxTableAfterBatch6 = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val targetTableAfterBatch6 = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(targetTableAfterBatch6.collect().isEmpty)
-    checkAnswer(auxTableAfterBatch6, Row(1, Row(5L, null)))
+    checkAnswer(auxTableAfterBatch6, Row(1, Row(5L, null, null)))
   }
 
   test(
@@ -398,7 +409,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L)))
+    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L, null)))
     assert(resultAuxTable.collect().isEmpty)
   }
 
@@ -417,7 +428,7 @@ class Scd1ForeachBatchHandlerSuite
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
     assert(resultTargetTable.collect().isEmpty)
-    checkAnswer(resultAuxTable, Row(99, Row(1L, null)))
+    checkAnswer(resultAuxTable, Row(99, Row(1L, null, null)))
   }
 
   test(
@@ -431,7 +442,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L)))
+    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L, null)))
     assert(resultAuxTable.collect().isEmpty)
   }
 
@@ -449,8 +460,8 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L)))
-    checkAnswer(resultAuxTable, Row(1, Row(2L, null)))
+    checkAnswer(resultTargetTable, Row(1, "alice", Row(null, 5L, null)))
+    checkAnswer(resultAuxTable, Row(1, Row(2L, null, null)))
   }
 
   test(
@@ -473,7 +484,7 @@ class Scd1ForeachBatchHandlerSuite
 
     val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
     val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 3L)))
+    checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 3L, null)))
     assert(resultAuxTable.collect().isEmpty)
   }
 
@@ -536,9 +547,9 @@ class Scd1ForeachBatchHandlerSuite
     checkAnswer(
       resultTargetTable.orderBy("country", "city"),
       Seq(
-        Row("UK", "London", 9000000L, Row(null, 1L)),
-        Row("US", "Los Angeles", 4000000L, Row(null, 1L)),
-        Row("US", "New York", 8000000L, Row(null, 1L))
+        Row("UK", "London", 9000000L, Row(null, 1L, null)),
+        Row("US", "Los Angeles", 4000000L, Row(null, 1L, null)),
+        Row("US", "New York", 8000000L, Row(null, 1L, null))
       )
     )
     assert(resultAuxTable.collect().isEmpty)
@@ -560,11 +571,348 @@ class Scd1ForeachBatchHandlerSuite
     checkAnswer(
       resultTargetTable.orderBy("id"),
       Seq(
-        Row(1, "alice-updated", Row(null, 2L)),
-        Row(2, "bob", Row(null, 1L))
+        Row(1, "alice-updated", Row(null, 2L, null)),
+        Row(2, "bob", Row(null, 1L, null))
       )
     )
     assert(resultAuxTable.collect().isEmpty)
+  }
+
+  // ===========================================================================================
+  // Ignore-null selection change tests
+  // ===========================================================================================
+
+  private val selectionChangeSourceSchema = new StructType()
+    .add("id", IntegerType)
+    .add("a", StringType)
+    .add("b", StringType)
+    .add("seq", LongType)
+
+  private val selectionChangeTargetSchema = new StructType()
+    .add("id", IntegerType)
+    .add("a", StringType)
+    .add("b", StringType)
+    .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
+
+  /**
+   * Executes a microbatch of `rows` with a handler whose flow has `ignoreNullSelection`, and
+   * stores every column except `seq`.
+   */
+  private def executeBatch(
+      ignoreNullSelection: Option[ColumnSelection],
+      batchId: Long,
+      microbatchSchema: StructType = selectionChangeSourceSchema)(rows: Row*): Unit = {
+    val handler = Scd1ForeachBatchHandler(
+      batchProcessor = Scd1BatchProcessor(
+        changeArgs = ChangeArgs(
+          keys = Seq(UnqualifiedColumnName("id")),
+          sequencing = F.col("seq"),
+          storedAsScdType = ScdType.Type1,
+          columnSelection = Some(ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("seq")))),
+          ignoreNullSelection = ignoreNullSelection
+        ),
+        resolvedSequencingType = LongType
+      ),
+      auxiliaryTableIdentifier = defaultAuxTableIdentifier,
+      targetTableIdentifier = defaultTargetTableIdentifier
+    )
+    handler.execute(microbatchOf(microbatchSchema)(rows: _*), batchId = batchId)
+  }
+
+  test(
+    "Scd1ForeachBatchHandler keeps a column's stored authorship after it leaves the ignore-null " +
+    "selection"
+  ) {
+    createAuxTable()
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, selectionChangeTargetSchema)
+
+    executeBatch(ignoreNullsIn("a", "b"), batchId = 0L)(Row(1, "a1", "b1", 10L))
+    // b is selected, so its null is ignored, and b stays authored at 10 while the row is at 30.
+    executeBatch(ignoreNullsIn("a", "b"), batchId = 1L)(Row(1, "a2", null, 30L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a2", "b1", Row(null, 30L, versionMap(Seq("a") -> 30L, Seq("b") -> 10L))))
+
+    // A selection change applies only to later events, so b stays authored at 10 after it leaves
+    // the selection, and a late upsert at 20 overwrites b even though the row is at 30.
+    executeBatch(ignoreNullsIn("a"), batchId = 2L)(Row(1, "late-a", "late-b", 20L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a2", "late-b", Row(null, 30L, versionMap(Seq("a") -> 30L, Seq("b") -> 20L))))
+
+    // Outside the selection, b's null is authored.
+    executeBatch(ignoreNullsIn("a"), batchId = 3L)(Row(1, "a3", null, 40L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a3", null, Row(null, 40L, versionMap(Seq("a") -> 40L, Seq("b") -> 40L))))
+  }
+
+  test(
+    "Scd1ForeachBatchHandler reconciles row by row while ignore-null is off and resumes from " +
+    "stored version maps once it is back on"
+  ) {
+    createAuxTable()
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, selectionChangeTargetSchema)
+
+    executeBatch(ignoreNullsIn("b"), batchId = 0L)(
+      Row(1, "a1", "b1", 10L),
+      Row(2, "a1", "b1", 10L))
+    // b is selected, so key 1's b stays authored at 10 while the row is at 30.
+    executeBatch(ignoreNullsIn("b"), batchId = 1L)(Row(1, "a2", null, 30L))
+
+    // With ignore-null off, an upsert older than the row's upsert sequence loses entirely, and a
+    // newer one replaces the row, nulls and CDC metadata included. Updated and inserted rows have
+    // no version map, and untouched rows keep theirs.
+    executeBatch(None, batchId = 2L)(
+      Row(1, "late-a", "late-b", 20L),
+      Row(2, "a2", null, 40L),
+      Row(3, "a1", "b1", 40L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Seq(
+        Row(1, "a2", "b1", Row(null, 30L, versionMap(Seq("a") -> 30L, Seq("b") -> 10L))),
+        Row(2, "a2", null, Row(null, 40L, null)),
+        Row(3, "a1", "b1", Row(null, 40L, null))))
+
+    // With ignore-null back on, key 1 resumes from the version map it kept, so the late upsert
+    // overwrites b. A row without a version map counts as authored entirely at its upsert
+    // sequence, so key 3's late upsert loses.
+    executeBatch(ignoreNullsIn("b"), batchId = 3L)(
+      Row(1, "late-a", "late-b", 20L),
+      Row(3, "late-a", "late-b", 20L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Seq(
+        Row(1, "a2", "late-b", Row(null, 30L, versionMap(Seq("a") -> 30L, Seq("b") -> 20L))),
+        Row(2, "a2", null, Row(null, 40L, null)),
+        Row(3, "a1", "b1", Row(null, 40L, null))))
+
+    // Key 3's next update writes a version map, in which its ignored null b keeps the row's
+    // earlier upsert sequence.
+    executeBatch(ignoreNullsIn("b"), batchId = 4L)(Row(3, "a4", null, 50L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Seq(
+        Row(1, "a2", "late-b", Row(null, 30L, versionMap(Seq("a") -> 30L, Seq("b") -> 20L))),
+        Row(2, "a2", null, Row(null, 40L, null)),
+        Row(3, "a4", "b1", Row(null, 50L, versionMap(Seq("a") -> 50L, Seq("b") -> 40L)))))
+  }
+
+  test(
+    "Scd1ForeachBatchHandler keeps per-leaf authorship when the ignore-null exclude list names " +
+    "every column"
+  ) {
+    createAuxTable()
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, selectionChangeTargetSchema)
+
+    executeBatch(ignoreNullsIn("b"), batchId = 0L)(Row(1, "a1", "b1", 10L))
+    // b is selected, so b stays authored at 10 while the row is at 30.
+    executeBatch(ignoreNullsIn("b"), batchId = 1L)(Row(1, "a2", null, 30L))
+
+    // Selecting no columns differs from turning ignore-null off: the stored version map still
+    // applies, so the late upsert overwrites b.
+    executeBatch(ignoreNullsExcept("a", "b"), batchId = 2L)(Row(1, "late-a", "late-b", 20L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a2", "late-b", Row(null, 30L, versionMap(Seq("a") -> 30L, Seq("b") -> 20L))))
+
+    // Nulls are authored, and the row keeps a version map.
+    executeBatch(ignoreNullsExcept("a", "b"), batchId = 3L)(Row(1, "a3", null, 40L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a3", null, Row(null, 40L, versionMap(Seq("a") -> 40L, Seq("b") -> 40L))))
+  }
+
+  test(
+    "Scd1ForeachBatchHandler reconciles a struct that leaves the ignore-null selection whole, as " +
+    "authored by its latest leaf"
+  ) {
+    val detailsType = new StructType().add("first", StringType).add("second", StringType)
+    val structSourceSchema = new StructType()
+      .add("id", IntegerType)
+      .add("a", StringType)
+      .add("details", detailsType)
+      .add("seq", LongType)
+    val structTargetSchema = new StructType()
+      .add("id", IntegerType)
+      .add("a", StringType)
+      .add("details", detailsType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, cdcMetadataColSchemaType())
+    val a = Seq("a")
+    val first = Seq("details", "first")
+    val second = Seq("details", "second")
+    createAuxTable()
+    createTable(defaultTargetIdent, defaultTargetTableIdentifier, structTargetSchema)
+
+    executeBatch(ignoreNullsIn("a", "details"), batchId = 0L, structSourceSchema)(
+      Row(1, "a1", Row("f1", "s1"), 10L))
+    // details is selected, so its null second is ignored, and second stays authored at 10.
+    executeBatch(ignoreNullsIn("a", "details"), batchId = 1L, structSourceSchema)(
+      Row(1, "a2", Row("f2", null), 30L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a2", Row("f2", "s1"),
+        Row(null, 30L, versionMap(a -> 30L, first -> 30L, second -> 10L))))
+
+    // Once details leaves the selection, it is reconciled whole, as authored when its latest leaf
+    // was (30), so the late upsert loses all of it. A scalar column that leaves the selection
+    // keeps its own authorship instead.
+    executeBatch(ignoreNullsIn("a"), batchId = 2L, structSourceSchema)(
+      Row(1, "late-a", Row("late-f", "late-s"), 20L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a2", Row("f2", "s1"),
+        Row(null, 30L, versionMap(a -> 30L, first -> 30L, second -> 10L))))
+
+    // Outside the selection, details is authored whole, including its null second.
+    executeBatch(ignoreNullsIn("a"), batchId = 3L, structSourceSchema)(
+      Row(1, "a3", Row("f3", null), 40L))
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "a3", Row("f3", null),
+        Row(null, 40L, versionMap(a -> 40L, first -> 40L, second -> 40L))))
+  }
+
+  // ===========================================================================================
+  // Retry correctness tests
+  // ===========================================================================================
+
+  test("retry after the target merge fails sees the unchanged auxiliary table") {
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
+    val batch = microbatchOf(sourceSchema)(Row(1, "revived", 20L, false))
+
+    // The missing target table makes the first merge fail. Because the target merge runs first,
+    // the auxiliary tombstone must remain available when the batch is retried.
+    intercept[AnalysisException] {
+      exec.execute(batch, batchId = 10L)
+    }
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(10L, null, null)))
+
+    createTargetTable()
+    exec.execute(batch, batchId = 10L)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "revived", Row(null, 20L, null)))
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
+  }
+
+  test("retry after a target-only merge completes the auxiliary merge") {
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(10L), upsertSeq = None)))
+    createTargetTable()
+    val batch = microbatchOf(sourceSchema)(Row(1, "revived", 20L, false))
+    val reconciled = processor.reconcileMicrobatch(
+      validatedBatchDf = batch,
+      targetTableIdentifier = defaultTargetTableIdentifier,
+      auxiliaryTableDf = spark.read.table(defaultAuxTableIdentifier.quotedString))
+
+    // Simulate a crash after the target merge commits but before the auxiliary merge starts.
+    processor.mergeMicrobatchOntoTarget(reconciled, defaultTargetTableIdentifier)
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "revived", Row(null, 20L, null)))
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(10L, null, null)))
+
+    exec.execute(batch, batchId = 11L)
+
+    checkAnswer(
+      spark.read.table(defaultTargetTableIdentifier.quotedString),
+      Row(1, "revived", Row(null, 20L, null)))
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
+  }
+
+  test("retry after both merges commit leaves both tables unchanged") {
+    createAuxTable()
+    createTargetTable(Row(1, "old", cdcMetadataRow(deleteSeq = None, upsertSeq = Some(10L))))
+    val batch = microbatchOf(sourceSchema)(Row(1, null, 20L, true))
+
+    exec.execute(batch, batchId = 12L)
+    assert(spark.read.table(defaultTargetTableIdentifier.quotedString).collect().isEmpty)
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(20L, null, null)))
+
+    exec.execute(batch, batchId = 12L)
+
+    assert(spark.read.table(defaultTargetTableIdentifier.quotedString).collect().isEmpty)
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(20L, null, null)))
+  }
+
+  private val ignoreNullProcessor = Scd1BatchProcessor(
+    changeArgs = ChangeArgs(
+      keys = Seq(UnqualifiedColumnName("id")),
+      sequencing = F.col("seq"),
+      storedAsScdType = ScdType.Type1,
+      deleteCondition = Some(F.col("is_delete")),
+      columnSelection = Some(
+        ColumnSelection.IncludeColumns(
+          Seq(UnqualifiedColumnName("id"), UnqualifiedColumnName("value"))
+        )
+      ),
+      ignoreNullSelection = ignoreNullsIn("value")
+    ),
+    resolvedSequencingType = LongType
+  )
+
+  private def ignoreNullExec: Scd1ForeachBatchHandler = Scd1ForeachBatchHandler(
+    batchProcessor = ignoreNullProcessor,
+    auxiliaryTableIdentifier = defaultAuxTableIdentifier,
+    targetTableIdentifier = defaultTargetTableIdentifier
+  )
+
+  test("retry after a target-only merge completes the auxiliary merge under ignore-null") {
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None)))
+    createTargetTable()
+    // The tombstone authors the null `value` that the upsert at 30 keeps, because ignore-null
+    // ignores the upsert's own null.
+    val batch = microbatchOf(sourceSchema)(
+      Row(1, "v1", 10L, false),
+      Row(1, null, 30L, false))
+    val reconciled = ignoreNullProcessor.reconcileMicrobatch(
+      validatedBatchDf = batch,
+      targetTableIdentifier = defaultTargetTableIdentifier,
+      auxiliaryTableDf = spark.read.table(defaultAuxTableIdentifier.quotedString))
+    val expectedTargetRow = Row(1, null, Row(null, 30L, versionMap(Seq("value") -> 20L)))
+
+    // Simulate a crash after the target merge commits but before the auxiliary merge starts.
+    ignoreNullProcessor.mergeMicrobatchOntoTarget(reconciled, defaultTargetTableIdentifier)
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), expectedTargetRow)
+    checkAnswer(
+      spark.read.table(defaultAuxTableIdentifier.quotedString),
+      Row(1, Row(20L, null, null)))
+
+    ignoreNullExec.execute(batch, batchId = 13L)
+
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), expectedTargetRow)
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
+  }
+
+  test("retry after both merges commit keeps the nulls a removed tombstone authored") {
+    createAuxTable(Row(1, cdcMetadataRow(deleteSeq = Some(20L), upsertSeq = None)))
+    createTargetTable()
+    // The tombstone authors the null `value` that the upsert at 30 keeps, because ignore-null
+    // ignores the upsert's own null.
+    val batch = microbatchOf(sourceSchema)(
+      Row(1, "v1", 10L, false),
+      Row(1, null, 30L, false))
+    val expectedTargetRow = Row(1, null, Row(null, 30L, versionMap(Seq("value") -> 20L)))
+
+    ignoreNullExec.execute(batch, batchId = 14L)
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), expectedTargetRow)
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
+
+    // The aux merge removed the tombstone, so the retry reconciles "v1", authored at 10, for
+    // `value`. The target recorded the tombstone's null at 20, so it keeps that null.
+    ignoreNullExec.execute(batch, batchId = 14L)
+
+    checkAnswer(spark.read.table(defaultTargetTableIdentifier.quotedString), expectedTargetRow)
+    assert(spark.read.table(defaultAuxTableIdentifier.quotedString).collect().isEmpty)
   }
 
   // ===========================================================================================
@@ -613,7 +961,7 @@ class Scd1ForeachBatchHandlerSuite
 
       val resultAuxTable = spark.read.table(defaultAuxTableIdentifier.quotedString)
       val resultTargetTable = spark.read.table(defaultTargetTableIdentifier.quotedString)
-      checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L)))
+      checkAnswer(resultTargetTable, Row(1, "bob", Row(null, 2L, null)))
       assert(resultAuxTable.collect().isEmpty)
     }
   }
