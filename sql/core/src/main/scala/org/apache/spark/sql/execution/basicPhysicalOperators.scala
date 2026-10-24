@@ -1111,7 +1111,7 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    * Returns the output partitionings of the children, with the attributes converted to this
    * union's output attributes at the same position.
    */
-  private def prepareOutputPartitioning(): Seq[Partitioning] = {
+  private[execution] def prepareOutputPartitioning(): Seq[Partitioning] = {
     // Map every child's partitioning attributes to this union's output attributes, so all
     // partitionings are expressed in the same attribute space before comparison. A child's
     // `outputPartitioning` may reference attributes that differ from its own `output` in any
@@ -1282,9 +1282,10 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
    *
    * `UNION_OUTPUT_PARTITIONING` is taken from `recordPreparationConf`, recorded before
    * `EnsureRequirements`, so the value the exchanges are planned against is the value execution
-   * uses. Reading it live here would leave one rule between the two: `conf` is live, and another
-   * thread setting it in that window would let a parent drop an exchange over a concrete
-   * partitioning and then have the stamp freeze plain concatenation under it. A node created after
+   * uses. Reading it live here would let a later read see a different value: `conf` is live, and
+   * another thread setting it between `EnsureRequirements` and the stamp would let a parent drop
+   * an exchange over a concrete partitioning and then have the stamp freeze plain concatenation
+   * under it. A node created after
    * that pass carries no record of its own and takes the same preparation's value when it is
    * stamped; only a union no barrier reached at all falls back to the live conf.
    *
@@ -1331,10 +1332,11 @@ case class UnionExec(children: Seq[SparkPlan]) extends SparkPlan with CodegenSup
 
   /**
    * Fixes this node's decisions for the rest of the plan's life. Called by `StampUnionDecisions`,
-   * first right after `EnsureRequirements`, so what the exchanges around this union were planned
-   * against is what execution uses; the confs come from one read per preparation. Nothing else
-   * writes this tag on an existing node, and the nodes the rule writes are freshly planned and not
-   * yet published, so no reader can be looking at one; `metrics` and the codegen gate read it
+   * first after `EnsureRequirements` and the shuffle push-down below it, so what the exchanges
+   * around this union were planned against is what execution uses; the confs come from one read
+   * per preparation. Nothing else writes this tag on an existing node, and the nodes the rule
+   * writes are freshly planned and not yet published, so no reader can be looking at one;
+   * `metrics` and the codegen gate read it
    * later, and a node that already carries it keeps it, which is how the copy in the codegen shell
    * stays in step with the gate.
    */

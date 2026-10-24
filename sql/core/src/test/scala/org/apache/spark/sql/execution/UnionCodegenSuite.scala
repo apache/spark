@@ -993,9 +993,10 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       // Pins the property the standard pipeline has to keep: a stamping pass runs immediately after
       // `EnsureRequirements`, so the decision is taken from the plan the exchanges were placed in
-      // and no rule in between can change a partitioning the parent already planned against. A
-      // count would break on a sixth legitimate pass and say nothing about the order.
-      // `AdaptiveQueryExecSuite` asserts the same adjacency for the list AQE builds.
+      // and no rule in between can change a partitioning the parent already planned against. The
+      // shuffle push-down sits between the two in the AQE list only, which
+      // `AdaptiveQueryExecSuite` covers. A count would break on a sixth legitimate pass and say
+      // nothing about the order.
       val rules = QueryExecution.preparations(spark, subquery = false)
       val firstStamp = rules.indexWhere(_.isInstanceOf[StampUnionDecisions])
       val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
@@ -1044,11 +1045,11 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: the stamp uses the conf the exchanges were planned against") {
     // `EnsureRequirements` asks the union what it reports, and the barrier behind it freezes that
-    // answer one rule later. `conf` is live, so another thread turning `UNION_OUTPUT_PARTITIONING`
-    // off in between would leave the parent's elided exchange standing over a union that then
-    // concatenates. `SnapshotUnionPreparationConf` records the value ahead of
-    // `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to each
-    // other in the pipeline and no injected rule can run in the window.
+    // answer at the next barrier. `conf` is live, so another thread turning
+    // `UNION_OUTPUT_PARTITIONING` off in between would leave the parent's elided exchange standing
+    // over a union that then concatenates. `SnapshotUnionPreparationConf` records the value ahead
+    // of `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to
+    // each other in the pipeline and no injected rule can run in the window.
     withSQLConf(
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
         SQLConf.UNION_OUTPUT_PARTITIONING.key -> "true") {
