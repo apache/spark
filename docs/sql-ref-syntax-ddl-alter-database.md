@@ -27,14 +27,16 @@ is issued if the database is not found in the system.
 
 ### SET PROPERTIES
 `ALTER DATABASE SET DBPROPERTIES` statement changes the properties associated with a database.
-The specified property values override any existing value with the same property name. 
+The specified property values override any existing value with the same property name.
+The `=` between a key and its value is optional; `SET DBPROPERTIES ('key1' 'val1')`
+is equivalent to `SET DBPROPERTIES ('key1'='val1')`.
 This command is mostly used to record the metadata for a database and may be used for auditing purposes.
 
 #### Syntax
 
 ```sql
 ALTER { DATABASE | SCHEMA | NAMESPACE } database_name
-    SET { DBPROPERTIES | PROPERTIES } ( property_name = property_value [ , ... ] )
+    SET { DBPROPERTIES | PROPERTIES } ( property_name [=] property_value [ , ... ] )
 ```
 
 #### Parameters

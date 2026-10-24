@@ -29,7 +29,7 @@ Creates a database with the specified name. If database with the same name alrea
 CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
     [ COMMENT database_comment ]
     [ LOCATION database_directory ]
-    [ WITH DBPROPERTIES ( property_name = property_value [ , ... ] ) ]
+    [ WITH DBPROPERTIES ( property_name [=] property_value [ , ... ] ) ]
 ```
 
 ### Parameters
@@ -53,9 +53,11 @@ CREATE { DATABASE | SCHEMA } [ IF NOT EXISTS ] database_name
 
     Specifies the description for the database.
 
-* **WITH DBPROPERTIES ( property_name=property_value [ , ... ] )**
+* **WITH DBPROPERTIES ( property_name [=] property_value [ , ... ] )**
 
     Specifies the properties for the database in key-value pairs.
+    The `=` between a key and its value is optional; `DBPROPERTIES ('key1' 'val1')`
+    is equivalent to `DBPROPERTIES ('key1'='val1')`.
 
 ### Examples
 
