@@ -231,7 +231,19 @@ private[sql] abstract class ArrowFieldWriter {
   }
 
   def reset(): Unit = {
-    valueVector.reset()
+    // Arrow's ValueVector.reset() zeroes every buffer up to its allocated capacity, which never
+    // shrinks, so after one large batch every later batch would pay for zeroing that size. Field
+    // writers write each index in [0, count) exactly once, through setValue or setNull, and both
+    // set the validity bit, so only the write cursor of vectors that track one needs resetting.
+    // Bytes under null slots and past the value count may keep stale values, which the Arrow
+    // format leaves undefined. Child vectors are reset by their own writers.
+    valueVector match {
+      case _: BaseFixedWidthVector | _: StructVector =>
+      case v: BaseVariableWidthVector => v.setLastSet(-1)
+      case v: BaseLargeVariableWidthVector => v.setLastSet(-1)
+      case v: ListVector => v.setLastSet(-1)
+      case v => v.reset()
+    }
     count = 0
   }
 }
@@ -465,6 +477,7 @@ private[arrow] class ArrayWriter(
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
   override def setNull(): Unit = {
+    valueVector.setNull(count)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
@@ -644,7 +657,9 @@ private[arrow] class MapWriter(
     val keyWriter: ArrowFieldWriter,
     val valueWriter: ArrowFieldWriter) extends ArrowFieldWriter {
 
-  override def setNull(): Unit = {}
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val map = input.getMap(ordinal)
