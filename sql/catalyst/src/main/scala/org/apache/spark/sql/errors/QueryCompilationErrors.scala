@@ -1171,6 +1171,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "class" -> unsupported.getClass.toString))
   }
 
+  def invalidSkewJoinHintError(reason: String): Throwable = {
+    new AnalysisException(
+      errorClass = "INVALID_SKEW_JOIN_HINT",
+      messageParameters = Map("reason" -> reason))
+  }
+
   def invalidHintParameterError(
       hintName: String, invalidParams: Seq[Expression]): Throwable = {
     new AnalysisException(

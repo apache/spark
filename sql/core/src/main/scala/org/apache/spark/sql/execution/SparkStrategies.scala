@@ -256,6 +256,66 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case j @ ExtractEquiJoinKeys(joinType, leftKeys, rightKeys, nonEquiCond,
           _, left, right, hint) =>
         val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
+
+        // Splits the join on the hot keys of the hinted side, see `SkewKeyJoinExec`. The hint is
+        // ignored if the join cannot be split, in which case the join is planned without it.
+        def createSkewKeyJoin(): Option[Seq[SparkPlan]] = {
+          val skewLeft = hintToSkewJoinLeft(hint) &&
+            joins.SkewKeyJoinExec.supportsJoinType(joinType, skewLeft = true)
+          val skewRight = !skewLeft && hintToSkewJoinRight(hint) &&
+            joins.SkewKeyJoinExec.supportsJoinType(joinType, skewLeft = false)
+          val hintInfo = if (skewLeft || (!skewRight && hintToSkewJoinLeft(hint))) {
+            hint.leftHint
+          } else {
+            hint.rightHint
+          }
+          def notSupported(reason: String): Option[Seq[SparkPlan]] = {
+            hintInfo.foreach(hintErrorHandler.joinHintNotSupported(_, reason))
+            None
+          }
+
+          if (!hintToSkewJoinLeft(hint) && !hintToSkewJoinRight(hint)) {
+            None
+          } else if (!skewLeft && !skewRight) {
+            notSupported(s"${joinType.sql.toLowerCase(Locale.ROOT)} join with the hinted " +
+              "side as the side to split")
+          } else if (!left.deterministic || !right.deterministic) {
+            throw QueryCompilationErrors.invalidSkewJoinHintError(
+              "the join has non-deterministic expressions, but both sides of the join are " +
+                "read twice")
+          } else if (!RowOrdering.isOrderable(leftKeys)) {
+            notSupported("the join keys are not sortable")
+          } else {
+            val skewChild = if (skewLeft) left else right
+            val skewKeys = if (skewLeft) leftKeys else rightKeys
+            val otherKeys = if (skewLeft) rightKeys else leftKeys
+            val skewColumns = hintInfo.get.skewColumns.map { column =>
+              skewChild.output.find(a => conf.resolver(a.name, column)).getOrElse {
+                throw QueryCompilationErrors.invalidSkewJoinHintError(
+                  s"the column $column is not found in the relation")
+              }
+            }
+            val skewKeyIndices = skewColumns.map { column =>
+              skewKeys.indexWhere {
+                case a: Attribute => a.semanticEquals(column)
+                case _ => false
+              }
+            }
+            if (skewKeyIndices.contains(-1)) {
+              notSupported("the columns are not all equi-join keys")
+            } else if (!skewKeyIndices.forall { i =>
+                joins.SkewKeyJoinExec.isSupportedKeyType(skewKeys(i).dataType) &&
+                  otherKeys(i).isInstanceOf[Attribute] &&
+                  otherKeys(i).dataType == skewKeys(i).dataType}) {
+              notSupported("the types of the join keys are not supported or differ between " +
+                "the two sides")
+            } else {
+              Some(Seq(joins.SkewKeyJoinExec(leftKeys, rightKeys, skewKeyIndices, joinType,
+                nonEquiCond, skewLeft, planLater(left), planLater(right))))
+            }
+          }
+        }
+
         def createBroadcastHashJoin(onlyLookingAtHint: Boolean) = {
           if (hashJoinSupport) {
             val buildSide = getBroadcastBuildSide(j, onlyLookingAtHint, conf)
@@ -339,7 +399,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         if (hint.isEmpty) {
           createJoinWithoutHint()
         } else {
-          createBroadcastHashJoin(true)
+          createSkewKeyJoin()
+            .orElse(createBroadcastHashJoin(true))
             .orElse { if (hintToSortMergeJoin(hint)) createSortMergeJoin() else None }
             .orElse(createShuffleHashJoin(true))
             .orElse { if (hintToShuffleReplicateNL(hint)) createCartesianProduct() else None }

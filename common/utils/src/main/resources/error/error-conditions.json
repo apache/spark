@@ -5197,6 +5197,12 @@
     ],
     "sqlState" : "42613"
   },
+  "INVALID_SKEW_JOIN_HINT" : {
+    "message" : [
+      "Invalid SKEW_JOIN hint: <reason>"
+    ],
+    "sqlState" : "42000"
+  },
   "INVALID_SPARK_CONFIG" : {
     "message" : [
       "Invalid Spark config:"
