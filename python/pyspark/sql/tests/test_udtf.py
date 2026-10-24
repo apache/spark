@@ -3705,6 +3705,27 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
                 ):
                     udtf(TestUDTF, returnType=ret_type)().collect()
 
+    def test_udtf_lateral_join_with_output_batch_slicing(self):
+        # Each output batch is joined with one input row, so it must not be sliced by the
+        # configs below.
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self, n: int):
+                for i in range(5):
+                    yield (n * 10 + i,)
+
+        self.spark.udtf.register("test_udtf_slicing", TestUDTF)
+        expected = [Row(id=n, x=n * 10 + i) for n in range(3) for i in range(5)]
+        for conf in [
+            {"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"},
+            {"spark.sql.execution.arrow.maxBytesPerOutputBatch": "3"},
+        ]:
+            with self.subTest(conf=conf), self.sql_conf(conf):
+                df = self.spark.sql(
+                    "SELECT t.id, u.x FROM range(0, 3, 1, 1) t, LATERAL test_udtf_slicing(t.id) u"
+                )
+                assertDataFrameEqual(df, expected)
+
 
 class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):
     @classmethod
