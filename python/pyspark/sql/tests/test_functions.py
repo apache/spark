@@ -37,6 +37,11 @@ from pyspark.testing.sqlutils import ReusedSQLTestCase, SQLTestUtils
 from pyspark.testing.utils import assertDataFrameEqual, have_numpy
 
 
+def _utc_to_local(*args: int) -> datetime.datetime:
+    """Return the given UTC wall-clock time as a naive local datetime, as collect() does."""
+    return datetime.datetime(*args, tzinfo=datetime.timezone.utc).astimezone().replace(tzinfo=None)
+
+
 class FunctionsTestsMixin:
     def test_function_parity(self):
         # This test compares the available list of functions in pyspark.sql.functions with those
@@ -474,9 +479,10 @@ class FunctionsTestsMixin:
         )
         # Expected results for comparison in different scenarios.
         result_no_tz = datetime.datetime(2024, 5, 22, 10, 30)
-        result_with_tz = datetime.datetime(2024, 5, 22, 8, 30)
+        # 10:30 CET is 08:30 UTC; collect() returns it in the local timezone.
+        result_with_tz = _utc_to_local(2024, 5, 22, 8, 30)
         result_frac_no_tz = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
-        result_frac_with_tz = datetime.datetime(2024, 5, 22, 8, 30, 45, 123000)
+        result_frac_with_tz = _utc_to_local(2024, 5, 22, 8, 30, 45, 123000)
 
         # Test 1A: Basic 6 positional arguments (years, months, days, hours, mins, secs).
         actual = df.select(
@@ -694,8 +700,12 @@ class FunctionsTestsMixin:
             F.try_make_timestamp(timezone=df_dt.timezone)
 
     def test_try_make_timestamp_ltz(self):
-        # use local timezone here to avoid flakiness
-        data = [(2024, 5, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
+        # Use the local UTC offset on the test date rather than the local tz abbreviation
+        # (e.g. CST, PDT), which Spark may misread or reject.
+        offset = datetime.datetime(2024, 5, 22, 10, 30).astimezone().strftime("%z")
+        local_tz = f"{offset[:3]}:{offset[3:]}"  # e.g. +0800 -> +08:00
+
+        data = [(2024, 5, 22, 10, 30, 0, local_tz)]
         df = self.spark.createDataFrame(
             data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
         )
@@ -706,8 +716,7 @@ class FunctionsTestsMixin:
         )
         assertDataFrameEqual(actual, [Row(datetime.datetime(2024, 5, 22, 10, 30, 0))])
 
-        # use local timezone here to avoid flakiness
-        data = [(2024, 13, 22, 10, 30, 0, datetime.datetime.now().astimezone().tzinfo.__str__())]
+        data = [(2024, 13, 22, 10, 30, 0, local_tz)]
         df = self.spark.createDataFrame(
             data, ["year", "month", "day", "hour", "minute", "second", "timezone"]
         )
@@ -1191,9 +1200,10 @@ class FunctionsTestsMixin:
         )
         # Expected results for comparison in different scenarios.
         result_no_tz = datetime.datetime(2024, 5, 22, 10, 30)
-        result_with_tz = datetime.datetime(2024, 5, 22, 8, 30)
+        # 10:30 CET is 08:30 UTC; collect() returns it in the local timezone.
+        result_with_tz = _utc_to_local(2024, 5, 22, 8, 30)
         result_frac_no_tz = datetime.datetime(2024, 5, 22, 10, 30, 45, 123000)
-        result_frac_with_tz = datetime.datetime(2024, 5, 22, 8, 30, 45, 123000)
+        result_frac_with_tz = _utc_to_local(2024, 5, 22, 8, 30, 45, 123000)
 
         # Test 1A: Basic 6 positional arguments (years, months, days, hours, mins, secs).
         actual = df.select(
