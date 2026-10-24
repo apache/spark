@@ -310,11 +310,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
             udf.raw_func(1)
 
     def test_fail_on_stopiteration_per_handler(self):
-        not_wrapped = {
-            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-            PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
-            PythonEvalType.SQL_ARROW_BATCHED_UDF,
-        }
+        not_wrapped = {PythonEvalType.SQL_ARROW_BATCHED_UDF}
         for _, variants in list(_eval_type_handlers.values()):
             for handler_cls in variants.values():
                 with self.subTest(handler=handler_cls.__name__):

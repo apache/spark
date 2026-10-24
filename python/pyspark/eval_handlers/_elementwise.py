@@ -653,7 +653,6 @@ class PandasScalarIterElementwiseUDFHandler(
     an iterator of pandas Series (DataFrames for struct types)."""
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF
-    _fail_on_stopiteration = False
 
     def _verify_return_type(self, results: Any) -> Iterator[Any]:
         import pandas as pd
