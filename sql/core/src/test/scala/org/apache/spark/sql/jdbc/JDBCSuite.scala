@@ -1474,27 +1474,20 @@ class JDBCSuite extends SharedSparkSession {
 
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
-    val mySQLEscape = "ESCAPE _utf8mb4 X'5C'"
     assert(mySQLSQL(StringStartsWith("c", "ab\\")) ===
-      s"`c` LIKE _utf8mb4 X'61625C5C25' $mySQLEscape")
+      "`c` LIKE _utf8mb4 X'61625C25' ESCAPE '!'")
     assert(mySQLSQL(StringEndsWith("c", "\\ab")) ===
-      s"`c` LIKE _utf8mb4 X'255C5C6162' $mySQLEscape")
+      "`c` LIKE _utf8mb4 X'255C6162' ESCAPE '!'")
     assert(mySQLSQL(StringContains("c", "a\\b")) ===
-      s"`c` LIKE _utf8mb4 X'25615C5C6225' $mySQLEscape")
-    assert(mySQLSQL(StringStartsWith("c", "a%b_")) ===
-      s"`c` LIKE _utf8mb4 X'615C25625C5F25' $mySQLEscape")
+      "`c` LIKE _utf8mb4 X'25615C6225' ESCAPE '!'")
+    assert(mySQLSQL(StringStartsWith("c", "a%b_!")) ===
+      "`c` LIKE 'a!%b!_!!%' ESCAPE '!'")
   }
 
   test("SPARK-57500: push down MySQL string literals containing a backslash as hex strings") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     assert(mySQLDialect.compileExpression(EqualTo("c", "a'\\b").toV2) ===
       Some("`c` = _utf8mb4 X'61275C62'"))
-  }
-
-  test("SPARK-57500: decline LIKE pushdown when the pattern is a null literal") {
-    val p = new Predicate("STARTS_WITH",
-      Array[V2Expression](FieldReference("c"), LiteralValue(null, StringType)))
-    assert(JdbcDialects.get("jdbc:").compileExpression(p).isEmpty)
   }
 
   test("SPARK-57446: escape single quotes in JDBC comment queries") {

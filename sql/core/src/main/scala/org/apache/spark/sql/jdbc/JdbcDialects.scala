@@ -434,6 +434,15 @@ abstract class JdbcDialect extends Serializable with Logging {
       case _ => super.build(expr)
     }
 
+    protected def likeEscapeChar: Char = '\\'
+
+    override protected def escapeSpecialCharsForLikePattern(str: String): String =
+      str.flatMap {
+        case c @ ('_' | '%') => s"$likeEscapeChar$c"
+        case c if c == likeEscapeChar => s"$c$c"
+        case c => c.toString
+      }
+
     private def isLikeStringPredicate(name: String): Boolean =
       name == "STARTS_WITH" || name == "ENDS_WITH" || name == "CONTAINS"
 
@@ -456,7 +465,8 @@ abstract class JdbcDialect extends Serializable with Logging {
             case _ => "%" + escaped + "%"
           }
           val col = build(children(0))
-          Some(s"$col LIKE ${compileValue(pattern)} ESCAPE ${compileValue("\\")}")
+          val escape = compileValue(likeEscapeChar.toString)
+          Some(s"$col LIKE ${compileValue(pattern)} ESCAPE $escape")
         case _ => None
       }
     }
