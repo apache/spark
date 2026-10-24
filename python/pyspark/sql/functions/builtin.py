@@ -14483,7 +14483,7 @@ def window(
     """
     from pyspark.sql.classic.column import _to_java_column
 
-    def check_string_field(field, fieldName):  # type: ignore[no-untyped-def]
+    def check_string_field(field: Any, fieldName: str) -> None:
         if not field or type(field) is not str:
             raise PySparkTypeError(
                 errorClass="NOT_EXPECTED_TYPE",
