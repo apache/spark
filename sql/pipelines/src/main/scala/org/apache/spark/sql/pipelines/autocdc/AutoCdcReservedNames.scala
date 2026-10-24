@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.pipelines.autocdc
 
+import org.apache.spark.SparkException
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.analysis.Resolver
+import org.apache.spark.sql.types.{ArrayType, DataType, StructField, StructType}
+
 /**
  * Names that AutoCDC reserves for its own use, both for internal columns it inserts during
  * reconciliation (e.g. `${prefix}metadata`, `${prefix}winning_row`) and for internal tables it
@@ -40,4 +45,280 @@ private[pipelines] object AutoCdcReservedNames {
    * Note that the schema of the CDC metadata column however can and does differ on the SCD-type.
    */
   val cdcMetadataColName: String = s"${prefix}metadata"
+
+  // A field is engine-owned when its name carries the reserved prefix. Matching goes through the
+  // caller's `resolver` so a user-declared column is still recognized as reserved under
+  // case-insensitive analysis, and the length guard keeps `substring` safe for shorter names.
+  private def isReservedFieldName(name: String, resolver: Resolver): Boolean =
+    name.length >= prefix.length && resolver(name.substring(0, prefix.length), prefix)
+
+  /** The engine-owned reserved AUTO CDC column(s) present in `schema`, if any. */
+  private[pipelines] def reservedFields(schema: StructType, resolver: Resolver): Seq[StructField] =
+    schema.fields.toSeq.filter(f => isReservedFieldName(f.name, resolver))
+
+  /** `schema` with the engine-owned reserved AUTO CDC column(s) removed. */
+  private[pipelines] def stripReservedFields(schema: StructType, resolver: Resolver): StructType =
+    StructType(schema.fields.filterNot(f => isReservedFieldName(f.name, resolver)))
+
+  /**
+   * The schema a materialized AUTO CDC target carries when the user declares a schema: the user's
+   * columns with the engine-owned type/nullability substituted into any declared reserved column,
+   * followed by the engine-owned reserved column(s) the declaration omitted. `flowInferredSchema`
+   * must be flow-derived (no user-declared columns merged in), so its reserved fields are exactly
+   * the engine-produced ones and never a user column that happens to carry the prefix.
+   *
+   * A declared reserved field keeps its own spelling, position, and metadata (e.g. a `COMMENT`);
+   * only its type and nullability are replaced with the engine's. That matters on the upgrade path:
+   * an already-materialized
+   * target may carry the reserved column under a different casing (e.g. an older definition
+   * declared it upper-cased under case-insensitive analysis), `evolveTable` merges that existing
+   * spelling in, and this schema -- which also feeds the analysis-time read path -- must agree with
+   * it so a downstream `SELECT *` plans against the column the target actually has.
+   *
+   * The engine-owned reserved fields are made nullable so a target created from a declared schema
+   * matches one created from an omitted schema (that path materializes the inferred schema
+   * `asNullable`), avoiding a spurious nullability diff when a declaration is added or removed.
+   */
+  private[pipelines] def appendEngineOwnedReservedFields(
+      declaredSchema: StructType,
+      flowInferredSchema: StructType,
+      resolver: Resolver): StructType = {
+    val engineReserved = StructType(reservedFields(flowInferredSchema, resolver)).asNullable.fields
+
+    // A declaration carries at most one field matching each engine-owned reserved column;
+    // `validateDeclaredReservedFields` rejects a case-insensitive duplicate upstream, so this guard
+    // is defense-in-depth, provably unreachable from a validated declaration.
+    engineReserved.foreach { ef =>
+      val matches = declaredSchema.fields.filter(df => resolver(df.name, ef.name))
+      if (matches.length > 1) {
+        throw SparkException.internalError(
+          s"Ambiguous reserved AUTO CDC field: ${matches.map(_.name).mkString(", ")} all match " +
+            s"the engine-owned column ${ef.name}.")
+      }
+    }
+
+    // Rebuild the declared schema in place: a declared reserved field keeps its spelling and
+    // position but takes the engine-owned type/nullability. `validateDeclaredReservedFields`
+    // rejects a reserved-prefixed declared field with no engine counterpart upstream, so
+    // `case None => df` is unreachable from a validated declaration.
+    val usedEngineNames = scala.collection.mutable.Set.empty[String]
+    val rebuilt = declaredSchema.fields.map { df =>
+      if (isReservedFieldName(df.name, resolver)) {
+        engineReserved.find(ef => resolver(df.name, ef.name)) match {
+          case Some(ef) =>
+            usedEngineNames += ef.name
+            reconcileReservedField(df, ef, resolver)
+          case None => df
+        }
+      } else {
+        df
+      }
+    }
+
+    // Append engine-owned reserved fields the declaration omitted, in canonical form.
+    val appended = engineReserved.filterNot(ef => usedEngineNames.contains(ef.name))
+    StructType(rebuilt ++ appended)
+  }
+
+  /**
+   * Reject a declared AUTO CDC target schema whose reserved metadata column(s) are shaped in a way
+   * reconciliation cannot honor, so `appendEngineOwnedReservedFields`, the read path, and the
+   * casing-drift check can assume a well-formed declaration instead of a guard elsewhere.
+   * Run this from schema validation (`GraphValidations.validateUserSpecifiedSchemas`) before
+   * materialization. Recursively through structs and array-of-struct elements it throws a
+   * user-facing `AnalysisException` when a declared reserved-prefixed field has no engine-owned
+   * counterpart (a typo or an extra reserved-namespace column), when two declared fields resolve to
+   * one engine field, or when a declared nested field under a reserved column is not one the engine
+   * produces.
+   */
+  private[pipelines] def validateDeclaredReservedFields(
+      tableName: String,
+      declaredSchema: StructType,
+      flowInferredSchema: StructType,
+      resolver: Resolver): Unit =
+    validateReservedLevel(
+      tableName,
+      reservedColumn = None,
+      reservedFields(declaredSchema, resolver),
+      reservedFields(flowInferredSchema, resolver),
+      resolver)
+
+  // Validate one level of reserved fields against the engine's. `reservedColumn` is the enclosing
+  // reserved column's (possibly dotted) name for nested-field messages, None at the top level. At
+  // the top level `declared`/`engine` are the reserved-prefixed columns; within a reserved struct
+  // every field is engine-owned, so the recursion passes all of a matched struct's fields.
+  private def validateReservedLevel(
+      tableName: String,
+      reservedColumn: Option[String],
+      declared: Seq[StructField],
+      engine: Seq[StructField],
+      resolver: Resolver): Unit = {
+    declared.filterNot(df => engine.exists(ef => resolver(df.name, ef.name))).foreach { df =>
+      reservedColumn match {
+        case None =>
+          throw new AnalysisException(
+            "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_COLUMN",
+            Map("tableName" -> tableName, "columnName" -> df.name,
+              "reservedColumnNamePrefix" -> prefix))
+        case Some(col) =>
+          throw new AnalysisException(
+            "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_NESTED_FIELD",
+            Map("tableName" -> tableName, "reservedColumnName" -> col, "fieldName" -> df.name))
+      }
+    }
+    engine.foreach { ef =>
+      val matches = declared.filter(df => resolver(df.name, ef.name))
+      if (matches.length > 1) {
+        val names = matches.map(f => s"`${f.name}`").mkString(", ")
+        reservedColumn match {
+          case None =>
+            throw new AnalysisException(
+              "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_COLUMN",
+              Map("tableName" -> tableName, "columnNames" -> names, "engineColumnName" -> ef.name))
+          case Some(col) =>
+            throw new AnalysisException(
+              "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_NESTED_FIELD",
+              Map("tableName" -> tableName, "reservedColumnName" -> col, "fieldNames" -> names,
+                "engineFieldName" -> ef.name))
+        }
+      }
+    }
+    declared.foreach { df =>
+      engine.find(ef => resolver(df.name, ef.name)).foreach { ef =>
+        val col = Some(reservedColumn.map(c => s"$c.${df.name}").getOrElse(df.name))
+        (df.dataType, ef.dataType) match {
+          case (ds: StructType, es: StructType) =>
+            validateReservedLevel(tableName, col, ds.fields.toSeq, es.fields.toSeq, resolver)
+          case (da: ArrayType, ea: ArrayType) =>
+            (da.elementType, ea.elementType) match {
+              case (ds: StructType, es: StructType) =>
+                validateReservedLevel(tableName, col, ds.fields.toSeq, es.fields.toSeq, resolver)
+              case _ =>
+            }
+          case _ =>
+        }
+      }
+    }
+  }
+
+  /**
+   * Reconcile a declared reserved field against its engine-owned counterpart: keep the declared
+   * field's spelling and its metadata (e.g. a user `COMMENT`), take the engine field's type and
+   * nullability, and reconcile the types recursively (see `reconcileReservedType`) so declared
+   * nested spelling survives through structs and arrays. Building from the declared field is what
+   * keeps the comment: `SchemaInferenceUtils` merges the declaration in to carry such metadata, and
+   * dropping it here would lose it from the created target and the analysis-time read path.
+   */
+  private def reconcileReservedField(
+      declared: StructField,
+      engine: StructField,
+      resolver: Resolver): StructField =
+    declared.copy(
+      dataType = reconcileReservedType(declared.dataType, engine.dataType, resolver),
+      nullable = engine.nullable)
+
+  /**
+   * Reconcile a declared data type against its engine-owned counterpart: keep the declared nested
+   * spelling and ordering, take the engine's types and nullability. Recurse through structs -- the
+   * AUTO CDC metadata column is one -- and through array element types, since a sequencing column
+   * can be `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
+   */
+  private def reconcileReservedType(
+      declared: DataType,
+      engine: DataType,
+      resolver: Resolver): DataType =
+    (declared, engine) match {
+      case (declaredStruct: StructType, engineStruct: StructType) =>
+        reconcileReservedStruct(declaredStruct, engineStruct, resolver)
+      case (declaredArray: ArrayType, engineArray: ArrayType) =>
+        engineArray.copy(elementType =
+          reconcileReservedType(declaredArray.elementType, engineArray.elementType, resolver))
+      case _ => engine
+    }
+
+  /**
+   * Rebuild `engine`'s struct with the declared nested spelling and ordering: each engine nested
+   * field takes a matching declared field's name (recursively), and engine nested fields the
+   * declaration omitted are appended in canonical form. A declared nested field with no engine
+   * counterpart is kept as-is, as at the outer level.
+   */
+  private def reconcileReservedStruct(
+      declared: StructType,
+      engine: StructType,
+      resolver: Resolver): StructType = {
+    val usedEngineNames = scala.collection.mutable.Set.empty[String]
+    val rebuilt = declared.fields.map { df =>
+      engine.fields.find(ef => resolver(df.name, ef.name)) match {
+        case Some(ef) =>
+          usedEngineNames += ef.name
+          reconcileReservedField(df, ef, resolver)
+        case None => df
+      }
+    }
+    StructType(rebuilt ++ engine.fields.filterNot(ef => usedEngineNames.contains(ef.name)))
+  }
+
+  /**
+   * Reserved AUTO CDC fields whose persisted spelling in `existingSchema` differs, case only, from
+   * the spelling this run gives them in `desiredSchema`, as `(existingName, desiredName)` pairs.
+   *
+   * On an incremental run the target's schema merge keeps the existing field spelling, while the
+   * analysis-time read path plans a downstream consumer against `desiredName`. A case-only
+   * difference between the two leaves the planned and persisted schemas disagreeing on the reserved
+   * column, so a case-sensitive downstream `SELECT *` cannot match them. The caller rejects such a
+   * run rather than let that mismatch surface as an opaque failure during execution.
+   */
+  private[pipelines] def reservedFieldCasingDrifts(
+      existingSchema: StructType,
+      desiredSchema: StructType,
+      resolver: Resolver): Seq[(String, String)] =
+    reservedFields(existingSchema, resolver).flatMap { existingField =>
+      desiredSchema.fields
+        .find(desiredField => resolver(desiredField.name, existingField.name))
+        .toSeq
+        .flatMap(desiredField => fieldCasingDrifts(existingField, desiredField, resolver))
+    }
+
+  /**
+   * Case-only spelling differences between `existing` and `desired` for a reserved field and,
+   * recursively, its nested fields, as `(existingName, desiredName)` pairs. Nested names are
+   * qualified by their parent, e.g. `__spark_autocdc_metadata.DELETESEQUENCE`, so the same drift
+   * policy covers the metadata column's nested fields -- through structs and arrays -- as well as
+   * the column itself.
+   */
+  private def fieldCasingDrifts(
+      existing: StructField,
+      desired: StructField,
+      resolver: Resolver): Seq[(String, String)] = {
+    val outer =
+      if (existing.name != desired.name) Seq((existing.name, desired.name)) else Seq.empty
+    val nested = typeCasingDrifts(existing.dataType, desired.dataType, resolver)
+      .map { case (e, r) => (s"${existing.name}.$e", s"${desired.name}.$r") }
+    outer ++ nested
+  }
+
+  /**
+   * Case-only spelling drifts among the nested fields of two data types, as `(existingName,
+   * desiredName)` pairs qualified by their path. Recurses through structs and through array element
+   * types, so a sequencing column such as `ARRAY<STRUCT<...>>` is covered as well as a nested
+   * struct. Any other shape has no nested names to drift.
+   */
+  private def typeCasingDrifts(
+      existing: DataType,
+      desired: DataType,
+      resolver: Resolver): Seq[(String, String)] =
+    (existing, desired) match {
+      case (existingStruct: StructType, desiredStruct: StructType) =>
+        existingStruct.fields.toSeq.flatMap { existingNested =>
+          desiredStruct.fields
+            .find(f => resolver(f.name, existingNested.name))
+            .toSeq
+            .flatMap(desiredNested => fieldCasingDrifts(existingNested, desiredNested, resolver))
+        }
+      case (existingArray: ArrayType, desiredArray: ArrayType) =>
+        // Mark the array hop so a nested drift reads `col.element.field`, matching diffSchemas.
+        typeCasingDrifts(existingArray.elementType, desiredArray.elementType, resolver)
+          .map { case (e, r) => (s"element.$e", s"element.$r") }
+      case _ => Seq.empty
+    }
 }
