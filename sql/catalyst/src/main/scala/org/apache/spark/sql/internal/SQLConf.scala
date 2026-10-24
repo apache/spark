@@ -2088,6 +2088,21 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val PARQUET_STORAGE_FILTER_PUSHDOWN_KEY_CONDITIONS_ENABLED =
+    buildConf("spark.sql.parquet.storageFilterPushdown.keyConditions.enabled")
+      .doc(s"If true, and ${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} applies a bloom filter, " +
+        "the reader also applies the query's other filter conditions that reference only the " +
+        "bloom filter's columns, on the rows the bloom filter keeps. They then run before the " +
+        "query's conditions on other columns. Only scans that return columnar batches with whole-" +
+        "stage codegen take them. The answer does not change, with the exceptions of " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} and one more. A condition that raises a " +
+        "fatal error, such as a regular expression or a UDF overflowing the stack, on a row that " +
+        "a condition on another column would have dropped first fails the query.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val PARQUET_AGGREGATE_PUSHDOWN_ENABLED = buildConf("spark.sql.parquet.aggregatePushdown")
     .doc("If true, aggregates will be pushed down to Parquet for optimization. Support MIN, MAX " +
       "and COUNT as aggregate expression. For MIN/MAX, support boolean, integer, float and date " +
@@ -9540,6 +9555,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def parquetStorageFilterPushdownEnabled: Boolean =
     getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED)
+
+  def parquetStorageFilterPushdownKeyConditionsEnabled: Boolean =
+    getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_KEY_CONDITIONS_ENABLED)
 
   def parquetStorageFilterPushdownMaxSplicedRowGroupBytes: Long =
     getConf(PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES)

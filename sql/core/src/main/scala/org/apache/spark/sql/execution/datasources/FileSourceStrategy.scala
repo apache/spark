@@ -174,12 +174,17 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
    *
    * Last, at least one projected column must be left for the reader to skip. A scan that projects
    * only the filter's own key columns reads the same columns for the same rows either way.
+   *
+   * Then, where `marksChecked`, every other conjunct that references only their key columns is
+   * offered after them where [[FileFormat.supportsStorageFilterOnKeys]] accepts it. Without the
+   * mark, the post-scan `Filter` would evaluate it again on every row the reader returns.
    */
   private def storageFiltersFor(
       normalizedFilters: Seq[Expression],
       fsRelation: HadoopFsRelation,
       readDataColumns: Seq[Attribute],
-      readerDataSchema: StructType): Seq[Expression] = {
+      readerDataSchema: StructType,
+      marksChecked: Boolean): Seq[Expression] = {
     val sparkSession = fsRelation.sparkSession
     if (!fsRelation.fileFormat.supportsStorageFilterPushdown(sparkSession)) return Nil
     if (fsRelation.schema.fieldNames.exists(
@@ -191,13 +196,22 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
     val dataAttrs = AttributeSet(readDataColumns)
     // Deduplicated through an `ExpressionSet`, as `afterScanFilters` is, once a scan can take any.
-    val offered = ExpressionSet(normalizedFilters).toSeq.filter { expr =>
+    val candidates = ExpressionSet(normalizedFilters).toSeq
+    val offered = candidates.filter { expr =>
       val refs = expr.references
       refs.nonEmpty && refs.subsetOf(dataAttrs) && fsRelation.fileFormat.supportsStorageFilter(expr)
     }
     if (offered.isEmpty) return Nil
     val storageKeyAttrs = AttributeSet.fromAttributeSets(offered.map(_.references))
-    if (dataAttrs.subsetOf(storageKeyAttrs)) Nil else offered
+    if (dataAttrs.subsetOf(storageKeyAttrs)) return Nil
+    if (!marksChecked) return offered
+    // A conjunct over the key columns alone adds no column to the read.
+    val onKeys = candidates.filter { expr =>
+      val refs = expr.references
+      refs.nonEmpty && refs.subsetOf(storageKeyAttrs) && !offered.contains(expr) &&
+        fsRelation.fileFormat.supportsStorageFilterOnKeys(sparkSession, expr)
+    }
+    offered ++ onKeys
   }
 
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -345,20 +359,23 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // Offered conjuncts become `storageFilters` on the scan and stay in the post-scan Filter too.
       // This runs here because eligibility depends on the data columns the reader reads.
       val readerDataColumns = readDataColumns ++ generatedMetadataColumns
-      val storageFilters = storageFiltersFor(
-        normalizedFilters, fsRelation, readDataColumns, readerDataColumns.toStructType)
       // The column the reader marks the rows it checked in, see
       // `FileFormat.buildReaderWithStorageFilters`. It is added only where the scan still returns
       // columnar batches with it, as `FileSourceScanExec.supportsColumnar` decides, so the column
       // never changes how the scan runs. Above a row-based scan, the Project that drops the
       // column would copy every surviving row.
-      val storageFilterCheckedColumn = Option.when(storageFilters.nonEmpty) {
+      val checkedColumn =
         AttributeReference(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME, BooleanType)()
-      }.filter { checked =>
+      val marksChecked = {
         val conf = fsRelation.sparkSession.sessionState.conf
-        val output = readerDataColumns ++ partitionColumns ++ constantMetadataColumns :+ checked
+        val output =
+          readerDataColumns ++ partitionColumns ++ constantMetadataColumns :+ checkedColumn
         conf.wholeStageEnabled && !WholeStageCodegenExec.isTooManyFields(conf, output.toStructType)
       }
+      val storageFilters = storageFiltersFor(normalizedFilters, fsRelation, readDataColumns,
+        readerDataColumns.toStructType, marksChecked)
+      val storageFilterCheckedColumn =
+        Option.when(storageFilters.nonEmpty && marksChecked)(checkedColumn)
 
       // The output rows will be produced during file scan operation in three steps:
       //  (1) File format reader populates a `Row` with `readDataColumns`,
@@ -431,12 +448,17 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       // than an `Or`, so a null mark leaves the conjunct as it was, an `And` around it included,
       // and subexpression elimination cannot hoist what the conjunct shares with another one
       // ahead of the skip. They are matched by `ExpressionSet`, since `storageFilters` carry the
-      // relation's column names.
+      // relation's column names. An `IsNotNull` stays bare, since the `Filter` marks its column
+      // not nullable only then.
       val postScanFilters = storageFilterCheckedColumn match {
         case Some(checked) =>
           val offered = ExpressionSet(storageFilters)
           afterScanFilters.toSeq.map { f =>
-            if (offered.contains(f)) If(checked, Literal.TrueLiteral, f) else f
+            if (offered.contains(f) && !f.isInstanceOf[IsNotNull]) {
+              If(checked, Literal.TrueLiteral, f)
+            } else {
+              f
+            }
           }
         case None => afterScanFilters.toSeq
       }
