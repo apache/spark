@@ -20,7 +20,7 @@ package org.apache.spark.sql.connector.catalog;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.read.Scan;
 import org.apache.spark.sql.connector.read.ScanBuilder;
-import org.apache.spark.sql.connector.read.ScanBuilderContext;
+import org.apache.spark.sql.connector.read.ScanContext;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 /**
@@ -55,7 +55,7 @@ public interface SupportsRead extends Table {
    *                string-to-string map
    * @since 4.4.0
    */
-  default ScanBuilder newScanBuilder(ScanBuilderContext context, CaseInsensitiveStringMap options) {
+  default ScanBuilder newScanBuilder(ScanContext context, CaseInsensitiveStringMap options) {
     return newScanBuilder(options);
   }
 }

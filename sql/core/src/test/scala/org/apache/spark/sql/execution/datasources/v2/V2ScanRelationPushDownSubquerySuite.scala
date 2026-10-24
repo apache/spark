@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.expressions.{GreaterThan, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, Project, Subquery}
 import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryTable, InMemoryTableCatalog, SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
-import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, ScanBuilderContext, Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsReportStatistics}
+import org.apache.spark.sql.connector.read.{Batch, Scan, ScanBuilder, ScanContext, Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownRequiredColumns, SupportsReportStatistics}
 import org.apache.spark.sql.sources
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StructType}
@@ -75,7 +75,7 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
         super.newScanBuilder(options)
       }
     }
-    table.newScanBuilder(new ScanBuilderContext(true), options).build()
+    table.newScanBuilder(new ScanContext(true), options).build()
     assert(receivedOptions eq options)
     assert(receivedOptions.get("mixed") == "value")
   }
@@ -220,7 +220,7 @@ object SubqueryScanTestCatalog {
 }
 
 class SubqueryScanTestCall(
-    val context: Option[ScanBuilderContext],
+    val context: Option[ScanContext],
     val options: CaseInsensitiveStringMap) {
   val events: ArrayBuffer[String] = ArrayBuffer("select statistics")
   val sizeInBytes: Long = if (context.exists(_.isInSubquery())) 10L else 100L
@@ -239,13 +239,13 @@ class SubqueryScanTestTable(table: InMemoryTable) extends Table with SupportsRea
   }
 
   override def newScanBuilder(
-      context: ScanBuilderContext,
+      context: ScanContext,
       options: CaseInsensitiveStringMap): ScanBuilder = {
     newBuilder(Some(context), options)
   }
 
   private def newBuilder(
-      context: Option[ScanBuilderContext],
+      context: Option[ScanContext],
       options: CaseInsensitiveStringMap): ScanBuilder = {
     val call = new SubqueryScanTestCall(context, options)
     SubqueryScanTestCatalog.calls += call

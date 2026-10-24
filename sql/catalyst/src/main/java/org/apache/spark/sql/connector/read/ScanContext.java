@@ -25,15 +25,19 @@ import org.apache.spark.annotation.Evolving;
  * @since 4.4.0
  */
 @Evolving
-public class ScanBuilderContext {
+public class ScanContext {
   private final boolean isInSubquery;
 
-  public ScanBuilderContext(boolean isInSubquery) {
+  public ScanContext(boolean isInSubquery) {
     this.isInSubquery = isInSubquery;
   }
 
   /**
    * Returns whether Spark is constructing this scan within a subquery.
+   *
+   * <p>This describes the planning scope when the scan builder is created. Subsequent optimizer
+   * rewrites may move or reuse the scan in another scope. It does not guarantee the final query
+   * shape or that statistics will be recomputed.
    *
    * <p>Data sources can use this context to adjust planning work, such as statistics computation.
    * It must not change the rows returned by the scan.

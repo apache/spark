@@ -22,7 +22,7 @@ import java.util.{EnumSet => JEnumSet, Set => JSet}
 import org.apache.spark.sql.connector.catalog.{Changelog, ChangelogContext, Column, Identifier, SupportsRead, Table, TableCapability, TableCatalog}
 import org.apache.spark.sql.connector.catalog.ChangelogRange.{TimestampRange, UnboundedRange, VersionRange}
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, MICRO_BATCH_READ}
-import org.apache.spark.sql.connector.read.ScanBuilder
+import org.apache.spark.sql.connector.read.{ScanBuilder, ScanContext}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.types.{DataType, LongType, StringType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -77,6 +77,12 @@ case class ChangelogTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
     changelog.newScanBuilder(options)
+  }
+
+  override def newScanBuilder(
+      context: ScanContext,
+      options: CaseInsensitiveStringMap): ScanBuilder = {
+    changelog.newScanBuilder(context, options)
   }
 
   override def capabilities: JSet[TableCapability] = JEnumSet.of(BATCH_READ, MICRO_BATCH_READ)
