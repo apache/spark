@@ -7,7 +7,7 @@ SELECT 1 + explode(array(1, 2, 3));
 -- multiple generators should work
 SELECT explode(array(0, 1, 2)), explode(array(10, 20));
 
--- multiple generators' order is not fixed and depends on rule ordering
+-- multiple generators preserve SELECT-list order when an earlier generator resolves later
 SELECT explode(array(sin(0), 1, 2)), explode(array(10, 20));
 
 -- multiple generators in aggregate should fail
@@ -133,6 +133,11 @@ SELECT explode(array(array(0), array(1), array(2))) as arr, explode(arr) as col;
 
 -- generator LCA right-to-left should work
 SELECT explode(arr) as col, explode(array(array(0), array(1), array(2))) as arr;
+
+-- transitive generator LCA right-to-left should work
+SELECT explode(b) AS a,
+       explode(c) AS b,
+       explode(array(array(array(1)), array(array(2)))) AS c;
 
 -- generator output LCA right-to-left should fail (reference before definition)
 SELECT col + 1 as col2, explode(array(1, 2, 3)) as col;
