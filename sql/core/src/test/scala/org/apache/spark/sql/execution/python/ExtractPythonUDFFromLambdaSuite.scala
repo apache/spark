@@ -22,8 +22,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{ArraysZip, LambdaFunction, Literal,
   NamedArgumentExpression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Join}
-import org.apache.spark.sql.functions.{array_sort, col, collect_list, forall, lit, map_filter,
-  map_zip_with, transform, transform_keys, transform_values, when, zip_with}
+import org.apache.spark.sql.functions.{array_sort, col, collect_list, filter, forall, lit,
+  map_filter, map_zip_with, transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType}
@@ -199,6 +199,17 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(udfsInsideLambda(df).isEmpty)
     // Two inner draws, and one outer call over each of them.
     assert(liftedUDFs(df).size == 4)
+  }
+
+  test("SPARK-60508: calls capturing different lambda variables are lifted distinctly") {
+    // `f(filter(c, y -> y < a))` and `f(filter(c, y -> y < b))` differ only in the lambda variable
+    // they capture, so keying them by canonical form must not merge them into one lifted call.
+    val df = Seq((Seq(1, 2), Seq(10, 20), Seq(0, 5, 15))).toDF("l", "r", "c").select(
+      zip_with(col("l"), col("r"), (a, b) =>
+        pythonUDF(filter(col("c"), y => y < a)) || pythonUDF(filter(col("c"), y => y < b)))
+        .as("res"))
+    assert(udfsInsideLambda(df).isEmpty)
+    assert(liftedUDFs(df).size == 2)
   }
 
   test("transform_values whose result type equals the key type replaces values, not keys") {
