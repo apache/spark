@@ -19,6 +19,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -294,6 +295,27 @@ class SparkSubmitTests(unittest.TestCase):
         )
         out, err = proc.communicate()
         self.assertEqual(0, proc.returncode, msg="Process failed with error:\n {0}".format(out))
+
+    def test_shell_reports_where_the_active_context_was_created(self):
+        """The shell creates its SparkContext from shell.py, the first frame on the stack"""
+        env = dict(os.environ)
+        env.pop("SPARK_TESTING", None)
+        # The test runner was itself started by bin/pyspark, which exported PYTHONSTARTUP.
+        # Inherited, shell.py would be recorded as the "old" startup file and run itself forever.
+        env.pop("PYTHONSTARTUP", None)
+        env.pop("OLD_PYTHONSTARTUP", None)
+        # -i makes Python run PYTHONSTARTUP (shell.py) even though stdin is a pipe.
+        env["PYSPARK_DRIVER_PYTHON"] = sys.executable
+        env["PYSPARK_DRIVER_PYTHON_OPTS"] = "-i"
+        proc = subprocess.Popen(
+            [os.path.join(SPARK_HOME, "bin", "pyspark")],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=env,
+        )
+        out, err = proc.communicate(b'SparkContext("local", "second")\n')
+        self.assertRegex(out.decode("utf-8"), r"created by <module> at \S*shell\.py:\d+")
 
 
 if __name__ == "__main__":
