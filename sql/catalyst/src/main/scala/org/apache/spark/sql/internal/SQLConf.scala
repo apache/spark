@@ -5140,6 +5140,27 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val WINDOW_REORDER_ENABLED =
+    buildConf("spark.sql.optimizer.windowReorder.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, the optimizer reorders a stack of adjacent window operators to reduce " +
+        "shuffles when their PARTITION BY columns nest or repeat, and places windows with " +
+        "compatible sort orders next to each other to share a sort. The shuffle count is " +
+        "not guaranteed to be minimal, and over input already partitioned for one of the " +
+        "windows this can even add an exchange. A rank filter such as rn = 1 above a " +
+        "row_number window can also keep a shuffle: that window is kept in place so the " +
+        "group limit still applies, and on a reordered stack the pin is taken only when it " +
+        "adds no shuffle, but when the window cannot be reordered with the window below it " +
+        "the extra shuffle can remain. Among orders with " +
+        "the same number of shuffles, windows whose output grows with the partition (for " +
+        "example collect_list or listagg) are placed near the top of the stack, so those " +
+        "columns cross fewer shuffles. When false, two adjacent window operators are " +
+        "swapped only when the upper one's PARTITION BY columns are a strict subset of the " +
+        "lower one's.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
