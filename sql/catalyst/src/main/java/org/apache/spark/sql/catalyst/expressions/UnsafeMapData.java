@@ -58,18 +58,23 @@ public final class UnsafeMapData extends MapData implements Externalizable, Kryo
   public long getBaseOffset() { return baseOffset; }
   public int getSizeInBytes() { return sizeInBytes; }
 
-  private final UnsafeArrayData keys;
-  private final UnsafeArrayData values;
+  // The number of bytes of the key array, read from the 8-byte header in `pointTo`.
+  private long keyArraySize;
+
+  // The key/value array views are materialized lazily by `keyArray()`/`valueArray()`. Keeping them
+  // out of the constructor leaves a freshly pointed-to UnsafeMapData a flat object (primitives plus
+  // a base-object reference), which lets the JIT scalar-replace it via escape analysis for
+  // count-only accesses such as `numElements()` -- the common `size(map)` / `cardinality` path and
+  // the `size(x) > 0` filter inferred below explode/inline.
+  private UnsafeArrayData keys;
+  private UnsafeArrayData values;
 
   /**
    * Construct a new UnsafeMapData. The resulting UnsafeMapData won't be usable until
    * `pointTo()` has been called, since the value returned by this constructor is equivalent
    * to a null pointer.
    */
-  public UnsafeMapData() {
-    keys = new UnsafeArrayData();
-    values = new UnsafeArrayData();
-  }
+  public UnsafeMapData() {}
 
   /**
    * Update this UnsafeMapData to point to different backing data.
@@ -87,28 +92,39 @@ public final class UnsafeMapData extends MapData implements Externalizable, Kryo
     final int valueArraySize = sizeInBytes - (int)keyArraySize - 8;
     assert valueArraySize >= 0 : "valueArraySize (" + valueArraySize + ") should >= 0";
 
-    keys.pointTo(baseObject, baseOffset + 8, (int)keyArraySize);
-    values.pointTo(baseObject, baseOffset + 8 + keyArraySize, valueArraySize);
-
-    assert keys.numElements() == values.numElements();
-
     this.baseObject = baseObject;
     this.baseOffset = baseOffset;
     this.sizeInBytes = sizeInBytes;
+    this.keyArraySize = keyArraySize;
+    // Defer building the key/value array views until they are actually needed (see field comment).
+    this.keys = null;
+    this.values = null;
   }
 
   @Override
   public int numElements() {
-    return keys.numElements();
+    // The key array is laid out at `baseOffset + 8`, and an UnsafeArrayData's element count is its
+    // first 8 bytes, so this reads the same value as `keyArray().numElements()` without
+    // materializing the key/value array views.
+    return (int) Platform.getLong(baseObject, baseOffset + 8);
   }
 
   @Override
   public UnsafeArrayData keyArray() {
+    if (keys == null) {
+      keys = new UnsafeArrayData();
+      keys.pointTo(baseObject, baseOffset + 8, (int) keyArraySize);
+    }
     return keys;
   }
 
   @Override
   public UnsafeArrayData valueArray() {
+    if (values == null) {
+      final int valueArraySize = sizeInBytes - (int) keyArraySize - 8;
+      values = new UnsafeArrayData();
+      values.pointTo(baseObject, baseOffset + 8 + keyArraySize, valueArraySize);
+    }
     return values;
   }
 

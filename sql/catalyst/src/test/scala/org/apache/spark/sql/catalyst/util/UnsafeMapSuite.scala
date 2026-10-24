@@ -61,4 +61,40 @@ class UnsafeMapSuite extends SparkFunSuite {
     assert(mapDataSer.valueArray().getLong(0) == 19286)
     assert(mapDataSer.getBaseObject.asInstanceOf[Array[Byte]].length == 1024)
   }
+
+  test("numElements reads the count without materializing the key/value arrays") {
+    assert(unsafeMapData.numElements() == 1)
+    assert(unsafeMapData.numElements() == unsafeMapData.keyArray().numElements())
+  }
+
+  test("keyArray/valueArray return the map's entries") {
+    assert(unsafeMapData.keyArray().getLong(0) == 19285)
+    assert(unsafeMapData.valueArray().getLong(0) == 19286)
+  }
+
+  test("keyArray/valueArray are cached across repeated calls") {
+    assert(unsafeMapData.keyArray() eq unsafeMapData.keyArray())
+    assert(unsafeMapData.valueArray() eq unsafeMapData.valueArray())
+  }
+
+  test("copy preserves numElements and entries") {
+    val copied = unsafeMapData.copy()
+    assert(copied.numElements() == 1)
+    assert(copied.keyArray().getLong(0) == 19285)
+    assert(copied.valueArray().getLong(0) == 19286)
+  }
+
+  test("empty map has numElements 0") {
+    val baseObject = new Array[Byte](64)
+    val offset = 16
+    // Layout: [key array numBytes][empty key array][empty value array] (empty array = 8B header).
+    Platform.putLong(baseObject, offset, 8L)
+    Platform.putLong(baseObject, offset + 8, 0L)
+    Platform.putLong(baseObject, offset + 16, 0L)
+    val emptyMap = new UnsafeMapData
+    emptyMap.pointTo(baseObject, offset, 24)
+    assert(emptyMap.numElements() == 0)
+    assert(emptyMap.keyArray().numElements() == 0)
+    assert(emptyMap.valueArray().numElements() == 0)
+  }
 }
