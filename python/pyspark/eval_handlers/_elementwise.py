@@ -62,6 +62,7 @@ from pyspark.util import PythonEvalType, fail_on_stopiteration
 if TYPE_CHECKING:
     import pyarrow as pa
 
+    from pyspark.eval_handlers._typing import UDF
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
@@ -179,9 +180,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
         # clear message rather than a bare ImportError from `import pyarrow`.
         require_minimum_pyarrow_version()
@@ -199,9 +198,9 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
-            udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type = udf
+            udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf_func, udf_args_offsets, udf_kwargs_offsets
+                udf.func, udf.args_offsets, udf.kwargs_offsets
             )
             depth = nesting[udf_index] if nesting is not None else 1
             # Each argument arrives as ``array^depth<T>``; convert its leaves with the element type
@@ -308,9 +307,7 @@ class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     whole flat columns. The conversions below are the Arrow flavor (``pa.Array`` in and out);
     ``_PandasElementwiseUDFHandler`` overrides them for pandas."""
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
@@ -390,17 +387,15 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     ``array<R>`` using the input's offsets - one row in, one row out, one Python round trip per
     batch. Subclasses supply the flavor's conversions and result check."""
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
 
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
-            udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type = udf
+            udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf_func, udf_args_offsets, udf_kwargs_offsets
+                udf.func, udf.args_offsets, udf.kwargs_offsets
             )
             udf_output_schema = _elementwise_output_schema(udf_return_type, runner_conf)
             depth = nesting[udf_index] if nesting is not None else 1
@@ -516,14 +511,16 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     input ones. Subclasses supply the flavor's conversions and result checks.
     """
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    _iter_based = True
+
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
-        self._udf_func, self._args_offsets, kwargs_offsets, self._return_type = udfs[0]
-        assert not kwargs_offsets, "Iterator UDFs do not take keyword arguments."
+        udf = udfs[0]
+        self._udf_func, self._args_offsets = udf.func, udf.args_offsets
+        self._return_type = udf.return_type
+        assert not udf.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
 
         # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
         # element type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned

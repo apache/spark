@@ -70,8 +70,13 @@ class PipelinedUDFTests(ReusedSQLTestCase):
             flag = os.environ.get("SPARK_PIPELINED_UDF", "not_set")
             return pd.Series([flag] * len(x))
 
-        result = self.spark.range(1).select(check_env(col("id"))).first()[0]
-        self.assertEqual(result, "1", "JVM should set SPARK_PIPELINED_UDF=1")
+        result = self.spark.range(1, numPartitions=1).select(check_env(col("id")))
+        self.assertEqual(result.collect()[0][0], "1", "JVM should set SPARK_PIPELINED_UDF=1")
+        plan = result._jdf.queryExecution().executedPlan()
+        while plan.nodeName() != "ArrowEvalPython":
+            self.assertEqual(plan.children().size(), 1)
+            plan = plan.children().apply(0)
+        self.assertEqual(plan.metrics().apply("pythonNumPipelinedTasks").value(), 1)
 
     def test_scalar_arrow_udf(self):
         """Basic scalar Arrow UDF with pipelined mode."""

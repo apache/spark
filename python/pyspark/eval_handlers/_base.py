@@ -26,6 +26,8 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Optional
 
 from pyspark.eval_handlers._typing import (
+    UDF,
+    UDTF,
     CoGroupedBatch,
     GroupedBatch,
     InputBatch,
@@ -120,6 +122,13 @@ class _EvalTypeHandlerMeta(ABCMeta):
             _eval_type_handlers[eval_type] = (conf_name, variants)
         return cls
 
+    _iter_based: bool
+
+    @property
+    def is_iter_based(cls) -> bool:
+        """Whether the handler's UDFs return an iterator."""
+        return cls._iter_based
+
 
 class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandlerMeta):
     """Base class for the UDF execution model.
@@ -138,11 +147,13 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # the value of it this handler serves; None when the eval type has a single handler.
     variant_conf: ClassVar[Optional[str]] = None
     variant_value: ClassVar[Any] = None
+    # Whether the handler's UDFs return an iterator.
+    _iter_based: ClassVar[bool] = False
 
     def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: "RunnerConf", eval_conf: "EvalConf"
+        self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
-        self._udfs = udfs
+        self._udfs: list[Any] = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
 

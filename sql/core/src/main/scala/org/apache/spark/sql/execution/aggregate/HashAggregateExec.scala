@@ -949,9 +949,11 @@ case class HashAggregateExec(
     // The compaction ratio is measured at the operator level: all processed rows against the keys
     // held by both maps, so two-level-map routing does not change the decision. The same predicate
     // decides both check points -- periodically every `minRows` rows, and right before the map
-    // would spill (in which case the spill is skipped entirely). `minRows = 0` disables the
-    // periodic check: the row count is only ever compared after being incremented past 0, so it
-    // never matches and only the spill check remains.
+    // would spill (in which case the spill is skipped entirely). Pass-through cannot be undone
+    // within the task, so the spill check, like the periodic one, waits until the current epoch
+    // has processed `minRows` rows; a map that fills sooner spills as usual. `minRows = 0`
+    // disables the periodic check: the row count is only ever compared after being incremented
+    // past 0, so it never matches and only the spill check remains, without a row floor.
     val adaptiveIneffective = if (adaptivePartialAggEnabled) {
       val totalKeys = if (isFastHashMapEnabled) {
         s"($fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
@@ -1020,13 +1022,15 @@ case class HashAggregateExec(
              |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
              |$snapshotFastKeys
            """.stripMargin
+        // The spill check needs at least one processed row even when `minRows = 0`.
+        val spillCheckMinRows = math.max(adaptiveMinRows, 1L)
         s"""
            |// generate grouping key
            |${unsafeRowKeyCode.code}
            |if (!$adaptivePassThroughTerm) {
            |  $probeRegularMap
            |  if ($unsafeRowBuffer == null) {
-           |    if ($processedRowsTerm > 0 && $adaptiveIneffective) {
+           |    if ($processedRowsTerm >= ${spillCheckMinRows}L && $adaptiveIneffective) {
            |      $adaptivePassThroughTerm = true;
            |    } else {
            |      $spillAndRestartEpoch

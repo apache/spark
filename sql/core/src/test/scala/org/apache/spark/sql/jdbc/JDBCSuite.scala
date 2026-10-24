@@ -1786,7 +1786,7 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-58876: Oracle NTZ mapping and the preferTimestampNTZ read option") {
-    // preferTimestampNTZ reaches the dialect only through getSchema's isTimestampNTZ argument, so
+    // preferTimestampNTZ reaches the dialect only through the options passed to getSchema, so
     // resolve a mocked Oracle TIMESTAMP column via getSchema under each (prefer, flag) combination.
     def resolve(preferTimestampNTZ: Boolean): StructField = {
       val rsmd = mock(classOf[java.sql.ResultSetMetaData])
@@ -1800,8 +1800,9 @@ class JDBCSuite extends SharedSparkSession {
       when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
       val rs = mock(classOf[ResultSet])
       when(rs.getMetaData).thenReturn(rsmd)
-      JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
-        isTimestampNTZ = preferTimestampNTZ).fields.head
+      val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+        Map("preferTimestampNTZ" -> preferTimestampNTZ.toString))
+      JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(), options).fields.head
     }
 
     // Non-legacy always maps to NTZ regardless of preferTimestampNTZ; the legacy flag defers to the
@@ -1960,8 +1961,9 @@ class JDBCSuite extends SharedSparkSession {
       val rs = mock(classOf[ResultSet])
       when(rs.getMetaData).thenReturn(rsmd)
       withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> nanosEnabled.toString) {
-        JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(),
-          preferTimestampNanos = preferNanos).fields.head
+        val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+          Map("preferTimestampNanos" -> preferNanos.toString))
+        JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(), options).fields.head
       }
     }
     // Sub-microsecond scales (7-9) widen to the nanosecond NTZ type only when both the read option
@@ -3153,7 +3155,8 @@ class JDBCSuite extends SharedSparkSession {
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect)
+    val options = new JDBCOptions(url, "t", Map.empty[String, String])
+    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect, options)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
