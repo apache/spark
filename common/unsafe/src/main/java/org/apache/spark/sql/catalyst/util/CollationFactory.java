@@ -111,6 +111,7 @@ public final class CollationFactory {
     public final String collationName;
     public final String provider;
     private final ThreadLocal<Collator> threadLocalCollator;
+    public final ULocale caseConversionLocale;
     public final Comparator<UTF8String> comparator;
 
     /**
@@ -188,6 +189,7 @@ public final class CollationFactory {
         String collationName,
         String provider,
         ThreadLocal<Collator> threadLocalCollator,
+        ULocale caseConversionLocale,
         Comparator<UTF8String> comparator,
         String version,
         Function<UTF8String, byte[]> sortKeyFunction,
@@ -198,6 +200,7 @@ public final class CollationFactory {
       this.collationName = collationName;
       this.provider = provider;
       this.threadLocalCollator = threadLocalCollator;
+      this.caseConversionLocale = caseConversionLocale;
       this.comparator = comparator;
       this.version = version;
       this.sortKeyFunction = sortKeyFunction;
@@ -609,6 +612,7 @@ public final class CollationFactory {
             normalizedCollationName(),
             PROVIDER_SPARK,
             null,
+            ULocale.ROOT,
             comparator,
             CollationSpecICU.ICU_VERSION,
             sortKeyFunction,
@@ -636,6 +640,7 @@ public final class CollationFactory {
             normalizedCollationName(),
             PROVIDER_SPARK,
             null,
+            ULocale.ROOT,
             comparator,
             CollationSpecICU.ICU_VERSION,
             sortKeyFunction,
@@ -1050,6 +1055,7 @@ public final class CollationFactory {
           normalizedCollationName(),
           PROVIDER_ICU,
           threadLocalCollator,
+          ICULocaleMap.get(locale),
           comparator,
           ICU_VERSION,
           sortKeyFunction,
@@ -1145,6 +1151,7 @@ public final class CollationFactory {
           "null",
           "null",
           null,
+          ULocale.ROOT,
           (s1, s2) -> {
             throw indeterminateError();
           },
