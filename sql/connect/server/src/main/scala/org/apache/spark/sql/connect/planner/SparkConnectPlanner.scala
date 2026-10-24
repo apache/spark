@@ -32,7 +32,7 @@ import io.grpc.stub.StreamObserver
 
 import org.apache.spark.{SparkClassNotFoundException, SparkEnv, SparkException}
 import org.apache.spark.annotation.{DeveloperApi, Since}
-import org.apache.spark.api.python.{PythonEvalType, SimplePythonFunction}
+import org.apache.spark.api.python.{PythonEvalType, PythonUtils, SimplePythonFunction}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.{CheckpointCommand, CreateResourceProfileCommand, ExecutePlanResponse, SqlCommand, StreamingForeachFunction, StreamingQueryCommand, StreamingQueryCommandResult, StreamingQueryInstanceId, StreamingQueryManagerCommand, StreamingQueryManagerCommandResult, WriteStreamOperationStart, WriteStreamOperationStartResult}
 import org.apache.spark.connect.proto.ExecutePlanResponse.SqlCommandResult
@@ -40,7 +40,7 @@ import org.apache.spark.connect.proto.Parse.ParseFormat
 import org.apache.spark.connect.proto.StreamingQueryManagerCommandResult.StreamingQueryInstance
 import org.apache.spark.connect.proto.WriteStreamOperationStart.TriggerCase
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, SESSION_ID}
+import org.apache.spark.internal.LogKeys.{DATAFRAME_ID, PYTHON_EXEC, REASON, SESSION_ID}
 import org.apache.spark.resource.{ExecutorResourceRequest, ResourceProfile, TaskResourceProfile, TaskResourceRequest}
 import org.apache.spark.sql.{AnalysisException, Column, Encoders, ForeachWriter, Row}
 import org.apache.spark.sql.catalyst.{expressions, AliasIdentifier, FunctionIdentifier, InternalRow, QueryPlanningTracker}
@@ -74,7 +74,7 @@ import org.apache.spark.sql.execution.arrow.ArrowConverters
 import org.apache.spark.sql.execution.command.{CreateViewCommand, ExternalCommandExecutor}
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.python.UserDefinedPythonDataSource
-import org.apache.spark.sql.execution.python.{UserDefinedPythonFunction, UserDefinedPythonTableFunction}
+import org.apache.spark.sql.execution.python.{PythonWorkerEnvironment, UserDefinedPythonFunction, UserDefinedPythonTableFunction}
 import org.apache.spark.sql.execution.python.streaming.PythonForeachWriter
 import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
@@ -2346,10 +2346,61 @@ class SparkConnectPlanner(
       name = fun.getFunctionName,
       func = function,
       dataType = transformDataType(udf.getOutputType),
-      pythonEvalType = udf.getEvalType,
+      pythonEvalType = correctPythonEvalType(udf.getEvalType, function),
       udfDeterministic = fun.getDeterministic,
       // Set only for incremental Python aggregators (see PythonAggregate).
       bufferType = if (udf.hasBufferType) transformDataType(udf.getBufferType) else null)
+  }
+
+  /**
+   * Falls back to a regular Python UDF when the Python that runs an Arrow-optimized one cannot
+   * run it, as a Python client does before it creates the UDF, see `_create_py_udf` in
+   * `pyspark.sql.udf`. A Spark Connect client checks its own Python rather than the one that runs
+   * the UDF, so the server checks again. It checks once per session for each Python executable
+   * and environment, and keeps the UDF Arrow-optimized if the check cannot run.
+   */
+  private def correctPythonEvalType(evalType: Int, function: SimplePythonFunction): Int = {
+    if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
+      val conf = session.sessionState.conf
+      // The executable and environment that the Python UDF runners launch workers with.
+      val pythonExec = conf.pysparkWorkerPythonExecutable.getOrElse(function.pythonExec)
+      // An invalid environment fails the worker launch with the reason, so it is left to that.
+      val canRunArrow = Try(PythonWorkerEnvironment.mergeValidated(function.envVars, conf))
+        .map(_.asScala.toMap)
+        .toOption
+        .forall { envVars =>
+          sessionHolder.arrowOptimizationChecks.computeIfAbsent(
+            (pythonExec, envVars),
+            _ => canRunArrowOptimization(pythonExec, envVars))
+        }
+      if (canRunArrow) evalType else PythonEvalType.SQL_BATCHED_UDF
+    } else {
+      evalType
+    }
+  }
+
+  private def canRunArrowOptimization(
+      pythonExec: String,
+      envVars: Map[String, String]): Boolean = {
+    try {
+      PythonUtils.checkArrowOptimization(pythonExec, envVars) match {
+        case Some(reason) =>
+          logWarning(log"Arrow optimization failed to enable because PyArrow is not installed. " +
+            log"Falling back to non-Arrow-optimized UDFs. " +
+            log"(session ${MDC(SESSION_ID, sessionId)}, Python ${MDC(PYTHON_EXEC, pythonExec)}: " +
+            log"${MDC(REASON, reason)})")
+          false
+        case None => true
+      }
+    } catch {
+      case NonFatal(e) =>
+        logWarning(
+          log"Failed to check whether PyArrow is installed, so Arrow-optimized UDFs " +
+            log"stay Arrow-optimized. (session ${MDC(SESSION_ID, sessionId)}, " +
+            log"Python ${MDC(PYTHON_EXEC, pythonExec)})",
+          e)
+        true
+    }
   }
 
   private def transformPythonFunction(fun: proto.PythonUDF): SimplePythonFunction = {
