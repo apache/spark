@@ -189,7 +189,7 @@ private[spark] object UIUtils extends Logging {
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
   def uiRoot(request: HttpServletRequest): String = {
     // Knox uses X-Forwarded-Context to notify the application the base path
-    val knoxBasePath = Option(request.getHeader("X-Forwarded-Context"))
+    val knoxBasePath = Option(request).flatMap(r => Option(r.getHeader("X-Forwarded-Context")))
     // SPARK-11484 - Use the proxyBase set by the AM, if not found then use env.
     sys.props.get("spark.ui.proxyBase")
       .orElse(sys.env.get("APPLICATION_WEB_PROXY_BASE"))
@@ -201,7 +201,16 @@ private[spark] object UIUtils extends Logging {
       request: HttpServletRequest,
       basePath: String = "",
       resource: String = ""): String = {
-    uiRoot(request) + basePath + resource
+    val root = uiRoot(request).stripSuffix("/")
+    val isAbsolute = basePath.startsWith("/") ||
+      basePath.startsWith("http://") || basePath.startsWith("https://")
+    val cleanBase = if (isAbsolute) basePath
+                    else if (basePath.nonEmpty) "/" + basePath
+                    else ""
+    val cleanResource = if (resource.startsWith("/")) resource
+                        else if (resource.nonEmpty) "/" + resource
+                        else ""
+    s"$root$cleanBase$cleanResource"
   }
 
   def commonHeaderNodes(request: HttpServletRequest): Seq[Node] = {
