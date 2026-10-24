@@ -23,10 +23,11 @@ import java.lang.reflect.Field
 import java.net.{BindException, ServerSocket, URI}
 import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.Files
+import java.nio.file.{Files, FileSystems}
+import java.nio.file.attribute.{PosixFilePermission, PosixFilePermissions}
 import java.text.DecimalFormatSymbols
 import java.util.Locale
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{CyclicBarrier, TimeUnit}
 import java.util.zip.{GZIPOutputStream, ZipEntry, ZipOutputStream}
 
 import scala.collection.mutable.ListBuffer
@@ -571,6 +572,73 @@ class UtilsSuite extends SparkFunSuite with ResetSystemProperties {
     val scenario8 = new File(testDir.getCanonicalPath + File.separator + "scenario8")
     assert(scenario8.createNewFile())
     assert(!Utils.createDirectory(scenario8))
+  }
+
+  test("chmod700 leaves rwx------ under concurrent calls on the same path") {
+    // Workers in local-cluster mode share local root dirs and can chmod the same
+    // per-application directory concurrently; the stat-then-chmod File.set* sequence
+    // interleaves into broken permission sets, so chmod700 must be atomic. A post-join
+    // assertion cannot see a broken mid-race state (each call ends on owner grants, so
+    // the final mode is rwx------ either way), so the observer samples the mode during
+    // the race: with an atomic chmod every sample is the initial or the final mode, and
+    // anything else is a non-atomic interleaving.
+    assume(FileSystems.getDefault.supportedFileAttributeViews().contains("posix"))
+    withTempDir { dir =>
+      val initialPerms = PosixFilePermissions.fromString("rwxr-xr-x")
+      val expectedPerms = PosixFilePermissions.fromString("rwx------")
+      // Start from a permissive mode so the assertions cannot pass vacuously under umask 077.
+      Files.setPosixFilePermissions(dir.toPath, initialPerms)
+      @volatile var observing = true
+      // Written only by the observer and read after observer.join(), which synchronizes.
+      var brokenStates = Set.empty[java.util.Set[PosixFilePermission]]
+      var observerError: Throwable = null
+      val observer = new Thread(() => {
+        try {
+          while (observing) {
+            val perms = Files.getPosixFilePermissions(dir.toPath)
+            if (perms != initialPerms && perms != expectedPerms) {
+              brokenStates += perms
+            }
+          }
+        } catch {
+          case t: Throwable => observerError = t
+        }
+      })
+      observer.start()
+      try {
+        val numThreads = 4
+        (1 to 10).foreach { _ =>
+          // Align the thread starts to widen the race window.
+          val barrier = new CyclicBarrier(numThreads)
+          val threads = (1 to numThreads).map { _ =>
+            new Thread(() => {
+              barrier.await()
+              (1 to 20).foreach(_ => Utils.chmod700(dir))
+            })
+          }
+          threads.foreach(_.start())
+          threads.foreach(_.join())
+          assert(Files.getPosixFilePermissions(dir.toPath) === expectedPerms)
+          // Reset so the next round also races from the permissive mode.
+          Files.setPosixFilePermissions(dir.toPath, initialPerms)
+        }
+      } finally {
+        observing = false
+        observer.join()
+      }
+      assert(observerError == null, s"Observer thread failed: $observerError")
+      assert(brokenStates.isEmpty, s"Observed non-atomic permission states: $brokenStates")
+    }
+  }
+
+  test("chmod700 returns false instead of throwing for a nonexistent path") {
+    val missing = new File(System.getProperty("java.io.tmpdir"), "chmod700-" + System.nanoTime())
+    assert(!Utils.chmod700(missing))
+  }
+
+  test("chmod700 returns false for an empty path") {
+    // The NIO empty path resolves to the process working directory; chmod700 must not touch it.
+    assert(!Utils.chmod700(new File("")))
   }
 
   test("doesDirectoryContainFilesNewerThan") {
