@@ -330,6 +330,9 @@ class Vector:
     def __len__(self) -> int:
         raise NotImplementedError
 
+    def __getitem__(self, index: int) -> np.float64:
+        raise NotImplementedError
+
 
 class DenseVector(Vector):
     """
