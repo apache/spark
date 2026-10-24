@@ -46,7 +46,7 @@ import org.apache.spark.sql.hive.HiveGenericUDF
 import org.apache.spark.sql.hive.HiveShim.HiveFunctionWrapper
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{TimestampType, TimeType}
+import org.apache.spark.sql.types.{GeographyType, GeometryType, TimestampType, TimeType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
