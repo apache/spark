@@ -82,6 +82,15 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite {
     }
   }
 
+  test("validateSession rejects a negative timeout without contacting the server") {
+    withClient { (client, service) =>
+      intercept[IllegalArgumentException] {
+        client.validateSession(-1)
+      }
+      assert(service.calls.get() == 0)
+    }
+  }
+
   test("validateSession returns false when the server closes the session") {
     withClient { (client, service) =>
       assert(client.validateSession(5))

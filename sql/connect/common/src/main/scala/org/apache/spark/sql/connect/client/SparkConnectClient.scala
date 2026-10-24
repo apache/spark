@@ -186,6 +186,8 @@ private[sql] class SparkConnectClient(
   }
 
   private[sql] def validateSession(timeout: Int): Boolean = {
+    require(timeout >= 0, "Validation timeout must not be negative.")
+
     if (!isSessionValid) {
       return false
     }
