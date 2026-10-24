@@ -4544,6 +4544,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX =
+    buildConf("spark.sql.legacy.regexpInstrIgnoreGroupIndex")
+      .internal()
+      .doc("When true, `regexp_instr(str, regexp, idx)` ignores `idx` and returns the " +
+        "position of the entire match, as in Spark 4.3 and earlier. When false, it returns the " +
+        "position of the regex group `idx`, and fails if `idx` is negative or greater than " +
+        "the number of groups.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val USE_CURRENT_SQL_CONFIGS_FOR_VIEW =
     buildConf("spark.sql.legacy.useCurrentConfigsForView")
       .internal()

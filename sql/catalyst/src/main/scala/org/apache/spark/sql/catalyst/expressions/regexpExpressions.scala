@@ -853,6 +853,20 @@ object RegExpExtractBase {
     }
     new GenericArrayData(matchResults.toArray.asInstanceOf[Array[Any]])
   }
+
+  // Returns the 1-based code-point position of group `idx` of the first match in `source`, or 0
+  // if there is no match or the group does not take part in it. Shared by RegExpInStr's eval and
+  // codegen.
+  def instr(matcher: Matcher, source: String, idx: Int, prettyName: String): Int = {
+    if (matcher.find()) {
+      checkGroupIndex(prettyName, matcher.groupCount, idx)
+      val start = matcher.start(idx)
+      // Pattern matched, but it's an optional group
+      if (start < 0) 0 else source.codePointCount(0, start) + 1
+    } else {
+      0
+    }
+  }
 }
 
 abstract class RegExpExtractBase
@@ -1131,7 +1145,7 @@ case class RegExpSubStr(left: Expression, right: Expression)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(str, regexp) - Searches a string for a regular expression and returns an integer that indicates the beginning position of the matched substring. Positions are 1-based, not 0-based. If no match is found, returns 0.
+    _FUNC_(str, regexp[, idx]) - Searches a string for a regular expression and returns an integer that indicates the beginning position of the matched substring, or of the group `idx` within it. Positions are 1-based, not 0-based. If no match is found, or the group does not take part in the match, returns 0.
   """,
   arguments = """
     Arguments:
@@ -1148,8 +1162,9 @@ case class RegExpSubStr(left: Expression, right: Expression)
           It's recommended to use a raw string literal (with the `r` prefix) to avoid escaping
           special characters in the pattern string if exists.
         An expression that evaluates to a string.
-      * idx - the group index of the regular expression to search for. The default value is 0
-          if not specified.
+      * idx - the group index of the regular expression to search for. The group index should
+          be non-negative and not greater than the number of groups in `regexp`. The value 0
+          means the entire regular expression. The default value is 0 if not specified.
         An expression that evaluates to an integer.
   """,
   examples = """
@@ -1158,23 +1173,33 @@ case class RegExpSubStr(left: Expression, right: Expression)
        1
       > SELECT _FUNC_('user@spark.apache.org', '@[^.]*');
        5
+      > SELECT _FUNC_('abc123', '([a-z]+)([0-9]+)', 2);
+       4
   """,
   since = "3.4.0",
   group = "string_funcs")
 // scalastyle:on line.size.limit
-case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
+case class RegExpInStr(
+    subject: Expression,
+    regexp: Expression,
+    idx: Expression,
+    ignoreGroupIndex: Boolean =
+      SQLConf.get.getConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX))
   extends RegExpExtractBase {
-  def this(s: Expression, r: Expression) = this(s, r, Literal(0))
+  def this(s: Expression, r: Expression) =
+    this(s, r, Literal(0), SQLConf.get.getConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX))
+
+  def this(s: Expression, r: Expression, i: Expression) =
+    this(s, r, i, SQLConf.get.getConf(SQLConf.LEGACY_REGEXP_INSTR_IGNORE_GROUP_INDEX))
+
+  override def flatArguments: Iterator[Any] = Iterator(subject, regexp, idx)
 
   override def nullSafeEval(s: Any, r: Any, i: Any): Any = {
     try {
       val source = s.toString
-      val m = getLastMatcher(source, r)
-      if (m.find) {
-        source.codePointCount(0, m.start()) + 1
-      } else {
-        0
-      }
+      // In legacy mode, the group 0 gives the position of the entire match.
+      val groupIndex = if (ignoreGroupIndex) 0 else i.asInstanceOf[Int]
+      RegExpExtractBase.instr(getLastMatcher(source, r), source, groupIndex, prettyName)
     } catch {
       case _: IllegalStateException => 0
     }
@@ -1184,6 +1209,7 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
   override def prettyName: String = "regexp_instr"
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val classNameRegExpExtractBase = classOf[RegExpExtractBase].getCanonicalName
     val matcher = ctx.freshName("matcher")
     val source = ctx.freshName("source")
     val setEvNotNull = if (nullable) {
@@ -1192,18 +1218,17 @@ case class RegExpInStr(subject: Expression, regexp: Expression, idx: Expression)
       ""
     }
 
-    nullSafeCodeGen(ctx, ev, (subject, regexp, _) => {
+    nullSafeCodeGen(ctx, ev, (subject, regexp, idx) => {
+      // In legacy mode, the group 0 gives the position of the entire match.
+      val groupIndex = if (ignoreGroupIndex) "0" else idx
       s"""
          |try {
          |  $setEvNotNull
-         |  ${RegExpUtils.initLastMatcherCode(ctx, subject, regexp, matcher, prettyName,
+         |  String $source = $subject.toString();
+         |  ${RegExpUtils.initLastMatcherCode(ctx, source, regexp, matcher, prettyName,
         collationId)}
-         |  if ($matcher.find()) {
-         |    String $source = $subject.toString();
-         |    ${ev.value} = $source.codePointCount(0, $matcher.start()) + 1;
-         |  } else {
-         |    ${ev.value} = 0;
-         |  }
+         |  ${ev.value} = $classNameRegExpExtractBase.instr(
+         |    $matcher, $source, $groupIndex, "$prettyName");
          |} catch (IllegalStateException e) {
          |  ${ev.value} = 0;
          |}
