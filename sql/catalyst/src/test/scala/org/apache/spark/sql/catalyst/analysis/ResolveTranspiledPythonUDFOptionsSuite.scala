@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.dsl.expressions._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, Concat, Expression, Literal, Multiply, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.types.LongType
@@ -81,6 +81,32 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
     val a = $"a".binary
     val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)),
       List(Concat(Seq(a, a))), List(List("string")))
+    val pruned = prune(node, LocalRelation(a))
+    assert(pruned.transpiledOptions.isEmpty)
+  }
+
+  test("integral matches the whole-number types, fractional the float types") {
+    Seq($"a".byte, $"a".short, $"a".int, $"a".long).foreach { a =>
+      val integralOpt = Add(a, a)
+      val fractionalOpt = Multiply(a, a)
+      val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(integralOpt, fractionalOpt),
+        List(List("integral"), List("fractional")))
+      assert(prune(node, LocalRelation(a)).transpiledOptions == List(integralOpt))
+    }
+    Seq($"a".float, $"a".double).foreach { a =>
+      val integralOpt = Add(a, a)
+      val fractionalOpt = Multiply(a, a)
+      val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(integralOpt, fractionalOpt),
+        List(List("integral"), List("fractional")))
+      assert(prune(node, LocalRelation(a)).transpiledOptions == List(fractionalOpt))
+    }
+  }
+
+  test("decimal matches neither numeric nor integral nor fractional (falls back)") {
+    val a = $"a".decimal(10, 2)
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)),
+      List(Add(a, a), Multiply(a, a), Concat(Seq(a, a))),
+      List(List("numeric"), List("fractional"), List("integral")))
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions.isEmpty)
   }

@@ -750,6 +750,7 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf_in_higher_order_function",
         "pyspark.sql.tests.test_udf_profiler",
         "pyspark.sql.tests.test_udf_transpile_hypothesis",
+        "pyspark.sql.tests.test_udf_transpile_java_unit",
         "pyspark.sql.tests.test_udf_transpile_parity",
         "pyspark.sql.tests.test_udf_transpile_unit",
         "pyspark.sql.tests.test_unified_udf",
