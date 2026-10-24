@@ -32,10 +32,11 @@ import org.apache.spark.sql.catalyst.expressions.SpecificInternalRow
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.classic
 import org.apache.spark.sql.execution.FileSourceScanExec
-import org.apache.spark.sql.execution.datasources.{SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, SchemaColumnConvertNotSupportedException, SQLHadoopMapReduceCommitProtocol}
 import org.apache.spark.sql.execution.datasources.parquet.TestingUDT._
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
+import org.apache.spark.sql.execution.vectorized.VectorizedReaderCapacityOverflowException
 import org.apache.spark.sql.functions.struct
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -1285,6 +1286,54 @@ abstract class ParquetQuerySuite extends ParquetTest
         (LocalTime.parse("12:13:14.001001"), LocalTime.parse("23:59:59")),
         (null, null)).toDF()
       checkAnswer(sql("select * from tbl"), expected)
+    }
+  }
+
+  test("SPARK-55968: do not ignore vectorized reader capacity overflow " +
+    "when ignoreCorruptFiles is enabled") {
+    val capacityEx = new VectorizedReaderCapacityOverflowException("test overflow", null)
+    assert(!DataSourceUtils.shouldIgnoreCorruptFileException(capacityEx))
+
+    val corruptEx = new RuntimeException("corrupt file exception")
+    assert(DataSourceUtils.shouldIgnoreCorruptFileException(corruptEx))
+
+    val invalidLengthEx = new IllegalArgumentException("Invalid negative additional capacity: -1")
+    assert(DataSourceUtils.shouldIgnoreCorruptFileException(invalidLengthEx))
+  }
+
+  test("SPARK-55968: ignoreCorruptFiles skips corrupt DELTA_BYTE_ARRAY file " +
+    "and reads healthy file") {
+    // 211-byte corrupt DELTA_BYTE_ARRAY Parquet file with prefix lengths [0, -2].
+    // The DeltaBinaryPacked min_delta for prefix lengths is mutated to 3 (-2 in zigzag encoding),
+    // producing a malformed prefix length for the second value.
+    val corruptBytes = java.util.Base64.getDecoder.decode(
+      "UEFSMRUAFTgVOCwVBBUOFQYVBhw2ACgBYhgBYRERAAAAAgAAAAQBgAEEAgADAAAAAIABBAICAAAAA" +
+      "ABhYhUEGSw1ABgGc2NoZW1hFQIAFQwlAhgBcyUATBwAAAAWBBkcGRwmABwVDBklBg4ZGAFzFQAWB" +
+      "BZyFnImCDw2ACgBYhgBYRERABkcFQAVDhUCADwWBBkGGSYABAAAABZyFgQmCBZyACggcGFycXVld" +
+      "C1jcHAtYXJyb3cgdmVyc2lvbiAyNS4wLjEZHBwAAACOAAAAUEFSMQ==")
+
+    withTempDir { dir =>
+      val healthyDir = new File(dir, "healthy")
+      val corruptFile = new File(dir, "corrupt.parquet")
+      Seq("healthy_1", "healthy_2").toDF("s")
+        .write.parquet(healthyDir.getCanonicalPath)
+      java.nio.file.Files.write(corruptFile.toPath, corruptBytes)
+
+      // 1. With ignoreCorruptFiles = true, corrupt file is skipped and healthy rows are returned
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "true") {
+        val df = spark.read.parquet(healthyDir.getCanonicalPath, corruptFile.getCanonicalPath)
+        checkAnswer(df, Seq(Row("healthy_1"), Row("healthy_2")))
+      }
+
+      // 2. With ignoreCorruptFiles = false, decoding exception is thrown, NOT capacity overflow
+      withSQLConf(SQLConf.IGNORE_CORRUPT_FILES.key -> "false") {
+        val df = spark.read.parquet(healthyDir.getCanonicalPath, corruptFile.getCanonicalPath)
+        val ex = intercept[SparkException] {
+          df.collect()
+        }
+        assert(!ex.getMessage.contains(
+          "Cannot reserve additional contiguous bytes in the vectorized reader"))
+      }
     }
   }
 }
