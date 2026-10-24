@@ -42,6 +42,15 @@ private class AggregatedDialect(dialects: List[JdbcDialect])
     dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md)).headOption
   }
 
+  override def getCatalystType(
+      sqlType: Int,
+      typeName: String,
+      size: Int,
+      md: MetadataBuilder,
+      options: JDBCOptions): Option[DataType] = {
+    dialects.flatMap(_.getCatalystType(sqlType, typeName, size, md, options)).headOption
+  }
+
   override def getJDBCType(dt: DataType): Option[JdbcType] = {
     dialects.flatMap(_.getJDBCType(dt)).headOption
   }

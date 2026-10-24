@@ -357,7 +357,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
 
       val columnType =
-        dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
+        dialect.getCatalystType(dataType, typeName, fieldSize, metadata, options).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, options))
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1

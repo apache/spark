@@ -1785,10 +1785,8 @@ class JDBCSuite extends SharedSparkSession {
     assert(!NoopDialect.timestampNTZAsWallClock)
   }
 
-  test("SPARK-58876: Oracle NTZ mapping and the preferTimestampNTZ read option") {
-    // preferTimestampNTZ reaches the dialect only through the options passed to getSchema, so
-    // resolve a mocked Oracle TIMESTAMP column via getSchema under each (prefer, flag) combination.
-    def resolve(preferTimestampNTZ: Boolean): StructField = {
+  test("SPARK-58876: Oracle NTZ mapping, preferTimestampNTZ and zonelessTimestampAsNTZ") {
+    def resolve(preferTimestampNTZ: Boolean, zoneless: Option[Boolean]): StructField = {
       val rsmd = mock(classOf[java.sql.ResultSetMetaData])
       when(rsmd.getColumnCount).thenReturn(1)
       when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
@@ -1801,20 +1799,23 @@ class JDBCSuite extends SharedSparkSession {
       val rs = mock(classOf[ResultSet])
       when(rs.getMetaData).thenReturn(rsmd)
       val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
-        Map("preferTimestampNTZ" -> preferTimestampNTZ.toString))
+        Map("preferTimestampNTZ" -> preferTimestampNTZ.toString) ++
+          zoneless.map("zonelessTimestampAsNTZ" -> _.toString))
       JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(), options).fields.head
     }
 
-    // Non-legacy always maps to NTZ regardless of preferTimestampNTZ; the legacy flag defers to the
-    // shared mapping, which honors preferTimestampNTZ.
+    // zonelessTimestampAsNTZ, defaulting to !legacy, maps to NTZ regardless of preferTimestampNTZ;
+    // otherwise the shared mapping honors preferTimestampNTZ.
     for {
       legacy <- Seq(true, false)
       prefer <- Seq(true, false)
+      zoneless <- Seq(None, Some(true), Some(false))
     } {
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
-        val field = resolve(prefer)
-        val expectedType = if (legacy && !prefer) TimestampType else TimestampNTZType
-        val hint = s"legacy=$legacy prefer=$prefer"
+        val field = resolve(prefer, zoneless)
+        val expectedType =
+          if (zoneless.getOrElse(!legacy) || prefer) TimestampNTZType else TimestampType
+        val hint = s"legacy=$legacy prefer=$prefer zoneless=$zoneless"
         assert(field.dataType === expectedType, hint)
       }
     }
@@ -1841,10 +1842,14 @@ class JDBCSuite extends SharedSparkSession {
   test("SPARK-58876: Oracle NTZ writes pick the setter from the snapshotted options") {
     val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
     val schema = new StructType().add("t", TimestampNTZType, nullable = true)
-    for (legacy <- Seq(true, false)) {
+    for {
+      legacy <- Seq(true, false)
+      wallClock <- Seq(None, Some(true), Some(false))
+    } {
       val options = withSQLConf(
           SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
-        new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
+        new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+          wallClock.map("timestampNTZAsWallClock" -> _.toString).toMap)
       }
       val stmt = mock(classOf[java.sql.PreparedStatement])
       val conn = mock(classOf[Connection])
@@ -1860,12 +1865,12 @@ class JDBCSuite extends SharedSparkSession {
       } finally {
         TaskContext.unset()
       }
-      if (legacy) {
-        verify(stmt).setTimestamp(1, dialect.convertTimestampNTZToJavaTimestamp(ldt))
-        verify(stmt, never()).setObject(anyInt(), any())
-      } else {
+      if (wallClock.getOrElse(!legacy)) {
         verify(stmt).setObject(1, ldt)
         verify(stmt, never()).setTimestamp(anyInt(), any())
+      } else {
+        verify(stmt).setTimestamp(1, dialect.convertTimestampNTZToJavaTimestamp(ldt))
+        verify(stmt, never()).setObject(anyInt(), any())
       }
     }
   }
@@ -3152,7 +3157,8 @@ class JDBCSuite extends SharedSparkSession {
     when(mockRs.getMetaData).thenReturn(mockRsmd)
 
     val mockDialect = mock(classOf[JdbcDialect])
-    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
+    when(mockDialect.getCatalystType(
+        anyInt(), anyString(), anyInt(), any[MetadataBuilder], any[JDBCOptions]))
       .thenReturn(None)
 
     val options = new JDBCOptions(url, "t", Map.empty[String, String])
