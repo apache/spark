@@ -40,6 +40,12 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
     override def apply(plan: LogicalPlan): LogicalPlan = plan
   }
 
+  // Kept in a val so that the override below returns the same instance on every call and
+  // reference equality stays a meaningful check.
+  private val otherDummyRules: Seq[Rule[LogicalPlan]] = Seq(new Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan
+  })
+
   private val dummyCheck: LogicalPlan => Unit = (_: LogicalPlan) => ()
 
   private val dummyExtension: ResolverExtension = new ResolverExtension {
@@ -77,6 +83,9 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
       override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(dummyExtension)
       override val singlePassMetadataResolverExtensions: Seq[ResolverExtension] =
         Seq(dummyExtension)
+      // Deliberately different from hintResolutionRules: singlePassHintResolutionRules defaults
+      // to it, so propagation can only be observed when the two differ.
+      override def singlePassHintResolutionRules: Seq[Rule[LogicalPlan]] = otherDummyRules
       override val singlePassPostHocResolutionRules: Seq[Rule[LogicalPlan]] = Seq(dummyRule)
       override val singlePassExtendedResolutionChecks: Seq[LogicalPlan => Unit] = Seq(dummyCheck)
     }
@@ -93,6 +102,9 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
     assert(clone.singlePassPostHocResolutionRules eq analyzer.singlePassPostHocResolutionRules)
     assert(clone.singlePassExtendedResolutionChecks eq analyzer.singlePassExtendedResolutionChecks)
 
+    assert(clone.singlePassHintResolutionRules eq analyzer.singlePassHintResolutionRules)
+    assert(clone.singlePassHintResolutionRules ne clone.hintResolutionRules)
+
     // Verify the clone's anonymous class overrides exactly the expected extension points.
     // If this assertion fails, withCatalogManager was updated but this test was not.
     // Add the corresponding assert above and update the expected set.
@@ -108,6 +120,7 @@ class AnalyzerExtensionPropagationSuite extends SparkFunSuite {
       "extendedCheckRules",
       "singlePassResolverExtensions",
       "singlePassMetadataResolverExtensions",
+      "singlePassHintResolutionRules",
       "singlePassPostHocResolutionRules",
       "singlePassExtendedResolutionChecks"
     )
