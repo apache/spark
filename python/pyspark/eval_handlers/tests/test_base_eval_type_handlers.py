@@ -45,7 +45,7 @@ from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import unpickle_and_chain
+    from pyspark.worker import unpickle_udf_funcs
     from pyspark.worker_util import RunnerConf, pickleSer
 
 
@@ -279,20 +279,18 @@ class HandlerUDFsTests(PySparkBaseTestCase):
     def _stop(x):
         raise StopIteration(x)
 
-    def _new(self, handler_cls, runner_conf=None):
-        return handler_cls(
-            [
-                UDF(
-                    raw_func=self._stop,
-                    args_offsets=[1],
-                    kwargs_offsets={"y": 2},
-                    return_type=LongType(),
-                    result_id=0,
-                )
-            ],
-            runner_conf or RunnerConf({}),
-            None,
+    @staticmethod
+    def _udf(*funcs):
+        return UDF(
+            funcs=list(funcs),
+            args_offsets=[1],
+            kwargs_offsets={"y": 2},
+            return_type=LongType(),
+            result_id=0,
         )
+
+    def _new(self, handler_cls, runner_conf=None):
+        return handler_cls([self._udf(self._stop)], runner_conf or RunnerConf({}), None)
 
     def test_wraps_udfs(self):
         handler = self._new(self._Handler)
@@ -302,12 +300,79 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         self.assertEqual(udf.args_offsets, [1])
         self.assertEqual(udf.kwargs_offsets, {"y": 2})
         self.assertEqual(udf.return_type, LongType())
-        # The handler keeps the function wrapped in fail_on_stopiteration; the record keeps it
-        # unwrapped.
+        # The handler keeps the function wrapped in fail_on_stopiteration; the record and the
+        # handler's raw function keep it unwrapped.
         with self.assertRaises(PySparkRuntimeError):
             handler._funcs[0](1)
         with self.assertRaises(StopIteration):
-            udf.raw_func(1)
+            udf.funcs[0](1)
+        self.assertIs(handler._raw_funcs[0], self._stop)
+
+    def test_chains_funcs_in_order(self):
+        handler = self._Handler(
+            [self._udf(lambda x: x + 1, lambda x: x * 2, str)], RunnerConf({}), None
+        )
+        self.assertEqual(handler._raw_funcs[0](3), "8")
+        self.assertEqual(handler._funcs[0](3), "8")
+
+    def test_single_func_not_chained(self):
+        # A single function is kept as is, so its signature (and an incremental Aggregator
+        # object) survives.
+        def f(key, value):
+            return value
+
+        handler = self._Handler([self._udf(f)], RunnerConf({}), None)
+        self.assertIs(handler._raw_funcs[0], f)
+
+    def test_single_udf(self):
+        class _Single(self._Handler):
+            _single_udf = True
+
+        def f(x):
+            return x + 1
+
+        handler = _Single([self._udf(f)], RunnerConf({}), None)
+        self.assertIs(handler._udf, handler._udfs[0])
+        self.assertIs(handler._raw_func, f)
+        self.assertIs(handler._func, handler._funcs[0])
+        self.assertEqual(handler._func(1), 2)
+        for udfs in ([], [self._udf(f), self._udf(f)]):
+            with self.subTest(num_udfs=len(udfs)):
+                with self.assertRaisesRegex(RuntimeError, "_Single takes one UDF, but got"):
+                    _Single(udfs, RunnerConf({}), None)
+
+        handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)
+        self.assertFalse(hasattr(handler, "_udf"))
+
+    def test_single_udf_per_handler(self):
+        single = {
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+            PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
+            PythonEvalType.SQL_MAP_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_MAP_ARROW_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
+            PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
+            PythonEvalType.SQL_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_TABLE_UDF,
+            PythonEvalType.SQL_ARROW_UDTF,
+        }
+        for _, variants in list(_eval_type_handlers.values()):
+            for handler_cls in variants.values():
+                with self.subTest(handler=handler_cls.__name__):
+                    self.assertEqual(handler_cls._single_udf, handler_cls.eval_type in single)
 
     def test_fail_on_stopiteration_per_handler(self):
         not_wrapped = {
@@ -361,17 +426,23 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         self.assertIs(no_profiler._with_profiler(f, 0), f)
 
 
-class UnpickleAndChainTests(PySparkBaseTestCase):
-    def test_chains_in_order(self):
+class UnpickleUDFFuncsTests(PySparkBaseTestCase):
+    def test_unpickles_in_order(self):
         ser = CloudPickleSerializer()
-        func, return_type = unpickle_and_chain(
+        funcs, return_type = unpickle_udf_funcs(
             pickleSer,
             [
                 ser.dumps((lambda x: x + 1, LongType())),
                 ser.dumps((lambda x: str(x * 2), StringType())),
             ],
         )
-        self.assertEqual(func(3), "8")
+        self.assertEqual([f(3) for f in funcs], [4, "6"])
+        self.assertEqual(return_type, StringType())
+
+    def test_unpickles_single(self):
+        ser = CloudPickleSerializer()
+        funcs, return_type = unpickle_udf_funcs(pickleSer, [ser.dumps((str, StringType()))])
+        self.assertEqual(funcs, [str])
         self.assertEqual(return_type, StringType())
 
 

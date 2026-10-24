@@ -45,7 +45,7 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
         return BatchedUDFHandler(
             udfs=[
                 UDF(
-                    raw_func=f,
+                    funcs=[f],
                     args_offsets=arg_offsets,
                     kwargs_offsets=kwargs_offsets or {},
                     return_type=return_type or LongType(),

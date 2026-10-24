@@ -77,21 +77,16 @@ def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     write_with_length(payload, outfile)
 
 
-def chain(f: Callable[..., Any], g: Callable[..., Any]) -> Callable[..., Any]:
-    """chain two functions together"""
-    return lambda *a: g(f(*a))
-
-
-def unpickle_and_chain(
+def unpickle_udf_funcs(
     pickleSer: FramedSerializer, pickled_udfs: list[memoryview]
-) -> tuple[Callable[..., Any], DataType]:
-    """Unpickle the functions applied in turn to one column and chain them into one; returns the
-    chained function and the return type of the last one."""
-    chained_func, return_type = read_command(pickleSer, pickled_udfs[0])
-    for udf in pickled_udfs[1:]:
-        f, return_type = read_command(pickleSer, udf)
-        chained_func = chain(chained_func, f)
-    return chained_func, return_type
+) -> tuple[list[Callable[..., Any]], DataType]:
+    """Unpickle the functions applied in turn to one column; returns them in call order and the
+    return type of the last one."""
+    funcs = []
+    for pickled_udf in pickled_udfs:
+        f, return_type = read_command(pickleSer, pickled_udf)
+        funcs.append(f)
+    return funcs, return_type
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
@@ -175,10 +170,10 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 assert isinstance(init_info.udf_info, list)
                 udfs = []
                 for udf_info in init_info.udf_info:
-                    chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
+                    funcs, return_type = unpickle_udf_funcs(pickleSer, udf_info.udfs)
                     udfs.append(
                         UDF(
-                            raw_func=chained_func,
+                            funcs=funcs,
                             args_offsets=udf_info.args,
                             kwargs_offsets=udf_info.kwargs,
                             return_type=return_type,

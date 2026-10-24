@@ -21,6 +21,7 @@ This leaf module imports only ``_typing``, the serializers and ``pyspark.util``,
 package ``__init__`` and the concrete-handler submodules can both import it.
 """
 
+import functools
 from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
@@ -50,6 +51,11 @@ if TYPE_CHECKING:
 # _EvalTypeHandlerMeta at class definition. Handlers that declare no variant_conf register
 # under the conf name None and the value None.
 _eval_type_handlers: "dict[int, tuple[Optional[str], dict[Any, type[EvalTypeHandler]]]]" = {}
+
+
+def chain(f: Callable[..., Any], g: Callable[..., Any]) -> Callable[..., Any]:
+    """chain two functions together"""
+    return lambda *a: g(f(*a))
 
 
 def get_eval_type_handler(
@@ -153,24 +159,42 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
     # user code fails the task instead of silently ending the loop that calls the UDF.
     _fail_on_stopiteration: ClassVar[bool] = True
+    # Whether the handler takes exactly one UDF (or UDTF); __init__ then exposes it as _udf and,
+    # for a UDF, its functions as _raw_func and _func.
+    _single_udf: ClassVar[bool] = False
 
     def __init__(
         self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
+        if self._single_udf and len(udfs) != 1:
+            raise RuntimeError(
+                "{} takes one UDF, but got {}.".format(type(self).__name__, len(udfs))
+            )
         self._udfs: list[Any] = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        # Each UDF's function wrapped for profiling and, unless _fail_on_stopiteration is False,
+        # Each UDF's functions chained into one before any wrapping, at the indexes of _udfs: a
+        # single function is the pickled object itself (an incremental Aggregator) with its
+        # signature. Empty for a UDTF.
+        self._raw_funcs: list[Any] = []
+        # Each raw function wrapped for profiling and, unless _fail_on_stopiteration is False,
         # in fail_on_stopiteration, at the indexes of _udfs; empty for a UDTF.
         self._funcs: list[Callable[..., Any]] = []
         for udf in udfs:
             if isinstance(udf, UDF):
-                profiling_func = self._with_profiler(udf.raw_func, udf.result_id)
+                raw_func = functools.reduce(chain, udf.funcs)
+                self._raw_funcs.append(raw_func)
+                profiling_func = self._with_profiler(raw_func, udf.result_id)
                 self._funcs.append(
                     fail_on_stopiteration(profiling_func)
                     if self._fail_on_stopiteration
                     else profiling_func
                 )
+        if self._single_udf:
+            self._udf: Any = udfs[0]
+            if self._funcs:
+                self._raw_func: Any = self._raw_funcs[0]
+                self._func: Callable[..., Any] = self._funcs[0]
 
     def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is
