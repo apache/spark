@@ -31,6 +31,7 @@ from pyspark.sql.types import (
     BinaryType,
     BooleanType,
     DoubleType,
+    IntegerType,
     LongType,
     StringType,
 )
@@ -51,6 +52,40 @@ _TRANSPILE_OFF_ANSI_ON = {
     "spark.sql.experimental.optimizer.transpilePyUDFs": False,
     "spark.sql.ansi.enabled": True,
 }
+
+
+def _times_two(x):
+    # No `/`, so nothing here *proves* a float: whether the result is one depends
+    # entirely on the column bound to `x`.
+    return x * 2
+
+
+def _repeat_with_condition(s, n):
+    # The count is the literal 2 or 3 whatever `n` is -- `n` only steers the choice.
+    return s * (2 if n > 1.0 else 3)
+
+
+def _plain_round_udf(x):
+    # `round` resolves to the builtin unless a test injects a module-level
+    # shadow -- see test_udf_transpile_rebound_builtin_falls_back.
+    return round(x)
+
+
+def _closure_shadowed_round():
+    """A UDF whose ``round`` is a closure variable rather than the builtin.
+
+    Defined at module level so ``inspect.getsource`` works and the UDF is
+    otherwise perfectly transpilable: the only reason it must fall back is the
+    rebinding.
+    """
+
+    def round(v):  # shadowing the builtin is the point of this helper
+        return 99
+
+    def shadowed(x):
+        return round(x)
+
+    return shadowed
 
 
 @unittest.skipIf(
@@ -112,8 +147,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertNotIn("UDF", physical_plan)
+            # Count EvalPython nodes rather than matching "UDF" as a substring:
+            # the NULL guard's raise_error renders as USER_RAISED_EXCEPTION.
+            self.assertEqual(0, self._eval_python_count(transformed_df))
 
         with self.sql_conf({"spark.sql.experimental.optimizer.transpilePyUDFs": False}):
             call = PlusFour()
@@ -124,8 +160,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             transformed_df = input_df.select(pudf("a").alias("result"))
             [row] = transformed_df.collect()
             self.assertEqual(row[0], 5)
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertIn("UDF", physical_plan)
+            self.assertGreater(self._eval_python_count(transformed_df), 0)
 
     def test_udf_not_transpilable(self):
         class UnsupportedEx:
@@ -225,26 +260,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # UDF with transpilation on, and asserts (a) construction does
         # not raise, (b) `transpiled == []`, (c) the UDF still produces
         # the correct interpreted result.
+        #
+        # `/`, `//`, `&`, `|`, `<<` and friends used to be listed here; they now
+        # lower (SPARK-55210) and are covered by
+        # test_udf_transpile_numeric_operators, with the cases that still have no
+        # exact lowering in test_udf_transpile_numeric_falls_back.
 
-        def divide_by_two(x):  # `/` -- ast.Div, not handled.
+        def power_of_column(x):  # `**` with a non-constant exponent.
             if x is not None:
-                return x / 2
-
-        def floor_divide_by_two(x):  # `//` -- ast.FloorDiv, not handled.
-            if x is not None:
-                return x // 2
-
-        def bit_and_one(x):  # `&` -- ast.BitAnd, not handled.
-            if x is not None:
-                return x & 1
-
-        def bit_or_one(x):  # `|` -- ast.BitOr, not handled.
-            if x is not None:
-                return x | 1
-
-        def left_shift(x):  # `<<` -- ast.LShift, not handled.
-            if x is not None:
-                return x << 1
+                return x**x
 
         def multi_statement(x):  # > 1 top-level statement, not handled.
             y = 1
@@ -256,11 +280,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 return x + offset
 
         cases = [
-            ("divide_by_two", divide_by_two, DoubleType(), Row(a=4.0), 2.0),
-            ("floor_divide_by_two", floor_divide_by_two, LongType(), Row(a=5), 2),
-            ("bit_and_one", bit_and_one, LongType(), Row(a=5), 1),
-            ("bit_or_one", bit_or_one, LongType(), Row(a=4), 5),
-            ("left_shift", left_shift, LongType(), Row(a=3), 6),
+            ("power_of_column", power_of_column, LongType(), Row(a=3), 27),
             ("multi_statement", multi_statement, LongType(), Row(a=5), 6),
             ("func_closure_capture", func_closure_capture, LongType(), Row(a=10), 17),
         ]
@@ -588,8 +608,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             expected = [None if v is None else v + 4 for v in [-3, -1, 0, 1, 7, None, 100]]
             self.assertEqual(actual, expected)
             # Plan should also have the UDF stripped under the rewrite.
-            physical_plan = transformed_df._jdf.queryExecution().executedPlan().toString()
-            self.assertNotIn("UDF", physical_plan)
+            self.assertEqual(0, self._eval_python_count(transformed_df))
 
     def test_udf_transpile_falls_back_for_non_boolean_short_circuit(self):
         # Python's `x or 0` returns x if truthy else 0; Spark's `|` is
@@ -713,6 +732,23 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             projected = df_bool.select(pudf_bool("a").alias("r"))
             self.assertEqual(0, self._eval_python_count(projected))
             self.assertEqual([r[0] for r in projected.collect()], ["yes", "no", "no"])
+
+    def test_udf_transpile_truthiness_survives_a_narrowed_parameter(self):
+        # A parameter read by a bare `if x` (SPARK-56925) AND by an operator that needs a
+        # narrower category -- `//` wants integral, `/` wants fractional -- carries that
+        # refined category rather than plain "numeric". Which kind of number it is cannot
+        # change whether the number is zero, so the refinement must not cost the lowering:
+        # each half lowered alone while the combination lowered neither.
+        floor_if = lambda x: (x // 2) if x else 0  # noqa: E731
+        div_if = lambda x: (x / 2) if x else 0.0  # noqa: E731
+        self.assertEqual(
+            [0, 0, 1, -1, -2],
+            self._native_vals(floor_if, LongType(), "a long", [(0,), (1,), (2,), (-2,), (-3,)]),
+        )
+        self.assertEqual(
+            [0.0, 0.5, -1.5],
+            self._native_vals(div_if, DoubleType(), "a double", [(0.0,), (1.0,), (-3.0,)]),
+        )
 
     def test_udf_transpile_falls_back_for_bare_truthiness_test(self):
         # For categories the transpiler cannot lower to a truthiness expression
@@ -1084,11 +1120,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_falls_back_for_uncastable_return_type(self):
         # The lowered expression is cast to the declared return type; a return
-        # type no atomic lowering can be cast to (arrays, maps, datetimes, ...)
+        # type no atomic lowering can be cast to (maps, structs, datetimes, ...)
         # would make that Cast fail CheckAnalysis and break the whole query
         # (the options are children of TranspiledPythonUDF), so such UDFs must
-        # fall back at construction instead. Interpreted execution still works
-        # (the pickled-UDF converter nulls the type-mismatched results).
+        # fall back at construction instead. Arrays of atomic elements are let
+        # through the outer gate (other transpiler varieties can produce full
+        # array-typed expressions), but the CatalystTranspiler's per-variant
+        # body-category check still refuses every array-typed body, so an
+        # atomic body declared as an array return falls back the same way.
+        # Interpreted execution still works (the pickled-UDF converter nulls
+        # the type-mismatched results).
         import warnings as _warnings
 
         from pyspark.sql.types import ArrayType, TimestampType
@@ -1109,6 +1150,41 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             df = self.spark.createDataFrame([Row(a=1)])
             [result] = df.select(array_udf("a")).collect()
             self.assertIsNone(result[0], "interpreted fallback nulls the mismatch")
+
+    def test_udf_transpile_array_return_only_null_body_lowers(self):
+        # With an array-of-atomic return type the only lowering the
+        # CatalystTranspiler accepts is a bare-None body (NULL casts to any
+        # array type cleanly, and the interpreted path returns None too);
+        # anything array-typed is refused by the per-variant category check.
+        import warnings as _warnings
+
+        from pyspark.sql.types import ArrayType
+
+        def none_body(x: int) -> None:
+            return None
+
+        def list_body(x: int):
+            return [x]
+
+        with self.sql_conf(_TRANSPILE_ON):
+            with _warnings.catch_warnings(record=True):
+                _warnings.simplefilter("always")
+                null_udf = UserDefinedFunction(none_body, ArrayType(LongType()))
+            self.assertTrue(null_udf.transpiled, "NULL lowering should cast to array<bigint>")
+            with _warnings.catch_warnings(record=True):
+                _warnings.simplefilter("always")
+                list_udf = UserDefinedFunction(list_body, ArrayType(LongType()))
+            self.assertEqual([], list_udf.transpiled, "array-typed body must fail closed")
+            df = self.spark.createDataFrame([Row(a=1), Row(a=None)])
+            self.assertEqual(
+                [None, None],
+                [r[0] for r in df.select(null_udf("a")).collect()],
+            )
+            self.assertEqual(
+                [[1], [None]],
+                [r[0] for r in df.select(list_udf("a")).collect()],
+                "interpreted fallback still runs the Python body",
+            )
 
     def test_udf_transpile_falls_back_for_cross_category_return_cast(self):
         # Per-variant guard: the body category must MATCH the declared return
@@ -1594,9 +1670,9 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 self.assertEqual(0, self._eval_python_count(projected), str(func))
             return [r[0] for r in projected.collect()]
 
-    def _raises(self, func, schema, rows, needle="numeric"):
+    def _raises(self, func, schema, rows, needle="numeric", return_type=LongType()):
         with self.sql_conf(_TRANSPILE_ON):
-            u = self._transpiled_udf(func, LongType())
+            u = self._transpiled_udf(func, return_type)
             df = self.spark.createDataFrame(rows, schema)
             with self.assertRaises(Exception) as ctx:
                 df.select(u(*df.columns)).collect()
@@ -1605,6 +1681,40 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     @staticmethod
     def _eval_python_count(df):
         return df._jdf.queryExecution().executedPlan().toString().count("EvalPython")
+
+    def _assert_runs_as_python(self, func, return_type, schema):
+        """Assert the UDF still executes as interpreted Python for these columns.
+
+        Covers both fall-back routes: no option was emitted at all, and options
+        were emitted but pruned during analysis because their declared categories
+        don't match the bound column types.
+        """
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(func, return_type)
+            base = self.spark.createDataFrame([], schema)
+            plan = base.select(u(*base.columns))
+            self.assertEqual(1, self._eval_python_count(plan), str(func))
+
+    def _native_vals(self, func, return_type, schema, rows):
+        """Like ``_vals``, but also proves the lowering actually ran.
+
+        ``_vals`` only checks that options were *emitted*. An option whose
+        declared categories don't match the bound columns is pruned during
+        analysis, and then interpreted Python computes the same (correct) answer
+        -- so a value-only assertion would pass without exercising the lowering
+        at all. Requiring zero EvalPython nodes closes that hole.
+        """
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(func, return_type)
+            self.assertTrue(u.transpiled, str(func))
+            df = self.spark.createDataFrame(rows, schema)
+            plan = df.select(u(*df.columns))
+            self.assertEqual(
+                0,
+                self._eval_python_count(plan),
+                f"{func} did not run natively -- the option was pruned for {schema}",
+            )
+            return [r[0] for r in plan.collect()]
 
     @staticmethod
     def _optimized_plan(df):
@@ -1640,12 +1750,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             # unresolved and ResolveRandomSeed then gives each spliced copy its OWN seed. Both have
             # to end up sharing one evaluation, or `x == x` compares two independent draws.
             #
-            # Sharing leaves `col = col`, which SimplifyBinaryComparison folds to true and column
-            # pruning then drops the draw entirely -- so zero draws in the plan is the proof that
-            # both sides became the same column. Two independent draws would leave both.
+            # Sharing leaves both sides reading one column, and on a double that lowers to
+            # `NOT isnan(col)` rather than `col = col` -- Python's `x == x` is False for NaN, so
+            # the NaN guard is the parity-correct answer here. It still depends on the column, so
+            # unlike a `col = col` that folds to true it cannot be pruned away: the one shared
+            # draw stays in the plan. That count IS the proof -- two independent draws would be 2.
             for arg in (rand(), expr("rand()")):
                 eq_df = rows.select(eq_udf(arg).alias("v"))
-                self.assertEqual(0, self._draw_count(eq_df))
+                self.assertEqual(1, self._draw_count(eq_df))
+                self.assertTrue(self._shares_an_argument(eq_df))
                 self.assertTrue(all(r[0] for r in eq_df.collect()))
 
             clamped = rows.select(clamp_udf(rand()).alias("v"))
@@ -2048,7 +2161,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         gt5 = lambda x: (x > 5) if x is not None else None  # noqa: E731
         add_offset = lambda x: x + offset  # noqa: E731  closure -> fallback
         plus_one = lambda x: x + 1  # noqa: E731  convertible
-        div_two = lambda x: x / 2  # noqa: E731  `/` -> fallback
+        div_two = lambda x: x / 2  # noqa: E731  `/` on a bigint column -> fallback
         with self.sql_conf(_TRANSPILE_ON):
             f = UserDefinedFunction(gt5, BooleanType())
             self.assertTrue(f.transpiled)
@@ -2059,7 +2172,13 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             u1 = UserDefinedFunction(add_offset, LongType())
             u2 = UserDefinedFunction(plus_one, LongType())
             u3 = UserDefinedFunction(div_two, DoubleType())
-            self.assertEqual(([], True, []), (u1.transpiled, bool(u2.transpiled), u3.transpiled))
+            # `x / 2` DOES produce options (an int32 one and a fractional one),
+            # but neither matches the bigint column below, so it is pruned during
+            # analysis and still runs as Python -- the same fallback this test
+            # wants, reached one stage later than the closure UDF's.
+            self.assertEqual(
+                ([], True, True), (u1.transpiled, bool(u2.transpiled), bool(u3.transpiled))
+            )
             chained = (
                 self.spark.createDataFrame([(10,)], "a long")
                 .select(u1("a").alias("x"))
@@ -2444,18 +2563,24 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             "both parameters come from the call site",
         )
 
-    def test_udf_transpile_known_value_divergences(self):
-        # Transpile but DIVERGE from Python (documented in transpile.py; pinned so
-        # a future fix is noticed): unguarded arithmetic on NULL yields NULL
-        # (Python raises TypeError), and NaN > 0 is True (Python False; Spark
-        # orders NaN highest). Mixed str/numeric arithmetic is handled or falls
-        # back -- see test_udf_transpile_string_operands{,_fall_back}.
-        unguarded = lambda x: x + 1  # noqa: E731
+    def test_udf_transpile_closed_value_divergences(self):
+        # Divergences that used to be pinned here and are now closed, kept as
+        # regression guards so a flip-back is loud. Arithmetic on a NULL operand
+        # was one (`x + 1` on NULL yielded NULL where Python raises TypeError);
+        # the NULL guards closed it, and the raise is pinned in
+        # test_udf_transpile_numeric_null_and_error_paths. Mixed str/numeric
+        # arithmetic is handled or falls back -- see
+        # test_udf_transpile_string_operands{,_fall_back}.
         nan_gt = lambda x: (x > 0) if x is not None else None  # noqa: E731
         eq_strlit = lambda x: (x == "5") if x is not None else None  # noqa: E731
-        self.assertEqual(self._vals(unguarded, LongType(), "a long", [(None,), (5,)]), [None, 6])
+        # `nan > 0` used to be pinned here as a divergence: Spark orders NaN above
+        # every value, so it returned True where Python returns False. `_nan_guard`
+        # closed that, and the case stays as a regression guard -- if the guard
+        # stops firing (for instance because a category gate stops recognising a
+        # refined numeric category as numeric) this flips straight back to True.
         self.assertEqual(
-            self._vals(nan_gt, BooleanType(), "a double", [(float("nan"),), (1.0,)]), [True, True]
+            self._vals(nan_gt, BooleanType(), "a double", [(float("nan"),), (1.0,)]),
+            [False, True],
         )
         # `x == "5"` used to be pinned as a coercion divergence (int == "5" -> True).
         # The eq category gate now drops the numeric variant, so on a long column the
@@ -2493,12 +2618,12 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         # (func, return_type, schema, rows, expected); arg columns come from schema.
         cases = [
             (add, S, "a string, b string", [("x", "y"), ("a", "b")], ["xy", "ab"]),
-            (mul, S, "a string, b long", [("ab", 3)], ["ababab"]),
-            (mul, S, "a long, b string", [(3, "ab")], ["ababab"]),
+            (mul, S, "a string, b int", [("ab", 3)], ["ababab"]),
+            (mul, S, "a int, b string", [(3, "ab")], ["ababab"]),
             (mul3, S, "a string", [("2",), ("ab",)], ["222", "ababab"]),
             (concat_right, S, "a string", [("hi",)], ["hi!"]),
             (concat_left, S, "a string", [("x",)], ["pre-x"]),
-            (repeat_lit, S, "a long", [(3,)], ["ababab"]),
+            (repeat_lit, S, "a int", [(3,)], ["ababab"]),
         ]
         for i, (func, rt, schema, rows, expected) in enumerate(cases):
             with self.subTest(case=i):
@@ -2553,14 +2678,503 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             with self.subTest(func=func, schema=schema):
                 self._raises(func, schema, rows, needle="")
 
-    def test_udf_transpile_power_falls_back(self):
-        # `**` is intentionally not lowered (Spark's pow is DOUBLE and loses
-        # precision for large ints), so a UDF using it falls back to interpreted
-        # Python. TODO(SPARK-55210): revisit once an exact integer-power lowering
-        # exists.
-        square = lambda x: x**2  # noqa: E731
+    def test_udf_transpile_numeric_operators(self):
+        # The numeric operators added by SPARK-55210 lower to Catalyst and match
+        # CPython. `//` is checked over all four sign combinations because Python
+        # floors toward negative infinity where Spark's `div` truncates toward
+        # zero; `**` covers the constant-exponent expansion including the 0 and 1
+        # base cases; `/` is exercised on an int column (exact: int32 values and
+        # their quotients are representable) and a double one.
+        L, D, I = LongType(), DoubleType(), IntegerType()
+        floordiv = lambda a, b: a // b  # noqa: E731
+        floordiv_lit = lambda x: x // 3  # noqa: E731
+        power = lambda x: x**3  # noqa: E731
+        power_zero = lambda x: x**0  # noqa: E731
+        power_one = lambda x: x**1  # noqa: E731
+        power_nested = lambda x: (x + 1) ** 2  # noqa: E731
+        div_int = lambda a, b: a / b  # noqa: E731
+        div_lit = lambda x: x / 4  # noqa: E731
+        div_float_lit = lambda x: x / 2.0  # noqa: E731
+        bit_and = lambda a, b: a & b  # noqa: E731
+        bit_or = lambda a, b: a | b  # noqa: E731
+        bit_xor = lambda a, b: a ^ b  # noqa: E731
+        invert = lambda x: ~x  # noqa: E731
+        lshift = lambda a, b: a << b  # noqa: E731
+        rshift = lambda a, b: a >> b  # noqa: E731
+        # (func, return type, schema, rows, expected)
+        cases = [
+            # Python's floor division rounds toward negative infinity.
+            (floordiv, L, "a long, b long", [(7, 2)], [3]),
+            (floordiv, L, "a long, b long", [(-7, 2)], [-4]),
+            (floordiv, L, "a long, b long", [(7, -2)], [-4]),
+            (floordiv, L, "a long, b long", [(-7, -2)], [3]),
+            # Exact division needs no correction.
+            (floordiv, L, "a long, b long", [(8, 2), (-8, 2)], [4, -4]),
+            (floordiv_lit, L, "a long", [(10,), (-10,)], [3, -4]),
+            (power, L, "a long", [(3,), (-2,), (0,)], [27, -8, 0]),
+            (power_zero, L, "a long", [(5,), (0,), (-3,)], [1, 1, 1]),
+            (power_one, L, "a long", [(5,), (-3,)], [5, -3]),
+            (power_nested, L, "a long", [(4,)], [25]),
+            (div_int, D, "a int, b int", [(7, 2), (-7, 2)], [3.5, -3.5]),
+            (div_lit, D, "a int", [(10,)], [2.5]),
+            (div_float_lit, D, "a long", [(7,)], [3.5]),
+            (div_float_lit, D, "a double", [(7.0,)], [3.5]),
+            (bit_and, L, "a long, b long", [(12, 10)], [8]),
+            (bit_or, L, "a long, b long", [(12, 10)], [14]),
+            (bit_xor, L, "a long, b long", [(12, 10)], [6]),
+            (invert, L, "a long", [(5,), (-1,), (0,)], [-6, 0, -1]),
+            (lshift, L, "a long, b long", [(3, 4), (-3, 4)], [48, -48]),
+            # `>>` is an arithmetic shift in both languages, so the sign bit is
+            # replicated and no floor correction is needed.
+            (rshift, L, "a long, b long", [(48, 4), (-48, 4), (-1, 1)], [3, -3, -1]),
+        ]
+        for i, (func, rt, schema, rows, expected) in enumerate(cases):
+            with self.subTest(case=i, func=func):
+                self.assertEqual(self._native_vals(func, rt, schema, rows), expected, f"case {i}")
+        # Every expectation above is what CPython itself produces.
+        self.assertEqual(
+            [7 // 2, -7 // 2, 7 // -2, -7 // -2, 3**3, ~5, 3 << 4, -48 >> 4],
+            [3, -4, -4, 3, 27, -6, 48, -3],
+        )
+        # A signed 32-bit column keeps `/` exact and `~` in range.
+        self.assertEqual(self._vals(invert, I, "a int", [(5,)]), [-6])
+
+    def test_udf_transpile_numeric_builtins(self):
+        # abs/min/max/round lower through the ast.Call branch. min/max are
+        # integral-or-string only (NaN: Python returns its first argument, Spark
+        # orders NaN highest),
+        # round is integral only (Spark's bround rounds the shortest decimal
+        # repr of a double), and abs works for either kind of number.
+        L, D, S = LongType(), DoubleType(), StringType()
+        absolute = lambda x: abs(x)  # noqa: E731
+        minimum = lambda a, b: min(a, b)  # noqa: E731
+        maximum = lambda a, b: max(a, b)  # noqa: E731
+        min_lit = lambda x: min(x, 10)  # noqa: E731
+        rounded = lambda x: round(x)  # noqa: E731
+        rounded_neg = lambda x: round(x, -1)  # noqa: E731
+        cases = [
+            (absolute, L, "a long", [(-5,), (5,), (0,)], [5, 5, 0]),
+            (absolute, D, "a double", [(-2.5,), (2.5,)], [2.5, 2.5]),
+            (minimum, L, "a long, b long", [(3, 7), (7, 3), (-1, -9)], [3, 3, -9]),
+            (maximum, L, "a long, b long", [(3, 7), (7, 3), (-1, -9)], [7, 7, -1]),
+            (min_lit, L, "a long", [(3,), (30,)], [3, 10]),
+            (minimum, S, "a string, b string", [("abc", "abd")], ["abc"]),
+            (maximum, S, "a string, b string", [("abc", "abd")], ["abd"]),
+            (rounded, L, "a long", [(5,), (-5,)], [5, -5]),
+            # HALF_EVEN, like Python: round(15, -1) is 20 and round(25, -1) is 20.
+            (rounded_neg, L, "a long", [(15,), (25,), (-15,)], [20, 20, -20]),
+        ]
+        for i, (func, rt, schema, rows, expected) in enumerate(cases):
+            with self.subTest(case=i, func=func):
+                self.assertEqual(self._native_vals(func, rt, schema, rows), expected, f"case {i}")
+        self.assertEqual([round(15, -1), round(25, -1), round(-15, -1)], [20, 20, -20])
+
+    def test_udf_transpile_numeric_null_and_error_paths(self):
+        # Runtime behavior of the new lowerings. `//` and `%` by zero raise in
+        # Spark and Python alike; the shift guards turn Python's ValueError and
+        # its promote-on-overflow into ANSI-style raises; and every numeric
+        # lowering guards NULL, because Spark propagates it where Python raises
+        # TypeError.
+        floordiv_zero = lambda x: x // 0  # noqa: E731
+        negative_shift = lambda a, b: a << b  # noqa: E731
+        overflow_shift = lambda a, b: a << b  # noqa: E731
+        min_null = lambda a, b: min(a, b)  # noqa: E731
+        self._raises(floordiv_zero, "a long", [(5,)], "zero")
+        self._raises(negative_shift, "a long, b long", [(1, -1)], "negative shift")
+        self._raises(overflow_shift, "a long, b long", [(1, 63)], "overflow")
+        self._raises(min_null, "a long, b long", [(None, 3)], "null")
+        # Every numeric lowering raises on a NULL operand now, matching the
+        # TypeError Python raises instead of propagating NULL the way Spark's
+        # arithmetic does. The guard is the shared `_raise_on_null_operand`,
+        # so one row per lowering pins the contract; floordiv gets both
+        # operand positions as the representative case.
+        add = lambda a, b: a + b  # noqa: E731
+        sub = lambda a, b: a - b  # noqa: E731
+        mul = lambda a, b: a * b  # noqa: E731
+        floordiv = lambda a, b: a // b  # noqa: E731
+        mod = lambda a, b: a % b  # noqa: E731
+        bit_and = lambda a, b: a & b  # noqa: E731
+        power = lambda x: x**2  # noqa: E731
+        negate = lambda x: -x  # noqa: E731
+        unary_plus = lambda x: +x  # noqa: E731
+        invert = lambda x: ~x  # noqa: E731
+        absolute = lambda x: abs(x)  # noqa: E731
+        rounded = lambda x: round(x)  # noqa: E731
+        div = lambda a, b: a / b  # noqa: E731
+        repeat = lambda a, b: a * b  # noqa: E731
+        self._raises(add, "a long, b long", [(None, 2)], "null")
+        self._raises(sub, "a long, b long", [(None, 2)], "null")
+        self._raises(mul, "a long, b long", [(7, None)], "null")
+        self._raises(floordiv, "a long, b long", [(None, 2)], "null")
+        self._raises(floordiv, "a long, b long", [(7, None)], "null")
+        self._raises(mod, "a long, b long", [(None, 2)], "null")
+        self._raises(bit_and, "a long, b long", [(None, 2)], "null")
+        self._raises(power, "a long", [(None,)], "null")
+        self._raises(negate, "a long", [(None,)], "null")
+        self._raises(unary_plus, "a long", [(None,)], "null")
+        self._raises(invert, "a long", [(None,)], "null")
+        self._raises(absolute, "a long", [(None,)], "null")
+        self._raises(rounded, "a long", [(None,)], "null")
+        # `/` and `*` on a string declare non-long return types, so they pass
+        # one to `_raises`. `/` gets a row per lowering arm (int32 and
+        # fractional); repeat gets both arms (str*int and int*str lower
+        # separately) and both operand positions of the str*int arm -- one
+        # collect aborts on the first raising row, so each pin is its own call.
+        self._raises(div, "a int, b int", [(None, 2)], "null", DoubleType())
+        self._raises(div, "a double, b double", [(7.0, None)], "null", DoubleType())
+        self._raises(repeat, "a string, b int", [(None, 2)], "null", StringType())
+        self._raises(repeat, "a string, b int", [("ab", None)], "null", StringType())
+        self._raises(repeat, "a int, b string", [(None, "ab")], "null", StringType())
+
+    def test_udf_transpile_shift_counts_at_and_past_the_width(self):
+        # Java (and so Spark) masks a shift distance to the operand's width where
+        # Python shifts by the full count. Two halves to pin:
+        #   - `x >> 32` on an *int* column masks to a no-op, so we widen to a long
+        #     and return Python's 0 rather than x. The hash-mix idiom
+        #     `x ^ (x >> 32)` is what makes this matter in practice.
+        #   - a count of 64+ can't be caught by shifting back and comparing, since
+        #     the mask makes that a no-op that agrees with itself. `>>` has an
+        #     exact answer there; `<<` overflows unless x is 0.
+        L = LongType()
+        rshift = lambda a, b: a >> b  # noqa: E731
+        lshift = lambda a, b: a << b  # noqa: E731
+        hash_mix = lambda x: x ^ (x >> 32)  # noqa: E731
+        wide_shift = lambda x: x << 32  # noqa: E731
+        cases = [
+            # `>>` past the width: every bit shifts out, leaving the sign.
+            (rshift, L, "a long, b long", [(48, 64), (48, 100)], [0, 0]),
+            (rshift, L, "a long, b long", [(-1, 64), (-48, 100)], [-1, -1]),
+            # ... and at an int column's width, where masking would be a no-op.
+            (rshift, L, "a int, b int", [(1024, 32), (1024, 31)], [0, 0]),
+            (hash_mix, L, "a int", [(1024,), (0,)], [1024, 0]),
+            # `<<` on a narrow column: widening removes the spurious overflow, so
+            # this matches Python instead of raising or wrapping.
+            (wide_shift, L, "a int", [(3,)], [3 << 32]),
+            # A zero operand is unaffected by any count, in both languages.
+            (lshift, L, "a long, b long", [(0, 64), (0, 200)], [0, 0]),
+        ]
+        for i, (func, rt, schema, rows, expected) in enumerate(cases):
+            with self.subTest(case=i, func=func):
+                self.assertEqual(self._native_vals(func, rt, schema, rows), expected, f"case {i}")
+        # The expectations are CPython's own.
+        self.assertEqual(
+            [48 >> 64, -1 >> 64, 1024 >> 32, 1024 ^ (1024 >> 32), 3 << 32, 0 << 64],
+            [0, -1, 0, 1024, 12884901888, 0],
+        )
+        # A count past int32 is fine in Python (`48 >> 2**40` is 0), so the count
+        # is clamped before the cast `shiftright` needs -- otherwise ANSI raises
+        # CAST_OVERFLOW on a value Python just answers.
+        self.assertEqual(
+            self._native_vals(
+                rshift, L, "a bigint, b bigint", [(48, 2**40), (-48, 2**40), (0, 2**62)]
+            ),
+            [48 >> 2**40, -48 >> 2**40, 0],
+        )
+        # A non-zero operand shifted 64+ overflows: Python promotes to a big int,
+        # so raising is the documented ANSI-overflow behavior rather than wrapping.
+        self._raises(lshift, "a long, b long", [(1, 64)], "overflow")
+        self._raises(lshift, "a long, b long", [(1, 200)], "overflow")
+        # A negative count raises the transpiler's own error, not a cast error,
+        # however far out of int32 range it is.
+        self._raises(rshift, "a long, b long", [(1, -1)], "negative shift")
+        self._raises(rshift, "a long, b long", [(1, -(2**40))], "negative shift")
+
+    def test_udf_transpile_abs_requires_numeric(self):
+        # `abs()` on a non-number can't lower: Python raises, but ANSI string
+        # promotion would coerce (`abs('-5')` -> 5.0) and a bool/binary operand
+        # fails Abs's input check, breaking the query instead of falling back.
+        absolute = lambda x: abs(x)  # noqa: E731
+
+        def abs_bool(x: bool):
+            return abs(x)
+
+        def abs_bytes(x: bytes):
+            return abs(x)
+
+        self._assert_runs_as_python(absolute, StringType(), "a string")
         with self.sql_conf(_TRANSPILE_ON):
-            self.assertFalse(UserDefinedFunction(square, LongType()).transpiled)
+            self.assertFalse(UserDefinedFunction(abs_bool, LongType()).transpiled)
+            self.assertFalse(UserDefinedFunction(abs_bytes, LongType()).transpiled)
+        # And the interpreted UDF still raises the way CPython does.
+        self._raises(absolute, "a string", [("-5",)], needle="")
+
+    def test_udf_transpile_repeat_count_must_be_integral(self):
+        # `"ab" * n` needs an int count -- `"ab" * 2.5` is a TypeError in Python,
+        # not the "abab" the cast would give. A float literal is visible here; for
+        # a parameter only the JVM knows, so the count is narrowed to integral32
+        # and a double or bigint column drops the option (a bigint above
+        # Int.MaxValue would overflow the cast to int where Python returns "").
+        S = StringType()
+        mul = lambda a, b: a * b  # noqa: E731
+        self._assert_runs_as_python(mul, S, "a string, b double")
+        self._assert_runs_as_python(mul, S, "a double, b string")
+        # A bigint count would overflow the cast to int (Python returns "" for
+        # negative counts, or a huge string), so it falls back too.
+        self._assert_runs_as_python(mul, S, "a string, b long")
+        self._assert_runs_as_python(mul, S, "a long, b string")
+        # An int32 count still lowers, in both operand orders.
+        self.assertEqual(self._native_vals(mul, S, "a string, b int", [("ab", 3)]), ["ababab"])
+        self.assertEqual(self._native_vals(mul, S, "a int, b string", [(3, "ab")]), ["ababab"])
+
+    def test_udf_transpile_pow_zero_keeps_the_base(self):
+        # `x ** 0` is 1 for every x in Python -- but `None ** 0` raises TypeError,
+        # so folding to a bare literal 1 would both invent a value for NULL and
+        # discard any error raised while computing the base. The base stays in
+        # the condition: NULL raises like everywhere else, and `(x // 0) ** 0`
+        # raises the division's error.
+        power_zero = lambda x: x**0  # noqa: E731
+        zero_div_pow = lambda x: (x // 0) ** 0  # noqa: E731
+        self.assertEqual(self._native_vals(power_zero, LongType(), "a long", [(5,), (0,)]), [1, 1])
+        self._raises(power_zero, "a long", [(None,)], "null")
+        self._raises(zero_div_pow, "a long", [(5,)], "zero")
+
+    def test_udf_transpile_narrowing_keeps_the_narrowest_requirement(self):
+        # Two lowerings in one option can each need something of the same param,
+        # and those needs are conjunctive: `n / 3` needs an int32 column (past
+        # 2^53 Spark casts to double before dividing, Python doesn't) while the
+        # repeat needs an integral count. The narrower one has to win, not
+        # whichever was recorded last.
+        S = StringType()
+        mixed = lambda s, n: s * (n if n / 3 > 1 else 1)  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            u = UserDefinedFunction(mixed, S)
+            self.assertEqual([["string", "integral32"]], u._transpiled_input_categories)
+        # So an int32 count runs natively and a bigint one falls back.
+        self.assertEqual(
+            self._native_vals(mixed, S, "a string, b int", [("ab", 9)]), [mixed("ab", 9)]
+        )
+        self._assert_runs_as_python(mixed, S, "a string, b bigint")
+
+    def test_udf_transpile_shift_null_raises(self):
+        # A NULL shift operand raises the way Python's TypeError does, in either
+        # position and either direction. `>>` past the width branches on
+        # `base < 0`, which is NULL for a NULL operand -- without the guard the
+        # zero branch would fire and invent a value.
+        rshift = lambda a, b: a >> b  # noqa: E731
+        lshift = lambda a, b: a << b  # noqa: E731
+        self._raises(rshift, "a bigint, b bigint", [(None, 70)], "null")
+        self._raises(rshift, "a bigint, b bigint", [(None, 5)], "null")
+        self._raises(rshift, "a bigint, b bigint", [(5, None)], "null")
+        self._raises(rshift, "a bigint, b bigint", [(None, None)], "null")
+        self._raises(lshift, "a bigint, b bigint", [(None, 5)], "null")
+        self._raises(lshift, "a bigint, b bigint", [(5, None)], "null")
+
+    def test_udf_transpile_pow_widens_narrow_columns(self):
+        # `Multiply` keeps its operands' type, so expanding `x ** 2` in place would
+        # raise overflow on an int column well inside the range Python handles --
+        # for UDFs that worked before `**` was lowered at all. Widening the base to
+        # a long makes LongType the boundary the expansion cap already assumed.
+        L = LongType()
+        square = lambda x: x**2  # noqa: E731
+        cube = lambda x: x**3  # noqa: E731
+        self.assertEqual(self._native_vals(square, L, "a int", [(50000,)]), [50000**2])
+        self.assertEqual(self._native_vals(square, L, "a smallint", [(30000,)]), [30000**2])
+        self.assertEqual(self._native_vals(square, L, "a tinyint", [(100,)]), [100**2])
+        self.assertEqual(self._native_vals(cube, L, "a int", [(2000,)]), [2000**3])
+        # Past LongType it still raises, like `*`.
+        self._raises(square, "a bigint", [(4000000000,)], "overflow")
+
+    def test_udf_transpile_round_scale_must_fit_in_an_int(self):
+        # `bround`'s scale is IntegerType, and a literal past int32 becomes a bigint
+        # ANSI won't narrow -- the option fails with CAST_OVERFLOW, breaking the
+        # query instead of falling back. Python takes any scale.
+        big_scale = lambda x: round(x, 1099511627776)  # noqa: E731
+        self._assert_runs_as_python(big_scale, LongType(), "a bigint")
+        self.assertEqual(
+            self.spark.createDataFrame([(5,)], "a bigint")
+            .select(UserDefinedFunction(big_scale, LongType())("a"))
+            .first()[0],
+            round(5, 1099511627776),
+        )
+
+    def test_udf_transpile_div_requires_two_numbers(self):
+        # `10.0 / "2"` is a TypeError in Python, but ANSI promotes the string to a
+        # double and computes 5.0. A fractional operand is enough to make `/`
+        # exact, but only once both sides are numbers.
+        D = DoubleType()
+        div = lambda a, b: a / b  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            cats = UserDefinedFunction(div, D)._transpiled_input_categories
+            self.assertNotIn("string", [c for pair in cats for c in pair], str(cats))
+        self._assert_runs_as_python(div, D, "a double, b string")
+        self._assert_runs_as_python(div, D, "a string, b double")
+        # Two numbers still lower, in either width combination.
+        self.assertEqual(self._native_vals(div, D, "a double, b double", [(10.0, 4.0)]), [2.5])
+        self.assertEqual(self._native_vals(div, D, "a double, b bigint", [(10.0, 4)]), [2.5])
+
+    def test_udf_transpile_modulo_on_floats_and_boundaries(self):
+        # `%` is lowered as CPython computes it: remainder, then add the divisor
+        # back when the signs disagree. The older `sign(b) * pmod(sign(b) * a,
+        # abs(b))` form lost a small dividend at large magnitudes -- `7.5 % -1e17`
+        # gave -0.0 because the intermediate `-7.5 + 1e17` rounds to 1e17 -- and
+        # raised where the negate or the `abs` overflowed the column type.
+        D, L = DoubleType(), LongType()
+        mod = lambda a, b: a % b  # noqa: E731
+        self.assertEqual(
+            self._native_vals(mod, D, "a double, b double", [(7.5, -1e17), (-7.5, 1e17)]),
+            [7.5 % -1e17, -7.5 % 1e17],
+        )
+        # Float sign parity, and the LongType boundaries the old form raised on.
+        self.assertEqual(
+            self._native_vals(
+                mod, D, "a double, b double", [(7.5, 2.0), (-7.5, 2.0), (7.5, -2.0), (-7.5, -2.0)]
+            ),
+            [7.5 % 2.0, -7.5 % 2.0, 7.5 % -2.0, -7.5 % -2.0],
+        )
+        self.assertEqual(
+            self._native_vals(mod, L, "a bigint, b bigint", [(-(2**63), -1), (5, -(2**63))]),
+            [(-(2**63)) % -1, 5 % -(2**63)],
+        )
+
+    def test_udf_transpile_floor_div_sign_and_width_boundaries(self):
+        # `//` is lowered as `div` (truncates toward zero) with a one-step
+        # correction toward -inf when the division is not exact and the operands'
+        # signs differ -- the four cases Python's floor division rounds away from
+        # `div`'s truncation. Pin each sign combination, the LongType width
+        # boundary (the halved range keeps `MinValue // -1` out, but the
+        # near-edge values still exercise the widening cast `div` does), and a
+        # NULL operand (transpiled NULL, interpreted raises -- the harness
+        # accepts that as the ANSI tier, but the transpiled side must not
+        # diverge on a non-NULL row).
+        L = LongType()
+        fdiv = lambda a, b: a // b  # noqa: E731
+        self.assertEqual(
+            self._native_vals(
+                fdiv,
+                L,
+                "a bigint, b bigint",
+                [(7, 2), (-7, 2), (7, -2), (-7, -2)],
+            ),
+            [7 // 2, -7 // 2, 7 // -2, -7 // -2],
+        )
+        # Near the edge of the halved range: `div` returns LongType (it
+        # widens), so the correction's `quotient - 1` must not overflow.
+        H = 2**62 - 1
+        self.assertEqual(
+            self._native_vals(
+                fdiv,
+                L,
+                "a bigint, b bigint",
+                [(H, 1), (H, -1), (-H, 1), (-H, -1), (H, H)],
+            ),
+            [H // 1, H // -1, -H // 1, -H // -1, H // H],
+        )
+
+    def test_udf_transpile_numeric_falls_back(self):
+        # Shapes with no exact lowering must stay interpreted rather than return a
+        # silently different number. Each is documented in transpile.py.
+        L, D = LongType(), DoubleType()
+        # `/` on two bigint columns: Spark casts to double before dividing, so
+        # above 2^53 the result differs from Python's exact int division. Only the
+        # int32 variant is emitted, and it does not match a bigint column.
+        div = lambda a, b: a / b  # noqa: E731
+        # A bigint operand inside the division likewise breaks int32 exactness.
+        div_big_lit = lambda x: x / 10000000000  # noqa: E731
+        # `**` and `//` on doubles: repeated multiplication and floor(a/b) can
+        # each differ from CPython by an ULP / by one.
+        power = lambda x: x**3  # noqa: E731
+        floordiv = lambda a, b: a // b  # noqa: E731
+        # round on a double: bround(2.675, 2) is 2.68, round(2.675, 2) is 2.67.
+        rounded = lambda x: round(x, 2)  # noqa: E731
+        # min/max on doubles: Python returns its first argument for a NaN
+        # operand, Spark orders NaN highest either way.
+        minimum = lambda a, b: min(a, b)  # noqa: E731
+        # A non-constant or negative exponent has no exact integral lowering.
+        power_col = lambda a, b: a**b  # noqa: E731
+        power_neg = lambda x: x**-1  # noqa: E731
+        # Bitwise operators are integer-only in Python.
+        bit_and = lambda a, b: a & b  # noqa: E731
+        invert = lambda x: ~x  # noqa: E731
+        # A float repeat count: `"ab" * 2.5` raises TypeError in Python, so the
+        # count must not be silently truncated by the cast `repeat` needs. This is
+        # a knock-on effect of recognising float literals as fractional.
+        repeat_float = lambda a: a * 2.5  # noqa: E731
+        # (func, return type, schema) -- the transpiled options must not match.
+        for func, rt, schema in [
+            (div, D, "a long, b long"),
+            (div_big_lit, D, "a int"),
+            (power, D, "a double"),
+            (floordiv, D, "a double, b double"),
+            (rounded, D, "a double"),
+            (minimum, D, "a double, b double"),
+            (power_col, L, "a long, b long"),
+            (power_neg, D, "a long"),
+            (repeat_float, StringType(), "a string"),
+            (bit_and, D, "a double, b double"),
+            (invert, D, "a double"),
+        ]:
+            with self.subTest(func=func, schema=schema):
+                self._assert_runs_as_python(func, rt, schema)
+        with self.sql_conf(_TRANSPILE_ON):
+            # An exponent above the expansion cap is refused outright, so no
+            # option is emitted for any column type.
+            big_power = lambda x: x**64  # noqa: E731
+            self.assertFalse(UserDefinedFunction(big_power, L).transpiled)
+
+    def test_udf_transpile_float_result_needs_float_return_type(self):
+        # A body that provably returns a Python float cannot be declared with an
+        # integral return type: interpreted, EvaluatePython nulls the float
+        # (LongType accepts only Byte/Short/Int/Long), while a lowered cast would
+        # truncate it to a number -- a silent divergence. Refuse and stay
+        # interpreted; with a double return type the same body transpiles.
+        div = lambda x: x / 4  # noqa: E731
+        add_float = lambda x: x + 1.0  # noqa: E731
+        with self.sql_conf(_TRANSPILE_ON):
+            self.assertFalse(UserDefinedFunction(div, LongType()).transpiled)
+            self.assertFalse(UserDefinedFunction(add_float, LongType()).transpiled)
+            self.assertTrue(UserDefinedFunction(div, DoubleType()).transpiled)
+            self.assertTrue(UserDefinedFunction(add_float, DoubleType()).transpiled)
+        # And the interpreted results confirm why: NULL, not a truncated number.
+        df = self.spark.createDataFrame([(10,)], "a int")
+        self.assertEqual(df.select(UserDefinedFunction(div, LongType())("a")).first()[0], None)
+        self.assertEqual(self._vals(div, DoubleType(), "a int", [(10,)]), [2.5])
+
+    def test_udf_transpile_rebound_builtin_falls_back(self):
+        # `abs`/`min`/`max`/`round` are ordinary names a UDF can rebind. Lowering
+        # builtin semantics for a rebound name would run different code than the
+        # UDF does, so a shadowed name must fall back. Two rebinding routes are
+        # covered: a closure variable, and the defining module's globals.
+        with self.sql_conf(_TRANSPILE_ON):
+            shadowed = _closure_shadowed_round()
+            self.assertFalse(UserDefinedFunction(shadowed, LongType()).transpiled)
+            # The unshadowed builtin still lowers, so the guard is not a blanket
+            # refusal of every call. Note this must be a *named* function: an
+            # inline lambda has no extractable source and would fall back for
+            # that unrelated reason (see test_udf_transpile_falls_back).
+            self.assertTrue(UserDefinedFunction(_plain_round_udf, LongType()).transpiled)
+
+            # Globals route: rebinding the name in the UDF's own module globals is
+            # what `from mymath import round` leaves behind. Same function as
+            # above, so the rebinding is the only thing that changed.
+            _plain_round_udf.__globals__["round"] = lambda v: -1
+            try:
+                self.assertFalse(UserDefinedFunction(_plain_round_udf, LongType()).transpiled)
+            finally:
+                del _plain_round_udf.__globals__["round"]
+
+        # The value must be the UDF's own, not the builtin's: this UDF returns 99
+        # for every input, and that is what running it produces.
+        self.assertEqual(
+            self.spark.createDataFrame([(5,)], "a long")
+            .select(UserDefinedFunction(_closure_shadowed_round(), LongType())("a"))
+            .first()[0],
+            99,
+        )
+
+    def test_udf_transpile_int_float_mix_still_lowers(self):
+        # The integral/fractional split must not refuse the cross-kind operations
+        # Python allows: comparing an int against a float, mixed arithmetic, and a
+        # ternary whose branches are of different numeric kinds. These have no
+        # `/`-style exactness problem, so they keep transpiling.
+        B, D = BooleanType(), DoubleType()
+        lt_float = lambda x: (x < 1.5) if x is not None else None  # noqa: E731
+        eq_float = lambda x: (x == 2.0) if x is not None else None  # noqa: E731
+        mixed_div = lambda x: x / 2.0 + 1  # noqa: E731
+        mixed_ternary = lambda x: (1 if x > 0 else 2.5) if x is not None else None  # noqa: E731
+        self.assertEqual(self._vals(lt_float, B, "a long", [(1,), (2,)]), [True, False])
+        self.assertEqual(self._vals(eq_float, B, "a long", [(2,), (3,)]), [True, False])
+        self.assertEqual(self._vals(mixed_div, D, "a long", [(5,)]), [3.5])
+        self.assertEqual(self._vals(mixed_ternary, D, "a long", [(1,), (-1,)]), [1.0, 2.5])
 
     def test_udf_transpile_non_numeric_constant_falls_back(self):
         # bool/None constants have no faithful numeric/string lowering, so
@@ -2646,6 +3260,50 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertEqual(len(combos), 2)
         for combo in combos:
             self.assertEqual(combo[0], "string")
+
+    def test_udf_transpile_integral_return_does_not_truncate_a_double(self):
+        # An integral return type takes only Byte/Short/Int/Long from
+        # `EvaluatePython.makeFromJava`, so interpreted, a Python float comes back NULL.
+        # Nothing in `x * 2` *proves* a float -- that depends on the bound column -- so
+        # the option used to match a double column and lower to `cast((x * 2.0) as
+        # bigint)`, answering 7 where the interpreted UDF gives None. A silent wrong
+        # answer is the one outcome transpilation must never produce, so the option now
+        # narrows to integral and a double column falls back instead.
+        rows = [Row(x=3.7), Row(x=-3.7), Row(x=2.5)]
+        transpile_off = {**_TRANSPILE_ON}
+        transpile_off["spark.sql.experimental.optimizer.transpilePyUDFs"] = False
+        with self.sql_conf(transpile_off):
+            interpreted = [
+                r[0]
+                for r in self.spark.createDataFrame(rows)
+                .select(UserDefinedFunction(_times_two, LongType())("x"))
+                .collect()
+            ]
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(_times_two, LongType())
+            transpiled = [
+                r[0] for r in self.spark.createDataFrame(rows).select(pudf("x")).collect()
+            ]
+        self.assertEqual([None, None, None], interpreted, "makeFromJava should null a float")
+        self.assertEqual(interpreted, transpiled, "the lowered path must not truncate")
+        # The narrowing costs the integral case nothing: it still lowers and computes.
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(_times_two, LongType())
+            self.assertTrue(pudf.transpiled)
+            ints = self.spark.createDataFrame([Row(x=3)])
+            self.assertEqual([6], [r[0] for r in ints.select(pudf("x")).collect()])
+
+    def test_udf_transpile_repeat_count_ignores_a_condition_only_param(self):
+        # `n` only picks which literal is the repeat count, so its column type cannot
+        # make the lowering inexact. `_narrow` used to walk the whole subtree, including
+        # the IfExp's test, and tagged `n` integral -- which dropped the option for a
+        # double `n` for no reason. It now walks value positions only, the same line
+        # `_int32_exact` draws.
+        with self.sql_conf(_TRANSPILE_ON):
+            pudf = UserDefinedFunction(_repeat_with_condition, StringType())
+            self.assertTrue(pudf.transpiled)
+            df = self.spark.createDataFrame([Row(s="ab", n=2.0)])
+            self.assertEqual(["abab"], [r[0] for r in df.select(pudf("s", "n")).collect()])
 
 
 if __name__ == "__main__":

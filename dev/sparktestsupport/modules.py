@@ -749,7 +749,6 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_udf_combinations",
         "pyspark.sql.tests.test_udf_in_higher_order_function",
         "pyspark.sql.tests.test_udf_profiler",
-        "pyspark.sql.tests.test_udf_transpile_hypothesis",
         "pyspark.sql.tests.test_udf_transpile_parity",
         "pyspark.sql.tests.test_udf_transpile_unit",
         "pyspark.sql.tests.test_unified_udf",
@@ -766,6 +765,18 @@ pyspark_sql = Module(
         "pyspark.sql.tests.coercion.test_python_udf_return_type",
         "pyspark.sql.tests.df_golden.test_df_golden",
         "pyspark.sql.tests.df_golden.test_df_golden_framework",
+    ],
+)
+
+# The transpile differential fuzzer is slow enough that the whole file blows
+# past the 450s PYSPARK_TEST_TIMEOUT the fast pyspark-sql group shares, so it
+# gets its own module with a higher per-test timeout in the CI workflow.
+pyspark_sql_slow = Module(
+    name="pyspark-sql-slow",
+    dependencies=[pyspark_core, hive, avro, protobuf],
+    source_file_regexes=["python/pyspark/sql/"],
+    python_test_goals=[
+        "pyspark.sql.tests.test_udf_transpile_hypothesis",
     ],
 )
 
