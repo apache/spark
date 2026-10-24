@@ -404,6 +404,76 @@ class PythonPipelineSuite
         Set(graphIdentifier("b"), graphIdentifier("d")))
   }
 
+  test("SPARK-60494: referencing internal datasets through DataFrame arguments of spark.sql") {
+    // `d` and `e` have the SQL with DataFrame arguments under another relation.
+    val unresolvedGraph = buildGraph("""
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(5)
+      |
+      |@dp.temporary_view
+      |def view_src():
+      |  return spark.range(5)
+      |
+      |@dp.materialized_view
+      |def a():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |
+      |@dp.table
+      |def b():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.readStream.table("src"))
+      |
+      |@dp.materialized_view
+      |def c():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("view_src"))
+      |
+      |@dp.materialized_view
+      |def d():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src")).where("id > 0")
+      |
+      |@dp.materialized_view
+      |def e():
+      |  inner = spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |  return spark.sql("SELECT * FROM {x}", x=inner)
+      |""".stripMargin)
+    val graph = unresolvedGraph.resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+    // dependency is properly tracked
+    Seq("a", "b", "d", "e").foreach { flowName =>
+      assert(graph.resolvedFlow(graphIdentifier(flowName)).inputs == Set(graphIdentifier("src")))
+    }
+    assert(graph.resolvedFlow(graphIdentifier("c")).inputs == Set(TableIdentifier("view_src")))
+    assert(!graph.resolvedFlow(graphIdentifier("a")).df.isStreaming)
+    assert(graph.resolvedFlow(graphIdentifier("b")).df.isStreaming)
+
+    val updateContext =
+      new PipelineUpdateContextImpl(unresolvedGraph, _ => (), storageRoot = storageRoot)
+    updateContext.pipelineExecution.runPipeline()
+    updateContext.pipelineExecution.awaitCompletion()
+    Seq("a", "b", "c", "e").foreach { table =>
+      assert(spark.table(table).collect().map(_.getLong(0)).toSet == (0L until 5L).toSet)
+    }
+    assert(spark.table("d").collect().map(_.getLong(0)).toSet == (1L until 5L).toSet)
+  }
+
+  test(
+    "SPARK-60494: referencing an internal dataset through DataFrame arguments of spark.sql " +
+      "tracks the dependency when its table already exists") {
+    // The table of `src` exists from a previous run of the pipeline.
+    sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
+    val graph = buildGraph("""
+      |@dp.materialized_view
+      |def src():
+      |  return spark.range(5)
+      |
+      |@dp.materialized_view
+      |def a():
+      |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
+      |""".stripMargin).resolve(sessionCaseSensitive).validate(sessionCaseSensitive)
+
+    assert(graph.resolvedFlow(graphIdentifier("a")).inputs == Set(graphIdentifier("src")))
+  }
+
   test("referencing external datasets") {
     sql("CREATE TABLE spark_catalog.default.src AS SELECT * FROM RANGE(5)")
     val graph = buildGraph("""
@@ -468,9 +538,13 @@ class PythonPipelineSuite
         |@dp.table
         |def e():
         |  return spark.sql("SELECT * FROM STREAM src")
+        |
+        |@dp.materialized_view
+        |def f():
+        |  return spark.sql("SELECT * FROM {df}", df=spark.read.table("src"))
         |""".stripMargin).resolve(sessionCaseSensitive)
 
-    assert(graph.resolutionFailedFlows.size == 5)
+    assert(graph.resolutionFailedFlows.size == 6)
     graph.resolutionFailedFlows.foreach { flow =>
       assert(flow.failure.head.getMessage.contains("[TABLE_OR_VIEW_NOT_FOUND]"))
       assert(flow.failure.head.getMessage.contains("`src`"))
