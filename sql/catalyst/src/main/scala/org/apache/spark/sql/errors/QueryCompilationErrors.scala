@@ -1442,6 +1442,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new FunctionAlreadyExistsException(func.nameParts)
   }
 
+  def cannotInstantiateFunctionClassError(
+      className: String, func: FunctionIdentifier, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_INSTANTIATE_FUNCTION_CLASS",
+      messageParameters = Map(
+        "className" -> className,
+        "functionName" -> toSQLId(func.toString),
+        "msg" -> Option(cause.getMessage).getOrElse(cause.getClass.getName)),
+      cause = Some(cause))
+  }
+
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(

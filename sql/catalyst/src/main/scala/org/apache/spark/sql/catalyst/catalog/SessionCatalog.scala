@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.catalog
 
+import java.lang.reflect.InvocationTargetException
 import java.net.URI
 import java.util.Locale
 import java.util.concurrent.{Callable, ExecutionException, TimeUnit}
 import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import com.google.common.cache.{Cache, CacheBuilder}
 import com.google.common.util.concurrent.UncheckedExecutionException
@@ -40,6 +42,7 @@ import org.apache.spark.sql.catalyst.catalog.SQLFunction.{padArgumentsWithDefaul
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, Cast, Expression, ExpressionInfo, LateralSubquery, NamedArgumentExpression, NamedExpression, OuterReference, ScalarSubquery, UpCast}
 import org.apache.spark.sql.catalyst.expressions.NamedLambdaVariable
 import org.apache.spark.sql.catalyst.expressions.UnresolvedNamedLambdaVariable
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParserInterface}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter, LateralJoin, LogicalPlan, NamedParametersSupport, OneRowRelation, Project, SubqueryAlias, View}
@@ -47,6 +50,7 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.GLOBAL_TEMP_DATABASE
@@ -2073,17 +2077,63 @@ class SessionCatalog(
   }
 
   /**
-   * Constructs a [[FunctionBuilder]] based on the provided function metadata.
+   * Constructs a [[FunctionBuilder]] and the [[ExpressionInfo]] based on the provided function
+   * metadata.
    */
-  private def makeFunctionBuilder(func: CatalogFunction): FunctionBuilder = {
+  private def makeFunctionBuilderAndInfo(
+      func: CatalogFunction): (FunctionBuilder, ExpressionInfo) = {
+    val clazz = loadFunctionClass(func)
+    val name = func.identifier.unquotedString
+    if (isV2FunctionClass(clazz)) {
+      // A DataSource V2 function: bind it to the arguments at each call site. An aggregate
+      // function is returned as a bare `V2Aggregator`, which the caller wraps into an
+      // `AggregateExpression` carrying DISTINCT / FILTER. This check goes first so that a class
+      // also implementing a Hive UDF interface, for other engines sharing the metastore, runs as
+      // a V2 function in Spark. The alias makes errors and column names use the function name,
+      // like the Hive UDF wrappers do.
+      val unbound = newV2FunctionInstance(clazz, func.identifier)
+      val builder = (input: Seq[Expression]) => {
+        val expr = V2ExpressionUtils.bindFunction(unbound, input)
+        expr.setTagValue(FunctionRegistry.FUNC_ALIAS, name)
+        expr
+      }
+      (builder, makeExprInfoForV2Function(func, unbound))
+    } else {
+      val builder = (input: Seq[Expression]) =>
+        functionExpressionBuilder.makeExpression(name, clazz, input)
+      (builder, makeExprInfoForHiveFunction(func))
+    }
+  }
+
+  /**
+   * Loads the class a class-based function (`CREATE FUNCTION ... AS 'class'`) refers to.
+   */
+  private def loadFunctionClass(func: CatalogFunction): Class[_] = {
     val className = func.className
     if (!Utils.classIsLoadable(className)) {
       throw QueryCompilationErrors.cannotLoadClassWhenRegisteringFunctionError(
         className, func.identifier)
     }
-    val clazz = Utils.classForName(className)
-    val name = func.identifier.unquotedString
-    (input: Seq[Expression]) => functionExpressionBuilder.makeExpression(name, clazz, input)
+    Utils.classForName(className)
+  }
+
+  private def isV2FunctionClass(clazz: Class[_]): Boolean = {
+    classOf[UnboundFunction].isAssignableFrom(clazz)
+  }
+
+  private def newV2FunctionInstance(
+      clazz: Class[_],
+      ident: FunctionIdentifier): UnboundFunction = {
+    try {
+      clazz.getDeclaredConstructor().newInstance().asInstanceOf[UnboundFunction]
+    } catch {
+      case e: InvocationTargetException =>
+        throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
+          clazz.getName, ident, e.getCause)
+      case NonFatal(e) =>
+        throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
+          clazz.getName, ident, e)
+    }
   }
 
   private def makeUserDefinedScalarFuncBuilder(func: UserDefinedFunction): FunctionBuilder = {
@@ -2119,8 +2169,13 @@ class SessionCatalog(
       funcDefinition: CatalogFunction,
       overrideIfExists: Boolean,
       functionBuilder: Option[FunctionBuilder] = None): Unit = {
-    val builder = functionBuilder.getOrElse(makeFunctionBuilder(funcDefinition))
-    registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, info = None)
+    functionBuilder match {
+      case Some(builder) =>
+        registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, info = None)
+      case None =>
+        val (builder, info) = makeFunctionBuilderAndInfo(funcDefinition)
+        registerFunction(funcDefinition, overrideIfExists, functionRegistry, builder, Some(info))
+    }
   }
 
   private def registerFunction[T](
@@ -2167,10 +2222,51 @@ class SessionCatalog(
       if (funcDefinition.isUserDefinedFunction) {
         UserDefinedFunction.fromCatalogFunction(funcDefinition, parser).toExpressionInfo
       } else {
-        makeExprInfoForHiveFunction(funcDefinition)
+        makeExprInfoForClassFunction(funcDefinition)
       }
     }
     registry.registerFunction(identToRegister, resolvedInfo, functionBuilder)
+  }
+
+  /**
+   * Builds the [[ExpressionInfo]] of a class-based function (`CREATE FUNCTION ... AS 'class'`).
+   * A DataSource V2 function reports its own description, which requires instantiating it.
+   * Otherwise, or if the class cannot be loaded or instantiated, use the class-name-only info, so
+   * that like a Hive UDF, a broken function only fails when invoked. The class of a function with
+   * `USING` resources is not touched, as initializing it may require those resources, which are
+   * only loaded on first invocation.
+   */
+  private def makeExprInfoForClassFunction(func: CatalogFunction): ExpressionInfo = {
+    if (func.resources.nonEmpty) {
+      return makeExprInfoForHiveFunction(func)
+    }
+    try {
+      if (Utils.classIsLoadableAndAssignableFrom(func.className, classOf[UnboundFunction])) {
+        val clazz = Utils.classForName(func.className)
+        makeExprInfoForV2Function(func, newV2FunctionInstance(clazz, func.identifier))
+      } else {
+        makeExprInfoForHiveFunction(func)
+      }
+    } catch {
+      case NonFatal(_) | _: LinkageError => makeExprInfoForHiveFunction(func)
+    }
+  }
+
+  private def makeExprInfoForV2Function(
+      func: CatalogFunction,
+      unbound: UnboundFunction): ExpressionInfo = {
+    new ExpressionInfo(
+      func.className,
+      func.identifier.database.orNull,
+      func.identifier.funcName,
+      unbound.description(),
+      "",
+      "",
+      "",
+      "",
+      "",
+      "",
+      "v2_function")
   }
 
   private def makeExprInfoForHiveFunction(func: CatalogFunction): ExpressionInfo = {
@@ -2692,7 +2788,7 @@ class SessionCatalog(
         if (funcMetadata.isUserDefinedFunction) {
           UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
         } else {
-          makeExprInfoForHiveFunction(funcMetadata)
+          makeExprInfoForClassFunction(funcMetadata)
         }
       }
   }
@@ -2720,7 +2816,7 @@ class SessionCatalog(
         val info = if (funcMetadata.isUserDefinedFunction) {
           UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
         } else {
-          makeExprInfoForHiveFunction(funcMetadata)
+          makeExprInfoForClassFunction(funcMetadata)
         }
 
         // Builder factory - loads resources only on first invoke()
@@ -2736,12 +2832,9 @@ class SessionCatalog(
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
               loadFunctionResources(funcMetadata.resources)
+              val (builder, loadedInfo) = makeFunctionBuilderAndInfo(funcMetadata)
               registerFunction(
-                funcMetadata,
-                overrideIfExists = false,
-                functionRegistry,
-                makeFunctionBuilder(funcMetadata),
-                info = None)
+                funcMetadata, overrideIfExists = false, functionRegistry, builder, Some(loadedInfo))
             }
             functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
           }
