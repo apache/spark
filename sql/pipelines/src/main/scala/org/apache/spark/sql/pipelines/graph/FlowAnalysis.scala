@@ -39,7 +39,21 @@ object FlowAnalysis {
      * @param plan The user-supplied LogicalPlan defining a flow.
      * @return A FlowFunction that attempts to analyze the provided LogicalPlan.
      */
-  def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction = {
+  def createFlowFunctionFromLogicalPlan(plan: LogicalPlan): FlowFunction =
+    createFlowFunction(_ => plan)
+
+  /**
+   * Like [[createFlowFunctionFromLogicalPlan]], but builds the LogicalPlan of the flow every time
+   * the flow is analyzed. `buildPlan` is given a function that resolves the reads of datasets in a
+   * plan, which it should apply before analyzing any part of the plan. Otherwise, the analysis
+   * resolves the datasets to tables in the catalog, and the flow doesn't depend on the datasets.
+   * For example, Spark Connect analyzes some DataFrame operations eagerly when building the plan.
+   *
+   * @param buildPlan Builds the LogicalPlan defining a flow, given a function that resolves the
+   *                  reads of datasets in a plan.
+   * @return A FlowFunction that attempts to analyze the built LogicalPlan.
+   */
+  def createFlowFunction(buildPlan: (LogicalPlan => LogicalPlan) => LogicalPlan): FlowFunction = {
     (allInputs: Set[TableIdentifier],
       availableInputs: Seq[Input],
       confs: Map[String, String],
@@ -61,7 +75,7 @@ object FlowAnalysis {
       )
       val df = SQLConf.withExistingConf(ctx.flowConf) {
         confs.foreach { case (k, v) => ctx.setConf(k, v) }
-        Try(FlowAnalysis.analyze(ctx, plan))
+        Try(FlowAnalysis.analyze(ctx, buildPlan(resolveDatasetReads(ctx, _))))
       }
       FlowFunctionResult(
         requestedInputs = ctx.requestedInputs.toSet,
@@ -82,7 +96,7 @@ object FlowAnalysis {
    * the flow (e.g. in a Python REPL), so it must not depend on ambient singletons or thread-locals
    * carried over from that defining thread. The one piece of per-flow state it relies on - the
    * flow's SQL confs - is installed on the analyzing thread by
-   * [[createFlowFunctionFromLogicalPlan]] via `SQLConf.withExistingConf`, so the Catalyst analysis
+   * [[createFlowFunction]] via `SQLConf.withExistingConf`, so the Catalyst analysis
    * this triggers reads them through `SQLConf.get`.
    *
    * @param plan     The [[LogicalPlan]] defining a flow.
@@ -92,6 +106,17 @@ object FlowAnalysis {
       context: FlowAnalysisContext,
       plan: LogicalPlan
   ): DataFrame = {
+    Dataset.ofRows(context.spark, resolveDatasetReads(context, plan))
+  }
+
+  /**
+   * Resolves the reads of datasets in the plan, which may be datasets in the pipeline, or tables
+   * in the catalog.
+   */
+  private def resolveDatasetReads(
+      context: FlowAnalysisContext,
+      plan: LogicalPlan
+  ): LogicalPlan = {
     // Users can define CTEs within their CREATE statements. For example,
     //
     // CREATE STREAMING TABLE a
@@ -110,7 +135,7 @@ object FlowAnalysis {
     val spark = context.spark
     // Traverse the user's query plan and recursively resolve nodes that reference Pipelines
     // features that the Spark analyzer is unable to resolve
-    val resolvedPlan = planWithInlinedCTEs transformWithSubqueries {
+    planWithInlinedCTEs transformWithSubqueries {
         // Streaming read on another dataset
         // This branch will be hit for the following kinds of queries:
         // - SELECT ... FROM STREAM(t1)
@@ -137,7 +162,6 @@ object FlowAnalysis {
           resolved.mergeTagsFrom(u)
           resolved
       }
-    Dataset.ofRows(spark, resolvedPlan)
   }
 
   /**
