@@ -1539,6 +1539,366 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         self.assertIsNotNone(converted)
         self.assertLessEqual(transpiler.category_calls, len(list(ast.walk(function_ast))))
 
+    def test_udf_transpile_variety_reports_own_categories(self):
+        # A (Column, list[str]) tuple labels the option with the categories the
+        # variety built, not the combo the caller asked about.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class BoolOnlyTranspiler(AbstractTranspiler):
+            variety = "bool_only_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                return (
+                    col("_udf_param_0").cast(returnType),
+                    ["bool"] * len(params),
+                )
+
+        with self._with_variety(BoolOnlyTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            u = self._transpiled_udf(add, LongType())
+            # The combo's numeric guess (the only combo for two int-annotated
+            # params) must NOT label the option.
+            self.assertEqual([["bool", "bool"]], u._transpiled_input_categories)
+
+    def test_udf_transpile_variety_plain_column_falls_back_to_combo(self):
+        # A plain Column return (the existing contract) is labeled with the
+        # combo the caller asked about, not anything the variety invented.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class NumericOnlyTranspiler(AbstractTranspiler):
+            variety = "numeric_only_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                return col("_udf_param_0").cast(returnType)
+
+        with self._with_variety(NumericOnlyTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            u = self._transpiled_udf(add, LongType())
+            # Numeric is the only combo for two int-annotated params.
+            self.assertEqual([["numeric", "numeric"]], u._transpiled_input_categories)
+
+    def test_udf_transpile_variety_tuple_with_none_column_falls_back(self):
+        # Declining is plain ``None``; a ``(None, categories)`` tuple is refused.
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class DeclineInTupleTranspiler(AbstractTranspiler):
+            variety = "decline_in_tuple_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                return (None, ["numeric"] * len(params))
+
+        with self._with_variety(DeclineInTupleTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("not a Column", reasons)
+
+    def test_udf_transpile_variety_malformed_return_falls_back(self):
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class ListReturningTranspiler(AbstractTranspiler):
+            variety = "list_returning_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                # A list, not a tuple: the documented shape is (Column, list[str]),
+                # and this is the natural slip.
+                return [col("_udf_param_0").cast(returnType), ["numeric"] * len(params)]
+
+        with self._with_variety(ListReturningTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("unsupported result", reasons)
+
+    def test_udf_transpile_variety_wrong_length_categories_falls_back(self):
+        # A wrong-length categories list is refused.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class WrongLengthTranspiler(AbstractTranspiler):
+            variety = "wrong_length_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                # One category short of the two public params.
+                return (col("_udf_param_0").cast(returnType), ["numeric"])
+
+        with self._with_variety(WrongLengthTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("input categories", reasons)
+
+    def test_udf_transpile_variety_wrong_arity_tuple_falls_back(self):
+        # A tuple with the wrong number of elements is refused with a clear
+        # reason, not an opaque "too many values to unpack".
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class ThreeElementTupleTranspiler(AbstractTranspiler):
+            variety = "three_element_tuple_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params), "extra")
+
+        with self._with_variety(ThreeElementTupleTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("3-element tuple", reasons)
+
+    def test_udf_transpile_variety_non_list_categories_falls_back(self):
+        # A non-list categories (a string) has a len and is iterable, so
+        # without the isinstance check it would slip through as bogus chars.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class StringCategoriesTranspiler(AbstractTranspiler):
+            variety = "string_categories_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                # "nu" has len 2 for the two public params -- passes the
+                # length check, but is not a list.
+                return (col("_udf_param_0").cast(returnType), "nu")
+
+        with self._with_variety(StringCategoriesTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            _, reasons = self._fallback_reason(add, LongType())
+            self.assertIn("not a list", reasons)
+
+    def test_udf_transpile_variety_receives_held_code(self):
+        # ``held_code`` is the code object that runs when the UDF is called,
+        # passed alongside the AST form.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        seen = {}
+
+        class CodeSeeingTranspiler(AbstractTranspiler):
+            variety = "code_seeing_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                seen["function_ast"] = function_ast
+                seen["held_code"] = held_code
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        with self._with_variety(CodeSeeingTranspiler):
+
+            def add(a: int, b: int):
+                return a + b
+
+            self._transpiled_udf(add, LongType())
+            self.assertIsNotNone(seen["function_ast"])
+            self.assertIs(add.__code__, seen["held_code"])
+
+    def test_udf_transpile_bytecode_variety_handles_repl_function(self):
+        # An exec/REPL-defined UDF has no source (``function_ast`` is None)
+        # but its bytecode runs fine -- a bytecode variety still lowers it.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        seen = {}
+
+        class BytecodeOnlyTranspiler(AbstractTranspiler):
+            variety = "bytecode_only_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                seen["function_ast"] = function_ast
+                seen["held_code"] = held_code
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        ns: dict = {}
+        exec("def ident(a):\n    return a", ns)
+        ident = ns["ident"]
+        with self._with_variety(BytecodeOnlyTranspiler):
+            u = self._transpiled_udf(ident, LongType())
+            self.assertIsNone(seen["function_ast"])
+            self.assertIs(ident.__code__, seen["held_code"])
+            # One untyped param from the code object: numeric and string combos.
+            self.assertEqual([["numeric"], ["numeric"]], u._transpiled_input_categories)
+            from pyspark.sql.types import StructField, StructType
+
+            long_schema = StructType([StructField("a", LongType(), nullable=True)])
+            df = self.spark.createDataFrame([Row(a=41)], schema=long_schema)
+            [result] = df.select(u("a")).collect()
+            self.assertEqual(result[0], 41)
+
+    def test_udf_transpile_bytecode_variety_handles_wraps_decorated(self):
+        # A functools.wraps-decorated UDF's visible source is the WRAPPED
+        # function's, so the AST is withheld (``function_ast`` is None) -- but
+        # the wrapper's bytecode is what runs, and a bytecode variety may
+        # lower it. (With the built-in transpiler it still falls back.)
+        import functools
+
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        seen = {}
+
+        class BytecodeVarietyTranspiler(AbstractTranspiler):
+            variety = "bytecode_wrapped_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                seen["function_ast"] = function_ast
+                seen["held_code"] = held_code
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        def base(x):
+            return x + 1
+
+        @functools.wraps(base)
+        def wrapper(x):
+            return base(x) * 10
+
+        with self._with_variety(BytecodeVarietyTranspiler):
+            self._transpiled_udf(wrapper, LongType())
+            self.assertIsNone(seen["function_ast"])
+            self.assertIs(wrapper.__code__, seen["held_code"])
+
+    def test_udf_transpile_no_ast_no_bytecode_falls_back(self):
+        # A builtin has neither source nor a code object: nothing to lower
+        # from, so the UDF falls back saying both are missing.
+        with self.sql_conf(_TRANSPILE_ON):
+            _, reasons = self._fallback_reason(len, LongType())
+            self.assertIn("no bytecode", reasons)
+
+    def test_udf_transpile_repl_function_with_defaults_falls_back(self):
+        # The no-defaults rule also applies without an AST: a defaulted
+        # argument breaks the positional placeholder scheme no matter which
+        # form a variety lowers from.
+        from pyspark.sql.functions import col
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        class EagerTranspiler(AbstractTranspiler):
+            variety = "eager_55213"
+
+            def _transpile_from_ast(
+                self,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+                held_code=None,
+            ):
+                return (col("_udf_param_0").cast(returnType), ["numeric"] * len(params))
+
+        ns: dict = {}
+        exec("def add(a, b=1):\n    return a + b", ns)
+        with self._with_variety(EagerTranspiler):
+            _, reasons = self._fallback_reason(ns["add"], LongType())
+            self.assertIn("default", reasons)
+
     # ------------------------------------------------------------------
     # Edge cases (SPARK-55206 follow-up). Helpers build a UDF with
     # transpilation on; `_vals` runs it and returns outputs (asserting it
@@ -1562,6 +1922,23 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             warnings.simplefilter("always")
             u = UserDefinedFunction(func, return_type)
         return u, " ".join(str(w.message) for w in caught)
+
+    def _with_variety(self, variety_cls):
+        """A sql_conf with ``variety_cls`` as the only ``pyTranspilers`` entry.
+
+        Registration is undone on test completion (``addCleanup``, so a failing
+        test cannot leak the variety into a later one).
+        """
+        from pyspark.sql.transpile import AbstractTranspiler
+
+        variety_cls.register()
+        self.addCleanup(AbstractTranspiler.varieties.pop, variety_cls.variety, None)
+        return self.sql_conf(
+            {
+                **_TRANSPILE_ON,
+                "spark.sql.experimental.optimizer.pyTranspilers": variety_cls.variety,
+            }
+        )
 
     def _fallback_reason(self, func, return_type=LongType()):
         """Assert ``func`` produced no options, and hand back the reason it reported."""
