@@ -22,11 +22,13 @@ import java.io.{DataInputStream, DataOutputStream}
 import scala.collection.mutable
 
 import org.apache.hadoop.fs.Path
+import org.json4s.{DefaultFormats, JObject, JValue}
 
 import org.apache.spark.annotation.Since
 import org.apache.spark.internal.LogKeys.{COST, INIT_MODE, NUM_ITERATIONS, TOTAL_TIME}
 import org.apache.spark.ml.{Estimator, Model, PipelineStage}
 import org.apache.spark.ml.feature.{Instance, InstanceBlock}
+import org.apache.spark.ml.impl.Utils.indexUpperTriangular
 import org.apache.spark.ml.linalg._
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
@@ -131,24 +133,75 @@ private[clustering] trait KMeansParams extends Params with HasMaxIter with HasFe
 /**
  * Model fitted by KMeans.
  *
- * @param parentModel a model trained by spark.mllib.clustering.KMeans.
+ * @param clusterCentersWithNorm cluster centers with their norms.
+ * @param distanceMeasureInstance distance measure.
+ * @param trainingCost training cost.
+ * @param numIter number of training iterations.
  */
 @Since("1.5.0")
 class KMeansModel private[ml] (
     @Since("1.5.0") override val uid: String,
-    private[clustering] val parentModel: MLlibKMeansModel)
+    private val clusterCentersWithNorm: Array[VectorWithNorm],
+    private val distanceMeasureInstance: DistanceMeasure,
+    private val trainingCost: Double,
+    private val numIter: Int)
   extends Model[KMeansModel] with KMeansParams with GeneralMLWritable
     with HasTrainingSummary[KMeansSummary] {
 
+  private[ml] def this(
+      uid: String,
+      clusterCentersArray: Array[Vector],
+      distanceMeasureInstance: DistanceMeasure,
+      trainingCost: Double,
+      numIter: Int) = {
+    this(
+      uid,
+      if (clusterCentersArray == null) null else KMeansModel.clusterCentersWithNorm(
+        clusterCentersArray),
+      distanceMeasureInstance,
+      trainingCost,
+      numIter)
+  }
+
+  private[ml] def this(
+      uid: String,
+      clusterCentersArray: Array[Vector],
+      distanceMeasureName: String,
+      trainingCost: Double,
+      numIter: Int) = {
+    this(
+      uid,
+      if (clusterCentersArray == null) null else KMeansModel.clusterCentersWithNorm(
+        clusterCentersArray),
+      DistanceMeasure.decodeFromString(distanceMeasureName),
+      trainingCost,
+      numIter)
+  }
+
+  private[ml] def this(uid: String, mllibModel: MLlibKMeansModel) = {
+    this(
+      uid,
+      if (mllibModel == null) null else KMeansModel.clusterCentersWithNorm(
+        mllibModel.clusterCenters.map(_.asML)),
+      DistanceMeasure.decodeFromString(
+        if (mllibModel == null) KMeans.EUCLIDEAN else mllibModel.distanceMeasure),
+      if (mllibModel == null) 0.0 else mllibModel.trainingCost,
+      if (mllibModel == null) -1 else mllibModel.numIter)
+  }
+
   // For ml connect only
-  private[ml] def this() = this("", null)
+  private[ml] def this() = this("", null.asInstanceOf[MLlibKMeansModel])
+
+  @transient private lazy val statistics =
+    KMeansModel.computeStatistics(clusterCentersWithNorm, distanceMeasureInstance)
 
   @Since("3.0.0")
-  lazy val numFeatures: Int = parentModel.clusterCenters.head.size
+  lazy val numFeatures: Int = clusterCentersWithNorm.head.vector.size
 
   @Since("1.5.0")
   override def copy(extra: ParamMap): KMeansModel = {
-    val copied = copyValues(new KMeansModel(uid, parentModel), extra)
+    val copied = copyValues(new KMeansModel(
+      uid, clusterCentersWithNorm, distanceMeasureInstance, trainingCost, numIter), extra)
     copied.setSummary(trainingSummary).setParent(this.parent)
   }
 
@@ -164,7 +217,11 @@ class KMeansModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     val outputSchema = transformSchema(dataset.schema, logging = true)
 
-    val predictUDF = udf((vector: Vector) => predict(vector))
+    val localCenters = clusterCentersWithNorm
+    val localStatistics = statistics
+    val localDistanceMeasure = distanceMeasureInstance
+    val predictUDF = udf((vector: Vector) =>
+      KMeansModel.predict(localCenters, localStatistics, localDistanceMeasure, vector))
 
     dataset.withColumn($(predictionCol),
       predictUDF(columnToVector(dataset, getFeaturesCol)),
@@ -176,16 +233,18 @@ class KMeansModel private[ml] (
     var outputSchema = validateAndTransformSchema(schema)
     if ($(predictionCol).nonEmpty) {
       outputSchema = SchemaUtils.updateNumValues(outputSchema,
-        $(predictionCol), parentModel.k)
+        $(predictionCol), clusterCentersWithNorm.length)
     }
     outputSchema
   }
 
   @Since("3.0.0")
-  def predict(features: Vector): Int = parentModel.predict(OldVectors.fromML(features))
+  def predict(features: Vector): Int = {
+    KMeansModel.predict(clusterCentersWithNorm, statistics, distanceMeasureInstance, features)
+  }
 
   @Since("2.0.0")
-  def clusterCenters: Array[Vector] = parentModel.clusterCenters.map(_.asML)
+  def clusterCenters: Array[Vector] = clusterCentersWithNorm.map(_.vector)
 
   private[ml] def clusterCenterMatrix: Matrix =
     Matrices.fromVectors(clusterCenters.toSeq)
@@ -202,7 +261,8 @@ class KMeansModel private[ml] (
 
   @Since("3.0.0")
   override def toString: String = {
-    s"KMeansModel: uid=$uid, k=${parentModel.k}, distanceMeasure=${$(distanceMeasure)}, " +
+    s"KMeansModel: uid=$uid, k=${clusterCentersWithNorm.length}, " +
+      s"distanceMeasure=${distanceMeasureInstance.name}, " +
       s"numFeatures=$numFeatures"
   }
 
@@ -215,18 +275,21 @@ class KMeansModel private[ml] (
 
   private[spark] override def estimatedSize: Long = {
     var size = estimateMatadataSize
-    if (parentModel != null) {
-      // clusterCenters: Array[Vector]
-      // distanceMeasure: String
+    if (clusterCentersWithNorm != null) {
+      // clusterCentersWithNorm: Array[VectorWithNorm]
       // trainingCost: Double
       // numIter: Int
       size += SizeEstimator.estimate((
-        parentModel.clusterCenters,
-        parentModel.distanceMeasure,
-        parentModel.trainingCost,
-        parentModel.numIter))
+        clusterCentersWithNorm,
+        trainingCost,
+        numIter))
     }
     size
+  }
+
+  private[clustering] def toMLlibModel: MLlibKMeansModel = {
+    new MLlibKMeansModel(
+      clusterCenters.map(OldVectors.fromML), distanceMeasureInstance.name, trainingCost, numIter)
   }
 
   private[spark] def createSummary(
@@ -317,13 +380,38 @@ private class PMMLKMeansModelWriter extends MLWriterFormat with MLFormatRegister
     optionMap: mutable.Map[String, String], stage: PipelineStage): Unit = {
     val instance = stage.asInstanceOf[KMeansModel]
     val sc = sparkSession.sparkContext
-    instance.parentModel.toPMML(sc, path)
+    instance.toMLlibModel.toPMML(sc, path)
   }
 }
 
 
 @Since("1.6.0")
 object KMeansModel extends MLReadable[KMeansModel] {
+  private def clusterCentersWithNorm(centers: Array[Vector]): Array[VectorWithNorm] = {
+    centers.map(center => VectorWithNorm(center, Vectors.norm(center, 2.0)))
+  }
+
+  private def computeStatistics(
+      centers: Array[VectorWithNorm],
+      distanceMeasure: DistanceMeasure): Option[Array[Double]] = {
+    val k = centers.length
+    val numFeatures = centers.head.vector.size
+    if (!DistanceMeasure.shouldComputeStatistics(k) ||
+        !DistanceMeasure.shouldComputeStatisticsLocally(k, numFeatures)) {
+      None
+    } else {
+      Some(distanceMeasure.computeStatistics(centers))
+    }
+  }
+
+  private def predict(
+      centers: Array[VectorWithNorm],
+      statistics: Option[Array[Double]],
+      distanceMeasure: DistanceMeasure,
+      point: Vector): Int = {
+    distanceMeasure.findClosest(centers, statistics,
+      VectorWithNorm(point, Vectors.norm(point, 2.0)))._1
+  }
 
   @Since("1.6.0")
   override def read: MLReader[KMeansModel] = new KMeansModelReader
@@ -354,15 +442,264 @@ object KMeansModel extends MLReadable[KMeansModel] {
         val data = ReadWriteUtils.loadArray[ClusterData](
           dataPath, sparkSession, ClusterData.deserializeData
         )
-        data.sortBy(_.clusterIdx).map(_.clusterCenter).map(OldVectors.fromML)
+        data.sortBy(_.clusterIdx).map(_.clusterCenter)
       } else {
         // Loads KMeansModel stored with the old format used by Spark 1.6 and earlier.
-        sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters
+        sparkSession.read.parquet(dataPath).as[OldData].head().clusterCenters.map(_.asML)
       }
-      val model = new KMeansModel(metadata.uid, new MLlibKMeansModel(clusterCenters))
+      val model = new KMeansModel(
+        metadata.uid, clusterCenters, loadDistanceMeasure(metadata), 0.0, -1)
       metadata.getAndSetParams(model)
       model
     }
+
+    private def loadDistanceMeasure(metadata: DefaultParamsReader.Metadata): DistanceMeasure = {
+      implicit val format: DefaultFormats.type = DefaultFormats
+
+      def getDistanceMeasure(params: JValue): Option[String] = {
+        params match {
+          case JObject(pairs) =>
+            pairs.collectFirst {
+              case ("distanceMeasure", value) => value.extract[String]
+            }
+          case _ => None
+        }
+      }
+
+      getDistanceMeasure(metadata.params)
+        .orElse(getDistanceMeasure(metadata.defaultParams))
+        .map(DistanceMeasure.decodeFromString)
+        .getOrElse(EuclideanDistanceMeasure)
+    }
+  }
+}
+
+private case class VectorWithNorm(vector: Vector, norm: Double)
+
+private abstract class DistanceMeasure extends Serializable {
+
+  def name: String
+
+  def computeStatistics(distance: Double): Double
+
+  def computeStatistics(centers: Array[VectorWithNorm]): Array[Double] = {
+    val k = centers.length
+    if (k == 1) return Array(Double.NaN)
+
+    val packedValues = Array.ofDim[Double](k * (k + 1) / 2)
+    val diagValues = Array.fill(k)(Double.PositiveInfinity)
+    var i = 0
+    while (i < k) {
+      var j = i + 1
+      while (j < k) {
+        val d = distance(centers(i), centers(j))
+        val s = computeStatistics(d)
+        val index = indexUpperTriangular(k, i, j)
+        packedValues(index) = s
+        if (s < diagValues(i)) diagValues(i) = s
+        if (s < diagValues(j)) diagValues(j) = s
+        j += 1
+      }
+      i += 1
+    }
+
+    i = 0
+    while (i < k) {
+      val index = indexUpperTriangular(k, i, i)
+      packedValues(index) = diagValues(i)
+      i += 1
+    }
+    packedValues
+  }
+
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Option[Array[Double]],
+      point: VectorWithNorm): (Int, Double) = {
+    if (statistics.nonEmpty) {
+      findClosest(centers, statistics.get, point)
+    } else {
+      findClosest(centers, point)
+    }
+  }
+
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Double],
+      point: VectorWithNorm): (Int, Double)
+
+  def findClosest(
+      centers: Array[VectorWithNorm],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = Double.PositiveInfinity
+    var bestIndex = 0
+    var i = 0
+    while (i < centers.length) {
+      val center = centers(i)
+      val currentDistance = distance(center, point)
+      if (currentDistance < bestDistance) {
+        bestDistance = currentDistance
+        bestIndex = i
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
+  def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double
+}
+
+private object DistanceMeasure {
+  def decodeFromString(distanceMeasure: String): DistanceMeasure = {
+    distanceMeasure match {
+      case KMeans.EUCLIDEAN => EuclideanDistanceMeasure
+      case KMeans.COSINE => CosineDistanceMeasure
+      case _ => throw new IllegalArgumentException(s"distanceMeasure must be one of: " +
+        s"${KMeans.EUCLIDEAN}, ${KMeans.COSINE}. $distanceMeasure provided.")
+    }
+  }
+
+  def shouldComputeStatistics(k: Int): Boolean = k < 1000
+
+  def shouldComputeStatisticsLocally(k: Int, numFeatures: Int): Boolean =
+    k.toLong * k * numFeatures < 1000000
+}
+
+private object EuclideanDistanceMeasure extends DistanceMeasure {
+
+  override def name: String = KMeans.EUCLIDEAN
+
+  override def computeStatistics(distance: Double): Double = {
+    0.25 * distance * distance
+  }
+
+  override def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Double],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = EuclideanDistanceMeasure.fastSquaredDistance(centers(0), point)
+    if (bestDistance < statistics(0)) return (0, bestDistance)
+
+    val k = centers.length
+    var bestIndex = 0
+    var i = 1
+    while (i < k) {
+      val center = centers(i)
+      val normDiff = center.norm - point.norm
+      val lowerBound = normDiff * normDiff
+      if (lowerBound < bestDistance) {
+        val index1 = indexUpperTriangular(k, i, bestIndex)
+        if (statistics(index1) < bestDistance) {
+          val d = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
+          val index2 = indexUpperTriangular(k, i, i)
+          if (d < statistics(index2)) return (i, d)
+          if (d < bestDistance) {
+            bestDistance = d
+            bestIndex = i
+          }
+        }
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
+  override def findClosest(
+      centers: Array[VectorWithNorm],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = Double.PositiveInfinity
+    var bestIndex = 0
+    var i = 0
+    while (i < centers.length) {
+      val center = centers(i)
+      var lowerBoundOfSqDist = center.norm - point.norm
+      lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
+      if (lowerBoundOfSqDist < bestDistance) {
+        val distance = EuclideanDistanceMeasure.fastSquaredDistance(center, point)
+        if (distance < bestDistance) {
+          bestDistance = distance
+          bestIndex = i
+        }
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
+  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
+    math.sqrt(EuclideanDistanceMeasure.fastSquaredDistance(v1, v2))
+  }
+
+  private lazy val epsilon = {
+    var eps = 1.0
+    while ((1.0 + (eps / 2.0)) != 1.0) {
+      eps /= 2.0
+    }
+    eps
+  }
+
+  def fastSquaredDistance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
+    if (v1.vector.isInstanceOf[DenseVector] && v2.vector.isInstanceOf[DenseVector]) {
+      Vectors.sqdist(v1.vector, v2.vector)
+    } else {
+      val sumSquaredNorm = v1.norm * v1.norm + v2.norm * v2.norm
+      val normDiff = v1.norm - v2.norm
+      val precisionBound1 = 2.0 * epsilon * sumSquaredNorm / (normDiff * normDiff + epsilon)
+      if (precisionBound1 < 1e-6) {
+        sumSquaredNorm - 2.0 * BLAS.dot(v1.vector, v2.vector)
+      } else {
+        val dotValue = BLAS.dot(v1.vector, v2.vector)
+        val sqDist = math.max(sumSquaredNorm - 2.0 * dotValue, 0.0)
+        val precisionBound2 = epsilon * (sumSquaredNorm + 2.0 * math.abs(dotValue)) /
+          (sqDist + epsilon)
+        if (precisionBound2 > 1e-6) {
+          Vectors.sqdist(v1.vector, v2.vector)
+        } else {
+          sqDist
+        }
+      }
+    }
+  }
+}
+
+private object CosineDistanceMeasure extends DistanceMeasure {
+
+  override def name: String = KMeans.COSINE
+
+  override def computeStatistics(distance: Double): Double = {
+    1 - math.sqrt(1 - distance / 2)
+  }
+
+  override def findClosest(
+      centers: Array[VectorWithNorm],
+      statistics: Array[Double],
+      point: VectorWithNorm): (Int, Double) = {
+    var bestDistance = distance(centers(0), point)
+    if (bestDistance < statistics(0)) return (0, bestDistance)
+
+    val k = centers.length
+    var bestIndex = 0
+    var i = 1
+    while (i < k) {
+      val index1 = indexUpperTriangular(k, i, bestIndex)
+      if (statistics(index1) < bestDistance) {
+        val center = centers(i)
+        val d = distance(center, point)
+        val index2 = indexUpperTriangular(k, i, i)
+        if (d < statistics(index2)) return (i, d)
+        if (d < bestDistance) {
+          bestDistance = d
+          bestIndex = i
+        }
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
+  override def distance(v1: VectorWithNorm, v2: VectorWithNorm): Double = {
+    assert(v1.norm > 0 && v2.norm > 0, "Cosine distance is not defined for zero-length vectors.")
+    1 - BLAS.dot(v1.vector, v2.vector) / v1.norm / v2.norm
   }
 }
 
