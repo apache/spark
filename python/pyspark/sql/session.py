@@ -30,6 +30,7 @@ from typing import (
     Dict,
     Generic,
     Iterable,
+    Iterator,
     List,
     Optional,
     Set,
@@ -1223,17 +1224,56 @@ class SparkSession(SparkConversionMixin):
             ).reduce(_merge_type)
         return schema
 
+    @staticmethod
+    def _make_row_length_warner(struct: StructType) -> Callable[[Iterable[Any]], Iterator[Any]]:
+        """
+        Return a function that yields rows unchanged and, after the last one, warns once when some
+        of them were a top-level tuple, list or :class:`Row` with a different number of values than
+        the inferred schema has fields. The converter and ``StructType.toInternal`` pair values
+        with fields by position, so such a row loses or misplaces values, or fails in the JVM at
+        the first action. This is the part of ``verifySchema`` that applies to an inferred schema.
+        On the local path the function runs on the driver before the rows are converted. On the
+        RDD path it runs through ``mapPartitions`` in the Python worker, once per partition, so the
+        warning shows on the driver console in local mode and in the executor's stderr on a
+        cluster. With ``verifySchema`` on, an explicit ``StructType`` is verified by
+        ``_make_type_verifier`` before the rows get here; with it off, no check runs.
+        """
+        expected = len(struct.fields)
+
+        def warn_partition(rows: Iterable[Any]) -> Iterator[Any]:
+            total = mismatched = first = 0
+            for obj in rows:
+                total += 1
+                if isinstance(obj, (tuple, list)) and len(obj) != expected:
+                    if mismatched == 0:
+                        first = len(obj)
+                    mismatched += 1
+                yield obj
+            if mismatched > 0:
+                warnings.warn(
+                    f"{mismatched} of {total} rows have a different number of values than the "
+                    f"{expected} fields of the inferred schema (first mismatch: length {first}). "
+                    "Values are paired with fields by position, so these rows lose or misplace "
+                    "values, or fail at the first action. Pass an explicit schema to have every "
+                    "row verified."
+                )
+
+        return warn_partition
+
     def _createFromRDD(
         self,
         rdd: "RDD[Any]",
         schema: Optional[Union[DataType, List[str]]],
         samplingRatio: Optional[float],
+        verifySchema: bool,
     ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from an existing RDD, returns the RDD and schema.
         """
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchema(rdd, samplingRatio, names=schema)
+            if verifySchema:
+                rdd = rdd.mapPartitions(self._make_row_length_warner(struct))
             converter = _create_converter(struct)
             tupled_rdd = rdd.map(converter)
             if isinstance(schema, (list, tuple)):
@@ -1260,7 +1300,10 @@ class SparkSession(SparkConversionMixin):
         return internal_rdd, struct
 
     def _createFromLocal(
-        self, data: Iterable[Any], schema: Optional[Union[DataType, List[str]]]
+        self,
+        data: Iterable[Any],
+        schema: Optional[Union[DataType, List[str]]],
+        verifySchema: bool,
     ) -> Tuple["RDD[Tuple]", StructType]:
         """
         Create an RDD for DataFrame from a list or pandas.DataFrame, returns
@@ -1276,6 +1319,8 @@ class SparkSession(SparkConversionMixin):
         tupled_data: Iterable[Tuple]
         if schema is None or isinstance(schema, (list, tuple)):
             struct = self._inferSchemaFromList(data, names=schema)
+            if verifySchema:
+                data = list(self._make_row_length_warner(struct)(data))
             converter = _create_converter(struct)
             tupled_data = map(converter, data)
             if isinstance(schema, (list, tuple)):
@@ -1474,6 +1519,13 @@ class SparkSession(SparkConversionMixin):
             :class:`RDD`.
         verifySchema : bool, optional
             verify data types of every row against schema. Enabled by default.
+            When the schema is inferred (``schema`` is None or a list of names), a warning is
+            issued for rows whose number of values differs from the number of inferred fields,
+            and the rows are converted as before.
+
+            .. versionchanged:: 4.4.0
+                Warns about rows whose number of values differs from the inferred field count.
+
             When the input is :class:`pyarrow.Table` or when the input class is
             :class:`pandas.DataFrame` and `spark.sql.execution.arrow.pyspark.enabled` is enabled,
             this option is not effective. It follows Arrow type coercion. This option is not
@@ -1720,11 +1772,14 @@ class SparkSession(SparkConversionMixin):
         if not is_remote_only():
             from pyspark.core.rdd import RDD
         if not is_remote_only() and isinstance(data, RDD):
-            rdd, struct = self._createFromRDD(data.map(prepare), schema, samplingRatio)
+            rdd, struct = self._createFromRDD(
+                data.map(prepare), schema, samplingRatio, verifySchema
+            )
         else:
             rdd, struct = self._createFromLocal(
                 map(prepare, data),  # type: ignore[arg-type]
                 schema,
+                verifySchema,
             )
         assert self._jvm is not None
         jrdd = self._jvm.SerDeUtil.toJavaArray(rdd._to_java_object_rdd())
