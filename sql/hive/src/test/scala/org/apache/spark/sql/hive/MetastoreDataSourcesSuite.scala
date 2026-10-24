@@ -1357,6 +1357,20 @@ class MetastoreDataSourcesSuite extends QueryTest
     }
   }
 
+  test("SPARK-60515: saveAsTable with mode Overwrite replaces the existing hive table with " +
+      "a collated string column") {
+    withTable("t") {
+      spark.range(3).write.format("hive").saveAsTable("t")
+      // Like `createTable`, the checks of Hive on the new table remove the collation, which Hive
+      // doesn't support.
+      val df = spark.range(5).selectExpr("id", "CAST(id AS STRING COLLATE UNICODE_CI) AS c")
+      df.write.format("hive").option("fileFormat", "parquet")
+        .mode(SaveMode.Overwrite).saveAsTable("t")
+      checkAnswer(table("t"), df)
+      assert(table("t").schema("c").dataType === StringType("UNICODE_CI"))
+    }
+  }
+
   test("insertInto - source and target are the same table") {
     val tableName = "tab1"
     withTable(tableName) {
