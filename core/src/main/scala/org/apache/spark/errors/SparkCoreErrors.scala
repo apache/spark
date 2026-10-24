@@ -202,6 +202,20 @@ private[spark] object SparkCoreErrors {
     )
   }
 
+  def checkpointDirectoryPartitionCountMismatchError(
+      checkpointDirPath: Path, expected: Int, found: Int): Throwable = {
+    val subClass = if (found < expected) "MISSING_FILES" else "UNEXPECTED_FILES"
+    new SparkException(
+      errorClass = s"CHECKPOINT_DIRECTORY_PARTITION_COUNT_MISMATCH.$subClass",
+      messageParameters = Map(
+        "path" -> s"$checkpointDirPath",
+        "expected" -> s"$expected",
+        "found" -> s"$found"
+      ),
+      cause = null
+    )
+  }
+
   def checkpointFailedToSaveError(task: Int, path: Path): Throwable = {
     new IOException("Checkpoint failed: failed to save output of task: " +
       s"$task and final output path does not exist: $path")
