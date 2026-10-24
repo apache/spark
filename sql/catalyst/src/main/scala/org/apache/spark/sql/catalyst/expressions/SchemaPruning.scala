@@ -182,6 +182,14 @@ object SchemaPruning extends SQLConfHelper {
   }
 
   /**
+   * Gets the root fields read inside a generator's array `input` itself, e.g. by the predicate of
+   * `filter(items, x -> ...)` or the comparator of `array_sort(items)`, which
+   * [[getGeneratorInputRootField]] passes through without accounting for.
+   */
+  def getGeneratorInputLambdaRootFields(input: Expression): Seq[RootField] =
+    getArrayReturningHigherOrderFunctionRootFields(input)
+
+  /**
    * Gets the root (aka top-level, no-parent) [[StructField]]s for the given [[Expression]].
    * When expr is an [[Attribute]], construct a field around it and indicate that that
    * field was derived from an attribute.

@@ -206,11 +206,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
       val (input, _) = inputs(i)
       val rootField = getGeneratorInputRootField(
         input, elements(i), readsAbove(i) ++ inputReads, elementFields(elements(i).exprId))
-      (rootField, input.references.toSeq) match {
-        case (Some(field), Seq(root)) if lowerElements.contains(root.exprId) =>
-          elementFields(root.exprId) :+= field.field
-        case (Some(field), Seq(root)) if scanRelation.outputSet.contains(root) =>
-          scanRootFields += field
+      // the input also reads what a filter predicate or sort comparator inside it reads
+      val inputFields = rootField.map(_ +: getGeneratorInputLambdaRootFields(input))
+      (inputFields, input.references.toSeq) match {
+        case (Some(fields), Seq(root)) if lowerElements.contains(root.exprId) =>
+          elementFields(root.exprId) ++= fields.map(_.field)
+        case (Some(fields), Seq(root)) if scanRelation.outputSet.contains(root) =>
+          scanRootFields ++= fields
         case _ =>
           inputReads += input
           scanRootFields ++= scanRootFieldsOf(input, scanRelation)
@@ -219,6 +221,24 @@ object SchemaPruning extends Rule[LogicalPlan] {
     pruneScan(segments.last, inputs.last._2, scanRootFields.toSeq)
       .map(rebuildAbove(op, generators.last.child, _))
       .filter(newOp => newOp.resolved && newOp.schema == op.schema)
+      .map(readSizesDirectly)
+  }
+
+  /**
+   * Once the scan is narrowed, `size` no longer needs to read through a field of an array of
+   * structs: the narrowed array has the same length and nullness, and reading it directly avoids
+   * building a projected array per row, e.g. `size(item.parts.pid)` becomes `size(item.parts)`.
+   * The field accesses [[lengthOnly]] added only served to decide what the scan reads.
+   */
+  private def readSizesDirectly(plan: LogicalPlan): LogicalPlan = {
+    @tailrec
+    def array(expr: Expression): Expression = expr match {
+      case GetArrayStructFields(child, _, _, _, _) => array(child)
+      case other => other
+    }
+    plan.transformAllExpressions {
+      case s @ Size(child: GetArrayStructFields, _) => s.copy(child = array(child))
+    }
   }
 
   /** The root fields of scan columns that `expr` reads. */

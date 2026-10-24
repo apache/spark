@@ -24,7 +24,7 @@ import org.scalactic.Equality
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.SchemaPruningTest
-import org.apache.spark.sql.catalyst.expressions.Concat
+import org.apache.spark.sql.catalyst.expressions.{Concat, Expression, GetArrayStructFields, Size}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -111,6 +111,12 @@ abstract class SchemaPruningSuite
   case class Pair(x: Int, y: Int)
   case class Positioned(pos: Point, items: Array[Pair])
   val positioned = Positioned(Point(1, 2), Array(Pair(10, 20), Pair(30, 40))) :: Nil
+
+  // sorting the elements by `a` and by `b` gives different orders
+  case class Ranked(a: Int, b: Int, c: Int)
+  case class Ranking(id: Int, items: Array[Ranked])
+  val rankings =
+    Ranking(0, Array(Ranked(2, 10, 100), Ranked(1, 20, 200))) :: Ranking(1, Array.empty) :: Nil
 
   case class Matrix(id: Int, rows: Array[Array[Part]])
   val matrices =
@@ -825,6 +831,69 @@ abstract class SchemaPruningSuite
         checkAnswer(query2, expected)
         assert(expected.exists(_.isNullAt(1)))
       }
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: a sorted generator input keeps the comparator's fields") {
+    withDataSourceTable(rankings, "rankings") {
+      // the default comparator orders the whole struct, `a` first
+      val query1 = sql("select pos, item.b, item.c from rankings " +
+        "lateral view outer posexplode(array_sort(items)) t as pos, item")
+      checkScan(query1, "struct<items:array<struct<a:int,b:int,c:int>>>")
+      checkAnswer(query1, Row(0, 20, 200) :: Row(1, 10, 100) :: Row(null, null, null) :: Nil)
+
+      // a comparator on one field still prunes the others
+      val query2 = sql("select pos, item.c from rankings lateral view outer posexplode(" +
+        "array_sort(items, (l, r) -> case when l.b < r.b then -1 when l.b > r.b then 1 " +
+        "else 0 end)) t as pos, item")
+      checkScan(query2, "struct<items:array<struct<b:int,c:int>>>")
+      checkAnswer(query2, Row(0, 100) :: Row(1, 200) :: Row(null, null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: a filtered generator input keeps the predicate's fields") {
+    withDataSourceTable(rankings, "rankings") {
+      // the predicate compares the whole element
+      val query1 = sql("select item.c from rankings lateral view outer explode(" +
+        "filter(items, x -> x != named_struct('a', 2, 'b', 10, 'c', 100))) t as item")
+      checkScan(query1, "struct<items:array<struct<a:int,b:int,c:int>>>")
+      checkAnswer(query1, Row(200) :: Row(null) :: Nil)
+
+      // a predicate on one field still prunes the others
+      val query2 = sql("select item.c from rankings " +
+        "lateral view outer explode(filter(items, x -> x.a > 1)) t as item")
+      checkScan(query2, "struct<items:array<struct<a:int,c:int>>>")
+      checkAnswer(query2, Row(100) :: Row(null) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: size() reads the array directly once the scan is narrowed") {
+    withDataSourceTable(orders, "orders") {
+      def sizeInputs(df: DataFrame): Seq[Expression] =
+        df.queryExecution.optimizedPlan.flatMap(_.expressions.flatMap(_.collect {
+          case s: Size => s.child
+        }))
+      def check(sqlText: String, expectedSchema: String): Unit = {
+        val expected = withSQLConf(
+            SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED.key -> "false") {
+          sql(sqlText).collect().toSeq
+        }
+        val query = sql(sqlText)
+        checkScan(query, expectedSchema)
+        assert(sizeInputs(query).nonEmpty)
+        assert(!sizeInputs(query).exists(_.isInstanceOf[GetArrayStructFields]),
+          query.queryExecution.optimizedPlan)
+        checkAnswer(query, expected)
+      }
+      // the element is used whole, so nothing is pruned
+      check("select item, size(item.parts) from orders " +
+        "lateral view outer explode(items) t1 as item",
+        "struct<items:array<struct<qty:int,sku:string," +
+          "parts:array<struct<pid:int,label:string,weight:double>>>>>")
+      // `parts` is narrowed to the field read for its length
+      check("select item.sku, size(item.parts) from orders " +
+        "lateral view outer explode(items) t1 as item",
+        "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
     }
   }
 
