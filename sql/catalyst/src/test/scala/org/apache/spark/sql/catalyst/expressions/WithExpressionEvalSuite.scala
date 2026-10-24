@@ -305,18 +305,18 @@ class WithExpressionEvalSuite extends SparkFunSuite with SQLHelper {
           s"the innermost body was emitted $count times at depth $depth")
         assert(!methods.contains("computeCommonExpr"), methods)
       }
-      // A value whose name is not one a parameter can take: `ExpandExec` hands out a compacted
-      // mutable state array slot as if it were a local. The marker count says the fallback pasted
-      // the body at both references; that a method was attempted at all is the case above, which
-      // gets one from the same shape with a passable name.
+      // A value whose name is not one a parameter can take, such as a slot of a compacted mutable
+      // state array handed out as a local. Its producer has to hand it out as a field, and tests
+      // fail where a method would be built; the previous test gets a method from the same shape
+      // with a passable name.
       val slot = ExprCode(EmptyBlock, FalseLiteral,
         JavaCode.variable("mutableStateArray_0[3]", IntegerType))
-      val (slotBody, slotMethods) = generateWithLocalInput(nested(2), slot)
-      assert(!slotMethods.contains("computeCommonExpr"), slotMethods)
-      assert(markersIn(slotBody + slotMethods) == 4, slotBody + slotMethods)
+      val e = intercept[AssertionError](generateWithLocalInput(nested(2), slot))
+      assert(e.getMessage.contains("mutableStateArray_0[3] cannot name a parameter"),
+        e.getMessage)
       // A nullness that is an expression rather than a name, the shape `GenerateExec` hands out
       // for the position of `posexplode_outer`: whichever locals such an expression names, this
-      // has no way to pass them. A plain name in its place does get a method, in the case above.
+      // has no way to pass them. A plain name in its place does get a method, in the previous test.
       val position = ExprCode(EmptyBlock, JavaCode.isNullExpression("index_0 == -1"),
         JavaCode.variable("index_0", IntegerType))
       val (positionBody, positionMethods) =
