@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.util.{removeInternalMetadata, truncatedStri
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, FunctionCatalog, Identifier, SupportsMetadataColumns, Table, TableCapability, TableCatalog, V2TableUtil}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering}
+import org.apache.spark.sql.connector.read.{Scan, Statistics => V2Statistics, SupportsReportStatistics, SupportsRuntimeV2Filtering, SupportsStorageFilters}
 import org.apache.spark.sql.connector.read.colstats.{ColumnStatistics, Histogram => V2Histogram, HistogramBin => V2HistogramBin}
 import org.apache.spark.sql.connector.read.streaming.{Offset, SparkDataStream}
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -187,7 +187,8 @@ case class DataSourceV2Relation(
  *                      non-reproducible pushdown (aggregate, join, variant extraction, limit,
  *                      offset, top-N, sample) or by any other rule stays not-mergeable by default,
  *                      so merging is safe by construction -- a new scan-relation build site need
- *                      not opt out.
+ *                      not opt out. Storage filters rely on it too: a scan that is not mergeable
+ *                      is offered none, since its readers would filter ahead of such a pushdown.
  */
 case class DataSourceV2ScanRelation(
     relation: DataSourceV2Relation,
@@ -264,6 +265,22 @@ case class DataSourceV2ScanRelation(
       method: String): AttributeSet = {
     V2ExpressionUtils.resolveDataSourceRuntimeFilterRefs(
       filterAttrs, output, method, scan.getClass.getName)
+  }
+
+  /**
+   * The output columns the scan declares for storage filtering via
+   * [[SupportsStorageFilters.storageFilterAttributes]], matched by name. Only top-level
+   * declarations count, and a declared column the scan does not read is left out, since no offered
+   * filter can reference it. Empty when the scan does not implement that interface. Unlike runtime
+   * filtering, there is no "fully pushed" set, since a storage filter always stays in the plan
+   * above the scan.
+   */
+  lazy val storageFilterAttrs: AttributeSet = scan match {
+    case s: SupportsStorageFilters =>
+      val declared = s.storageFilterAttributes().map(_.fieldNames).collect { case Array(n) => n }
+      val resolver = SQLConf.get.resolver
+      AttributeSet(output.filter(a => declared.exists(resolver(a.name, _))))
+    case _ => AttributeSet.empty
   }
 
   override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_SCAN_RELATION)

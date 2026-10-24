@@ -26,7 +26,7 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, StorageFilterRequest}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -139,13 +139,17 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  * @param partitionReaderFactory Factory for creating partition readers
  * @param columnarReads Whether to use columnar reads
  * @param customMetrics Custom metrics defined by the data source
+ * @param storageFilterRequest What every reader gets when the scan was offered storage filters.
+ *                             Serialized with the task, so each task has its own instance of the
+ *                             filter.
  */
 class DataSourceRDD(
     sc: SparkContext,
     @transient private val inputPartitions: Seq[Option[InputPartition]],
     partitionReaderFactory: PartitionReaderFactory,
     columnarReads: Boolean,
-    customMetrics: Map[String, SQLMetric])
+    customMetrics: Map[String, SQLMetric],
+    storageFilterRequest: Option[StorageFilterRequest] = None)
   extends RDD[InternalRow](sc, Nil) {
 
   // One TaskState per task attempt.
@@ -187,10 +191,16 @@ class DataSourceRDD(
 
     castPartition(split).inputPartition.iterator.flatMap { inputPartition =>
       val iter = if (columnarReads) {
-        val batchReader = partitionReaderFactory.createColumnarReader(inputPartition)
+        val batchReader = storageFilterRequest match {
+          case Some(request) => partitionReaderFactory.createColumnarReader(inputPartition, request)
+          case None => partitionReaderFactory.createColumnarReader(inputPartition)
+        }
         new PartitionIterator[ColumnarBatch](batchReader, _.numRows, taskState)
       } else {
-        val rowReader = partitionReaderFactory.createReader(inputPartition)
+        val rowReader = storageFilterRequest match {
+          case Some(request) => partitionReaderFactory.createReader(inputPartition, request)
+          case None => partitionReaderFactory.createReader(inputPartition)
+        }
         new PartitionIterator[InternalRow](rowReader, _ => 1, taskState)
       }
 
