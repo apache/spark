@@ -33,6 +33,12 @@ private[hive] trait RawHiveTable {
 
   /** Get hive table properties. */
   def hiveTableProps(): Map[String, String]
+
+  /**
+   * Get hive partition column names, including the Hive incompatible partition columns which
+   * `toCatalogTable` does not contain.
+   */
+  def hivePartitionColumnNames(): Seq[String]
 }
 
 /**
