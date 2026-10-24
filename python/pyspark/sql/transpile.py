@@ -147,15 +147,26 @@ class AbstractTranspiler(object):
     def _transpile_from_ast(
         self,
         src: Optional[str],
-        ast_info: ast.AST,
-        function_ast: ast.FunctionDef,
+        ast_info: Optional[ast.AST],
+        function_ast: Optional[ast.FunctionDef],
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
+        held_code: Any = None,
     ) -> Optional[Union[Column, Tuple[Column, List[str]]]]:
-        """Lower ``function_ast`` to a :class:`Column`, or return ``None`` to decline.
+        """Lower the UDF to a :class:`Column`, or return ``None`` to decline.
 
         The override point for ``spark.sql.experimental.optimizer.pyTranspilers``.
+
+        The caller hands over whatever it could extract: ``src`` / ``ast_info`` /
+        ``function_ast`` come from the source on disk and are ``None`` when no
+        trustworthy source exists -- a REPL- or exec-defined function, a
+        functools.wraps-decorated callable (whose visible source is the wrapped
+        function's, not the wrapper's), or a builtin. ``held_code`` is the code
+        object that actually runs when the UDF is called (``None`` for builtins
+        and slot wrappers). One of the two forms is always present; a transpiler
+        declines when the one it needs is not -- the built-in lowering works
+        from ``function_ast``, a numba-style variety from ``held_code``.
 
         ``params`` is the CALLER-FACING parameter list: a receiver already bound, as
         on a method or callable instance, has been removed, so ``params[i]`` is the
@@ -855,14 +866,16 @@ class CatalystTranspiler(AbstractTranspiler):
     def _transpile_from_ast(
         self,
         src: Optional[str],
-        ast_info: ast.AST,
-        function_ast: ast.FunctionDef,
+        ast_info: Optional[ast.AST],
+        function_ast: Optional[ast.FunctionDef],
         params: List[str],
         returnType: "DataTypeOrString",
         param_categories: Optional[dict] = None,
+        held_code: Any = None,
     ) -> Optional[Union[Column, Tuple[Column, List[str]]]]:
-        # Short circuit on nothing to transpile.
-        if src == "" or ast_info is None:
+        # Short circuit on nothing to transpile. This lowering works from the
+        # AST; ``held_code`` is for bytecode varieties.
+        if not src or ast_info is None or function_ast is None:
             return None
         # Per-variant input-type assumption ({public_param_index -> category}),
         # read by ``_category`` to choose str vs numeric operators.
@@ -969,7 +982,9 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     return None
 
 
-def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
+def _param_category_combos(
+    function_ast: Optional[ast.FunctionDef], public_params: List[str]
+) -> List[dict]:
     """Per-variant maps ``{public_param_index -> category}`` where category is
     one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``.
 
@@ -977,20 +992,26 @@ def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[st
     untyped param is tried as both numeric and string. To cap plan growth, when
     more than three params are untyped we collapse the untyped ones to the
     all-numeric and all-string variants (encourage typing inputs to keep the
-    matrix small) while keeping every typed param pinned.
+    matrix small) while keeping every typed param pinned. A ``None``
+    ``function_ast`` means no trustworthy source, hence no annotations: every
+    param is untyped.
     """
     n = len(public_params)
-    all_args = _positional_args(function_ast)
-    public_args = all_args[len(all_args) - n :]
     candidates: List[List[str]] = []
     untyped = 0
-    for arg in public_args:
-        cat = _annotation_category(arg.annotation)
-        if cat is None:
-            candidates.append(["numeric", "string"])
-            untyped += 1
-        else:
-            candidates.append([cat])
+    if function_ast is None:
+        candidates = [["numeric", "string"] for _ in range(n)]
+        untyped = n
+    else:
+        all_args = _positional_args(function_ast)
+        public_args = all_args[len(all_args) - n :]
+        for arg in public_args:
+            cat = _annotation_category(arg.annotation)
+            if cat is None:
+                candidates.append(["numeric", "string"])
+                untyped += 1
+            else:
+                candidates.append([cat])
     if untyped > 3:
         # Cap the 2**untyped blow-up, but keep each typed param pinned to its
         # category (a single-element ``candidates`` entry); only the untyped
@@ -1037,14 +1058,24 @@ def _call_impl(entry: Any) -> Any:
     return entry.__func__ if isinstance(entry, (staticmethod, classmethod)) else entry
 
 
+def _code_owner(func: Callable) -> Any:
+    """The function or method whose code runs when ``func`` is called.
+
+    A function or method runs its own ``__code__``; anything else runs its type's
+    ``__call__``. Its ``__defaults__`` / ``__kwdefaults__`` answer the default-
+    argument question when there is no AST to ask.
+    """
+    target = func if (inspect.isfunction(func) or inspect.ismethod(func)) else _call_dunder(func)
+    return _call_impl(target)
+
+
 def _held_code(func: Callable) -> Any:
     """The code object that runs when ``func`` is called, or ``None``.
 
-    A function or method runs its own ``__code__``; anything else runs its type's
-    ``__call__``. Used only to ask whether we are holding a lambda.
+    Used to ask whether we are holding a lambda, and handed to transpiler
+    varieties that work from bytecode.
     """
-    target = func if (inspect.isfunction(func) or inspect.ismethod(func)) else _call_dunder(func)
-    return getattr(_call_impl(target), "__code__", None)
+    return getattr(_code_owner(func), "__code__", None)
 
 
 _WARNINGS_LOCK = threading.Lock()
@@ -1310,54 +1341,82 @@ def _transpile_func(
                 [],
                 [],
             )
+        # Hand each transpiler whatever could be extracted: the AST from the
+        # source on disk when it is trustworthy, and the code object that
+        # actually runs (``held_code``) when there is one. A transpiler declines
+        # when the form it needs is missing -- the built-in lowering works from
+        # the AST, a numba-style variety from the bytecode -- so an extraction
+        # failure is recorded as a reason for the fallback warning, not refused
+        # outright. Only BOTH missing means there is nothing to lower from.
+        held_code = _held_code(func)
+        src = None
+        ast_info = None
+        function_ast = None
+        errors: List[str] = []
         # A functools.wraps-style decorator makes ``inspect.getsource`` return
         # the WRAPPED function's source (getsource follows ``__wrapped__``),
-        # while the UDF actually executes the wrapper. Transpiling would
-        # silently reproduce the wrong behavior, so refuse and fall back.
+        # while the UDF actually executes the wrapper -- the AST is a lie, but
+        # ``held_code`` is exactly what runs.
         # ``_call_impl`` first: a ``staticmethod`` / ``classmethod`` exposes a
-        # ``__wrapped__`` of its own, so asking the descriptor refuses every one of
-        # them for a wraps decorator that is not there.
+        # ``__wrapped__`` of its own, so asking the descriptor distrusts every
+        # one of them for a wraps decorator that is not there.
         if (
             getattr(func, "__wrapped__", None) is not None
             or getattr(_call_impl(_call_dunder(func)), "__wrapped__", None) is not None
         ):
+            errors.append(
+                "a functools.wraps decorator makes the visible source the wrapped "
+                "function's, not the wrapper's; only the bytecode is trustworthy"
+            )
+        else:
+            # Not ``ast``: that name would shadow the module for this function.
+            src, ast_info = _get_src_ast_from_func(func)
+            if ast_info is None:
+                errors.append("Error getting ast for function")
+            else:
+                # Get the lambda body and parameters
+                function_ast, extraction_error = _get_function_from_ast(ast_info, held_code)
+                if function_ast is None:
+                    errors.append(extraction_error)
+        if function_ast is None and held_code is None:
             return (
                 [],
-                [
-                    "decorated callables (functools.wraps) are not supported: "
-                    "the visible source is the wrapped function's, not the "
-                    "wrapper's, so transpilation would change behavior"
-                ],
+                errors + ["and no bytecode is available either, cannot transpile"],
                 [],
                 [],
                 [],
             )
-        # Not ``ast``: that name would shadow the module for this whole function.
-        src, ast_info = _get_src_ast_from_func(func)
-        if ast_info is None:
-            return ([], ["Error getting ast for function, cannot transpile"], [], [], [])
-        # Get the lambda body and parameters
-        function_ast, extraction_error = _get_function_from_ast(ast_info, _held_code(func))
-        if function_ast is None:
-            return ([], [extraction_error], [], [], [])
         # Default, variadic (``*args`` / ``**kwargs``) and keyword-only params
         # can't be represented by the positional ``_udf_param_N`` placeholder
         # scheme: a call site may omit a defaulted argument, leaving the
         # placeholder referencing a position the call never bound. A
         # positional-only param has no such gap -- it is always bound by
-        # position -- so it is not refused here; a DEFAULTED one still hits
-        # ``fn_args.defaults`` above.
-        fn_args = function_ast.args
-        if (
-            fn_args.defaults
-            or any(d is not None for d in fn_args.kw_defaults)
-            or fn_args.kwonlyargs
-            or fn_args.vararg is not None
-            or fn_args.kwarg is not None
-        ):
+        # position -- so it is not refused here; a DEFAULTED one still hits the
+        # check below. The check runs on the AST when there is one, on the code
+        # object otherwise: ``__defaults__`` / ``__kwdefaults__`` live on the
+        # function, the variadic and keyword-only counts on its code object.
+        if function_ast is not None:
+            fn_args = function_ast.args
+            unsupported_params = bool(
+                fn_args.defaults
+                or any(d is not None for d in fn_args.kw_defaults)
+                or fn_args.kwonlyargs
+                or fn_args.vararg is not None
+                or fn_args.kwarg is not None
+            )
+        else:
+            owner = _code_owner(func)
+            unsupported_params = bool(
+                getattr(owner, "__defaults__", None)
+                or getattr(owner, "__kwdefaults__", None)
+                or held_code.co_kwonlyargcount
+                or held_code.co_flags & (inspect.CO_VARARGS | inspect.CO_VARKEYWORDS)
+            )
+        if unsupported_params:
             return (
                 [],
-                [
+                errors
+                + [
                     "functions with default, variadic, or keyword-only "
                     "arguments are not supported by the transpiler"
                 ],
@@ -1365,7 +1424,10 @@ def _transpile_func(
                 [],
                 [],
             )
-        params = _get_parameter_list(function_ast)
+        if function_ast is not None:
+            params = _get_parameter_list(function_ast)
+        else:
+            params = list(held_code.co_varnames[: held_code.co_argcount])
         # Drop a receiver that is already bound, so what is left is what the call
         # site supplies. Decided by HOW ``func`` dispatches, not by the parameter's
         # name: a bound ``__call__(this, x)`` or ``@classmethod f(cls, x)`` has a
@@ -1419,11 +1481,13 @@ def _transpile_func(
         # Subset of ``public_params`` Python forbids calling by keyword. The
         # call-site kwargs-to-positional rewrite in ``udf.py`` must not "fix" a
         # keyword call to one of these, since Python itself would reject it.
-        posonly_names = {arg.arg for arg in function_ast.args.posonlyargs}
+        if function_ast is not None:
+            posonly_names = {arg.arg for arg in function_ast.args.posonlyargs}
+        else:
+            posonly_names = set(params[: held_code.co_posonlyargcount])
         positional_only_public_params = [p for p in public_params if p in posonly_names]
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
-        errors = []
         # One transpiled option per (backend x input-type variant). Untyped
         # params are tried as both numeric and string so the JVM can pick the
         # option matching the actual column types (or fall back if none match).
@@ -1434,7 +1498,7 @@ def _transpile_func(
             for combo in combos:
                 try:
                     result = transpiler._transpile_from_ast(
-                        src, ast_info, function_ast, public_params, returnType, combo
+                        src, ast_info, function_ast, public_params, returnType, combo, held_code
                     )
                     if result is not None:
                         column, categories = _variety_option(result, combo, len(public_params))
@@ -1445,9 +1509,13 @@ def _transpile_func(
         return (
             transpiled,
             errors,
-            public_params,
+            # Param names only matter alongside an option (the caller's kwargs
+            # rewrite is guarded on ``transpiled``); report none when no
+            # transpiler produced anything, so a fallen-back UDF carries no
+            # transpilation state.
+            public_params if transpiled else [],
             input_categories,
-            positional_only_public_params,
+            positional_only_public_params if transpiled else [],
         )
     except Exception as e:
         # Don't re-raise: an inability to transpile must never break a
