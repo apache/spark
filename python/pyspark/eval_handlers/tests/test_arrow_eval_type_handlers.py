@@ -34,7 +34,7 @@ from pyspark.eval_handlers.utils import hashable_grouping_key
 from pyspark.sql.pandas.serializers import ArrowStreamCoGroupSerializer, ArrowStreamSerializer
 from pyspark.sql.types import DoubleType, LongType, StringType, StructField, StructType
 from pyspark.testing.utils import PySparkBaseTestCase, have_pyarrow, pyarrow_requirement_message
-from pyspark.util import PythonEvalType, fail_on_stopiteration
+from pyspark.util import PythonEvalType
 from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -125,27 +125,23 @@ class ArrowEvalTypeHandlerTestCase(PySparkBaseTestCase):
         return offsets
 
     @staticmethod
-    def _udf(func, args_offsets, kwargs_offsets=None, return_type=None, raw_func=None):
-        """A ``UDF`` record; ``raw_func`` defaults to ``func``."""
+    def _udf(func, args_offsets, kwargs_offsets=None, return_type=None):
+        """A ``UDF`` record as the worker builds it."""
         return UDF(
-            func=func,
-            raw_func=func if raw_func is None else raw_func,
+            raw_func=func,
             args_offsets=args_offsets,
             kwargs_offsets=kwargs_offsets or {},
             return_type=return_type or LongType(),
+            result_id=0,
         )
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets):
-        """Build a grouped/cogrouped-map handler with the shared return type. As from
-        ``read_single_udf``, ``func`` is wrapped (losing the signature) while ``raw_func``
-        keeps it."""
+        """Build a grouped/cogrouped-map handler with the shared return type. The function the
+        handler wraps loses its signature, so the handler reads it from the record's
+        ``raw_func``."""
         return handler_cls(
-            udfs=[
-                cls._udf(
-                    lambda *a: udf(*a), arg_offsets, return_type=cls._RETURN_TYPE, raw_func=udf
-                )
-            ],
+            udfs=[cls._udf(udf, arg_offsets, return_type=cls._RETURN_TYPE)],
             runner_conf=RunnerConf({}),
             eval_conf=None,
         )
@@ -609,10 +605,9 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
     _KEY_SCHEMA = StructType([StructField("k", LongType())])
 
     def _handler(self, cap=10000):
-        # As from read_single_udf: func is wrapped, raw_func is the Aggregator itself.
-        agg = _SumAggregator()
+        # The handler takes the Aggregator itself from the record's raw_func.
         return ArrowGroupedAggIncrementalPartialUDFHandler(
-            udfs=[self._udf(fail_on_stopiteration(agg), [1], raw_func=agg)],
+            udfs=[self._udf(_SumAggregator(), [1])],
             runner_conf=RunnerConf({"spark.sql.execution.arrow.maxRecordsPerBatch": str(cap)}),
             eval_conf=EvalConf({"grouping_key_schema": self._KEY_SCHEMA.json()}),
         )
@@ -669,9 +664,8 @@ class ArrowGroupedAggIncrementalPartialUDFHandlerTests(ArrowEvalTypeHandlerTestC
             [pa.array([float("nan"), float("nan")]), pa.array([1, 2], type=pa.int64())],
             ["k", "v"],
         )
-        agg = _SumAggregator()
         handler = ArrowGroupedAggIncrementalPartialUDFHandler(
-            udfs=[self._udf(fail_on_stopiteration(agg), [1], raw_func=agg)],
+            udfs=[self._udf(_SumAggregator(), [1])],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf(
                 {"grouping_key_schema": StructType([StructField("k", DoubleType())]).json()}
@@ -692,12 +686,9 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
         return pa.RecordBatch.from_arrays([pa.array(buffers, type=self._BUFFER_TYPE)], ["buf"])
 
     def _handler(self):
-        # As from read_single_udf: func is wrapped, raw_func is the Aggregator itself.
-        agg = _SumAggregator()
+        # The handler takes the Aggregator itself from the record's raw_func.
         return ArrowGroupedAggIncrementalFinalUDFHandler(
-            udfs=[self._udf(fail_on_stopiteration(agg), [0], raw_func=agg)],
-            runner_conf=RunnerConf({}),
-            eval_conf=None,
+            udfs=[self._udf(_SumAggregator(), [0])], runner_conf=RunnerConf({}), eval_conf=None
         )
 
     def test_merges_partial_buffers_per_group(self):
@@ -722,8 +713,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandlerTests(ArrowEvalTypeHandlerTestCas
 class ArrowWindowAggIncrementalUDFHandlerTests(ArrowEvalTypeHandlerTestCase):
     def _handler(self, agg, bound_type, args_offsets):
         return ArrowWindowAggIncrementalUDFHandler(
-            # As from read_single_udf: func is wrapped, raw_func is the Aggregator itself.
-            udfs=[self._udf(fail_on_stopiteration(agg), args_offsets, raw_func=agg)],
+            udfs=[self._udf(agg, args_offsets)],
             runner_conf=RunnerConf({"window_bound_types": bound_type}),
             eval_conf=None,
         )

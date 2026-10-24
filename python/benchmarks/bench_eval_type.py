@@ -198,7 +198,7 @@ class MockProtocolWriter:
         arg_offsets: list[int],
         buf: io.BytesIO,
     ) -> None:
-        """Write the ``read_single_udf`` portion of the protocol."""
+        """Write the ``UDFInfo`` portion of the protocol."""
         write_int(1, buf)  # num_udfs
         write_int(len(arg_offsets), buf)  # num_arg
         for offset in arg_offsets:

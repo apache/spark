@@ -45,15 +45,13 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
 
     def __init__(self, udfs: "list[UDF]", runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         super().__init__(udfs, runner_conf, eval_conf)
-        self._udf_infos = [self._prepare_udf(udf) for udf in udfs]
+        self._udf_infos = [self._prepare_udf(udf, func) for udf, func in zip(udfs, self._funcs)]
 
     @staticmethod
-    def _prepare_udf(udf: "UDF") -> tuple[list[int], Callable[..., Any]]:
+    def _prepare_udf(udf: "UDF", func: Callable[..., Any]) -> tuple[list[int], Callable[..., Any]]:
         """Apply kwargs binding, and convert each result to the internal representation only
         when the return type requires it."""
-        func, args_kwargs_offsets = wrap_kwargs_support(
-            udf.func, udf.args_offsets, udf.kwargs_offsets
-        )
+        func, args_kwargs_offsets = wrap_kwargs_support(func, udf.args_offsets, udf.kwargs_offsets)
         if udf.return_type.needConversion():
             toInternal = udf.return_type.toInternal
             return args_kwargs_offsets, lambda *a: toInternal(func(*a))
