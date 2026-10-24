@@ -16,7 +16,11 @@
 #
 
 """
-Worker that receives input from Piped RDD.
+Python worker that runs one task at a time. ``invoke_udf`` runs a task against any
+``SparkMessageReceiver``, so it does not depend on how the worker was started; ``main`` drives
+it over the socket of a worker launched by the JVM's PythonRunner, directly or forked by
+pyspark.daemon. A task runs either a classic RDD command (eval type NON_UDF) or SQL UDFs/UDTFs
+through the handler registered for their eval type in pyspark.eval_handlers.
 """
 
 import dataclasses
@@ -35,8 +39,8 @@ from pyspark.accumulators import (
 )
 from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF, UDTF
 from pyspark.eval_handlers._udtf import TableUDTFHandler, UDTFEvalTypeHandler
-from pyspark.eval_handlers.utils import wrap_kwargs_support
 from pyspark.logger.worker_io import capture_outputs
 from pyspark.messages import (
     SparkMessageReceiver,
@@ -201,93 +205,25 @@ def read_single_udf(pickleSer, udf_info, handler_cls, runner_conf):
         # when they are processed in a for loop, raise them as RuntimeError's instead
         func = fail_on_stopiteration(profiling_func)
 
-    args_offsets, kwargs_offsets = udf_info.args, udf_info.kwargs
-
-    # The last returnType will be the return type of UDF. Eval types are grouped below by the
-    # shape of the value they return.
-
-    # Incremental Python aggregators: the pickled "function" is the Aggregator object itself, whose
-    # zero/reduce/merge/finish methods the worker calls directly. Return it unwrapped (not through
-    # fail_on_stopiteration, which would treat it as a plain callable).
-    if eval_type in (
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
-    ):
-        return chained_func, args_offsets, kwargs_offsets, return_type
-
-    # Scalar, aggregation and window UDFs: (func, args_offsets, kwargs_offsets, return_type).
-    if eval_type in (
-        PythonEvalType.SQL_ARROW_BATCHED_UDF,
-        PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_ELEMENTWISE_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_ARROW_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_SCALAR_PANDAS_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF,
-        PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF,
-    ):
-        return func, args_offsets, kwargs_offsets, return_type
-    # Grouped-map and cogrouped-map UDFs: (func, args_offsets, return_type, num_udf_args).
-    elif eval_type in (
-        PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF,
-        PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF,
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF,
-    ):
-        # signature was lost when wrapping it
-        num_udf_args = len(inspect.getfullargspec(chained_func).args)
-        return func, args_offsets, return_type, num_udf_args
-    # Grouped-map-with-state and transform-with-state UDFs: (func, args_offsets, return_type).
-    elif eval_type in (
-        PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF,
-        PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF,
-    ):
-        return func, args_offsets, return_type
-    # Map iterator UDFs take no offsets.
-    elif eval_type == PythonEvalType.SQL_MAP_PANDAS_ITER_UDF:
-        return func, None, None, return_type
-    elif eval_type == PythonEvalType.SQL_MAP_ARROW_ITER_UDF:
-        return func, None, None, None
-    # Batched (plain Python) UDFs: (args_kwargs_offsets, eval func); apply kwargs binding and
-    # convert each result to the internal representation only when the return type requires it.
-    elif eval_type == PythonEvalType.SQL_BATCHED_UDF:
-        func, args_kwargs_offsets = wrap_kwargs_support(func, args_offsets, kwargs_offsets)
-        if return_type.needConversion():
-            toInternal = return_type.toInternal
-            return args_kwargs_offsets, lambda *a: toInternal(func(*a))
-        else:
-            return args_kwargs_offsets, lambda *a: func(*a)
-    else:
-        raise ValueError("Unknown eval type: {}".format(eval_type))
+    # The last returnType will be the return type of UDF.
+    return UDF(
+        func=func,
+        raw_func=chained_func,
+        args_offsets=udf_info.args,
+        kwargs_offsets=udf_info.kwargs,
+        return_type=return_type,
+    )
 
 
 # Read a serialized user-defined table function (UDTF) and prepare it for evaluation: wrap
 # the constructor to receive the AnalyzeResult, instantiate the UDTF (wrapped in the handler's
 # partition_wrapper when its TABLE argument has PARTITION BY expressions), and check the 'eval'
-# signature against the call arguments. Returns the same
-# (func, args_offsets, kwargs_offsets, return_type) shape as read_single_udf, with the UDTF
-# instance in the func slot.
+# signature against the call arguments.
 def read_single_udtf(pickleSer, udtf_info, handler_cls):
     if udtf_info.pickled_analyze_result is not None:
         pickled_analyze_result = pickleSer.loads(udtf_info.pickled_analyze_result)
     else:
         pickled_analyze_result = None
-    # Initially we assume that the UDTF __init__ method accepts the pickled AnalyzeResult,
-    # although we may set this to false later if we find otherwise.
     handler = read_command(pickleSer, udtf_info.handler)
     if not isinstance(handler, type):
         raise PySparkRuntimeError(
@@ -301,10 +237,9 @@ def read_single_udtf(pickleSer, udtf_info, handler_cls):
             f"The return type of a UDTF must be a struct type, but got {type(return_type)}."
         )
 
-    # Update the handler that creates a new UDTF instance to first try calling the UDTF constructor
-    # with one argument containing the previous AnalyzeResult. If that fails, then try a constructor
-    # with no arguments. In this way each UDTF class instance can decide if it wants to inspect the
-    # AnalyzeResult.
+    # Pick how to construct the UDTF from the count of named positional __init__ parameters
+    # after self. With an AnalyzeResult, one parameter receives a copy of it, zero means the
+    # class is called with no arguments, and more are an error; without one, any is an error.
     udtf_init_args = inspect.getfullargspec(handler)
     if pickled_analyze_result is not None:
         if len(udtf_init_args.args) > 2:
@@ -356,13 +291,19 @@ def read_single_udtf(pickleSer, udtf_info, handler_cls):
             messageParameters={"name": udtf_info.name, "reason": str(e)},
         ) from None
 
-    return udtf, udtf_info.args, udtf_info.kwargs, return_type
+    return UDTF(
+        udtf=udtf,
+        args_offsets=udtf_info.args,
+        kwargs_offsets=udtf_info.kwargs,
+        return_type=return_type,
+    )
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     """
     This function is the main processing function for worker.py.
-    It receives messages from the JVM, processes the data, and sends back results.
+    It reads the task's messages from message_receiver, processes the data, and writes the
+    results to outfile.
     This method goes through three phases:
 
     Initialization -> Processing -> Finish/Cleanup
@@ -398,8 +339,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
         eval_type = init_info.eval_type
         runner_conf = RunnerConf(init_info.runner_conf)
         eval_conf = EvalConf(init_info.eval_conf)
-        # UDF and UDTF runners fold profiling into func at construction time (see
-        # read_single_udf); only the classic RDD command carries a profiler of its own.
+        # Only the classic RDD command carries a profiler of its own. UDF runners fold profiling
+        # into func at construction time (see read_single_udf); UDTF runners are not profiled.
         profiler = None
         if eval_type == PythonEvalType.NON_UDF:
             assert isinstance(init_info.udf_info, (bytes, memoryview))
