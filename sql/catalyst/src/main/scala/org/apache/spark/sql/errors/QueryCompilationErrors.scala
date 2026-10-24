@@ -2242,6 +2242,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map.empty)
   }
 
+  def specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      origin = origin)
+  }
+
   def bucketingColumnCannotBePartOfPartitionColumnsError(
       bucketCol: String, normalizedPartCols: Seq[String]): Throwable = {
     // These names are already resolved against the table schema, so each is quoted as a single

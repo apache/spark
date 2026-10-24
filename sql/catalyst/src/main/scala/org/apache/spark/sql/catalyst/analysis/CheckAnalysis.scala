@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -1009,6 +1009,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
                 messageParameters = Map(
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
+            }
+
+            // PreprocessTableCreation keeps a reference to a missing column as is, so this is the
+            // only check that rejects it, also for analyzers that do not run that rule.
+            val badOrderingReferences = WriteDistributionAndOrdering.unknownReferences(
+              create.tableSchema, create.writeOrdering)
+
+            if (badOrderingReferences.nonEmpty) {
+              create.failAnalysis(
+                errorClass = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
+                messageParameters = Map(
+                  "cols" -> badOrderingReferences.map(parts => toSQLId(parts)).mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
