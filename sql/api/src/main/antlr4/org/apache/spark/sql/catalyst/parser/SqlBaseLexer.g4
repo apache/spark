@@ -80,10 +80,52 @@ import java.util.Deque;
   public int complex_type_level_counter = 0;
 
   /**
-   * Increase the counter by one when hits KEYWORD 'ARRAY', 'MAP', 'STRUCT'.
+   * Increase the counter by one when hits KEYWORD 'ARRAY', 'MAP', 'STRUCT' that starts an
+   * angle-bracketed complex type, such as ARRAY<INT>. Other uses of these keywords, such as the
+   * ARRAY(1, 2) function or the `IS JSON ARRAY` predicate, have no matching '>' and must leave
+   * the counter unchanged, otherwise a later '>>' could not be lexed as a shift operator.
    */
   public void incComplexTypeLevelCounter() {
-    complex_type_level_counter++;
+    if (isFollowedByLessThan()) complex_type_level_counter++;
+  }
+
+  /**
+   * Returns whether the next character after the current token, skipping whitespace and
+   * comments, is '<'. Called from a lexer action, where the input is positioned right after the
+   * matched keyword.
+   */
+  private boolean isFollowedByLessThan() {
+    int i = 1;
+    while (true) {
+      int c = _input.LA(i);
+      if (c != CharStream.EOF && (Character.isWhitespace(c) || Character.isSpaceChar(c))) {
+        // Covers every character of the WS rule, including no-break spaces.
+        i++;
+      } else if (c == '-' && _input.LA(i + 1) == '-') {
+        // Simple comment: skip to the end of the line, honoring backslash line continuations.
+        i += 2;
+        while (_input.LA(i) != '\n' && _input.LA(i) != CharStream.EOF) {
+          i += (_input.LA(i) == '\\' && _input.LA(i + 1) == '\n') ? 2 : 1;
+        }
+      } else if (c == '/' && _input.LA(i + 1) == '*') {
+        // Bracketed comment, which may be nested.
+        i += 2;
+        int level = 1;
+        while (level > 0 && _input.LA(i) != CharStream.EOF) {
+          if (_input.LA(i) == '/' && _input.LA(i + 1) == '*') {
+            level++;
+            i += 2;
+          } else if (_input.LA(i) == '*' && _input.LA(i + 1) == '/') {
+            level--;
+            i += 2;
+          } else {
+            i++;
+          }
+        }
+      } else {
+        return c == '<';
+      }
+    }
   }
 
   /**
@@ -468,6 +510,7 @@ ROLLBACK: 'ROLLBACK';
 ROLLUP: 'ROLLUP';
 ROW: 'ROW';
 ROWS: 'ROWS';
+SCALAR: 'SCALAR';
 SECOND: 'SECOND';
 SECONDS: 'SECONDS';
 SCD: 'SCD';

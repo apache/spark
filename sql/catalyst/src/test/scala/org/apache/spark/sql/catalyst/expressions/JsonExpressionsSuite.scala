@@ -1138,4 +1138,81 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
         StructType(StructField("f", FileType.external) :: Nil))
     }
   }
+
+  test("SPARK-58793: IS JSON evaluates its operand exactly once") {
+    // Regression test: a non-deterministic operand (e.g. `IF(rand() < 0.5, NULL, '{}')`) must be
+    // evaluated a single time, otherwise the predicate could observe two different values and
+    // return a wrong result (false, when only NULL or true are valid). The replacement must
+    // therefore reference the operand exactly once.
+    val child = Literal.create("{}", StringType)
+    Seq(IsJsonShape.Any, IsJsonShape.Value, IsJsonShape.Object, IsJsonShape.Array,
+        IsJsonShape.Scalar).foreach { shape =>
+      val references = IsJson(child, shape).replacement.collect { case e if e eq child => e }
+      assert(references.length == 1,
+        s"operand referenced ${references.length} times for shape $shape, expected exactly once")
+    }
+  }
+
+  test("SPARK-58793: IS JSON requires strict ANSI JSON (no Hive leniency)") {
+    // Single quotes and unescaped control characters are allowed by the Hive-compatible parser
+    // shared by json_typeof etc., but the ANSI SQL IS JSON predicate must reject them.
+    checkEvaluation(IsJson(Literal("{'a':1}"), IsJsonShape.Any), false)
+    checkEvaluation(IsJson(Literal("['a', 'b']"), IsJsonShape.Any), false)
+    // A raw (unescaped) control character inside a JSON string is not valid ANSI JSON.
+    checkEvaluation(IsJson(Literal("\"line1\nline2\""), IsJsonShape.Any), false)
+    // The double-quoted equivalents are well-formed ANSI JSON.
+    checkEvaluation(IsJson(Literal("""{"a":1}"""), IsJsonShape.Any), true)
+    checkEvaluation(IsJson(Literal("""["a", "b"]"""), IsJsonShape.Any), true)
+  }
+
+  test("SPARK-58793: IS JSON rejects malformed UTF-8 and unpaired surrogates") {
+    def bytes(b: Int*): Literal =
+      Literal.create(UTF8String.fromBytes(b.map(_.toByte).toArray), StringType)
+    // `"<0x80>"`: a lone continuation byte would otherwise be decoded to U+FFFD and accepted.
+    checkEvaluation(IsJson(bytes(0x22, 0x80, 0x22), IsJsonShape.Any), false)
+    // `"<ED A0 80>"`: UTF-8 encoding of the surrogate U+D800, which is not valid UTF-8.
+    checkEvaluation(IsJson(bytes(0x22, 0xED, 0xA0, 0x80, 0x22), IsJsonShape.Scalar), false)
+    // A valid multi-byte UTF-8 sequence (U+00E9) is accepted.
+    checkEvaluation(IsJson(bytes(0x22, 0xC3, 0xA9, 0x22), IsJsonShape.Any), true)
+
+    val high = "\\" + "uD835"
+    val low = "\\" + "uDC00"
+    def quoted(s: String): Literal = Literal("\"" + s + "\"")
+    // Unpaired surrogate escapes in string values and field names, at any depth.
+    checkEvaluation(IsJson(quoted(high), IsJsonShape.Any), false)
+    checkEvaluation(IsJson(quoted(low), IsJsonShape.Scalar), false)
+    checkEvaluation(IsJson(quoted(low + high), IsJsonShape.Any), false)
+    checkEvaluation(IsJson(Literal(s"""{"$high":1}"""), IsJsonShape.Object), false)
+    checkEvaluation(IsJson(Literal(s"""[{"a":["x$low"]}]"""), IsJsonShape.Array), false)
+    // A correctly paired surrogate escape is well-formed.
+    checkEvaluation(IsJson(quoted(high + low), IsJsonShape.Any), true)
+    checkEvaluation(IsJson(Literal(s"""{"$high$low":["$high$low"]}"""), IsJsonShape.Object),
+      true)
+  }
+
+  test("SPARK-58793: IS JSON NULL propagation and shape qualifiers") {
+    // NULL operand propagates as NULL (three-valued logic).
+    Seq(IsJsonShape.Any, IsJsonShape.Value, IsJsonShape.Object, IsJsonShape.Array,
+        IsJsonShape.Scalar).foreach { shape =>
+      checkEvaluation(IsJson(Literal.create(null, StringType), shape), null)
+    }
+    // Empty and malformed inputs are not JSON.
+    checkEvaluation(IsJson(Literal(""), IsJsonShape.Any), false)
+    checkEvaluation(IsJson(Literal("not json"), IsJsonShape.Any), false)
+    // Trailing content after a well-formed value is rejected.
+    checkEvaluation(IsJson(Literal("1 2"), IsJsonShape.Any), false)
+    // Shape qualifiers.
+    checkEvaluation(IsJson(Literal("""{"a":1}"""), IsJsonShape.Object), true)
+    checkEvaluation(IsJson(Literal("[1,2]"), IsJsonShape.Object), false)
+    checkEvaluation(IsJson(Literal("[1,2]"), IsJsonShape.Array), true)
+    checkEvaluation(IsJson(Literal("""{"a":1}"""), IsJsonShape.Array), false)
+    checkEvaluation(IsJson(Literal("42"), IsJsonShape.Scalar), true)
+    checkEvaluation(IsJson(Literal("null"), IsJsonShape.Scalar), true)
+    checkEvaluation(IsJson(Literal("[1]"), IsJsonShape.Scalar), false)
+    // IS JSON VALUE accepts any well-formed JSON value, including objects and arrays.
+    checkEvaluation(IsJson(Literal("""{"a":1}"""), IsJsonShape.Value), true)
+    checkEvaluation(IsJson(Literal("[1,2]"), IsJsonShape.Value), true)
+    checkEvaluation(IsJson(Literal("42"), IsJsonShape.Value), true)
+  }
+
 }

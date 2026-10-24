@@ -121,6 +121,9 @@
       url: sql-ref-number-pattern.html
     - text: Operators
       url: sql-ref-operators.html
+      subitems:
+        - text: IS JSON predicate
+          url: sql-ref-is-json.html
     - text: Functions
       url: sql-ref-functions.html
       subitems:
