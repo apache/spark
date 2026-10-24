@@ -9069,6 +9069,11 @@
           "Catalog <catalogName> does not support <operation>."
         ]
       },
+      "CHANGELOG_METADATA_COLUMN" : {
+        "message" : [
+          "Changelog metadata column <columnName> cannot be queried directly."
+        ]
+      },
       "CHANGE_DATA_CAPTURE" : {
         "message" : [
           "Catalog <catalogName> does not support Change Data Capture (CDC)."
