@@ -328,4 +328,24 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
         parameters = expectedParams)
     }
   }
+
+  test("SPARK-60519: geospatial types are unsupported in Hive object inspectors") {
+    Seq(
+      GeometryType(4326), GeometryType("ANY"),
+      GeographyType(4326), GeographyType("ANY")).foreach { geoType =>
+      val expectedParams = Map("typeName" -> s"\"${geoType.sql}\"")
+      checkError(
+        exception = intercept[AnalysisException](toInspector(geoType)),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+      checkError(
+        exception = intercept[AnalysisException](toInspector(Literal.create(null, geoType))),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+      checkError(
+        exception = intercept[AnalysisException](geoType.toTypeInfo),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+    }
+  }
 }

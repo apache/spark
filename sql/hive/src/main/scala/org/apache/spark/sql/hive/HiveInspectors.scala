@@ -970,6 +970,8 @@ private[hive] trait HiveInspectors {
     // Hive has no nanosecond-precision timestamp type, so it cannot be represented by any Hive
     // object inspector. Reject it instead of silently downgrading to microsecond precision.
     case _: AnyTimestampNanoType => throw unsupportedHiveType(dataType)
+    // Hive has no geospatial types, so they cannot be represented by any Hive object inspector.
+    case _: GeometryType | _: GeographyType => throw unsupportedHiveType(dataType)
   }
 
   private def unsupportedHiveType(dataType: DataType): AnalysisException = {
@@ -1050,6 +1052,10 @@ private[hive] trait HiveInspectors {
     // Hive has no nanosecond-precision timestamp type, so such a constant cannot be mapped to a
     // Hive object inspector.
     case Literal(_, dt: AnyTimestampNanoType) =>
+      throw unsupportedHiveType(dt)
+    // Hive has no geospatial types, so a geospatial constant cannot be mapped to a Hive object
+    // inspector.
+    case Literal(_, dt @ (_: GeometryType | _: GeographyType)) =>
       throw unsupportedHiveType(dt)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>
