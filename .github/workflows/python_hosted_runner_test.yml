@@ -55,6 +55,10 @@ on:
         required: false
         type: string
         default: '{}'
+
+env:
+  SPARK_SCALA_CHECKINIT: "true"
+
 jobs:
   # Precompile Spark with SBT once and publish target/ as an artifact for the
   # matrix entries below to consume. Optional: any failure here degrades the
