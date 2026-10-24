@@ -16,6 +16,7 @@
 #
 import difflib
 import unittest
+from enum import Enum
 from itertools import zip_longest
 
 import pyspark.sql.functions as F
@@ -44,6 +45,15 @@ from pyspark.sql.types import (
     StructField,
     StructType,
     TimestampNTZNanosType,
+)
+from pyspark.sql.utils import (
+    NumpyHelper,
+    StringConcat,
+    enum_to_value,
+    escape_meta_characters,
+    get_lit_sql_str,
+    remote_only,
+    to_str,
 )
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
@@ -1886,6 +1896,133 @@ class UtilsTestsMixin:
 
 class UtilsTests(UtilsTestsMixin, ReusedSQLTestCase):
     pass
+
+
+class SQLUtilsTests(unittest.TestCase):
+    def test_to_str(self):
+        self.assertEqual(to_str(True), "true")
+        self.assertEqual(to_str(False), "false")
+        self.assertIsNone(to_str(None))
+        self.assertEqual(to_str(5), "5")
+        self.assertEqual(to_str(3.5), "3.5")
+
+    def test_escape_meta_characters(self):
+        self.assertEqual(
+            escape_meta_characters("text\n\r\t\f\b\u000b\u0007\n"),
+            "text\\n\\r\\t\\f\\b\\v\\a\\n",
+        )
+        self.assertEqual(escape_meta_characters(""), "")
+        self.assertEqual(escape_meta_characters("plain text"), "plain text")
+
+    def test_get_lit_sql_str(self):
+        self.assertEqual(get_lit_sql_str(""), "''")
+        self.assertEqual(get_lit_sql_str("sql command\\sql"), "'sql command\\\\sql'")
+        self.assertEqual(get_lit_sql_str("I'm the best\\"), "'I\\'m the best\\\\'")
+
+    def test_linspace(self):
+        self.assertEqual(NumpyHelper.linspace(0.0, 10.0, 3), [0.0, 5.0, 10.0])
+        self.assertEqual(NumpyHelper.linspace(2, 10, 1), [2])
+        self.assertEqual(NumpyHelper.linspace(5, 5, 3), [5, 5, 5])
+        self.assertEqual(NumpyHelper.linspace(10, 0, 3), [10.0, 5.0, 0.0])
+        self.assertEqual(NumpyHelper.linspace(20.0, 100.0, 1), [20.0])
+        values = NumpyHelper.linspace(0.0, 100.0, 20)
+        self.assertEqual(len(values), 20)
+        self.assertAlmostEqual(values[0], 0.0)
+        self.assertAlmostEqual(values[3], 15.789473684210527)
+        self.assertAlmostEqual(values[-1], 100.0)
+
+    def test_string_concat_empty(self):
+        concat = StringConcat(5)
+        self.assertEqual(concat.atLimit(), False)
+        self.assertEqual(concat.toString(), "")
+        self.assertEqual(concat.length, 0)
+
+    def test_string_concat_append(self):
+        concat = StringConcat(10)
+        concat.append("ab")
+        concat.append("cd")
+        self.assertEqual(concat.atLimit(), False)
+        self.assertEqual(concat.toString(), "abcd")
+        concat.append("ef")
+        self.assertEqual(concat.length, 6)
+        concat.append("gh")
+        self.assertEqual(concat.atLimit(), False)
+        self.assertEqual(concat.toString(), "abcdefgh")
+
+    def test_string_concat_truncate(self):
+        concat = StringConcat(5)
+        concat.append("ab")
+        self.assertEqual(concat.toString(), "ab")
+        concat.append("cdef")
+        self.assertEqual(concat.toString(), "abcde")
+        self.assertEqual(concat.length, 6)
+        self.assertEqual(concat.atLimit(), True)
+
+    def test_string_concat_at_limit(self):
+        concat = StringConcat(3)
+        concat.append("abc")
+        self.assertEqual(concat.toString(), "abc")
+        self.assertEqual(concat.length, 3)
+        self.assertEqual(concat.atLimit(), True)
+        concat.append("def")
+        self.assertEqual(concat.toString(), "abc")
+        self.assertEqual(concat.length, 6)
+        self.assertEqual(concat.atLimit(), True)
+
+    def test_string_concat_ignore_none(self):
+        concat = StringConcat(5)
+        concat.append("ab")
+        concat.append(None)
+        self.assertEqual(concat.toString(), "ab")
+        self.assertEqual(concat.length, 2)
+        self.assertEqual(concat.atLimit(), False)
+
+    def test_string_concat_zero_limit(self):
+        concat = StringConcat(0)
+        self.assertEqual(concat.atLimit(), True)
+        concat.append("abc")
+        self.assertEqual(concat.toString(), "")
+        self.assertEqual(concat.length, 3)
+        self.assertEqual(concat.atLimit(), True)
+
+    def test_enum_to_value(self):
+        self.assertIsNone(enum_to_value(None))
+        self.assertEqual(enum_to_value(True), True)
+        self.assertEqual(enum_to_value(1), 1)
+        self.assertEqual(enum_to_value("str"), "str")
+
+        class Number(Enum):
+            ONE = 1
+            TWO = 2
+
+        self.assertEqual(enum_to_value(Number.ONE), 1)
+        self.assertEqual(enum_to_value(Number.TWO), 2)
+
+        class Outer(Enum):
+            FIRST = Number.ONE
+
+        self.assertEqual(enum_to_value(Outer.FIRST), 1)
+
+    def test_remote_only(self):
+        def greet():
+            return "hello"
+
+        marked = remote_only(greet)
+
+        self.assertTrue(marked._remote_only)
+        self.assertEqual(marked(), "hello")
+        self.assertIs(marked, greet)
+
+    def test_remote_only_property(self):
+        class Example:
+            @remote_only
+            @property
+            def name(self):
+                return "hello"
+
+        self.assertIsInstance(Example.name, property)
+        self.assertTrue(Example.name.fget._remote_only)
+        self.assertEqual(Example().name, "hello")
 
 
 if __name__ == "__main__":
