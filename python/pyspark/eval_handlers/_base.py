@@ -150,8 +150,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
-    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
-    # user code fails the task instead of silently ending the loop that calls the UDF.
+    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised by
+    # the UDF call fails with STOP_ITERATION_OCCURRED instead of PEP 479's generic RuntimeError.
     _fail_on_stopiteration: ClassVar[bool] = True
 
     def __init__(
