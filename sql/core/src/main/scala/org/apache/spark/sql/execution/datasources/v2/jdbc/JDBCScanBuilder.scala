@@ -192,16 +192,16 @@ case class JDBCScanBuilder(
       return false
     }
 
-    val joinTypeStringOption = joinType match {
-      case JoinType.INNER_JOIN => Some("INNER JOIN")
-      case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
-      case JoinType.RIGHT_OUTER_JOIN => Some("RIGHT JOIN")
-      case _ => None
-    }
-    if (!joinTypeStringOption.isDefined) {
-      logError(log"Failed to push down join to JDBC due to unsupported join type " +
-        log"${MDC(JOIN_TYPE, joinType)}")
-      return false
+    val joinTypeString = joinType match {
+      case JoinType.INNER_JOIN => "INNER JOIN"
+      case JoinType.LEFT_OUTER_JOIN => "LEFT JOIN"
+      case JoinType.RIGHT_OUTER_JOIN => "RIGHT JOIN"
+      case JoinType.LEFT_SEMI_JOIN => "EXISTS"
+      case JoinType.LEFT_ANTI_JOIN => "NOT EXISTS"
+      case _ =>
+        logError(log"Failed to push down join to JDBC due to unsupported join type " +
+          log"${MDC(JOIN_TYPE, joinType)}")
+        return false
     }
 
     val compiledCondition = dialect.compileExpression(condition)
@@ -214,14 +214,12 @@ case class JDBCScanBuilder(
     val otherJdbcScanBuilder = other.asInstanceOf[JDBCScanBuilder]
 
     // requiredSchema will become the finalSchema of this JDBCScanBuilder
-    var requiredSchema = StructType(Seq())
-    requiredSchema = calculateJoinOutputSchema(leftSideRequiredColumnsWithAliases, finalSchema)
-    requiredSchema = requiredSchema.merge(
-      calculateJoinOutputSchema(
-        rightSideRequiredColumnsWithAliases,
-        otherJdbcScanBuilder.finalSchema
-      )
-    )
+    val leftSchema = calculateJoinOutputSchema(leftSideRequiredColumnsWithAliases, finalSchema)
+    val requiredSchema = joinType match {
+      case JoinType.LEFT_SEMI_JOIN | JoinType.LEFT_ANTI_JOIN => leftSchema
+      case _ => leftSchema.merge(calculateJoinOutputSchema(
+        rightSideRequiredColumnsWithAliases, otherJdbcScanBuilder.finalSchema))
+    }
 
     val joinOutputColumns = requiredSchema.fields.map(f => dialect.quoteIdentifier(f.name))
     val conditionString = compiledCondition.get
@@ -232,18 +230,28 @@ case class JDBCScanBuilder(
     val otherSideJdbcSQLBuilder = otherJdbcScanBuilder
       .getJoinPushdownJdbcSQLBuilder(rightSideRequiredColumnsWithAliases)
 
-    val joinQuery = dialect
-      .getJdbcSQLQueryBuilder(jdbcOptions)
-      .withJoin(
+    val joinBuilder = dialect.getJdbcSQLQueryBuilder(jdbcOptions)
+    val leftSideQualifier = JoinPushdownAliasGenerator.getSubqueryQualifier
+    val rightSideQualifier = JoinPushdownAliasGenerator.getSubqueryQualifier
+    val joinQuery = (joinType match {
+      case JoinType.LEFT_SEMI_JOIN | JoinType.LEFT_ANTI_JOIN =>
+        joinBuilder.withExistenceJoin(
+          leftSideJdbcSQLBuilder,
+          otherSideJdbcSQLBuilder,
+          leftSideQualifier,
+          rightSideQualifier,
+          joinOutputColumns,
+          joinTypeString,
+          conditionString)
+      case _ => joinBuilder.withJoin(
         leftSideJdbcSQLBuilder,
         otherSideJdbcSQLBuilder,
-        JoinPushdownAliasGenerator.getSubqueryQualifier,
-        JoinPushdownAliasGenerator.getSubqueryQualifier,
+        leftSideQualifier,
+        rightSideQualifier,
         joinOutputColumns,
-        joinTypeStringOption.get,
-        conditionString
-      )
-      .build()
+        joinTypeString,
+        conditionString)
+    }).build()
 
     val newJdbcOptionsMap = jdbcOptions.parameters.originalMap +
       (JDBCOptions.JDBC_QUERY_STRING -> joinQuery) - JDBCOptions.JDBC_TABLE_NAME
