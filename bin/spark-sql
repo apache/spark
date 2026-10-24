@@ -18,6 +18,13 @@
 #
 export SPARK_CONNECT_MODE=0
 
+# Marker read by SparkSubmitCommandBuilder: when combined with a remote session
+# (--remote / spark.remote / spark.api.mode=connect), the CLI main class is swapped to
+# org.apache.spark.sql.application.SparkConnectSQLCLIDriver, mirroring how SPARK_SCALA_SHELL
+# selects the Connect REPL for spark-shell. Without a remote session this has no effect and
+# the classic local SparkSQLCLIDriver is used.
+export SPARK_SQL_SHELL=1
+
 if [ -z "${SPARK_HOME}" ]; then
   source "$(dirname "$0")"/find-spark-home
 fi
