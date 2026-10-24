@@ -75,6 +75,8 @@ Feature
     DCT
     ElementwiseProduct
     FeatureHasher
+    FrequencyEncoder
+    FrequencyEncoderModel
     HashingTF
     IDF
     IDFModel
