@@ -486,6 +486,15 @@ class ScalarIterElementwiseUDFHandlerTestsMixin:
                 )
             )
 
+    def test_stop_iteration_in_udf_call_raises_runtime_error(self):
+        # A non-generator UDF that eagerly reads an empty input raises StopIteration from the
+        # call itself.
+        def eager(batches):
+            return iter([next(batches)])
+
+        with self.assertRaisesRegex(PySparkRuntimeError, "STOP_ITERATION_OCCURRED"):
+            list(self._iter_handler(eager).run(0, iter([])))
+
     def test_rejects_non_iterator_result(self):
         with self.assertRaisesRegex(PySparkTypeError, "UDF_RETURN_TYPE"):
             list(self._iter_handler(lambda batches: [1]).run(0, iter([self._batch()])))
