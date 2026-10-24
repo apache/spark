@@ -95,12 +95,13 @@ public final class DateTimeExpressionUtils {
       Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
     assert secAndMicros.scale() == 6 :
       "Seconds fraction must have 6 digits for microseconds but got " + secAndMicros.scale();
-    // 8 digits cannot overflow Int.
-    int totalMicros = (int) secAndMicros.toUnscaledLong();
-    int microsPerSecond = (int) DateTimeConstants.MICROS_PER_SECOND;
+    // secAndMicros is Decimal(16, 6), so the unscaled value can exceed Int.
+    // Compute in long and validate the seconds before narrowing.
+    long totalMicros = secAndMicros.toUnscaledLong();
+    long microsPerSecond = DateTimeConstants.MICROS_PER_SECOND;
     int nanosPerMicros = (int) DateTimeConstants.NANOS_PER_MICROS;
-    int seconds = Math.floorDiv(totalMicros, microsPerSecond);
-    int nanos = Math.floorMod(totalMicros, microsPerSecond) * nanosPerMicros;
+    long seconds = Math.floorDiv(totalMicros, microsPerSecond);
+    int nanos = (int) (Math.floorMod(totalMicros, microsPerSecond) * nanosPerMicros);
     LocalDateTime ldt;
     if (seconds == 60) {
       if (nanos == 0) {
@@ -110,7 +111,11 @@ public final class DateTimeExpressionUtils {
         throw QueryExecutionErrors.invalidFractionOfSecondError(secAndMicros.toDouble());
       }
     } else {
-      ldt = LocalDateTime.of(year, month, day, hour, min, seconds, nanos);
+      if (seconds < 0 || seconds > 59) {
+        throw new DateTimeException(
+          "Invalid value for SecondOfMinute (valid values 0 - 59): " + seconds);
+      }
+      ldt = LocalDateTime.of(year, month, day, hour, min, (int) seconds, nanos);
     }
     if (timestampNTZ) {
       return DateTimeUtils.localDateTimeToMicros(ldt);
