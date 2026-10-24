@@ -656,6 +656,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         deterministic["spark.sql.autoBroadcastJoinThreshold"] = -1
         with self.sql_conf(deterministic):
             and_udf = UserDefinedFunction(both_positive, BooleanType())
+            self.assertTrue(and_udf.transpiled, "rebuilt and_udf should transpile")
             left = self.spark.createDataFrame([(1, -5)], "k long, a long")
             right = self.spark.createDataFrame([(1, None)], "k long, c long")
             joined = left.join(right, "k")
