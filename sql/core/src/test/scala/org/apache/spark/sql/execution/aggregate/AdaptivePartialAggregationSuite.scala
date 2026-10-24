@@ -19,6 +19,7 @@ package org.apache.spark.sql.execution.aggregate
 
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Partial, PartialMerge}
+import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -34,7 +35,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  * behind the map and flushed only after it drains, so every group merges its buffers in the same
  * order as a run that never bypasses, including order-sensitive aggregates such as `first`/`last`.
  *
- * The suite has two halves:
+ * The suite has three parts:
  *   1. Correctness: aggregate results are identical to the reference (feature-off) run across the
  *      full matrix of codegen on/off, two-level map on/off, and spill/no-spill, over a range of
  *      aggregate shapes, key types, and `Expand`-bearing plans (ROLLUP / CUBE / GROUPING SETS /
@@ -43,6 +44,7 @@ import org.apache.spark.tags.ExtendedSQLTest
  *   2. Triggering: the `numBypassingRows` metric proves the bypass actually fires when (and only
  *      when) it should -- high-cardinality input bypasses, low-cardinality input keeps aggregating,
  *      the feature switch and eligibility rules are honored, and both check points work.
+ *   3. Generated code: the pass-through path keeps the code layout that bounds its size.
  */
 @ExtendedSQLTest
 class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
@@ -1418,6 +1420,40 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
         assert(c.partialOutputRows == 5,
           "an effective partial aggregate should emit exactly the distinct key count")
       }
+    }
+  }
+
+  /////////////////////////////////////////////////////////////////////////////
+  // Part 3: Generated code -- the layout that bounds the pass-through code size.
+  /////////////////////////////////////////////////////////////////////////////
+
+  test("pass-through resets its buffer with copyFrom from buffers registered once") {
+    // Each passed-through row resets a reusable buffer with one `copyFrom` of the initial
+    // aggregation buffer rather than projecting the initial values again, so the per-row code does
+    // not grow with the number of buffer slots. Under a fused Union the consume code is generated
+    // once per child, so each child resets the buffer, but all of them must share the same pair
+    // of buffers rather than registering a pair each.
+    withSQLConf(
+      (Seq(
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_UNION_CODEGEN_ENABLED.key -> "true") ++ fixedPlanConfs): _*) {
+      val df = spark.range(0, 100, 1, 2)
+        .union(spark.range(100, 200, 1, 2))
+        .groupBy("id")
+        .agg(sum($"id") as "s", avg($"id") as "a", max($"id") as "m")
+      df.collect()
+      val code = collect(df.queryExecution.executedPlan) {
+        case w: WholeStageCodegenExec => w.doCodeGen()._2.body
+      }.mkString("\n")
+      val resets = """(\w+)\.copyFrom\((\w+)\);""".r.findAllMatchIn(code)
+        .map(m => (m.group(1), m.group(2)))
+        .filter(_._2.contains("adaptiveEmptyBuffer"))
+        .toSeq
+      assert(resets.length == 2,
+        s"expected one reset per child of the fused Union, got ${resets.length}:\n$code")
+      assert(resets.distinct.length == 1,
+        s"expected every child to reset the same pair of buffers, got ${resets.distinct}")
     }
   }
 }
