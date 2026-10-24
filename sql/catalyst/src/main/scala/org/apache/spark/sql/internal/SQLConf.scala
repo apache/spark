@@ -4046,7 +4046,8 @@ object SQLConf {
         "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
         "the number of records is limited when sending it to the downstream operator. This is " +
         "used to avoid large batches being sent to the downstream operator including " +
-        "the columnar-based operator implemented by third-party libraries.")
+        "the columnar-based operator implemented by third-party libraries. " +
+        "applyInPandasWithState and Arrow Python UDTFs ignore this config.")
       .version("4.1.0")
       .internal()
       .intConf
@@ -4062,7 +4063,8 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record.")
+        "Spark will create a batch with one record. applyInPandasWithState and Arrow Python " +
+        "UDTFs ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)

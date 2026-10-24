@@ -49,6 +49,11 @@ class ArrowPythonUDTFRunner(
   with BatchedPythonArrowInput
   with BasicPythonArrowOutput {
 
+  // `EvalPythonUDTFExec` joins each output batch with one input row, so the batches returned
+  // from Python must not be sliced.
+  override protected def arrowMaxRecordsPerOutputBatch: Int = -1
+  override protected def arrowMaxBytesPerOutputBatch: Int = -1
+
   override protected def writeUDF(dataOut: DataOutputStream): Unit = {
     // For arrow-optimized Python UDTFs (@udtf(useArrow=True)), we need to write
     // the schema to the worker to support UDT (user-defined type).
