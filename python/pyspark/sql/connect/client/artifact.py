@@ -24,7 +24,7 @@ import zlib
 from functools import cached_property
 from itertools import chain
 from pathlib import Path, PureWindowsPath
-from typing import BinaryIO, Iterable, Iterator, List, Optional, Tuple
+from typing import BinaryIO, Callable, Iterable, Iterator, List, Optional, Tuple, TypeVar
 from urllib.parse import urlparse
 from urllib.request import url2pathname
 
@@ -41,6 +41,8 @@ ARCHIVE_PREFIX: str = "archives"
 FILE_PREFIX: str = "files"
 FORWARD_TO_FS_PREFIX: str = "forward_to_fs"
 CACHE_PREFIX: str = "cache"
+
+R = TypeVar("R", proto.AddArtifactsRequest, proto.ArtifactStatusesRequest)
 
 
 class LocalData(metaclass=abc.ABCMeta):
@@ -170,6 +172,7 @@ class ArtifactManager:
         metadata: Iterable[Tuple[str, str]],
         add_artifacts_timeout: Optional[float] = None,
         artifact_status_timeout: Optional[float] = None,
+        observed_server_session_id: Optional[Callable[[], Optional[str]]] = None,
     ):
         self._user_context = proto.UserContext()
         if user_id is not None:
@@ -179,6 +182,17 @@ class ArtifactManager:
         self._metadata = metadata
         self._add_artifacts_timeout = add_artifacts_timeout
         self._artifact_status_timeout = artifact_status_timeout
+        # Returns the server-side session id that the client has observed, if any. Sending it lets
+        # the server reject a request from a client whose session was closed instead of creating a
+        # new session.
+        self._observed_server_session_id = observed_server_session_id
+
+    def _with_observed_server_session_id(self, req: R) -> R:
+        if self._observed_server_session_id is not None:
+            server_session_id = self._observed_server_session_id()
+            if server_session_id is not None:
+                req.client_observed_server_side_session_id = server_session_id
+        return req
 
     def _parse_artifacts(
         self, path_or_uri: str, pyfile: bool, archive: bool, file: bool
@@ -381,10 +395,12 @@ class ArtifactManager:
             )
 
         # Write the request once
-        yield proto.AddArtifactsRequest(
-            session_id=self._session_id,
-            user_context=self._user_context,
-            batch=proto.AddArtifactsRequest.Batch(artifacts=artifact_chunks),
+        yield self._with_observed_server_session_id(
+            proto.AddArtifactsRequest(
+                session_id=self._session_id,
+                user_context=self._user_context,
+                batch=proto.AddArtifactsRequest.Batch(artifacts=artifact_chunks),
+            )
         )
 
     def _add_chunked_artifact(self, artifact: Artifact) -> Iterator[proto.AddArtifactsRequest]:
@@ -403,27 +419,31 @@ class ArtifactManager:
             for chunk in iter(lambda: stream.read(ArtifactManager.CHUNK_SIZE), b""):
                 if initial_batch:
                     # First RPC contains the `BeginChunkedArtifact` payload (`begin_chunk`).
-                    yield proto.AddArtifactsRequest(
-                        session_id=self._session_id,
-                        user_context=self._user_context,
-                        begin_chunk=proto.AddArtifactsRequest.BeginChunkedArtifact(
-                            name=artifact.path,
-                            total_bytes=artifact.size,
-                            num_chunks=get_num_chunks,
-                            initial_chunk=proto.AddArtifactsRequest.ArtifactChunk(
-                                data=chunk, crc=zlib.crc32(chunk)
+                    yield self._with_observed_server_session_id(
+                        proto.AddArtifactsRequest(
+                            session_id=self._session_id,
+                            user_context=self._user_context,
+                            begin_chunk=proto.AddArtifactsRequest.BeginChunkedArtifact(
+                                name=artifact.path,
+                                total_bytes=artifact.size,
+                                num_chunks=get_num_chunks,
+                                initial_chunk=proto.AddArtifactsRequest.ArtifactChunk(
+                                    data=chunk, crc=zlib.crc32(chunk)
+                                ),
                             ),
-                        ),
+                        )
                     )
                     initial_batch = False
                 else:
                     # Subsequent RPCs contains the `ArtifactChunk` payload (`chunk`).
-                    yield proto.AddArtifactsRequest(
-                        session_id=self._session_id,
-                        user_context=self._user_context,
-                        chunk=proto.AddArtifactsRequest.ArtifactChunk(
-                            data=chunk, crc=zlib.crc32(chunk)
-                        ),
+                    yield self._with_observed_server_session_id(
+                        proto.AddArtifactsRequest(
+                            session_id=self._session_id,
+                            user_context=self._user_context,
+                            chunk=proto.AddArtifactsRequest.ArtifactChunk(
+                                data=chunk, crc=zlib.crc32(chunk)
+                            ),
+                        )
                     )
 
     def is_cached_artifact(self, hash: str) -> bool:
@@ -431,8 +451,10 @@ class ArtifactManager:
         Ask the server either any artifact with `hash` has been cached at the server side or not.
         """
         artifactName = CACHE_PREFIX + "/" + hash
-        request = proto.ArtifactStatusesRequest(
-            user_context=self._user_context, session_id=self._session_id, names=[artifactName]
+        request = self._with_observed_server_session_id(
+            proto.ArtifactStatusesRequest(
+                user_context=self._user_context, session_id=self._session_id, names=[artifactName]
+            )
         )
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
             request,
@@ -451,8 +473,10 @@ class ArtifactManager:
             return set()
 
         artifact_names = [f"{CACHE_PREFIX}/{hash}" for hash in hashes]
-        request = proto.ArtifactStatusesRequest(
-            user_context=self._user_context, session_id=self._session_id, names=artifact_names
+        request = self._with_observed_server_session_id(
+            proto.ArtifactStatusesRequest(
+                user_context=self._user_context, session_id=self._session_id, names=artifact_names
+            )
         )
         resp: proto.ArtifactStatusesResponse = self._stub.ArtifactStatus(
             request,
