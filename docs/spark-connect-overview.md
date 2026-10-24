@@ -17,14 +17,12 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-**Building client-side Spark applications**
 
-In Apache Spark 3.4, Spark Connect introduced a decoupled client-server
-architecture that allows remote connectivity to Spark clusters using the
-DataFrame API and unresolved logical plans as the protocol. The separation
-between client and server allows Spark and its open ecosystem to be
-leveraged from everywhere. It can be embedded in modern data applications,
-in IDEs, Notebooks and programming languages.
+Spark Connect is a decoupled client-server architecture for Apache Spark. A thin client
+library speaks to a Spark cluster over gRPC using the DataFrame API and unresolved logical
+plans as the protocol, so Spark and its open ecosystem can be used from anywhere:
+embedded in modern data applications, in IDEs, in notebooks and in programming languages.
+Spark Connect has been part of Apache Spark since the 3.4 release.
 
 To get started, see [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html).
 
@@ -70,11 +68,20 @@ that developers need to be aware of when using Spark Connect:
 2. By design, the Spark Connect protocol uses Sparks logical
    plans as the abstraction to be able to declaratively describe the operations to be executed
    on the server. Consequently, the Spark Connect protocol does not support all the
-   execution APIs of Spark, most importantly RDDs.
+   execution APIs of Spark, most importantly RDDs. Alternatives for missing RDD functionality
+   are provided as part of the higher-level DataFrame API.
 3. Spark Connect provides a session-based client for its consumers. This means that the
    client does not have access to properties of the cluster that manipulate the
-   environment for all connected clients. Most importantly, the client does not have access
-   to the static Spark configuration or the SparkContext.
+   environment for all connected clients. Most importantly, the client cannot change the
+   static Spark configuration and has no access to the SparkContext.
+
+Apart from these differences the Spark Connect API is code-compatible with classic Spark
+applications: the DataFrame code they contain does not change. What changes is around that code:
+how the application is launched and configured, where its dependencies go, and when a plan is
+analyzed. The [Spark Connect Programming Guide](spark-connect-programming-guide.html) covers
+launching, configuration, dependencies and migration; the
+[Eager vs Lazy](spark-connect-gotchas.html) page covers the behavioral differences, starting with
+the deferred analysis of query plans.
 
 # Operational benefits of Spark Connect
 
@@ -82,375 +89,28 @@ With this new architecture, Spark Connect mitigates several multi-tenant
 operational issues:
 
 **Stability**: Applications that use too much memory will now only impact their
-own environment as they can run in their own processes. Users can define their
-own dependencies on the client and don't need to worry about potential conflicts
-with the Spark driver.
+own environment as they can run in their own processes. Dependencies installed on
+the client do not conflict with the Spark driver's, although anything a UDF imports
+still has to be available on the server.
 
 **Upgradability**: The Spark driver can now seamlessly be upgraded independently
 of applications, for example to benefit from performance improvements and security fixes.
 This means applications can be forward-compatible, as long as the server-side RPC
 definitions are designed to be backwards compatible.
 
+**Remote connectivity**: The decoupled architecture allows remote connectivity to Spark beyond SQL
+and JDBC: any application can now interactively use Spark "as a service".
+
+**Simplicity**: The number of APIs exposed to the user is reduced from 3 to 2. The Spark Connect
+API is fully declarative and consequently easy to learn for new users familiar with SQL.
+
 **Debuggability and observability**: Spark Connect enables interactive debugging
 during development directly from your favorite IDE. Similarly, applications can
 be monitored using the application's framework native metrics and logging libraries.
 
-# How to use Spark Connect
-
-Spark Connect is available and supports PySpark and Scala
-applications. We will walk through how to run an Apache Spark server with Spark
-Connect and connect to it from a client application using the Spark Connect client
-library.
-
-## Download and start Spark server with Spark Connect
-
-First, download Spark from the
-[Download Apache Spark](https://spark.apache.org/downloads.html) page. Choose the
-latest release in  the release drop down at the top of the page. Then choose your package type, typically
-“Pre-built for Apache Hadoop 3.5 and later”, and click the link to download.
-
-Now extract the Spark package you just downloaded on your computer, for example:
-
-```bash
-tar -xvf spark-{{site.SPARK_VERSION_SHORT}}-bin-hadoop3.tgz
-```
-
-In a terminal window, go to the `spark` folder in the location where you extracted
-Spark before and run the `start-connect-server.sh` script to start Spark server with
-Spark Connect, like in this example:
-
-```bash
-./sbin/start-connect-server.sh
-```
-
-Alternatively, `./bin/spark-connect-shell` starts an interactive Scala shell with the Connect server hosted inside the shell process itself.
-
-Make sure to use the same version  of the package as the Spark version you
-downloaded previously. In this example, Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.13.
-
-Now Spark server is running and ready to accept Spark Connect sessions from client
-applications. In the next section we will walk through how to use Spark Connect
-when writing client applications.
-
-## Use Spark Connect for interactive analysis
-<div class="codetabs">
-
-<div data-lang="python" markdown="1">
-When creating a Spark session, you can specify that you want to use Spark Connect
-and there are a few ways to do that outlined as follows.
-
-If you do not use one of the mechanisms outlined here, your Spark session will
-work just like before, without leveraging Spark Connect.
-
-### Set SPARK_REMOTE environment variable
-
-If you set the `SPARK_REMOTE` environment variable on the client machine where your
-Spark client application is running and create a new Spark Session as in the following
-example, the session will be a Spark Connect session. With this approach, there is no
-code change needed to start using Spark Connect.
-
-In a terminal window, set the `SPARK_REMOTE` environment variable to point to the
-local Spark server you started previously on your computer:
-
-{% highlight bash %}
-export SPARK_REMOTE="sc://localhost"
-{% endhighlight %}
-
-And start the Spark shell as usual:
-
-{% highlight bash %}
-./bin/pyspark
-{% endhighlight %}
-
-The PySpark shell is now connected to Spark using Spark Connect as indicated in the welcome message:
-
-{% highlight python %}
-Client connected to the Spark Connect server at localhost
-{% endhighlight %}
-
-### Specify Spark Connect when creating Spark session
-
-You can also specify that you want to use Spark Connect explicitly when you
-create a Spark session.
-
-For example, you can launch the PySpark shell with Spark Connect as
-illustrated here.
-
-To launch the PySpark shell with Spark Connect, simply include the `remote`
-parameter and specify the location of your Spark server. We are using `localhost`
-in this example to connect to the local Spark server we started previously:
-
-{% highlight bash %}
-./bin/pyspark --remote "sc://localhost"
-{% endhighlight %}
-
-And you will notice that the PySpark shell welcome message tells you that
-you have connected to Spark using Spark Connect:
-
-{% highlight python %}
-Client connected to the Spark Connect server at localhost
-{% endhighlight %}
-
-You can also check the Spark session type. If it includes `.connect.` you
-are using Spark Connect as shown in this example:
-
-{% highlight python %}
-SparkSession available as 'spark'.
->>> type(spark)
-<class 'pyspark.sql.connect.session.SparkSession'>
-{% endhighlight %}
-
-Now you can run PySpark code in the shell to see Spark Connect in action:
-
-{% highlight python %}
->>> columns = ["id", "name"]
->>> data = [(1,"Sarah"), (2,"Maria")]
->>> df = spark.createDataFrame(data).toDF(*columns)
->>> df.show()
-+---+-----+
-| id| name|
-+---+-----+
-|  1|Sarah|
-|  2|Maria|
-+---+-----+
-{% endhighlight %}
-
-</div>
-
-<div data-lang="scala"  markdown="1">
-For the Scala shell, we use an Ammonite-based REPL. Otherwise, very similar with PySpark shell.
-
-{% highlight bash %}
-./bin/spark-shell --remote "sc://localhost"
-{% endhighlight %}
-
-A greeting message will appear when the REPL successfully initializes:
-{% highlight bash %}
-Welcome to
-      ____              __
-     / __/__  ___ _____/ /__
-    _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version {{site.SPARK_VERSION}}
-      /_/
-
-Type in expressions to have them evaluated.
-Spark session available as 'spark'.
-{% endhighlight %}
-
-By default, the REPL will attempt to connect to a local Spark Server.
-Run the following Scala code in the shell to see Spark Connect in action:
-
-{% highlight scala %}
-@ spark.range(10).count
-res0: Long = 10L
-{% endhighlight %}
-
-### Configure client-server connection
-
-By default, the REPL will attempt to connect to a local Spark Server on port 15002.
-The connection, however, may be configured in several ways as described in this configuration
-[reference](https://github.com/apache/spark/blob/master/sql/connect/docs/client-connection-string.md).
-
-#### Set SPARK_REMOTE environment variable
-
-The SPARK_REMOTE environment variable can be set on the client machine to customize the client-server
-connection that is initialized at REPL startup.
-
-{% highlight bash %}
-export SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG"
-./bin/spark-shell
-{% endhighlight %}
-
-or
-
-{% highlight bash %}
-SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG" spark-connect-repl
-{% endhighlight %}
-
-#### Configure programmatically with a connection string
-
-The connection may also be programmatically created using _SparkSession#builder_ as in this example:
-
-{% highlight scala %}
-@ import org.apache.spark.sql.SparkSession
-@ val spark = SparkSession.builder.remote("sc://localhost:443/;token=ABCDEFG").getOrCreate()
-{% endhighlight %}
-
-</div>
-</div>
-
-## Faster local iteration with a persistent Connect server
-
-When you develop or test locally with
-
-```python
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.remote("local[*]").getOrCreate()
-```
-
-PySpark boots a fresh in-process Spark Connect server that lives only as long as that Python
-process. Every `python script.py` invocation (or every new test worker process) therefore re-pays
-the one-time startup cost -- JVM warmup, `SparkContext` construction, and Connect server boot --
-which can take a few seconds and makes a quick edit/run loop feel slow.
-
-To amortize that cost across runs, start one persistent local Spark Connect server and point
-every run at it:
-
-```bash
-# Start once; it stays up across runs. (--master is optional; it defaults to local[*].)
-$SPARK_HOME/sbin/start-connect-server.sh --master "local[*]"
-
-# Every run reconnects instead of booting a new server.
-python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc://localhost:15002").getOrCreate()'
-
-# Stop it when you are done.
-$SPARK_HOME/sbin/stop-connect-server.sh
-```
-
-Alternatively, on POSIX systems PySpark can manage this persistent server for you. With
-`SPARK_LOCAL_CONNECT_REUSE=1` set (or `spark.local.connect.reuse=true` on the builder),
-`SparkSession.builder.remote("local[*]").getOrCreate()` starts a persistent server through
-`sbin/start-connect-server.sh` on the first run and reconnects to it on later runs, so scripts
-keep the plain `local[*]` URL:
-
-```bash
-export SPARK_LOCAL_CONNECT_REUSE=1
-
-# The first run starts the server; later runs reconnect to it.
-python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("local[*]").getOrCreate()'
-
-# Stop the managed server when you are done.
-python -m pyspark.sql.connect.local_server --stop
-```
-
-The managed server is an ordinary `spark-daemon.sh` daemon, but it runs with a per-user pid
-directory and ident string so it cannot collide with a server you started by hand -- which also
-means a plain `sbin/stop-connect-server.sh` does not find it. The `--stop` command signals the
-recorded server and cleans up the discovery file; killing the server's pid directly also works,
-and the next run notices the dead server and starts a fresh one.
-
-This managed-server workflow is experimental. The `--stop` command and the discovery file
-location and format may change in a future release, for example if local server management is
-folded into a unified `spark connect` CLI.
-
-The connection details (host, port, auth token, pid, Spark version) are recorded in a discovery
-file in a private per-user directory; set `SPARK_LOCAL_CONNECT_DISCOVERY` to override its
-location. A run reconnects only to a server whose Spark version matches. After upgrading Spark,
-the server from the previous version cannot be reused and the next run fails with an error asking
-you to stop it; run the `--stop` command above and rerun to start a fresh server.
-
-Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
-configurations, and session artifacts -- is fresh on every run and never leaks between runs. State
-backed by the shared `SparkContext` (the persistent catalog/warehouse, global temp views, and
-cached datasets) *is* shared across runs, so namespace per-run databases or clear that state
-yourself if your runs must be fully isolated.
-
-## Use Spark Connect in standalone applications
-
-<div class="codetabs">
-
-
-<div data-lang="python"  markdown="1">
-
-First, install PySpark with `pip install pyspark-client=={{site.SPARK_VERSION_SHORT}}` or if building a packaged PySpark application/library,
-add it your setup.py file as:
-{% highlight python %}
-install_requires=[
-'pyspark-client=={{site.SPARK_VERSION_SHORT}}'
-]
-{% endhighlight %}
-
-When writing your own code, include the `remote` function with a reference to
-your Spark server when you create a Spark session, as in this example:
-
-{% highlight python %}
-from pyspark.sql import SparkSession
-spark = SparkSession.builder.remote("sc://localhost").getOrCreate()
-{% endhighlight %}
-
-
-For illustration purposes, we’ll create a simple Spark Connect application, SimpleApp.py:
-{% highlight python %}
-"""SimpleApp.py"""
-from pyspark.sql import SparkSession
-
-logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
-spark = SparkSession.builder.remote("sc://localhost").appName("SimpleApp").getOrCreate()
-logData = spark.read.text(logFile).cache()
-
-numAs = logData.filter(logData.value.contains('a')).count()
-numBs = logData.filter(logData.value.contains('b')).count()
-
-print("Lines with a: %i, lines with b: %i" % (numAs, numBs))
-
-spark.stop()
-{% endhighlight %}
-
-This program just counts the number of lines containing ‘a’ and the number containing ‘b’ in a text file.
-Note that you’ll need to replace YOUR_SPARK_HOME with the location where Spark is installed.
-
-We can run this application with the regular Python interpreter as follows:
-{% highlight python %}
-# Use the Python interpreter to run your application
-$ python SimpleApp.py
-...
-Lines with a: 72, lines with b: 39
-{% endhighlight %}
-</div>
-
-
-<div data-lang="scala"  markdown="1">
-To use Spark Connect as part of a Scala application/project, we first need to include the right dependencies.
-Using the `sbt` build system as an example, we add the following dependencies to the `build.sbt` file:
-{% highlight sbt %}
-libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{site.SPARK_VERSION_SHORT}}"
-{% endhighlight %}
-
-When writing your own code, include the `remote` function with a reference to
-your Spark server when you create a Spark session, as in this example:
-
-{% highlight scala %}
-import org.apache.spark.sql.SparkSession
-val spark = SparkSession.builder().remote("sc://localhost").getOrCreate()
-{% endhighlight %}
-
-
-**Note**: Operations that reference User Defined Code such as UDFs, filter, map, etc require a
-[ClassFinder](https://github.com/apache/spark/blob/master/sql/connect/common/src/main/scala/org/apache/spark/sql/connect/client/ClassFinder.scala)
-to be registered to pickup and upload any required classfiles. Also, any JAR dependencies must be uploaded to the server using `SparkSession#AddArtifact`.
-
-Example:
-{% highlight scala %}
-import org.apache.spark.sql.connect.client.REPLClassDirMonitor
-// Register a ClassFinder to monitor and upload the classfiles from the build output.
-val classFinder = new REPLClassDirMonitor(<ABSOLUTE_PATH_TO_BUILD_OUTPUT_DIR>)
-spark.registerClassFinder(classFinder)
-
-// Upload JAR dependencies
-spark.addArtifact(<ABSOLUTE_PATH_JAR_DEP>)
-{% endhighlight %}
-Here, `ABSOLUTE_PATH_TO_BUILD_OUTPUT_DIR` is the output directory where the build system writes classfiles into
-and `ABSOLUTE_PATH_JAR_DEP` is the location of the JAR on the local file system.
-
-The `REPLClassDirMonitor` is a provided implementation of `ClassFinder` that monitors a specific directory but
-one may implement their own class extending `ClassFinder` for customized search and monitoring.
-
-</div>
-</div>
-
-For more information on application development with Spark Connect as well as extending Spark Connect
-with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html).
-# Client application authentication
-
-While Spark Connect does not have built-in authentication, it is designed to
-work seamlessly with your existing authentication infrastructure. Its gRPC
-HTTP/2 interface allows for the use of authenticating proxies, which makes
-it possible to secure Spark Connect without having to implement authentication
-logic in Spark directly.
-
 # What is supported
 
-**PySpark**: Since Spark 3.4, Spark Connect supports most PySpark APIs, including
+**PySpark**: Spark Connect supports most PySpark APIs, including
 [DataFrame](api/python/reference/pyspark.sql/dataframe.html),
 [Functions](api/python/reference/pyspark.sql/functions.html), and
 [Column](api/python/reference/pyspark.sql/column.html). However,
@@ -461,7 +121,7 @@ supported in the [API reference](api/python/reference/index.html) documentation.
 Supported APIs are labeled "Supports Spark Connect" so you can check whether the
 APIs you are using are available before migrating existing code to Spark Connect.
 
-**Scala**: Since Spark 3.5, Spark Connect supports most Scala APIs, including
+**Scala**: Spark Connect supports most Scala APIs, including
 [Dataset](api/scala/org/apache/spark/sql/Dataset.html),
 [functions](api/scala/org/apache/spark/sql/functions$.html),
 [Column](api/scala/org/apache/spark/sql/Column.html),
@@ -473,89 +133,32 @@ additional set-up requirements.
 
 Majority of the Streaming API is supported, including
 [DataStreamReader](api/scala/org/apache/spark/sql/streaming/DataStreamReader.html),
-[DataStreamWriter](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.htmll),
+[DataStreamWriter](api/scala/org/apache/spark/sql/streaming/DataStreamWriter.html),
 [StreamingQuery](api/scala/org/apache/spark/sql/streaming/StreamingQuery.html) and
 [StreamingQueryListener](api/scala/org/apache/spark/sql/streaming/StreamingQueryListener.html).
 
 APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
 and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are unsupported in Spark Connect.
 
-Support for more APIs is planned for upcoming Spark releases.
+**Other clients**: Because the protocol is language-agnostic, Spark Connect clients exist
+outside the Apache Spark repository as well. The Apache Software Foundation hosts clients for
+[Go](https://github.com/apache/spark-connect-go),
+[Rust](https://github.com/apache/spark-connect-rust) and
+[Swift](https://github.com/apache/spark-connect-swift), each released on its own schedule.
 
-# Routing through a shared ingress or reverse proxy
+# Where to go from here
 
-When several services share a single hostname behind a Kubernetes Ingress (or another
-reverse proxy), it is tempting to give each service a URL path prefix (for example
-`sc://host/sparkConnect`) and route on that path. This does not work for gRPC: the
-gRPC method name *is* the HTTP/2 `:path` (`/spark.connect.SparkConnectService/ExecutePlan`),
-so a connection string cannot carry a separate routing path. Prepending a prefix to the
-`:path` produces an unknown method and the server responds with `UNIMPLEMENTED`, unless the
-proxy is configured to strip the prefix back off before forwarding, a two-sided contract
-that is not part of gRPC's design.
-
-The routing dimension that *is* free is the HTTP/2 `:authority` (the virtual host). Set it
-to a routing tag with the `grpc.default_authority` channel option, and route on it at the
-proxy (for example, an Ingress `host:` rule). The client still dials the shared hostname
-(`default_authority` only overrides the `:authority` header used for routing, not the address
-it connects to), and the gRPC method `:path` is never touched, so no path rewrite is needed.
-This is the approach the gRPC maintainers recommend for this scenario
-([grpc/grpc#14900](https://github.com/grpc/grpc/issues/14900)).
-
-The example below uses the Python client, which exposes gRPC channel options directly:
-
-{% highlight python %}
-from pyspark.sql.connect.session import SparkSession
-from pyspark.sql.connect.client import DefaultChannelBuilder
-
-cb = DefaultChannelBuilder("sc://myhost.com:443")
-cb.setChannelOption("grpc.default_authority", "sparkconnect")  # routing tag
-spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
-{% endhighlight %}
-
-A corresponding Kubernetes Ingress routes on that tag and keeps the service at path `/`
-(no subpath, no rewrite). Note the routing tag must be a lowercase
-[RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123) name, since a Kubernetes Ingress
-`host:` requires one:
-
-{% highlight yaml %}
-spec:
-  rules:
-  - host: sparkconnect            # matches grpc.default_authority
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: spark-connect-server
-            port: { number: 15002 }
-{% endhighlight %}
-
-**Over TLS**, gRPC uses the `:authority` as the certificate-verification name by default,
-so overriding it with a routing tag would fail verification (the tag is not in the server
-certificate's SAN). Keep the two names separate: set `grpc.ssl_target_name_override` to the
-real server hostname (used for certificate verification and SNI) and `grpc.default_authority`
-to the routing tag.
-
-{% highlight python %}
-cb = DefaultChannelBuilder("sc://myhost.com:443/;use_ssl=true")
-cb.setChannelOption("grpc.ssl_target_name_override", "myhost.com")  # certificate verification / SNI
-cb.setChannelOption("grpc.default_authority", "sparkconnect")       # routing tag
-spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
-{% endhighlight %}
-
-`use_ssl=true` verifies the server certificate against the system's trusted CA store. If your
-gateway's certificate is issued by a CA the client does not trust by default (a self-signed or
-internal CA), make that CA trusted on the client side (for example, via
-`GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`) rather than through the connection string. Configuring the
-proxy's own TLS (which certificate it presents for which hostname) is part of your ingress
-setup and is out of scope here.
-
-Two notes on `grpc.ssl_target_name_override`:
-gRPC documents it as testing-oriented because its typical misuse is to *mask* a certificate
-name mismatch (verifying against a name the server does not actually present, which defeats
-hostname verification). Here it is set to the real, verified hostname, so the certificate is
-still checked correctly; it only prevents the routing tag from being used as the verification
-name. If you prefer to avoid the option entirely, issue the server certificate with the routing
-tag included in its SAN; then `grpc.default_authority` alone is sufficient and no override is
-needed.
+* [Spark Connect Programming Guide](spark-connect-programming-guide.html): connect from Python,
+  Scala and Rust, run and configure jobs, ship code to the server, and migrate code that uses
+  `SparkContext` or RDDs.
+* [Setting up Spark Connect](spark-connect-setup.html): start a Spark Connect server, connect
+  to it from the shells and from standalone applications, run a persistent local server for
+  development, switch existing applications between Spark Classic and Spark Connect, and put
+  the server behind an authenticating proxy.
+* [Eager vs Lazy: Spark Connect vs Spark Classic](spark-connect-gotchas.html): how deferred
+  analysis changes the behavior of temporary views, UDFs and error reporting, how a session
+  differs from a local one, and how to write code that works in both modes.
+* [Extending Spark with Spark Server Libraries](spark-connect-server-libs.html): add custom
+  server-side logic and expose it to clients through the Spark Connect protocol.
+* [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html): a notebook
+  walkthrough for PySpark.

@@ -1,6 +1,7 @@
 ---
 layout: global
-title: Application Development with Spark Connect
+title: Extending Spark with Spark Server Libraries
+redirect_from: app-dev-spark-connect.html
 license: |
   Licensed to the Apache Software Foundation (ASF) under one or more
   contributor license agreements.  See the NOTICE file distributed with
@@ -17,17 +18,6 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-**Spark Connect Overview**
-
-In Apache Spark 3.4, Spark Connect introduced a decoupled client-server
-architecture that allows remote connectivity to Spark clusters using the
-DataFrame API and unresolved logical plans as the protocol. The separation
-between client and server allows Spark and its open ecosystem to be
-leveraged from everywhere. It can be embedded in modern data applications,
-in IDEs, Notebooks and programming languages.
-
-To learn more about Spark Connect, see [Spark Connect Overview](spark-connect-overview.html).
-
 # Redefining Spark Applications using Spark Connect
 
 With its decoupled client-server architecture, Spark Connect simplifies how Spark Applications are
@@ -40,11 +30,14 @@ and inference.
 [MLlib](ml-guide.html) (distributed ML libraries that use Spark's powerful distributed processing). Spark Connect
 can be extended to expose client-side interfaces for Spark Server Libraries.
 
-With Spark 3.4 and Spark Connect, the development of Spark Client Applications is simplified, and
+With Spark Connect, the development of Spark Client Applications is simplified, and
 clear extension points and guidelines are provided on how to build Spark Server Libraries, making
 it easy for both types of applications to evolve alongside Spark. As illustrated in Fig.1, Spark
 Client applications connect to Spark using the Spark Connect API, which is essentially the
-DataFrame API and fully declarative.
+DataFrame API and fully declarative. How client applications differ from classic Spark
+applications is described in the [Spark Connect Overview](spark-connect-overview.html#how-spark-connect-client-applications-differ-from-classic-spark-applications);
+switching an existing application between the two modes is described in
+[Setting up Spark Connect](spark-connect-setup.html#switching-between-spark-connect-and-spark-classic).
 
 <p style="text-align: center;">
   <img src="img/extending-spark-connect.png" title="Figure 1: Architecture" alt="Extending Spark
@@ -58,60 +51,6 @@ to the client via the blue box as part of the Spark Connect API. The client uses
 alongside PySpark or the Spark Scala client, making it easy for Spark client applications to work
 with the custom logic/library. 
 
-## Spark API Mode: Spark Client and Spark Classic
-
-Spark provides the API mode, `spark.api.mode` configuration, enabling Spark Classic applications
-to seamlessly switch to Spark Connect. Depending on the value of `spark.api.mode`, the application
-can run in either Spark Classic or Spark Connect mode. Here is an example:
-
-{% highlight python %}
-from pyspark.sql import SparkSession
-
-SparkSession.builder.config("spark.api.mode", "connect").master("...").getOrCreate()
-{% endhighlight %}
-
-You can also apply this configuration to both Scala and PySpark applications when submitting yours:
-
-{% highlight bash %}
-spark-submit --master "..." --conf spark.api.mode=connect
-{% endhighlight %}
-
-Additionally, Spark Connect offers convenient options for local testing. By setting `spark.remote`
-to `local[...]` or `local-cluster[...]`, you can start a local Spark Connect server and access a Spark
-Connect session.
-
-This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, note that
-`spark.remote` and `--remote` are limited to `local*` values, while `--conf spark.api.mode=connect`
-with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
-Spark Classic.
-
-## Spark Client Applications
-
-Spark Client Applications are the _regular Spark applications_ that Spark users develop today, e.g.,
-ETL pipelines, data preparation, or model training or inference. These are typically built using
-Sparks declarative DataFrame and DataSet APIs. With Spark Connect, the core behaviour remains the
-same, but there are a few differences: 
-* Lower-level, non-declarative APIs (RDDs) can no longer be directly used from Spark Client
-applications. Alternatives for missing RDD functionality are provided as part of the higher-level
-DataFrame API.
-* Client applications no longer have direct access to the Spark driver JVM; they are fully
-separated from the server. 
-
-Client applications based on Spark Connect can be submitted in the same way as any previous job.
-In addition, Spark Client Applications based on Spark Connect have several benefits compared to
-classic Spark applications using earlier Spark versions (3.4 and below): 
-* _Upgradability_: Upgrading to new Spark Server versions is seamless, as the Spark Connect API
-abstracts any changes/improvements on the server side. Client- and server APIs are cleanly
-separated.
-* _Simplicity_: The number of APIs exposed to the user is reduced from 3 to 2. The Spark Connect API
-is fully declarative and consequently easy to learn for new users familiar with SQL.
-* _Stability_: When using Spark Connect, the client applications no longer run on the Spark driver
-and, therefore don’t cause and are not affected by any instability on the server.
-* _Remote connectivity_: The decoupled architecture allows remote connectivity to Spark beyond SQL
-and JDBC: any application can now interactively use Spark “as a service”.
-* _Backwards compatibility_: The Spark Connect API is code-compatible with earlier Spark versions,
-except for the usage of RDDs, for which a list of alternative APIs is provided in Spark Connect. 
-
 ## Spark Server Libraries
 
 Until Spark 3.4, extensions to Spark (e.g., [Spark ML](ml-guide#:~:text=What%20is%20%E2%80%9CSpark%20ML%E2%80%9D%3F,to%20emphasize%20the%20pipeline%20concept.)
@@ -123,11 +62,6 @@ exposed to a client, which differs from existing extension points in Spark such 
 [Spark Plugins](api/java/org/apache/spark/api/plugin/SparkPlugin.html). 
 
 ### Getting Started: Extending Spark with Spark Server Libraries
-
-Spark Connect is available and supports PySpark and Scala
-applications. We will walk through how to run an Apache Spark server with Spark
-Connect and connect to it from a client application using the Spark Connect client
-library.
 
 A Spark Server Library consists of the following components, illustrated in Fig. 2:
 
