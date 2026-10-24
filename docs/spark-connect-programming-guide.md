@@ -301,8 +301,8 @@ df.Show(ctx, 100, false)
 
 ## Running a job
 
-There is no separate submit step for a Spark Connect job. Your program is the job, and running it
-sends the work. The machine that runs it needs the client library and the server's address, not a
+A Spark Connect application has no separate submit step: running the program sends its queries to
+the server. The machine that runs it needs the client library and the server's address, not a
 Spark download, a JVM (for Python and Rust) or access to the cluster manager. The program's exit
 status is the job's status: an unhandled Spark error ends the process with a non-zero exit code,
 which is what a scheduler or CI step checks.
@@ -328,7 +328,7 @@ and `--files` become `addArtifact` calls in the application (see
 [Shipping code and files](#shipping-code-and-files)), while `--master`, `--packages`,
 `--driver-memory` and `--conf` for static settings become part of the server's startup command.
 
-### Where a scheduler expects spark-submit
+### Running with spark-submit
 
 `spark-submit` from a Spark download can start the client for you. It cannot take `--master` or
 `--deploy-mode` together with `--remote`; the server already made those choices.
@@ -348,7 +348,7 @@ instead of connecting to the one in `--remote`.
 Each run of `spark-submit` still launches a JVM on the submitting machine, so a plain
 `python my_pipeline.py` with `SPARK_REMOTE` set is lighter and needs no Spark download.
 
-### An existing job, almost unchanged
+### Switching an existing job with spark.api.mode
 
 `spark.api.mode` switches a classic job to Spark Connect without changing its code: Spark starts a
 Spark Connect server for the job and runs the code as its client. Set it in the session builder and
@@ -364,7 +364,7 @@ spark = (SparkSession.builder
 In PySpark this needs `pyspark[connect]`. [Switching between Spark Connect and Spark Classic](spark-connect-setup.html#switching-between-spark-connect-and-spark-classic)
 describes the other forms.
 
-### A declarative pipeline
+### Running a declarative pipeline
 
 The `spark-pipelines` command line takes the server with `--remote`:
 
@@ -379,8 +379,8 @@ includes those dependencies, run `python -m pyspark.pipelines.cli run --spec spa
 
 ## Configuring the session
 
-A classic session often does a lot more than name a master: it pulls in packages, sets SQL
-extensions, turns on Hive support and sets runtime options.
+A classic application often configures the driver through the session builder: packages, SQL
+extensions, Hive support and runtime options.
 
 ```python
 # Spark Classic: everything is configured by the program that runs the driver.
@@ -395,8 +395,7 @@ spark = (
 spark.sparkContext.setLogLevel("WARN")
 ```
 
-Under Spark Connect that block splits in two, because some of those settings describe the driver,
-and the driver is not yours any more. Anything the server reads once when it starts (packages and
+Under Spark Connect, the driver belongs to the server. Anything the server reads once when it starts (packages and
 JARs, including the ones catalogs load, `spark.sql.extensions`, Hive support) moves to the command
 that starts the server:
 
@@ -529,10 +528,9 @@ client's, and a path on the client machine is only readable if the server can re
 shared file system or object storage. The same applies
 to checkpoint locations and output paths.
 
-Local data goes the other way. `spark.createDataFrame(rows)` uploads the rows to the server, so it
-is the right tool for small lookup tables and test fixtures, and `spark.read.json(df)`, `csv(df)` and
-`xml(df)` (all since Spark 4.2) parse a DataFrame with a single string column, replacing
-`spark.read.json(rdd)`:
+`spark.createDataFrame(rows)` uploads local rows to the server, which suits small lookup tables and
+test fixtures. To parse local strings, `spark.read.json(df)`, `csv(df)` and `xml(df)` (all since
+Spark 4.2) read a DataFrame with a single string column, replacing `spark.read.json(rdd)`:
 
 ```python
 lines = spark.createDataFrame([('{"city": "Toronto", "n": 3}',)], "value string")
@@ -560,7 +558,7 @@ print(bad_rows.value)
 ```
 
 ```python
-# After: an Observation, collected alongside a query you were running anyway
+# After: an Observation, collected while the write runs
 from pyspark.sql import Observation
 
 obs = Observation("quality")
@@ -569,9 +567,9 @@ checked.write.mode("overwrite").saveAsTable("orders_checked")
 print(obs.get["bad_rows"])
 ```
 
-The `Observation` rides along with a write that was happening anyway, instead of needing its own
-pass over the data. The rest of the common replacements, most of which already exist in the
-DataFrame API, so they can be made while the application still runs on Spark Classic:
+The metric is collected during the write, without a separate pass over the data. Other common
+replacements follow. Most of them already exist in Spark Classic, so they can be made before the
+application moves to Spark Connect:
 
 | Spark Classic | Spark Connect |
 |---------------|---------------|
@@ -646,15 +644,14 @@ be pointed at servers of different versions.
 
 ## Debugging
 
-**Check which server answered.** Nothing in `sc://localhost:15002` says which Spark is supposed to
-be there, and a server left running from an earlier project will answer a newer client with errors
-that look like bugs. Print `spark.version` first. The related trap in PySpark is `getOrCreate()`
+**Which server answered.** A connection string does not identify the Spark version behind it, and
+a server left running from an earlier project can answer with errors that look like bugs. Print `spark.version` first. The related trap in PySpark is `getOrCreate()`
 returning the process's existing session for a different URL, described under [Sessions](#sessions).
 A connection string that looks fine but is not is reported by the Python client as
 `INVALID_CONNECT_URL`: the path must be empty (`/;key=value` parameters are fine), and parameter
 values cannot contain `/`.
 
-**Read the error's name.** Spark Connect errors carry an error class in square brackets that says
+**Error classes.** Spark Connect errors carry an error class in square brackets that says
 which side of the boundary the problem is on. `JVM_ATTRIBUTE_NOT_SUPPORTED` (or `NOT_IMPLEMENTED`
 for `df.rdd` with the full `pyspark` packages) means the code reached for something that lived in
 the local JVM (`sparkContext`, `rdd`, `_jvm`); use the replacement from
@@ -662,15 +659,15 @@ the local JVM (`sparkContext`, `rdd`, `_jvm`); use the replacement from
 `ModuleNotFoundError` inside a UDF point at the server's Python environment.
 `CANNOT_MODIFY_CONFIG` and `CANNOT_MODIFY_STATIC_CONFIG` mean the setting belongs to the server's
 startup command. In PySpark, `UNSUPPORTED_LOCAL_CONNECTION_STRING` means `create()` was called with
-`local[*]`. And one that does not raise at all: `enableHiveSupport()` hands back a session without
+`local[*]`. `enableHiveSupport()` does not raise at all; it returns a session without
 Hive (PySpark warns; the Scala client only logs), so read the warnings.
 
-**Errors arrive late.** A typo in a column name fails at the first action, schema access or
+**Deferred errors.** A typo in a column name fails at the first action, schema access or
 `explain()`, not on the line with the typo, and a `try`/`except` around the definition catches
 nothing. `df.explain()` or `df.schema` forces analysis, which surfaces a deferred error at the
 point where the DataFrame is built.
 
-**Look at the server's side.** The server is a Spark application, so its Spark UI (port 4040 by
+**Server UI and logs.** The server is a Spark application, so its Spark UI (port 4040 by
 default) shows the jobs, stages and SQL queries that client sessions ran, and the **Connect** tab
 lists every client session and request, which confirms which server an application reached and
 whether it released its session. The driver logs are the server's logs, under `logs/` in the Spark
@@ -678,4 +675,4 @@ folder or in `docker logs` for a container. `df.explain()` prints the plan the s
 built, and `spark.interruptAll()` cancels every running operation of the session without stopping
 it.
 
-**Check the client is not newer than the server.** See [Client and server versions](#client-and-server-versions).
+**Version skew.** See [Client and server versions](#client-and-server-versions).
