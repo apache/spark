@@ -33,7 +33,9 @@ apply. All of these row-level changes are performed as a single atomic operation
 
 ```sql
 MERGE [ WITH SCHEMA EVOLUTION ] INTO target_table [ [ AS ] target_alias ]
-    USING { source_table | ( source_query ) } [ [ AS ] source_alias ]
+    [ WITH ( target_option_key = target_option_value [ , ... ] ) ]
+    USING { source_table [ WITH ( source_option_key = source_option_value [ , ... ] ) ] |
+        ( source_query ) } [ [ AS ] source_alias ]
     ON merge_condition
     [ WHEN MATCHED [ AND matched_condition ] THEN matched_action ] [ ... ]
     [ WHEN NOT MATCHED [ BY TARGET ] [ AND not_matched_condition ] THEN not_matched_action ] [ ... ]
@@ -68,6 +70,13 @@ not_matched_by_source_action
 
     The source of the merge, specified either as a table or as a parenthesized query. An optional
     alias may be provided with or without the `AS` keyword.
+
+* **WITH ( option_key = option_value [ , ... ] )**
+
+    Specifies dynamic table options for this `MERGE` operation. Options following the target table
+    are passed to the data source connector for the write operation. Options following the source
+    table are passed to the connector when reading the source. The supported options depend on the
+    connector.
 
 * **merge_condition**
 
@@ -147,6 +156,17 @@ SELECT * FROM source;
 | 2|   200|  eng|
 | 3|   120|sales|
 +--+------+-----+
+```
+
+#### Merge Using Dynamic Table Options
+
+```sql
+-- Option names and values are specific to each table's data source connector.
+MERGE INTO target t WITH (`write.split-size` = 10)
+    USING source WITH (`split-size` = 5) s
+    ON t.pk = s.pk
+    WHEN MATCHED THEN UPDATE SET *
+    WHEN NOT MATCHED THEN INSERT *;
 ```
 
 #### Update Matched Rows and Insert New Rows
