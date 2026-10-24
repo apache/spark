@@ -185,6 +185,31 @@ private[sql] class SparkConnectClient(
     stubState.responseValidator.isSessionValid
   }
 
+  private[sql] def validateSession(timeout: Int): Boolean = {
+    if (!isSessionValid) {
+      return false
+    }
+    // An empty config read validates the session without running a Spark job.
+    val request = proto.ConfigRequest
+      .newBuilder()
+      .setOperation(
+        proto.ConfigRequest.Operation
+          .newBuilder()
+          .setGet(proto.ConfigRequest.Get.getDefaultInstance))
+      .setSessionId(sessionId)
+      .setClientType(userAgent)
+      .setUserContext(userContext)
+    serverSideSessionId.foreach(request.setClientObservedServerSideSessionId)
+    try {
+      bstub.validateSession(request.build(), timeout)
+      true
+    } catch {
+      case NonFatal(e) =>
+        logDebug("Failed to validate the server-side session.", e)
+        false
+    }
+  }
+
   private[sql] val artifactManager: ArtifactManager = {
     new ArtifactManager(configuration, sessionId, bstub, stub)
   }
