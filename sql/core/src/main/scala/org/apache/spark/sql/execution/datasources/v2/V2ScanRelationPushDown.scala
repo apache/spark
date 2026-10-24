@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
-import java.util.{Locale, OptionalLong}
+import java.util.{Collections, IdentityHashMap, Locale, OptionalLong}
 
 import scala.collection.mutable
 
@@ -28,7 +28,8 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
+import org.apache.spark.sql.catalyst.plans.InnerLike
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort, Union}
 import org.apache.spark.sql.catalyst.plans.logical.PlanHelper
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -1106,8 +1107,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def pushDownLimit(plan: LogicalPlan, limit: Int): (LogicalPlan, Boolean) = plan match {
+  private def pushDownLimit(
+      plan: LogicalPlan,
+      limit: Int,
+      attemptedBuilders: java.util.Set[ScanBuilder]): (LogicalPlan, Boolean) = plan match {
     case operation @ PhysicalOperation(_, Nil, sHolder: ScanBuilderHolder) =>
+      attemptedBuilders.add(sHolder.builder)
       val (isPushed, isPartiallyPushed) = PushDownUtils.pushLimit(sHolder.builder, limit)
       if (isPushed) {
         sHolder.pushedLimit = Some(limit)
@@ -1132,6 +1137,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       val normalizedOrders = normalizeExpressions(newOrder, sHolder).asInstanceOf[Seq[SortOrder]]
       val orders = DataSourceStrategy.translateSortOrders(normalizedOrders)
       if (orders.length == order.length) {
+        attemptedBuilders.add(sHolder.builder)
         val (isPushed, isPartiallyPushed) =
           PushDownUtils.pushTopN(sHolder.builder, orders.toArray, limit)
         if (isPushed) {
@@ -1149,9 +1155,41 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         (s, false)
       }
     case p: Project =>
-      val (newChild, isPartiallyPushed) = pushDownLimit(p.child, limit)
+      val (newChild, isPartiallyPushed) = pushDownLimit(p.child, limit, attemptedBuilders)
       (p.withNewChildren(Seq(newChild)), isPartiallyPushed)
+    case u: Union =>
+      // The enclosing global limit still needs at most `limit` rows from each union child.
+      u.children.foreach(pushDownLocalLimit(_, limit, attemptedBuilders))
+      (u, false)
+    case j @ Join(_, _, _: InnerLike, None, _) =>
+      // Capping either input at `limit` rows leaves enough rows for the global limit above
+      // a conditionless inner join, including when either input is empty.
+      pushDownLocalLimit(j.left, limit, attemptedBuilders)
+      pushDownLocalLimit(j.right, limit, attemptedBuilders)
+      (j, false)
     case other => (other, false)
+  }
+
+  // Only push branch limits protected by an enclosing global limit. A standalone LocalLimit
+  // caps each partition, so replacing it with a global source limit could discard needed rows.
+  private def pushDownLocalLimit(
+      plan: LogicalPlan,
+      limit: Int,
+      attemptedBuilders: java.util.Set[ScanBuilder]): Unit = plan match {
+    case LocalLimit(IntegerLiteral(localLimit),
+        PhysicalOperation(projects, Nil, sHolder: ScanBuilderHolder))
+        if localLimit == limit && projects.forall(_.deterministic) &&
+          sHolder.pushedOffset.isEmpty =>
+      // Keep LocalLimit for Spark-side enforcement and its maxRowsPerPartition bound.
+      // An offset/limit combination can visit the same builder more than once. Remember
+      // rejected attempts too, since retrying may repeat expensive connector planning.
+      if (attemptedBuilders.add(sHolder.builder)) {
+        val (isPushed, _) = PushDownUtils.pushLimit(sHolder.builder, limit)
+        if (isPushed) {
+          sHolder.pushedLimit = Some(limit)
+        }
+      }
+    case _ =>
   }
 
   @scala.annotation.tailrec
@@ -1169,9 +1207,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     case _ => false
   }
 
-  def pushDownLimitAndOffset(plan: LogicalPlan): LogicalPlan = plan.transform {
+  def pushDownLimitAndOffset(plan: LogicalPlan): LogicalPlan = {
+    val attemptedBuilders = Collections.newSetFromMap(
+      new IdentityHashMap[ScanBuilder, java.lang.Boolean]())
+    pushDownLimitAndOffset(plan, attemptedBuilders)
+  }
+
+  private def pushDownLimitAndOffset(
+      plan: LogicalPlan,
+      attemptedBuilders: java.util.Set[ScanBuilder]): LogicalPlan = plan.transform {
     case offset @ LimitAndOffset(limit, offsetValue, child) =>
-      val (newChild, canRemoveLimit) = pushDownLimit(child, limit)
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limit, attemptedBuilders)
       if (canRemoveLimit) {
         // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
         val isPushed = pushDownOffset(newChild, offsetValue)
@@ -1187,7 +1233,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }
     case globalLimit @ OffsetAndLimit(offset, limit, child) =>
       // For `df.offset(n).limit(m)`, we can push down `limit(m + n)` first.
-      val (newChild, canRemoveLimit) = pushDownLimit(child, limit + offset)
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limit + offset, attemptedBuilders)
       if (canRemoveLimit) {
         // Try to push down OFFSET only if the LIMIT operator has been pushed and can be removed.
         val isPushed = pushDownOffset(newChild, offset)
@@ -1210,7 +1256,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         }
       }
     case globalLimit @ Limit(IntegerLiteral(limitValue), child) =>
-      val (newChild, canRemoveLimit) = pushDownLimit(child, limitValue)
+      val (newChild, canRemoveLimit) = pushDownLimit(child, limitValue, attemptedBuilders)
       if (canRemoveLimit) {
         newChild
       } else {
