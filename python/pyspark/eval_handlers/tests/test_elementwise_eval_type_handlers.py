@@ -216,9 +216,15 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
         def stop(x):
             raise StopIteration()
 
-        handler = self._handler(ArrowElementwiseUDFHandler, (stop, [0], {}, LongType()))
-        with self.assertRaises(PySparkRuntimeError):
-            list(handler.run(0, iter([self._batch()])))
+        for level in ("0", "4"):
+            with self.subTest(concurrency_level=level):
+                conf = {"spark.sql.execution.pythonUDF.arrow.concurrency.level": level}
+                handler = self._handler(
+                    ArrowElementwiseUDFHandler, (stop, [0], {}, LongType()), runner_conf=conf
+                )
+                with self.assertRaises(PySparkRuntimeError) as ctx:
+                    list(handler.run(0, iter([self._batch()])))
+                self.assertEqual(ctx.exception.getCondition(), "STOP_ITERATION_OCCURRED")
 
 
 class ScalarElementwiseUDFHandlerTestsMixin:
