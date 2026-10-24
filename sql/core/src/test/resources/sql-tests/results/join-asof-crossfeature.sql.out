@@ -198,3 +198,228 @@ struct<symbol:string,bid_price:decimal(5,2),extra_val:decimal(2,1)>
 AAPL	180.10	1.0
 AAPL	180.20	2.0
 MSFT	420.50	2.0
+
+
+-- !query
+SELECT s.symbol,
+  (SELECT max(q.bid_price)
+   FROM (SELECT * FROM trades t WHERE t.symbol = s.symbol) t
+   ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS max_bid
+FROM VALUES ('AAPL'), ('GOOG'), ('MSFT') AS s(symbol)
+ORDER BY s.symbol
+-- !query schema
+struct<symbol:string,max_bid:decimal(5,2)>
+-- !query output
+AAPL	180.20
+GOOG	NULL
+MSFT	420.50
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query schema
+struct<max_bid:decimal(5,2),total_bid:decimal(15,2)>
+-- !query output
+180.12	360.20
+500.00	780.80
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol AND q.bid_price <= o.max_bid) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query schema
+struct<max_bid:decimal(5,2),total_bid:decimal(15,2)>
+-- !query output
+180.12	360.20
+500.00	780.80
+
+
+-- !query
+SELECT o.symbol, o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM (SELECT * FROM trades t WHERE t.symbol = o.symbol) t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES ('AAPL', 180.12), ('AAPL', 500.00), ('MSFT', 180.12) AS o(symbol, max_bid)
+ORDER BY o.symbol, o.max_bid
+-- !query schema
+struct<symbol:string,max_bid:decimal(5,2),total_bid:decimal(15,2)>
+-- !query output
+AAPL	180.12	360.20
+AAPL	500.00	360.30
+MSFT	180.12	NULL
+
+
+-- !query
+SELECT t0.trade_time, t0.symbol,
+  t0.quantity IN (
+    SELECT t.quantity
+    FROM (SELECT * FROM trades t WHERE t.symbol = t0.symbol) t
+    ASOF JOIN quotes q
+      MATCH_CONDITION (t.trade_time >= q.quote_time)
+      ON t.symbol = q.symbol) AS has_quote
+FROM trades t0
+ORDER BY t0.trade_time
+-- !query schema
+struct<trade_time:timestamp,symbol:string,has_quote:boolean>
+-- !query output
+2026-06-29 09:59:59	GOOG	false
+2026-06-29 10:00:05	AAPL	true
+2026-06-29 10:00:11	AAPL	true
+2026-06-29 10:00:12	MSFT	true
+
+
+-- !query
+SELECT o.max_bid
+FROM VALUES (100.00), (180.17), (500.00) AS o(max_bid)
+WHERE EXISTS (
+  SELECT 1
+  FROM trades t
+  ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+    MATCH_CONDITION (t.trade_time >= q.quote_time)
+    ON t.symbol = q.symbol
+  WHERE q.bid_price = 180.15)
+ORDER BY o.max_bid
+-- !query schema
+struct<max_bid:decimal(5,2)>
+-- !query output
+180.17
+
+
+-- !query
+SELECT s.symbol,
+  (SELECT count(*)
+   FROM (SELECT * FROM trades t WHERE t.symbol = s.symbol) t
+   LEFT ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS trade_count
+FROM VALUES ('AAPL'), ('GOOG'), ('MSFT') AS s(symbol)
+ORDER BY s.symbol
+-- !query schema
+struct<symbol:string,trade_count:bigint>
+-- !query output
+AAPL	2
+GOOG	1
+MSFT	1
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT count(*)
+   FROM trades t
+   LEFT ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS trade_count
+FROM VALUES (180.12) AS o(max_bid)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.ACCESSING_OUTER_QUERY_COLUMN_IS_NOT_ALLOWED",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Filter (bid_price#x <= outer(max_bid#x))\n+- SubqueryAlias q\n   +- SubqueryAlias quotes\n      +- View (`quotes`, [quote_time#x, symbol#x, bid_price#x])\n         +- Project [cast(col1#x as timestamp) AS quote_time#x, cast(col2#x as string) AS symbol#x, cast(col3#x as decimal(5,2)) AS bid_price#x]\n            +- LocalRelation [col1#x, col2#x, col3#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 74,
+    "stopIndex" : 126,
+    "fragment" : "SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid"
+  } ]
+}
+
+
+-- !query
+SELECT o.lag,
+  (SELECT count(*)
+   FROM trades t ASOF JOIN quotes q
+     MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)
+     ON t.symbol = q.symbol) AS matched
+FROM VALUES (INTERVAL '1' SECOND) AS o(lag)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "refs1" : "\"trade_time\"",
+    "refs2" : "\"quote_time + lag\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 51,
+    "stopIndex" : 156,
+    "fragment" : "ASOF JOIN quotes q\n     MATCH_CONDITION (t.trade_time >= q.quote_time + o.lag)\n     ON t.symbol = q.symbol"
+  } ]
+}
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE o.max_bid IS NULL OR q.bid_price <= o.max_bid) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (NULL) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query schema
+struct<max_bid:decimal(5,2),total_bid:decimal(15,2)>
+-- !query output
+NULL	780.80
+180.12	360.20
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT symbol, max(quote_time) AS quote_time, max(bid_price) AS bid_price
+              FROM quotes WHERE bid_price <= o.max_bid
+              GROUP BY symbol) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query schema
+struct<max_bid:decimal(5,2),total_bid:decimal(15,2)>
+-- !query output
+180.12	360.20
+500.00	600.70
+
+
+-- !query
+SELECT o.max_bid,
+  (SELECT sum(q.bid_price)
+   FROM trades t
+   ASOF JOIN (SELECT * FROM quotes q WHERE q.bid_price <= o.max_bid
+              ORDER BY q.quote_time LIMIT 2) q
+     MATCH_CONDITION (t.trade_time >= q.quote_time)
+     ON t.symbol = q.symbol) AS total_bid
+FROM VALUES (180.12), (500.00) AS o(max_bid)
+ORDER BY o.max_bid
+-- !query schema
+struct<max_bid:decimal(5,2),total_bid:decimal(15,2)>
+-- !query output
+180.12	360.20
+500.00	360.25
