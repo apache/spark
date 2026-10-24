@@ -612,6 +612,16 @@ case class AlterTableAddPartitionCommand(
         locationUri = location.map(CatalogUtils.stringToURI)))
     }
 
+    val updateStats = table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled
+    // With IF NOT EXISTS, `createPartitions` skips partitions that already exist. Exclude them from
+    // the stats update below too, so that their metadata is not overwritten and their size is not
+    // counted as added. This has to be checked before the new partitions are created.
+    val newParts = if (ifNotExists && updateStats) {
+      parts.filter(p => catalog.listPartitions(table.identifier, Some(p.spec)).isEmpty)
+    } else {
+      parts
+    }
+
     // Hive metastore may not have enough memory to handle millions of partitions in single RPC.
     // Also the request to metastore times out when adding lot of partitions in one shot.
     // we should split them into smaller batches
@@ -621,14 +631,14 @@ case class AlterTableAddPartitionCommand(
     }
 
     sparkSession.catalog.refreshTable(table.identifier.quotedString)
-    if (table.stats.nonEmpty && sparkSession.sessionState.conf.autoSizeUpdateEnabled) {
+    if (updateStats) {
       // Updating table stats only if new partition is not empty
       val addedSize = CommandUtils.calculateMultipleLocationSizes(sparkSession, table.identifier,
-        parts.map(_.storage.locationUri)).sum
+        newParts.map(_.storage.locationUri)).sum
       if (addedSize > 0) {
         val newStats = CatalogStatistics(sizeInBytes = table.stats.get.sizeInBytes + addedSize)
         catalog.alterTableStats(table.identifier, Some(newStats))
-        catalog.alterPartitions(table.identifier, parts)
+        catalog.alterPartitions(table.identifier, newParts)
       }
     } else {
       // Re-calculating of table size including all partitions
