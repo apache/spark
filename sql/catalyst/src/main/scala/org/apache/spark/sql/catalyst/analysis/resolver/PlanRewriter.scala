@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 
 /**
  * Utility wrapper on top of [[RuleExecutor]], used to apply post-resolution rules on single-pass
- * resolution result. [[SinglePassRewriter]] transforms the plan and the subqueries inside.
+ * resolution result. [[PlanRewriter]] transforms the plan and the subqueries inside.
  */
 class PlanRewriter(
     planRewriteRules: Seq[Rule[LogicalPlan]],

@@ -2787,8 +2787,9 @@ def ceil(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Col
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column for the computed results.
-        Returns a column that evaluates to a long or decimal.
+        The smallest number not less than ``col``. Without ``scale`` the result is a
+        long, or a decimal when ``col`` is a decimal. When ``scale`` is given the result
+        is always a decimal, whatever the type of ``col``.
 
     See Also
     --------
@@ -2854,8 +2855,9 @@ def ceiling(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> 
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        A column for the computed results.
-        Returns a column that evaluates to a long or decimal.
+        The smallest number not less than ``col``. Without ``scale`` the result is a
+        long, or a decimal when ``col`` is a decimal. When ``scale`` is given the result
+        is always a decimal, whatever the type of ``col``.
 
     See Also
     --------
@@ -3283,8 +3285,9 @@ def floor(col: "ColumnOrName", scale: Optional[Union[Column, int]] = None) -> Co
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        nearest integer that is less than or equal to given value.
-        Returns a column that evaluates to a long or decimal.
+        The largest number not greater than ``col``. Without ``scale`` the result is a
+        long, or a decimal when ``col`` is a decimal. When ``scale`` is given the result
+        is always a decimal, whatever the type of ``col``.
 
     Notes
     -----
@@ -7667,6 +7670,10 @@ def count_min_sketch(
     ----------
     col : :class:`~pyspark.sql.Column` or column name
         target column to compute on.
+
+        .. versionchanged:: 4.4.0
+            Supports the TIME type for the ``col`` argument. A TIME column is counted by its
+            nanoseconds-of-day, so look it up in the resulting sketch by that value.
     eps : :class:`~pyspark.sql.Column` or float
         relative error, must be positive
 
@@ -12832,6 +12839,7 @@ def to_timestamp(col: "ColumnOrName", format: Optional[str] = None) -> Column:
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -12986,6 +12994,7 @@ def try_to_timestamp(col: "ColumnOrName", format: Optional["ColumnOrName"] = Non
     col : :class:`~pyspark.sql.Column` or column name
         column values to convert.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format: literal string, optional
         format to use to convert timestamp values.
         A column that evaluates to a string.
@@ -14254,11 +14263,15 @@ def timestamp_add(unit: str, quantity: "ColumnOrName", ts: "ColumnOrName") -> Co
     unit : literal string
         This indicates the units of datetime that you want to add.
         Supported options are (case insensitive): "YEAR", "QUARTER", "MONTH", "WEEK",
-        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND" and "MICROSECOND".
+        "DAY", "HOUR", "MINUTE", "SECOND", "MILLISECOND", "MICROSECOND" and "NANOSECOND".
+        "NANOSECOND" is only valid for nanosecond-precision timestamp inputs
+        (TIMESTAMP_NTZ(p) / TIMESTAMP_LTZ(p), p in [7, 9]); the result is floored to the
+        input's precision.
     quantity : :class:`~pyspark.sql.Column` or column name
         The number of units of time that you want to add.
     ts : :class:`~pyspark.sql.Column` or column name
-        A timestamp to which you want to add.
+        A timestamp to which you want to add. A nanosecond-precision timestamp keeps its
+        sub-microsecond fraction; units of MICROSECOND or coarser leave the fraction unchanged.
 
     Returns
     -------
@@ -14737,6 +14750,7 @@ def to_timestamp_ltz(
     timestamp : :class:`~pyspark.sql.Column` or column name
         Input column or strings.
         A column that evaluates to a string, date, timestamp, or numeric.
+        If `format` is specified, a numeric input is cast to a string and parsed with `format`.
     format : :class:`~pyspark.sql.Column` or column name, optional
         format to use to convert type `TimestampType` timestamp values.
         A column that evaluates to a string.
@@ -23112,6 +23126,13 @@ def from_json(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. Map-key length checks require
+      ``spark.sql.charVarchar.standardSemantics.enabled``.
 
     Examples
     --------
@@ -24514,6 +24535,15 @@ def from_xml(
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
     * ``spark.sql.xml.variant.respectInferSchema``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``. With this flag, CHAR/VARCHAR
+      map keys are length-checked without padding or trimming; with only
+      ``spark.sql.preserveCharVarcharTypeInfo``, short CHAR keys are padded and
+      over-length keys raise ``EXCEED_LIMIT_LENGTH``.
 
     Examples
     --------
@@ -24796,6 +24826,9 @@ def schema_of_csv(csv: Union[Column, str], options: Optional[Mapping[str, str]] 
     Affected by these public SQL configurations:
 
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. When CHAR is first-class, padding can change
+      inferred field count and types.
 
     Examples
     --------
@@ -26451,6 +26484,12 @@ def from_csv(
     * ``spark.sql.columnNameOfCorruptRecord``
     * ``spark.sql.session.timeZone``
     * ``spark.sql.timestampType``
+    * ``spark.sql.charVarchar.standardSemantics.enabled`` (preview): CHAR
+      arguments are not rtrimmed. CHAR/VARCHAR in the schema is accepted when
+      types are first-class (this flag or
+      ``spark.sql.preserveCharVarcharTypeInfo``);
+      ``spark.sql.legacy.charVarcharAsString`` reads them as STRING; otherwise
+      ``UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING``.
 
     Examples
     --------
@@ -34848,10 +34887,13 @@ def vector_avg(col: "ColumnOrName") -> Column:
 
 @_try_remote_functions
 def vector_sum(col: "ColumnOrName") -> Column:
-    """Aggregate function: returns the element-wise sum of float vectors in a group.
+    """Aggregate function: returns the element-wise sum of float or double vectors in a group.
     All vectors must have the same dimension.
 
     .. versionadded:: 4.3.0
+
+    .. versionchanged:: 4.4.0
+        Supports arrays of doubles.
 
     Parameters
     ----------
@@ -34861,7 +34903,8 @@ def vector_sum(col: "ColumnOrName") -> Column:
     Returns
     -------
     :class:`~pyspark.sql.Column`
-        the element-wise sum vector as an array of floats.
+        the element-wise sum vector as an array with the same element type as the input
+        (float or double).
 
     Examples
     --------

@@ -357,8 +357,8 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
-   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   * Returns one [[PartitionPredicateField]] per transform of `relation.table.partitioning`, if
+   * the partitioning supports [[PartitionPredicate]] push down. None if not supported.
    */
   def getPartitionPredicateSchema(relation: DataSourceV2Relation)
   : Option[Seq[PartitionPredicateField]] = {
@@ -366,8 +366,8 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
-   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   * Returns one [[PartitionPredicateField]] per transform of `table.partitioning`, if the
+   * partitioning supports [[PartitionPredicate]] push down. None if not supported.
    */
   def getPartitionPredicateSchema(table: Table, output: Seq[AttributeReference])
   : Option[Seq[PartitionPredicateField]] = {
@@ -375,8 +375,15 @@ object PushDownUtils extends Logging {
   }
 
   /**
-   * Returns a Seq of [[PartitionPredicateField]] representing partition transform expression types,
-   * if schema is supported for [[PartitionPredicate]] push down. None if not supported.
+   * Returns one [[PartitionPredicateField]] per transform, in partitioning order, if the
+   * partitioning supports [[PartitionPredicate]] push down. None if not supported.
+   *
+   * Only an identity transform yields a field with an attribute, so only filters over identity
+   * partition columns become partition predicates. Any other transform is kept as a field without
+   * an attribute: Spark cannot evaluate a filter against its partition value, but the field must
+   * keep its ordinal since a predicate is evaluated against the full partition key. The
+   * partitioning is not supported when it is empty, has no identity transform, or has an identity
+   * transform that does not resolve against `output`.
    *
    * Use this overload when the caller has access to the partition transforms but not the
    * full [[Table]].
@@ -392,11 +399,11 @@ object PushDownUtils extends Logging {
       val fields = transforms.flatMap {
         case t: IdentityTransform =>
           resolveIdentityPartitionField(t, rootStruct).map { sf =>
-            PartitionPredicateField(t.ref.fieldNames().toSeq, DataTypeUtils.toAttribute(sf))
+            PartitionPredicateField(t.ref.fieldNames().toSeq, Some(DataTypeUtils.toAttribute(sf)))
           }
-        case _ => None
+        case t => Some(PartitionPredicateField(Seq(t.describe()), None))
       }
-      if (fields.length == transforms.length) {
+      if (fields.length == transforms.length && fields.exists(_.attrRef.isDefined)) {
         Some(fields.toSeq)
       } else {
         None
@@ -445,7 +452,7 @@ object PushDownUtils extends Logging {
       partitionFields: Seq[PartitionPredicateField],
       keepOnEvalFailure: Boolean = false)
   : (Seq[PartitionPredicateImpl], Seq[Expression]) = {
-    val partitionAttributes = partitionFields.map(_.attrRef)
+    val partitionAttributes = partitionFields.flatMap(_.attrRef)
     val (partFilters, nonPartitionFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionAttributes, flattenedFilters)
     val (pushable, nonPushable) = partFilters.partition(isPushablePartitionFilter(_))
@@ -537,7 +544,9 @@ object PushDownUtils extends Logging {
       filters: Seq[Expression],
       partitionFields: Seq[PartitionPredicateField])
   : Map[Expression, Expression] = {
-    val pathToAttr = partitionFields.map(f => f.fieldNames -> f.attrRef).toMap
+    val pathToAttr = partitionFields.collect {
+      case PartitionPredicateField(names, Some(attr)) => names -> attr
+    }.toMap
     filters.map(f => doNormalizePartitionFilters(f, pathToAttr) -> f).toMap
   }
 
@@ -708,9 +717,22 @@ object PushDownUtils extends Logging {
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    toAttributes(cleaned).map {
-      // we have to keep the attribute id during transformation
-      a => a.withExprId(nameToAttr(a.name).exprId)
+    toAttributes(cleaned).map { a =>
+      val orig = nameToAttr(a.name)
+      // Keep exprId. Drop __CHAR_VARCHAR_TYPE_STRING only when the relation
+      // attribute already has none; keep it otherwise. This runs in the
+      // optimizer with no second padding pass, so re-stamping a cleaned
+      // attribute would look unpadded when a V2 scan readSchema() still
+      // surfaces CHAR/VARCHAR. File sources usually already substituted
+      // STRING, so the stamp was latent. AnalyzedSchemaProjection keeps
+      // cleaned metadata across versioned-table refresh, so a padded
+      // relation still arrives unstamped. Do not key off the session conf.
+      val metadata = if (CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
+        CharVarcharUtils.cleanMetadata(a.metadata)
+      } else {
+        a.metadata
+      }
+      a.withExprId(orig.exprId).withMetadata(metadata)
     }
   }
 }

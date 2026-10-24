@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import java.util.Locale
 
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{execution, AnalysisException}
 import org.apache.spark.sql.catalyst.InternalRow
@@ -115,6 +116,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           CollectLimitExec(limit = offset + limit, child = planLater(child), offset = offset)
         case Limit(IntegerLiteral(limit), child) =>
           CollectLimitExec(limit = limit, child = planLater(child))
+        case logical.Offset(IntegerLiteral(0), child) =>
+          // OFFSET 0 is a no-op. It is normally removed by the EliminateOffsets optimizer rule,
+          // but that rule is excludable, so handle it defensively here to avoid constructing a
+          // CollectLimitExec with no limit and a zero offset (which fails its assertion).
+          planLater(child)
         case logical.Offset(IntegerLiteral(offset), child) =>
           CollectLimitExec(child = planLater(child), offset = offset)
         case Tail(IntegerLiteral(limit), child) =>
@@ -458,7 +464,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
         joins.SortMergeAsOfJoinExec(
           leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.orderExpression, j.joinType, residual,
+          j.asOfCondition, j.direction, j.joinType, residual,
           planLater(j.left), planLater(j.right)) :: Nil
       case _ => Nil
     }
@@ -530,16 +536,32 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       expr match {
         // Backward: Subtract(leftAsOf, rightAsOf)
         // Forward: Subtract(rightAsOf, leftAsOf)
-        case Subtract(l, r, _)
+        case Subtraction(l, r)
             if l.references.subsetOf(leftAttrs) &&
               r.references.subsetOf(rightAttrs) =>
           Some((l, r))
-        case Subtract(l, r, _)
+        case Subtraction(l, r)
             if l.references.subsetOf(rightAttrs) &&
               r.references.subsetOf(leftAttrs) =>
           Some((r, l))
         // Nearest: If(GT(left, right), Sub(left, right), Sub(right, left))
-        case If(_, thenExpr, _) => findFromOrder(thenExpr, leftAttrs, rightAttrs)
+        case If(_, thenExpr, _) =>
+          findFromOrder(thenExpr, leftAttrs, rightAttrs).filter { case (l, r) =>
+            joins.SortMergeAsOfJoinScanner.supportsNearestKeys(l.dataType, r.dataType)
+          }
+        case _ => None
+      }
+    }
+
+    /**
+     * Matches the operands of a subtraction. The analyzer replaces a Subtract of DATE or
+     * TIMESTAMP operands with SubtractDates or SubtractTimestamps.
+     */
+    private object Subtraction {
+      def unapply(expr: Expression): Option[(Expression, Expression)] = expr match {
+        case Subtract(l, r, _) => Some((l, r))
+        case SubtractTimestamps(l, r, _, _) => Some((l, r))
+        case SubtractDates(l, r, _) => Some((l, r))
         case _ => None
       }
     }
@@ -619,7 +641,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             // A Real-Time Mode batch runs until its duration elapses rather than until its input
             // is exhausted, so an aggregation that only emits once the batch ends would hold every
             // result back for the whole batch. Plan the streamline operator instead, which merges
-            // each input row against state and emits immediately.
+            // each input row against state; Update mode can emit an intermediate result per
+            // input.
             if (isRealTimeMode(child) ||
               conf.getConf(SQLConf.STREAMING_USE_STREAMLINE_AGGREGATOR)) {
               AggUtils.planStreamlineStreamingAggregation(
@@ -1027,6 +1050,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
    */
   object PythonEvals extends Strategy {
     override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case ArrowEvalPython(udfs, output, child, PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF) =>
+        InProcessPythonUDFBuilder.checkConfiguration(conf)
+        InProcessArrowEvalPythonExec(udfs, output, planLater(child)) :: Nil
       case ArrowEvalPython(udfs, output, child, evalType) =>
         ArrowEvalPythonExec(udfs, output, planLater(child), evalType) :: Nil
       case BatchEvalPython(udfs, output, child) =>
@@ -1242,6 +1268,11 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.LocalLimitExec(limit, planLater(child)) :: Nil
       case logical.GlobalLimit(IntegerLiteral(limit), child) =>
         execution.GlobalLimitExec(limit, planLater(child)) :: Nil
+      case logical.Offset(IntegerLiteral(0), child) =>
+        // OFFSET 0 is a no-op; see the note in SpecialLimits. Excluding EliminateOffsets leaves
+        // the Offset node in place, so avoid building a GlobalLimitExec with no limit and a zero
+        // offset (which fails its assertion).
+        planLater(child) :: Nil
       case logical.Offset(IntegerLiteral(offset), child) =>
         GlobalLimitExec(child = planLater(child), offset = offset) :: Nil
       case union: logical.Union =>

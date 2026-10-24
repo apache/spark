@@ -20,17 +20,17 @@ package org.apache.spark.sql
 import java.time.{Instant, LocalDate, LocalDateTime, ZoneId}
 
 import org.apache.spark.sql.catalyst.ExtendedAnalysisException
-import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedInsertTarget, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{BindParameters, CTESubstitution, ExpressionWithUnresolvedIdentifier, NameParameterizedQuery, PlanWithUnresolvedIdentifier, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CacheTableAsSelect, CTEInChildren, InsertIntoStatement, Limit, ReplaceTableAsSelect, UnresolvedInsert, WithCTE}
 import org.apache.spark.sql.catalyst.trees.SQLQueryContext
 import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.functions.{array, call_function, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
+import org.apache.spark.sql.functions.{array, call_function, expr, lit, map, map_from_arrays, map_from_entries, str_to_map, struct}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, VarcharType}
+import org.apache.spark.sql.types.{CharType, DataType, DecimalType, StructField, TimeType, VarcharType}
 
 class ParametersSuite extends SharedSparkSession {
 
@@ -523,6 +523,38 @@ class ParametersSuite extends SharedSparkSession {
         Row(LocalDateTime.of(1970, 1, 1, 1, 2, 3)
           .atZone(ZoneId.of("Europe/Amsterdam"))
           .toInstant) :: Nil)
+    }
+  }
+
+  test("SPARK-60314: TIME(7)-TIME(9) literal argument keeps its precision") {
+    // Arguments are substituted as `Literal.sql` text. A TIME(9) argument rendered without its
+    // trailing zeros is parsed as TIME(6), which truncates the strings compared with it.
+    val time = expr("TIME '12:00:00.100000000'")
+    assert(spark.sql("SELECT :t", args = Map("t" -> time)).schema.head.dataType === TimeType(9))
+    checkAnswer(
+      spark.sql("SELECT :t = '12:00:00.100000001'", args = Map("t" -> time)),
+      Row(false))
+    checkAnswer(
+      spark.sql("SELECT ? < '12:00:00.100000001'", args = Array(time)),
+      Row(true))
+    checkAnswer(
+      spark.sql(
+        "SELECT s FROM VALUES ('12:00:00.100000001'), ('12:00:00.1') AS t(s) WHERE s = :t",
+        args = Map("t" -> time)),
+      Row("12:00:00.1") :: Nil)
+    checkAnswer(
+      sql(
+        """EXECUTE IMMEDIATE 'SELECT ? = \'12:00:00.100000001\''
+          |USING TIME '12:00:00.100000000'""".stripMargin),
+      Row(false))
+    // Nested values are rendered element by element, so they keep the precision as well.
+    Seq(
+      "array(TIME '12:00:00.100000000')" -> "array<time(9)>",
+      "named_struct('f', TIME '12:00:00.100000000')" -> "struct<f:time(9)>",
+      "map(1, TIME '12:00:00.100000000')" -> "map<int,time(9)>"
+    ).foreach { case (arg, expected) =>
+      val df = spark.sql("SELECT :c", args = Map("c" -> expr(arg)))
+      assert(df.schema.head.dataType.simpleString === expected)
     }
   }
 
@@ -2534,11 +2566,11 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  // The unresolved binary node exposes the target to analyzer traversal and keeps CTE definitions
-  // on the input query.
+  // The temporary binary node exposes only a dynamic target to analyzer traversal and keeps CTE
+  // definitions on the input query.
   test("SPARK-46625: WITH ... INSERT INTO IDENTIFIER(:p) REPLACE WHERE ... parser") {
     // Use a non-literal-string expression so `withIdentClause` produces
-    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to `UnresolvedInsertTarget`.
+    // `PlanWithUnresolvedIdentifier` rather than short-circuiting to a static target.
     val parsedPlan = spark.sessionState.sqlParser.parsePlan(
       """WITH transformation AS (SELECT 99 AS a)
         |INSERT INTO IDENTIFIER('some' || '_table') REPLACE WHERE a = 10
@@ -2562,12 +2594,15 @@ class ParametersSuite extends SharedSparkSession {
     }
   }
 
-  test("parsed INSERT targets use an unresolved binary plan") {
+  test("dynamic INSERT targets use a temporary binary plan") {
     val regularInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO target_table SELECT 1")
-      .asInstanceOf[UnresolvedInsert]
-    assert(regularInsert.table.isInstanceOf[UnresolvedInsertTarget])
-    assert(regularInsert.children === Seq(regularInsert.table, regularInsert.query))
+    assert(regularInsert.isInstanceOf[InsertIntoStatement])
+
+    // A literal IDENTIFIER is a static target, so it parses to the same plan as a bare name.
+    val literalIdentifierInsert = spark.sessionState.sqlParser
+      .parsePlan("INSERT INTO IDENTIFIER('target_table') SELECT 1")
+    assert(literalIdentifierInsert === regularInsert)
 
     val identifierInsert = spark.sessionState.sqlParser
       .parsePlan("INSERT INTO IDENTIFIER(lower('TESTCAT.NS.TARGET_TABLE')) SELECT 1")

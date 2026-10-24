@@ -41,4 +41,9 @@ public class TestDataPage extends DataPage {
   public <T> T accept(Visitor<T> visitor) {
     return wrapped.accept(visitor);
   }
+
+  @Override
+  public String toString() {
+    return wrapped.toString();
+  }
 }

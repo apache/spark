@@ -36,7 +36,13 @@ from typing import Any, Callable, Iterator
 import numpy as np
 import pyarrow as pa
 from pyspark.cloudpickle import dumps as cloudpickle_dumps
-from pyspark.serializers import CPickleSerializer, SpecialLengths, write_int, write_long
+from pyspark.serializers import (
+    BatchedSerializer,
+    CPickleSerializer,
+    SpecialLengths,
+    write_int,
+    write_long,
+)
 from pyspark.sql.types import (
     BinaryType,
     BooleanType,
@@ -100,6 +106,19 @@ class MockProtocolWriter:
             for df_batches in group:
                 cls.write_data_payload(iter(df_batches), buf)
         write_int(0, buf)  # end of groups
+
+    @classmethod
+    def write_pickled_data_payload(
+        cls, rows: list[tuple], buf: io.BufferedIOBase, batch_size: int = 100
+    ) -> None:
+        """Write pickled row batches followed by ``END_OF_DATA_SECTION``.
+
+        Mirrors ``BatchEvalPythonExec.getInputIterator`` on the JVM side, which
+        pickles rows (as tuples) in batches of ``batch_size``; the worker's
+        ``BatchedSerializer`` unbatches them on read.
+        """
+        BatchedSerializer(CPickleSerializer(), batch_size).dump_stream(iter(rows), buf)
+        write_int(SpecialLengths.END_OF_DATA_SECTION, buf)
 
     @classmethod
     def write_preamble(cls, buf: io.BytesIO) -> None:
@@ -331,6 +350,23 @@ class MockDataFactory:
             ]
         )
         return batches, schema
+
+    @classmethod
+    def make_rows(
+        cls,
+        *,
+        num_rows: int,
+        num_cols: int,
+        spark_type_pool: list[tuple[Callable, Any]],
+    ) -> tuple[list[tuple], StructType]:
+        """Create Python row tuples with columns cycling through ``spark_type_pool``."""
+        batches, schema = cls.make_batches(
+            num_rows=num_rows, num_cols=num_cols, spark_type_pool=spark_type_pool
+        )
+        rows = [
+            row for batch in batches for row in zip(*(col.to_pylist() for col in batch.columns))
+        ]
+        return rows, schema
 
     @classmethod
     def make_grouped_batches(
@@ -738,6 +774,99 @@ class ArrowTableUDFTimeBench(_ArrowTableUDFBenchMixin, _TimeBenchBase):
 
 
 class ArrowTableUDFPeakmemBench(_ArrowTableUDFBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# -- SQL_TABLE_UDF ----------------------------------------------------------
+# Python UDTF (``@udtf``, useArrow=False): input rows arrive as pickled tuples and
+# each row triggers one ``eval(self, *args)`` call; yielded rows are converted
+# with ``toInternal`` and pickled back one input row at a time.
+
+
+class _TableUDFIdentity:
+    def eval(self, *args):
+        yield args
+
+
+class _TableUDFExplode:
+    def eval(self, *args):
+        for _ in range(3):
+            yield args
+
+
+class _TableUDFCount:
+    """Emits nothing per row; yields a single-row count from ``terminate``."""
+
+    def __init__(self):
+        self._count = 0
+
+    def eval(self, *args):
+        self._count += 1
+
+    def terminate(self):
+        yield (self._count,)
+
+
+class _TableUDFStringify:
+    def eval(self, *args):
+        yield tuple(str(a) for a in args)
+
+
+class _TableUDFBenchMixin:
+    """Provides ``_write_scenario`` for SQL_TABLE_UDF (pickled Python UDTF).
+
+    Every input column is passed to ``eval`` as a positional argument, so the
+    ``*_args`` scenarios scale the per-row argument count.
+    """
+
+    _scenario_configs = {
+        "few_args_ints": ("pure_ints", 50_000, 2),
+        "many_args_ints": ("pure_ints", 20_000, 20),
+        "few_args_strings": ("pure_strings", 50_000, 2),
+        "many_args_strings": ("pure_strings", 20_000, 20),
+        "mixed_types": ("mixed", 20_000, 5),
+    }
+
+    @classmethod
+    def _build_scenario(cls, name):
+        np.random.seed(42)
+        type_key, num_rows, num_cols = cls._scenario_configs[name]
+        pool = MockDataFactory.NAMED_TYPE_POOLS[type_key]
+        return MockDataFactory.make_rows(num_rows=num_rows, num_cols=num_cols, spark_type_pool=pool)
+
+    _udtfs = {
+        "identity_udtf": (_TableUDFIdentity, lambda schema: schema),
+        "explode_udtf": (_TableUDFExplode, lambda schema: schema),
+        "count_udtf": (_TableUDFCount, lambda schema: _ARROW_UDTF_COUNT_RETURN),
+        "stringify_udtf": (
+            _TableUDFStringify,
+            lambda schema: StructType([StructField(f.name, StringType()) for f in schema]),
+        ),
+    }
+    params = [list(_scenario_configs), list(_udtfs)]
+    param_names = ["scenario", "udtf"]
+
+    def _write_scenario(self, scenario, udtf_name, buf):
+        rows, schema = self._build_scenario(scenario)
+        udtf_cls, return_type_fn = self._udtfs[udtf_name]
+        return_type = return_type_fn(schema)
+        arg_offsets = list(range(len(schema)))
+
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_TABLE_UDF,
+            lambda b: MockProtocolWriter.write_arrow_udtf_payload(
+                udtf_cls, return_type, arg_offsets, b
+            ),
+            lambda b: MockProtocolWriter.write_pickled_data_payload(rows, b),
+            buf,
+        )
+
+
+class TableUDFTimeBench(_TableUDFBenchMixin, _TimeBenchBase):
+    pass
+
+
+class TableUDFPeakmemBench(_TableUDFBenchMixin, _PeakmemBenchBase):
     pass
 
 
@@ -1808,8 +1937,9 @@ class WindowAggPandasUDFPeakmemBench(_WindowAggPandasBenchMixin, _PeakmemBenchBa
 # Stateful streaming with Pandas. UDF signature is
 # ``(api_client, mode, key, pdfs)`` and returns ``Iterator[pandas.DataFrame]``.
 # The input wire stream is a single plain Arrow stream pre-sorted by the
-# grouping key column at offset 0; ``read_udfs`` in worker.py chunks rows into
-# one ``(mode, key, pdfs)`` tuple per group, then emits a phantom
+# grouping key column at offset 0; ``PandasTransformWithStateUDFHandler.run``
+# in ``pyspark/eval_handlers/_stateful.py`` chunks rows into one
+# ``(mode, key, pdfs)`` tuple per group, then emits a phantom
 # ``PROCESS_TIMER`` and ``COMPLETE`` call with an empty pdf iterator.
 # ``StatefulProcessorApiClient.__init__`` opens a real TCP socket to the JVM
 # state server; the stub listener below satisfies that connect. The benchmark
@@ -2334,9 +2464,11 @@ class TransformWithStateRowUDFPeakmemBench(_TransformWithStateRowBenchMixin, _Pe
 # Each batch carries either inputData or initState rows -- never both -- with the
 # inactive column written as an all-null struct. Matching the JVM ``initData ++
 # data`` ordering, all initial-state batches are emitted first, then all data
-# batches. ``read_udfs`` walks each batch row by row, materializing every column
-# (key included) into a ``Row`` via ``.as_py()``, then regroups consecutive rows
-# by the leading key column so each key surfaces as one
+# batches. ``RowTransformWithStateInitStateUDFHandler.run`` in
+# ``pyspark/eval_handlers/_stateful.py`` walks each batch row by row,
+# materializing every column (key included) into a ``Row`` via ``.as_py()``,
+# then regroups consecutive rows by the leading key column so each key
+# surfaces as one
 # ``(mode, key, (input_rows, init_rows))`` call. This is the
 # per-row Python object round trip the Row variant is built around, layered on
 # top of the nested-struct init-state deserialization, in contrast to the
@@ -2761,4 +2893,278 @@ class ApplyInPandasWithStateUDFTimeBench(_ApplyInPandasWithStateBenchMixin, _Tim
 
 
 class ApplyInPandasWithStateUDFPeakmemBench(_ApplyInPandasWithStateBenchMixin, _PeakmemBenchBase):
+    pass
+
+
+# ---------------------------------------------------------------------------
+# Incremental Arrow aggregate / window UDFs
+# (SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+#  SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+#  SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF).
+#
+# Unlike the vectorized SQL_GROUPED_AGG_ARROW_UDF (one Python call per group over
+# whole Arrow columns), these eval types drive an incremental ``Aggregator``: the
+# cloudpickled "function" is the Aggregator object itself, whose
+# ``zero``/``reduce``/``merge``/``finish`` methods the worker calls directly.
+# ``bufferSchema`` types the intermediate per-group buffer struct exchanged
+# between the map-side PARTIAL stage and the post-shuffle FINAL stage.
+# ---------------------------------------------------------------------------
+
+
+class _BenchMeanAggregator:
+    """Incremental ``Aggregator`` stub used by the incremental benchmarks: a
+    running ``(sum, count)`` buffer that ignores null inputs, like SQL ``avg``.
+
+    Defined at module level (not inside a mixin) so cloudpickle serializes it as
+    the worker's UDF payload -- mirroring a real ``@udaf`` aggregator whose
+    methods the worker invokes per row/group. The method bodies are kept trivial
+    so the benchmarks measure the eval-type pipeline, not the aggregation itself.
+    """
+
+    bufferSchema = StructType([StructField("sum", DoubleType()), StructField("count", LongType())])
+    outputType = DoubleType()
+
+    def zero(self):
+        return (0.0, 0)
+
+    def reduce(self, buffer, values):
+        (v,) = values
+        return buffer if v is None else (buffer[0] + v, buffer[1] + 1)
+
+    def merge(self, left, right):
+        return (left[0] + right[0], left[1] + right[1])
+
+    def finish(self, buffer):
+        return buffer[0] / buffer[1] if buffer[1] else None
+
+
+# Arrow type of the partial-buffer struct exchanged on the wire between the
+# PARTIAL and FINAL stages; field names/types match ``_BenchMeanAggregator``.
+_BENCH_BUFFER_ARROW_TYPE = pa.struct([("sum", pa.float64()), ("count", pa.int64())])
+
+
+# -- SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF ----------------------------
+# Map-side PARTIAL stage: stream input rows, hash-combine into one running buffer
+# per grouping key via ``reduce``, and emit one row per key (the key columns plus
+# one buffer struct). ``grouping_key_schema`` (eval_conf) names the leading key
+# columns; ``spark.sql.execution.arrow.maxRecordsPerBatch`` (runner_conf) caps the
+# per-key map so a high-cardinality partition flushes instead of growing unbounded.
+
+
+class _GroupedAggArrowIncrementalPartialBenchMixin:
+    """Provides ``_write_scenario`` for SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF.
+
+    Input columns are ``[k, v]``: an int32 grouping key then a double aggregator
+    input. ``few_keys`` keeps the map small (combine only, one final emit);
+    ``many_keys_cap_flush`` makes every key distinct so the map repeatedly reaches
+    ``maxRecordsPerBatch`` and flushes mid-stream, then chunks the leftover buffers
+    at end of partition.
+    """
+
+    _KEY_SCHEMA = StructType([StructField("k", IntegerType())])
+    _MAX_RECORDS_PER_BATCH = 10_000
+
+    # scenario -> (num_rows, num_distinct_keys)
+    _scenario_configs = {
+        "few_keys": (150_000, 1_000),
+        "many_keys_cap_flush": (150_000, 150_000),
+    }
+    params = [list(_scenario_configs)]
+    param_names = ["scenario"]
+
+    @classmethod
+    def _build_scenario(cls, name):
+        np.random.seed(42)
+        num_rows, num_keys = cls._scenario_configs[name]
+        batch_size = cls._MAX_RECORDS_PER_BATCH
+        # When keys are globally unique the running map grows past the cap and
+        # flushes after (about) every batch; otherwise it stays small.
+        all_distinct = num_keys >= num_rows
+        batches = []
+        for offset in range(0, num_rows, batch_size):
+            rows = min(batch_size, num_rows - offset)
+            if all_distinct:
+                keys = pa.array(np.arange(offset, offset + rows, dtype=np.int32))
+            else:
+                keys = pa.array(np.random.randint(0, num_keys, rows, dtype=np.int32))
+            vals = pa.array(np.random.rand(rows))
+            batches.append(pa.RecordBatch.from_arrays([keys, vals], ["k", "v"]))
+        return batches
+
+    def _write_scenario(self, scenario, buf):
+        batches = self._build_scenario(scenario)
+        # arg_offsets=[1]: the aggregator reads column 1 (v); column 0 (k) is the
+        # single grouping key named by _KEY_SCHEMA.
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(
+                _BenchMeanAggregator(), DoubleType(), [1], b
+            ),
+            lambda b: MockProtocolWriter.write_data_payload(iter(batches), b),
+            buf,
+            runner_conf={
+                "spark.sql.execution.arrow.maxRecordsPerBatch": str(self._MAX_RECORDS_PER_BATCH)
+            },
+            eval_conf={"grouping_key_schema": self._KEY_SCHEMA.json()},
+        )
+
+
+class GroupedAggArrowIncrementalPartialUDFTimeBench(
+    _GroupedAggArrowIncrementalPartialBenchMixin, _TimeBenchBase
+):
+    pass
+
+
+class GroupedAggArrowIncrementalPartialUDFPeakmemBench(
+    _GroupedAggArrowIncrementalPartialBenchMixin, _PeakmemBenchBase
+):
+    pass
+
+
+# -- SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF ------------------------------
+# Post-shuffle FINAL stage: each group is the partial buffers (a single struct
+# column) that the PARTIAL stage emitted for one key across map partitions; the
+# worker ``merge``s them and emits one ``finish`` value per group. Null partial
+# buffers (empty-partition partials) are skipped, and an all-null group finishes
+# ``zero`` (the empty global aggregation).
+
+
+class _GroupedAggArrowIncrementalFinalBenchMixin:
+    """Provides ``_write_scenario`` for SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF.
+
+    Each group carries ``partials_per_group`` ``(sum, count)`` buffer structs with
+    every fifth row null (an empty-partition partial the merge skips), and the
+    first group is entirely null (exercising ``finish(zero)``). ``few_groups`` is
+    merge-heavy per group; ``many_groups`` stresses the per-group overhead with a
+    2k-group post-shuffle fan-in.
+    """
+
+    # scenario -> (num_groups, partials_per_group)
+    _scenario_configs = {
+        "few_groups": (50, 2_000),
+        "many_groups": (2_000, 50),
+    }
+    params = [list(_scenario_configs)]
+    param_names = ["scenario"]
+
+    @classmethod
+    def _build_scenario(cls, name):
+        np.random.seed(42)
+        num_groups, partials = cls._scenario_configs[name]
+        sums = np.random.rand(partials)
+        counts = np.random.randint(1, 100, partials)
+        rows = [
+            None if i % 5 == 0 else {"sum": float(sums[i]), "count": int(counts[i])}
+            for i in range(partials)
+        ]
+        # Build each group's single buffer-struct batch once and reuse it; only the
+        # group count matters to the benchmark, not per-group buffer values.
+        batch = pa.RecordBatch.from_arrays([pa.array(rows, type=_BENCH_BUFFER_ARROW_TYPE)], ["buf"])
+        null_batch = pa.RecordBatch.from_arrays(
+            [pa.array([None] * partials, type=_BENCH_BUFFER_ARROW_TYPE)], ["buf"]
+        )
+        return [[[null_batch]]] + [[[batch]] for _ in range(num_groups - 1)]
+
+    def _write_scenario(self, scenario, buf):
+        groups = self._build_scenario(scenario)
+        # arg_offsets=[0]: the buffer struct is the only input column.
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(
+                _BenchMeanAggregator(), DoubleType(), [0], b
+            ),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
+            buf,
+        )
+
+
+class GroupedAggArrowIncrementalFinalUDFTimeBench(
+    _GroupedAggArrowIncrementalFinalBenchMixin, _TimeBenchBase
+):
+    pass
+
+
+class GroupedAggArrowIncrementalFinalUDFPeakmemBench(
+    _GroupedAggArrowIncrementalFinalBenchMixin, _PeakmemBenchBase
+):
+    pass
+
+
+# -- SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF -------------------------------------
+# Window aggregation with an incremental Aggregator. Each group is a whole window
+# partition. The per-UDF frame bound type is sent via ``window_bound_types``
+# (runner_conf): an ``unbounded`` frame is folded once and repeated for every row;
+# a ``bounded`` frame carries per-row ``[begin, end)`` row-offset columns. When
+# consecutive bounded frames share a lower bound and only grow on the right (a
+# running frame) the worker extends the running buffer; when the lower bound
+# advances (a sliding frame) it refolds the frame from ``zero``.
+
+
+class _WindowAggArrowIncrementalBenchMixin:
+    """Provides ``_write_scenario`` for SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF.
+
+    One partition config (``_NUM_PARTITIONS`` x ``_ROWS_PER_PARTITION``) crossed
+    with three frame shapes:
+
+    - ``unbounded``: the whole partition, folded once and repeated per row.
+    - ``running``: ``rowsBetween(unboundedPreceding, currentRow)`` -- fixed lower
+      bound, growing upper bound, so each row extends the running buffer (O(n)).
+    - ``sliding``: ``rowsBetween(-K, currentRow)`` -- the lower bound advances, so
+      each row refolds its frame from ``zero`` (O(n*K)).
+    """
+
+    _NUM_PARTITIONS = 50
+    _ROWS_PER_PARTITION = 2_000
+    _SLIDING_LOOKBACK = 10
+
+    params = [["unbounded", "running", "sliding"]]
+    param_names = ["frame"]
+
+    @classmethod
+    def _build_scenario(cls, frame):
+        np.random.seed(42)
+        num_rows = cls._ROWS_PER_PARTITION
+        idx = np.arange(num_rows)
+        if frame == "unbounded":
+            names = ["v"]
+            bound_arrays = []
+        else:
+            # begin/end are row offsets into the concatenated partition; [begin, end).
+            end = pa.array((idx + 1).astype(np.int32))
+            if frame == "running":
+                begin = pa.array(np.zeros(num_rows, dtype=np.int32))
+            else:  # sliding
+                begin = pa.array(np.maximum(0, idx - cls._SLIDING_LOOKBACK).astype(np.int32))
+            names = ["begin", "end", "v"]
+            bound_arrays = [begin, end]
+        groups = []
+        for _ in range(cls._NUM_PARTITIONS):
+            vals = pa.array(np.random.rand(num_rows))
+            batch = pa.RecordBatch.from_arrays(bound_arrays + [vals], names)
+            groups.append([[batch]])
+        return groups
+
+    def _write_scenario(self, frame, buf):
+        groups = self._build_scenario(frame)
+        # unbounded: arg_offsets=[value]; bounded: arg_offsets=[begin, end, value].
+        arg_offsets = [0] if frame == "unbounded" else [0, 1, 2]
+        bound_type = "unbounded" if frame == "unbounded" else "bounded"
+        MockProtocolWriter.write_worker_input(
+            PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF,
+            lambda b: MockProtocolWriter.write_udf_payload(
+                _BenchMeanAggregator(), DoubleType(), arg_offsets, b
+            ),
+            lambda b: MockProtocolWriter.write_grouped_data_payload(groups, buf=b),
+            buf,
+            runner_conf={"window_bound_types": bound_type},
+        )
+
+
+class WindowAggArrowIncrementalUDFTimeBench(_WindowAggArrowIncrementalBenchMixin, _TimeBenchBase):
+    pass
+
+
+class WindowAggArrowIncrementalUDFPeakmemBench(
+    _WindowAggArrowIncrementalBenchMixin, _PeakmemBenchBase
+):
     pass

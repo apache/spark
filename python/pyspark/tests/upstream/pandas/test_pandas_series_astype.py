@@ -37,6 +37,7 @@ overrides rather than replacing the baseline golden.
 """
 
 import datetime
+import platform
 import unittest
 import warnings
 from decimal import Decimal
@@ -361,9 +362,27 @@ class PandasSeriesAstypeTests(GoldenFileTestMixin, unittest.TestCase):
         )
         return overrides
 
-    def _version_overrides(self) -> dict[tuple[str, str], str]:
+    @staticmethod
+    def _arm_overrides() -> dict[tuple[str, str], str]:
+        """ARM maps positive infinity to the int64 maximum in these casts; x86 yields NaT."""
+        return {
+            ("float64:nonfinite", "datetime64[ns]"): (
+                "[NaT, Timestamp('2262-04-11 23:47:16.854775807'), NaT]@Series[datetime64[ns]]"
+            ),
+            ("float64:nonfinite", "datetime64[us]"): (
+                "[NaT, Timestamp('294247-01-10 04:00:54.775807'), NaT]@Series[datetime64[us]]"
+            ),
+            ("float64:nonfinite", "timedelta64[ns]"): (
+                "[NaT, Timedelta('106751 days 23:47:16.854775807'), NaT]@Series[timedelta64[ns]]"
+            ),
+            ("float64:nonfinite", "timedelta64[us]"): (
+                "[NaT, Timedelta('106751991 days 04:00:54.775807'), NaT]@Series[timedelta64[us]]"
+            ),
+        }
+
+    def _overrides(self) -> dict[tuple[str, str], str]:
         """
-        Return expected cells that differ from the pandas 2.3.3 / NumPy 2 baseline.
+        Return expected cells that differ from the pandas 2.3.3 / NumPy 2 x86 baseline.
 
         Conditions are independent because one dependency profile can require several
         groups at once. No PyArrow-specific overrides were needed across versions 18-25.
@@ -376,6 +395,8 @@ class PandasSeriesAstypeTests(GoldenFileTestMixin, unittest.TestCase):
             overrides.update(self._pandas_before_2_3_0_overrides())
         if pandas_version >= "3.0.0":
             overrides.update(self._pandas_3_overrides())
+        if platform.machine() in ("aarch64", "arm64"):
+            overrides.update(self._arm_overrides())
         return overrides
 
     def _test_astype(self, golden_file_prefix, **kwargs):
@@ -396,7 +417,7 @@ class PandasSeriesAstypeTests(GoldenFileTestMixin, unittest.TestCase):
             col_names=[COL_INPUT, *targets],
             compute_cell=compute_cell,
             golden_file_prefix=golden_file_prefix,
-            overrides=self._version_overrides(),
+            overrides=self._overrides(),
         )
 
     def test_astype_default(self):

@@ -125,6 +125,9 @@ object AsOfJoinBenchmark extends SqlBasedBenchmark {
     runBenchmark("AS-OF Join Benchmark") {
       // 10K left x 10K right, 100 groups - both paths feasible
       asOfJoinBenchmark(leftRows = 10000, rightRows = 10000, numGroups = 100)
+      // Few large groups: ~1K right rows buffered per group, and each left row rescans a
+      // prefix of that buffer, which is where the per-left-row group-scan cost dominates.
+      asOfJoinBenchmark(leftRows = 10000, rightRows = 10000, numGroups = 10)
       // No equi-key: 10K x 10K
       asOfJoinNoEquiKeyBenchmark(leftRows = 10000, rightRows = 10000)
     }

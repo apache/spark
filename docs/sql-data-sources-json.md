@@ -238,6 +238,12 @@ Data source options of JSON can be set via:
     <td>read</td>
   </tr>
   <tr>
+    <td><code>enableStreamingTopLevelArray</code></td>
+    <td>(value of <code>spark.sql.json.enableStreamingTopLevelArray</code> configuration)</td>
+    <td>When <code>multiLine</code> is enabled and a file holds a top-level JSON array, read the array's elements one at a time instead of materializing the whole array before returning rows. It applies to reads into a struct schema, and has no effect on reads using <code>singleVariantColumn</code> or <code>explodeEmbeddedArray</code>. While streaming, <code>mode</code> applies to an individual element rather than the whole document: <code>PERMISSIVE</code> fills the field configured by <code>columnNameOfCorruptRecord</code> for the malformed element alone, leaving it null on the valid rows of the same document, and <code>DROPMALFORMED</code> drops that element rather than the document. An element whose failure leaves the parser at an unknown position, such as a nested value of the wrong shape, still ends the document, as does a failure outside any element, such as a syntax error between two elements or a missing closing bracket.</td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>allowUnquotedControlChars</code></td>
     <td><code>false</code></td>
     <td>Allows JSON Strings to contain unquoted control characters (ASCII characters with value less than 32, including tab and line feed characters) or not.</td>

@@ -18,6 +18,7 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
+import java.sql.Types.TIMESTAMP
 import java.time.LocalDateTime
 import java.util.Locale
 
@@ -58,6 +59,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isNotSelectableObjectException(e: SQLException): Boolean = {
     // ORA-04044: object is not a table (e.g. a synonym to a procedure/function/package).
     e.getMessage.contains("ORA-04044") ||
+      // ORA-00980: synonym translation is no longer valid (synonym whose target is missing).
+      e.getMessage.contains("ORA-00980") ||
       // ORA-04063: object is invalid (e.g. a view over a dropped base table).
       e.getMessage.contains("ORA-04063")
   }
@@ -154,6 +157,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     sqlType match {
       case Types.NUMERIC =>
         val scale = if (null != md) md.build().getLong("scale") else 0L
+        val defaultScale = if (conf.legacyOracleNumberMappingEnabled) 10
+          else DecimalType.DEFAULT_SCALE
         size match {
           // Handle NUMBER fields that have no precision/scale in special way
           // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
@@ -161,12 +166,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           // https://github.com/apache/spark/pull/8780#issuecomment-145598968
           // and
           // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
           // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
           // this to NUMERIC with -127 scale
           // Not sure if there is a more robust way to identify the field as a float (or other
           // numeric types that do not specify a scale.
-          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
           case _ => None
         }
       case TIMESTAMP_TZ | TIMESTAMP_LTZ =>
@@ -182,7 +187,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
-      case Types.TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+      case TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
           typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
         val metadata = if (md != null) md.build() else Metadata.empty
         // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
@@ -191,23 +196,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           metadata.getBoolean("preferTimestampNanos")
         val resolved = JdbcUtils.resolveTimestampType(
           isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
-        // Oracle DATE/TIMESTAMP are zoneless; mark the microsecond NTZ wall-clock so a later flag
-        // flip can't desync the read. The nanos NTZ getter is wall-clock by construction.
-        if (md != null && resolved == TimestampNTZType) {
-          md.putBoolean(JdbcUtils.READ_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
-        }
         Some(resolved)
       case _ => None
     }
   }
 
-  override def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {
-    dt match {
-      case TimestampNTZType if !conf.legacyOracleTimestampNTZMappingEnabled =>
-        metadata.putBoolean(JdbcUtils.WRITE_TIMESTAMP_NTZ_WALL_CLOCK, value = true)
-      case _ =>
-    }
-  }
+  override def timestampNTZAsWallClock: Boolean = !conf.legacyOracleTimestampNTZMappingEnabled
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     // For more details, please see

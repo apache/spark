@@ -1093,7 +1093,7 @@ Project [unix_timestamp(22 05 2020 Friday, dd MM yyyy EEEEE, Some(America/Los_An
 -- !query
 select from_json('{"t":"26/October/2015"}', 't Timestamp', map('timestampFormat', 'dd/MMMMM/yyyy'))
 -- !query analysis
-Project [from_json(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false) AS from_json({"t":"26/October/2015"})#x]
+Project [from_json(StructField(t,TimestampNTZType,true), (timestampFormat,dd/MMMMM/yyyy), {"t":"26/October/2015"}, Some(America/Los_Angeles), false, false) AS from_json({"t":"26/October/2015"})#x]
 +- OneRowRelation
 
 
@@ -1242,6 +1242,13 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "timestampdiff('YEAR', date'2022-02-15', date'2023-02-15')"
   } ]
 }
+
+
+-- !query
+select timestampdiff(NANOSECOND, timestamp'2022-02-14 01:02:03', timestamp'2022-02-14 01:02:04')
+-- !query analysis
+Project [timestampdiff(NANOSECOND, cast(2022-02-14 01:02:03 as timestamp), cast(2022-02-14 01:02:04 as timestamp), Some(America/Los_Angeles)) AS timestampdiff(NANOSECOND, TIMESTAMP_NTZ '2022-02-14 01:02:03', TIMESTAMP_NTZ '2022-02-14 01:02:04')#xL]
++- OneRowRelation
 
 
 -- !query

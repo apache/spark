@@ -26,6 +26,7 @@ import concurrent.futures
 import copy
 import logging
 import os
+import pickle
 import platform
 import sys
 import threading
@@ -64,7 +65,7 @@ import pyspark
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 import pyspark.sql.connect.types as types
-from pyspark.accumulators import SpecialAccumulatorIds, pickleSer
+from pyspark.accumulators import SpecialAccumulatorIds, specialAccumulatorSer
 from pyspark.errors import (
     PySparkAssertionError,
     PySparkNotImplementedError,
@@ -1377,7 +1378,7 @@ class SparkConnectClient(object):
                 if descriptor.type == descriptor.TYPE_MESSAGE:
                     if allowed_recursion_depth == 0:
                         p2.ClearField(field_name)
-                    elif descriptor.label == descriptor.LABEL_REPEATED:
+                    elif descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend(
                             [self._truncate(v, allowed_recursion_depth - 1) for v in value]
@@ -1388,14 +1389,14 @@ class SparkConnectClient(object):
                         )
 
                 elif descriptor.type == descriptor.TYPE_STRING:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend([truncate_str(v) for v in value])
                     else:
                         setattr(p2, field_name, truncate_str(value))
 
                 elif descriptor.type == descriptor.TYPE_BYTES:
-                    if descriptor.label == descriptor.LABEL_REPEATED:
+                    if descriptor.is_repeated:
                         p2.ClearField(field_name)
                         getattr(p2, field_name).extend([truncate_bytes(v) for v in value])
                     else:
@@ -1794,7 +1795,15 @@ class SparkConnectClient(object):
                     else:
                         if observed_metrics.name == "__python_accumulator__":
                             for metric in observed_metrics.metrics:
-                                aid, update = pickleSer.loads(LiteralExpression._to_value(metric))
+                                try:
+                                    aid, update = specialAccumulatorSer.loads(
+                                        LiteralExpression._to_value(metric)
+                                    )
+                                except pickle.UnpicklingError as e:
+                                    # We found unexpected class/function in the accumulator metric.
+                                    # We will ignore this metric and continue.
+                                    logger.warning(f"Error unpickling accumulator metric: {e}")
+                                    continue
                                 if aid == SpecialAccumulatorIds.SQL_UDF_PROFIER_V2:
                                     self._profiler_collector._update(update)
                         elif observed_metrics.name in observations:
