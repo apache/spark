@@ -20,13 +20,14 @@ package org.apache.spark.api.python
 import java.io.File
 import java.nio.file.Paths
 import java.util.{List => JList}
+import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.sys.process.Process
 
-import org.apache.spark.{SparkContext, SparkEnv}
+import org.apache.spark.{JobArtifactSet, SparkContext, SparkEnv, SparkException, SparkFiles}
 import org.apache.spark.api.java.{JavaRDD, JavaSparkContext}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{PATH, PYTHON_PACKAGES, PYTHON_VERSION}
@@ -195,5 +196,67 @@ private[spark] object PythonUtils extends Logging {
       pythonVer = pythonVer,
       broadcastVars = List.empty.asJava,
       accumulator = null)
+  }
+
+  /**
+   * Checks whether `pythonExec` can run Arrow-optimized Python UDFs, that is, whether it has
+   * PyArrow at the version PySpark requires. A Python client runs the same check before it creates
+   * such a UDF, see `_create_py_udf` in `pyspark.sql.udf`, where it also requires pandas, which
+   * these UDFs only need with the legacy pandas conversion.
+   *
+   * It runs `pythonExec` with the environment, Python path and working directory that
+   * `PythonWorkerFactory` gives a Python worker launched with `envVars`.
+   *
+   * @return `None` if it can, and why it cannot otherwise.
+   * @throws SparkException if the check fails otherwise, or does not finish within `timeoutMs`.
+   */
+  private[spark] def checkArrowOptimization(
+      pythonExec: String,
+      envVars: Map[String, String],
+      timeoutMs: Long = PythonWorkerFactory.PROCESS_WAIT_TIMEOUT_MS): Option[String] = {
+    // Exits with 3 only when PyArrow is missing or too old, so that no other failure, such as
+    // PySpark not being importable, is taken for that.
+    val code =
+      """
+        |import sys
+        |from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+        |try:
+        |    require_minimum_pyarrow_version()
+        |except ImportError as e:
+        |    print(e)
+        |    sys.exit(3)
+        |""".stripMargin
+    val jobArtifactUUID =
+      JobArtifactSet.getCurrentJobArtifactState.map(_.uuid).getOrElse("default")
+    val workingDir = if (jobArtifactUUID != "default") {
+      val dir = new File(SparkFiles.getRootDirectory(), jobArtifactUUID)
+      dir.mkdir()
+      dir
+    } else {
+      new File(".")
+    }
+    val pythonPath = mergePythonPaths(
+      sparkPythonPath, envVars.getOrElse("PYTHONPATH", ""), sys.env.getOrElse("PYTHONPATH", ""))
+    val process = Utils.executeCommand(
+      Seq(pythonExec, "-c", code), workingDir, envVars + ("PYTHONPATH" -> pythonPath))
+    try {
+      val output = new StringBuffer
+      def appendToOutput(line: String): Unit = output.append(line).append("\n")
+      val reader = Utils.processStreamByLine(
+        s"read stdout for $pythonExec", process.getInputStream, appendToOutput)
+      if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+        throw new SparkException(
+          s"Checking PyArrow in $pythonExec did not finish within $timeoutMs ms")
+      }
+      reader.join(timeoutMs)
+      process.exitValue() match {
+        case 0 => None
+        case 3 => Some(output.toString.trim)
+        case exitCode =>
+          throw new SparkException(s"Checking PyArrow in $pythonExec exited with code $exitCode")
+      }
+    } finally {
+      process.destroyForcibly()
+    }
   }
 }
