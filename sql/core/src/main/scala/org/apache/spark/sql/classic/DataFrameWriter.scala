@@ -629,8 +629,10 @@ final class DataFrameWriter[T] private[sql](ds: Dataset[T]) extends sql.DataFram
    * Wrap a DataFrameWriter action to track the QueryExecution and time cost, then report to the
    * user-registered callback functions.
    */
-  private def runCommand(session: SparkSession)(command: LogicalPlan): Unit = {
-    val qe = new QueryExecution(session, command, df.queryExecution.tracker,
+  private def runCommand(session: SparkSession)(command: => LogicalPlan): Unit = {
+    // The command is built with the session active, like a query is analyzed: it looks up the
+    // data source, and the lookups of the Python and native data sources use the active session.
+    val qe = new QueryExecution(session, session.withActive(command), df.queryExecution.tracker,
       shuffleCleanupModeOpt =
         Some(QueryExecution.determineShuffleCleanupMode(session.sessionState.conf)))
     qe.assertCommandExecuted()
