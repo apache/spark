@@ -896,6 +896,74 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(!mapFilter2_1.semanticEquals(mapFilter2_3))
   }
 
+  test("SPARK-60508: semanticEquals between higher-order functions capturing lambda variables") {
+    val ys = Literal.create(Seq(1, 2, 3, 4, 5), ArrayType(IntegerType, containsNull = true))
+
+    // 1. Confirm original alpha-equivalence: x -> x * 2 still equals y -> y * 2
+    val mult1 = transform(ys, x => x * 2)
+    val mult2 = transform(ys, y => y * 2)
+    assert(mult1.semanticEquals(mult2))
+
+    // 2. Free captured variables from an enclosing scope
+    val x1 = NamedLambdaVariable("x1", IntegerType, nullable = true)
+    val x2 = NamedLambdaVariable("x2", IntegerType, nullable = true)
+
+    val filter1 = filter(ys, y => y > x1)
+    val filter2 = filter(ys, y => y > x2)
+
+    // filter1 must equal itself (with identical captured variable x1)
+    assert(filter1.semanticEquals(filter(ys, y => y > x1)))
+    // filter1 must NOT equal filter2 (different captured variables x1 vs x2)
+    assert(!filter1.semanticEquals(filter2))
+
+    // 3. Nested lambda scenario: outer lambda binds y, inner lambda binds z and captures x1 vs x2
+    val nested1 = transform(ys, y => filter(ys, z => z > y + x1))
+    assert(nested1.semanticEquals(transform(ys, y => filter(ys, z => z > y + x1))))
+    assert(!nested1.semanticEquals(transform(ys, y => filter(ys, z => z > y + x2))))
+    assert(!nested1.semanticEquals(transform(ys, y => filter(ys, z => z > z + x1))))
+    // 4. Fresh copy of the plan (which produces distinct AtomicReferences for stateful expressions)
+    Seq(filter1, nested1).foreach { e =>
+      val copied = e.freshCopyIfContainsStatefulExpression()
+      assert(copied.semanticEquals(e))
+      assert(copied.semanticHash() == e.semanticHash())
+    }
+
+    // Canonicalizing the enclosing function numbers its own variables too, without colliding with
+    // the variables of the nested functions.
+    def zipWith(f: (Expression, Expression) => Expression): Expression =
+      ZipWith(ys, ys, createLambda(IntegerType, true, IntegerType, true, f)).bind(validateBinding)
+    val zip1 = zipWith((a, b) => If(a > b, filter(ys, y => y > a), filter(ys, y => y > b)))
+    assert(zip1.semanticEquals(
+      zipWith((a, b) => If(a > b, filter(ys, y => y > a), filter(ys, y => y > b)))))
+    assert(!zip1.semanticEquals(
+      zipWith((a, b) => If(a > b, filter(ys, y => y > b), filter(ys, y => y > a)))))
+    assert(!zipWith((a, _) => transform(ys, y => y + a)).semanticEquals(
+      zipWith((_, _) => transform(ys, y => y + y))))
+    assert(zip1.canonicalized.references.isEmpty)
+
+    // The canonical exprIds of the variables bound by each lambda function, outermost first.
+    def canonicalIds(e: Expression): Seq[Seq[ExprId]] = e.canonicalized.collect {
+      case f: LambdaFunction => f.arguments.map(_.exprId)
+    }
+
+    // A free variable never equals a renamed bound variable, even with the same name and exprId.
+    val Seq(abIds) = canonicalIds(zipWith((a, _) => a + x1))
+    assert(canonicalIds(zipWith((_, b) => x1 + b)) == Seq(abIds))
+    val Seq(noneA, noneB) =
+      abIds.map(id => NamedLambdaVariable("none", IntegerType, nullable = true, exprId = id))
+    assert(!zipWith((a, _) => a + noneB).semanticEquals(zipWith((_, b) => noneA + b)))
+
+    // A free variable keeps its exprId, even when it is the canonical exprId of a variable bound
+    // by a nested function, like `y` below.
+    val Seq(_, Seq(yId)) = canonicalIds(zipWith((_, _) => filter(ys, y => y > x1)))
+    val x = NamedLambdaVariable("x", IntegerType, nullable = true, exprId = yId)
+    val zip2 = zipWith((_, _) => filter(ys, y => y > x))
+    assert(canonicalIds(zip2).last == Seq(yId))
+    assert(zip2.canonicalized.collect {
+      case l: NamedLambdaVariable if l.name == "x" => l.exprId
+    } == Seq(yId))
+  }
+
   test("SPARK-36740: ArraySort should handle NaN greater than non-NaN value") {
     checkEvaluation(arraySort(
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
