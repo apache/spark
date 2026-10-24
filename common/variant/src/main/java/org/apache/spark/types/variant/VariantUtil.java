@@ -427,9 +427,13 @@ public class VariantUtil {
     return Double.longBitsToDouble(readLong(value, pos + 1, 8));
   }
 
-  // Check whether the precision and scale of the decimal are within the limit.
+  // Check that the precision of the decimal is within `maxPrecision`, the limit of its physical
+  // type, and that its scale is within `MAX_DECIMAL16_PRECISION`. The variant spec bounds the
+  // scale of every decimal type by 38 and does not tie it to the physical type, so a decimal4 or
+  // decimal8 may have a scale larger than its max precision, e.g., 1.234E-10 stored as decimal4
+  // with unscaled value 1234 and scale 13.
   private static void checkDecimal(BigDecimal d, int maxPrecision) {
-    if (d.precision() > maxPrecision || d.scale() > maxPrecision) {
+    if (d.precision() > maxPrecision || d.scale() > MAX_DECIMAL16_PRECISION) {
       throw malformedVariant();
     }
   }

@@ -141,6 +141,71 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     check("true", Array(primitiveHeader(TRUE)), emptyMetadata4)
   }
 
+  // The variant spec only bounds the precision of each decimal physical type. The scale of any
+  // decimal type can be up to 38, so decimal4/decimal8 may have a scale larger than 9/18.
+  test("decimal with scale larger than the max precision of its physical type") {
+    val emptyMetadata = Array[Byte](VERSION, 0, 0)
+    // Encode a decimal with the given physical type, scale and unscaled value.
+    def encode(typeInfo: Int, scale: Int, unscaled: Long): Array[Byte] = {
+      val size = typeInfo match {
+        case DECIMAL4 => 4
+        case DECIMAL8 => 8
+        case DECIMAL16 => 16
+      }
+      // Little endian, sign extended to `size` bytes.
+      val bytes = (0 until size).map(i => (if (i < 8) unscaled >> (8 * i) else unscaled >> 63))
+      Array[Byte](primitiveHeader(typeInfo), scale.toByte) ++ bytes.map(_.toByte)
+    }
+
+    // (physical type, scale, unscaled value, expected decimal type)
+    val cases = Seq(
+      (DECIMAL4, 13, 1234L, DecimalType(13, 13)),
+      (DECIMAL4, 13, -1234L, DecimalType(13, 13)),
+      (DECIMAL4, 38, 1234L, DecimalType(38, 38)),
+      (DECIMAL8, 25, 1234L, DecimalType(25, 25)),
+      (DECIMAL8, 25, -1234L, DecimalType(25, 25)),
+      (DECIMAL8, 38, 1234L, DecimalType(38, 38)),
+      (DECIMAL16, 38, 1234L, DecimalType(38, 38)),
+      (DECIMAL16, 38, -1234L, DecimalType(38, 38)),
+      // Zero has precision 1 regardless of the scale. `getDecimal` strips the trailing zeros.
+      (DECIMAL4, 38, 0L, DecimalType(1, 0)),
+      (DECIMAL8, 38, 0L, DecimalType(1, 0)))
+    cases.foreach { case (typeInfo, scale, unscaled, expectedType) =>
+      val value = encode(typeInfo, scale, unscaled)
+      val expected = java.math.BigDecimal.valueOf(unscaled, scale).stripTrailingZeros()
+      val variant = Literal(new VariantVal(value, emptyMetadata))
+      assert(new Variant(value, emptyMetadata).getDecimal === expected)
+      checkEvaluation(StructsToJson(Map.empty, variant), expected.toPlainString)
+      // `DecimalType` requires precision >= scale, so the precision is widened to the scale.
+      checkEvaluation(SchemaOfVariant(variant), expectedType.sql)
+      checkEvaluation(
+        VariantGet(variant, Literal("$"), expectedType, failOnError = true),
+        Decimal(expected))
+    }
+
+    // The same value encoded in different physical types is the same variant value.
+    Seq(1234L, -1234L).foreach { unscaled =>
+      val d4 = new Variant(encode(DECIMAL4, 13, unscaled), emptyMetadata)
+      val d8 = new Variant(encode(DECIMAL8, 13, unscaled), emptyMetadata)
+      val d16 = new Variant(encode(DECIMAL16, 13, unscaled), emptyMetadata)
+      assert(d4.getDecimal === d8.getDecimal)
+      assert(d4.getDecimal === d16.getDecimal)
+    }
+
+    // The scale is still bounded by 38 for every physical type. A negative scale byte is read as an
+    // unsigned value above 38.
+    Seq(
+      encode(DECIMAL4, 39, 1234L),
+      encode(DECIMAL4, 253, 1234L),
+      encode(DECIMAL8, 39, 1234L),
+      encode(DECIMAL16, 39, 1234L)).foreach { value =>
+      checkErrorInExpression[SparkRuntimeException](
+        ResolveTimeZone.resolveTimeZones(
+          StructsToJson(Map.empty, Literal(new VariantVal(value, emptyMetadata)))),
+        "MALFORMED_VARIANT")
+    }
+  }
+
   // Test StructsToJson with manually constructed input that uses up to 4 bytes for offsets and
   // sizes.  We never produce 4-byte offsets, since they're only needed for >16 MiB values, which we
   // error out on, but the reader should be able to handle them if some other writer decides to use
