@@ -286,7 +286,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val completedJobs = new ListBuffer[v1.JobData]()
     val failedJobs = new ListBuffer[v1.JobData]()
 
-    store.jobsList(null).foreach { job =>
+    store.jobSummaries().foreach { job =>
       job.status match {
         case JobExecutionStatus.SUCCEEDED =>
           completedJobs += job
@@ -495,13 +495,16 @@ private[ui] class JobDataSource(
 
   import ApiHelper._
 
-  // Convert JobUIData to JobTableRowData which contains the final contents to show in the table
-  // so that we can avoid creating duplicate contents during sorting the data
-  private val data = jobs.map(jobRow).sorted(ordering(sortColumn, desc))
+  // Sort summaries before loading details and formatting the rows on the requested page.
+  private val data = jobs.sorted(ordering(sortColumn, desc))
 
   override def dataSize: Int = data.size
 
-  override def sliceData(from: Int, to: Int): Seq[JobTableRowData] = data.slice(from, to)
+  override def sliceData(from: Int, to: Int): Seq[JobTableRowData] = {
+    data.slice(from, to).map { summary =>
+      jobRow(store.asOption(store.job(summary.jobId)).getOrElse(summary))
+    }
+  }
 
   private def jobRow(jobData: v1.JobData): JobTableRowData = {
     val duration: Option[Long] = JobDataUtil.getDuration(jobData)
@@ -534,12 +537,25 @@ private[ui] class JobDataSource(
   /**
    * Return Ordering according to sortColumn and desc
    */
-  private def ordering(sortColumn: String, desc: Boolean): Ordering[JobTableRowData] = {
-    val ordering: Ordering[JobTableRowData] = sortColumn match {
-      case "Job Id" | "Job Id (Job Group)" => Ordering.by(_.jobData.jobId)
-      case "Description" => Ordering.by(x => (x.lastStageDescription, x.lastStageName))
-      case "Submitted" => Ordering.by(_.submissionTime)
-      case "Duration" => Ordering.by(_.duration)
+  private def ordering(sortColumn: String, desc: Boolean): Ordering[v1.JobData] = {
+    val now = System.currentTimeMillis()
+    val descriptions = if (sortColumn == "Description") {
+      jobs.map { job =>
+        val (name, description) = lastStageNameAndDescription(store, job)
+        job.jobId -> (description, name)
+      }.toMap
+    } else {
+      Map.empty[Int, (String, String)]
+    }
+    val ordering: Ordering[v1.JobData] = sortColumn match {
+      case "Job Id" | "Job Id (Job Group)" => Ordering.by(_.jobId)
+      case "Description" => Ordering.by(job => descriptions(job.jobId))
+      case "Submitted" => Ordering.by(_.submissionTime.map(_.getTime).getOrElse(-1L))
+      case "Duration" => Ordering.by { job =>
+        job.submissionTime.map { start =>
+          job.completionTime.map(_.getTime).getOrElse(now) - start.getTime
+        }.getOrElse(-1L)
+      }
       case "Stages: Succeeded/Total" | "Tasks (for all stages): Succeeded/Total" =>
         throw new IllegalArgumentException(s"Unsortable column: $sortColumn")
       case unknownColumn => throw new IllegalArgumentException(s"Unknown column: $unknownColumn")

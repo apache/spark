@@ -159,27 +159,21 @@ private[v1] class StagesResource extends BaseAppResource {
         isSearch = true
         searchValue = uriQueryParameters.getFirst("search[value]")
       }
-      val _tasksToShow: Seq[TaskData] = doPagination(uriQueryParameters, stageId, stageAttemptId,
-        isSearch, totalRecords.toInt)
       val ret = new HashMap[String, Object]()
-      if (_tasksToShow.nonEmpty) {
-        // Performs server-side search based on input from user
-        if (isSearch) {
-          val filteredTaskList = filterTaskList(_tasksToShow, searchValue)
-          filteredRecords = filteredTaskList.length.toString
-          if (filteredTaskList.length > 0) {
-            val pageStartIndex = uriQueryParameters.getFirst("start").toInt
-            val pageLength = uriQueryParameters.getFirst("length").toInt
-            ret.put("aaData", filteredTaskList.slice(
-              pageStartIndex, pageStartIndex + pageLength))
-          } else {
-            ret.put("aaData", filteredTaskList)
-          }
-        } else {
-          ret.put("aaData", _tasksToShow)
-        }
+      if (isSearch) {
+        val column = uriQueryParameters.getFirst("columnNameToSort")
+        val sortColumn = if (column.equalsIgnoreCase("Logs")) "Index" else column
+        val (page, count) = ui.store.taskListWithFilter(stageId, stageAttemptId,
+          uriQueryParameters.getFirst("start").toInt,
+          uriQueryParameters.getFirst("length").toInt,
+          indexName(sortColumn),
+          "asc".equalsIgnoreCase(uriQueryParameters.getFirst("order[0][dir]")))(
+          taskSearchPredicate(searchValue))
+        ret.put("aaData", page)
+        filteredRecords = count.toString
       } else {
-        ret.put("aaData", _tasksToShow)
+        ret.put("aaData", doPagination(uriQueryParameters, stageId, stageAttemptId,
+          isSearch = false, totalRecords = totalRecords.toInt))
       }
       ret.put("recordsTotal", totalRecords)
       ret.put("recordsFiltered", filteredRecords)
@@ -213,6 +207,10 @@ private[v1] class StagesResource extends BaseAppResource {
   def filterTaskList(
     taskDataList: Seq[TaskData],
     searchValue: String): Seq[TaskData] = {
+    taskDataList.filter(taskSearchPredicate(searchValue))
+  }
+
+  private def taskSearchPredicate(searchValue: String): TaskData => Boolean = {
     val defaultOptionString: String = "d"
     val searchValueLowerCase = searchValue.toLowerCase(Locale.ROOT)
     val containsValue = (taskDataParams: Any) => taskDataParams.toString.toLowerCase(
@@ -246,7 +244,7 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(UIUtils.formatDuration(
           task.taskMetrics.get.shuffleWriteMetrics.writeTime / 1000000)))
     }
-    val filteredTaskDataSequence: Seq[TaskData] = taskDataList.filter(f =>
+    val predicate: TaskData => Boolean = f =>
       (containsValue(f.taskId) || containsValue(f.index) || containsValue(f.attempt)
         || containsValue(UIUtils.formatDate(f.launchTime))
         || containsValue(f.resultFetchStart.getOrElse(defaultOptionString))
@@ -255,8 +253,8 @@ private[v1] class StagesResource extends BaseAppResource {
         || containsValue(f.errorMessage.getOrElse(defaultOptionString))
         || taskMetricsContainsValue(f)
         || containsValue(UIUtils.formatDuration(f.schedulerDelay))
-        || containsValue(UIUtils.formatDuration(f.gettingResultTime))))
-    filteredTaskDataSequence
+        || containsValue(UIUtils.formatDuration(f.gettingResultTime)))
+    predicate
   }
 
   def parseQuantileString(quantileString: String): Array[Double] = {

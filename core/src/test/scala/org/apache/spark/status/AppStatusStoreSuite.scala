@@ -22,7 +22,7 @@ import scala.util.Random
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.internal.config.History.{HYBRID_STORE_DISK_BACKEND, HybridStoreDiskBackend}
-import org.apache.spark.internal.config.Status.{LIVE_ENTITY_UPDATE_PERIOD, LIVE_UI_LOCAL_STORE_DIR}
+import org.apache.spark.internal.config.Status.{COMPACT_UI_STORE_ENABLED, LIVE_ENTITY_UPDATE_PERIOD, LIVE_UI_LOCAL_STORE_DIR}
 import org.apache.spark.resource.ResourceProfile
 import org.apache.spark.scheduler.{SparkListenerStageSubmitted, SparkListenerTaskStart, StageInfo, TaskInfo, TaskLocality}
 import org.apache.spark.status.api.v1.SpeculationStageSummary
@@ -55,6 +55,14 @@ class AppStatusStoreSuite extends SparkFunSuite {
     compareQuantiles(4096, Array(0.01, 0.33, 0.5, 0.42, 0.69, 0.99))
   }
 
+  gridTest("compact quantile calculation")(Seq(1, 4, 100, 4096)) { count =>
+    compareQuantiles(count, uiQuantiles, compact = true)
+  }
+
+  test("compact quantile calculation: custom quantiles") {
+    compareQuantiles(4096, Array(0.01, 0.33, 0.5, 0.42, 0.69, 0.99), compact = true)
+  }
+
   test("quantile cache") {
     val store = new InMemoryStore()
     (0 until 4096).foreach { i => store.write(newTaskData(i)) }
@@ -85,8 +93,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
   }
 
   private def createAppStore(disk: Boolean, diskStoreType: HybridStoreDiskBackend.Value = null,
-      live: Boolean): AppStatusStore = {
-    val conf = new SparkConf()
+      live: Boolean, compact: Boolean = false): AppStatusStore = {
+    val conf = new SparkConf().set(COMPACT_UI_STORE_ENABLED, compact)
     if (live) {
       if (disk) {
         val testDir = Utils.createTempDir()
@@ -109,7 +117,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
       val diskStore = KVUtils.open(testDir, getClass.getName, conf, live = false)
       new ElementTrackingStore(diskStore, conf)
     } else {
-      new ElementTrackingStore(new InMemoryStore, conf)
+      new ElementTrackingStore(KVUtils.createInMemoryStore(conf), conf)
     }
     new AppStatusStore(store)
   }
@@ -119,6 +127,8 @@ class AppStatusStoreSuite extends SparkFunSuite {
       "disk rocksdb" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = false),
       "in memory" -> createAppStore(disk = false, live = false),
       "in memory live" -> createAppStore(disk = false, live = true),
+      "compact in memory" -> createAppStore(disk = false, live = false, compact = true),
+      "compact in memory live" -> createAppStore(disk = false, live = true, compact = true),
       "rocksdb live" -> createAppStore(disk = true, HybridStoreDiskBackend.ROCKSDB, live = true)
     )
     if (Utils.isMacOnAppleSilicon) {
@@ -259,8 +269,11 @@ class AppStatusStoreSuite extends SparkFunSuite {
     }
   }
 
-  private def compareQuantiles(count: Int, quantiles: Array[Double]): Unit = {
-    val store = new InMemoryStore()
+  private def compareQuantiles(
+      count: Int,
+      quantiles: Array[Double],
+      compact: Boolean = false): Unit = {
+    val store = KVUtils.createInMemoryStore(new SparkConf().set(COMPACT_UI_STORE_ENABLED, compact))
     val values = (0 until count).map { i =>
       val task = newTaskData(i)
       store.write(task)
@@ -273,6 +286,7 @@ class AppStatusStoreSuite extends SparkFunSuite {
     dist.zip(summary.executorRunTime).foreach { case (expected, actual) =>
       assert(expected === actual)
     }
+    store.close()
   }
 
   private def newTaskData(i: Int, status: String = "SUCCESS"): TaskDataWrapper = {
