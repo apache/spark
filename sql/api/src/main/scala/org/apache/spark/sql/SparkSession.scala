@@ -568,6 +568,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
    * Ivy repositories local to the client.
    *
+   * Since 4.4.0, it also supports native data source packages: local files with the extension
+   * .sparkpkg, which make the native data sources that they contain available to the session.
+   *
    * @since 4.0.0
    */
   @Experimental
@@ -583,6 +586,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
    * Ivy repositories local to the client.
    *
+   * Since 4.4.0, it also supports native data source packages: local files with the extension
+   * .sparkpkg, which make the native data sources that they contain available to the session.
+   *
    * @since 4.0.0
    */
   @Experimental
@@ -593,7 +599,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * specified by `target` under the session's working directory of that particular file
    * extension.
    *
-   * Supported target file extensions are .jar and .class.
+   * Supported target file extensions are .jar and .class, and since 4.4.0, .sparkpkg for native
+   * data source packages, which make the native data sources that they contain available to the
+   * session.
    *
    * ==Example==
    * {{{
@@ -613,7 +621,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * Add a single artifact to the session while preserving the directory structure specified by
    * `target` under the session's working directory of that particular file extension.
    *
-   * Supported target file extensions are .jar and .class.
+   * Supported target file extensions are .jar and .class, and since 4.4.0, .sparkpkg for native
+   * data source packages, which make the native data sources that they contain available to the
+   * session.
    *
    * ==Example==
    * {{{
@@ -638,6 +648,9 @@ abstract class SparkSession extends Serializable with Closeable {
    * do not support server-side Maven resolution, are resolved by the client without the server's
    * Ivy settings. Otherwise, Ivy URIs are resolved by the server, which does not search Maven or
    * Ivy repositories local to the client.
+   *
+   * Since 4.4.0, it also supports native data source packages: local files with the extension
+   * .sparkpkg, which make the native data sources that they contain available to the session.
    *
    * @since 4.0.0
    */

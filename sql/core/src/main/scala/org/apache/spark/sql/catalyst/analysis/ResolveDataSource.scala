@@ -32,8 +32,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.DDLUtils
 import org.apache.spark.sql.execution.datasources.{DataSource, LogicalRelation}
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2}
-import org.apache.spark.sql.execution.datasources.v2.python.PythonDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Utils, FileDataSourceV2, NamedTableProvider}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.types.StructType
@@ -159,7 +158,7 @@ class ResolveDataSource(sparkSession: SparkSession) extends Rule[LogicalPlan] {
       optionsWithPath.originalMap
     val dsOptions = new CaseInsensitiveStringMap(finalOptions.asJava)
     provider match {
-      case p: PythonDataSourceV2 => p.setShortName(source)
+      case p: NamedTableProvider => p.setShortName(source)
       case _ =>
     }
     val table =
