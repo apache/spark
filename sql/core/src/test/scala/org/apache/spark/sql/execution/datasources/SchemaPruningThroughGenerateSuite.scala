@@ -58,6 +58,13 @@ abstract class SchemaPruningThroughGenerateSuite
     id: Int, country: String, memo: String, items: Array[Item], tags: Map[String, Info])
   case class Dim(id: Int, name: String)
 
+  // two exact-duplicate parts plus one differing only in `label`, and a null element
+  private val dupParts = Array(
+    Part(true, true, 50, "dupA", 1.0, 1.0, Array(5)),
+    Part(true, true, 50, "dupB", 1.0, 1.0, Array(5)),
+    Part(true, true, 50, "dupA", 1.0, 1.0, Array(5)),
+    null)
+
   val ordersData: Seq[Order] = Seq(
     Order(1, "US", "m1", Array(
       Item(true, 1, "chrome", "n1", Array(
@@ -70,7 +77,15 @@ abstract class SchemaPruningThroughGenerateSuite
       Item(true, 3, "chrome", "n3", Array.empty)),
       Map.empty),
     Order(3, "US", "m3", Array.empty, Map("c" -> Info(null, 2.0, null))),
-    Order(4, "DE", null, null, null))
+    Order(4, "DE", null, null, null),
+    // order 5 makes whole-element semantics observable: items and parts that differ only in
+    // a field the whole-element-operator tests below never read, so a dedup or a sort over
+    // wrongly narrowed elements would change their rows
+    Order(5, "FR", "m5", Array(
+      Item(true, 9, "alpha", "n5a", dupParts),
+      Item(true, 9, "alpha", "n5x", dupParts),
+      Item(true, 1, "beta", "n5b", Array.empty)),
+      Map.empty))
 
   val dimData: Seq[Dim] = Seq(Dim(1, "one"), Dim(2, "two"))
 
@@ -850,6 +865,124 @@ abstract class SchemaPruningThroughGenerateSuite
         |where item.parts is not null""".stripMargin,
       "struct<items:array<struct<active:boolean,sku:string," +
         s"parts:$fullPartsType>>>")
+  }
+
+  // Generator inputs wrapped in array operators. Operators that compare whole elements
+  // (sort_array, array_distinct, array_union and the other set operators) must keep the
+  // element whole: dropping even an unread field would change their ordering or equality,
+  // which order 5's near-duplicate items and parts make observable in the rows.
+
+  testPruning("SPARK-47230: sort_array as a generator input keeps the elements whole") {
+    // whole-element ordering, so reading the whole struct is required, not a missed pruning
+    checkPrunedQuery(
+      """select pos, item.sku
+        |from orders
+        |lateral view posexplode(sort_array(items)) t1 as pos, item""".stripMargin,
+      s"struct<items:$fullItemsType>")
+  }
+
+  testPruning("SPARK-47230: array_distinct as a generator input keeps the elements whole") {
+    // order 5 has two items differing only in the unread `note`, which a dedup over
+    // narrowed elements would collapse into one row
+    checkPrunedQuery(
+      """select item.sku
+        |from orders
+        |lateral view explode(array_distinct(items)) t1 as item""".stripMargin,
+      s"struct<items:$fullItemsType>")
+  }
+
+  testPruning("SPARK-47230: array_union as a generator input keeps the elements whole") {
+    checkPrunedQuery(
+      """select item.qty
+        |from orders
+        |lateral view explode(array_union(items, items)) t1 as item""".stripMargin,
+      s"struct<items:$fullItemsType>")
+  }
+
+  testPruning("SPARK-47230: array_sort with an arithmetic comparator keeps the elements whole") {
+    // Not narrowed today, independently of generators: the comparator's result is nullable,
+    // so the sort keeps the whole element to preserve its strict null-check errors
+    checkPrunedQuery(
+      """select pos, item.sku
+        |from orders
+        |lateral view posexplode(array_sort(items, (l, r) -> l.qty - r.qty)) t1
+        |  as pos, item""".stripMargin,
+      s"struct<items:$fullItemsType>")
+  }
+
+  testPruning("SPARK-47230: posexplode of a reversed array still prunes") {
+    // `reverse` only reorders the elements, so pruning passes through and the positions
+    // pair with the reversed order
+    checkPrunedQuery(
+      """select pos, item.sku
+        |from orders
+        |lateral view posexplode(reverse(items)) t1 as pos, item""".stripMargin,
+      "struct<items:array<struct<sku:string>>>")
+  }
+
+  testPruning("SPARK-47230: posexplode of a slice with foldable bounds still prunes") {
+    checkPrunedQuery(
+      """select pos, item.sku
+        |from orders
+        |lateral view posexplode(slice(items, 1, 2)) t1 as pos, item""".stripMargin,
+      "struct<items:array<struct<sku:string>>>")
+  }
+
+  testPruning("SPARK-47230: slice with non-foldable bounds is not pruned through") {
+    // Not narrowed today, independently of generators: field extraction only looks through
+    // `slice` when its bounds are foldable
+    checkPrunedQuery(
+      """select item.sku
+        |from orders
+        |lateral view explode(slice(items, id + 1, 1)) t1 as item""".stripMargin,
+      s"struct<id:int,items:$fullItemsType>")
+  }
+
+  testPruning("SPARK-47230: a filter capturing the outer exploded element prunes both levels") {
+    // the predicate reads `item.active` from the outer generator's element and `x.inStock`
+    // from the filtered element; both elements narrow to just the used fields
+    checkPrunedQuery(
+      """select p.pid
+        |from orders
+        |lateral view explode(items) t1 as item
+        |lateral view explode(filter(item.parts,
+        |  x -> x.inStock and item.active)) t2 as p""".stripMargin,
+      "struct<items:array<struct<active:boolean," +
+        "parts:array<struct<inStock:boolean,pid:int>>>>>")
+  }
+
+  testPruning("SPARK-47230: array_compact narrows the element and still drops null elements") {
+    // order 5 has a null part element, dropped by the compact before and after narrowing;
+    // `active` is the smallest item field, kept by the outer explode's inferred size filter
+    checkPrunedQuery(
+      """select p.pid
+        |from orders
+        |lateral view explode(items) t1 as item
+        |lateral view explode(array_compact(item.parts)) t2 as p""".stripMargin,
+      "struct<items:array<struct<active:boolean,parts:array<struct<pid:int>>>>>")
+  }
+
+  testPruning("SPARK-47230: explode of a transformed filtered array prunes to the used fields") {
+    // the input is opaque to field extraction, but the fallback still collects both
+    // lambdas' reads instead of keeping the whole element
+    checkPrunedQuery(
+      """select v
+        |from orders
+        |lateral view explode(transform(filter(items, x -> x.qty > 1),
+        |  x -> x.sku)) t1 as v""".stripMargin,
+      "struct<items:array<struct<qty:int,sku:string>>>")
+  }
+
+  testPruning("SPARK-47230: nested sort and filter wrappers read both lambdas' fields") {
+    // the scan keeps the union of the comparator's `qty`, the predicate's `active` and the
+    // selected `sku`
+    checkPrunedQuery(
+      """select pos, item.sku
+        |from orders
+        |lateral view posexplode(filter(array_sort(items,
+        |    (l, r) -> case when l.qty < r.qty then -1 when l.qty > r.qty then 1 else 0 end),
+        |  x -> x.active)) t1 as pos, item""".stripMargin,
+      "struct<items:array<struct<active:boolean,qty:int,sku:string>>>")
   }
 }
 
