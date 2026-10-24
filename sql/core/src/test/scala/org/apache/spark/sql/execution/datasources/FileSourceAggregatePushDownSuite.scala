@@ -773,6 +773,56 @@ class ParquetV2AggregatePushDownSuite extends ParquetAggregatePushDownSuite {
     }
   }
 
+  test("SPARK-59609: aggregate push-down reads statistics from the correct column " +
+    "after schema merging") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.sql("SELECT 1 AS id, 10 AS value, 100 AS other")
+          .union(spark.sql("SELECT 2 AS id, 20 AS value, 200 AS other"))
+          .coalesce(1).write.parquet(path + "/with_value")
+        // Missing `value`; after merging, `other` sits where `value` is in the merged schema.
+        spark.sql("SELECT 3 AS id, 300 AS other")
+          .union(spark.sql("SELECT 4 AS id, 400 AS other"))
+          .coalesce(1).write.parquet(path + "/without_value")
+        withTempView("t") {
+          spark.read.option("mergeSchema", "true").option("recursiveFileLookup", "true")
+            .parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            checkAnswer(
+              sql("SELECT COUNT(*), COUNT(value), MIN(value), MAX(value) FROM t"),
+              Row(4, 2, 10, 20))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59609: aggregate push-down resolves the column case-insensitively") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // Physical column is `value`, but the read schema names it `VALUE`.
+        spark.sql("SELECT 1 AS id, 10 AS value")
+          .union(spark.sql("SELECT 2 AS id, 20 AS value"))
+          .coalesce(1).write.parquet(path)
+        withTempView("t") {
+          spark.read.schema("id INT, VALUE INT").parquet(path).createOrReplaceTempView("t")
+          withSQLConf(
+            SQLConf.CASE_SENSITIVE.key -> "false",
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            checkAnswer(
+              sql("SELECT COUNT(VALUE), MIN(VALUE), MAX(VALUE) FROM t"),
+              Row(2, 10, 20))
+          }
+        }
+      }
+    }
+  }
+
   // The error originates in the executor-side partition reader, so it may be wrapped in a
   // higher-level exception. Walk the cause chain to find the structured Spark exception.
   private def interceptAggPushDownError(query: String): SparkUnsupportedOperationException = {
@@ -806,4 +856,32 @@ class OrcV2AggregatePushDownSuite extends OrcAggregatePushDownSuite {
 
   override protected def sparkConf: SparkConf =
     super.sparkConf.set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  // ORC has no mergeSchema, but a divergent physical column order exercises the same bug.
+  test("SPARK-59609: aggregate push-down reads statistics from the correct column " +
+    "when the file column order differs from the read schema") {
+    Seq("false", "true").foreach { enableVectorizedReader =>
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.sql("SELECT 1 AS id, 10 AS value, 100 AS other")
+          .union(spark.sql("SELECT 2 AS id, 20 AS value, 200 AS other"))
+          .coalesce(1).write.orc(path + "/order1")
+        // Columns laid out as (id, other, value), so `value` sits at a different physical ordinal.
+        spark.sql("SELECT 3 AS id, 300 AS other, 30 AS value")
+          .union(spark.sql("SELECT 4 AS id, 400 AS other, 40 AS value"))
+          .coalesce(1).write.orc(path + "/order2")
+        withTempView("t") {
+          spark.read.schema("id INT, value INT, other INT")
+            .option("recursiveFileLookup", "true").orc(path).createOrReplaceTempView("t")
+          withSQLConf(
+            aggPushDownEnabledKey -> "true",
+            vectorizedReaderEnabledKey -> enableVectorizedReader) {
+            checkAnswer(
+              sql("SELECT COUNT(*), COUNT(value), MIN(value), MAX(value) FROM t"),
+              Row(4, 4, 10, 40))
+          }
+        }
+      }
+    }
+  }
 }
