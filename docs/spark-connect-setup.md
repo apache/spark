@@ -61,9 +61,9 @@ server.
 
 By default the server listens on port 15002 on all interfaces and runs as a background daemon
 (`./sbin/stop-connect-server.sh` stops it). Pass `--wait` as the first argument to keep it in
-the foreground instead; this sets `SPARK_NO_DAEMONIZE=1`, writes no PID file and sends the logs to
-standard output, which is what a container entrypoint or a process supervisor needs, since a
-daemonized server would leave the container with nothing running. `spark.connect.grpc.binding.address` restricts the listening interface and
+the foreground instead, for example as a container entrypoint or under a process supervisor. With
+`--wait`, the script sets `SPARK_NO_DAEMONIZE=1`, writes no PID file and sends the logs to standard
+output. `spark.connect.grpc.binding.address` restricts the listening interface and
 `spark.connect.grpc.binding.port` changes the port:
 
 ```bash

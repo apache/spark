@@ -460,8 +460,8 @@ If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColu
 
 # Session and Configuration Gotchas
 
-The gotchas above come from deferred analysis. The following come from the session being a handle
-to a server rather than a process-local object. In PySpark neither produces an error (the Scala
+The [common gotchas](#common-gotchas-with-mitigations) come from deferred analysis. The following
+come from the session being a handle to a server rather than a process-local object. In PySpark neither produces an error (the Scala
 builder raises for the second). The
 [Spark Connect Programming Guide](spark-connect-programming-guide.html) describes the intended
 usage of each API.

@@ -27,9 +27,8 @@ as unresolved logical plans and sends them to a Spark Connect server over gRPC; 
 optimizes and runs them on the cluster and returns the results as Arrow record batches. Clients
 exist for Python, Scala, Go, Rust and Swift, and for JDBC.
 
-This guide covers writing and running client applications. For the architecture, see the
-[Spark Connect Overview](spark-connect-overview.html). For running and securing the server, see
-[Setting up Spark Connect](spark-connect-setup.html).
+For the architecture, see the [Spark Connect Overview](spark-connect-overview.html). For running
+and securing the server, see [Setting up Spark Connect](spark-connect-setup.html).
 
 ## Spark Connect and Spark Classic
 
