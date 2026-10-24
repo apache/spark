@@ -378,9 +378,7 @@ class DataFramePivotSuite extends SharedSparkSession {
   }
 
   test("SPARK-55483: pivot with null non-atomic pivot column should not throw NPE") {
-    // When the pivot column is a non-atomic type (struct, array), PivotFirst uses a TreeMap
-    // whose comparison-based lookup throws NPE on null keys. Null pivot column values should
-    // be silently ignored since they can never match any declared pivot value.
+    // A null pivot column value matches no declared value, so the row is ignored.
     withTempView("struct_pivot_data") {
       sql(
         """CREATE OR REPLACE TEMP VIEW struct_pivot_data AS
@@ -631,7 +629,8 @@ class DataFramePivotSuite extends SharedSparkSession {
         """CREATE OR REPLACE TEMP VIEW dup_zero_pivot AS
           |SELECT * FROM VALUES
           |  (0.0D, 0.0F, 10),
-          |  (2.0D, 2.0F, 20)
+          |  (2.0D, 2.0F, 20),
+          |  (DOUBLE('NaN'), FLOAT('NaN'), 30)
           |AS t(d, f, v)""".stripMargin)
 
       val doubleDf = sql(
@@ -651,7 +650,94 @@ class DataFramePivotSuite extends SharedSparkSession {
           |PIVOT (SUM(v) FOR k IN (
           |  DOUBLE('NaN') AS x, DOUBLE('NaN') AS y, 2.0D AS z))""".stripMargin)
       assert(usesPivotFirst(nanDf))
-      checkAnswer(nanDf, Row(null, null, 20L))
+      checkAnswer(nanDf, Row(30L, 30L, 20L))
+
+      val floatNanDf = sql(
+        """SELECT * FROM (SELECT f AS k, v FROM dup_zero_pivot)
+          |PIVOT (SUM(v) FOR k IN (
+          |  FLOAT('NaN') AS x, FLOAT('NaN') AS y, 2.0F AS z))""".stripMargin)
+      assert(usesPivotFirst(floatNanDf))
+      checkAnswer(floatNanDf, Row(30L, 30L, 20L))
+    }
+  }
+
+  test("SPARK-39031: pivot on a floating point column matches NaN") {
+    val df = Seq(Some(Double.NaN), Some(Double.NaN), Some(1.0d), None, Some(1.0d)).toDF("value")
+    val doublePivot = df.groupBy("value").pivot("value").count()
+    assert(usesPivotFirst(doublePivot))
+    checkAnswer(
+      doublePivot,
+      Row(null, 1L, null, null) :: Row(1.0d, null, 2L, null) ::
+        Row(Double.NaN, null, null, 2L) :: Nil)
+
+    val floatDf = Seq(Some(Float.NaN), Some(1.0f), None, Some(Float.NaN)).toDF("value")
+    val floatPivot = floatDf.groupBy("value").pivot("value").count()
+    assert(usesPivotFirst(floatPivot))
+    checkAnswer(
+      floatPivot,
+      Row(null, 1L, null, null) :: Row(1.0f, null, 1L, null) ::
+        Row(Float.NaN, null, null, 2L) :: Nil)
+  }
+
+  test("SPARK-39031: pivot matches NaN when the pivot values are given explicitly") {
+    val df = Seq(Double.NaN, 1.0d, Double.NaN).toDF("value")
+    val apiPivot = df.groupBy(lit(1).as("id")).pivot("value", Seq(Double.NaN, 1.0d)).count()
+    assert(usesPivotFirst(apiPivot))
+    checkAnswer(apiPivot, Row(1, 2L, 1L) :: Nil)
+
+    val standardPivot = df.groupBy(lit(1).as("id")).pivot("value", Seq(Double.NaN, 1.0d))
+      .agg(max($"value".cast(StringType)))
+    assert(!usesPivotFirst(standardPivot))
+    checkAnswer(standardPivot, Row(1, "NaN", "1.0") :: Nil)
+
+    withTempView("nan_pivot_data") {
+      df.createOrReplaceTempView("nan_pivot_data")
+      val sqlPivot = sql(
+        """SELECT * FROM (SELECT 1 AS id, value FROM nan_pivot_data)
+          |PIVOT (COUNT(1) FOR value IN (double('NaN') AS nan, 1.0D AS one))""".stripMargin)
+      assert(usesPivotFirst(sqlPivot))
+      checkAnswer(sqlPivot, Row(1, 2L, 1L) :: Nil)
+    }
+  }
+
+  test("SPARK-39031: null is a usable pivot value on the ordering-based index") {
+    val collatedDf = Seq(Some("a"), Some("A"), None, Some("b"), None).toDF("value")
+      .select($"value".cast(StringType("UTF8_LCASE")).as("value"))
+    val collatedPivot = collatedDf.groupBy(lit(1).as("id")).pivot("value").count()
+    assert(usesPivotFirst(collatedPivot))
+    checkAnswer(collatedPivot, Row(1, 2L, 2L, 1L) :: Nil)
+
+    val binaryDf =
+      Seq("a".getBytes, "a".getBytes, null, "b".getBytes, null).toDF("value")
+    val binaryPivot = binaryDf.groupBy(lit(1).as("id")).pivot("value").count()
+    assert(usesPivotFirst(binaryPivot))
+    checkAnswer(binaryPivot, Row(1, 2L, 2L, 1L) :: Nil)
+
+    withTempView("struct_null_pivot", "array_null_pivot") {
+      sql(
+        """CREATE OR REPLACE TEMP VIEW struct_null_pivot AS
+          |SELECT * FROM VALUES
+          |  (named_struct('x', 1, 'y', 2), 100),
+          |  (CAST(NULL AS STRUCT<x: INT, y: INT>), 300)
+          |AS t(key, amount)""".stripMargin)
+      val structDf = sql(
+        """SELECT * FROM struct_null_pivot
+          |PIVOT (SUM(amount) FOR key IN (
+          |  named_struct('x', 1, 'y', 2) AS k12, NULL AS knull))""".stripMargin)
+      assert(usesPivotFirst(structDf))
+      checkAnswer(structDf, Row(100L, 300L))
+
+      sql(
+        """CREATE OR REPLACE TEMP VIEW array_null_pivot AS
+          |SELECT * FROM VALUES
+          |  (array(1, 2), 100),
+          |  (CAST(NULL AS ARRAY<INT>), 300)
+          |AS t(key, amount)""".stripMargin)
+      val arrayDf = sql(
+        """SELECT * FROM array_null_pivot
+          |PIVOT (SUM(amount) FOR key IN (array(1, 2) AS k12, NULL AS knull))""".stripMargin)
+      assert(usesPivotFirst(arrayDf))
+      checkAnswer(arrayDf, Row(100L, 300L))
     }
   }
 }
