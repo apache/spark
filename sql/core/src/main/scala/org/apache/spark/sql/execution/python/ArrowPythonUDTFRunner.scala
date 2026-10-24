@@ -51,6 +51,11 @@ class ArrowPythonUDTFRunner(
   with BasicPythonArrowOutput {
   ArrowUtils.failDuplicatedFieldNames(schema)
 
+  // `EvalPythonUDTFExec` joins each output batch with one input row, so the batches returned
+  // from Python must not be sliced.
+  override protected def arrowMaxRecordsPerOutputBatch: Int = -1
+  override protected def arrowMaxBytesPerOutputBatch: Int = -1
+
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def evalConf: Map[String, String] = {
