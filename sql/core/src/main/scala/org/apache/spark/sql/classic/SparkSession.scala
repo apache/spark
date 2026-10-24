@@ -353,13 +353,9 @@ class SparkSession private(
 
   /** @inheritdoc */
   def createDataFrame(rdd: RDD[_], beanClass: Class[_]): DataFrame = withActive {
-    val attributeSeq: Seq[AttributeReference] = getSchema(beanClass)
-    val className = beanClass.getName
-    val rowRdd = rdd.mapPartitions { iter =>
-    // BeanInfo is not serializable so we must rediscover it remotely for each partition.
-      SQLContext.beansToRows(iter, Utils.classForName(className), attributeSeq)
-    }
-    Dataset.ofRows(self, LogicalRDD(attributeSeq, rowRdd.setName(rdd.name))(self))
+    val (attributes, toRow) = beanRowSerializer(beanClass)
+    val rowRdd = rdd.asInstanceOf[RDD[Any]].map(toRow)
+    Dataset.ofRows(self, LogicalRDD(attributes, rowRdd.setName(rdd.name))(self))
   }
 
   /** @inheritdoc */
@@ -369,9 +365,9 @@ class SparkSession private(
 
   /** @inheritdoc */
   def createDataFrame(data: java.util.List[_], beanClass: Class[_]): DataFrame = withActive {
-    val attrSeq = getSchema(beanClass)
-    val rows = SQLContext.beansToRows(data.asScala.iterator, beanClass, attrSeq)
-    Dataset.ofRows(self, LocalRelation(attrSeq, rows.toSeq))
+    val (attributes, toRow) = beanRowSerializer(beanClass)
+    val rows = data.asScala.map(d => toRow(d).copy()).toSeq
+    Dataset.ofRows(self, LocalRelation(attributes, rows))
   }
 
   /** @inheritdoc */
@@ -901,13 +897,15 @@ class SparkSession private(
   }
 
   /**
-   * Returns a Catalyst Schema for the given java bean class.
+   * Output attributes and row serializer for the `createDataFrame(..., beanClass)` overloads. They
+   * use the same encoder as `Encoders.bean`, so Java records are supported too. The attributes
+   * come from the encoder's schema rather than its serializer's, which keeps `@Nonnull` boxed
+   * fields non-nullable.
    */
-  private def getSchema(beanClass: Class[_]): Seq[AttributeReference] = {
-    val (dataType, _) = JavaTypeInference.inferDataType(beanClass)
-    dataType.asInstanceOf[StructType].fields.map { f =>
-      AttributeReference(f.name, f.dataType, f.nullable)()
-    }.toImmutableArraySeq
+  private def beanRowSerializer(
+      beanClass: Class[_]): (Seq[AttributeReference], ExpressionEncoder.Serializer[Any]) = {
+    val encoder = JavaTypeInference.encoderFor(beanClass.asInstanceOf[Class[Any]])
+    (toAttributes(encoder.schema), ExpressionEncoder(encoder).createSerializer())
   }
 
   private[sql] def leafNodeDefaultParallelism: Int = {

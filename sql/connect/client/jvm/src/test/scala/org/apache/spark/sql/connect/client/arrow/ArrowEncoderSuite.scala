@@ -652,6 +652,74 @@ class ArrowEncoderSuite extends ConnectFunSuite {
     }
   }
 
+  test("SPARK-55396: java record") {
+    import ArrowEncoderRecordTestData.SimpleRecord
+    val encoder = JavaTypeInference.encoderFor[SimpleRecord](classOf[SimpleRecord])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(5)
+      Iterator.tabulate(100) { i =>
+        new SimpleRecord(i, maybeNull("name" + i), maybeNull(java.lang.Double.valueOf(i * 0.5)))
+      }
+    }
+  }
+
+  test("SPARK-55396: java records and beans nested in each other") {
+    import ArrowEncoderRecordTestData.{Address, BeanWithRecord, RecordWithBean}
+    val encoder = JavaTypeInference.encoderFor[RecordWithBean](classOf[RecordWithBean])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(5)
+      Iterator.tabulate(100) { i =>
+        val bean = new BeanWithRecord
+        bean.setAddress(maybeNull(new Address("c" + i, "z" + i)))
+        new RecordWithBean("r" + i, maybeNull(bean))
+      }
+    }
+  }
+
+  test("SPARK-55396: java record with array components") {
+    import ArrowEncoderRecordTestData.{Address, ArrayRecord}
+    val encoder = JavaTypeInference.encoderFor[ArrayRecord](classOf[ArrayRecord])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(5)
+      Iterator.tabulate(100) { i =>
+        new ArrayRecord(
+          maybeNull(Array(i, i + 1)),
+          maybeNull(Array("s" + i, maybeNull("t" + i))),
+          maybeNull(Array(new Address("c" + i, "z" + i), maybeNull(new Address("d", "y")))))
+      }
+    }
+  }
+
+  test("SPARK-55396: java record with generic record components") {
+    import ArrowEncoderRecordTestData.{Box, BoxHolder, ComparableBox, NumberBox}
+    val encoder = JavaTypeInference.encoderFor[BoxHolder](classOf[BoxHolder])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(5)
+      Iterator.tabulate(100) { i =>
+        new BoxHolder(
+          maybeNull(new Box("b" + i)),
+          maybeNull(new NumberBox(Integer.valueOf(i))),
+          maybeNull(new ComparableBox(Integer.valueOf(i))))
+      }
+    }
+  }
+
+  test("SPARK-55396: java record with nested record and collection components") {
+    import ArrowEncoderRecordTestData.{Address, Person}
+    val encoder = JavaTypeInference.encoderFor[Person](classOf[Person])
+    roundTripAndCheckIdentical(encoder) { () =>
+      val maybeNull = MaybeNull(7)
+      Iterator.tabulate(100) { i =>
+        new Person(
+          "p" + i,
+          i.toLong,
+          maybeNull(new Address("city" + i, maybeNull("z" + i))),
+          java.util.Arrays.asList("t" + i, "u" + i),
+          java.util.Map.of("k" + i, Integer.valueOf(i)))
+      }
+    }
+  }
+
   test("defined by constructor parameters") {
     val encoder = ScalaReflection.encoderFor[NonProduct]
     roundTripAndCheckIdentical(encoder) { () =>

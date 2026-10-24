@@ -171,6 +171,11 @@ object AgnosticEncoders {
       override val fields: Seq[EncoderField])
       extends StructEncoder[K]
 
+  case class JavaRecordEncoder[K](
+      override val clsTag: ClassTag[K],
+      override val fields: Seq[EncoderField])
+      extends StructEncoder[K]
+
   // This will only work for encoding from/to Sparks' InternalRow format.
   // It is here for compatibility.
   case class UDTEncoder[E >: Null](
