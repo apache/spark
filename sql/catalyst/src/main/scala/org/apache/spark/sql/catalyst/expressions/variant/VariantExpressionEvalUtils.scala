@@ -76,6 +76,22 @@ object VariantExpressionEvalUtils {
   def isValidVariant(input: VariantVal): Boolean =
     VariantUtil.isValidVariant(input.getValue, input.getMetadata)
 
+  def canonicalizeVariant(input: VariantVal): VariantVal = {
+    val variant = new Variant(input.getValue, input.getMetadata)
+    val canonicalized = try {
+      VariantBuilder.canonicalize(variant)
+    } catch {
+      case _: VariantSizeLimitException =>
+        throw QueryExecutionErrors.variantSizeLimitError(
+          VariantUtil.SIZE_LIMIT, "canonicalize_variant")
+    }
+    if (canonicalized eq variant) {
+      input
+    } else {
+      new VariantVal(canonicalized.getValue, canonicalized.getMetadata)
+    }
+  }
+
   /**
    * Parse a JSONPath for a variant manipulation function. Throws `INVALID_VARIANT_PATH` on a
    * malformed path, or on the empty (root `$`) path unless `allowRoot` is set (as
