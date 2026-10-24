@@ -1976,6 +1976,15 @@ class DatasetSuite extends SharedSparkSession
     assert(rdd.getStorageLevel == StorageLevel.DISK_ONLY)
   }
 
+  test("SPARK-52878: checkpoint of union of checkpoints with case-insensitive references") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val df1 = spark.range(1).toDF("foo").localCheckpoint()
+      val df2 = df1.where("Foo == 0").localCheckpoint()
+      val union = df1.unionByName(df2).localCheckpoint()
+      checkAnswer(union, Row(0L) :: Row(0L) :: Nil)
+    }
+  }
+
   test("identity map for primitive arrays") {
     val arrayByte = Array(1.toByte, 2.toByte, 3.toByte)
     val arrayInt = Array(1, 2, 3)
