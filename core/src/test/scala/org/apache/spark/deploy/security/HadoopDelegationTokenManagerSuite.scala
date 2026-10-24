@@ -17,15 +17,22 @@
 
 package org.apache.spark.deploy.security
 
+import java.io.File
 import java.security.PrivilegedExceptionAction
+import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, LocalFileSystem}
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION
 import org.apache.hadoop.minikdc.MiniKdc
 import org.apache.hadoop.security.{Credentials, UserGroupInformation}
+import org.mockito.Mockito.mock
 
 import org.apache.spark.{SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.internal.config.{KEYTAB, PRINCIPAL}
+import org.apache.spark.rpc.RpcEndpointRef
 import org.apache.spark.security.HadoopDelegationTokenProvider
 import org.apache.spark.util.Utils
 
@@ -47,6 +54,35 @@ private class ExceptionThrowingDelegationTokenProvider extends HadoopDelegationT
 
 private object ExceptionThrowingDelegationTokenProvider {
   var constructed = false
+}
+
+private class CloseTrackingLocalFileSystem extends LocalFileSystem {
+  private val isClosed = new AtomicBoolean(false)
+  CloseTrackingLocalFileSystem.instances.add(this)
+
+  override def close(): Unit = {
+    if (isClosed.compareAndSet(false, true)) {
+      try {
+        super.close()
+      } finally {
+        CloseTrackingLocalFileSystem.closedCount.incrementAndGet()
+      }
+    }
+  }
+}
+
+private object CloseTrackingLocalFileSystem {
+  val instances = new ConcurrentLinkedQueue[CloseTrackingLocalFileSystem]()
+  val closedCount = new AtomicInteger(0)
+
+  def reset(): Unit = {
+    instances.clear()
+    closedCount.set(0)
+  }
+
+  def closeInstances(): Unit = {
+    instances.forEach(_.close())
+  }
 }
 
 class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
@@ -74,6 +110,49 @@ class HadoopDelegationTokenManagerSuite extends SparkFunSuite {
     val manager = new HadoopDelegationTokenManager(sparkConf, hadoopConf, null)
     assert(!manager.isProviderLoaded("hadoopfs"))
     assert(manager.isProviderLoaded("hbase"))
+  }
+
+  test("SPARK-58438: token renewal closes filesystems cached for the fresh UGI") {
+    SparkHadoopUtil.get
+    CloseTrackingLocalFileSystem.reset()
+
+    var kdc: MiniKdc = null
+    var manager: HadoopDelegationTokenManager = null
+    try {
+      val kdcDir = Utils.createTempDir()
+      kdc = new MiniKdc(MiniKdc.createConf(), kdcDir)
+      kdc.start()
+
+      val principal = "spark"
+      val keytab = new File(kdcDir, "spark.keytab")
+      kdc.createPrincipal(keytab, principal)
+
+      val krbConf = new Configuration()
+      krbConf.set(HADOOP_SECURITY_AUTHENTICATION, "kerberos")
+      krbConf.setClass(
+        "fs.file.impl", classOf[CloseTrackingLocalFileSystem], classOf[FileSystem])
+      UserGroupInformation.setConfiguration(krbConf)
+
+      val sparkConf = new SparkConf(false)
+        .set(PRINCIPAL, s"$principal@${kdc.getRealm}")
+        .set(KEYTAB, keytab.getAbsolutePath)
+      manager = new HadoopDelegationTokenManager(
+        sparkConf, krbConf, mock(classOf[RpcEndpointRef]))
+
+      assert(manager.start() != null)
+      assert(CloseTrackingLocalFileSystem.instances.size() > 0)
+      assert(CloseTrackingLocalFileSystem.closedCount.get() ===
+        CloseTrackingLocalFileSystem.instances.size())
+    } finally {
+      if (manager != null) {
+        manager.stop()
+      }
+      CloseTrackingLocalFileSystem.closeInstances()
+      if (kdc != null) {
+        kdc.stop()
+      }
+      UserGroupInformation.reset()
+    }
   }
 
   test("SPARK-29082: do not fail if current user does not have credentials") {
