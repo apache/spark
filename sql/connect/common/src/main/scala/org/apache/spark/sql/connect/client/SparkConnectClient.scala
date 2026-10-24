@@ -204,7 +204,9 @@ private[sql] class SparkConnectClient(
       bstub.validateSession(request.build(), timeout)
       true
     } catch {
-      case NonFatal(_) => false
+      case NonFatal(e) =>
+        logDebug("Failed to validate the server-side session.", e)
+        false
     }
   }
 
