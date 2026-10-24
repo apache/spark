@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.adaptive
 import scala.collection.mutable
 
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{SinglePartition, UnknownPartitioning}
 import org.apache.spark.sql.execution.{ShufflePartitionSpec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, REBALANCE_PARTITIONS_BY_COL, REBALANCE_PARTITIONS_BY_NONE, REPARTITION_BY_COL, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec}
@@ -186,7 +186,11 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
     // partitioning relied on by downstream operators, so its children must remain co-partitioned
     // -- coalesce them as a single group. When it reports UnknownPartitioning (config off, or
     // children not compatibly partitioned), the children may still be coalesced independently.
-    case u: UnionExec => !u.isPlainUnion
+    // The stamped decision alone is not enough: a rule that runs after the stamp, such as
+    // `OptimizeSkewedJoin` splitting one branch, can take the layout away, and the union then
+    // concatenates whatever its children produce.
+    case u: UnionExec =>
+      !u.isPlainUnion && !u.outputPartitioning.isInstanceOf[UnknownPartitioning]
     case _: CartesianProductExec => false
     case _: BroadcastHashJoinExec => false
     case _: BroadcastNestedLoopJoinExec => false
