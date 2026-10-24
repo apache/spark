@@ -1492,6 +1492,36 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
   }
 
+  test("SPARK-60241: the session checks again for another Python or environment") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs && !Utils.isWindows)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { noPyArrow =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      assert(
+        plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+          PythonEvalType.SQL_BATCHED_UDF)
+      // Another environment, whose path has a PyArrow.
+      withPythonModules("pyarrow" -> "__version__ = '99.0.0'") { _ =>
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_ARROW_BATCHED_UDF)
+        // Another Python, which puts the directory without PyArrow in front of that path.
+        val python = new File(noPyArrow, "python")
+        Files.writeString(
+          python.toPath,
+          s"""#!/bin/sh
+             |export PYTHONPATH="$noPyArrow:$$PYTHONPATH"
+             |exec "${IntegratedUDFTestUtils.pythonExec}" "$$@"
+             |""".stripMargin)
+        assert(python.setExecutable(true))
+        withSQLConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE.key -> python.getAbsolutePath) {
+          assert(
+            plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+              PythonEvalType.SQL_BATCHED_UDF)
+        }
+      }
+    }
+  }
+
   test("SPARK-60241: registered Arrow-optimized Python UDF falls back without PyArrow") {
     assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
     withPythonModules("pyarrow" -> notInstalled("pyarrow")) { _ =>
