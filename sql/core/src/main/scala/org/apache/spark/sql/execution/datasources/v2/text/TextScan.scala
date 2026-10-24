@@ -52,12 +52,16 @@ case class TextScan(
   }
 
   override def isSplitable(path: Path): Boolean = {
-    super.isSplitable(path) && !textOptions.wholeText
+    // When `decompression` is set, its splittability wins over the file extension.
+    textOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path)) &&
+      !textOptions.wholeText
   }
 
   override def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))
-    if (!super.isSplitable(path)) {
+    // Report the codec first: a forced `decompression` decides splittability, not the
+    // file name extension.
+    if (!textOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))) {
       super.getFileUnSplittableReason(path)
     } else {
       "the text datasource is set wholetext mode"
@@ -66,11 +70,7 @@ case class TextScan(
 
   override def createReaderFactory(): PartitionReaderFactory = {
     verifyReadSchema(readDataSchema)
-    val hadoopConf = {
-      val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-      // Hadoop Configurations are case sensitive.
-      sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
-    }
+    val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     TextPartitionReaderFactory(conf, broadcastedConf, readDataSchema,
