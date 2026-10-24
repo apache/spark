@@ -2570,4 +2570,24 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     // A failed parse leaves the cache empty.
     assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 0)
   }
+
+  test("from_protobuf and to_protobuf reject null messageName with INVALID_PARAMETER_VALUE.NULL") {
+    val e1 = intercept[AnalysisException] {
+      spark.sql("SELECT from_protobuf(col, cast(null as string)) FROM values(X'0801') as (col)")
+    }
+    checkError(
+      exception = e1,
+      condition = "INVALID_PARAMETER_VALUE.NULL",
+      parameters = Map("parameter" -> "`messageName`", "functionName" -> "`from_protobuf`")
+    )
+
+    val e2 = intercept[AnalysisException] {
+      spark.sql("SELECT to_protobuf(named_struct('a', 1), cast(null as string))")
+    }
+    checkError(
+      exception = e2,
+      condition = "INVALID_PARAMETER_VALUE.NULL",
+      parameters = Map("parameter" -> "`messageName`", "functionName" -> "`to_protobuf`")
+    )
+  }
 }
