@@ -88,19 +88,29 @@ case class CollectFrequentItems(
   override def createAggregationBuffer(): mutable.Map[Any, Long] =
     mutable.Map.empty[Any, Long]
 
-  private def add(map: mutable.Map[Any, Long], key: Any, count: Long): mutable.Map[Any, Long] = {
+  /**
+   * Adds `count` occurrences of `key` to `map`. With `copyOnInsert`, `key` is copied only when
+   * the map stores it, so a caller's value that may point into a reused buffer is not copied when
+   * it is merely looked up: incrementing an existing entry keeps the entry's stored key.
+   */
+  private def add(
+      map: mutable.Map[Any, Long],
+      key: Any,
+      count: Long,
+      copyOnInsert: Boolean): mutable.Map[Any, Long] = {
+    def keyToInsert: Any = if (copyOnInsert) InternalRow.copyValue(key) else key
     map.get(key) match {
       case Some(existing) =>
         map(key) = existing + count
       case None =>
         if (map.size < size) {
-          map += key -> count
+          map += keyToInsert -> count
         } else {
           // Non-empty here: this branch runs only when map.size >= size, and size > 0.
           val minCount = map.values.min
           val remainder = count - minCount
           if (remainder >= 0) {
-            map += key -> count // something will get kicked out, so we can add this
+            map += keyToInsert -> count // something will get kicked out, so we can add this
             map.filterInPlace((k, v) => v > minCount)
             map.mapValuesInPlace((k, v) => v - minCount)
           } else {
@@ -114,12 +124,8 @@ case class CollectFrequentItems(
   override def update(
       buffer: mutable.Map[Any, Long],
       input: InternalRow): mutable.Map[Any, Long] = {
-    val key = child.eval(input)
-    if (key != null) {
-      this.add(buffer, InternalRow.copyValue(key), 1L)
-    } else {
-      this.add(buffer, key, 1L)
-    }
+    // The value may point into a reused input buffer, so `add` copies it if it stores it.
+    this.add(buffer, child.eval(input), 1L, copyOnInsert = true)
   }
 
   override def merge(
@@ -128,7 +134,7 @@ case class CollectFrequentItems(
     val otherIter = input.iterator
     while (otherIter.hasNext) {
       val (key, count) = otherIter.next()
-      add(buffer, key, count)
+      add(buffer, key, count, copyOnInsert = false)
     }
     buffer
   }
