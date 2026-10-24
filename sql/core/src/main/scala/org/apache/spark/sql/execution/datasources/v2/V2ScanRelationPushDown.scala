@@ -25,6 +25,7 @@ import org.apache.spark.{SparkException, SparkIllegalArgumentException}
 import org.apache.spark.internal.LogKeys.{AGGREGATE_FUNCTIONS, COLUMN_NAME, COLUMN_NAMES, EXPR, GROUP_BY_EXPRS, JOIN_CONDITION, JOIN_TYPE, POST_SCAN_FILTERS, PUSHED_FILTERS, RELATION_NAME, RELATION_OUTPUT}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribute, AttributeMap, AttributeReference, AttributeSet, BoundReference, Cast, Expression, ExpressionSet, ExprId, GetArrayStructFields, GetStructField, IntegerLiteral, LateralColumnAliasReference, Literal, NamedExpression, OuterReference, OuterScopeReference, PredicateHelper, ProjectionOverSchema, RuntimeReplaceable, SortOrder, SubqueryExpression, Unevaluable, UserDefinedExpression}
+import org.apache.spark.sql.catalyst.expressions.SchemaPruning.RootField
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
@@ -36,7 +37,7 @@ import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
-import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, SchemaPruning, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
@@ -990,7 +991,26 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case op @ SchemaPruning.GeneratorsOverScan(_, _, sHolder: ScanBuilderHolder) =>
+      // Fields read from the generators' elements above them narrow the scan below them. If the
+      // plan above cannot be re-resolved, the scan is pruned again on its own below, which calls
+      // `pruneColumns` on the scan builder a second time.
+      SchemaPruning.pruneThroughGenerators(op, sHolder) { (scan, otherProjects, inputRootFields) =>
+        Some(pruneScan(scan.projects, scan.filtersStayUp, scan.filtersPushDown, sHolder,
+          Some(otherProjects), inputRootFields))
+      }.getOrElse(op)
+
     case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
+      pruneScan(project, filtersStayUp, filtersPushDown, sHolder, None, Nil)
+  }
+
+  private def pruneScan(
+      project: Seq[NamedExpression],
+      filtersStayUp: Seq[Expression],
+      filtersPushDown: Seq[Expression],
+      sHolder: ScanBuilderHolder,
+      rootFieldProjects: Option[Seq[NamedExpression]],
+      extraRootFields: Seq[RootField]): LogicalPlan = {
       // column pruning
       val normalizedProjects = DataSourceStrategy
         .normalizeExprs(project, sHolder.output)
@@ -1000,8 +1020,11 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // recorded on the scan below.
       val allFilters = filtersPushDown.reduceOption(And).toSeq ++ filtersStayUp
       val normalizedFilters = DataSourceStrategy.normalizeExprs(allFilters, sHolder.output)
+      val normalizedRootFieldProjects = rootFieldProjects.map(DataSourceStrategy
+        .normalizeExprs(_, sHolder.output).asInstanceOf[Seq[NamedExpression]])
       val (scan, output) = PushDownUtils.pruneColumns(
-        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters)
+        sHolder.builder, sHolder.relation, normalizedProjects, normalizedFilters,
+        normalizedRootFieldProjects, extraRootFields)
 
       logInfo(
         log"""

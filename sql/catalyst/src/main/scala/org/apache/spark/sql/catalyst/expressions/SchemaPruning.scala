@@ -98,9 +98,10 @@ object SchemaPruning extends SQLConfHelper {
    */
   def identifyRootFields(
       projects: Seq[NamedExpression],
-      filters: Seq[Expression]): Seq[RootField] = {
+      filters: Seq[Expression],
+      extraRootFields: Seq[RootField] = Nil): Seq[RootField] = {
     val projectionRootFields = projects.flatMap(getRootFields)
-    val filterRootFields = filters.flatMap(getRootFields)
+    val filterRootFields = filters.flatMap(getRootFields) ++ extraRootFields
 
     // Kind of expressions don't need to access any fields of a root fields, e.g., `IsNotNull`.
     // For them, if there are any nested fields accessed in the query, we don't need to add root
@@ -132,6 +133,61 @@ object SchemaPruning extends SQLConfHelper {
       }
     } ++ rootFields
   }
+
+  /**
+   * Gets the root field that the array `input` of an `explode` or `posexplode` needs, when the
+   * generator's element output `element` is only read by `exprs` through nested field accesses.
+   * For example, for `explode(items) AS item` read as `item.a` and `item.b`, with
+   * `items: array<struct<a, b, c>>`, it returns `items: array<struct<a, b>>`.
+   *
+   * `elementFields` are fields of the element read by other means, e.g. as the input of a
+   * generator above this one, named like the element.
+   *
+   * If nothing of the element is read, only the array sizes are needed, so a single smallest
+   * field is kept, as in [[org.apache.spark.sql.catalyst.optimizer.GenerateOptimization]].
+   *
+   * If the element is used whole, `input` is needed whole, e.g. `items.parts` for
+   * `explode(items.parts)`, which still narrows `items` to `parts`.
+   *
+   * `input` must be expressed over the scan's output. Returns None if `input` is not an access
+   * path [[SelectedField]] can narrow.
+   */
+  def getGeneratorInputRootField(
+      input: Expression,
+      element: Attribute,
+      exprs: Seq[Expression],
+      elementFields: Seq[StructField] = Nil): Option[RootField] = input.dataType match {
+    case ArrayType(elementType, containsNull) =>
+      // Rename the element so that its fields can be told apart from other columns by name.
+      val name = s"${element.name}#${element.exprId.id}"
+      val renamed = exprs.map(_.transform {
+        case a: Attribute if a.exprId == element.exprId => a.withName(name)
+      })
+      val fields = identifyRootFields(Nil, renamed,
+        elementFields.map(f => RootField(f.copy(name = name), derivedFromAtt = false)))
+        .filter(_.field.name == name)
+      val prunedElementType = (fields, elementType) match {
+        // not read: only the array sizes are needed
+        case (Seq(), StructType(structFields)) if structFields.length > 1 =>
+          StructType(Array(structFields.minBy(_.dataType.defaultSize)))
+        case (Seq(), _) => elementType
+        // used whole: the input is needed whole, which still narrows what it is extracted from
+        case _ if fields.exists(_.derivedFromAtt) => elementType
+        case _ =>
+          pruneSchema(StructType(Array(StructField(name, elementType))), fields).head.dataType
+      }
+      SelectedField.withDataType(input, ArrayType(prunedElementType, containsNull))
+        .map(RootField(_, derivedFromAtt = false))
+    case _ => None
+  }
+
+  /**
+   * Gets the root fields read inside a generator's array `input` itself, e.g. by the predicate of
+   * `filter(items, x -> ...)` or the comparator of `array_sort(items)`, which
+   * [[getGeneratorInputRootField]] passes through without accounting for.
+   */
+  def getGeneratorInputLambdaRootFields(input: Expression): Seq[RootField] =
+    getArrayReturningHigherOrderFunctionRootFields(input)
 
   /**
    * Gets the root (aka top-level, no-parent) [[StructField]]s for the given [[Expression]].
