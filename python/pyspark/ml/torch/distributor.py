@@ -21,6 +21,7 @@ import os
 import random
 import re
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -449,6 +450,26 @@ class TorchDistributor(Distributor):
         return torchrun_args, processes_per_node
 
     @staticmethod
+    def _reserve_free_port(address: str) -> socket.socket:
+        """
+        Bind a socket to a free port on the given address and return it.
+
+        Closing the socket right away would let another socket take the port before
+        torchrun's TCPStore binds it. The returned socket is bound but not listening and
+        sets SO_REUSEADDR, so TCPStore, which also sets SO_REUSEADDR, can still listen on
+        the port while the socket keeps it reserved.
+
+        The reservation only blocks binds that do not set SO_REUSEADDR on the same address
+        or the wildcard address, and outgoing connections picking the port. A socket that
+        sets SO_REUSEADDR, or one bound to another local address such as loopback, can
+        still take the port.
+        """
+        sock = socket.socket()
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((address, 0))
+        return sock
+
+    @staticmethod
     def _create_torchrun_command(
         input_params: Dict[str, Any], path_to_train_file: str, *args: Any
     ) -> List[str]:
@@ -684,14 +705,15 @@ class TorchDistributor(Distributor):
 
             CUDA_VISIBLE_DEVICES = "CUDA_VISIBLE_DEVICES"
 
+            # Sockets reserving MASTER_PORT, held until training finishes.
+            reserved_port_sockets = []
+
             def get_free_port(address: str, context: "BarrierTaskContext") -> int:
                 port = ""
                 if context.partitionId() == 0:
                     try:
-                        import socket
-
-                        sock = socket.socket()
-                        sock.bind((address, 0))
+                        sock = TorchDistributor._reserve_free_port(address)
+                        reserved_port_sockets.append(sock)
                         port = sock.getsockname()[1]
                     except socket.error:
                         pass
@@ -763,6 +785,8 @@ class TorchDistributor(Distributor):
                         **kwargs,
                     )
             finally:
+                for sock in reserved_port_sockets:
+                    sock.close()
                 try:
                     LogStreamingClient._destroy()
                 except BaseException:

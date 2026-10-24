@@ -299,6 +299,86 @@ class TorchDistributorBaselineUnitTestsMixin:
         self.assertIn("Start torch distributor log streaming server failed", message)
         self.assertIn("Address already in use", message)
 
+    def test_reserve_free_port(self) -> None:
+        import socket
+        from datetime import timedelta
+
+        from torch.distributed import TCPStore
+
+        sock = TorchDistributor._reserve_free_port("127.0.0.1")
+        try:
+            port = sock.getsockname()[1]
+            # Plain binds on the same address cannot take the reserved port.
+            other = socket.socket()
+            try:
+                with self.assertRaises(OSError):
+                    other.bind(("127.0.0.1", port))
+            finally:
+                other.close()
+            # torchrun's TCPStore can still listen on it.
+            store = TCPStore("127.0.0.1", port, 1, True, timeout=timedelta(seconds=30))
+            store.set("key", "value")
+            self.assertEqual(store.get("key"), b"value")
+        finally:
+            sock.close()
+
+    def test_master_port_reserved_until_training_finishes(self) -> None:
+        import socket
+
+        from pyspark.taskcontext import BarrierTaskContext
+
+        def bind_master_port() -> None:
+            sock = socket.socket()
+            try:
+                sock.bind((os.environ["MASTER_ADDR"], int(os.environ["MASTER_PORT"])))
+            finally:
+                sock.close()
+
+        def train_and_check_reserved(*args: Any, **kwargs: Any) -> str:
+            with self.assertRaises(OSError):
+                bind_master_port()
+            return "done"
+
+        def train_check_reserved_and_raise(*args: Any, **kwargs: Any) -> str:
+            train_and_check_reserved()
+            raise RuntimeError("training failed")
+
+        dist = TorchDistributor(num_processes=1, local_mode=False, use_gpu=False)
+        dist.driver_address = "127.0.0.1"
+        dist.log_streaming_server_port = -1
+        dist.log_streaming_auth_secret = None
+        context = MagicMock()
+        context.partitionId.return_value = 0
+        context.getTaskInfos.return_value = [MagicMock(address="127.0.0.1:0")]
+        context.allGather.side_effect = lambda message: [message]
+
+        for train_fn in [train_and_check_reserved, train_check_reserved_and_raise]:
+            with (
+                self.subTest(train_fn=train_fn.__name__),
+                patch.dict(os.environ),
+                patch.object(BarrierTaskContext, "get", return_value=context),
+                patch("pyspark.ml.torch.distributor.LogStreamingClient"),
+                patch.object(
+                    TorchDistributor, "_get_output_from_framework_wrapper", side_effect=train_fn
+                ),
+            ):
+                task_fn = dist._get_spark_task_function(None, MagicMock(), None, None)
+                gen = task_fn(iter([]))
+                # The reservation is released explicitly, while the generator or the
+                # exception still keeps the reserving socket alive.
+                if train_fn is train_check_reserved_and_raise:
+                    with self.assertRaisesRegex(RuntimeError, "training failed"):
+                        try:
+                            next(gen)
+                        except RuntimeError:
+                            bind_master_port()
+                            raise
+                else:
+                    # Partition 0's output batch, yielded after the finally.
+                    next(gen)
+                    bind_master_port()
+                    self.assertEqual(list(gen), [])
+
     def test_create_torchrun_command(self) -> None:
         train_path = "train.py"
         args_string = ["1", "3"]
