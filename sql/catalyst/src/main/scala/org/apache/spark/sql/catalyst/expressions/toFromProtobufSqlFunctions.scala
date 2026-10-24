@@ -155,7 +155,7 @@ case class FromProtobuf(
   override lazy val replacement: Expression = {
     val messageNameValue: String = messageName.eval() match {
       case null =>
-        throw new IllegalArgumentException("Message name cannot be null")
+        throw QueryCompilationErrors.nullArgumentError("from_protobuf", "messageName")
       case s: UTF8String =>
         s.toString
     }
@@ -324,7 +324,7 @@ case class ToProtobuf(
   override lazy val replacement: Expression = {
     val messageNameValue: String = messageName.eval() match {
       case null =>
-        throw new IllegalArgumentException("Message name cannot be null")
+        throw QueryCompilationErrors.nullArgumentError("to_protobuf", "messageName")
       case s: UTF8String =>
         s.toString
     }
