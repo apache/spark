@@ -1238,6 +1238,22 @@ object SQLConf {
     .bytesConf(ByteUnit.BYTE)
     .createWithDefaultString("10MB")
 
+  val BROADCAST_RANGE_JOIN_ENABLED = buildConf("spark.sql.join.broadcastRangeJoin.enabled")
+    .internal()
+    .doc("When true, joins with range predicates (such as point-in-range, interval-overlap, " +
+      "or single inequalities) are planned as broadcast range joins instead of broadcast " +
+      "nested loop joins if the build side is eligible for broadcast. Supported join types " +
+      "include inner, left outer, right outer, left semi, and left anti. Broadcast range joins " +
+      "build an index on the broadcast side to significantly accelerate selective range probes, " +
+      "but perform worse than nested loop joins when most, but not all, of the build intervals " +
+      "overlap each probe: about 0.7X-0.8X on long keys and 0.5X-0.6X on boxed keys. Builds " +
+      "where every interval overlaps each probe run at about parity instead. This is " +
+      "disabled by default.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+    .booleanConf
+    .createWithDefault(false)
+
   val SHUFFLE_HASH_JOIN_FACTOR =
     buildConfFromConfigFile[Int]("spark.sql.shuffledHashJoinFactor")
       .checkValue(_ >= 1, "The shuffle hash join factor must be at least 1.")
@@ -9744,6 +9760,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
     getConf(LEGACY_FILTER_SHORT_CIRCUIT_ON_NULL_CONJUNCT)
 
   def autoBroadcastJoinThreshold: Long = getConf(AUTO_BROADCASTJOIN_THRESHOLD)
+
+  def broadcastRangeJoinEnabled: Boolean = getConf(BROADCAST_RANGE_JOIN_ENABLED)
 
   def limitInitialNumPartitions: Int = getConf(LIMIT_INITIAL_NUM_PARTITIONS)
 

@@ -1101,6 +1101,25 @@ object Equality {
   }
 }
 
+/** Matches a `<`/`<=`/`>`/`>=` comparison; see `unapply` for the exact normalization. */
+object RangePredicate {
+  /**
+   * Normalizes `<`, `<=`, `>`, `>=` to `(low.dataType, low, high, strict)`, with
+   * `>` and `>=` reordered so the lower bound leads. Inclusivity stays on the
+   * original predicate, which execution evaluates as-is; a strict predicate
+   * also selects the exclusive point-index bound.
+   */
+  def unapply(expression: Expression): Option[(DataType, Expression, Expression, Boolean)] = {
+    expression match {
+      case LessThan(low, high) => Some((low.dataType, low, high, true))
+      case LessThanOrEqual(low, high) => Some((low.dataType, low, high, false))
+      case GreaterThan(high, low) => Some((low.dataType, low, high, true))
+      case GreaterThanOrEqual(high, low) => Some((low.dataType, low, high, false))
+      case _ => None
+    }
+  }
+}
+
 // TODO: although map type is not orderable, technically map type should be able to be used
 // in equality comparison
 @ExpressionDescription(

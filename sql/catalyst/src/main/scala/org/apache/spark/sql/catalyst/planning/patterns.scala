@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, DataSourceV2ScanRelation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 
 trait OperationHelper extends AliasHelper with PredicateHelper {
   import org.apache.spark.sql.catalyst.optimizer.CollapseProject.canCollapseExpressions
@@ -418,6 +419,198 @@ object ExtractSingleColumnNullAwareAntiJoin extends JoinSelectionHelper with Pre
         None
       }
     case _ => None
+  }
+}
+
+/**
+ * Tags the shape of a range-predicate join recognized by [[ExtractRangeJoinKeys]].
+ * Point-in-range and interval overlap both probe an interval index. A partial range
+ * is one inequality; Less vs Greater records which side holds the lower bound.
+ */
+sealed abstract class RangeJoinKind
+
+/** A point-in-range join: a value from one side falls within a `[low, high]` range on the other. */
+case object PointInRangeJoin extends RangeJoinKind
+
+/**
+ * An interval-overlap join: `(low, high)` on each side. The build side is an
+ * interval index and the stream side probes it with `overlapping(low, high)`.
+ */
+case object IntervalOverlapJoin extends RangeJoinKind
+
+/**
+ * A partial-range join: one inequality, one expression per side.
+ * `leftIsLower` says which child holds the lower bound.
+ */
+sealed abstract class PartialRangeJoin extends RangeJoinKind {
+  def leftIsLower: Boolean
+
+  /**
+   * The inequality is `<`/`>` and not `<=`/`>=`. Inclusivity stays on the
+   * original condition, but the strict form also selects the exclusive
+   * point-index bound, so duplicated build keys equal to the probe value
+   * are skipped instead of failing the condition one by one.
+   */
+  def strict: Boolean
+}
+
+/** A `low <[=] high` partial-range join where the left side is the low bound. */
+final case class LessPartialRangeJoin(override val strict: Boolean) extends PartialRangeJoin {
+  override def leftIsLower: Boolean = true
+}
+
+/** A `low <[=] high` partial-range join where the left side is the high bound. */
+final case class GreaterPartialRangeJoin(override val strict: Boolean) extends PartialRangeJoin {
+  override def leftIsLower: Boolean = false
+}
+
+/**
+ * Finds joins whose condition is a range predicate usable by a broadcast range join.
+ *
+ * Tries the two-predicate shapes first (point-in-range, then interval overlap),
+ * which capture more of the condition, and falls back to the single
+ * cross-side inequality: keeps the first that matches.
+ *  - point-in-range: one key probed as both ends of a `(low, high)` window on the other side.
+ *  - interval overlap: a `(low, high)` key on each side.
+ *  - partial range: one inequality, one expression per side.
+ * [[RangePredicate]] normalizes `<`/`<=`/`>`/`>=` to `(dataType, low, high, strict)`;
+ * `strict` selects the exclusive point-index scan for `partialRange` below, but
+ * inclusivity otherwise, and every leftover conjunct, stay on the original condition
+ * and are evaluated per candidate.
+ */
+object ExtractRangeJoinKeys extends PredicateHelper {
+  type ReturnType = (JoinType, Seq[Expression], Seq[Expression], RangeJoinKind)
+
+  def unapply(plan: LogicalPlan): Option[ReturnType] = plan match {
+    case Join(left, right, joinType, Some(condition), _) =>
+      val predicates = splitConjunctivePredicates(condition)
+      val rangePreds = predicates.collect {
+        case RangePredicate(dt, low, high, strict) if supportedType(dt) => (dt, low, high, strict)
+      }
+      if (rangePreds.isEmpty) {
+        None
+      } else {
+        pointInRange(rangePreds, left, right, joinType)
+          .orElse(intervalOverlap(rangePreds, left, right, joinType))
+          .orElse(partialRange(rangePreds, left, right, joinType))
+      }
+    case _ => None
+  }
+
+  /**
+   * Types supported as range keys by the broadcast range index.
+   * Other orderable types (arrays, intervals, timestamp-with-nanos, UDTs) stay a nested loop join.
+   */
+  private[planning] def supportedType(dataType: DataType): Boolean = dataType match {
+    case BooleanType | ByteType | ShortType | IntegerType | LongType |
+         FloatType | DoubleType | BinaryType | DateType | TimestampType |
+         TimestampNTZType | _: StringType | _: DecimalType => true
+    case _ => false
+  }
+
+  /**
+   * The first pair of range predicates whose `shape` regrouping holds and
+   * whose keys evaluate one side each. `place` settles the orientation,
+   * `supportedKeys` the eligibility; a rejected pair stays on the condition.
+   */
+  private def pairJoin(
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType,
+      rangeJoinKind: RangeJoinKind)(
+      shape: PartialFunction[(Expression, Expression, Expression, Expression),
+        (Seq[Expression], Seq[Expression])]): Option[ReturnType] = {
+    rangePreds.combinations(2).collectFirst(Function.unlift {
+      case Seq((d1, l1, h1, _), (d2, l2, h2, _)) if d1 == d2 =>
+        shape.lift((l1, h1, l2, h2)).flatMap { case (keysA, keysB) =>
+          place(keysA, keysB, left, right).filter { case (l, r) =>
+            supportedKeys(l, r)
+          }.map { case (leftKeys, rightKeys) =>
+            (joinType, leftKeys, rightKeys, rangeJoinKind)
+          }
+        }
+      case _ => None
+    })
+  }
+
+  private def pointInRange(
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType): Option[ReturnType] = {
+    pairJoin(rangePreds, left, right, joinType, PointInRangeJoin)({
+      case (l1, h1, l2, h2)
+          if h1.semanticEquals(l2) && !l1.semanticEquals(h2) && l1.dataType == h2.dataType =>
+        (Seq(l2), Seq(l1, h2))
+      case (l1, h1, l2, h2)
+          if l1.semanticEquals(h2) && !h1.semanticEquals(l2) && l2.dataType == h1.dataType =>
+        (Seq(l1), Seq(l2, h1))
+    })
+  }
+
+  /**
+   * Puts `leftExprs` on the left child when that child can evaluate all of them
+   * and the right child can evaluate `rightExprs`. Otherwise swaps, when the
+   * opposite assignment fits. A key is evaluable on exactly one input, so at
+   * most one assignment succeeds.
+   */
+  private def place(
+      leftExprs: Seq[Expression],
+      rightExprs: Seq[Expression],
+      left: LogicalPlan,
+      right: LogicalPlan): Option[(Seq[Expression], Seq[Expression])] = {
+    if (leftExprs.forall(canEvaluate(_, left)) && rightExprs.forall(canEvaluate(_, right))) {
+      Some((leftExprs, rightExprs))
+    } else if (leftExprs.forall(canEvaluate(_, right)) &&
+        rightExprs.forall(canEvaluate(_, left))) {
+      Some((rightExprs, leftExprs))
+    } else {
+      None
+    }
+  }
+
+  private def intervalOverlap(
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType): Option[ReturnType] = {
+    pairJoin(rangePreds, left, right, joinType, IntervalOverlapJoin)({
+      case (l1, h1, l2, h2)
+          if !l1.semanticEquals(h2) && !l2.semanticEquals(h1) &&
+            l1.dataType == h2.dataType && l2.dataType == h1.dataType =>
+        (Seq(l1, h2), Seq(l2, h1))
+    })
+  }
+
+  private def supportedKeys(keys: Seq[Expression]*): Boolean = {
+    keys.flatten.forall { key =>
+      key.references.nonEmpty && key.deterministic &&
+        !SubqueryExpression.hasSubquery(key) && supportedType(key.dataType)
+    }
+  }
+
+  private def partialRange(
+      rangePreds: Seq[(DataType, Expression, Expression, Boolean)],
+      left: LogicalPlan,
+      right: LogicalPlan,
+      joinType: JoinType): Option[ReturnType] = {
+    rangePreds.iterator.flatMap { case (_, low, high, strict) =>
+      if (low.semanticEquals(high) || low.dataType != high.dataType ||
+          !supportedKeys(Seq(low, high))) {
+        None
+      } else {
+        // Unswapped, the left child holds `low`. Swapped, it holds `high`.
+        place(Seq(low), Seq(high), left, right).map { case (leftKeys, rightKeys) =>
+          val rangeJoinKind = if (canEvaluate(low, left)) {
+            LessPartialRangeJoin(strict)
+          } else {
+            GreaterPartialRangeJoin(strict)
+          }
+          (joinType, leftKeys, rightKeys, rangeJoinKind)
+        }
+      }
+    }.nextOption()
   }
 }
 
