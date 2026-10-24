@@ -30,14 +30,24 @@
       url: spark-connect-programming-guide.html#connecting-from-scala
     - text: Connecting from Rust
       url: spark-connect-programming-guide.html#connecting-from-rust
+    - text: Other clients
+      url: spark-connect-programming-guide.html#other-clients
     - text: Running a job
       url: spark-connect-programming-guide.html#running-a-job
     - text: Configuring the session
       url: spark-connect-programming-guide.html#configuring-the-session
     - text: Shipping code and files
       url: spark-connect-programming-guide.html#shipping-code-and-files
+    - text: Python UDFs and the server's Python
+      url: spark-connect-programming-guide.html#python-udfs-and-the-servers-python
+    - text: Reading and writing data
+      url: spark-connect-programming-guide.html#reading-and-writing-data
     - text: Migrating existing code
       url: spark-connect-programming-guide.html#migrating-existing-code
+    - text: What you need locally
+      url: spark-connect-programming-guide.html#what-you-need-locally
+    - text: Client and server versions
+      url: spark-connect-programming-guide.html#client-and-server-versions
     - text: Debugging
       url: spark-connect-programming-guide.html#debugging
 - text: "Eager vs Lazy: Spark Connect vs Spark Classic"

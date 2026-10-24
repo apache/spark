@@ -460,10 +460,9 @@ If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColu
 
 # Session and Configuration Gotchas
 
-The gotchas above come from deferred analysis. The following three come from the session being a
-handle to a server rather than a process-local object. In PySpark the first two produce no error
-(the Scala builder raises for the second); the third fails at startup or, with the port moved,
-silently reaches a different server. The
+The gotchas above come from deferred analysis. The following come from the session being a handle
+to a server rather than a process-local object. In PySpark neither produces an error (the Scala
+builder raises for the second). The
 [Spark Connect Programming Guide](spark-connect-programming-guide.html) describes the intended
 usage of each API.
 
@@ -521,29 +520,6 @@ Put static settings, catalogs and their JARs in the server's startup command (se
 [Starting a Spark Connect server](spark-connect-setup.html#starting-a-spark-connect-server)), treat
 the warning as an error in CI, and have the application confirm what it depends on at startup,
 for example with `spark.sql("SHOW NAMESPACES IN <catalog>")`.
-
-## 8. Another server on port 15002
-
-`SparkSession.builder.remote("local[*]").getOrCreate()` starts a Spark Connect server inside the
-Python process and then dials `sc://localhost`, which is port 15002. If a different Spark Connect
-server is already listening there (a container, or a server from an earlier session) the
-in-process server fails to start:
-
-```
-java.net.BindException: Failed to bind to address 0.0.0.0/0.0.0.0:15002: Service
-'org.apache.spark.sql.connect.service.SparkConnectService' failed after 0 retries
-```
-
-Spark does not retry another port (`spark.connect.grpc.port.maxRetries` is 0), and setting
-`spark.connect.grpc.binding.port` to move the in-process server does not help, because the client
-still dials 15002 and would reach the other server, possibly a different Spark version, without
-any error.
-
-### Mitigation
-
-Find what holds the port (`ss -ltnp | grep 15002`, `docker ps`) and either stop it or connect to
-it explicitly with `remote("sc://localhost:15002")`. When the application can be pointed at
-several servers, check `spark.version` at startup.
 
 # Summary
 

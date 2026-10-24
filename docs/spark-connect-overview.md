@@ -72,8 +72,8 @@ that developers need to be aware of when using Spark Connect:
    are provided as part of the higher-level DataFrame API.
 3. Spark Connect provides a session-based client for its consumers. This means that the
    client does not have access to properties of the cluster that manipulate the
-   environment for all connected clients. Most importantly, the client does not have access
-   to the static Spark configuration or the SparkContext.
+   environment for all connected clients. Most importantly, the client cannot change the
+   static Spark configuration and has no access to the SparkContext.
 
 Apart from these differences the Spark Connect API is code-compatible with classic Spark
 applications: the DataFrame code they contain does not change. What changes is around that code:
@@ -89,9 +89,9 @@ With this new architecture, Spark Connect mitigates several multi-tenant
 operational issues:
 
 **Stability**: Applications that use too much memory will now only impact their
-own environment as they can run in their own processes. Users can define their
-own dependencies on the client and don't need to worry about potential conflicts
-with the Spark driver.
+own environment as they can run in their own processes. Dependencies installed on
+the client do not conflict with the Spark driver's, although anything a UDF imports
+still has to be available on the server.
 
 **Upgradability**: The Spark driver can now seamlessly be upgraded independently
 of applications, for example to benefit from performance improvements and security fixes.
@@ -148,13 +148,16 @@ outside the Apache Spark repository as well. The Apache Software Foundation host
 
 # Where to go from here
 
+* [Spark Connect Programming Guide](spark-connect-programming-guide.html): connect from Python,
+  Scala and Rust, run and configure jobs, ship code to the server, and migrate code that uses
+  `SparkContext` or RDDs.
 * [Setting up Spark Connect](spark-connect-setup.html): start a Spark Connect server, connect
   to it from the shells and from standalone applications, run a persistent local server for
   development, switch existing applications between Spark Classic and Spark Connect, and put
   the server behind an authenticating proxy.
 * [Eager vs Lazy: Spark Connect vs Spark Classic](spark-connect-gotchas.html): how deferred
-  analysis changes the behavior of temporary views, UDFs and error reporting, and how to
-  write code that works in both modes.
+  analysis changes the behavior of temporary views, UDFs and error reporting, how a session
+  differs from a local one, and how to write code that works in both modes.
 * [Extending Spark with Spark Server Libraries](spark-connect-server-libs.html): add custom
   server-side logic and expose it to clients through the Spark Connect protocol.
 * [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html): a notebook

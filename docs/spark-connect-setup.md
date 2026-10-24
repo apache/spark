@@ -19,10 +19,9 @@ license: |
 ---
 
 Spark Connect ships with every Spark release since 3.4 and supports PySpark and Scala
-applications. The sections below walk through running an Apache Spark server with Spark
-Connect and connecting to it from the shells and from client applications using the Spark
-Connect client library. For what Spark Connect is and how it differs from classic Spark, see
-the [Spark Connect Overview](spark-connect-overview.html).
+applications. For what Spark Connect is and how it differs from classic Spark, see the
+[Spark Connect Overview](spark-connect-overview.html); for writing applications against a server,
+see the [Spark Connect Programming Guide](spark-connect-programming-guide.html).
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -45,7 +44,6 @@ Spark before and run the `start-connect-server.sh` script to start Spark server 
 Spark Connect. If you already have Spark installed and `SPARK_HOME` defined, you can use that too.
 
 ```bash
-cd spark/
 ./sbin/start-connect-server.sh
 
 # alternately
@@ -53,9 +51,6 @@ cd spark/
 ```
 
 Alternatively, `./bin/spark-connect-shell` starts an interactive Scala shell with the Connect server hosted inside the shell process itself.
-
-Make sure to use the same version  of the package as the Spark version you
-downloaded previously. In this example, Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.13.
 
 The script accepts the same options as `spark-submit`, so `--master`, `--jars`, `--packages`
 and `--conf` work as they do for any other Spark application. Everything that the server
@@ -66,9 +61,9 @@ server.
 
 By default the server listens on port 15002 on all interfaces and runs as a background daemon
 (`./sbin/stop-connect-server.sh` stops it). Pass `--wait` as the first argument to keep it in
-the foreground instead; this sets `SPARK_NO_DAEMONIZE=1` and is what a container entrypoint or a
-process supervisor needs, since a daemonized server would leave the container with nothing
-running. `spark.connect.grpc.binding.address` restricts the listening interface and
+the foreground instead; this sets `SPARK_NO_DAEMONIZE=1`, writes no PID file and sends the logs to
+standard output, which is what a container entrypoint or a process supervisor needs, since a
+daemonized server would leave the container with nothing running. `spark.connect.grpc.binding.address` restricts the listening interface and
 `spark.connect.grpc.binding.port` changes the port:
 
 ```bash
@@ -79,13 +74,9 @@ running. `spark.connect.grpc.binding.address` restricts the listening interface 
 
 Spark does not retry another port when the configured one is taken
 (`spark.connect.grpc.port.maxRetries` defaults to 0), so a port conflict fails the server with a
-`java.net.BindException` instead of silently moving it. The server logs go to `logs/` under the
-Spark folder (or `SPARK_LOG_DIR`), and the Spark UI of the server, at port 4040 by default, has a
+`java.net.BindException` instead of silently moving it. A daemonized server logs to `logs/` under
+the Spark folder (or `SPARK_LOG_DIR`), and the Spark UI of the server, at port 4040 by default, has a
 **Connect** tab listing sessions and requests.
-
-Now Spark server is running and ready to accept Spark Connect sessions from client
-applications. In the next section we will walk through how to use Spark Connect
-when writing client applications.
 
 # Interactive analysis with Spark Connect
 <div class="codetabs">
@@ -211,7 +202,8 @@ configuration [reference](https://github.com/apache/spark/blob/master/sql/connec
 A connection string has the form `sc://host:port/;param1=value;param2=value`: the scheme is
 always `sc://`, the path component must stay empty because gRPC uses the HTTP/2 path for its own
 method names, and parameters such as `token`, `use_ssl`, `user_id` and `user_agent` follow a `/;`
-separator. Setting `token` turns on TLS as well.
+separator. Setting `token` turns on TLS as well, except that the Python client connecting to
+`localhost` uses a local channel without TLS.
 
 A parameter value cannot contain a `/`, because the parser reads everything from the first `/`
 as the path:
@@ -232,12 +224,6 @@ connection that is initialized at REPL startup.
 {% highlight bash %}
 export SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG"
 ./bin/spark-shell
-{% endhighlight %}
-
-or
-
-{% highlight bash %}
-SPARK_REMOTE="sc://myhost.com:443/;token=ABCDEFG" spark-connect-repl
 {% endhighlight %}
 
 ## Configure programmatically with a connection string
@@ -274,7 +260,7 @@ process. Every `python script.py` invocation (or every new test worker process) 
 the one-time startup cost -- JVM warmup, `SparkContext` construction, and Connect server boot --
 which can take a few seconds and makes a quick edit/run loop feel slow.
 
-The in-process server always binds port 15002 and the client always dials `sc://localhost`,
+The in-process server binds port 15002 by default and the client dials `sc://localhost`,
 so if another Spark Connect server is already listening on that port (a container, or a server
 left running from an earlier session) the start fails with
 `java.net.BindException: Failed to bind to address 0.0.0.0/0.0.0.0:15002`. Moving the port with
@@ -361,7 +347,7 @@ For illustration purposes, we’ll create a simple Spark Connect application, Si
 """SimpleApp.py"""
 from pyspark.sql import SparkSession
 
-logFile = "YOUR_SPARK_HOME/README.md"  # Should be some file on your system
+logFile = "YOUR_SPARK_HOME/README.md"  # a path the server can read
 spark = SparkSession.builder.remote("sc://localhost").appName("SimpleApp").getOrCreate()
 logData = spark.read.text(logFile).cache()
 
@@ -392,6 +378,10 @@ Using the `sbt` build system as an example, we add the following dependencies to
 {% highlight sbt %}
 libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{site.SPARK_VERSION_SHORT}}"
 {% endhighlight %}
+
+Depend on `spark-connect-client-jvm` only, and on JDK 17 and later start the JVM with
+`--add-opens=java.base/java.nio=ALL-UNNAMED`;
+[Connecting from Scala](spark-connect-programming-guide.html#connecting-from-scala) explains both.
 
 When writing your own code, include the `remote` function with a reference to
 your Spark server when you create a Spark session, as in this example:
@@ -431,7 +421,7 @@ For extending Spark Connect with custom server-side functionality, see
 # Switching between Spark Connect and Spark Classic
 
 Spark provides the API mode, `spark.api.mode` configuration, enabling Spark Classic applications
-to seamlessly switch to Spark Connect. Depending on the value of `spark.api.mode`, the application
+to switch to Spark Connect. Depending on the value of `spark.api.mode`, the application
 can run in either Spark Classic or Spark Connect mode. Here is an example:
 
 {% highlight python %}
@@ -450,18 +440,17 @@ Additionally, Spark Connect offers convenient options for local testing. By sett
 to `local[...]` or `local-cluster[...]`, you can start a local Spark Connect server and access a Spark
 Connect session.
 
-This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, note that
-`spark.remote` and `--remote` are limited to `local*` values, while `--conf spark.api.mode=connect`
+This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, to start a
+local server, `spark.remote` and `--remote` take only `local*` values, while `--conf spark.api.mode=connect`
 with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
 Spark Classic.
 
 # Client application authentication
 
-While Spark Connect does not have built-in authentication, it is designed to
-work seamlessly with your existing authentication infrastructure. Its gRPC
-HTTP/2 interface allows for the use of authenticating proxies, which makes
-it possible to secure Spark Connect without having to implement authentication
-logic in Spark directly.
+Spark Connect has no user-facing authentication of its own. Its gRPC HTTP/2
+interface allows for the use of authenticating proxies, which makes it possible
+to secure Spark Connect without having to implement authentication logic in
+Spark directly.
 
 # Routing through a shared ingress or reverse proxy
 
