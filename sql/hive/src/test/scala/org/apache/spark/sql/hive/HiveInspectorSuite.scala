@@ -28,7 +28,7 @@ import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo
 import org.apache.hadoop.io.LongWritable
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.{Row, TestUserClassUDT}
+import org.apache.spark.sql.{AnalysisException, Row, TestUserClassUDT}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, GenericArrayData, MapData}
@@ -290,5 +290,25 @@ class HiveInspectorSuite extends SparkFunSuite with HiveInspectors {
     val typeInfo2 = oi2.getTypeInfo.asInstanceOf[DecimalTypeInfo]
     assert(typeInfo2.precision() === 18)
     assert(typeInfo2.scale() === 10)
+  }
+
+  test("SPARK-60519: geospatial types are unsupported in Hive object inspectors") {
+    Seq(
+      GeometryType(4326), GeometryType("ANY"),
+      GeographyType(4326), GeographyType("ANY")).foreach { geoType =>
+      val expectedParams = Map("typeName" -> s"\"${geoType.sql}\"")
+      checkError(
+        exception = intercept[AnalysisException](toInspector(geoType)),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+      checkError(
+        exception = intercept[AnalysisException](toInspector(Literal.create(null, geoType))),
+        condition = "UNSUPPORTED_DATATYPE",
+        parameters = expectedParams)
+      checkError(
+        exception = intercept[AnalysisException](geoType.toTypeInfo),
+        condition = "_LEGACY_ERROR_TEMP_3095",
+        parameters = Map("dt" -> s"\"${geoType.sql}\""))
+    }
   }
 }

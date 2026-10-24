@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, Out
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
 import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, DataType, GeographyType, GeometryType, MapType, StructType, UserDefinedType}
 import org.apache.spark.util.SerializableJobConf
 
 /**
@@ -113,6 +113,22 @@ case class HiveFileFormat(fileSinkConf: FileSinkDesc)
         new HiveOutputWriter(path, fileSinkConfSer, jobConf.value, dataSchema)
       }
     }
+  }
+
+  override def supportDataType(dataType: DataType): Boolean = dataType match {
+    // Hive has no geospatial types, so they cannot be stored in a Hive serde table.
+    case _: GeometryType | _: GeographyType => false
+
+    case st: StructType => st.forall { f => supportDataType(f.dataType) }
+
+    case ArrayType(elementType, _) => supportDataType(elementType)
+
+    case MapType(keyType, valueType, _) =>
+      supportDataType(keyType) && supportDataType(valueType)
+
+    case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+
+    case _ => true
   }
 
   override def supportFieldName(name: String): Boolean = {

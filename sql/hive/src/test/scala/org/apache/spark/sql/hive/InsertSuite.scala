@@ -705,6 +705,42 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     }
   }
 
+  test("SPARK-60519: geospatial types are unsupported when writing to a Hive serde directory") {
+    // WKB of POINT(1 2).
+    val wkb = "0101000000000000000000F03F0000000000000040"
+    // Disable native data source conversion so that PARQUET and ORC also go through the Hive
+    // serde path (HiveFileFormat) like TEXTFILE.
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      Seq("TEXTFILE", "PARQUET", "ORC").foreach { fileFormat =>
+        Seq(
+          s"ST_GeomFromWKB(X'$wkb', 4326)" -> GeometryType(4326),
+          s"ST_GeogFromWKB(X'$wkb')" -> GeographyType(4326),
+          s"ARRAY(ST_GeomFromWKB(X'$wkb', 4326))" -> ArrayType(GeometryType(4326))
+        ).foreach { case (expr, dt) =>
+          withTempDir { dir =>
+            // InsertIntoHiveDirCommand wraps the failure in a SparkException, so assert on the
+            // cause.
+            val e = intercept[SparkException] {
+              sql(
+                s"""
+                   |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+                   |STORED AS $fileFormat
+                   |SELECT $expr AS c
+                 """.stripMargin)
+            }
+            checkError(
+              exception = e.getCause.asInstanceOf[AnalysisException],
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "columnName" -> "`c`",
+                "columnType" -> s"\"${dt.sql}\"",
+                "format" -> "Hive"))
+          }
+        }
+      }
+    }
+  }
+
   test("insert overwrite to dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")

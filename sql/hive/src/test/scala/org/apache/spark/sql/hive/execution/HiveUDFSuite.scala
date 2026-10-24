@@ -41,6 +41,7 @@ import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.functions.{call_function, max}
 import org.apache.spark.sql.hive.test.{TestHiveSingleton, TestUDTFJar}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{GeographyType, GeometryType}
 import org.apache.spark.tags.SlowHiveTest
 import org.apache.spark.util.Utils
 
@@ -404,6 +405,36 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
       sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
       val df2 = sql("SELECT testGenericUDFHash(rand())")
       assert(!df2.logicalPlan.asInstanceOf[Project].projectList.forall(_.deterministic))
+    }
+  }
+
+  test("SPARK-60519: geospatial types are unsupported as Hive UDF arguments") {
+    withUserDefinedFunction("testGenericUDFHash" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      // WKB of POINT(1 2).
+      val wkb = "0101000000000000000000F03F0000000000000040"
+      Seq(
+        // Non-foldable arguments, which are mapped to Hive object inspectors by their data types.
+        s"ST_GeomFromWKB(X'$wkb', 4326)" -> GeometryType(4326),
+        s"ST_GeogFromWKB(X'$wkb')" -> GeographyType(4326),
+        // Foldable arguments, which are mapped to constant Hive object inspectors.
+        "CAST(NULL AS GEOMETRY(4326))" -> GeometryType(4326),
+        "CAST(NULL AS GEOGRAPHY(4326))" -> GeographyType(4326)
+      ).foreach { case (arg, dt) =>
+        // The Hive UDF resolver wraps the failure in _LEGACY_ERROR_TEMP_3084.
+        val fragment = s"testGenericUDFHash($arg)"
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT $fragment").collect()
+        }
+        checkError(
+          exception = e,
+          condition = "_LEGACY_ERROR_TEMP_3084",
+          parameters = Map(
+            "clazz" -> classOf[GenericUDFHash].getCanonicalName,
+            "e" -> (s"${classOf[AnalysisException].getName}: [UNSUPPORTED_DATATYPE] " +
+              s"Unsupported data type \"${dt.sql}\". SQLSTATE: 0A000")),
+          context = ExpectedContext(fragment = fragment, start = 7, stop = 6 + fragment.length))
+      }
     }
   }
 

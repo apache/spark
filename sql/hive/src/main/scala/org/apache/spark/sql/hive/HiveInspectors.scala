@@ -849,6 +849,14 @@ private[hive] trait HiveInspectors {
     case _: UserDefinedType[_] =>
       val sqlType = dataType.asInstanceOf[UserDefinedType[_]].sqlType
       toInspector(sqlType)
+    // Hive has no geospatial types, so they cannot be represented by any Hive object inspector.
+    case _: GeometryType | _: GeographyType => throw unsupportedHiveType(dataType)
+  }
+
+  private def unsupportedHiveType(dataType: DataType): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_DATATYPE",
+      messageParameters = Map("typeName" -> toSQLType(dataType)))
   }
 
   /**
@@ -917,6 +925,10 @@ private[hive] trait HiveInspectors {
       toInspector(dt)
     case Literal(_, dt: UserDefinedType[_]) =>
       toInspector(dt.sqlType)
+    // Hive has no geospatial types, so a geospatial constant cannot be mapped to a Hive object
+    // inspector.
+    case Literal(_, dt @ (_: GeometryType | _: GeographyType)) =>
+      throw unsupportedHiveType(dt)
     // We will enumerate all of the possible constant expressions, throw exception if we missed
     case Literal(_, dt) =>
       throw SparkException.internalError(s"Hive doesn't support the constant type [$dt].")
