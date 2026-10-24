@@ -90,10 +90,11 @@ abstract class KeyGroupedPartitioningSuiteBase extends DistributionAndOrderingSu
       columns: Array[Column],
       partitions: Array[Transform],
       ordering: Array[SortOrder] = Array.empty,
-      catalog: InMemoryTableCatalog = catalog): Unit = {
+      catalog: InMemoryTableCatalog = catalog,
+      numRowsPerSplit: Int = 1): Unit = {
     catalog.createTable(Identifier.of(Array("ns"), table),
       columns, partitions, emptyProps, Distributions.unspecified(), ordering, None, None,
-      numRowsPerSplit = 1)
+      numRowsPerSplit = numRowsPerSplit)
   }
 
   protected def collectShuffles(plan: SparkPlan): Seq[ShuffleExchangeLike] = {
@@ -4032,6 +4033,7 @@ class KeyGroupedPartitioningSuite
       } finally {
         reportingCatalog.reportedKeys = Seq.empty
         reportingCatalog.reportedOrdering = Seq.empty
+        reportingCatalog.readSchemaOverride = schema => schema
         reportingCatalog.clearTables()
       }
     }
@@ -4246,6 +4248,138 @@ class KeyGroupedPartitioningSuite
     val df = sql(s"SELECT * FROM testcat.ns.$nestedItems SORT BY s.x")
     assert(collect(df.queryExecution.executedPlan) { case s: SortExec => s }.isEmpty)
     checkAnswer(df, Seq(Row(1L, Row(1L)), Row(2L, Row(2L))))
+  }
+
+  /** `id` and `s: struct<x, y>`, the columns of most SPARK-60011 tests. */
+  private val xy = new StructType().add("x", LongType).add("y", LongType)
+  private val idAndXy = Array(Column.create("id", LongType), Column.create("s", xy))
+
+  private def ascending(key: String): Array[SortOrder] =
+    Array(sort(column(key), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST))
+
+  /** The scan of `SELECT id, <projection> FROM testcat.ns.<table>`. */
+  private def scanOf(table: String, projection: String): BatchScanExec = collectScans(
+    sql(s"SELECT id, $projection FROM testcat.ns.$table").queryExecution.executedPlan).head
+
+  private def sortsIn(df: DataFrame): Seq[SortExec] =
+    collect(df.queryExecution.executedPlan) { case s: SortExec => s }
+
+  test("SPARK-60011: a scan's reported ordering on a nested field after schema pruning") {
+    // One split holds every row, so an ordering the scan claims but does not have would show in
+    // the answer. `S.y` resolves to `s` case-insensitively and keeps the reported spelling.
+    Seq("s.y", "S.y").zipWithIndex.foreach { case (key, i) =>
+      val table = s"nested_items_$i"
+      createTable(table, idAndXy, Array.empty, ascending(key), numRowsPerSplit = Int.MaxValue)
+      sql(s"INSERT INTO testcat.ns.$table VALUES (1, named_struct('x', 30L, 'y', 1L)), " +
+        "(2, named_struct('x', 10L, 'y', 2L)), (3, named_struct('x', 20L, 'y', 3L))")
+
+      val df = sql(s"SELECT id, s.y FROM testcat.ns.$table SORT BY s.y")
+      assert(sortsIn(df).isEmpty, key)
+      checkAnswer(df, Seq(Row(1L, 1L), Row(2L, 2L), Row(3L, 3L)))
+
+      // Pruning drops `y`, so the scan keeps no ordering and the query sorts by `x`.
+      assert(scanOf(table, "s.x").outputOrdering.isEmpty, key)
+      checkAnswer(sql(s"SELECT id, s.x FROM testcat.ns.$table SORT BY s.x"),
+        Seq(Row(2L, 10L), Row(3L, 20L), Row(1L, 30L)))
+    }
+
+    // A reported sort order whose value pruning narrows is dropped, and kept when the scan reads
+    // the whole struct. With `identity(s)`, so is the ordering derived from the key `s`.
+    val inner = new StructType().add("a", LongType).add("b", LongType)
+    val idAndInner = Array(Column.create("id", LongType),
+      Column.create("s", new StructType().add("x", LongType).add("inner", inner)))
+    for {
+      (key, i) <- Seq("s", "S", "s.inner", "S.inner").zipWithIndex
+      (partitions, j) <- Seq(Array.empty[Transform], Array[Transform](identity("s"))).zipWithIndex
+    } {
+      val table = s"narrowed_${i}_$j"
+      createTable(table, idAndInner, partitions, ascending(key))
+      sql(s"INSERT INTO testcat.ns.$table VALUES " +
+        "(1, named_struct('x', 1L, 'inner', named_struct('a', 1L, 'b', 2L)))")
+      assert(scanOf(table, "s.inner.b").outputOrdering.isEmpty, table)
+      assert(scanOf(table, "s").outputOrdering.nonEmpty, table)
+    }
+
+    // With no reported ordering, the key `s` derives an ordering only when the scan reads it whole.
+    createTable("keyed_s", idAndInner, Array(identity("s")))
+    sql("INSERT INTO testcat.ns.keyed_s VALUES " +
+      "(1, named_struct('x', 1L, 'inner', named_struct('a', 1L, 'b', 2L)))")
+    assert(orderingNames(scanOf("keyed_s", "s")) == Seq((Seq("s"), Ascending)))
+    assert(scanOf("keyed_s", "s.inner.b").outputOrdering.isEmpty)
+
+    // A kept two-level key is rebound through both field ordinals.
+    createTable("leaf", idAndInner, Array.empty, ascending("s.inner.b"))
+    assert(sortsIn(sql("SELECT id, s.inner.b FROM testcat.ns.leaf SORT BY s.inner.b")).isEmpty)
+    assert(scanOf("leaf", "s.inner.a").outputOrdering.isEmpty)
+
+    // So is a field of an array of structs, through `GetArrayStructFields`, which takes its field
+    // name from the output for `arr.Y`.
+    Seq("arr.y", "arr.Y").zipWithIndex.foreach { case (key, i) =>
+      val table = s"arrays_$i"
+      createTable(table, Array(Column.create("id", LongType), Column.create("arr", ArrayType(xy))),
+        Array.empty, ascending(key))
+      assert(sortsIn(sql(s"SELECT id, arr.y FROM testcat.ns.$table SORT BY arr.y")).isEmpty, key)
+      assert(scanOf(table, "arr.x").outputOrdering.isEmpty, key)
+    }
+  }
+
+  test("SPARK-60011: a nested-field ordering of a key-grouped scan after schema pruning") {
+    // Pruning drops `y`, so the reported `s.y` ends the kept prefix and the ordering falls back
+    // to the partition key, or keeps it when it follows `s.y`.
+    Seq(Seq("s.y"), Seq("s.y", "id")).zipWithIndex.foreach { case (keys, i) =>
+      val table = s"keyed_$i"
+      createTable(table, idAndXy, Array(identity("id")), keys.flatMap(ascending).toArray)
+      sql(s"INSERT INTO testcat.ns.$table VALUES (1, named_struct('x', 1L, 'y', 1L))")
+      assert(orderingNames(scanOf(table, "s.x")) == Seq((Seq("id"), Ascending)), keys)
+    }
+  }
+
+  test("SPARK-60011: a reported ordering that cannot be bound to the scan output is dropped") {
+    // The source reads the struct `s` as a string, against the `readSchema()` contract, so
+    // `ProjectionOverSchema` fails on `s.x` with an internal error rather than `FIELD_NOT_FOUND`.
+    // The scan drops the ordering instead of failing the planning.
+    withCustomReportingTable { reportingCatalog =>
+      reportingCatalog.reportedOrdering = Seq(sort(column("s.x"), SortDirection.ASCENDING))
+      reportingCatalog.readSchemaOverride = schema => StructType(schema.map {
+        case field if field.name == "s" => field.copy(dataType = StringType)
+        case field => field
+      })
+      val df = sql(s"SELECT count(s) FROM $customReportingTableName")
+      assert(collectScans(df.queryExecution.executedPlan).head.outputOrdering.isEmpty)
+    }
+  }
+
+  test("SPARK-60011: k-way merge over a reported ordering on a nested field") {
+    // Two splits hold `id` 1 out of `s.y` order, so only a merge by `[id, s.y]` lets the sort-merge
+    // join on `(id, s.y)` see every match without a sort. The query reads only `s.y`, so pruning
+    // narrows `s` to `struct<y>` and moves `y` to ordinal 0.
+    createTable(items, idAndXy, Array(identity("id")), ascending("id") ++ ascending("s.y"))
+    sql(s"INSERT INTO testcat.ns.$items VALUES " +
+      "(1, named_struct('x', 1L, 'y', 20L)), (2, named_struct('x', 3L, 'y', 30L))")
+    sql(s"INSERT INTO testcat.ns.$items VALUES (1, named_struct('x', 2L, 'y', 10L))")
+    val keyedPurchasesColumns =
+      Array(Column.create("item_id", LongType), Column.create("y", LongType))
+    createTable(purchases, keyedPurchasesColumns, Array(identity("item_id")),
+      ascending("item_id") ++ ascending("y"), numRowsPerSplit = Int.MaxValue)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 10), (1, 20), (2, 30)")
+
+    withSQLConf(
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false",
+        SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED.key -> "true") {
+      val df = sql(
+        s"""
+           |${selectWithMergeJoinHint("i", "p")}
+           |i.id, p.y
+           |FROM testcat.ns.$items i JOIN testcat.ns.$purchases p
+           |ON p.item_id = i.id AND p.y = i.s.y
+           |""".stripMargin)
+      checkAnswer(df, Seq(Row(1L, 10L), Row(1L, 20L), Row(2L, 30L)))
+      assert(sortsIn(df).isEmpty)
+      val merging =
+        collectAllGroupPartitions(df.queryExecution.executedPlan).filter(_.enableSortedMerge)
+      assert(merging.length == 1, "expected one k-way merge")
+      assert(merging.head.execute().isInstanceOf[SortedMergeCoalescedRDD[_]])
+    }
   }
 
   test("SPARK-47094: SPJ: Support compatible buckets") {
@@ -11103,6 +11237,7 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
 class CustomReportingCatalog extends InMemoryTableCatalog {
   var reportedKeys: Seq[Expression] = Seq.empty
   var reportedOrdering: Seq[SortOrder] = Seq.empty
+  var readSchemaOverride: StructType => StructType = schema => schema
 
   // scalastyle:off argcount
   override protected def newInMemoryTable(
@@ -11126,7 +11261,7 @@ class CustomReportingCatalog extends InMemoryTableCatalog {
       override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
         new InMemoryScanBuilder(schema(), options) {
           override def build(): Scan =
-            CustomReportingScan(super.build(), reportedKeys, reportedOrdering)
+            CustomReportingScan(super.build(), reportedKeys, reportedOrdering, readSchemaOverride)
         }
     }
   }
@@ -11135,8 +11270,10 @@ class CustomReportingCatalog extends InMemoryTableCatalog {
 case class CustomReportingScan(
     inner: Scan,
     keys: Seq[Expression],
-    ordering: Seq[SortOrder]) extends SupportsReportPartitioning with SupportsReportOrdering {
-  override def readSchema(): StructType = inner.readSchema()
+    ordering: Seq[SortOrder],
+    readSchemaOverride: StructType => StructType)
+  extends SupportsReportPartitioning with SupportsReportOrdering {
+  override def readSchema(): StructType = readSchemaOverride(inner.readSchema())
   override def toBatch: Batch = inner.toBatch
   override def description(): String = inner.description()
   override def outputPartitioning(): Partitioning = new KeyGroupedPartitioning(
