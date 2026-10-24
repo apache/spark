@@ -84,6 +84,14 @@ class ToPrettyStringSuite extends SparkFunSuite with ExpressionEvalHelper {
       ToPrettyString(Cast(Literal(1234.65), DecimalType(6, 2))), "1234.65")
   }
 
+  test("SPARK-60200: Decimal with a huge negative scale as a pretty string") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val input = Literal.create(
+        Decimal(new java.math.BigDecimal("1e1001")), DecimalType(1, -1001))
+      checkEvaluation(ToPrettyString(input), "1E+1001")
+    }
+  }
+
   test("String as pretty strings") {
     checkEvaluation(ToPrettyString(Literal("s")), "s")
   }
