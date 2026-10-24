@@ -16,16 +16,22 @@
  */
 package org.apache.spark.scheduler.cluster.k8s
 
+import java.net.InetSocketAddress
+import java.nio.charset.StandardCharsets.UTF_8
 import java.time.Instant
 import java.time.temporal.ChronoUnit.MILLIS
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.{Callable, CompletableFuture, CountDownLatch, ThreadPoolExecutor, TimeoutException, TimeUnit}
+import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
 
+import com.sun.net.httpserver.{HttpExchange, HttpHandler, HttpServer}
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException}
+import io.fabric8.kubernetes.client.{Config, ConfigBuilder, KubernetesClient, KubernetesClientBuilder, KubernetesClientException}
 import io.fabric8.kubernetes.client.dsl.PodResource
+import io.fabric8.kubernetes.client.utils.Serialization
 import org.mockito.{Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyString, eq => meq}
 import org.mockito.Mockito.{clearInvocations, never, times, verify, when}
@@ -33,6 +39,8 @@ import org.mockito.invocation.InvocationOnMock
 import org.mockito.stubbing.Answer
 import org.scalatest.BeforeAndAfter
 import org.scalatest.PrivateMethodTester._
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkException, SparkFunSuite}
 import org.apache.spark.deploy.k8s.{KubernetesExecutorConf, KubernetesExecutorSpec}
@@ -42,7 +50,7 @@ import org.apache.spark.deploy.k8s.Fabric8Aliases._
 import org.apache.spark.internal.config._
 import org.apache.spark.resource._
 import org.apache.spark.scheduler.cluster.k8s.ExecutorLifecycleTestUtils._
-import org.apache.spark.util.ManualClock
+import org.apache.spark.util.{ManualClock, ThreadUtils}
 
 class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
 
@@ -154,6 +162,10 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     when(pvcWithNamespace.resource(any())).thenReturn(pvcResource)
     when(labeledPersistentVolumeClaims.list()).thenReturn(persistentVolumeClaimList)
     when(persistentVolumeClaimList.getItems).thenReturn(Seq.empty[PersistentVolumeClaim].asJava)
+  }
+
+  after {
+    podsAllocatorUnderTest.stopAllocation()
   }
 
   test("SPARK-58192: warn when recovery mode cannot isolate a single task") {
@@ -1099,6 +1111,678 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val modifiedVolume = podVolumes.asScala
       .find(v => v.getPersistentVolumeClaim.getClaimName.equals(existingPVCName))
     assert(modifiedVolume.nonEmpty)
+  }
+
+  test("Parallel allocation configuration is opt-in and requires positive concurrency") {
+    assert(!conf.get(KUBERNETES_ALLOCATION_PARALLEL_ENABLED))
+    assert(conf.get(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY) == 5)
+    assert(conf.get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT) == 20000L)
+    assert(conf.clone.set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "0s")
+      .get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT) == 0L)
+    intercept[IllegalArgumentException] {
+      conf.clone.set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "-1s")
+        .get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT)
+    }
+    Seq(0, -1).foreach { concurrency =>
+      intercept[IllegalArgumentException] {
+        conf.clone.set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, concurrency)
+          .get(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY)
+      }
+    }
+  }
+
+  test("Disabled parallel allocation ignores concurrency and the new stop hook") {
+    val serialConf = conf.clone
+      .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, false)
+      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY.key, "invalid")
+      .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "invalid")
+    snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(serialConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+    podsAllocatorUnderTest.stopAllocation()
+    mockPodCreation(identity)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    verify(podResource).create()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+  }
+
+  test("Disabled parallel allocation preserves rollback exception propagation") {
+    mockExecutorWithPVC()
+    mockPodCreation(identity)
+    when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC failed"))
+    when(podResource.delete()).thenThrow(new KubernetesClientException("rollback failed"))
+    val failure = intercept[KubernetesClientException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    }
+    assert(failure.getMessage == "rollback failed")
+  }
+
+  test("Disabled parallel allocation preserves serial creation and failure handling") {
+    val serialConf = conf.clone
+      .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, false)
+      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 8)
+    snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(serialConf, secMgr, executorBuilder,
+      kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+    val caller = Thread.currentThread()
+    val events = mutable.ArrayBuffer.empty[String]
+    val pvcCalls = new AtomicInteger()
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        assert(Thread.currentThread() == caller)
+        val executorConf = invocation.getArgument[KubernetesExecutorConf](0)
+        events += s"build-${executorConf.executorId}"
+        val pod = executorPodWithIdAndVolume(
+          executorConf.executorId.toInt, executorConf.resourceProfileId)
+        pod.pod.getSpec.getVolumes.get(0).getPersistentVolumeClaim
+          .setClaimName(s"pvc-${executorConf.executorId}")
+        KubernetesExecutorSpec(pod,
+          Seq(persistentVolumeClaim(s"pvc-${executorConf.executorId}", "gp3", "200Gi")))
+      })
+    mockPodCreation { pod =>
+      assert(Thread.currentThread() == caller)
+      events += s"pod-${pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL)}"
+      pod
+    }
+    when(pvcResource.create()).thenAnswer((_: InvocationOnMock) => {
+      assert(Thread.currentThread() == caller)
+      val call = pvcCalls.incrementAndGet()
+      events += s"pvc-$call"
+      if (call == 2) throw new KubernetesClientException("second PVC failed")
+      persistentVolumeClaim(s"pvc-$call", "gp3", "200Gi")
+    })
+    val failure = intercept[KubernetesClientException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    }
+    assert(failure.getMessage == "second PVC failed")
+    assert(events.toSeq == Seq("build-1", "pod-1", "pvc-1", "build-2", "pod-2", "pvc-2"))
+    verify(podResource, times(2)).create()
+    verify(podResource, times(1)).delete()
+    val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
+    assert(podsAllocatorUnderTest.invokePrivate(counter).get() == 1)
+    val poolAccessor = PrivateMethod[Option[ThreadPoolExecutor]](Symbol("podCreationThreadPool"))()
+    assert(podsAllocatorUnderTest.invokePrivate(poolAccessor).isEmpty)
+    // The first success must remain tracked even though the second request failed.
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+    verify(podResource, times(2)).create()
+  }
+
+  test("Parallel allocation tracks late successes across wait polling intervals") {
+    startParallelAllocator(conf.clone.set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 2))
+    val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-slow-pod-allocation")
+    val started = new CountDownLatch(2)
+    val finished = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    mockPodCreation { pod =>
+      started.countDown()
+      if (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) == "1") {
+        assert(release.await(10, TimeUnit.SECONDS))
+      }
+      pod
+    }
+    try {
+      val allocation = caller.submit(new Callable[Unit] {
+        override def call(): Unit = {
+          try {
+            podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+          } finally {
+            finished.countDown()
+          }
+        }
+      })
+      assert(started.await(10, TimeUnit.SECONDS))
+      assert(!finished.await(1500, TimeUnit.MILLISECONDS),
+        "Allocation discarded a live request after a wait polling interval")
+      release.countDown()
+      ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
+      assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
+      snapshotsStore.notifySubscribers()
+      verify(podResource, times(2)).create()
+      assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
+    } finally {
+      release.countDown()
+      caller.shutdownNow()
+    }
+  }
+
+  test("Parallel allocation bounds concurrent requests and builds specs on the caller thread") {
+    val concurrency = 2
+    startParallelAllocator(conf.clone
+      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, concurrency)
+      .set(KUBERNETES_ALLOCATION_BATCH_SIZE, 4))
+    val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-pod-allocator")
+    val started = new CountDownLatch(concurrency)
+    val release = new CountDownLatch(1)
+    val active = new AtomicInteger()
+    val peak = new AtomicInteger()
+    val built = new AtomicInteger()
+    val createCalls = new AtomicInteger()
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        assert(Thread.currentThread().getName.startsWith("test-pod-allocator"))
+        built.incrementAndGet()
+        executorPodAnswer().answer(invocation)
+      })
+    mockPodCreation { pod =>
+      assert(built.get() == 4)
+      assert(Thread.currentThread().getName.contains("k8s-pod-creator"))
+      val running = active.incrementAndGet()
+      peak.updateAndGet(previous => math.max(previous, running))
+      createCalls.incrementAndGet()
+      started.countDown()
+      try {
+        assert(release.await(10, TimeUnit.SECONDS))
+        pod
+      } finally {
+        active.decrementAndGet()
+      }
+    }
+    try {
+      val allocation = caller.submit(new Callable[Unit] {
+        override def call(): Unit = {
+          podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 10))
+        }
+      })
+      assert(started.await(10, TimeUnit.SECONDS))
+      assert(createCalls.get() == concurrency)
+      release.countDown()
+      ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
+      assert(peak.get() == concurrency)
+      assert(createCalls.get() == 4)
+      assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 4)
+      (1 to 4).foreach { id =>
+        verify(podsWithNamespace).resource(podWithAttachedContainerForId(id))
+      }
+    } finally {
+      release.countDown()
+      caller.shutdownNow()
+    }
+  }
+
+  test("Parallel allocation retains successful pods when another create fails") {
+    startParallelAllocator()
+    mockPodCreation { pod =>
+      if (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) == "1") {
+        throw new KubernetesClientException("Pod creation failed")
+      }
+      pod
+    }
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
+    verify(lifecycleManager, times(1)).registerExecutorFailure()
+    verify(podResource, times(3)).create()
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(3)).create()
+    snapshotsStore.updatePod(runningExecutor(2))
+    snapshotsStore.updatePod(runningExecutor(3))
+    snapshotsStore.notifySubscribers()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(4))
+    verify(podResource, times(4)).create()
+  }
+
+  test("An API timeout fails only its executor instead of restarting the wait loop") {
+    startParallelAllocator()
+    val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-api-timeout")
+    mockPodCreation { pod =>
+      if (pod.getMetadata.getLabels.get(SPARK_EXECUTOR_ID_LABEL) == "1") {
+        throw new TimeoutException("API request timed out")
+      }
+      pod
+    }
+    try {
+      val allocation = caller.submit(new Callable[Unit] {
+        override def call(): Unit = {
+          podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+        }
+      })
+      ThreadUtils.awaitResult(allocation, Duration(5, TimeUnit.SECONDS))
+      assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+      snapshotsStore.notifySubscribers()
+      verify(podResource, times(2)).create()
+      snapshotsStore.updatePod(runningExecutor(2))
+      snapshotsStore.notifySubscribers()
+      verify(podResource, times(3)).create()
+      verify(podsWithNamespace).resource(podWithAttachedContainerForId(3))
+    } finally {
+      podsAllocatorUnderTest.stopAllocation()
+      caller.shutdownNow()
+    }
+  }
+
+  test("Parallel allocation preserves resource profile and pending pod limits") {
+    startParallelAllocator(conf.clone.set(KUBERNETES_MAX_PENDING_PODS, 3))
+    mockPodCreation(identity)
+    val profile = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(4).memory("2g"))
+      .require(new TaskResourceRequests().cpus(2)).build()
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2, profile -> 3))
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 3)
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(1, defaultProfile.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(2, defaultProfile.id))
+    verify(podsWithNamespace).resource(podWithAttachedContainerForId(3, profile.id))
+    snapshotsStore.notifySubscribers()
+    verify(podResource, times(3)).create()
+  }
+
+  Seq(false, true).foreach { failPVC =>
+    test(s"Parallel allocation reserves PVC capacity and retries failures: failPVC=$failPVC") {
+      startParallelAllocator(conf.clone
+        .set(KUBERNETES_DRIVER_OWN_PVC, true)
+        .set(KUBERNETES_DRIVER_REUSE_PVC, true)
+        .set(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC, true)
+        .set(EXECUTOR_INSTANCES, 1))
+      mockExecutorWithPVC()
+      mockPodCreation(identity)
+      if (failPVC) {
+        when(pvcResource.create()).thenThrow(new KubernetesClientException("PVC creation failed"))
+          .thenReturn(persistentVolumeClaim("pvc-0", "gp3", "200Gi"))
+      }
+      val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+      verify(podResource, times(1)).create()
+      verify(pvcResource, times(1)).create()
+      verify(lifecycleManager, times(if (failPVC) 1 else 0)).registerExecutorFailure()
+      assert(podsAllocatorUnderTest.invokePrivate(counter).get() == (if (failPVC) 0 else 1))
+      assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() ==
+        (if (failPVC) 0 else 1))
+      if (failPVC) {
+        verify(podResource).delete()
+        snapshotsStore.notifySubscribers()
+        verify(podResource, times(2)).create()
+        assert(podsAllocatorUnderTest.invokePrivate(counter).get() == 1)
+        assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1)
+      } else {
+        snapshotsStore.updatePod(runningExecutor(1))
+        snapshotsStore.notifySubscribers()
+        verify(podResource, times(1)).create()
+      }
+    }
+  }
+
+  test("Parallel allocation assigns each reusable PVC to only one executor") {
+    startParallelAllocator(conf.clone
+      .set(KUBERNETES_DRIVER_OWN_PVC, true)
+      .set(KUBERNETES_DRIVER_REUSE_PVC, true))
+    mockExecutorWithPVC()
+    mockPodCreation(identity)
+    val pvcs = Seq("reused-1", "reused-2").map { name =>
+      val pvc = persistentVolumeClaim(name, "gp3", "200Gi")
+      pvc.getMetadata.setCreationTimestamp(
+        Instant.now().minusMillis(podCreationTimeout + 1).toString)
+      pvc
+    }
+    when(persistentVolumeClaimList.getItems).thenReturn(pvcs.asJava)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+    val captor = org.mockito.ArgumentCaptor.forClass(classOf[Pod])
+    verify(podsWithNamespace, times(2)).resource(captor.capture())
+    val claims = captor.getAllValues.asScala.flatMap(_.getSpec.getVolumes.asScala)
+      .map(_.getPersistentVolumeClaim.getClaimName)
+    assert(claims.toSet == Set("reused-1", "reused-2"))
+    verify(pvcResource, never()).create()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 2)
+  }
+
+  test("Parallel allocation respects the maximum executor pod ID") {
+    startParallelAllocator(conf.clone.set(KUBERNETES_ALLOCATION_MAXIMUM, 2))
+    mockPodCreation(identity)
+    val error = intercept[SparkException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    }
+    assert(error.getMessage.contains("Exceed the pod creation limit: 2"))
+    verify(podResource, never()).create()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+  }
+
+  test("Parallel allocation does not submit a partially built batch") {
+    startParallelAllocator()
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        if (invocation.getArgument[KubernetesExecutorConf](0).executorId == "2") {
+          throw new IllegalArgumentException("Invalid pod spec")
+        }
+        executorPodAnswer().answer(invocation)
+      })
+    intercept[IllegalArgumentException] {
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+    }
+    verify(podResource, never()).create()
+    assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 0)
+  }
+
+  Seq(false, true).foreach { parallel =>
+    test(s"An executor with two PVCs can start with instances=1, parallel=$parallel") {
+      val reviewConf = conf.clone
+        .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, parallel)
+        .set(KUBERNETES_DRIVER_OWN_PVC, true)
+        .set(KUBERNETES_DRIVER_REUSE_PVC, true)
+        .set(KUBERNETES_DRIVER_WAIT_TO_REUSE_PVC, true)
+        .set(EXECUTOR_INSTANCES, 1)
+      snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+      podsAllocatorUnderTest = new ExecutorPodsAllocator(reviewConf, secMgr, executorBuilder,
+        kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+      podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+      podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+      mockPodCreation(identity)
+      when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+        meq(kubernetesClient), any(classOf[ResourceProfile])))
+        .thenAnswer((invocation: InvocationOnMock) => {
+          val k8sConf = invocation.getArgument[KubernetesExecutorConf](0)
+          val sparkPod = executorPodWithIdAndVolume(
+            k8sConf.executorId.toInt, k8sConf.resourceProfileId)
+          val secondVolume = new VolumeBuilder()
+            .withName("second-volume")
+            .withNewPersistentVolumeClaim().withClaimName("pvc-1")
+            .endPersistentVolumeClaim().build()
+          sparkPod.pod.getSpec.getVolumes.add(secondVolume)
+          KubernetesExecutorSpec(sparkPod, Seq(
+            persistentVolumeClaim("pvc-0", "gp3", "200Gi"),
+            persistentVolumeClaim("pvc-1", "gp3", "200Gi")))
+        })
+      podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+      snapshotsStore.notifySubscribers()
+      assert(podsAllocatorUnderTest.invokePrivate(numOutstandingPods).get() == 1,
+        "No executor created even after retrying the allocation")
+      verify(podResource, times(1)).create()
+      verify(pvcResource, times(2)).create()
+    }
+  }
+
+  test("Backend stop closes creation pool when executor deletion is disabled") {
+    val reviewConf = conf.clone
+      .set(KUBERNETES_DELETE_EXECUTORS, false)
+      .set(KUBERNETES_DRIVER_OWN_PVC, false)
+      .set(KUBERNETES_DRIVER_SERVICE_DELETE_ON_TERMINATION, false)
+    startParallelAllocator(reviewConf)
+    mockPodCreation(identity)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    val sc = org.mockito.Mockito.mock(classOf[org.apache.spark.SparkContext])
+    val env = org.mockito.Mockito.mock(classOf[org.apache.spark.SparkEnv])
+    val rpcEnv = org.mockito.Mockito.mock(classOf[org.apache.spark.rpc.RpcEnv])
+    val scheduler = org.mockito.Mockito.mock(classOf[org.apache.spark.scheduler.TaskSchedulerImpl])
+    val profiles = org.mockito.Mockito.mock(classOf[ResourceProfileManager])
+    val lifecycle = org.mockito.Mockito.mock(classOf[ExecutorPodsLifecycleManager])
+    when(scheduler.sc).thenReturn(sc)
+    when(sc.conf).thenReturn(reviewConf)
+    when(sc.env).thenReturn(env)
+    when(env.rpcEnv).thenReturn(rpcEnv)
+    when(sc.resourceProfileManager).thenReturn(profiles)
+    when(profiles.defaultResourceProfile).thenReturn(defaultProfile)
+    val backend = new KubernetesClusterSchedulerBackend(scheduler, sc, kubernetesClient,
+      new org.jmock.lib.concurrent.DeterministicScheduler(), snapshotsStore,
+      podsAllocatorUnderTest, lifecycle,
+      org.mockito.Mockito.mock(classOf[ExecutorPodsWatchSnapshotSource]),
+      org.mockito.Mockito.mock(classOf[ExecutorPodsPollingSnapshotSource]))
+    val poolAccessor = PrivateMethod[Option[java.util.concurrent.ThreadPoolExecutor]](
+      Symbol("podCreationThreadPool"))()
+    val pool = podsAllocatorUnderTest.invokePrivate(poolAccessor).get
+    assert(pool.getPoolSize > 0)
+    backend.stop()
+    verify(kubernetesClient).close()
+    assert(pool.isShutdown, "Pod creation pool is still alive after backend stop")
+  }
+
+  for (deleteExecutors <- Seq(false, true); waitingForPVC <- Seq(false, true)) {
+    test(s"Stopping drains API responses: delete=$deleteExecutors, waitingForPVC=$waitingForPVC") {
+      startParallelAllocator(conf.clone
+        .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
+        .set(KUBERNETES_DELETE_EXECUTORS, deleteExecutors))
+      val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-drain")
+      val stopper = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-stop")
+      val started = new CountDownLatch(1)
+      val stopReturned = new CountDownLatch(1)
+      val response = new CompletableFuture[Pod]()
+      def awaitResponse(): Pod = {
+        started.countDown()
+        try {
+          response.get()
+        } catch {
+          case e: InterruptedException =>
+            // Fabric8's synchronous API stops waiting without cancelling the HTTP request.
+            Thread.currentThread().interrupt()
+            throw new KubernetesClientException("Interrupted while awaiting API response", e)
+        }
+      }
+      if (waitingForPVC) {
+        mockExecutorWithPVC()
+        mockPodCreation(identity)
+        when(pvcResource.create()).thenAnswer((_: InvocationOnMock) => {
+          awaitResponse()
+          persistentVolumeClaim("pvc-0", "gp3", "200Gi")
+        })
+      } else {
+        mockPodCreation(_ => awaitResponse())
+      }
+      try {
+        val allocation = caller.submit(new Callable[Unit] {
+          override def call(): Unit = {
+            podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 4))
+          }
+        })
+        assert(started.await(10, TimeUnit.SECONDS))
+        val stopping = stopper.submit(new Callable[Unit] {
+          override def call(): Unit = {
+            try {
+              podsAllocatorUnderTest.stopAllocation()
+            } finally {
+              stopReturned.countDown()
+            }
+          }
+        })
+        val poolAccessor = PrivateMethod[Option[ThreadPoolExecutor]](
+          Symbol("podCreationThreadPool"))()
+        val pool = podsAllocatorUnderTest.invokePrivate(poolAccessor).get
+        eventually(timeout(Span(10, Seconds))) {
+          assert(pool.isShutdown)
+        }
+        assert(!stopReturned.await(200, TimeUnit.MILLISECONDS),
+          "Stopping returned while a Pod creation request was still in flight")
+        response.complete(podWithAttachedContainerForId(1))
+        ThreadUtils.awaitResult(stopping, Duration(10, TimeUnit.SECONDS))
+        ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
+        verify(podResource, times(1)).create()
+        verify(podResource, times(if (deleteExecutors) 1 else 0)).delete()
+        verify(pvcResource, times(if (waitingForPVC) 1 else 0)).create()
+        val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
+        assert(podsAllocatorUnderTest.invokePrivate(counter).get() ==
+          (if (waitingForPVC) 1 else 0))
+        assert(pool.isTerminated)
+      } finally {
+        response.complete(podWithAttachedContainerForId(1))
+        caller.shutdownNow()
+        stopper.shutdownNow()
+      }
+    }
+  }
+
+  Seq("0s", "1s").foreach { shutdownTimeout =>
+    test(s"Allocation shutdown uses its own timeout and is idempotent: $shutdownTimeout") {
+      startParallelAllocator(conf.clone
+        .set(KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD.key, "30s")
+        .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, shutdownTimeout))
+      val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-grace-period")
+      val stopper = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-stop-again")
+      val started = new CountDownLatch(1)
+      val response = new CompletableFuture[Pod]()
+      mockPodCreation { _ =>
+        started.countDown()
+        response.get()
+      }
+      try {
+        val allocation = caller.submit(new Callable[Unit] {
+          override def call(): Unit = {
+            podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+          }
+        })
+        assert(started.await(10, TimeUnit.SECONDS))
+        val firstStop = stopper.submit(new Callable[Unit] {
+          override def call(): Unit = podsAllocatorUnderTest.stopAllocation()
+        })
+        ThreadUtils.awaitResult(firstStop, Duration(5, TimeUnit.SECONDS))
+        assert(!response.isDone)
+        ThreadUtils.awaitResult(allocation, Duration(2, TimeUnit.SECONDS))
+        val secondStop = stopper.submit(new Callable[Unit] {
+          override def call(): Unit = podsAllocatorUnderTest.stopAllocation()
+        })
+        ThreadUtils.awaitResult(secondStop, Duration(200, TimeUnit.MILLISECONDS))
+        response.complete(podWithAttachedContainerForId(1))
+        val poolAccessor = PrivateMethod[Option[ThreadPoolExecutor]](
+          Symbol("podCreationThreadPool"))()
+        assert(podsAllocatorUnderTest.invokePrivate(poolAccessor).get
+          .awaitTermination(10, TimeUnit.SECONDS))
+        verify(podResource, times(1)).delete()
+      } finally {
+        response.complete(podWithAttachedContainerForId(1))
+        caller.shutdownNow()
+        stopper.shutdownNow()
+      }
+    }
+  }
+
+  test("Snapshots queued during shutdown do not delete retained pods") {
+    startParallelAllocator(conf.clone.set(KUBERNETES_DELETE_EXECUTORS, false))
+    mockPodCreation(identity)
+    waitForExecutorPodsClock.setTime(Instant.now().toEpochMilli)
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
+    snapshotsStore.updatePod(pendingExecutor(1))
+    podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 0))
+    waitForExecutorPodsClock.advance(executorIdleTimeout * 2)
+    podsAllocatorUnderTest.stopAllocation()
+    snapshotsStore.notifySubscribers()
+    verify(labeledPods, never()).delete()
+    verify(podResource, times(1)).create()
+  }
+
+  Seq(false, true).foreach { deleteExecutors =>
+    test(s"Real client drains a delayed Pod response during stop: delete=$deleteExecutors") {
+      val started = new CountDownLatch(1)
+      val releaseResponse = new CountDownLatch(1)
+      val created = new AtomicReference[Pod]()
+      val creates = new AtomicInteger()
+      val deletes = new AtomicInteger()
+      val server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0)
+      server.createContext("/api/v1/namespaces/default/pods", new HttpHandler {
+        override def handle(exchange: HttpExchange): Unit = {
+          try {
+            val response = exchange.getRequestMethod match {
+              case "POST" =>
+                val pod = Serialization.unmarshal(exchange.getRequestBody, classOf[Pod])
+                pod.getMetadata.setUid("created-pod-uid")
+                created.set(pod)
+                creates.incrementAndGet()
+                started.countDown()
+                assert(releaseResponse.await(10, TimeUnit.SECONDS))
+                (201, Serialization.asJson(pod))
+              case "DELETE" =>
+                deletes.incrementAndGet()
+                created.set(null)
+                (200, Serialization.asJson(new StatusBuilder()
+                  .withStatus("Success").withCode(200).build()))
+              case _ =>
+                (404, Serialization.asJson(new StatusBuilder()
+                  .withStatus("Failure").withCode(404).build()))
+            }
+            val bytes = response._2.getBytes(UTF_8)
+            exchange.getResponseHeaders.set("Content-Type", "application/json")
+            exchange.sendResponseHeaders(response._1, bytes.length)
+            exchange.getResponseBody.write(bytes)
+          } finally {
+            exchange.close()
+          }
+        }
+      })
+      server.start()
+      val client = new KubernetesClientBuilder().withConfig(new ConfigBuilder(Config.empty())
+        .withMasterUrl(s"http://127.0.0.1:${server.getAddress.getPort}")
+        .withNamespace("default")
+        .withRequestTimeout(10000)
+        .build()).build()
+      val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-http-allocation")
+      val stopper = ThreadUtils.newDaemonSingleThreadExecutor("test-http-stop")
+      try {
+        val httpConf = conf.clone
+          .remove(KUBERNETES_DRIVER_POD_NAME.key)
+          .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, true)
+          .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
+          .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "10s")
+          .set(KUBERNETES_DELETE_EXECUTORS, deleteExecutors)
+        when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+          meq(client), any(classOf[ResourceProfile]))).thenAnswer(executorPodAnswer())
+        snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+        podsAllocatorUnderTest = new ExecutorPodsAllocator(httpConf, secMgr, executorBuilder,
+          client, snapshotsStore, waitForExecutorPodsClock)
+        podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+        podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+        val allocation = caller.submit(new Callable[Unit] {
+          override def call(): Unit = {
+            podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 3))
+          }
+        })
+        assert(started.await(10, TimeUnit.SECONDS))
+        val stopping = stopper.submit(new Callable[Unit] {
+          override def call(): Unit = podsAllocatorUnderTest.stopAllocation()
+        })
+        val poolAccessor = PrivateMethod[Option[ThreadPoolExecutor]](
+          Symbol("podCreationThreadPool"))()
+        val pool = podsAllocatorUnderTest.invokePrivate(poolAccessor).get
+        eventually(timeout(Span(10, Seconds))) {
+          assert(pool.isShutdown)
+        }
+        assert(!stopping.isDone)
+        assert(created.get() != null, "The API server has already created the Pod")
+        releaseResponse.countDown()
+        ThreadUtils.awaitResult(stopping, Duration(10, TimeUnit.SECONDS))
+        ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
+        assert(pool.isTerminated)
+        assert(creates.get() == 1, "Queued requests must not reach the API server")
+        assert(deletes.get() == (if (deleteExecutors) 1 else 0))
+        assert((created.get() == null) == deleteExecutors)
+      } finally {
+        releaseResponse.countDown()
+        podsAllocatorUnderTest.stopAllocation()
+        caller.shutdownNow()
+        stopper.shutdownNow()
+        client.close()
+        server.stop(0)
+      }
+    }
+  }
+
+  private def startParallelAllocator(allocatorConf: SparkConf = conf.clone): Unit = {
+    snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
+    podsAllocatorUnderTest = new ExecutorPodsAllocator(
+      allocatorConf.set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, true), secMgr,
+      executorBuilder, kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
+    podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+    podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+  }
+
+  private def mockPodCreation(create: Pod => Pod): Unit = {
+    val requestedPod = new ThreadLocal[Pod]()
+    when(podsWithNamespace.resource(any())).thenAnswer((invocation: InvocationOnMock) => {
+      requestedPod.set(invocation.getArgument[Pod](0))
+      podResource
+    })
+    when(podResource.create()).thenAnswer((_: InvocationOnMock) => create(requestedPod.get()))
+  }
+
+  private def mockExecutorWithPVC(): Unit = {
+    when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
+      meq(kubernetesClient), any(classOf[ResourceProfile])))
+      .thenAnswer((invocation: InvocationOnMock) => {
+        val k8sConf = invocation.getArgument[KubernetesExecutorConf](0)
+        KubernetesExecutorSpec(
+          executorPodWithIdAndVolume(k8sConf.executorId.toInt, k8sConf.resourceProfileId),
+          Seq(persistentVolumeClaim("pvc-0", "gp3", "200Gi")))
+      })
   }
 
   private def executorPodAnswer(): Answer[KubernetesExecutorSpec] =
