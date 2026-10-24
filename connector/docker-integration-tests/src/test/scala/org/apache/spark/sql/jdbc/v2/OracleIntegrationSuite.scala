@@ -428,4 +428,36 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows11(0).getString(0) === "amy")
     assert(rows11(1).getString(0) === "alex")
   }
+
+  test("SPARK-60479: CHAR equality is pushed, including CJK") {
+    val tableName = caseConvert("char_pad")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      // CHAR(n CHAR) so CJK occupies one length unit, matching Spark CHAR padding.
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 CHAR))").executeUpdate()
+      }
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, '日本')")
+      // scalastyle:on nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getDecimal(0).intValueExact() === 1)
+      // scalastyle:off nonascii
+      val cjk = sql(s"SELECT id FROM $table WHERE flag = '日本'")
+      // scalastyle:on nonascii
+      checkFilterPushed(cjk)
+      val cjkRows = cjk.collect()
+      assert(cjkRows.length === 1)
+      assert(cjkRows(0).getDecimal(0).intValueExact() === 3)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getDecimal(0).intValueExact() === 2)
+    }
+  }
 }

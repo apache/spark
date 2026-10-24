@@ -54,6 +54,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SharedSparkSession {
@@ -1432,7 +1433,6 @@ class JDBCSuite extends SharedSparkSession {
 
     // LIKE-family operators render with a trailing ESCAPE clause and must be delimited too.
     // LiteralValue for StringType must use UTF8String (Spark's internal string type).
-    import org.apache.spark.unsafe.types.UTF8String
     for ((op, pattern) <- Seq(
         "STARTS_WITH" -> "abc%", "ENDS_WITH" -> "%abc", "CONTAINS" -> "%abc%")) {
       val like = new Predicate(op,
@@ -2350,13 +2350,50 @@ class JDBCSuite extends SharedSparkSession {
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
+  test("SPARK-60479: dialects compile CHAR_READ_SIDE_PADDING") {
+    val pad = new GeneralScalarExpression(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val eq = new Predicate("=",
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val rpad = new GeneralScalarExpression("RPAD",
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val rpadEq = new Predicate("=",
+      Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+
+    Seq(
+      "jdbc:h2:mem:testdb0",
+      "jdbc:postgresql://127.0.0.1/db",
+      "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:oracle://127.0.0.1/db").foreach { url =>
+      assert(
+        JdbcDialects.get(url).compileExpression(eq).get === """("flag") = 'Y    '""", url)
+    }
+    Seq(
+      "jdbc:mysql://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db",
+      "jdbc:derby:memory:db").foreach { url =>
+      assert(JdbcDialects.get(url).compileExpression(eq).isEmpty, url)
+    }
+
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    assert(h2.compileExpression(rpadEq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
+
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracle.compileExpression(rpadEq).isEmpty)
+  }
+
   test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     val dateRef = FieldReference("d")
 
     // LiteralValue for StringType must use UTF8String (Spark's internal string type)
     // to match what V2ExpressionBuilder produces in the real pushdown path.
-    import org.apache.spark.unsafe.types.UTF8String
     def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
       Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
 
