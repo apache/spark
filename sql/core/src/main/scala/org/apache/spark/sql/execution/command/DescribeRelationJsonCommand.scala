@@ -215,6 +215,13 @@ case class DescribeRelationJsonCommand(
           "length" -> JInt(charType.length)
         )
 
+      case geographyType: GeographyType =>
+        val srid = if (geographyType.isMixedSrid) "ANY" else geographyType.srid.toString
+        JObject(
+          "name" -> JString("geography"),
+          "srid" -> JString(srid)
+        )
+
       // Only override TimestampType; TimestampType_NTZ type is already timestamp_ntz
       case _: TimestampType =>
         JObject("name" -> JString("timestamp_ltz"))
