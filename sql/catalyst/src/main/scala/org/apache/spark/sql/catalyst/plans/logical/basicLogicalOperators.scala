@@ -120,6 +120,14 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan)
 object Project {
   val hiddenOutputTag: TreeNodeTag[Seq[Attribute]] = TreeNodeTag[Seq[Attribute]]("hidden_output")
 
+  /**
+   * The attributes of [[hiddenOutputTag]] that the Project also keeps visible in its output. They
+   * are in the hidden output only to keep their positions in a qualified star, as are the source
+   * columns that the SQL pipe SET operator does not assign, so the Project does not hide them.
+   */
+  val visibleHiddenOutputTag: TreeNodeTag[Seq[Attribute]] =
+    TreeNodeTag[Seq[Attribute]]("visible_hidden_output")
+
   def matchSchema(plan: LogicalPlan, schema: StructType, conf: SQLConf): Project = {
     assert(plan.resolved)
     val projectList =

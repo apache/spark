@@ -910,6 +910,185 @@ struct<a:int,a:int,z2:int>
 
 
 -- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select t.a
+-- !query schema
+struct<a:int>
+-- !query output
+1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a, t.b
+-- !query schema
+struct<a:int,a:int,b:int>
+-- !query output
+2	1	10
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select *
+-- !query schema
+struct<a:int,b:int>
+-- !query output
+2	10
+
+
+-- !query
+table t
+|> as u
+|> set x = x + 1
+|> select x, u.x
+-- !query schema
+struct<x:int,x:int>
+-- !query output
+1	0
+2	1
+
+
+-- !query
+values (1) as t(a)
+|> set a = a + 1
+|> set a = a + 1
+|> select a, t.a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+3	1
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set b = 20
+|> set a = 10
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set a = 10
+|> set c = 30
+|> select a, b, c, t.*
+-- !query schema
+struct<a:int,b:int,c:int,a:int,b:int,c:int>
+-- !query output
+10	2	30	1	2	3
+
+
+-- !query
+values (1, 2, 3) as t(a, b, c)
+|> set c = 30, a = 10
+|> select t.*
+-- !query schema
+struct<a:int,b:int,c:int>
+-- !query output
+1	2	3
+
+
+-- !query
+values (1, 2) as s(a, b)
+|> select a, a, b
+|> as t
+|> set b = 3
+|> select t.*
+-- !query schema
+struct<a:int,a:int,b:int>
+-- !query output
+1	1	2
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> where t.a = 1
+|> select a, t.a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+2	1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> order by t.a
+|> select a, t.a
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+2	1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> aggregate sum(t.a) as original_sum group by a
+-- !query schema
+struct<a:int,original_sum:bigint>
+-- !query output
+2	1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> join (values (1, 20) as u(c, d)) on t.a = c
+|> select a, t.a, c
+-- !query schema
+struct<a:int,a:int,c:int>
+-- !query output
+2	1	1
+
+
+-- !query
+values (1, 10) as t(a, b)
+|> set a = a + 1
+|> select a, t.a
+|> union all (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+2	1
+2	1
+
+
+-- !query
+select * from (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+2	1
+
+
+-- !query
+with cte as (values (1, 10) as t(a, b) |> set a = a + 1 |> select a, t.a)
+select * from cte
+-- !query schema
+struct<a:int,a:int>
+-- !query output
+2	1
+
+
+-- !query
 table t
 |> set z = 1
 -- !query schema

@@ -2019,6 +2019,114 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val expectedPlan = Project(Seq(UnresolvedAttribute("i")), addColumnF).analyze
     checkAnalysis(inputPlan, expectedPlan)
   }
+
+  test("SPARK-59146: pipe SET keeps the original Project tags alongside the hidden output") {
+    // The Project that the SQL pipe SET operator builds, as a Spark Connect relation.
+    val set = Project(
+      Seq(UnresolvedStarExceptOrReplace(
+        target = None,
+        excepts = Seq(Seq("a")),
+        replacements = Some(Seq(Alias(Literal(1), "a")())),
+        retainExceptedColumnsAsHidden = true)),
+      testRelation.subquery("t"))
+    set.setTagValue(LogicalPlan.PLAN_ID_TAG, 42L)
+
+    val analyzed = getAnalyzer.execute(set)
+    assert(analyzed.isInstanceOf[Project], analyzed)
+    assert(analyzed.getTagValue(LogicalPlan.PLAN_ID_TAG).contains(42L))
+    assert(analyzed.getTagValue(Project.hiddenOutputTag).exists(_.map(_.name) == Seq("a")))
+  }
+
+  test("SPARK-59146: DataFrame columns that pipe SET did not assign stay visible") {
+    // The Project of `|> SET a = 'x'` over `t(a, b)`, as a Spark Connect relation. Each use of the
+    // DataFrame is planned from a new relation, with new expression IDs and the same plan id.
+    def set(source: LocalRelation): LogicalPlan = {
+      val project = Project(
+        Seq(UnresolvedStarExceptOrReplace(
+          target = None,
+          excepts = Seq(Seq("a")),
+          replacements = Some(Seq(Alias(Literal("x"), "a")())),
+          retainExceptedColumnsAsHidden = true)),
+        source.subquery("t"))
+      project.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+      project
+    }
+    // The DataFrame is used directly, and as the right side of a USING join on `b` that hides its
+    // `b`. SET retains its whole source row as hidden output, but only to keep the column order,
+    // so the direct candidate is regular and wins. Treating it as hidden too would make the
+    // reference ambiguous.
+    val direct = LocalRelation($"a".string, $"b".string)
+    val reused = Join(
+      LocalRelation($"b".string, $"c".int),
+      set(LocalRelation($"a".string, $"b".string)),
+      UsingJoin(Inner, Seq("b")),
+      None,
+      JoinHint.NONE)
+    val column = UnresolvedAttribute("b")
+    column.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    val plan = Project(Seq(column), Join(set(direct), reused, Inner, None, JoinHint.NONE))
+
+    val output = getAnalyzer.execute(plan).output
+    assert(output.map(_.exprId) == Seq(direct.output(1).exprId), output)
+  }
+
+  test("SPARK-59146: merge hidden and visible output for a qualified star") {
+    // Compares instances, so that the qualifier and metadata of every position are checked too.
+    def checkMerge(
+        hidden: Seq[Attribute],
+        visible: Seq[Attribute],
+        expected: Seq[Attribute]): Unit = {
+      val merged = UnresolvedStarBase.mergeHiddenAndVisibleOutput(hidden, visible)
+      assert(merged.length == expected.length, merged)
+      merged.zip(expected).foreach { case (actual, instance) =>
+        assert(actual eq instance, s"$actual in $merged is not the instance $instance")
+      }
+    }
+    def attributes(qualifier: String, names: String*): Seq[AttributeReference] =
+      names.map(name => AttributeReference(name, IntegerType)(qualifier = Seq(qualifier)))
+
+    // Disjoint, as for the join key that a USING join hides: the hidden output goes first.
+    val Seq(lk, x) = attributes("l", "k", "x")
+    val Seq(rk, y) = attributes("r", "k", "y")
+    val hiddenKey = rk.markAsQualifiedAccessOnly()
+    checkMerge(Seq(hiddenKey), Seq(lk, x, y), Seq(hiddenKey, lk, x, y))
+    checkMerge(Nil, Seq(lk, x, y), Seq(lk, x, y))
+
+    // Overlapping, as for pipe SET: the hidden source row pins the position of every visible
+    // attribute, which is emitted in place of its hidden copy.
+    val Seq(a, b, c) = attributes("t", "a", "b", "c")
+    val assigned = AttributeReference("b", IntegerType)()
+    val row = Seq(a, b, c).map(_.markAsQualifiedAccessOnly())
+    checkMerge(row, Seq(a, c, assigned), Seq(a, row(1), c, assigned))
+
+    // Repeated, as for `SELECT a, a, b`: the occurrences share an ExprId, and are told apart here
+    // by their qualifier. A hidden occurrence consumes the first unconsumed visible one, so every
+    // position is kept exactly once.
+    val repeatedA = a.withQualifier(Seq("u"))
+    val repeatedRow = Seq(a, repeatedA, b).map(_.markAsQualifiedAccessOnly())
+    checkMerge(
+      repeatedRow, Seq(a, repeatedA, assigned), Seq(a, repeatedA, repeatedRow(2), assigned))
+    checkMerge(Seq(row(1), row(0)), Seq(a, repeatedA), Seq(row(1), a, repeatedA))
+    checkMerge(repeatedRow.take(2), Seq(a), Seq(a, repeatedRow(1)))
+  }
+
+  test("SPARK-59146: a qualified star after repeated pipe SETs returns the original row") {
+    // The second SET sees the hidden output of the first one overlap its visible output.
+    def set(column: String, child: LogicalPlan): LogicalPlan = Project(
+      Seq(UnresolvedStarExceptOrReplace(
+        target = None,
+        excepts = Seq(Seq(column)),
+        replacements = Some(Seq(Alias(Literal("x"), column)())),
+        retainExceptedColumnsAsHidden = true)),
+      child)
+    val plan = Project(
+      Seq(UnresolvedStar(Some(Seq("t")))),
+      set("a", set("c", testRelation2.subquery("t"))))
+
+    val output = getAnalyzer.execute(plan).output
+    assert(output.map(_.exprId) == testRelation2.output.map(_.exprId), output)
+    assert(output.forall(_.qualifier == Seq("t")), output)
+  }
 }
 
 /**
