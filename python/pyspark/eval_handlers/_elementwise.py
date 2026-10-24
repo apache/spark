@@ -57,7 +57,7 @@ from pyspark.sql.conversion import (
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import ArrayType, DataType, StructField, StructType
-from pyspark.util import PythonEvalType, fail_on_stopiteration
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -240,7 +240,6 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        @fail_on_stopiteration
         def _evaluate_elementwise_udf(udf_func: Any, rows: Iterator[tuple]) -> list[Any]:
             if self._runner_conf.arrow_concurrency_level <= 0:
                 return [udf_func(*row) for row in rows]
