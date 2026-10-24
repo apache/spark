@@ -33,10 +33,15 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
  * The purpose of this table is to make the existing scan and write planning rules work
  * with commands that require coordination between the scan and the write (so that the write
  * knows what to replace).
+ *
+ * `operationInfo` is the info the operation was built from. It is in a separate parameter list
+ * so that patterns such as `RowLevelOperationTable(table, operation)` stay unchanged, and a rule
+ * that rebuilds the operation for another table can pass the same info through [[withTable]].
  */
 private[sql] case class RowLevelOperationTable(
     table: Table with SupportsRowLevelOperations,
-    operation: RowLevelOperation)
+    operation: RowLevelOperation)(
+    val operationInfo: RowLevelOperationInfo)
   extends Table with SupportsRead with SupportsWrite with SupportsConfigurableSchemaAlignment {
 
   override def name: String = table.name
@@ -57,5 +62,15 @@ private[sql] case class RowLevelOperationTable(
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     operation.newWriteBuilder(info)
+  }
+
+  /**
+   * Builds the operation for another table from the same info, for a rule that redirects the
+   * write after the rewrite, such as to a branch of the table. Call it once and use the result
+   * for the write relation and for every read of this table.
+   */
+  def withTable(newTable: Table with SupportsRowLevelOperations): RowLevelOperationTable = {
+    val newOperation = newTable.newRowLevelOperationBuilder(operationInfo).build()
+    RowLevelOperationTable(newTable, newOperation)(operationInfo)
   }
 }

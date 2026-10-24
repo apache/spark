@@ -48,7 +48,10 @@ object MimaExcludes {
     ProblemFilters.exclude[DirectMissingMethodProblem](
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
     // BIN BY DataFrame API.
-    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy")
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy"),
+    // [SPARK-58111] Scan and write schema narrowing for column-level UPDATE in DSv2
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.connector.write.RowLevelOperationInfo.updatedColumns")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
