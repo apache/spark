@@ -21,6 +21,7 @@ import java.io.{ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.annotation.DeveloperApi
 import org.apache.spark.internal.Logging
+import org.apache.spark.memory.SparkOutOfMemoryError
 import org.apache.spark.scheduler.AccumulableInfo
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AccumulatorV2, Utils}
@@ -135,6 +136,11 @@ case class ExceptionFailure(
     private[spark] var metricPeaks: Seq[Long] = Seq.empty)
   extends TaskFailedReason {
 
+  // Keep this independent of exceptionWrapper, which may be dropped during serialization.
+  private[spark] var isOutOfMemoryError: Boolean =
+    className == classOf[OutOfMemoryError].getName ||
+      className == classOf[SparkOutOfMemoryError].getName
+
   /**
    * `preserveCause` is used to keep the exception itself so it is available to the
    * driver. This may be set to `false` in the event that the exception is not in fact
@@ -146,6 +152,14 @@ case class ExceptionFailure(
       preserveCause: Boolean) = {
     this(e.getClass.getName, e.getMessage, e.getStackTrace, Utils.exceptionString(e),
       if (preserveCause) Some(new ThrowableSerializationWrapper(e)) else None, accumUpdates)
+    // Bound the traversal because user exceptions may contain cycles in their cause chains.
+    var cause = e
+    var depth = 0
+    while (cause != null && !isOutOfMemoryError && depth < 20) {
+      isOutOfMemoryError = cause.isInstanceOf[OutOfMemoryError]
+      cause = cause.getCause
+      depth += 1
+    }
   }
 
   private[spark] def this(e: Throwable, accumUpdates: Seq[AccumulableInfo]) = {
@@ -262,6 +276,8 @@ case class ExecutorLostFailure(
     execId: String,
     exitCausedByApp: Boolean = true,
     reason: Option[String]) extends TaskFailedReason {
+  private[spark] var isOutOfMemoryError: Boolean = false
+
   override def toErrorString: String = {
     val exitBehavior = if (exitCausedByApp) {
       "caused by one of the running tasks"

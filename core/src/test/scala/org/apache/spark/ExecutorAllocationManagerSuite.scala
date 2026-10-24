@@ -513,6 +513,419 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
     assert(numExecutorsToAddForDefaultProfile(manager) === 1)
   }
 
+  for {
+    enabled <- Seq(false, true)
+    (failureName, reason, attributedOom) <- Seq(
+      ("OOM exception", new ExceptionFailure(
+        new RuntimeException("wrapped", new OutOfMemoryError("test OOM")), Nil), true),
+      ("ordinary exception", new ExceptionFailure(
+        new RuntimeException("OutOfMemoryError in an ordinary exception's message"), Nil), false),
+      ("OOM executor loss", {
+        val failure = ExecutorLostFailure("a", exitCausedByApp = true, Some("OOMKilled"))
+        failure.isOutOfMemoryError = true
+        failure
+      }, true),
+      ("unattributed OOM executor loss", {
+        val failure = ExecutorLostFailure("a", exitCausedByApp = false, Some("OOMKilled"))
+        failure.isOutOfMemoryError = true
+        failure
+      }, false),
+      ("executor loss without typed OOM", ExecutorLostFailure(
+        "a", exitCausedByApp = true, Some("OOMKilled")), false))
+  } {
+    test(s"OOM recovery speculative demand after $failureName (enabled=$enabled)") {
+      val clock = new ManualClock(1)
+      val conf = createConf(0, 5, 0)
+        .set(config.EXECUTOR_CORES, 4)
+        .set(config.SCHEDULER_OOM_RETRY_ENABLED, enabled)
+      val manager = createManager(conf, clock = clock)
+      val rpId = DEFAULT_RESOURCE_PROFILE_ID
+      val revokeSpeculation = enabled && attributedOom
+      post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+      onExecutorAdded(manager, "a", rpManager.defaultResourceProfile)
+      clock.advance(schedulerBacklogTimeout * 1000)
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+
+      val original = createTaskInfo(0, 0, "a")
+      post(SparkListenerTaskStart(0, 0, original))
+      assert(addTime(manager) === NOT_SET)
+      post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 0))
+      clock.advance(schedulerBacklogTimeout * 1000)
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+
+      original.markFinished(TaskState.FAILED, clock.getTimeMillis())
+      post(SparkListenerTaskEnd(0, 0, null, reason, original, new ExecutorMetrics, null))
+      assert(manager.listener.pendingSpeculativeTasksPerResourceProfile(rpId) ===
+        (if (revokeSpeculation) 0 else 1))
+      // Removing revoked speculation must leave the ordinary failed task backlogged.
+      assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 1)
+      assert(addTime(manager) !== NOT_SET)
+
+      val retryExecutor = if (reason.isInstanceOf[ExecutorLostFailure]) {
+        onExecutorRemoved(manager, "a")
+        onExecutorAdded(manager, "replacement", rpManager.defaultResourceProfile)
+        "replacement"
+      } else {
+        "a"
+      }
+      val retry = createTaskInfo(1, 0, retryExecutor)
+      post(SparkListenerTaskStart(0, 0, retry))
+      onExecutorAdded(manager, "b", rpManager.defaultResourceProfile)
+      assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 0)
+      assert(totalRunningTasksPerResourceProfile(manager) === 1)
+      assert((addTime(manager) == NOT_SET) === revokeSpeculation)
+
+      // With the retry running, only valid speculative demand may retain the idle executor.
+      clock.advance(executorIdleTimeout * 1000 + 1)
+      assert(manager.executorMonitor.timedOutExecutors().map(_._1) === Seq("b"))
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) ===
+        (if (revokeSpeculation) 1 else 2))
+      assert(executorsPendingToRemove(manager) ===
+        (if (revokeSpeculation) Set("b") else Set.empty[String]))
+
+      retry.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+      post(SparkListenerTaskEnd(0, 0, null, Success, retry, new ExecutorMetrics, null))
+      assert(manager.listener.pendingSpeculativeTasksPerResourceProfile(rpId) === 0)
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+      assert(executorsPendingToRemove(manager).contains("b"))
+    }
+  }
+
+  Seq(1.0, 0.1).foreach { allocationRatio =>
+    test(s"OOM retry isolation preserves ordinary executor demand (ratio=$allocationRatio)") {
+      val clock = new ManualClock(1)
+      val conf = createConf(0, 5, 1)
+        .set(config.EXECUTOR_CORES, 4)
+        .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+        .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, allocationRatio)
+      var reservation: Option[OomRetryReservationInfo] = None
+      val manager = createManager(conf, clock = clock, oomRetryReservationInfo = () => reservation)
+      val rpId = DEFAULT_RESOURCE_PROFILE_ID
+      onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+      post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+      post(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "reserved")))
+      post(SparkListenerStageSubmitted(createStageInfo(1, 3)))
+
+      assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 3)
+      assert(totalRunningTasksPerResourceProfile(manager) === 1)
+      assert(manager.listener.pendingUnschedulableTaskSetsPerResourceProfile(rpId) === 0)
+      assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+
+      // The isolated retry cannot share its executor's other three slots with ordinary tasks.
+      reservation = Some(OomRetryReservationInfo(rpId, "reserved", 0, 0, 0))
+      assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+      clock.advance(schedulerBacklogTimeout * 1000)
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+
+      // Releasing the reservation restores the normal target without changing task demand.
+      reservation = None
+      schedule(manager)
+      assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    }
+  }
+
+  test("OOM retry isolation accounts for tasks already draining on the reserved executor") {
+    val clock = new ManualClock(1)
+    val conf = createConf(0, 5, 1)
+      .set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    val reservation = Some(OomRetryReservationInfo(rpId, "reserved", 0, 0, 4))
+    val manager = createManager(conf, clock = clock, oomRetryReservationInfo = () => reservation)
+    onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 5)))
+    val draining = (0 until 4).map { index => createTaskInfo(index, index, "reserved") }
+    draining.foreach { info => post(SparkListenerTaskStart(0, 0, info)) }
+
+    // Four running tasks and the pending isolated retry retain the ordinary two-executor floor.
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+    draining.last.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    post(SparkListenerTaskEnd(0, 0, null, Success, draining.last, new ExecutorMetrics, null))
+
+    // The three remaining tasks and the pending retry need no extra executor just for draining.
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 1)
+    assert(totalRunningTasksPerResourceProfile(manager) === 3)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+
+    post(SparkListenerStageSubmitted(createStageInfo(1, 4)))
+    // Only the four new ordinary tasks need capacity outside the reserved executor.
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 5)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+  }
+
+  for {
+    enabled <- Seq(false, true)
+    speculativeSuccess <- Seq(false, true)
+  } {
+    test("resubmitted shuffle demand during OOM recovery " +
+        s"(enabled=$enabled, speculativeSuccess=$speculativeSuccess)") {
+      val clock = new ManualClock(1)
+      val conf = createConf(0, 5, 2)
+        .set(config.EXECUTOR_CORES, 4)
+        .set(config.SCHEDULER_OOM_RETRY_ENABLED, enabled)
+      val rpId = DEFAULT_RESOURCE_PROFILE_ID
+      var reservation: Option[OomRetryReservationInfo] = None
+      val manager = createManager(conf, clock = clock, oomRetryReservationInfo = () => reservation)
+      onExecutorAdded(manager, "lost", rpManager.defaultResourceProfile)
+      onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+      post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+
+      val original = createTaskInfo(0, 0, if (speculativeSuccess) "reserved" else "lost")
+      post(SparkListenerTaskStart(0, 0, original))
+      val completed = if (speculativeSuccess) {
+        post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 0))
+        val copy = createTaskInfo(1, 0, "lost", speculative = true)
+        post(SparkListenerTaskStart(0, 0, copy))
+        copy
+      } else {
+        original
+      }
+      completed.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+      post(SparkListenerTaskEnd(0, 0, null, Success, completed, new ExecutorMetrics, null))
+      if (speculativeSuccess) {
+        original.markFinished(TaskState.KILLED, clock.getTimeMillis())
+        post(SparkListenerTaskEnd(0, 0, null, TaskKilled("Another attempt succeeded"),
+          original, new ExecutorMetrics, null))
+      }
+
+      val retry = createTaskInfo(2, 1, "reserved")
+      post(SparkListenerTaskStart(0, 0, retry))
+      if (enabled) {
+        reservation = Some(OomRetryReservationInfo(rpId, "reserved", 0, 0, 1))
+      }
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+
+      // Losing completed output emits a second TaskEnd for the already-finished attempt.
+      onExecutorRemoved(manager, "lost")
+      post(SparkListenerTaskEnd(0, 0, null, Resubmitted, completed, new ExecutorMetrics, null))
+      assert(totalRunningTasksPerResourceProfile(manager) === 1)
+      assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 1)
+      clock.advance(schedulerBacklogTimeout * 1000)
+      schedule(manager)
+      // The regenerated partition needs capacity outside the still-running isolated retry.
+      assert(numExecutorsTargetForDefaultProfileId(manager) === (if (enabled) 2 else 1))
+
+      val regeneratedExecutor = if (enabled) "replacement" else "reserved"
+      if (enabled) {
+        onExecutorAdded(manager, regeneratedExecutor, rpManager.defaultResourceProfile)
+      }
+      val regenerated = createTaskInfo(3, 0, regeneratedExecutor)
+      post(SparkListenerTaskStart(0, 0, regenerated))
+      assert(totalRunningTasksPerResourceProfile(manager) === 2)
+      regenerated.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+      post(SparkListenerTaskEnd(0, 0, null, Success, regenerated, new ExecutorMetrics, null))
+      retry.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+      post(SparkListenerTaskEnd(0, 0, null, Success, retry, new ExecutorMetrics, null))
+      reservation = None
+      post(SparkListenerStageCompleted(createStageInfo(0, 2)))
+      assert(totalRunningTasksPerResourceProfile(manager) === 0)
+      schedule(manager)
+      assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+    }
+  }
+
+  test("OOM retry isolation counts a pending retry once across listener events") {
+    val conf = createConf(0, 5, 1)
+      .set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    var reservation = Option(OomRetryReservationInfo(rpId, "reserved", 0, 0, 0))
+    val manager = createManager(conf, oomRetryReservationInfo = () => reservation)
+    onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+
+    // The scheduler snapshot can precede the retry's TaskStart event in this listener.
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+    post(SparkListenerStageSubmitted(createStageInfo(1, 5)))
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 6)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 3)
+
+    val retry = createTaskInfo(0, 0, "reserved")
+    post(SparkListenerTaskStart(0, 0, retry))
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 5)
+    assert(totalRunningTasksPerResourceProfile(manager) === 1)
+    // Counting the retry as both pending and running would hide one ordinary executor here.
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 3)
+
+    retry.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    post(SparkListenerTaskEnd(0, 0, null, Success, retry, new ExecutorMetrics, null))
+    reservation = None
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+
+    // A later reservation on this executor must not also cover the finished retry.
+    post(SparkListenerStageSubmitted(createStageInfo(2, 1)))
+    reservation = Some(OomRetryReservationInfo(rpId, "reserved", 2, 0, 0))
+    assert(totalRunningTasksPerResourceProfile(manager) === 0)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 3)
+
+    reservation = None
+    post(SparkListenerStageCompleted(createStageInfo(0, 1)))
+    post(SparkListenerStageCompleted(createStageInfo(1, 5)))
+    post(SparkListenerStageCompleted(createStageInfo(2, 1)))
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 0)
+  }
+
+  test("OOM retry isolation does not subtract late tasks from a canceled stage") {
+    val clock = new ManualClock(1)
+    val conf = createConf(0, 5, 1)
+      .set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    var reservation = Option(OomRetryReservationInfo(rpId, "reserved", 0, 0, 0))
+    val manager = createManager(conf, clock = clock, oomRetryReservationInfo = () => reservation)
+    onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    post(SparkListenerStageCompleted(createStageInfo(0, 1)))
+    post(SparkListenerStageSubmitted(createStageInfo(1, 1)))
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+
+    // Cancellation can remove the stage's resource-profile association before a queued start.
+    val retry = createTaskInfo(0, 0, "reserved")
+    post(SparkListenerTaskStart(0, 0, retry))
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 1)
+    assert(totalRunningTasksPerResourceProfile(manager) === 0)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+    clock.advance(schedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+
+    retry.markFinished(TaskState.KILLED, clock.getTimeMillis())
+    post(SparkListenerTaskEnd(0, 0, null, TaskKilled("Stage cancelled"),
+      retry, new ExecutorMetrics, null))
+    reservation = None
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 1)
+    post(SparkListenerStageCompleted(createStageInfo(1, 1)))
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+  }
+
+  test("OOM retry isolation preserves the extra executor for ordinary speculation") {
+    val clock = new ManualClock(1)
+    val conf = createConf(0, 5, 2)
+      .set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    var reservation = Option(OomRetryReservationInfo(rpId, "reserved", 0, 0, 0))
+    val manager = createManager(conf, clock = clock, oomRetryReservationInfo = () => reservation)
+    onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+    onExecutorAdded(manager, "ordinary", rpManager.defaultResourceProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 1)))
+    post(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "reserved")))
+    post(SparkListenerStageSubmitted(createStageInfo(1, 1)))
+    post(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0, "ordinary")))
+    post(speculativeTaskSubmitEventFromTaskIndex(1, taskIndex = 0))
+
+    assert(totalRunningTasksPerResourceProfile(manager) === 2)
+    assert(manager.listener.pendingSpeculativeTasksPerResourceProfile(rpId) === 1)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 3)
+    clock.advance(schedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 3)
+
+    reservation = None
+    schedule(manager)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+  }
+
+  test("OOM retry isolation separates speculation from an original on the reserved executor") {
+    val clock = new ManualClock(1)
+    val conf = createConf(0, 5, 2)
+      .set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    var reservation = Option(OomRetryReservationInfo(rpId, "reserved", 0, 0, 1))
+    val manager = createManager(conf, clock = clock, oomRetryReservationInfo = () => reservation)
+    onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 2)))
+    val original = createTaskInfo(0, 0, "reserved")
+    post(SparkListenerTaskStart(0, 0, original))
+    post(speculativeTaskSubmitEventFromTaskIndex(0, taskIndex = 0))
+
+    assert(manager.listener.pendingTasksPerResourceProfile(rpId) === 1)
+    assert(manager.listener.pendingSpeculativeTasksPerResourceProfile(rpId) === 1)
+    // The ordinary executor is already separate from the draining original's executor.
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+    clock.advance(schedulerBacklogTimeout * 1000)
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 2)
+
+    onExecutorAdded(manager, "ordinary", rpManager.defaultResourceProfile)
+    val speculative = createTaskInfo(1, 0, "ordinary", speculative = true)
+    post(SparkListenerTaskStart(0, 0, speculative))
+    original.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    post(SparkListenerTaskEnd(0, 0, null, Success, original, new ExecutorMetrics, null))
+    assert(manager.listener.pendingSpeculativeTasksPerResourceProfile(rpId) === 0)
+    // The finished original must no longer cover the copy still running elsewhere.
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+
+    speculative.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    post(SparkListenerTaskEnd(0, 0, null, Success, speculative, new ExecutorMetrics, null))
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+    val retry = createTaskInfo(2, 1, "reserved")
+    post(SparkListenerTaskStart(0, 0, retry))
+    retry.markFinished(TaskState.FINISHED, clock.getTimeMillis())
+    post(SparkListenerTaskEnd(0, 0, null, Success, retry, new ExecutorMetrics, null))
+    reservation = None
+    schedule(manager)
+    assert(numExecutorsTargetForDefaultProfileId(manager) === 0)
+  }
+
+  Seq(("disabled", false, 4), ("single-slot", true, 1)).foreach {
+    case (name, enabled, cores) =>
+      test(s"OOM retry isolation leaves $name allocation unchanged") {
+        val conf = createConf(0, 5, 1)
+          .set(config.EXECUTOR_CORES, cores)
+          .set(config.SCHEDULER_OOM_RETRY_ENABLED, enabled)
+          .set(config.DYN_ALLOCATION_EXECUTOR_ALLOCATION_RATIO, 0.1)
+        val rpId = DEFAULT_RESOURCE_PROFILE_ID
+        var reservation = Option(OomRetryReservationInfo(rpId, "reserved", 0, 0, 0))
+        val manager = createManager(conf, oomRetryReservationInfo = () => reservation)
+        onExecutorAdded(manager, "reserved", rpManager.defaultResourceProfile)
+        post(SparkListenerStageSubmitted(createStageInfo(0, 4)))
+        post(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "reserved")))
+
+        assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+        reservation = None
+        assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+      }
+  }
+
+  test("OOM retry isolation only changes demand for the reserved resource profile") {
+    val conf = createConf(0, 5, 1)
+      .set(config.EXECUTOR_CORES, 4)
+      .set(config.SCHEDULER_OOM_RETRY_ENABLED, true)
+    var reservation: Option[OomRetryReservationInfo] = None
+    val manager = createManager(conf, oomRetryReservationInfo = () => reservation)
+    val otherProfile = new ResourceProfileBuilder()
+      .require(new ExecutorResourceRequests().cores(4).resource("gpu", 4))
+      .require(new TaskResourceRequests().cpus(1).resource("gpu", 1))
+      .build()
+    rpManager.addResourceProfile(otherProfile)
+    val rpId = DEFAULT_RESOURCE_PROFILE_ID
+    onExecutorAdded(manager, "default", rpManager.defaultResourceProfile)
+    onExecutorAdded(manager, "other", otherProfile)
+    post(SparkListenerStageSubmitted(createStageInfo(0, 4)))
+    post(SparkListenerTaskStart(0, 0, createTaskInfo(0, 0, "default")))
+    post(SparkListenerStageSubmitted(createStageInfo(1, 4, rp = otherProfile)))
+    post(SparkListenerTaskStart(1, 0, createTaskInfo(1, 0, "other")))
+
+    reservation = Some(OomRetryReservationInfo(otherProfile.id, "other", 1, 0, 0))
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 1)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(otherProfile.id) === 2)
+    reservation = Some(OomRetryReservationInfo(rpId, "default", 0, 0, 0))
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(rpId) === 2)
+    assert(manager.maxNumExecutorsNeededPerResourceProfile(otherProfile.id) === 1)
+  }
+
   test("SPARK-31418: one stage being unschedulable") {
     val clock = new ManualClock()
     val conf = createConf(0, 5, 0).set(config.EXECUTOR_CORES, 2)
@@ -1996,12 +2409,15 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   private def createManager(
       conf: SparkConf,
-      clock: Clock = new SystemClock()): ExecutorAllocationManager = {
+      clock: Clock = new SystemClock(),
+      oomRetryReservationInfo: () => Option[OomRetryReservationInfo] = () => None):
+      ExecutorAllocationManager = {
     ResourceProfile.reInitDefaultProfile(conf)
 
     rpManager = new ResourceProfileManager(conf, listenerBus)
     val manager = new ExecutorAllocationManager(client, listenerBus, conf, clock = clock,
-      resourceProfileManager = rpManager, reliableShuffleStorage = false)
+      resourceProfileManager = rpManager, reliableShuffleStorage = false,
+      oomRetryReservationInfo = oomRetryReservationInfo)
     managers += manager
     manager.start()
     manager
