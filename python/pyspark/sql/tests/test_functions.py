@@ -222,6 +222,14 @@ class FunctionsTestsMixin:
             df.count()
             df.collect()
 
+    def test_bitmap_contains(self):
+        df = self.spark.createDataFrame(
+            [(bytearray([1]), 0), (bytearray([1]), 1), (None, 0)],
+            ["bitmap", "position"],
+        )
+        result = df.select(F.bitmap_contains("bitmap", "position")).collect()
+        self.assertEqual([row[0] for row in result], [True, False, None])
+
     def test_corr(self):
         df = self.spark.createDataFrame([Row(a=i, b=math.sqrt(i)) for i in range(10)])
         corr = df.stat.corr("a", "b")
