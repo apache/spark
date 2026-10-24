@@ -17,7 +17,10 @@
 
 package org.apache.spark.sql.execution
 
-import org.apache.spark.sql.{AnalysisException, QueryTest}
+import java.util.Locale
+
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.{AssetSource, Column, DimensionExpression, MeasureExpression, MetricView, MetricViewFactory, SQLSource}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -165,6 +168,140 @@ abstract class MetricViewSuite extends QueryTest {
             "FROM test_metric_view WHERE region_upper = 'REGION_1'"),
           sql("SELECT sum(count), avg(price) FROM test_table WHERE upper(region) = 'REGION_1'")
         )
+      }
+    }
+  }
+
+  test("metric view resolves its source in the namespace it was created in") {
+    val assetSource = MetricView(
+      "0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    val sqlSource = MetricView(
+      "0.1", SQLSource(s"SELECT * FROM $testTableName"), None, testMetricViewColumns)
+    withMetricView("mv_asset_source", assetSource) {
+      withMetricView("mv_sql_source", sqlSource) {
+        withDatabase("other_db", "empty_db") {
+          sql("CREATE DATABASE other_db")
+          sql("CREATE DATABASE empty_db")
+          sql(s"CREATE TABLE other_db.$testTableName USING parquet AS " +
+            "SELECT 'region_9' AS region, 'product_9' AS product, 1000 AS count, 1.0 AS price")
+          val expected = sql(s"SELECT sum(count) FROM default.$testTableName")
+          // A table with the same name in the current namespace, and no such table at all.
+          Seq("other_db", "empty_db").foreach { db =>
+            activateDatabase(db) {
+              checkAnswer(sql("SELECT measure(count_sum) FROM default.mv_asset_source"), expected)
+              checkAnswer(sql("SELECT measure(count_sum) FROM default.mv_sql_source"), expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("metric view source does not resolve to a temporary view") {
+    val metricView = MetricView("0.1", AssetSource(testTableName), None, testMetricViewColumns)
+    withMetricView(testMetricViewName, metricView) {
+      withTempView(testTableName) {
+        sql(s"CREATE TEMPORARY VIEW $testTableName AS " +
+          "SELECT 'region_9' AS region, 'product_9' AS product, 1000 AS count, 1.0 AS price")
+        checkAnswer(
+          sql(s"SELECT measure(count_sum) FROM $testMetricViewName"),
+          sql(s"SELECT sum(count) FROM default.$testTableName"))
+      }
+    }
+  }
+
+  test("metric view source is analyzed with the configs captured at creation") {
+    // `PRODUCT` only resolves case-insensitively, the default at creation, and the hour is 0 only
+    // in the UTC session time zone captured at creation.
+    val metricView = MetricView(
+      "0.1", AssetSource(testTableName),
+      Some("PRODUCT = 'product_1' AND hour(TIMESTAMP '2024-01-01 00:00:00 UTC') = 0"),
+      testMetricViewColumns)
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      createMetricView(testMetricViewName, metricView)
+    }
+    withView(testMetricViewName) {
+      val query = s"SELECT measure(count_sum) FROM $testMetricViewName"
+      val expected = sql(s"SELECT sum(count) FROM $testTableName WHERE product = 'product_1'")
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+          checkAnswer(sql(query), expected)
+          withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
+            val e = intercept[AnalysisException](sql(query))
+            assert(e.getCondition === "UNRESOLVED_COLUMN.WITH_SUGGESTION")
+          }
+        }
+        withSQLConf(SQLConf.USE_CURRENT_SQL_CONFIGS_FOR_VIEW.key -> "true") {
+          checkAnswer(sql(query), Row(null))
+        }
+      }
+    }
+  }
+
+  test("metric view source cannot reference a temporary function") {
+    withUserDefinedFunction("norm" -> true) {
+      spark.udf.register("norm", (s: String) => s.toLowerCase(Locale.ROOT))
+      Seq(
+        MetricView("0.1", AssetSource(testTableName),
+          Some("norm(product) = 'product_1'"), testMetricViewColumns),
+        MetricView("0.1", AssetSource(testTableName),
+          Some(s"product IN (SELECT norm(product) FROM $testTableName)"), testMetricViewColumns),
+        MetricView("0.1",
+          SQLSource(s"SELECT * FROM $testTableName WHERE norm(product) = 'product_1'"),
+          None, testMetricViewColumns)
+      ).foreach { metricView =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            createMetricView(testMetricViewName, metricView)
+          },
+          condition = "INVALID_TEMP_OBJ_REFERENCE",
+          parameters = Map(
+            "obj" -> "VIEW",
+            "objName" -> s"`default`.`$testMetricViewName`",
+            "tempObj" -> "FUNCTION",
+            "tempObjName" -> "`norm`"))
+      }
+    }
+  }
+
+  test("metric view dimensions and measures can use a temporary function") {
+    withUserDefinedFunction("norm" -> true) {
+      spark.udf.register("norm", (s: String) => s.toUpperCase(Locale.ROOT))
+      val metricView = MetricView("0.1", AssetSource(testTableName), None, Seq(
+        Column("region_norm", DimensionExpression("norm(region)"), 0),
+        Column("product_len", MeasureExpression("sum(length(norm(product)))"), 1)))
+      withMetricView(testMetricViewName, metricView) {
+        checkAnswer(
+          sql(s"SELECT region_norm, measure(product_len) FROM $testMetricViewName " +
+            "GROUP BY region_norm"),
+          sql(s"SELECT upper(region), sum(length(product)) FROM $testTableName " +
+            "GROUP BY upper(region)"))
+      }
+    }
+  }
+
+  test("metric view counts toward the nested view depth") {
+    withView("v") {
+      sql(s"CREATE VIEW v AS SELECT * FROM $testTableName")
+      val metricView = MetricView("0.1", AssetSource("v"), None, testMetricViewColumns)
+      withMetricView(testMetricViewName, metricView) {
+        withSQLConf(SQLConf.MAX_NESTED_VIEW_DEPTH.key -> "1") {
+          checkAnswer(sql("SELECT count(*) FROM v"), Row(testTableData.length))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"SELECT measure(count_sum) FROM $testMetricViewName")
+            },
+            condition = "VIEW_EXCEED_MAX_NESTED_DEPTH",
+            parameters = Map(
+              "viewName" -> s"`$SESSION_CATALOG_NAME`.`default`.`v`",
+              "maxNestedDepth" -> "1"),
+            context = ExpectedContext(
+              "METRIC VIEW",
+              s"$SESSION_CATALOG_NAME.default.$testMetricViewName",
+              31,
+              30 + testMetricViewName.length,
+              testMetricViewName))
+        }
       }
     }
   }

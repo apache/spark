@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
 import scala.jdk.CollectionConverters._
@@ -483,6 +484,35 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
     }
   }
 
+  test("v2 metric view source cannot reference a temporary function") {
+    withTestCatalogTables {
+      withUserDefinedFunction("norm" -> true) {
+        spark.udf.register("norm", (s: String) => s.toLowerCase(Locale.ROOT))
+        Seq(
+          MetricView("0.1", AssetSource(fullSourceTableName),
+            Some("norm(region) = 'region_1'"), metricViewColumns),
+          MetricView("0.1", AssetSource(fullSourceTableName),
+            Some(s"region IN (SELECT norm(region) FROM $fullSourceTableName)"),
+            metricViewColumns),
+          MetricView("0.1",
+            SQLSource(s"SELECT * FROM $fullSourceTableName WHERE norm(region) = 'region_1'"),
+            None, metricViewColumns)
+        ).foreach { metricView =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              createMetricView(fullMetricViewName, metricView)
+            },
+            condition = "INVALID_TEMP_OBJ_REFERENCE",
+            parameters = Map(
+              "obj" -> "VIEW",
+              "objName" -> s"`$testCatalogName`.`$testNamespace`.`$metricViewName`",
+              "tempObj" -> "FUNCTION",
+              "tempObjName" -> "`norm`"))
+        }
+      }
+    }
+  }
+
   // ============================================================
   // Section 2: Dependency extraction
   // ============================================================
@@ -639,6 +669,27 @@ class MetricViewV2CatalogSuite extends SharedSparkSession {
   // Section 3: SELECT cases
   // ============================================================
 
+
+  test("v2 metric view resolves its source in the namespace it was created in") {
+    withTestCatalogTables {
+      try {
+        sql(s"USE $testCatalogName.$testNamespace")
+        createMetricView(fullMetricViewName,
+          MetricView("0.1", AssetSource(sourceTableName), where = None, select = metricViewColumns))
+        sql(s"CREATE TABLE $testCatalogName.other.$sourceTableName USING foo AS " +
+          "SELECT 'region_9' AS region, 1000 AS count, 1.0 AS price")
+        val expected = sql(s"SELECT sum(count) FROM $fullSourceTableName")
+        // Another namespace with the same table name, and another catalog.
+        Seq(s"$testCatalogName.other", "spark_catalog.default").foreach { namespace =>
+          sql(s"USE $namespace")
+          checkAnswer(sql(s"SELECT measure(count_sum) FROM $fullMetricViewName"), expected)
+        }
+      } finally {
+        sql("USE spark_catalog.default")
+        scala.util.Try(sql(s"DROP TABLE IF EXISTS $testCatalogName.other.$sourceTableName"))
+      }
+    }
+  }
 
   test("SELECT measure(...) from a v2 metric view returns aggregated rows") {
     withTestCatalogTables {
