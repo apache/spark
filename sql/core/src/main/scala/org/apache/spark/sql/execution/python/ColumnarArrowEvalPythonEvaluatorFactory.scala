@@ -63,6 +63,9 @@ import org.apache.spark.util.Utils
  *    [[BasicPythonArrowInput]]. Uses [[HybridRowQueue]] for pass-through
  *    and converts joined rows back to [[ColumnarBatch]].
  *
+ * Paths 2 and 3 copy what they need from an input batch, so they release
+ * it with closeIfFreeable once it has been written to Python.
+ *
  * TODO: Add a physical plan rule that inserts a ProjectExec before
  *   ArrowEvalPythonExec to pre-evaluate complex UDF input expressions
  *   into simple column references. This would eliminate path 3.
@@ -255,12 +258,12 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val resultIter = if (inputColumnIndices.isDefined) {
         // Path 2: simple column refs, non-Arrow vectors.
-        val bufferedIter = inputIter.map { batch =>
+        val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
           batch.rowIterator().asScala.foreach { row =>
             queue.add(unsafeProj(row).copy())
           }
-          batch
-        }
+          true
+        })
         val pyRunner =
           new ColumnarArrowPythonWithNamedArgumentRunner(
             pyFuncs, evalType, argMetas, udfInputSchema,
@@ -274,7 +277,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val projection = MutableProjection.create(
           allInputs, childOutput)
         projection.initialize(context.partitionId())
-        val batchIter = inputIter.map { batch =>
+        // The rows of a batch are written to Python before the writer asks
+        // for the next batch, which releases it.
+        val batchIter = new WrittenBatchReleasingIterator(inputIter, _ => true).map { batch =>
           batch.rowIterator().asScala.map { row =>
             queue.add(unsafeProj(row).copy())
             projection(row)
@@ -340,6 +345,41 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         }
       }
     }
+  }
+}
+
+/**
+ * Hands the input batches to the Python writer. `enqueue` is called on each
+ * batch before the writer gets it, and returns whether the batch should be
+ * released with closeIfFreeable once it has been written: the writer is done
+ * with a batch when it asks for the next one or reaches the end.
+ */
+private[python] class WrittenBatchReleasingIterator(
+    input: Iterator[ColumnarBatch],
+    enqueue: ColumnarBatch => Boolean)
+  extends Iterator[ColumnarBatch] {
+
+  private var written: ColumnarBatch = _
+
+  private def releaseWritten(): Unit = {
+    if (written != null) {
+      written.closeIfFreeable()
+      written = null
+    }
+  }
+
+  override def hasNext: Boolean = {
+    releaseWritten()
+    input.hasNext
+  }
+
+  override def next(): ColumnarBatch = {
+    releaseWritten()
+    val batch = input.next()
+    if (enqueue(batch)) {
+      written = batch
+    }
+    batch
   }
 }
 
