@@ -118,6 +118,29 @@ class PythonUDFSuite extends SharedSparkSession {
     assert(df.agg(pandasTestUDF(df("id"))).schema.fieldNames.exists(_.startsWith(udfName)))
   }
 
+  test("SPARK-60150: filter on a float key above a grouped-agg pandas UDF aggregate") {
+    assume(shouldTestPandasUDFs)
+    val pandasTestUDF = TestGroupedAggPandasUDF(name = "pandas_udf")
+    // The aggregate outputs the raw key -0.0, and the filter pushed below it must read it raw.
+    val grouped = Seq(-0.0d, -0.0d).toDF("x").groupBy("x").agg(pandasTestUDF(col("x")))
+    assert(grouped.where(col("x").cast("string") === "-0.0").collect().length == 1)
+    assert(grouped.where(col("x").cast("string") === "0.0").collect().isEmpty)
+
+    // Column pruning removes an aggregate function after the filter push-down, which keeps the
+    // filter above the aggregate. With count(*) pruned, the aggregate outputs the raw key -0.0,
+    // which the filter keeps.
+    val df = Seq((-0.0d, 1.0d), (-0.0d, 2.0d)).toDF("x", "v")
+    val mixed = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"), count("*").as("c"))
+      .where(col("x").cast("string") === "-0.0").select("x", "p")
+    assert(mixed.collect().length == 1)
+    // With the pandas UDF pruned, the aggregate is group-only and outputs the normalized key 0.0,
+    // which the filter then reads, pushed below it in normalized form.
+    def keys(key: String): Array[String] = df.groupBy("x").agg(pandasTestUDF(col("v")).as("p"))
+      .where(col("x").cast("string") === key).select(col("x").cast("string")).as[String].collect()
+    assert(keys("0.0").toSeq == Seq("0.0"))
+    assert(keys("-0.0").isEmpty)
+  }
+
   test("SPARK-27052: Python UDF in a higher order function lambda") {
     assume(shouldTestPythonUDFs)
     // SPARK-48706 originally rejected this. `ExtractPythonUDFFromLambda` now rewrites it so the
