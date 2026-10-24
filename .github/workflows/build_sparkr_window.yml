@@ -70,6 +70,8 @@ jobs:
         python-version: '3.11'
         architecture: x64
     - name: Build Spark
+      env:
+        DEVELOCITY_ACCESS_KEY: ${{ secrets.SPARK_DEVELOCITY_ACCESS_KEY }}
       run: |
         rem 1. '-Djna.nosys=true' is required to avoid kernel32.dll load failure.
         rem   See SPARK-28759.
