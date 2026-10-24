@@ -160,8 +160,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udfs: list[Any] = udfs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        # Each UDF's function wrapped for profiling and in fail_on_stopiteration, at the indexes
-        # of _udfs; empty for a UDTF.
+        # Each UDF's function wrapped for profiling and, unless _fail_on_stopiteration is False,
+        # in fail_on_stopiteration, at the indexes of _udfs; empty for a UDTF.
         self._funcs: list[Callable[..., Any]] = []
         for udf in udfs:
             if isinstance(udf, UDF):
