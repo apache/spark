@@ -30,21 +30,44 @@ import org.apache.spark.internal.LogKeys.{POD_NAME, POD_NAMESPACE, POD_PHASE}
 /**
  * An immutable view of the current executor pods that are running in the cluster.
  */
-private[spark] case class ExecutorPodsSnapshot(
+private[spark] case class ExecutorPodsSnapshot private (
     executorPods: Map[Long, ExecutorPodState],
-    fullSnapshotTs: Long) {
+    fullSnapshotTs: Long)(
+    // The pods in executorPods that ExecutorPodsLifecycleManager acts on, maintained
+    // incrementally so it does not scan healthy pods. Derived from executorPods, so it is kept
+    // out of equality. The constructor is private so that every snapshot builds this index.
+    private[k8s] val lifecyclePods: Map[Long, ExecutorPodState]) {
 
   import ExecutorPodsSnapshot._
 
   def withUpdate(updatedPod: Pod): ExecutorPodsSnapshot = {
-    val newExecutorPods = executorPods ++ toStatesByExecutorId(Seq(updatedPod))
-    new ExecutorPodsSnapshot(newExecutorPods, fullSnapshotTs)
+    val updates = toStatesByExecutorId(Seq(updatedPod))
+    val newLifecyclePods = updates.foldLeft(lifecyclePods) { case (pods, (execId, state)) =>
+      if (needsLifecycleHandling(state)) pods.updated(execId, state) else pods - execId
+    }
+    new ExecutorPodsSnapshot(executorPods ++ updates, fullSnapshotTs)(newLifecyclePods)
   }
 }
 
 object ExecutorPodsSnapshot extends Logging {
   private var shouldCheckAllContainers: Boolean = _
   private var sparkContainerName: String = DEFAULT_EXECUTOR_CONTAINER_NAME
+
+  // Replaces the synthesized case class apply. Left public, it would make
+  // ExecutorPodsSnapshot(executorPods, fullSnapshotTs) ambiguous with the factory below.
+  private def apply(
+      executorPods: Map[Long, ExecutorPodState],
+      fullSnapshotTs: Long)(
+      lifecyclePods: Map[Long, ExecutorPodState]): ExecutorPodsSnapshot = {
+    new ExecutorPodsSnapshot(executorPods, fullSnapshotTs)(lifecyclePods)
+  }
+
+  def apply(
+      executorPods: Map[Long, ExecutorPodState],
+      fullSnapshotTs: Long): ExecutorPodsSnapshot = {
+    val lifecyclePods = executorPods.filter { case (_, state) => needsLifecycleHandling(state) }
+    new ExecutorPodsSnapshot(executorPods, fullSnapshotTs)(lifecyclePods)
+  }
 
   def apply(executorPods: Seq[Pod], fullSnapshotTs: Long): ExecutorPodsSnapshot = {
     ExecutorPodsSnapshot(toStatesByExecutorId(executorPods), fullSnapshotTs)
@@ -58,6 +81,16 @@ object ExecutorPodsSnapshot extends Logging {
 
   def setSparkContainerName(containerName: String): Unit = {
     sparkContainerName = containerName
+  }
+
+  private[k8s] def isPodInactive(pod: Pod): Boolean = {
+    pod.getMetadata.getLabels.get(SPARK_EXECUTOR_INACTIVE_LABEL) == "true"
+  }
+
+  // Final and inactive pods. Final pods stay indexed while they remain in executorPods, so failed
+  // cleanups are retried on later snapshots.
+  private def needsLifecycleHandling(state: ExecutorPodState): Boolean = {
+    state.isInstanceOf[FinalPodState] || isPodInactive(state.pod)
   }
 
   private def toStatesByExecutorId(executorPods: Seq[Pod]): Map[Long, ExecutorPodState] = {
