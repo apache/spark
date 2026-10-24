@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, DynamicPruning, DynamicPruningExpression, Expression, ExpressionSet, GetStructField, Literal, NamedExpression, Or, PythonUDF, SchemaPruning, SubqueryExpression, V2ExpressionUtils}
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.catalyst.plans.physical.KeyedPartitioning
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -69,27 +69,50 @@ object PushDownUtils extends Logging {
         // pushed down. This map can be used to construct a catalyst filter expression from the
         // input filter, or a superset(partial push down filter) of the input filter.
         val translatedFilterToExpr = mutable.HashMap.empty[sources.Filter, Expression]
-        val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+        val fullyTranslatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
+        val extractedFilters = mutable.LinkedHashSet.empty[sources.Filter]
         // Catalyst filter expression that can't be translated to data source filters.
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
+        def translateFilter(expression: Expression): Option[sources.Filter] = {
+          DataSourceStrategy.translateFilterWithMapping(expression, Some(translatedFilterToExpr),
+            nestedPredicatePushdownEnabled = true)
+        }
+
         for (filterExpr <- filters) {
-          val translated =
-            DataSourceStrategy.translateFilterWithMapping(filterExpr, Some(translatedFilterToExpr),
-              nestedPredicatePushdownEnabled = true)
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
-          } else {
-            translatedFilters += translated.get
+          translateFilter(filterExpr) match {
+            case Some(filter) =>
+              fullyTranslatedFilters += filter
+            case None =>
+              untranslatableExprs += filterExpr
+              if (filterExpr.deterministic) {
+                extractPushablePredicate(
+                  filterExpr,
+                  e => DataSourceStrategy.translateFilter(
+                    e, supportNestedPredicatePushdown = true))
+                  .flatMap(translateFilter)
+                  .foreach(extractedFilters += _)
+              }
           }
         }
+
+        // Exclude fully translated inputs from the residuals to omit.
+        val residualsToOmit = extractedFilters
+        residualsToOmit --= fullyTranslatedFilters
+
+        // Include extracted filters in the pushdown list.
+        val filtersToPush = fullyTranslatedFilters
+        filtersToPush ++= residualsToOmit
 
         // Data source filters that need to be evaluated again after scanning. which means
         // the data source cannot guarantee the rows returned can pass these filters.
         // As a result we must return it so Spark can plan an extra filter operator.
-        val postScanFilters = r.pushFilters(translatedFilters.toArray).map { filter =>
-          DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
-        }
+        // Omit returned residuals that came only from predicate extraction.
+        val postScanFilters = r.pushFilters(filtersToPush.toArray)
+          .filterNot(residualsToOmit.contains)
+          .map { filter =>
+            DataSourceStrategy.rebuildExpressionFromFilter(filter, translatedFilterToExpr)
+          }
         // Normally translated filters (postScanFilters) are simple filters that can be evaluated
         // faster, while the untranslated filters are complicated filters that take more time to
         // evaluate, so we want to evaluate the postScanFilters filters first.
@@ -102,21 +125,40 @@ object PushDownUtils extends Logging {
         // and the data source will return the filters that it cannot guarantee to be true
         // for all returned rows.
         val translatedFilterToExpr = mutable.HashMap.empty[Predicate, Expression]
-        val translatedFilters = mutable.ArrayBuffer.empty[Predicate]
+        val fullyTranslatedFilters = mutable.ArrayBuffer.empty[Predicate]
+        val extractedFilters = mutable.LinkedHashSet.empty[Predicate]
         val untranslatableExprs = mutable.ArrayBuffer.empty[Expression]
 
+        def translateFilter(expression: Expression): Option[Predicate] = {
+          DataSourceV2Strategy.translateFilterV2WithMapping(
+            expression, Some(translatedFilterToExpr))
+        }
+
         for (filterExpr <- deterministicFilters) {
-          val translated =
-            DataSourceV2Strategy.translateFilterV2WithMapping(
-              filterExpr, Some(translatedFilterToExpr))
-          if (translated.isEmpty) {
-            untranslatableExprs += filterExpr
-          } else {
-            translatedFilters += translated.get
+          translateFilter(filterExpr) match {
+            case Some(filter) =>
+              fullyTranslatedFilters += filter
+            case None =>
+              untranslatableExprs += filterExpr
+              extractPushablePredicate(
+                filterExpr,
+                DataSourceV2Strategy.translateFilterV2)
+                .flatMap(translateFilter)
+                .foreach(extractedFilters += _)
           }
         }
 
-        val postScanPredicates = r.pushPredicates(translatedFilters.toArray)
+        // Exclude fully translated inputs from the residuals to omit.
+        val residualsToOmit = extractedFilters
+        residualsToOmit --= fullyTranslatedFilters
+
+        // Include extracted filters in the pushdown list.
+        val filtersToPush = fullyTranslatedFilters
+        filtersToPush ++= residualsToOmit
+
+        // Omit returned residuals that came only from predicate extraction.
+        val postScanPredicates = r.pushPredicates(filtersToPush.toArray)
+          .filterNot(residualsToOmit.contains)
 
         val finalPostScanFilters =
           if (!partitionFields.exists(_.nonEmpty) || !r.supportsIterativePushdown) {
@@ -142,6 +184,28 @@ object PushDownUtils extends Logging {
         (Right(r.pushedFilters.toImmutableArraySeq), postScanFilters)
       case _ => (Left(Nil), filters)
     }
+  }
+
+  // Extract a necessary condition from a deterministic filter that cannot be fully translated.
+  // The caller must retain the original filter for post-scan evaluation. AND can use either
+  // child, but OR requires both children. Other expressions, including NOT, must translate whole.
+  private def extractPushablePredicate[T](
+      expression: Expression,
+      translate: Expression => Option[T]): Option[Expression] = expression match {
+    case And(left, right) =>
+      val l = extractPushablePredicate(left, translate)
+      val r = extractPushablePredicate(right, translate)
+      (l, r) match {
+        case (Some(a), Some(b)) => Some(And(a, b))
+        case _ => l.orElse(r)
+      }
+    case Or(left, right) =>
+      for {
+        l <- extractPushablePredicate(left, translate)
+        r <- extractPushablePredicate(right, translate)
+      } yield Or(l, r)
+    case other =>
+      translate(other).map(_ => other)
   }
 
   /**
