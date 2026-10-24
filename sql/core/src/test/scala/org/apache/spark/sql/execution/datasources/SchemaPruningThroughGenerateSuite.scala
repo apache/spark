@@ -910,6 +910,17 @@ abstract class SchemaPruningThroughGenerateSuite
       s"struct<items:$fullItemsType>")
   }
 
+  testPruning("SPARK-47230: array_sort with a non-nullable field comparator prunes") {
+    // a comparator that cannot return null narrows the element to its field plus the reads
+    checkPrunedQuery(
+      """select pos, item.sku
+        |from orders
+        |lateral view posexplode(array_sort(items,
+        |    (l, r) -> case when l.qty < r.qty then -1 when l.qty > r.qty then 1 else 0 end))
+        |  t1 as pos, item""".stripMargin,
+      "struct<items:array<struct<qty:int,sku:string>>>")
+  }
+
   testPruning("SPARK-47230: posexplode of a reversed array still prunes") {
     // `reverse` only reorders the elements, so pruning passes through and the positions
     // pair with the reversed order
