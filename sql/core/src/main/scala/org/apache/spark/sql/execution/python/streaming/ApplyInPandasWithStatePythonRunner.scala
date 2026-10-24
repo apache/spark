@@ -70,6 +70,11 @@ class ApplyInPandasWithStatePythonRunner(
   with PythonArrowInput[InType]
   with PythonArrowOutput[OutType] {
 
+  // The data and state counts of each batch returned from Python cover the whole batch and are
+  // read from its first row, so the batch must not be sliced.
+  override protected def arrowMaxRecordsPerOutputBatch: Int = -1
+  override protected def arrowMaxBytesPerOutputBatch: Int = -1
+
   override val pythonExec: String =
     SQLConf.get.pysparkWorkerPythonExecutable.getOrElse(
       funcs.head._1.funcs.head.pythonExec)
