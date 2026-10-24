@@ -3726,7 +3726,10 @@ class SparkConnectPlanner(
         case StreamingForeachFunction.FunctionCase.PYTHON_FUNCTION =>
           val pythonFn = transformPythonFunction(writeOp.getForeachBatch.getPythonFunction)
           val (fn, cleaner, queryIdRef) =
-            StreamingForeachBatchHelper.pythonForeachBatchWrapper(pythonFn, sessionHolder)
+            StreamingForeachBatchHelper.pythonForeachBatchWrapper(
+              pythonFn,
+              sessionHolder,
+              executeHolder.sparkSessionTags)
           foreachBatchRunnerCleaner = Some(cleaner)
           foreachBatchQueryIdRef = Some(queryIdRef)
           fn
