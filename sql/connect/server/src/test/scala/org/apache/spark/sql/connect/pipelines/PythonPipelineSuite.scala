@@ -1635,6 +1635,14 @@ class PythonPipelineSuite
     "CREATE VIEW some_view AS SELECT * FROM some_table",
     "CREATE TEMPORARY VIEW IDENTIFIER('some_view') AS SELECT 1",
     "INSERT INTO some_table VALUES (1)",
+    "WITH v AS (SELECT 1 AS id) INSERT INTO some_table SELECT * FROM v",
+    "WITH v AS (SELECT 1 AS id) MERGE INTO some_table t USING v ON t.id = v.id " +
+      "WHEN MATCHED THEN DELETE",
+    "WITH v AS (SELECT 1 AS id) UPDATE some_table SET id = 2 WHERE id IN (SELECT id FROM v)",
+    "WITH v AS (SELECT 1 AS id) DELETE FROM some_table WHERE id IN (SELECT id FROM v)",
+    "FROM some_view INSERT INTO some_table SELECT * INSERT INTO some_new_table SELECT *",
+    "WITH v AS (SELECT 1 AS id) FROM v INSERT INTO some_table SELECT * " +
+      "INSERT INTO some_new_table SELECT *",
     "ALTER TABLE some_table RENAME TO some_new_table",
     "CREATE NAMESPACE some_namespace",
     "DROP VIEW some_view",
@@ -1683,7 +1691,9 @@ class PythonPipelineSuite
     "SHOW CREATE TABLE spark_catalog.default.src",
     "SELECT * FROM RANGE(5)",
     "SELECT * FROM spark_catalog.default.src",
-    "TABLE IDENTIFIER('spark_catalog.default.' || 'src')")
+    "TABLE IDENTIFIER('spark_catalog.default.' || 'src')",
+    "WITH v AS (SELECT * FROM spark_catalog.default.src) SELECT * FROM v",
+    "SELECT * FROM RANGE(5) UNION ALL SELECT * FROM spark_catalog.default.src")
 
   gridTest("Supported SQL command outside query function should work")(supportedSqlCommandList) {
     supportedSqlCommand =>
