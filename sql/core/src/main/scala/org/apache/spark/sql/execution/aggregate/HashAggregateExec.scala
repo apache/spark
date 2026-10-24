@@ -79,7 +79,7 @@ case class HashAggregateExec(
     // Only the aggregates that can actually bypass report this, so the rest do not show a
     // constant 0 in the SQL UI (see `UnionExec.metrics` for the same approach).
     if (adaptivePartialAggEnabled) {
-      Map("numBypassingRows" -> SQLMetrics.createMetric(sparkContext, "number of bypassing rows"))
+      Map("numPassthroughRows" -> SQLMetrics.createMetric(sparkContext, "passthrough output rows"))
     } else {
       Map.empty[String, SQLMetric]
     }
@@ -106,7 +106,8 @@ case class HashAggregateExec(
     val aggTime = longMetric("aggTime")
     val numTasksFallBacked = longMetric("numTasksFallBacked")
     // Registered only when the feature applies, and only read from the pass-through path.
-    val numBypassingRows = if (adaptivePartialAggEnabled) longMetric("numBypassingRows") else null
+    val numPassthroughRows =
+      if (adaptivePartialAggEnabled) longMetric("numPassthroughRows") else null
 
     child.execute().mapPartitionsWithIndex { (partIndex, iter) =>
 
@@ -135,8 +136,7 @@ case class HashAggregateExec(
             spillSize,
             avgHashProbe,
             numTasksFallBacked,
-            numBypassingRows,
-            aggTime,
+            numPassthroughRows,
             adaptivePartialAggEnabled,
             adaptiveMinRows,
             adaptiveMinCompaction)
@@ -841,14 +841,14 @@ case class HashAggregateExec(
     } else {
       ""
     }
+    // The resumed build is not timed: split by an exchange, every passed-through row returns and
+    // re-enters here, so a timer would cost two `System.nanoTime()` calls per row while the
+    // millisecond division truncates each sub-millisecond slice to 0.
     val adaptiveResumeBuild = if (adaptivePartialAggEnabled) {
-      val beforeResumedAgg = ctx.freshName("beforeResumedAgg")
       s"""
          |if (!$adaptiveChildrenConsumedTerm) {
          |  $adaptiveOutputMapAndFlush
-         |  long $beforeResumedAgg = System.nanoTime();
          |  $doAggFuncName(partitionIndex);
-         |  $aggTime.add((System.nanoTime() - $beforeResumedAgg) / $NANOS_PER_MILLIS);
          |  if (shouldStop()) return;
          |}
        """.stripMargin
@@ -1314,10 +1314,10 @@ case class HashAggregateExec(
     // buffered, `shouldStop()` never fires, and the single output call drains the whole map before
     // the held row follows.
     val handlePassThroughRow = if (adaptivePartialAggEnabled) {
-      val numBypassingRows = metricTerm(ctx, "numBypassingRows")
+      val numPassthroughRows = metricTerm(ctx, "numPassthroughRows")
       s"""
          |if ($adaptiveRowBypassedTerm) {
-         |  $numBypassingRows.add(1);
+         |  $numPassthroughRows.add(1);
          |  if ($adaptiveMapOutputDoneTerm) {
          |    $outputFunc(${unsafeRowKeyCode.value}, $unsafeRowBuffer);
          |  } else {
