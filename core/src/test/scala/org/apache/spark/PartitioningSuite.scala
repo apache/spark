@@ -243,6 +243,9 @@ class PartitioningSuite extends SparkFunSuite with SharedSparkContext with Priva
     verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs))
     verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs, arrPairs))
     verify("HASH_PARTITIONER")(arrPairs.cogroup(arrPairs, arrPairs, arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.subtractByKey(arrPairs))
+    verify("HASH_PARTITIONER")(arrPairs.subtractByKey(arrPairs, 2))
+    verify("HASH_PARTITIONER")(arrPairs.subtractByKey(arrPairs, new HashPartitioner(2)))
     verify("REDUCE_BY_KEY_LOCALLY")(arrPairs.reduceByKeyLocally(_ + _))
     verify("MAP_SIDE_COMBINE")(arrPairs.reduceByKey(_ + _))
   }
