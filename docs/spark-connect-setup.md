@@ -381,7 +381,7 @@ libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{sit
 
 Depend on `spark-connect-client-jvm` only, and on JDK 17 and later start the JVM with
 `--add-opens=java.base/java.nio=ALL-UNNAMED`;
-[Connecting from Scala](spark-connect-programming-guide.html#connecting-from-scala) explains both.
+[Scala dependency](spark-connect-programming-guide.html#scala-dependency) explains both.
 
 When writing your own code, include the `remote` function with a reference to
 your Spark server when you create a Spark session, as in this example:
