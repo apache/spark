@@ -23,7 +23,9 @@ import java.nio.file.Files
 import java.security.PrivilegedExceptionAction
 import java.util.Base64
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.security.alias.CredentialProviderFactory
 
 import org.apache.spark.internal.config._
 import org.apache.spark.internal.config.UI._
@@ -507,6 +509,84 @@ class SecurityManagerSuite extends SparkFunSuite with ResetSystemProperties {
           }
         }
       )
+    }
+  }
+
+  test("SSL RPC password env is empty when RPC SSL is disabled") {
+    val conf = new SparkConf()
+      .set("spark.ssl.rpc.enabled", "false")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswords.isEmpty)
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf.isEmpty)
+  }
+
+  test("SSL RPC password env from SparkConf includes passwords set in spark.ssl.rpc.*") {
+    val conf = new SparkConf()
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.keyStorePassword", "keyStorePass")
+      .set("spark.ssl.rpc.keyPassword", "keyPass")
+      .set("spark.ssl.rpc.privateKeyPassword", "privateKeyPass")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+    val expected = Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "keyStorePass",
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass",
+      SSLOptions.ENV_RPC_SSL_PRIVATE_KEY_PASSWORD -> "privateKeyPass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswords === expected)
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === expected)
+  }
+
+  test("SSL RPC password env from SparkConf includes passwords inherited from spark.ssl.*") {
+    val conf = new SparkConf()
+      .set("spark.ssl.enabled", "true")
+      .set("spark.ssl.keyStorePassword", "globalKeyStorePass")
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "globalKeyStorePass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+  }
+
+  test("SSL RPC password env from SparkConf excludes passwords resolved from the environment") {
+    val conf = new SparkConfWithEnv(Map(
+        SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "envKeyStorePass",
+        "TRUST_STORE_PASS" -> "substitutedTrustStorePass"))
+      .set("spark.ssl.rpc.enabled", "true")
+      .set("spark.ssl.rpc.trustStorePassword", "${env:TRUST_STORE_PASS}")
+      .set("spark.ssl.rpc.keyPassword", "keyPass")
+    val mgr = new SecurityManager(conf)
+    assert(mgr.getEnvironmentForSslRpcPasswords === Map(
+      SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "envKeyStorePass",
+      SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "substitutedTrustStorePass",
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass"))
+    assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === Map(
+      SSLOptions.ENV_RPC_SSL_KEY_PASSWORD -> "keyPass"))
+  }
+
+  test("SSL RPC password env from SparkConf excludes passwords from a credential provider") {
+    withTempDir { dir =>
+      val providerPath = s"localjceks://file${dir.getAbsolutePath}/test.jceks"
+      val hadoopConf = new Configuration()
+      hadoopConf.set(CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH, providerPath)
+      val provider = CredentialProviderFactory.getProviders(hadoopConf).get(0)
+      provider.createCredentialEntry(
+        "spark.ssl.rpc.keyStorePassword", "providerKeyStorePass".toCharArray)
+      provider.flush()
+
+      val conf = new SparkConf()
+        .set(s"spark.hadoop.${CredentialProviderFactory.CREDENTIAL_PROVIDER_PATH}", providerPath)
+        .set("spark.ssl.rpc.enabled", "true")
+        .set("spark.ssl.rpc.trustStorePassword", "trustStorePass")
+      val mgr = new SecurityManager(conf)
+      assert(mgr.getEnvironmentForSslRpcPasswords === Map(
+        SSLOptions.ENV_RPC_SSL_KEY_STORE_PASSWORD -> "providerKeyStorePass",
+        SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
+      assert(mgr.getEnvironmentForSslRpcPasswordsFromSparkConf === Map(
+        SSLOptions.ENV_RPC_SSL_TRUST_STORE_PASSWORD -> "trustStorePass"))
     }
   }
 
