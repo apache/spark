@@ -235,6 +235,45 @@ case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
   override def displayName(): String = toString
 }
 
+object UnboundNonScalarBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = NonScalarBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+// A `bucket` that is neither a ScalarFunction nor an AggregateFunction, so Spark cannot evaluate
+// it. The in-memory table computes the bucket values itself, see BucketTransform in
+// InMemoryBaseTable.scala.
+object NonScalarBucketFunction extends BoundFunction {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+}
+
+object UnboundInheritedBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = InheritedBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+abstract class BucketFunctionBase extends ScalarFunction[Int] {
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+}
+
+// A `bucket` ScalarFunction that inherits `produceResult`, which Spark does not find when it
+// resolves the function, so Spark cannot evaluate it either.
+object InheritedBucketFunction extends BucketFunctionBase {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+}
+
 object UnboundStringSelfFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = StringSelfFunction
   override def description(): String = name()

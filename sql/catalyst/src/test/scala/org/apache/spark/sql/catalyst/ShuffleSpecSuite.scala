@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, DirectShufflePartitionID, Expression, GetStructField, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.physical._
-import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, FlipLowBitFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
 
@@ -702,6 +702,52 @@ class ShuffleSpecSuite extends SparkFunSuite with SQLHelper {
       assert(divergingSpec(struct("f"), struct("g"), InternalRow(InternalRow(1)))
         .canCreatePartitioning,
         "a key row reads the same either way, so the field names must not matter")
+    }
+  }
+
+  test("SPARK-60522: KeyedShuffleSpec refuses a transform Spark cannot evaluate") {
+    // A connector may bind its partition transform to a `BoundFunction` that is not a
+    // `ScalarFunction`, or to a `ScalarFunction` whose `produceResult` is inherited, which
+    // resolving it does not find. `TransformExpression.eval` cannot run either, so an identity
+    // side is not reduced onto it and no other child is shuffled onto it. The gates answer that
+    // without throwing, since they are asked of candidates that may not be chosen.
+    val nonScalarBucket = new BoundFunction {
+      override def inputTypes(): Array[DataType] = Array(IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+    }
+    abstract class BucketBase extends ScalarFunction[Int] {
+      override def produceResult(input: InternalRow): Int = input.getInt(0)
+    }
+    val inheritedBucket = new BucketBase {
+      override def inputTypes(): Array[DataType] = Array(IntegerType)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "bucket"
+      override def canonicalName(): String = "test.bucket"
+    }
+    val a = $"a".int
+    def spec(expression: Expression): KeyedShuffleSpec = KeyedShuffleSpec(
+      KeyedPartitioning(Seq(expression), Seq(InternalRow(1))), ClusteredDistribution(Seq(a)))
+    val identity = spec(a)
+
+    Seq(
+      ("scalar", TestBucketFunction, true),
+      ("non-scalar", nonScalarBucket, false),
+      ("inherited produceResult", inheritedBucket, false)
+    ).foreach {
+      case (name, fn, evaluable) =>
+        val bucket = spec(TransformExpression(fn, Seq(a), Some(4)))
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          assert(identity.areKeysCompatible(bucket, allowReduce = true) == evaluable, name)
+          assert(bucket.areKeysCompatible(identity, allowReduce = true) == evaluable, name)
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          assert(bucket.canCreatePartitioning == evaluable, name)
+        }
     }
   }
 
