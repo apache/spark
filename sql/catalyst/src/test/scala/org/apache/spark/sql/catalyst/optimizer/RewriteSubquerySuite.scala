@@ -20,9 +20,10 @@ package org.apache.spark.sql.catalyst.optimizer
 import org.apache.spark.sql.catalyst.QueryPlanningTracker
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.{CaseWhen, Cast, EqualTo, Exists, InSubquery, IsNull, ListQuery, Literal, Not, Or}
+import org.apache.spark.sql.catalyst.expressions.aggregate.First
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, LeftSemi, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.types.LongType
 
@@ -122,6 +123,35 @@ class RewriteSubquerySuite extends PlanTest {
         Some($"_aggregateexpression" === $"c3"))
       .select($"exists".as("(sum(col2) IN (listquery()))")).analyze
     comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-58429: rewrite uncorrelated IN above a global aggregate over empty input") {
+    val outer = LocalRelation($"a".int)
+    val inner = LocalRelation($"b".int)
+    val query = outer.groupBy()(
+      count(1).as("cnt"),
+      Literal(1).in(ListQuery(inner.select($"b"))).as("in"))
+
+    val optimized = Optimize.execute(query.analyze)
+    val join = optimized.collectFirst { case j: Join => j }.get
+
+    assert(join.left.isInstanceOf[Aggregate])
+    assert(!optimized.exists { plan =>
+      plan.expressions.exists(_.exists(_.isInstanceOf[First]))
+    })
+  }
+
+  test("SPARK-58429: uncorrelated IN inside an aggregate function stays below the aggregate") {
+    val outer = LocalRelation($"a".int)
+    val inner = LocalRelation($"b".int)
+    val in = Literal(1).in(ListQuery(inner.select($"b")))
+    val query = outer.groupBy()(
+      count(CaseWhen(Seq((in, Literal(1))), None)).as("cnt"))
+
+    val optimized = Optimize.execute(query.analyze)
+    val agg = optimized.collectFirst { case a: Aggregate => a }.get
+
+    assert(agg.exists(_.isInstanceOf[Join]))
   }
 
   test("SPARK-57005: No None.get when correlated predicates are eliminated") {
