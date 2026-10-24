@@ -116,6 +116,7 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
   }
 
   test("keeps the map option for a map column and drops the string one") {
+    // Symbol, not $"a": TreeNode.map(BaseType => A) shadows the dsl's map(MapType).
     val a = Symbol("a").map(MapType(StringType, StringType))
     val mapOpt = a
     val strOpt = Add(a, Literal(1L))
