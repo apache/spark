@@ -22,6 +22,7 @@ import org.apache.datasketches.theta.{CompactSketch, Intersection, SetOperation,
 
 import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
 import org.apache.spark.sql.catalyst.expressions.aggregate.TypedImperativeAggregate
 import org.apache.spark.sql.catalyst.trees.{BinaryLike, UnaryLike}
@@ -92,9 +93,8 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
     Arguments:
       * expr - The expression whose distinct values are aggregated into the sketch.
         An expression that evaluates to an array, binary, double, float, integer, long, or string.
-      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
-      ThetaSketch.
-        An expression that evaluates to an integer.
+      * lgNomEntries - A foldable integer expression containing the log-base-2 of nominal entries,
+        which sets the number of buckets for the ThetaSketch.
   """,
   examples = """
     Examples:
@@ -167,6 +167,15 @@ case class ThetaSketchAgg(
         LongType,
         StringTypeWithCollation(supportsTrimCollation = true)),
       IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      ThetaSketchUtils.checkLgNomEntriesInput(right)
+    }
+  }
 
   override def dataType: DataType = BinaryType
 
@@ -340,9 +349,9 @@ case class ThetaSketchAgg(
   arguments = """
     Arguments:
       * expr - A binary expression of Compact ThetaSketch representations to union.
-      * lgNomEntries - An optional integer expression, the log-base-2 of nominal entries which
-          sets the number of buckets for the resulting ThetaSketch. When omitted, it defaults to
-          the default log nominal entries.
+      * lgNomEntries - An optional foldable integer expression containing the log-base-2 of nominal
+          entries, which sets the number of buckets for the resulting ThetaSketch. When omitted,
+          it defaults to the default log nominal entries.
   """,
   examples = """
     Examples:
@@ -404,6 +413,15 @@ case class ThetaUnionAgg(
   override def prettyName: String = "theta_union_agg"
 
   override def inputTypes: Seq[AbstractDataType] = Seq(BinaryType, IntegerType)
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    val defaultCheck = super.checkInputDataTypes()
+    if (defaultCheck.isFailure) {
+      defaultCheck
+    } else {
+      ThetaSketchUtils.checkLgNomEntriesInput(right)
+    }
+  }
 
   override def dataType: DataType = BinaryType
 

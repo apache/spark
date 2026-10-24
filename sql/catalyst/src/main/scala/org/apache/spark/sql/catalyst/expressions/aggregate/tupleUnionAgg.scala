@@ -228,14 +228,16 @@ abstract class TupleUnionAggBase[S <: Summary]
 
   override def checkInputDataTypes(): TypeCheckResult = {
     val defaultCheck = super.checkInputDataTypes()
-    val lgCheck = checkLgNomEntriesParameter()
 
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (lgCheck.isFailure) {
-      lgCheck
     } else {
-      checkModeParameter()
+      val lgCheck = checkLgNomEntriesParameter()
+      if (lgCheck.isFailure) {
+        lgCheck
+      } else {
+        checkModeParameter()
+      }
     }
   }
 
