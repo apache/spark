@@ -57,6 +57,8 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   class MySQLSQLBuilder extends JDBCSQLBuilder {
 
+    override protected def likeEscapeChar: Char = '!'
+
     override def visitExtract(extract: Extract): String = {
       val field = extract.field
       field match {
