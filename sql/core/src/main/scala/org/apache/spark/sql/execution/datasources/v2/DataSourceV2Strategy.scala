@@ -50,6 +50,7 @@ import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, LogicalRe
 import org.apache.spark.sql.execution.streaming.continuous.{WriteToContinuousDataSource, WriteToContinuousDataSourceExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.StaticSQLConf.WAREHOUSE_PATH
+import org.apache.spark.sql.internal.connector.SupportsRuntimeCatalystFiltering
 import org.apache.spark.sql.metricview.logical.CreateMetricView
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.storage.StorageLevel
@@ -198,7 +199,16 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       // dynamicFilters need no such check: a DynamicPruningSubquery over a non-deterministic
       // filtering plan is itself non-deterministic, so CleanupDynamicPruningFilters has already
       // rewritten it to TrueLiteral by the time we get here.
-      val runtimeFilters = dynamicFilters ++ scalarSubqueryFilters
+      // A Catalyst runtime-filtering scan only applies a filter over attributes it declared, so a
+      // DPP filter over any other column is dropped here rather than planned for nothing. One
+      // PartitionPruning inserted over a union lands in every branch, including one that cannot
+      // use it; the join it was derived from still applies it.
+      val usableDynamicFilters = relation.scan match {
+        case _: SupportsRuntimeCatalystFiltering =>
+          dynamicFilters.filter(_.references.subsetOf(relation.runtimeFilterAttrs))
+        case _ => dynamicFilters
+      }
+      val runtimeFilters = usableDynamicFilters ++ scalarSubqueryFilters
 
       val batchExec = BatchScanExec(relation.output, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning)
