@@ -245,6 +245,8 @@ object ParseSqlResult {
       case i: UnresolvedInsert =>
         visitPlan(i.table, scope, TableRefRole.Target)(f)
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
+      case i: InsertIntoStatement =>
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
         visitPlan(c.query, nextScope, TableRefRole.Source)(f)
@@ -288,6 +290,9 @@ object ParseSqlResult {
           visitPlan(cteRelation.plan, bodyScope, TableRefRole.Source)(f)
           definitionScope += normalized
         }
+      // An INSERT target is never resolved against a CTE, so no alias shadows it.
+      case i: InsertIntoStatement =>
+        visitPlan(i.table, Set.empty, TableRefRole.Target)(f)
       case c: CacheTable if c.multipartIdentifier.isEmpty =>
         visitPlan(c.table, scope, TableRefRole.Target)(f)
       case c: CompoundBody =>
@@ -360,7 +365,6 @@ object ParseSqlResult {
       foreachExpressionDeep(p)(visitExpr)
       def add(parts: Seq[String]): Unit = addTable(parts, scope, role)
       p match {
-        case u: UnresolvedInsertTarget => addTarget(u.multipartIdentifier)
         case u: UnresolvedRelation => add(u.multipartIdentifier)
         case u: UnresolvedTable => add(u.multipartIdentifier)
         case u: UnresolvedView => add(u.multipartIdentifier)
@@ -406,6 +410,8 @@ object ParseSqlResult {
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
     case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
+      primaryQueryPlan(query)
+    case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)
