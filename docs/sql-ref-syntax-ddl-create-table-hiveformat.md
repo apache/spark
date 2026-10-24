@@ -37,7 +37,7 @@ CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
     [ LOCATION path ]
-    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ TBLPROPERTIES ( key1[=]val1, key2[=]val2, ... ) ]
     [ AS select_statement ]
 ```
 
@@ -93,7 +93,7 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 
 * **TBLPROPERTIES**
 
-    A list of key-value pairs that is used to tag the table definition.
+    A list of key-value pairs that is used to tag the table definition. The equals sign (`=`) separating each key and value is optional; whitespace can be used instead.
 
 * **AS select_statement**
 
