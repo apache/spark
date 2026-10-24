@@ -2869,7 +2869,6 @@ class SparkConnectPlanner(
         } else {
           RelationalGroupedDataset
             .collectPivotValues(Dataset.ofRows(session, logicalPlan), Column(pivotExpr))
-            .map(expressions.Literal.apply)
         }
         logical.Pivot(
           groupByExprsOpt = Some(groupingExpressionsWithOrdinals.map(toNamedExpression)),
