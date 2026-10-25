@@ -231,7 +231,35 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
 
   // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    "42000".equals(exception.getSQLState)
+    "42000".equals(exception.getSQLState) &&
+    !isNonSyntaxErrorBestEffort(exception)
+  }
+
+  // See https://dev.mysql.com/doc/mysql-errors/8.0/en/server-error-reference.html
+  // MySQL uses SQLSTATE 42000 for both syntax errors and access/limit failures.
+  private def isNonSyntaxErrorBestEffort(exception: SQLException): Boolean = {
+    val nonSyntaxErrorCodes = Set(
+      1044, // ER_DBACCESS_DENIED_ERROR
+      1142, // ER_TABLEACCESS_DENIED_ERROR
+      1143, // ER_COLUMNACCESS_DENIED_ERROR
+      1148, // ER_NOT_ALLOWED_COMMAND
+      1203, // ER_TOO_MANY_USER_CONNECTIONS
+      1226, // ER_USER_LIMIT_REACHED
+      1227, // ER_SPECIFIC_ACCESS_DENIED_ERROR
+      1370 // ER_PROCACCESS_DENIED_ERROR
+    )
+    // Message matching is a best-effort fallback for drivers that omit error codes.
+    // Prefer error codes above; MySQL messages may be localized.
+    val nonSyntaxSubstrings = Set(
+      "command denied to user",
+      "access denied",
+      "must have privileges"
+    )
+    val message = Option(exception.getMessage)
+      .map(_.toLowerCase(Locale.ROOT))
+      .getOrElse("")
+    nonSyntaxErrorCodes.contains(exception.getErrorCode) ||
+      nonSyntaxSubstrings.exists(message.contains)
   }
 
   // See https://dev.mysql.com/doc/refman/8.0/en/alter-table.html
