@@ -9480,7 +9480,7 @@
       },
       "TIMESTAMP_NANOS_SUBTRACTION" : {
         "message" : [
-          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The day-time interval result has microsecond precision. Use `unix_nanos(end) - unix_nanos(start)` for the exact difference in nanoseconds, or cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision."
+          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The interval result has microsecond precision. Cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision, or use `unix_nanos(end) - unix_nanos(start)` for the elapsed time in nanoseconds."
         ]
       },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {

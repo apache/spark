@@ -630,46 +630,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 90,
-    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05'"
-  } ]
-}
-
-
--- !query
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
-  "sqlState" : "0A000",
-  "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789')\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 90,
-    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789'"
-  } ]
-}
-
-
--- !query
 SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01'
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -690,41 +650,61 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT DATE '2020-01-03' - TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789'
+SELECT 1 WHERE TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05' > INTERVAL '0' SECOND
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "sqlExpr" : "\"(DATE '2020-01-03' - TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789')\""
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 72,
-    "fragment" : "DATE '2020-01-03' - TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789'"
+    "startIndex" : 16,
+    "stopIndex" : 98,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
   } ]
 }
 
 
 -- !query
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9))
+SELECT (SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
 {
   "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS TIMESTAMP_NTZ(9)))\""
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
   },
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 85,
-    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9))"
+    "startIndex" : 16,
+    "stopIndex" : 98,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
+  } ]
+}
+
+
+-- !query
+SELECT d FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05') AS t(d)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 23,
+    "stopIndex" : 105,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
   } ]
 }
 

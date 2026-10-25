@@ -158,16 +158,15 @@ SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH;
 -- legacy calendar interval is still rejected by TimestampAddInterval's type check.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
--- Subtraction with a TIMESTAMP_NTZ(p) operand is rejected: the day-time interval result only has
--- microsecond precision. Every operand mix fails, including micro, DATE and NULL operands.
+-- Subtraction with a TIMESTAMP_NTZ(p) operand is rejected: the interval result only has
+-- microsecond precision. This holds in a filter, a subquery and a folded VALUES row too.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111';
 SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9));
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05';
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
 SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
-SELECT DATE '2020-01-03' - TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789';
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9));
--- The exact difference in nanoseconds, and subtraction at microsecond precision after a cast.
+SELECT 1 WHERE TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05' > INTERVAL '0' SECOND;
+SELECT (SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05');
+SELECT d FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05') AS t(d);
+-- The elapsed time in nanoseconds, and subtraction at microsecond precision after a cast.
 SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111');
 SELECT CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ);
 

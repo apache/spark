@@ -19,6 +19,8 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDateTime}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.catalyst.expressions.EqualTo
 import org.apache.spark.sql.catalyst.plans.logical.Join
@@ -401,20 +403,46 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
   // The as-of join orders candidates by an internal timestamp subtraction, which stays allowed for
   // nanosecond keys even though user-written nanosecond subtraction is rejected.
   test("DataFrame as-of join over nanosecond keys") {
-    val schema = new StructType().add("k", TimestampNTZNanosType(9)).add("v", IntegerType)
-    def df(rows: (String, Int)*): classic.DataFrame = spark.createDataFrame(
-      spark.sparkContext.parallelize(rows.map { case (k, v) => Row(LocalDateTime.parse(k), v) }),
-      schema)
-    val left = df("2020-01-01T00:00:01.000000500" -> 1)
-    val right = df("2020-01-01T00:00:00.000000100" -> 10, "2020-01-01T00:00:03.000000200" -> 20)
-    Seq("false", "true").foreach { sortMerge =>
-      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
-        Seq("backward" -> 10, "forward" -> 20, "nearest" -> 10).foreach {
-          case (direction, expected) =>
-            val joined = left.joinAsOf(right, left("k"), right("k"), usingColumns = Seq.empty,
-              joinType = "inner", tolerance = null, allowExactMatches = true,
-              direction = direction)
-            checkAnswer(joined.select(left("v"), right("v")), Row(1, expected))
+    Seq[(DataType, String => Any)](
+      TimestampNTZNanosType(9) -> (s => LocalDateTime.parse(s)),
+      TimestampLTZNanosType(9) -> (s => Instant.parse(s + "Z"))).foreach { case (keyType, key) =>
+      val schema = new StructType().add("k", keyType).add("k2", keyType).add("v", IntegerType)
+      def df(rows: (String, Int)*): classic.DataFrame = spark.createDataFrame(
+        rows.map { case (k, v) => Row(key(k), key(k), v) }.asJava, schema)
+      val left = df("2020-01-01T00:00:01.000000500" -> 1)
+      val right = df("2020-01-01T00:00:00.000000100" -> 10, "2020-01-01T00:00:03.000000200" -> 20)
+      def asOf(l: Column, r: Column, joinExprs: Column, direction: String): classic.DataFrame =
+        left.joinAsOf(right, l, r, joinExprs, joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = direction)
+      Seq("false", "true").foreach { singlePass =>
+        withSQLConf(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+          Seq("false", "true").foreach { sortMerge =>
+            withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
+              Seq("backward" -> 10, "forward" -> 20, "nearest" -> 10).foreach {
+                case (direction, expected) =>
+                  // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
+                  QueryTest.checkAnswer(
+                    df = asOf(left("k"), right("k"), null, direction)
+                      .select(left("v"), right("v")),
+                    expectedAnswer = Seq(Row(1, expected)),
+                    checkToRDD = false)
+              }
+            }
+          }
+          // A nanosecond subtraction in an as-of key or in the join condition is still rejected.
+          Seq(
+            () => asOf(left("k") - left("k2"), right("k") - right("k2"), null, "nearest"),
+            () => asOf(left("k") - left("k2"), right("k") - right("k2"), null, "backward"),
+            () => asOf(left("k"), right("k"),
+              left("k") - right("k") < functions.expr("INTERVAL 5 SECONDS"), "backward")
+          ).foreach { join =>
+            val e = intercept[AnalysisException](join())
+            assert(e.getCondition == "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION")
+          }
         }
       }
     }

@@ -739,8 +739,6 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
         if (stagedError.isDefined) stagedError.get.apply()
 
-        NanosTimestampSubtractionCheck.checkOperator(operator)
-
         operator match {
           case RelationTimeTravel(u: UnresolvedRelation, _, _) =>
             u.tableNotFound(
@@ -1237,6 +1235,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case _ => // Analysis successful!
         }
+
+        NanosTimestampSubtractionCheck.checkOperator(operator)
     }
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))

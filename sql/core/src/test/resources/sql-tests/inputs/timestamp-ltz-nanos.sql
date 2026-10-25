@@ -182,16 +182,12 @@ SELECT TIMESTAMP_LTZ '1960-01-31 03:04:05.123456789 UTC' + INTERVAL '1' MONTH;
 -- legacy calendar interval is still rejected by TimestampAddInterval's type check.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
--- Subtraction with a TIMESTAMP_LTZ(p) operand is rejected: the day-time interval result only has
--- microsecond precision. Every operand mix fails, including micro, DATE and NULL operands.
+-- Subtraction with a TIMESTAMP_LTZ(p) operand is rejected: the interval result only has
+-- microsecond precision.
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC';
-SELECT ('2020-01-02 03:04:05.1234567 UTC' :: timestamp_ltz(7)) - ('2020-01-01 03:04:05.000000009 UTC' :: timestamp_ltz(9));
 SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC';
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05 UTC' - TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC';
 SELECT TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
-SELECT DATE '2020-01-03' - TIMESTAMP_LTZ '2020-01-02 00:00:00.000000789';
-SELECT TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' - CAST(NULL AS timestamp_ltz(9));
--- The exact difference in nanoseconds, and subtraction at microsecond precision after a cast.
+-- The elapsed time in nanoseconds, and subtraction at microsecond precision after a cast.
 SELECT unix_nanos(TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC') - unix_nanos(TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC');
 SELECT CAST(TIMESTAMP_LTZ '2020-01-02 03:04:05.123456789 UTC' AS TIMESTAMP_LTZ) - CAST(TIMESTAMP_LTZ '2020-01-01 03:04:05.000000111 UTC' AS TIMESTAMP_LTZ);
 

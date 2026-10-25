@@ -4777,16 +4777,15 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The difference is
-  // always reported on the microsecond grid (both result types -- DayTimeIntervalType and, in
-  // legacy mode, CalendarIntervalType -- carry microsecond resolution), so each operand contributes
-  // only its epochMicros; the sub-microsecond remainder is truncated.
+  // Nanosecond operands are accepted for the as-of join distance (see the class doc).
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(AnyTimestampType, AnyTimestampNanoType),
       TypeCollection(AnyTimestampType, AnyTimestampNanoType))
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(SUBTRACT_TIMESTAMPS)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
