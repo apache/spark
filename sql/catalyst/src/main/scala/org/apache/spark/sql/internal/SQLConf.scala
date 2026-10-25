@@ -10114,7 +10114,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
 
-  def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
+  // Zero or negative means no limit; clamp it so that a value below Int.MinValue does not wrap
+  // around to a positive limit when narrowed.
+  def arrowMaxBytesPerOutputBatch: Int =
+    math.max(getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH), 0L).toInt
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
