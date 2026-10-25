@@ -84,11 +84,11 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(self._raw_func).args)
-        parsed_offsets = extract_key_value_indexes(self._udf.args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         self._left_key_cols, self._left_val_cols = parsed_offsets[0]
         self._right_key_cols, self._right_val_cols = parsed_offsets[1]
         self._arrow_return_schema = to_arrow_schema(
-            self._udf.return_type,
+            self._udf_desc.return_type,
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
@@ -141,14 +141,14 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(self._raw_func).args)
-        parsed_offsets = extract_key_value_indexes(self._udf.args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for GROUPED_MAP_ARROW_ITER UDF."
         )
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
         self._arrow_return_schema = to_arrow_schema(
-            self._udf.return_type,
+            self._udf_desc.return_type,
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
@@ -211,12 +211,12 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         super().__init__(udfs, runner_conf, eval_conf)
         # signature was lost when wrapping it
         self._num_udf_args = len(inspect.getfullargspec(self._raw_func).args)
-        parsed_offsets = extract_key_value_indexes(self._udf.args_offsets)
+        parsed_offsets = extract_key_value_indexes(self._udf_desc.args_offsets)
         assert len(parsed_offsets) == 1, "Expected one pair of offsets for GROUPED_MAP_ARROW UDF."
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
         self._arrow_return_schema = to_arrow_schema(
-            self._udf.return_type,
+            self._udf_desc.return_type,
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
@@ -311,7 +311,7 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         self._return_schema = to_arrow_schema(
-            StructType([StructField("_0", self._udf.return_type)]),
+            StructType([StructField("_0", self._udf_desc.return_type)]),
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
@@ -319,7 +319,7 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[GroupedBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        args_offsets = self._udf.args_offsets
+        args_offsets = self._udf_desc.args_offsets
 
         def extract_args(batch: pa.RecordBatch) -> Any:
             args = tuple(batch.column(o) for o in args_offsets)
@@ -726,7 +726,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
         self._arrow_return_type = to_arrow_type(
-            self._udf.return_type,
+            self._udf_desc.return_type,
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
@@ -734,7 +734,7 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        args_offsets = self._udf.args_offsets
+        args_offsets = self._udf_desc.args_offsets
         num_input_rows = 0
 
         def extract_args(batch: pa.RecordBatch) -> Any:

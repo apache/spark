@@ -343,7 +343,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
             return x + 1
 
         handler = _Single([self._udf(f)], RunnerConf({}), None)
-        self.assertIs(handler._udf, handler._udfs[0])
+        self.assertIs(handler._udf_desc, handler._udfs[0])
         self.assertIs(handler._raw_func, f)
         self.assertIs(handler._func, handler._funcs[0])
         self.assertEqual(handler._func(1), 2)
@@ -353,7 +353,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
                     _Single(udfs, RunnerConf({}), None)
 
         handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)
-        self.assertFalse(hasattr(handler, "_udf"))
+        self.assertFalse(hasattr(handler, "_udf_desc"))
 
     def test_multi_udf_per_handler(self):
         multi = {

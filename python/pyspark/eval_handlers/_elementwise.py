@@ -519,7 +519,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
 
-        assert not self._udf.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
+        assert not self._udf_desc.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
 
         # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
         # element type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned
@@ -527,9 +527,11 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         nesting = eval_conf.elementwise_nesting
         self._depth = nesting[0] if nesting is not None else 1
         self._udf_input_schema = _elementwise_input_schema(
-            eval_conf.input_type, self._udf.args_offsets, self._depth
+            eval_conf.input_type, self._udf_desc.args_offsets, self._depth
         )
-        self._udf_output_schema = _elementwise_output_schema(self._udf.return_type, runner_conf)
+        self._udf_output_schema = _elementwise_output_schema(
+            self._udf_desc.return_type, runner_conf
+        )
 
     @abstractmethod
     def _verify_return_type(self, results: Any) -> Iterator[Any]:
@@ -551,7 +553,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
             # shapes re-nest this batch's rows. The user function sees the flat leaves as a
             # pandas Series / DataFrame (pandas) or a pa.Array (Arrow), each with its leaf type.
             flat_batch, list_lengths_by_level, large_list_by_level = _elementwise_flatten_inputs(
-                batch, self._udf.args_offsets, self._depth
+                batch, self._udf_desc.args_offsets, self._depth
             )
             pending_shapes.append((list_lengths_by_level, large_list_by_level, flat_batch.num_rows))
             num_input_elements += flat_batch.num_rows
@@ -602,7 +604,9 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         def process_results() -> Iterator[pa.RecordBatch]:
             nonlocal pending_chunks, pending_len, empty_schema, num_output_elements
             for result in verified_iter:
-                chunk = self._to_flat_batch(result, self._udf.return_type, self._udf_output_schema)
+                chunk = self._to_flat_batch(
+                    result, self._udf_desc.return_type, self._udf_output_schema
+                )
                 num_output_elements += chunk.num_rows
                 # Fail fast if the UDF over-produces, before the buffer grows unbounded (the
                 # base iterator paths do the same via verify_output_row_limit).
@@ -659,7 +663,7 @@ class PandasScalarIterElementwiseUDFHandler(
 
         pandas_iter_type = (
             Iterator[pd.DataFrame]
-            if isinstance(self._udf.return_type, StructType)
+            if isinstance(self._udf_desc.return_type, StructType)
             else Iterator[pd.Series]
         )
         return verify_return_type(results, pandas_iter_type)

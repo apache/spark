@@ -160,7 +160,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # user code fails the task instead of silently ending the loop that calls the UDF.
     _fail_on_stopiteration: ClassVar[bool] = True
     # Whether the handler takes any number of UDFs. Otherwise it takes exactly one UDF (or UDTF),
-    # which __init__ exposes as _udf and, for a UDF, its functions as _raw_func and _func.
+    # which __init__ exposes as _udf_desc and, for a UDF, its functions as _raw_func and _func.
     _multi_udf: ClassVar[bool] = False
 
     def __init__(
@@ -191,7 +191,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                     else profiling_func
                 )
         if not self._multi_udf:
-            self._udf: Any = udfs[0]
+            self._udf_desc: Any = udfs[0]
             if self._funcs:
                 self._raw_func: Any = self._raw_funcs[0]
                 self._func: Callable[..., Any] = self._funcs[0]
