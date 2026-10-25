@@ -161,9 +161,10 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
 
   /**
    * Whether one of this `With`'s references will be evaluated interpretively even though this
-   * `With` is generated: it sits under a [[CodegenFallback]], or under a nested `With` that itself
-   * falls back (`With` is not a `CodegenFallback`, so it has to be named rather than matched). Such
-   * a reference needs its cell bound and cleared; the generated code clears codegen flags instead.
+   * `With` is generated: it sits under a [[CodegenFallback]], under a [[TransformExpression]] whose
+   * call falls back, or under a nested `With` that itself falls back (neither of the last two is a
+   * `CodegenFallback`, so each has to be named rather than matched). Such a reference needs its
+   * cell bound and cleared; the generated code clears codegen flags instead.
    */
   @transient private[expressions] lazy val refUnderCodegenFallback: Boolean = {
     val ids = defs.map(_.id).toSet
@@ -173,6 +174,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
     }
     child.exists {
       case f: CodegenFallback => holdsMyRef(f)
+      case t: TransformExpression if t.fallsBackToEval => holdsMyRef(t)
       case w: With if w.refUnderCodegenFallback => holdsMyRef(w)
       case _ => false
     }

@@ -21,11 +21,13 @@ import org.apache.spark.{SparkConf, SparkContext, SparkException}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, SortOrder, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, CodegenObjectFactoryMode, Expression, SortOrder, TransformExpression, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HASH_ROUTING, KeyedPartitioning, KeyedShuffleSpec, KeyReducer, OrderedDistribution, Partitioning, PartitioningCollection, REPLICATED_FOR_JOIN, SPLIT_FOR_JOIN, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.date
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, BucketReducer, DaysFunctionWithToYearsReducerWithLongResult, DaysToYearsReducerWithLongResult, Reducer, YearsFunction, YearsFunctionWithToYearsReducerWithLongResult}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{DummySparkPlan, InputAdapter, LeafExecNode, SafeForKWayMerge}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -242,13 +244,10 @@ class GroupPartitionsExecSuite extends SharedSparkSession {
   }
 
   test("SPARK-59995: the k-way merge ordering falls back to interpreted evaluation") {
-    // The scan drops every sort order over a transform, so none reaches the merge. Here a transform
-    // only stands in for a sort key without generated code. `TransformExpression` generates none,
-    // while `eval` calls its function. The ordering is serialized before any comparison, as the
-    // RDD ships it.
+    // A sort key without generated code, whose `eval` works. The ordering is serialized before any
+    // comparison, as the RDD ships it.
     val ts = AttributeReference("ts", TimestampType)()
-    val ordering = new LazyRowOrdering(
-      Seq(SortOrder(TransformExpression(YearsFunction, Seq(ts)), Ascending)), Seq(ts))
+    val ordering = new LazyRowOrdering(Seq(SortOrder(InterpretedYears(ts), Ascending)), Seq(ts))
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
     def ship(): LazyRowOrdering =
       serializer.deserialize[LazyRowOrdering](serializer.serialize(ordering))
@@ -984,4 +983,15 @@ private case class ExecutableKeyedLeaf(kp: KeyedPartitioning)
     val n = kp.numPartitions
     SparkContext.getActive.get.parallelize(0 until n, n).map(i => InternalRow(i))
   }
+}
+
+/** The years since the epoch of a timestamp, computed by `eval` only. It generates no code. */
+private case class InterpretedYears(child: Expression) extends UnaryExpression {
+  override def dataType: DataType = IntegerType
+  override protected def nullSafeEval(input: Any): Any =
+    YearsFunction.invoke(input.asInstanceOf[Long])
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
+    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+  override protected def withNewChildInternal(newChild: Expression): InterpretedYears =
+    copy(child = newChild)
 }
