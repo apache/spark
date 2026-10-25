@@ -448,6 +448,25 @@ object DeserializerBuildHelper {
         exprs.Literal.create(null, dt),
         NewInstance(cls, arguments, Nil, propagateNull = false, dt, outerPointerGetter))
 
+    case AgnosticEncoders.JavaRecordEncoder(tag, fields) =>
+      val cls = tag.runtimeClass
+      val dt = ObjectType(cls)
+      val arguments = fields.zipWithIndex.map {
+        case (field, i) =>
+          val newTypePath = walkedTypePath.recordField(
+            field.enc.clsTag.runtimeClass.getName,
+            field.name)
+          val getter = addToPath(path, field.name, field.enc.dataType, newTypePath)
+          expressionWithNullSafety(
+            createDeserializer(field.enc, getter, newTypePath),
+            field.nullable,
+            newTypePath)
+      }
+      exprs.If(
+        IsNull(path),
+        exprs.Literal.create(null, dt),
+        NewInstance(cls, arguments, Nil, propagateNull = false, dt, None))
+
     case AgnosticEncoders.RowEncoder(fields) =>
       val convertedFields = fields.zipWithIndex.map { case (f, i) =>
         val newTypePath = walkedTypePath.recordField(
