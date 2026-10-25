@@ -53,11 +53,6 @@ if TYPE_CHECKING:
 _eval_type_handlers: "dict[int, tuple[Optional[str], dict[Any, type[EvalTypeHandler]]]]" = {}
 
 
-def chain(f: Callable[..., Any], g: Callable[..., Any]) -> Callable[..., Any]:
-    """chain two functions together"""
-    return lambda *a: g(f(*a))
-
-
 def get_eval_type_handler(
     eval_type: int, runner_conf: "RunnerConf"
 ) -> "Optional[type[EvalTypeHandler]]":
@@ -183,7 +178,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._funcs: list[Callable[..., Any]] = []
         for udf in udfs:
             if isinstance(udf, UDF):
-                raw_func = functools.reduce(chain, udf.funcs)
+                raw_func = functools.reduce(lambda f, g: lambda *a: g(f(*a)), udf.funcs)
                 self._raw_funcs.append(raw_func)
                 profiling_func = self._with_profiler(raw_func, udf.result_id)
                 self._funcs.append(
