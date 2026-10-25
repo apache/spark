@@ -21,14 +21,19 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import io.grpc.Status
+import scala.concurrent.duration._
+
+import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.netty.NettyServerBuilder
 import io.grpc.stub.StreamObserver
+import org.scalatest.concurrent.{Signaler, ThreadSignaler, TimeLimits}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.connect.test.ConnectFunSuite
 
-class SparkConnectSessionValidationSuite extends ConnectFunSuite {
+class SparkConnectSessionValidationSuite extends ConnectFunSuite with TimeLimits {
+
+  private implicit val signaler: Signaler = ThreadSignaler
 
   private class ValidationService
       extends proto.SparkConnectServiceGrpc.SparkConnectServiceImplBase {
@@ -45,7 +50,10 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite {
       calls.incrementAndGet()
       if (respond) {
         failure match {
-          case Some(status) => observer.onError(status.asRuntimeException())
+          case Some(status) =>
+            // Fail only once so unexpected retries would succeed.
+            failure = None
+            observer.onError(status.asRuntimeException())
           case None =>
             observer.onNext(
               proto.ConfigResponse
@@ -109,25 +117,33 @@ class SparkConnectSessionValidationSuite extends ConnectFunSuite {
     }
   }
 
-  test("validateSession bounds validation when the server does not respond") {
+  test("validation stub exceeds its deadline when the server does not respond") {
     withClient { (client, service) =>
+      assert(client.validateSession(0))
+      val stub = new CustomSparkConnectBlockingStub(
+        client.channel,
+        new SparkConnectStubState(client.channel, client.configuration))
       service.respond = false
-      val start = System.nanoTime()
-      assert(!client.validateSession(1))
-      val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
-      assert(elapsed >= 500 && elapsed < 5000, s"Validation took $elapsed ms")
+      failAfter(60.seconds) {
+        val e = intercept[StatusRuntimeException] {
+          stub.validateSession(service.lastRequest, 1)
+        }
+        assert(e.getStatus.getCode == Status.Code.DEADLINE_EXCEEDED)
+      }
       service.respond = true
       assert(client.validateSession(5))
     }
   }
 
-  test("validateSession returns false promptly when the server is unavailable") {
-    withClient { (client, service) =>
-      service.failure = Some(Status.UNAVAILABLE)
-      val start = System.nanoTime()
-      assert(!client.validateSession(1))
-      val elapsed = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start)
-      assert(elapsed < 5000, s"Validation took $elapsed ms")
+  Seq(Status.UNAVAILABLE, Status.DEADLINE_EXCEEDED).foreach { status =>
+    test(s"validateSession returns false without retrying on ${status.getCode}") {
+      withClient { (client, service) =>
+        service.failure = Some(status)
+        failAfter(60.seconds) {
+          assert(!client.validateSession(0))
+        }
+        assert(service.calls.get() == 1)
+      }
     }
   }
 }
