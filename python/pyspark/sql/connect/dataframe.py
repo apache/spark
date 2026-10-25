@@ -138,7 +138,7 @@ class DataFrame(ParentDataFrame):
         if self._session is None:
             raise PySparkRuntimeError(
                 errorClass="NO_ACTIVE_SESSION",
-                messageParameters={"operator": "__init__"},
+                messageParameters={},
             )
 
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
@@ -995,6 +995,72 @@ class DataFrame(ParentDataFrame):
                 columnNames=[columnName],
                 columns=[self[columnName]],
                 metadata=[json.dumps(metadata)],
+            ),
+            session=self._session,
+        )
+
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> ParentDataFrame:
+        expressions = {"binWidth": binWidth}
+        if alignTo is not None:
+            expressions["alignTo"] = alignTo
+        for arg_name, expression in expressions.items():
+            if not isinstance(expression, Column):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "Column",
+                        "arg_type": type(expression).__name__,
+                    },
+                )
+
+        if not isinstance(distributeUniform, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "distributeUniform",
+                    "expected_type": "list or tuple",
+                    "arg_type": type(distributeUniform).__name__,
+                },
+            )
+        aliases = {
+            "binStartName": binStartName,
+            "binEndName": binEndName,
+            "binDistributeRatioName": binDistributeRatioName,
+        }
+        for arg_name, name in aliases.items():
+            if name is not None and not isinstance(name, str):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
+                )
+
+        return DataFrame(
+            plan.BinBy(
+                child=self._plan,
+                range_start=F._to_col(rangeStart),
+                range_end=F._to_col(rangeEnd),
+                bin_width=F._to_col(binWidth),
+                distribute_uniform=[F._to_col(col) for col in distributeUniform],
+                align_to=F._to_col(alignTo) if alignTo is not None else None,
+                bin_start_name=binStartName,
+                bin_end_name=binEndName,
+                bin_distribute_ratio_name=binDistributeRatioName,
             ),
             session=self._session,
         )

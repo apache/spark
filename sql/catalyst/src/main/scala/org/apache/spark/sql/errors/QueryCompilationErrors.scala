@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedPlanId, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -82,6 +82,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "index" -> index.toString,
         "numParams" -> numParams.toString)
     )
+  }
+
+  def charVarcharNotSupportedInPython(feature: String, dataType: String): Throwable = {
+    new AnalysisException(
+      errorClass = "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+      messageParameters = Map("feature" -> feature, "data_type" -> dataType))
   }
 
   def positionalAndNamedArgumentDoubleReference(
@@ -1447,7 +1453,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def resourceTypeNotSupportedError(resourceType: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1079",
+      errorClass = "UNSUPPORTED_RESOURCE_TYPE_FOR_FUNCTION",
       messageParameters = Map("resourceType" -> resourceType))
   }
 
@@ -4872,6 +4878,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def subqueryPlanNotAttached(u: UnresolvedPlanId): Throwable = {
+    new AnalysisException(
+      errorClass = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      messageParameters = Map("planId" -> u.planId.toString),
+      origin = u.origin
+    )
+  }
+
   def ambiguousColumnReferences(e: Expression): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
@@ -5159,6 +5173,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "tableName" -> toSQLId(tableName),
         "colType" -> "metadata",
         "errors" -> errors.mkString("- ", "\n- ", "")))
+  }
+
+  def unsupportedFileTypeError(): Throwable = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FILE_TYPE",
+      messageParameters = Map.empty)
   }
 
   def unsupportedTimeTypeError(): Throwable = {

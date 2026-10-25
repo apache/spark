@@ -832,7 +832,10 @@ Apart from these, the following properties are also available, and may be useful
     cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
     <code>applyInPandasWithState</code> and <code>transformWithState</code>;
     <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
-    and read a streaming source.
+    and read a streaming source. In-process Python UDFs share the executor process and reject
+    this configuration; set their environment before executor startup instead, using
+    <code>spark.executorEnv.[EnvironmentVariableName]</code>. In local mode, set these variables
+    in the launching environment instead, because the interpreter runs inside the driver JVM.
     <br /><br />
     A running streaming query holds a configuration snapshot, because its batches run on a cloned
     session whose configurations are copied when the query starts. A change made while a query is
@@ -958,6 +961,21 @@ Apart from these, the following properties are also available, and may be useful
     from JVM to Python worker for every task.
   </td>
   <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.python.inProcess.sitePackages</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated executor directories for packages used by opt-in in-process Python UDFs.
+    JEP must be directly importable from these directories. Spark distribution paths and
+    process <code>PYTHONPATH</code> take precedence; <code>.pth</code> files are processed.
+    Paths cannot contain single quotes, newlines, NUL, surrogate characters (including
+    supplementary Unicode characters) or the platform path separator. Restart the executor
+    process before changing these directories, including after a failed Python bootstrap.
+    See the <a href="sql-pyspark-inprocess-udf.html">in-process Python UDF guide</a>
+    for plugin setup, native dependencies and limitations.
+  </td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.python.factory.idleWorkerMaxPoolSize</code></td>
@@ -1413,14 +1431,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
-  <td>-1.0</td>
+  <td>5.0</td>
   <td>
     A shuffle block is considered as skewed and will be accurately recorded in
     <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
-    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
-    recommended to set this parameter to be the same as
-    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
-    feature by default.
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>.
+    Otherwise every block below <code>spark.shuffle.accurateBlockThreshold</code> is reported
+    as the average block size, which hides skew from adaptive query execution once a shuffle
+    has more than <code>spark.shuffle.minNumPartitionsToHighlyCompress</code> partitions. At
+    most <code>spark.shuffle.maxAccurateSkewedBlockNumber</code> block sizes are recorded
+    accurately per map task. The default matches
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable
+    this feature.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -2124,6 +2146,7 @@ Apart from these, the following properties are also available, and may be useful
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
     might increase the compression cost because of excessive JNI call overhead. This
     configuration only applies to <code>spark.io.compression.codec</code>.
+    The value must be positive and less than or equal to 2147483632 bytes.
   </td>
   <td>2.3.0</td>
 </tr>

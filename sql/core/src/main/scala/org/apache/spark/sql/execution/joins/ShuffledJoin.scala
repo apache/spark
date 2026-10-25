@@ -73,8 +73,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
       // `PartitioningCollection` invariant), and `keysSatisfy` admits a marked side into it only
       // for full-key join keys, where the join equality ties every column of its claim: a row of
       // an undeclared key matches nothing on the accurate side and is filtered, so a marked
-      // member alongside an unmarked one is spurious. Clear it at the one site that can mix
-      // them, so consumers can take members' markers at face value (see
+      // member alongside an unmarked one is spurious. Clear it here so consumers can take
+      // members' markers at face value (see
       // `KeyedPartitioning.mayContainUnknownPartitionKeys`).
       PartitioningCollection.fromPartitionings(
         clearUnknownPartitionKeys(Seq(left.outputPartitioning, right.outputPartitioning)))
@@ -89,9 +89,8 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   /**
    * Clears the `mayContainUnknownPartitionKeys` marker of every `KeyedPartitioning` in
-   * `partitionings` when marked and unmarked keyed inputs meet; within a collection the
-   * constructor makes that unrepresentable. Only `ShuffledJoin`'s `InnerLike` arm can mix
-   * inputs this way; see the call site for the argument.
+   * `partitionings` when marked and unmarked keyed inputs meet in an `InnerLike` join.
+   * See the call site for why the marker can be cleared.
    */
   private def clearUnknownPartitionKeys(
       partitionings: Seq[Partitioning]): Seq[Partitioning] = {
@@ -118,7 +117,7 @@ trait ShuffledJoin extends JoinCodegenSupport {
       partitionings.zip(representatives).map {
         case (partitioning: Partitioning with Expression, Some(representative))
             if representative.mayContainUnknownPartitionKeys =>
-          val copied = representative.layout.copy(mayContainUnknownPartitionKeys = false)
+          val copied = representative.layout.copy(unknownKeysOrigin = None)
           val cleared = unmarkedLayout
             .filter(l => (l.partitionKeys eq copied.partitionKeys) && l == copied)
             .getOrElse(copied)

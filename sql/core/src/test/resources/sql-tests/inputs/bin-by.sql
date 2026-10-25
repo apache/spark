@@ -56,3 +56,17 @@ SELECT * FROM metrics BIN BY (
   BIN WIDTH INTERVAL '5' MINUTE
   DISTRIBUTE UNIFORM (value)
 );
+
+SELECT * FROM metrics BIN BY (
+  RANGE missing TO ts_end
+  BIN WIDTH INTERVAL '5' MINUTE
+  DISTRIBUTE UNIFORM (value)
+);
+
+SELECT * FROM (
+  SELECT named_struct('start', ts_start) AS s, ts_end, value FROM metrics
+) BIN BY (
+  RANGE s.start TO ts_end
+  BIN WIDTH INTERVAL '5' MINUTE
+  DISTRIBUTE UNIFORM (value)
+);

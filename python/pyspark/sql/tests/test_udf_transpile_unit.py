@@ -179,6 +179,42 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 "when both transpilePyUDFs and ANSI mode are enabled",
             )
 
+    def test_udf_transpile_does_not_mask_char_varchar_ddl(self):
+        # DDL CHAR/VARCHAR is parsed via ``returnType`` inside the optional
+        # transpilation try. That structured error must not become a
+        # transpilation UserWarning (which warnings-as-errors would raise).
+        import warnings
+
+        from pyspark.errors import PySparkNotImplementedError
+
+        def identity(x):
+            return x
+
+        def _assert_char_varchar(return_type, data_type):
+            with self.assertRaises(PySparkNotImplementedError) as pe:
+                UserDefinedFunction(identity, return_type)
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                messageParameters={
+                    "feature": "Python UDF return types",
+                    "data_type": data_type,
+                },
+            )
+
+        with self.sql_conf(_TRANSPILE_ON):
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.simplefilter("always")
+                _assert_char_varchar("char(3)", "char(3)")
+            self.assertFalse(
+                any("Exception transpiling" in str(w.message) for w in caught),
+                "CHAR/VARCHAR DDL must not be reported as a transpilation failure",
+            )
+
+            with warnings.catch_warnings():
+                warnings.simplefilter("error")
+                _assert_char_varchar("varchar(8)", "varchar(8)")
+
     def test_udf_transpile_falls_back_for_unsupported_patterns(self):
         # The transpiler intentionally only handles a small subset of
         # Python AST today. Everything outside that subset must
