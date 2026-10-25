@@ -31,10 +31,6 @@ from pyspark.testing.utils import have_pandas, pandas_requirement_message
 
 
 class ColumnTestsMixin:
-    def assert_column_resolution_error(self, exception, *, classic_condition, connect_condition):
-        """Assert the API-specific condition for a shared Classic/Connect test."""
-        self.assertEqual(exception.getCondition(), classic_condition)
-
     def test_column_name_encoding(self):
         """Ensure that created columns has `str` type consistently."""
         columns = self.spark.createDataFrame([("Alice", 1)], ["name", "age"]).columns
@@ -590,6 +586,29 @@ class ColumnTestsMixin:
             [10, 20],
         )
 
+    def test_select_reselected_hidden_join_key_with_reused_dataframe(self):
+        # `sel` re-selects `dim["dk"]`, the hidden right key of a USING join, so in
+        # `sel` that attribute is in both `p.output` and the `p.metadataOutput`
+        # inherited from the USING-join wrapper. `sel` is then reused: once directly
+        # (in `q`) and once as the right side of another USING join on `dk` (in `r`),
+        # where its `dk` is hidden. Resolving `sel["dk"]` must treat the `q` candidate
+        # as regular and prefer it over the hidden `r` one, not throw
+        # AMBIGUOUS_COLUMN_REFERENCE.
+        fact = self.spark.createDataFrame([(1, 10), (2, 20)], ["fid", "dk"])
+        dim = self.spark.createDataFrame([(10, "a"), (20, "b")], ["dk", "name"])
+        # No `other` row has dk 20, so `r` drops fid 2 and the left join below yields
+        # NULL on the `r` side for it. If `sel["dk"]` were resolved to the hidden `r`
+        # candidate, the second row would be NULL instead of 20.
+        other = self.spark.createDataFrame([(1, 10, 7), (2, 30, 8)], ["fid", "dk", "qty"])
+        sel = fact.join(dim, "dk", "left").select(fact["fid"], dim["dk"])
+        q = sel.join(other.select("fid", "qty"), "fid")
+        r = other.select("dk", "qty").join(sel, "dk")
+        result = q.join(r, "fid", "left").sort("fid").select(sel["dk"])
+        self.assertEqual(
+            [row["dk"] for row in result.collect()],
+            [10, 20],
+        )
+
     def test_drop_notexistent_col(self):
         df1 = self.spark.createDataFrame(
             [("a", "b", "c")],
@@ -838,10 +857,9 @@ class ColumnTestsMixin:
             df.withColumn("c", sf.col("c").cast("string")).withColumn(
                 "c", sf.col("c").cast("int")
             ).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_after_select_alias_shadow(self):
@@ -851,10 +869,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException) as error:
             df.select(df.c.cast("string").alias("c")).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_after_withcolumnrenamed(self):
@@ -864,10 +881,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException) as error:
             df.withColumnRenamed("c", "c2").select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         )
 
     def test_resolve_after_drop(self):
@@ -876,10 +892,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c, 2 AS d")
         with self.assertRaises(AnalysisException) as error:
             df.drop("c").select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         )
 
     def test_resolve_generator_after_projection(self):
@@ -888,10 +903,9 @@ class ColumnTestsMixin:
         projected = df.select(sf.lit(0).alias("keep"))
         with self.assertRaises(AnalysisException) as error:
             projected.select(sf.explode(df.arr)).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
         )
 
     def test_resolve_through_filter(self):
@@ -929,10 +943,9 @@ class ColumnTestsMixin:
         df = self.spark.sql("SELECT 1 AS c")
         with self.assertRaises(AnalysisException) as error:
             df.groupBy().agg(sf.sum("c").alias("c")).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_after_pivot(self):
@@ -1101,11 +1114,7 @@ class ColumnTestsMixin:
         a, b = df.alias("a"), df.alias("b")
         with self.assertRaises(AnalysisException) as error:
             a.join(b, a.c == b.c).select(df.c).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="_LEGACY_ERROR_TEMP_1182",
-            connect_condition="AMBIGUOUS_COLUMN_REFERENCE",
-        )
+        self.assertEqual(error.exception.getCondition(), "_LEGACY_ERROR_TEMP_1182")
 
     def test_resolve_after_subquery_view(self):
         # Persisting the DataFrame as a temp view and reading it back via
@@ -1128,10 +1137,9 @@ class ColumnTestsMixin:
         df2 = self.spark.range(5)
         with self.assertRaises(AnalysisException) as error:
             df1.select(df2.id).collect()
-        self.assert_column_resolution_error(
-            error.exception,
-            classic_condition="MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-            connect_condition="CANNOT_RESOLVE_DATAFRAME_COLUMN",
+        self.assertEqual(
+            error.exception.getCondition(),
+            "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
         )
 
     def test_resolve_df_star(self):

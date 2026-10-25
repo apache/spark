@@ -191,6 +191,32 @@ private[spark] object BLAS extends Serializable {
   }
 
   /**
+   * sum(abs(x))
+   */
+  def asum(x: Vector): Double = {
+    val values = x match {
+      case sx: SparseVector => sx.values
+      case dx: DenseVector => dx.values
+      case _ =>
+        throw new IllegalArgumentException(s"asum doesn't support vector type ${x.getClass}.")
+    }
+    getBLAS(values.length).dasum(values.length, values, 1)
+  }
+
+  /**
+   * sqrt(sum(x_i^2))
+   */
+  def nrm2(x: Vector): Double = {
+    val values = x match {
+      case sx: SparseVector => sx.values
+      case dx: DenseVector => dx.values
+      case _ =>
+        throw new IllegalArgumentException(s"nrm2 doesn't support vector type ${x.getClass}.")
+    }
+    getBLAS(values.length).dnrm2(values.length, values, 1)
+  }
+
+  /**
    * y = x
    */
   def copy(x: Vector, y: Vector): Unit = {

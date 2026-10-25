@@ -49,10 +49,7 @@ case class CreateHiveTableAsSelectCommand(
     val catalog = sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdentifier)
 
-    if (tableExists) {
-      assert(mode != SaveMode.Overwrite,
-        s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
-
+    if (tableExists && mode != SaveMode.Overwrite) {
       if (mode == SaveMode.ErrorIfExists) {
         throw QueryCompilationErrors.tableIdentifierExistsError(tableIdentifier)
       }
@@ -67,6 +64,12 @@ case class CreateHiveTableAsSelectCommand(
     } else {
       tableDesc.storage.locationUri.foreach { p =>
         DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
+      }
+      if (tableExists) {
+        // `SaveAsV1TableCommand` runs this command with `SaveMode.Overwrite` to replace the
+        // table. Drop it here, after the analysis, because the new table is created before the
+        // write.
+        catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
       }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data

@@ -609,7 +609,9 @@ pyspark_base = Module(
 pyspark_core = Module(
     name="pyspark-core",
     dependencies=[core, pyspark_base],
-    source_file_regexes=["python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing))"],
+    source_file_regexes=[
+        "python/(?!pyspark/(ml|mllib|sql|streaming|pandas|resource|testing|inprocess))"
+    ],
     python_test_goals=[
         # doctests
         "pyspark.conf",
@@ -652,7 +654,7 @@ pyspark_core = Module(
 pyspark_sql = Module(
     name="pyspark-sql",
     dependencies=[pyspark_core, hive, avro, protobuf],
-    source_file_regexes=["python/pyspark/sql"],
+    source_file_regexes=["python/pyspark/sql", "python/pyspark/inprocess"],
     python_test_goals=[
         # doctests
         "pyspark.sql.types",
@@ -686,7 +688,11 @@ pyspark_sql = Module(
         # unittests
         "pyspark.eval_handlers.tests.test_arrow_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_base_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_elementwise_eval_type_handlers",
         "pyspark.eval_handlers.tests.test_pandas_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_stateful_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_udtf_eval_type_handlers",
+        "pyspark.eval_handlers.tests.test_vanilla_eval_type_handlers",
         "pyspark.sql.tests.test_artifact",
         "pyspark.sql.tests.test_catalog",
         "pyspark.sql.tests.test_column",
@@ -709,6 +715,8 @@ pyspark_sql = Module(
         "pyspark.sql.tests.test_group",
         "pyspark.sql.tests.test_sql",
         "pyspark.sql.tests.test_job_cancellation",
+        "pyspark.sql.tests.test_inprocess_udf",
+        "pyspark.sql.tests.test_inprocess_runtime",
         "pyspark.sql.tests.arrow.test_arrow",
         "pyspark.sql.tests.arrow.test_arrow_map",
         "pyspark.sql.tests.arrow.test_arrow_cogrouped_map",

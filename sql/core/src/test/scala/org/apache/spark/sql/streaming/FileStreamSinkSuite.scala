@@ -744,6 +744,41 @@ abstract class FileStreamSinkSuite extends StreamTest {
     }
     assert(exception.getMessage.contains("is not absolute path."))
   }
+
+  test("SPARK-60520: Validate partition columns when starting a query") {
+    val df = MemoryStream[Int].toDF()
+    withTempDir { dir =>
+      def startQuery(data: DataFrame, partitionColumns: String*): StreamingQuery = {
+        data.writeStream
+          .option("checkpointLocation", new File(dir, "checkpoint").getCanonicalPath)
+          .format("parquet")
+          .partitionBy(partitionColumns: _*)
+          .start(new File(dir, "output").getCanonicalPath)
+      }
+
+      Seq(
+        "parse_json('1')" -> "\"VARIANT\"",
+        "array(1, 2)" -> "\"ARRAY<INT>\"",
+        "map(1, 2)" -> "\"MAP<INT, INT>\"",
+        "named_struct('a', 1)" -> "\"STRUCT<a: INT>\"",
+        "'a' COLLATE UTF8_LCASE" -> "\"STRING COLLATE UTF8_LCASE\"").foreach {
+        case (expr, dataType) =>
+          checkError(
+            exception = intercept[AnalysisException] {
+              startQuery(df.selectExpr("value AS i", s"$expr AS p"), "p")
+            },
+            condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+            parameters = Map("type" -> dataType))
+      }
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          startQuery(df.selectExpr("value AS i", "value AS p"), "p", "p")
+        },
+        condition = "COLUMN_ALREADY_EXISTS",
+        parameters = Map("columnName" -> "`p`"))
+    }
+  }
 }
 
 object PendingCommitFilesTrackingManifestFileCommitProtocol {

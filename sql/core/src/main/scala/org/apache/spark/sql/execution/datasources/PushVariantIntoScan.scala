@@ -47,15 +47,19 @@ case class VariantMetadata(
     // with the offending value when the paired data field's strict cast raises
     // INVALID_VARIANT_CAST. We pair by NAME (not struct ordinal) because later pruning or
     // reordering of struct fields preserves names but may shift positions.
-    castErrorFor: Option[String] = None) {
+    castErrorFor: Option[String] = None,
+    // Path parser mode captured from the originating VariantGet.
+    legacyPathBackslashAsLiteral: Boolean = false) {
   // Produce a metadata contain one key-value pair. The key is the special `METADATA_KEY`.
-  // The value contains key-value pairs for `path`, `failOnError`, `timeZoneId`, and -- for
-  // companion fields only -- `castErrorFor`.
+  // The value contains key-value pairs for `path`, `failOnError`, `timeZoneId`,
+  // `legacyPathBackslashAsLiteral`, and -- for companion fields only -- `castErrorFor`.
   def toMetadata: Metadata = {
     val inner = new MetadataBuilder()
       .putString(VariantMetadata.PATH_KEY, path)
       .putBoolean(VariantMetadata.FAIL_ON_ERROR_KEY, failOnError)
       .putString(VariantMetadata.TIME_ZONE_ID_KEY, timeZoneId)
+      .putBoolean(
+        VariantMetadata.LEGACY_PATH_BACKSLASH_AS_LITERAL_KEY, legacyPathBackslashAsLiteral)
     castErrorFor.foreach { name =>
       inner.putString(VariantMetadata.CAST_ERROR_FOR_KEY, name)
     }
@@ -63,7 +67,7 @@ case class VariantMetadata(
   }
 
   def parsedPath(): Array[VariantPathSegment] = {
-    VariantPathParser.parse(path).getOrElse {
+    VariantPathParser.parse(path, legacyPathBackslashAsLiteral).getOrElse {
       val name = if (failOnError) "variant_get" else "try_variant_get"
       throw QueryExecutionErrors.invalidVariantGetPath(path, name)
     }
@@ -75,6 +79,7 @@ object VariantMetadata {
   val PATH_KEY = "path"
   val FAIL_ON_ERROR_KEY = "failOnError"
   val TIME_ZONE_ID_KEY = "timeZoneId"
+  val LEGACY_PATH_BACKSLASH_AS_LITERAL_KEY = "legacyPathBackslashAsLiteral"
   // Optional metadata key marking a struct field as a synthetic cast-error companion. When
   // present, the value is the NAME of the paired data field in the same variant struct. We tag
   // in metadata (rather than by a field-name convention or sentinel path) so the marker can't
@@ -122,7 +127,8 @@ object VariantMetadata {
       value.getString(PATH_KEY),
       value.getBoolean(FAIL_ON_ERROR_KEY),
       value.getString(TIME_ZONE_ID_KEY),
-      castErrorFor
+      castErrorFor,
+      value.getBoolean(LEGACY_PATH_BACKSLASH_AS_LITERAL_KEY)
     )
   }
 }
@@ -138,7 +144,8 @@ object RequestedVariantField {
   def apply(v: VariantGet): RequestedVariantField = {
     assert(v.path.foldable)
     RequestedVariantField(
-      VariantMetadata(v.path.eval().toString, v.failOnError, v.timeZoneId.get), v.dataType)
+      VariantMetadata(v.path.eval().toString, v.failOnError, v.timeZoneId.get,
+        legacyPathBackslashAsLiteral = v.legacyPathBackslashAsLiteral), v.dataType)
   }
 
   def apply(c: Cast): RequestedVariantField =
@@ -281,7 +288,7 @@ class VariantInRelation {
   // fields, which also changes the struct type containing it, and it is difficult to reconstruct
   // the original struct value. This is not a big loss, because we need the full variant anyway.
   def collectRequestedFields(expr: Expression): Unit = expr match {
-    case v@VariantGet(StructPathToVariant(fields), path, _, _, _) if path.foldable =>
+    case v@VariantGet(StructPathToVariant(fields), path, _, _, _, _) if path.foldable =>
       addField(fields, RequestedVariantField(v))
     case c@Cast(StructPathToVariant(fields), _, _, _) => addField(fields, RequestedVariantField(c))
     case IsNotNull(StructPath(_, _)) | IsNull(StructPath(_, _)) =>
@@ -336,7 +343,7 @@ class VariantInRelation {
 
     // Rewrite patterns should be consistent with visit patterns in `collectRequestedFields`.
     expr.transformDown {
-      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _) if path.foldable =>
+      case g@VariantGet(v@StructPathToVariant(fields), path, _, _, _, _) if path.foldable =>
         // Rewrite the attribute in advance, rather than depending on the last branch to rewrite it.
         // Ww need to avoid the `v@StructPathToVariant(fields)` branch to rewrite the child again.
         accessRequestedField(fields, RequestedVariantField(g), rewriteAttribute(v))

@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution.joins
 
+import java.math.{BigDecimal => JavaBigDecimal}
+
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
@@ -28,6 +30,10 @@ import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, DataType, DateType, DayTimeIntervalType,
+  Decimal, DecimalType, DoubleType, FloatType, IntegralType, TimestampNTZType, TimestampType,
+  YearMonthIntervalType}
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 /**
  * Performs an AS-OF join using sort-merge. Both sides are co-partitioned
@@ -48,12 +54,12 @@ case class SortMergeAsOfJoinExec(
     leftSortExprs: Seq[Expression],
     rightSortExprs: Seq[Expression],
     asOfCondition: Expression,
-    orderExpression: Expression,
+    direction: AsOfJoinDirection,
     joinType: JoinType,
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends ShuffledJoin with PredicateHelper {
+    isSkewJoin: Boolean = false) extends ShuffledJoin {
 
   // The sides may have different key counts: each side is sorted on its own, and only the
   // equi-keys are compared across sides.
@@ -93,24 +99,9 @@ case class SortMergeAsOfJoinExec(
 
   override def outputOrdering: Seq[SortOrder] = left.outputOrdering
 
-  // The first `left op right` comparison gives the direction. Nearest has none.
-  private val asOfDirection: AsOfJoinDirection =
-    splitConjunctivePredicates(asOfCondition).head match {
-      case c: BinaryComparison
-          if c.left.references.subsetOf(left.outputSet) &&
-            c.right.references.subsetOf(right.outputSet) =>
-        c match {
-          case _: GreaterThanOrEqual | _: GreaterThan => Backward
-          case _: LessThanOrEqual | _: LessThan => Forward
-          case _ => Nearest
-        }
-      case _ => Nearest
-    }
-
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
     val spillSize = longMetric("spillSize")
-    val direction = asOfDirection
     val inMemoryThreshold = conf.sortMergeJoinExecBufferInMemoryThreshold
     val sizeInBytesSpillThreshold = conf.sortMergeJoinExecBufferSpillSizeThreshold
     val spillThreshold = conf.sortMergeJoinExecBufferSpillThreshold
@@ -120,7 +111,8 @@ case class SortMergeAsOfJoinExec(
         leftIter, rightIter,
         left.output, right.output,
         leftKeys, rightKeys,
-        asOfCondition, orderExpression,
+        leftSortExprs, rightSortExprs,
+        asOfCondition,
         joinType, condition,
         numOutputRows, spillSize, direction,
         inMemoryThreshold, sizeInBytesSpillThreshold, spillThreshold
@@ -144,7 +136,7 @@ case class SortMergeAsOfJoinExec(
  * forward to find the best match:
  *  - Backward (left.t >= right.t): the last satisfying row is the closest.
  *  - Forward (left.t <= right.t): the first satisfying row is the closest.
- *  - Nearest: the satisfying row with the smallest distance.
+ *  - Nearest: the closest eligible rows before and after the left key are compared.
  */
 private[joins] class SortMergeAsOfJoinScanner(
     leftIter: Iterator[InternalRow],
@@ -153,8 +145,9 @@ private[joins] class SortMergeAsOfJoinScanner(
     rightOutput: Seq[Attribute],
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
+    leftSortExprs: Seq[Expression],
+    rightSortExprs: Seq[Expression],
     asOfCondition: Expression,
-    orderExpression: Expression,
     joinType: JoinType,
     residualCondition: Option[Expression],
     numOutputRows: SQLMetric,
@@ -176,10 +169,6 @@ private[joins] class SortMergeAsOfJoinScanner(
   }
 
   private val boundAsOfCond = bindReference(asOfCondition, joinedOutput)
-  // Lazy, since only Nearest reads the distance, and its type may have no ordering.
-  private lazy val boundOrderExpr = bindReference(orderExpression, joinedOutput)
-  private lazy val distanceOrdering =
-    TypeUtils.getInterpretedOrdering(orderExpression.dataType)
   private val boundResidualCond =
     residualCondition.map(bindReference(_, joinedOutput))
 
@@ -196,6 +185,20 @@ private[joins] class SortMergeAsOfJoinScanner(
 
   private val leftKeyProj = UnsafeProjection.create(leftKeys, leftOutput)
   private val rightKeyProj = UnsafeProjection.create(rightKeys, rightOutput)
+
+  // Lazy, since only Nearest reads the keys.
+  private lazy val nearestKeys: (Expression, Expression, Ordering[Any]) =
+    (leftSortExprs, rightSortExprs) match {
+      case (Seq(leftKey), Seq(rightKey))
+          if SortMergeAsOfJoinScanner.supportsNearestKeys(leftKey.dataType, rightKey.dataType) =>
+        (
+          bindReference(leftKey, leftOutput),
+          bindReference(rightKey, rightOutput),
+          TypeUtils.getInterpretedOrdering(leftKey.dataType))
+      case _ =>
+        throw SparkException.internalError(
+          s"Unexpected nearest keys: $leftSortExprs and $rightSortExprs")
+    }
 
   // Materialize an all-null right row as UnsafeRow. GenericInternalRow cannot be
   // passed through identity UnsafeProjection when right columns are NOT NULL.
@@ -430,43 +433,103 @@ private[joins] class SortMergeAsOfJoinScanner(
     null
   }
 
-  /**
-   * Nearest joins: keeps the row with the smallest distance. The scan stops once the
-   * distance stops decreasing.
-   */
+  /** Finds the nearest row passing both conditions, preferring the predecessor on equal gaps. */
   private def findNearest(leftRow: InternalRow): InternalRow = {
-    var bestMatch: InternalRow = null
-    var bestDistance: Any = null
+    val (leftKeyExpr, rightKeyExpr, keyOrdering) = nearestKeys
+    val leftKey = leftKeyExpr.eval(leftRow)
+    if (leftKey == null) return null
+
+    var bestBefore: UnsafeRow = null
+    var bestBeforeKey: Any = null
     val iter = rightGroupBuffer.generateIterator()
     val needsCopy = rightGroupBuffer.isSpillBacked
-    // Read the lazy vals once, not once per row.
-    val orderExpr = boundOrderExpr
-    val ordering = distanceOrdering
 
     joinedRow.withLeft(leftRow)
     while (iter.hasNext) {
       val rightRow = iter.next()
       joinedRow.withRight(rightRow)
 
-      if (holds(boundAsOfCond)) {
-        if (residualHolds) {
-          val distance = orderExpr.eval(joinedRow)
-          if (distance != null) {
-            if (bestMatch == null || ordering.lt(distance, bestDistance)) {
-              bestMatch = retainMatch(rightRow, needsCopy)
-              bestDistance = distance
-            } else {
-              // The distance stopped decreasing. It is V-shaped, so no later row is closer.
-              return bestMatch
+      if (holds(boundAsOfCond) && residualHolds) {
+        val rightKey = rightKeyExpr.eval(rightRow)
+        if (rightKey != null) {
+          if (keyOrdering.lt(rightKey, leftKey)) {
+            // Keep the first eligible row at each key so equal-distance ties stay stable.
+            if (bestBefore == null || keyOrdering.lt(bestBeforeKey, rightKey)) {
+              bestBefore = retainMatch(rightRow, needsCopy)
+              bestBeforeKey = InternalRow.copyValue(rightKey)
             }
+          } else if (keyOrdering.equiv(rightKey, leftKey)) {
+            // An exact match is the nearest row, even for an infinite key (Inf - Inf is NaN).
+            return retainMatch(rightRow, needsCopy)
+          } else if (bestBefore == null ||
+              isAfterCloser(bestBeforeKey, leftKey, rightKey, leftKeyExpr.dataType)) {
+            return retainMatch(rightRow, needsCopy)
+          } else {
+            return bestBefore
           }
         }
       }
-      // Do NOT early-terminate on as-of condition failure here.
-      // For Nearest + !allowExactMatches, the condition is false at a
-      // single interior point (right == left) with valid matches on
-      // both sides. Distance-based termination above is sufficient.
     }
-    bestMatch
+
+    bestBefore
   }
+
+  /** The exact value of a nearest key, or None for a NaN or infinite floating-point key. */
+  private def exactNearestKeyValue(key: Any, dataType: DataType): Option[JavaBigDecimal] =
+    dataType match {
+      case _: IntegralType | DateType | _: YearMonthIntervalType | _: DayTimeIntervalType |
+           TimestampType | TimestampNTZType =>
+        Some(JavaBigDecimal.valueOf(key.asInstanceOf[java.lang.Number].longValue()))
+      case _: AnyTimestampNanoType =>
+        val timestamp = key.asInstanceOf[TimestampNanosVal]
+        Some(JavaBigDecimal.valueOf(timestamp.epochMicros)
+          .multiply(JavaBigDecimal.valueOf(1000))
+          .add(JavaBigDecimal.valueOf(timestamp.nanosWithinMicro)))
+      case _: DecimalType => Some(key.asInstanceOf[Decimal].toJavaBigDecimal)
+      case FloatType | DoubleType =>
+        val value = key.asInstanceOf[java.lang.Number].doubleValue()
+        // The BigDecimal(double) constructor keeps the exact binary value; valueOf rounds it.
+        if (value.isNaN || value.isInfinite) None else Some(new JavaBigDecimal(value))
+      case _ => throw SparkException.internalError(s"Unsupported nearest key type: $dataType")
+    }
+
+  /** Whether the row after the left key is strictly closer than the row before it. */
+  private def isAfterCloser(
+      beforeKey: Any,
+      leftKey: Any,
+      afterKey: Any,
+      dataType: DataType): Boolean = {
+    (exactNearestKeyValue(beforeKey, dataType),
+      exactNearestKeyValue(leftKey, dataType),
+      exactNearestKeyValue(afterKey, dataType)) match {
+      case (Some(before), Some(left), Some(after)) =>
+        after.subtract(left).compareTo(left.subtract(before)) < 0
+      case _ =>
+        // A NaN or infinite key leaves at most one gap finite.
+        nonFiniteGapRank(leftKey, afterKey) < nonFiniteGapRank(beforeKey, leftKey)
+    }
+  }
+
+  /** 0 for a gap between finite keys, 1 for an infinite gap, and 2 for a gap from NaN. */
+  private def nonFiniteGapRank(lowerKey: Any, upperKey: Any): Int = {
+    val lower = lowerKey.asInstanceOf[java.lang.Number].doubleValue()
+    val upper = upperKey.asInstanceOf[java.lang.Number].doubleValue()
+    if (lower.isNaN || upper.isNaN) 2 else if (lower.isInfinite || upper.isInfinite) 1 else 0
+  }
+}
+
+private[execution] object SortMergeAsOfJoinScanner {
+
+  /** Whether a nearest join can compare the exact gaps between keys of these types. */
+  def supportsNearestKeys(leftType: DataType, rightType: DataType): Boolean =
+    (leftType, rightType) match {
+      // A decimal subtraction keeps the precision and scale of each operand.
+      case (_: DecimalType, _: DecimalType) => true
+      case _ => leftType == rightType && (leftType match {
+        case _: IntegralType | FloatType | DoubleType => true
+        case DateType | _: YearMonthIntervalType | _: DayTimeIntervalType => true
+        case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
+        case _ => false
+      })
+    }
 }

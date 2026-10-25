@@ -1479,6 +1479,40 @@ abstract class JsonSuite
     }
   }
 
+  gridTest("multiline top level JSON array ends the document at a syntax error in a nested object")(
+      for {
+        field <- Seq("struct", "array of structs")
+        mode <- Seq("PERMISSIVE", "DROPMALFORMED")
+      } yield (field, mode)) { case (field, mode) =>
+    withSQLConf(
+        SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true",
+        SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
+      withTempPath { file =>
+        val (document, fieldSchema) = field match {
+          // Resuming inside the second element would return `t`'s object as a row.
+          case "struct" =>
+            ("""[{"a":1},{"s":{"x":1 2},"t":{"a":9}},{"a":2}]""", "s STRUCT<x: INT>")
+          // Resuming inside `arr` would return its second struct as a row.
+          case "array of structs" =>
+            ("""[{"a":1},{"arr":[{"x":1 2},{"a":5}]},{"a":2}]""", "arr ARRAY<STRUCT<x: INT>>")
+        }
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read
+          .schema(s"a INT, $fieldSchema, _corrupt_record STRING")
+          .option("multiLine", true)
+          .option("mode", mode)
+          .json(file.getCanonicalPath)
+
+        val expected = if (mode == "PERMISSIVE") {
+          Seq(Row(1, null, null), Row(null, null, document))
+        } else {
+          Seq(Row(1, null, null))
+        }
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
   gridTest("multiline top level JSON array streaming option overrides the session config")(
       Seq(false, true)) { streaming =>
     withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> (!streaming).toString) {
@@ -4213,9 +4247,12 @@ abstract class JsonSuite
               Seq(Row(Row(1, null), Row(1)), Row(Row(2, null), Row(2)))
             )
           } else {
+            // SPARK-60229: any nested object/map failure (not only CHAR map keys)
+            // still nulls `a`, but the rest of that object is consumed so sibling
+            // `b` is parsed.
             checkAnswer(
               df,
-              Seq(Row(null, null), Row(Row(2, null), Row(2)))
+              Seq(Row(null, Row(1)), Row(Row(2, null), Row(2)))
             )
           }
         }
@@ -4247,7 +4284,7 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null, null),
+            Row("AAA", null, "id1", "XXX"),
             Row("BBB", Seq(Row(12, "")), "id2", "YYY")
           )
         )
@@ -4283,8 +4320,8 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null),
-            Row("BBB", null, null)
+            Row("AAA", null, "id1"),
+            Row("BBB", null, "id2")
           )
         )
       }
@@ -4317,7 +4354,7 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null),
+            Row("AAA", null, "id1"),
             Row("BBB", Map("key" -> Row(12, "")), "id2")
           )
         )
@@ -4349,7 +4386,7 @@ abstract class JsonSuite
         checkAnswer(
           df,
           Seq(
-            Row("AAA", null, null, null),
+            Row("AAA", null, "id1", "XXX"),
             Row("BBB", Row(Seq(12)), "id2", "YYY")
           )
         )
