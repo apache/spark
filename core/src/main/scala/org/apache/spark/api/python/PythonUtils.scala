@@ -200,9 +200,9 @@ private[spark] object PythonUtils extends Logging {
 
   /**
    * Checks whether `pythonExec` can run Arrow-optimized Python UDFs, that is, whether it has
-   * PyArrow at the version PySpark requires. A Python client runs the same check before it creates
-   * such a UDF, see `_create_py_udf` in `pyspark.sql.udf`, where it also requires pandas, which
-   * these UDFs only need with the legacy pandas conversion.
+   * PyArrow at the version PySpark requires, and pandas as well when the legacy pandas conversion
+   * path is enabled. A Python client runs the same check before it creates such a UDF, see
+   * `_create_py_udf` in `pyspark.sql.udf`.
    *
    * It runs `pythonExec` with the environment, Python path and working directory that
    * `PythonWorkerFactory` gives a Python worker launched with `envVars`.
@@ -213,14 +213,22 @@ private[spark] object PythonUtils extends Logging {
   private[spark] def checkArrowOptimization(
       pythonExec: String,
       envVars: Map[String, String],
-      timeoutMs: Long = PythonWorkerFactory.PROCESS_WAIT_TIMEOUT_MS): Option[String] = {
-    // Exits with 3 only when PyArrow is missing or too old, so that no other failure, such as
-    // PySpark not being importable, is taken for that.
+      timeoutMs: Long = PythonWorkerFactory.PROCESS_WAIT_TIMEOUT_MS,
+      requirePandas: Boolean = false): Option[String] = {
+    // Exits with 3 only when PyArrow, or pandas when required, is missing or too old, so that no
+    // other failure, such as PySpark not being importable, is taken for that.
+    val imports = if (requirePandas) {
+      "require_minimum_pandas_version, require_minimum_pyarrow_version"
+    } else {
+      "require_minimum_pyarrow_version"
+    }
+    val pandasCheck = if (requirePandas) "require_minimum_pandas_version()" else ""
     val code =
-      """
+      s"""
         |import sys
-        |from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
+        |from pyspark.sql.pandas.utils import $imports
         |try:
+        |    $pandasCheck
         |    require_minimum_pyarrow_version()
         |except ImportError as e:
         |    print(e)

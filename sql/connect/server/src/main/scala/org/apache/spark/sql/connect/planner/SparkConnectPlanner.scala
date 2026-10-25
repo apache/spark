@@ -80,6 +80,7 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -2364,14 +2365,15 @@ class SparkConnectPlanner(
       val conf = session.sessionState.conf
       // The executable and environment that the Python UDF runners launch workers with.
       val pythonExec = conf.pysparkWorkerPythonExecutable.getOrElse(function.pythonExec)
+      val requirePandas = conf.getConf(SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
       // An invalid environment fails the worker launch with the reason, so it is left to that.
       val canRunArrow = Try(PythonWorkerEnvironment.mergeValidated(function.envVars, conf))
         .map(_.asScala.toMap)
         .toOption
         .forall { envVars =>
           sessionHolder.arrowOptimizationChecks.computeIfAbsent(
-            (pythonExec, envVars),
-            _ => canRunArrowOptimization(pythonExec, envVars))
+            (pythonExec, envVars, requirePandas),
+            _ => canRunArrowOptimization(pythonExec, envVars, requirePandas))
         }
       if (canRunArrow) evalType else PythonEvalType.SQL_BATCHED_UDF
     } else {
@@ -2381,11 +2383,16 @@ class SparkConnectPlanner(
 
   private def canRunArrowOptimization(
       pythonExec: String,
-      envVars: Map[String, String]): Boolean = {
+      envVars: Map[String, String],
+      requirePandas: Boolean): Boolean = {
     try {
-      PythonUtils.checkArrowOptimization(pythonExec, envVars) match {
+      PythonUtils.checkArrowOptimization(
+          pythonExec,
+          envVars,
+          requirePandas = requirePandas) match {
         case Some(reason) =>
-          logWarning(log"Arrow optimization failed to enable because PyArrow is not installed. " +
+          logWarning(log"Arrow optimization failed to enable because the server-side Python " +
+            log"does not have the required packages installed. " +
             log"Falling back to non-Arrow-optimized UDFs. " +
             log"(session ${MDC(SESSION_ID, sessionId)}, Python ${MDC(PYTHON_EXEC, pythonExec)}: " +
             log"${MDC(REASON, reason)})")
@@ -2395,8 +2402,8 @@ class SparkConnectPlanner(
     } catch {
       case NonFatal(e) =>
         logWarning(
-          log"Failed to check whether PyArrow is installed, so Arrow-optimized UDFs " +
-            log"stay Arrow-optimized. (session ${MDC(SESSION_ID, sessionId)}, " +
+          log"Failed to check whether the server-side Python can run Arrow-optimized UDFs, so " +
+            log"they stay Arrow-optimized. (session ${MDC(SESSION_ID, sessionId)}, " +
             log"Python ${MDC(PYTHON_EXEC, pythonExec)})",
           e)
         true

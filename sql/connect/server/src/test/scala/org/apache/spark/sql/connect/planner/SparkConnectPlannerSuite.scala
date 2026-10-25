@@ -1421,6 +1421,21 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     }
   }
 
+  test("SPARK-60241: Arrow-optimized Python UDF falls back without pandas in legacy mode") {
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    withPythonModules("pandas" -> notInstalled("pandas")) { _ =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      assert(
+        plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+          PythonEvalType.SQL_ARROW_BATCHED_UDF)
+      withSQLConf(SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key -> "true") {
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_BATCHED_UDF)
+      }
+    }
+  }
+
   test("SPARK-60241: Arrow-optimized Python UDF stays Arrow-optimized if the check cannot run") {
     assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
     withPythonModules("pyarrow" -> notInstalled("pyarrow")) { dir =>

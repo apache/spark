@@ -360,13 +360,22 @@ class PythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-60241: checkArrowOptimization passes with PyArrow, with or without pandas") {
+  test("SPARK-60241: checkArrowOptimization optionally requires pandas") {
     assume(shouldTestPandasUDFs)
     withPythonModules() { envVars =>
       assert(PythonUtils.checkArrowOptimization(pythonExec, envVars).isEmpty)
+      assert(PythonUtils.checkArrowOptimization(
+        pythonExec,
+        envVars,
+        requirePandas = true).isEmpty)
     }
     withPythonModules("pandas" -> notInstalled("pandas")) { envVars =>
       assert(PythonUtils.checkArrowOptimization(pythonExec, envVars).isEmpty)
+      val reason = PythonUtils.checkArrowOptimization(
+        pythonExec,
+        envVars,
+        requirePandas = true)
+      assert(reason.exists(_.startsWith("[PACKAGE_NOT_INSTALLED] Pandas >= ")))
     }
   }
 

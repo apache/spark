@@ -136,10 +136,12 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
   private[connect] lazy val dataFrameQueryIndex: ConcurrentMap[String, String] =
     new ConcurrentHashMap()
 
-  // Whether the Python that runs Python UDFs can run Arrow-optimized ones, by its executable and
-  // environment. Checked once per session by SparkConnectPlanner.
+  // Whether the Python that runs Python UDFs can run Arrow-optimized ones, by its executable,
+  // environment and whether legacy pandas conversion is enabled. Checked once per session by
+  // SparkConnectPlanner.
   private[connect] lazy val arrowOptimizationChecks
-      : ConcurrentMap[(String, Map[String, String]), java.lang.Boolean] = new ConcurrentHashMap()
+      : ConcurrentMap[(String, Map[String, String], Boolean), java.lang.Boolean] =
+    new ConcurrentHashMap()
 
   // ML model cache
   @volatile private var mlCacheInitialized = false
