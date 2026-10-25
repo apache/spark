@@ -46,10 +46,9 @@ CREATE [ OR REPLACE ] VIEW [ IF NOT EXISTS ] view_identifier
 
 * **OR REPLACE**
 
-    In a catalog that implements `ViewCatalog`, an existing view of the same name is replaced. In
-    the session catalog (`spark_catalog`), `OR REPLACE` is ignored: if a table or view of that name
-    exists, the statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS`, so drop the view and create it
-    again. `OR REPLACE` cannot be combined with `IF NOT EXISTS`. A Data Source V2 catalog that does
+    If a view of the same name already exists, it is replaced. Replacing an existing view requires a
+    catalog that implements `ViewCatalog`; in the session catalog (`spark_catalog`), drop the view and create it
+    again instead. `OR REPLACE` cannot be combined with `IF NOT EXISTS`. A Data Source V2 catalog that does
     not implement `ViewCatalog` rejects `CREATE VIEW ... WITH METRICS` with
     `MISSING_CATALOG_ABILITY.VIEWS`.
 

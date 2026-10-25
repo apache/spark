@@ -406,7 +406,7 @@ metrics.count()
 
 A metric view needs nothing beyond SQL, so any client that submits SQL to Spark can use one: the Thrift JDBC/ODBC server, Spark Connect, or a BI tool's custom-SQL query. Dashboards that group by different dimensions issue the same `SELECT ... MEASURE(...) ... GROUP BY ...` shape, and each gets the measure at its own grain.
 
-Creating one is where clients differ, because the YAML body depends on indentation. Beeline strips the leading whitespace of each line when it reads a statement from a file (`-f`) or at its prompt, so a block-style definition fails there with `INVALID_METRIC_VIEW_YAML`; `beeline -e`, the JDBC driver itself, `spark-sql` and Spark Connect send the text as written. In beeline, write the definition in YAML flow style, which has no indentation to lose:
+The YAML body depends on indentation. Beeline drops the leading whitespace of each line when it reads a statement from a file (`-f`) or at its prompt, so in beeline write the definition in YAML flow style:
 
 ```sql
 CREATE VIEW revenue_by_region WITH METRICS LANGUAGE YAML AS
@@ -464,7 +464,7 @@ ORDER BY region;
 +------+---------------+--------------------+
 ```
 
-A measure's expression resolves against the source's columns, not against other measures. `revenue_per_customer` repeats `SUM(amount)` rather than referring to `revenue`; a measure written as `revenue / COUNT(1)` is accepted at creation but fails to resolve when queried.
+A measure's expression can reference the source's columns, not other measures, so `revenue_per_customer` repeats `SUM(amount)` rather than referring to `revenue`.
 
 ### Date Dimensions
 
@@ -535,7 +535,7 @@ FROM region_metrics;
 
 ### Changing a Definition
 
-To change the YAML, replace the view. In a catalog that implements `ViewCatalog`, `CREATE OR REPLACE VIEW ... WITH METRICS` does that. In the session catalog (`spark_catalog`), `OR REPLACE` is ignored and the statement fails with `TABLE_OR_VIEW_ALREADY_EXISTS`, so drop the view and create it again:
+To change the YAML, replace the view with `CREATE OR REPLACE VIEW ... WITH METRICS`. Replacing an existing view with `OR REPLACE` requires a catalog that implements `ViewCatalog`; in the session catalog (`spark_catalog`), drop the view and create it again:
 
 ```sql
 DROP VIEW order_metrics;
@@ -561,7 +561,7 @@ $$;
 
 ### Renaming, Properties and Dropping
 
-`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` work as they do for other views. `ALTER VIEW ... AS query` is not rejected on a metric view, but it replaces the YAML with the query text and every later query on the view fails with `INVALID_METRIC_VIEW_YAML`; replace the view as described in [Changing a Definition](#changing-a-definition) instead. `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
+`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` work as they do for other views. To change the definition, see [Changing a Definition](#changing-a-definition). `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
 
 ```sql
 ALTER VIEW order_metrics SET TBLPROPERTIES ('team' = 'finance');
