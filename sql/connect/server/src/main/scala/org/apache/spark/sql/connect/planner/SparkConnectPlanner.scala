@@ -52,7 +52,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.parser.{NamedParameterContext, ParameterContext, ParseException, ParserUtils, PositionalParameterContext}
 import org.apache.spark.sql.catalyst.plans.{Cross, FullOuter, Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter, UsingJoin}
 import org.apache.spark.sql.catalyst.plans.logical
-import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, BinByOutputAliases, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedBinBy, UnresolvedHint, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
+import org.apache.spark.sql.catalyst.plans.logical.{AppendColumns, Assignment, BinByOutputAliases, CoGroup, CollectMetrics, CommandResult, DeduplicateAllColumnsAsKey, DeduplicateKeyColumns, DeleteAction, DeserializeToObject, Except, FlatMapGroupsWithState, InsertAction, InsertStarAction, Intersect, JoinWith, LocalRelation, LogicalGroupState, LogicalPlan, MapGroups, MapPartitions, MergeAction, Project, Sample, SerializeFromObject, Sort, SubqueryAlias, TimeModes, TransformWithState, TypedFilter, Union, Unpivot, UnresolvedBinBy, UnresolvedCTERelation, UnresolvedHint, UnresolvedWith, UpdateAction, UpdateEventTimeWatermarkColumn, UpdateStarAction}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
@@ -264,6 +264,28 @@ class SparkConnectPlanner(
     plan
   }
 
+  /**
+   * Whether [[transformSqlWithRefs]] builds an unresolved plan instead of executing the SQL. Set
+   * only by [[transformPipelineFlowRelation]].
+   */
+  private var deferSqlWithRefs = false
+
+  /**
+   * Transforms the relation that a pipeline flow returns. Unlike [[transformRelation]],
+   * [[transformSqlWithRefs]] does not execute a valid SQL-with-references [[proto.WithRelations]]
+   * during this transformation: it parses the root SQL and binds each reference to its alias as a
+   * CTE relation. The flow analysis then resolves the pipeline datasets that the references read,
+   * and records them as inputs of the flow, as it does for a CTE in the SQL text.
+   */
+  private def transformPipelineFlowRelation(rel: proto.Relation): LogicalPlan = {
+    deferSqlWithRefs = true
+    try {
+      transformRelation(rel)
+    } finally {
+      deferSqlWithRefs = false
+    }
+  }
+
   private def transformRelationPlugin(extension: ProtoAny): LogicalPlan = {
     SparkConnectPluginRegistry.relationRegistry
       // Lazily traverse the collection.
@@ -414,7 +436,17 @@ class SparkConnectPlanner(
     if (!isValidSQLWithRefs(query)) {
       throw InvalidInputErrors.invalidSQLWithReferences(query)
     }
-    executeSQLWithRefs(query).logicalPlan
+    if (deferSqlWithRefs) {
+      val cteRelations = query.getReferencesList.asScala.map { ref =>
+        val alias = ref.getSubqueryAlias.getAlias
+        UnresolvedCTERelation(
+          alias,
+          SubqueryAlias(alias, transformRelation(ref.getSubqueryAlias.getInput)))
+      }
+      UnresolvedWith(transformSql(query.getRoot.getSql), cteRelations.toSeq)
+    } else {
+      executeSQLWithRefs(query).logicalPlan
+    }
   }
 
   private def transformSubqueryAlias(alias: proto.SubqueryAlias): LogicalPlan = {
@@ -3100,7 +3132,7 @@ class SparkConnectPlanner(
       sessionHolder,
       command,
       responseObserver,
-      transformRelation,
+      transformPipelineFlowRelation,
       transformExpression)
     executeHolder.eventsManager.postFinished()
     responseObserver.onNext(
