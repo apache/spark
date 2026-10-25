@@ -1656,6 +1656,65 @@ class MetastoreDataSourcesSuite extends QueryTest
     }
   }
 
+  test("SPARK-60514: GEOMETRY and GEOGRAPHY columns are stored in Spark SQL specific format") {
+    withTable("t") {
+      val logAppender =
+        new LogAppender("Check that geospatial types are reported as Hive incompatible")
+      logAppender.setThreshold(Level.WARN)
+      withLogAppender(logAppender) {
+        sql(
+          """
+            |CREATE TABLE t(
+            |  c1 GEOMETRY(4326),
+            |  c2 GEOGRAPHY(4326),
+            |  c3 ARRAY<GEOMETRY(0)>,
+            |  c4 STRUCT<a: INT, b: GEOGRAPHY(4326)>,
+            |  c5 MAP<STRING, GEOMETRY(4326)>
+            |) USING Parquet""".stripMargin)
+      }
+      val expectedMsg = "Hive incompatible types found: geometry(4326), geography(4326), " +
+        "array<geometry(0)>, struct<a:int,b:geography(4326)>, map<string,geometry(4326)>. " +
+        s"Persisting data source table `$SESSION_CATALOG_NAME`.`default`.`t` into Hive " +
+        "metastore in Spark SQL specific format, which is NOT compatible with Hive."
+      val actualMessages = logAppender.loggingEvents
+        .map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("incompatible"))
+      assert(actualMessages.contains(expectedMsg))
+      assert(hiveClient.getTable("default", "t").schema
+        .forall(_.dataType == ArrayType(StringType)))
+      assert(sql("SELECT * FROM t").schema ===
+        StructType(Seq(
+          StructField("c1", GeometryType(4326)),
+          StructField("c2", GeographyType(4326)),
+          StructField("c3", ArrayType(GeometryType(0))),
+          StructField("c4",
+            StructType(Seq(
+              StructField("a", IntegerType),
+              StructField("b", GeographyType(4326))))),
+          StructField("c5", MapType(StringType, GeometryType(4326))))))
+    }
+  }
+
+  test("SPARK-60514: views with GEOMETRY and GEOGRAPHY columns are stored with " +
+    "the empty Hive metastore schema") {
+    // WKB of POINT(1 2).
+    val wkb = "0101000000000000000000F03F0000000000000040"
+    withView("v") {
+      // Hive metastore accepts nested geospatial types of views, which Hive cannot parse.
+      sql(s"CREATE VIEW v AS SELECT ARRAY(ST_GeomFromWKB(X'$wkb', 4326)) AS c1")
+      assert(hiveClient.getTable("default", "v").schema
+        .forall(_.dataType == ArrayType(StringType)))
+      checkAnswer(sql("SELECT hex(ST_AsBinary(c1[0])), typeof(c1) FROM v"),
+        Row(wkb, "array<geometry(4326)>"))
+
+      sql(s"ALTER VIEW v AS SELECT 1 AS c1, NAMED_STRUCT('x', ST_GeogFromWKB(X'$wkb')) AS c2")
+      assert(hiveClient.getTable("default", "v").schema
+        .forall(_.dataType == ArrayType(StringType)))
+      checkAnswer(sql("SELECT c1, hex(ST_AsBinary(c2.x)), typeof(c2) FROM v"),
+        Row(1, wkb, "struct<x:geography(4326)>"))
+    }
+  }
+
   private def withDebugMode(f: => Unit): Unit = {
     val previousValue = sparkSession.sparkContext.conf.get(DEBUG_MODE)
     try {
