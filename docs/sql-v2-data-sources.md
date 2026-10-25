@@ -453,7 +453,7 @@ predicate are removed without rewriting individual records.
 
 | Method | Description |
 |--------|-------------|
-| `canDeleteWhere(predicates)` | Returns whether the data source can efficiently delete rows matching the given predicates. If this returns `false`, Spark falls back to row-level rewriting (see below) when the table also implements `SupportsRowLevelOperations`; otherwise the `DELETE` fails |
+| `canDeleteWhere(predicates)` | Returns whether the data source can efficiently delete rows matching the given predicates. If this returns `false`, Spark falls back to row-level rewriting ([Row-Level Operations](#row-level-operations)) when the table also implements `SupportsRowLevelOperations`; otherwise the `DELETE` fails |
 | `deleteWhere(predicates)` | Deletes all rows matching the predicates |
 
 This approach is well-suited for data sources that can drop entire partitions or files without
@@ -524,8 +524,8 @@ for writes, exercised by
 [`DataSourceV2Suite`](https://github.com/apache/spark/blob/master/sql/core/src/test/scala/org/apache/spark/sql/connector/DataSourceV2Suite.scala).
 The three share a few test helpers. `TestingV2Source` is a test trait over `TableProvider`: it
 implements `inferSchema` (two `int` columns, `i` and `j`) and forwards
-`getTable(schema, partitioning, properties)` to a one-argument `getTable(options)`, which is what
-the excerpts override; a connector implements the three-argument form. `JavaSimpleBatchTable` is a
+`getTable(schema, partitioning, properties)` to a one-argument `getTable(options)`. The excerpts
+override the one-argument form; a connector implements the three-argument form. `JavaSimpleBatchTable` is a
 `Table` that declares `BATCH_READ` and returns that schema (through the deprecated `schema()`; a
 new `Table` implements `columns()`); `JavaRangeInputPartition` carries a `start` and `end`; and
 `JavaSimpleScanBuilder` is a `ScanBuilder` that is also its own `Scan` and `Batch`.
@@ -591,7 +591,7 @@ return new PartitionReader<InternalRow>() {
 
 A `PartitionReader<InternalRow>` produces `InternalRow`, which holds each column
 in Spark's internal representation rather than the external one a `Row` carries: a boxed `int`
-is fine for an `IntegerType` column as above, but a `StringType` column holds `UTF8String` (not
+is fine for an `IntegerType` column, but a `StringType` column holds `UTF8String` (not
 `java.lang.String`), `DecimalType` holds `Decimal`, `DateType` holds an `int` of days,
 `TimestampType` a `long` of microseconds, `BinaryType` a `byte[]`, and nested types hold
 `ArrayData`, `MapData` and `InternalRow`. `InternalRow` and `GenericInternalRow` live in Spark's
@@ -611,7 +611,7 @@ A connector that can skip columns or rows adds the pushdown mix-ins to its `Scan
 list, the order Spark applies them in, and the residual-filter contract are under
 [ScanBuilder](#scanbuilder). `JavaAdvancedDataSourceV2WithV2Filter` accepts only
 `i > <int literal>` and returns everything else for Spark to evaluate. Unlike the test, which
-asserts the shapes it expects, the version below checks them, because Spark can also push `i > j`
+asserts the shapes it expects, the following version checks them, because Spark can also push `i > j`
 as a `>` predicate; it also matches on the public `NamedReference` rather than the test's
 `FieldReference`. Replacing `predicates` on each call is right while `supportsIterativePushdown()`
 returns `false` (the default); an iterative source accumulates them instead:
