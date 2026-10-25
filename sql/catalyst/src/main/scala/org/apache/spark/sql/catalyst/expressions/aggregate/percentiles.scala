@@ -60,6 +60,10 @@ abstract class PercentileBase
     case arrayData: ArrayData => arrayData.toDoubleArray()
   }
 
+  // Nanosecond timestamps are interpolated exactly, at an exact position.
+  @transient
+  private lazy val isNanos = child.dataType.isInstanceOf[AnyTimestampNanoType]
+
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
@@ -129,17 +133,7 @@ abstract class PercentileBase
   }
 
   // Nanosecond timestamps are kept as is, so that no sub-microsecond digit is lost.
-  protected def toPercentileValue(key: AnyRef): Any = key match {
-    case v: TimestampNanosVal => v
-    case _ => toDoubleValue(key)
-  }
-
-  // The precision p in [7, 9] of a nanosecond timestamp input; -1 for other inputs.
-  @transient private lazy val nanosPrecision: Int = child.dataType match {
-    case t: TimestampNTZNanosType => t.precision
-    case t: TimestampLTZNanosType => t.precision
-    case _ => -1
-  }
+  protected def toPercentileValue(key: AnyRef): Any = if (isNanos) key else toDoubleValue(key)
 
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
@@ -217,10 +211,18 @@ abstract class PercentileBase
       accumulatedCounts: Seq[(AnyRef, Long)],
       percentile: Double): Any = {
     val position = (accumulatedCounts.last._2 - 1) * percentile
+    // A double position can land just below a whole number (e.g. 90 * 0.7), which flooring a
+    // nanosecond result would turn into a whole step.
+    lazy val exactPosition = JBigDecimal.valueOf(accumulatedCounts.last._2 - 1)
+      .multiply(JBigDecimal.valueOf(percentile))
 
     // We may need to do linear interpolation to get the exact percentile
-    val lower = position.floor.toLong
-    val higher = position.ceil.toLong
+    val (lower, higher) = if (isNanos) {
+      (exactPosition.setScale(0, RoundingMode.FLOOR).longValueExact(),
+        exactPosition.setScale(0, RoundingMode.CEILING).longValueExact())
+    } else {
+      (position.floor.toLong, position.ceil.toLong)
+    }
 
     // Use binary search to find the lower and the higher position.
     val countsArray = accumulatedCounts.map(_._2).toArray[Long]
@@ -242,42 +244,40 @@ abstract class PercentileBase
     if (discrete) {
       // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
       toPercentileValue(lowerKey)
+    } else if (isNanos) {
+      interpolateNanos(lowerKey.asInstanceOf[TimestampNanosVal],
+        higherKey.asInstanceOf[TimestampNanosVal],
+        exactPosition.subtract(JBigDecimal.valueOf(lower)))
     } else {
-      (lowerKey, higherKey) match {
-        case (l: TimestampNanosVal, h: TimestampNanosVal) =>
-          interpolateNanos(l, h, position - lower)
-        case _ =>
-          // Linear interpolation to get the exact percentile. Computed as lower + fraction *
-          // (higher - lower) to stay monotonic; the delta can overflow to Infinity only for
-          // adjacent values straddling zero near Double.MaxValue, an extreme case where the old
-          // form was also inaccurate.
-          toDoubleValue(lowerKey) +
-            (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
-      }
+      // Linear interpolation to get the exact percentile. Computed as lower + fraction *
+      // (higher - lower) to stay monotonic; the delta can overflow to Infinity only for adjacent
+      // values straddling zero near Double.MaxValue, an extreme case where the old form was also
+      // inaccurate.
+      toDoubleValue(lowerKey) +
+        (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
     }
   }
 
   // Exact `lower + fraction * (higher - lower)` in epoch nanoseconds (a double can't hold them),
-  // floored to the input precision. `BigDecimal.valueOf` takes `fraction` in its shortest decimal
-  // form, e.g. 0.3 rather than 0.29999999999999998.
+  // floored to the input precision.
   private def interpolateNanos(
       lower: TimestampNanosVal,
       higher: TimestampNanosVal,
-      fraction: Double): TimestampNanosVal = {
-    val nanosPerMicro = JBigDecimal.valueOf(DateTimeConstants.NANOS_PER_MICROS)
+      fraction: JBigDecimal): TimestampNanosVal = {
+    import PercentileBase.NANOS_PER_MICRO
     def toEpochNanos(v: TimestampNanosVal): JBigDecimal =
-      JBigDecimal.valueOf(v.epochMicros).multiply(nanosPerMicro).add(
+      JBigDecimal.valueOf(v.epochMicros).multiply(NANOS_PER_MICRO).add(
         JBigDecimal.valueOf(v.nanosWithinMicro.toLong))
     val lowerNanos = toEpochNanos(lower)
     val nanos = toEpochNanos(higher).subtract(lowerNanos)
-      .multiply(JBigDecimal.valueOf(fraction))
+      .multiply(fraction)
       .add(lowerNanos)
       .setScale(0, RoundingMode.FLOOR)
-    val micros = nanos.divide(nanosPerMicro, 0, RoundingMode.FLOOR)
-    val nanosWithinMicro = nanos.subtract(micros.multiply(nanosPerMicro)).intValueExact()
+    val micros = nanos.divide(NANOS_PER_MICRO, 0, RoundingMode.FLOOR)
+    val nanosWithinMicro = nanos.subtract(micros.multiply(NANOS_PER_MICRO)).intValueExact()
     DateTimeUtils.truncateTimestampNanosToPrecision(
       TimestampNanosVal.fromParts(micros.longValueExact(), nanosWithinMicro.toShort),
-      nanosPrecision)
+      TimestampFamily.fractionalPrecision(child.dataType).get)
   }
 
   /**
@@ -290,6 +290,10 @@ abstract class PercentileBase
       case ix => ix
     }
   }
+}
+
+object PercentileBase {
+  private val NANOS_PER_MICRO = JBigDecimal.valueOf(DateTimeConstants.NANOS_PER_MICROS)
 }
 
 /**

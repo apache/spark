@@ -656,6 +656,12 @@ SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789'),
 -- Pre-epoch: the midpoint -499.5ns is floored to -500ns.
 SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999000'),
                              (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000001') AS t(c);
+-- A non-dyadic percentage uses an exact position: 3 * 0.7 is 2.0999999999999996 as a double.
+SELECT percentile(c, 0.7), percentile_cont(0.3) WITHIN GROUP (ORDER BY c DESC)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000200'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000300'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001300') AS t(c);
 -- At p=7 the midpoint .00000025 is floored to .0000002.
 SELECT median(c), percentile(c, array(0.0, 1.0))
   FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))),

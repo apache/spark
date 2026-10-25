@@ -2269,6 +2269,18 @@ struct<median(c):timestamp_ntz(9)>
 
 
 -- !query
+SELECT percentile(c, 0.7), percentile_cont(0.3) WITHIN GROUP (ORDER BY c DESC)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000200'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000300'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001300') AS t(c)
+-- !query schema
+struct<percentile(c, 0.7, 1):timestamp_ntz(9),percentile_cont(0.3) WITHIN GROUP (ORDER BY c DESC):timestamp_ntz(9)>
+-- !query output
+2020-01-01 12:00:00.0000004	2020-01-01 12:00:00.0000004
+
+
+-- !query
 SELECT median(c), percentile(c, array(0.0, 1.0))
   FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))),
               (CAST('2020-01-01 12:00:00.0000004' AS timestamp_ntz(7))) AS t(c)

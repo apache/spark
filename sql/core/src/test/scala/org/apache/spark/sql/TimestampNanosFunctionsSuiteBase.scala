@@ -821,7 +821,7 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
-  test("SPARK-56822: percentile family over nanosecond timestamps keeps the input type") {
+  test("SPARK-60542: percentile family over nanosecond timestamps keeps the input type") {
     Seq(7, 8, 9).foreach { p =>
       val schema = new StructType()
         .add("ntz", TimestampNTZNanosType(p))
@@ -855,10 +855,18 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         TimestampNTZNanosType(p), ArrayType(TimestampLTZNanosType(p), containsNull = false)))
       checkAnswer(arrayRes,
         Row(ldt.plusNanos(400), Seq(expectedNanos(1), 700).map(ins.plusNanos(_))))
+
+      // A non-dyadic percentage uses an exact position: 3 * 0.7 is 2.0999999999999996 as a double.
+      val df2 = spark.createDataFrame(spark.sparkContext.parallelize(
+        Seq(100, 200, 300, 1300).map(n => Row(ldt.plusNanos(n), ins.plusNanos(n)))), schema)
+      checkAnswer(
+        df2.selectExpr(
+          "percentile(ntz, 0.7)", "percentile_cont(0.3) WITHIN GROUP (ORDER BY ltz DESC)"),
+        Row(ldt.plusNanos(400), ins.plusNanos(400)))
     }
   }
 
-  test("SPARK-56822: percentile over nanosecond timestamps interpolates exactly") {
+  test("SPARK-60542: percentile over nanosecond timestamps interpolates exactly") {
     def median9(values: String*): DataFrame = spark.createDataFrame(
       spark.sparkContext.parallelize(values.map(v => Row(LocalDateTime.parse(v)))),
       new StructType().add("c", TimestampNTZNanosType(9))).selectExpr("median(c)")

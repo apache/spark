@@ -138,7 +138,7 @@ class PercentileSuite extends SparkFunSuite {
     agg.eval(buffer)
   }
 
-  test("SPARK-56822: percentile family over nanosecond timestamps keeps the input type") {
+  test("SPARK-60542: percentile family over nanosecond timestamps keeps the input type") {
     Seq(7, 8, 9).flatMap(p => Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))).foreach {
       dt =>
         val child = BoundReference(0, dt, nullable = true)
@@ -154,7 +154,7 @@ class PercentileSuite extends SparkFunSuite {
     }
   }
 
-  test("SPARK-56822: percentile over nanosecond timestamps interpolates exactly") {
+  test("SPARK-60542: percentile over nanosecond timestamps interpolates exactly") {
     // 2020-01-01 12:00:00.123456 UTC.
     val micros = 1577880000123456L
     val p9 = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
@@ -200,7 +200,29 @@ class PercentileSuite extends SparkFunSuite {
       Seq(nanosTs(micros, 10), nanosTs(micros, 40))) === nanosTs(micros, 20))
   }
 
-  test("SPARK-56822: percentile_disc over nanosecond timestamps returns an input value") {
+  test("SPARK-60542: percentile over nanosecond timestamps uses an exact position") {
+    val p9 = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
+    // 90 * 0.7 is 62.99999999999999 as a double, but the exact position is the 63rd input value.
+    val spaced = (0 to 90).map(nanosTs(0, _))
+    assert(evalNanos(new Percentile(p9, Literal(0.7)), spaced) === spaced(63))
+    assert(evalNanos(new Percentile(p9, Literal(0.3)), Seq(nanosTs(0, 0), nanosTs(0, 10))) ===
+      nanosTs(0, 3))
+    // 3 * 0.7 is 2.0999999999999996 as a double; ascending 0.7 and descending 0.3 agree.
+    val values = Seq(nanosTs(0, 100), nanosTs(0, 200), nanosTs(0, 300), nanosTs(1, 300))
+    val p7 = BoundReference(0, TimestampLTZNanosType(7), nullable = true)
+    Seq(p9, p7).foreach { child =>
+      assert(evalNanos(new Percentile(child, Literal(0.7)), values) === nanosTs(0, 400))
+      assert(evalNanos(new Percentile(child, Literal(0.3), reverse = true), values) ===
+        nanosTs(0, 400))
+    }
+    // A tenth of a one-year gap is a whole number of nanoseconds.
+    val year = 365L * 24 * 60 * 60 * 1000 * 1000
+    assert(evalNanos(new Percentile(p9, Literal(0.7)),
+      Seq(nanosTs(0, 0), nanosTs(0, 1), nanosTs(0, 2), nanosTs(year, 2))) ===
+      nanosTs(year / 10, 2))
+  }
+
+  test("SPARK-60542: percentile_disc over nanosecond timestamps returns an input value") {
     val child = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
     val values = (1 to 4).map(nanosTs(1577880000123456L, _))
     assert(evalNanos(PercentileDisc(child, Literal(0.6)), values) === values(2))
@@ -209,7 +231,7 @@ class PercentileSuite extends SparkFunSuite {
     assert(evalNanos(PercentileDisc(child, Literal(0.6), reverse = true), values) === values(1))
   }
 
-  test("SPARK-56822: percentile over nanosecond timestamps merges serialized buffers") {
+  test("SPARK-60542: percentile over nanosecond timestamps merges serialized buffers") {
     val child = BoundReference(0, TimestampLTZNanosType(9), nullable = true)
     val agg = new Percentile(child, Literal(0.5))
     val buffer1 = agg.createAggregationBuffer()
