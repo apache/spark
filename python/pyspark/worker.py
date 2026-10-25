@@ -152,15 +152,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result=analyze_result,
                     name=init_info.udf_info.name,
                 )
-                handler = handler_cls(udfs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf)
+                handler = handler_cls(
+                    udf_descs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf
+                )
             else:
                 assert isinstance(init_info.udf_info, list)
-                udfs = []
+                udf_descs = []
                 for udf_info in init_info.udf_info:
                     # The functions applied in turn to one column; the last one's return type
                     # is the UDF's.
                     funcs, return_types = zip(*(read_command(pickleSer, c) for c in udf_info.udfs))
-                    udfs.append(
+                    udf_descs.append(
                         UDF(
                             funcs=list(funcs),
                             args_offsets=udf_info.args,
@@ -169,7 +171,9 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                             result_id=udf_info.result_id,
                         )
                     )
-                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+                handler = handler_cls(
+                    udf_descs=udf_descs, runner_conf=runner_conf, eval_conf=eval_conf
+                )
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 

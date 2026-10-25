@@ -302,7 +302,7 @@ class HandlerUDFsTests(PySparkErrorTestUtils, PySparkBaseTestCase):
 
     def test_wraps_udfs(self):
         handler = self._new(self._Handler)
-        udf = handler._udfs[0]
+        udf = handler._udf_descs[0]
 
         self.assertIsInstance(udf, UDF)
         self.assertEqual(udf.args_offsets, [1])
@@ -341,18 +341,18 @@ class HandlerUDFsTests(PySparkErrorTestUtils, PySparkBaseTestCase):
             return x + 1
 
         handler = _Single([self._udf(f)], RunnerConf({}), None)
-        self.assertIs(handler._udf_desc, handler._udfs[0])
+        self.assertIs(handler._udf_desc, handler._udf_descs[0])
         self.assertIs(handler._raw_func, f)
         self.assertIs(handler._func, handler._funcs[0])
         self.assertEqual(handler._func(1), 2)
-        for udfs in ([], [self._udf(f), self._udf(f)]):
-            with self.subTest(num_udfs=len(udfs)):
+        for udf_descs in ([], [self._udf(f), self._udf(f)]):
+            with self.subTest(num_udfs=len(udf_descs)):
                 with self.assertRaises(PySparkRuntimeError) as cm:
-                    _Single(udfs, RunnerConf({}), None)
+                    _Single(udf_descs, RunnerConf({}), None)
                 self.check_error(
                     exception=cm.exception,
                     errorClass="WRONG_NUM_UDFS",
-                    messageParameters={"expected": "_Single UDF", "num_udfs": str(len(udfs))},
+                    messageParameters={"expected": "_Single UDF", "num_udfs": str(len(udf_descs))},
                 )
 
         handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)

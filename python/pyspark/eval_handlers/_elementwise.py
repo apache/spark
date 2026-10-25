@@ -181,11 +181,11 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
     _multi_udf = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
         # clear message rather than a bare ImportError from `import pyarrow`.
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         # Element-wise UDFs back higher-order lambdas like transform(arr, x -> udf(x)).
         # ExtractPythonUDFFromLambda rewrites them so the UDF receives *all* array elements
@@ -198,7 +198,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         # UDF preparation
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
-        for udf_index, udf in enumerate(udfs):
+        for udf_index, udf in enumerate(udf_descs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
@@ -236,7 +236,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                     ),
                 )
             )
-        self._col_names = [f"_{i}" for i in range(len(udfs))]
+        self._col_names = [f"_{i}" for i in range(len(udf_descs))]
 
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
@@ -308,9 +308,9 @@ class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     whole flat columns. The conversions below are the Arrow flavor (``pa.Array`` in and out);
     ``_PandasElementwiseUDFHandler`` overrides them for pandas."""
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
-        super().__init__(udfs, runner_conf, eval_conf)
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
     def _to_udf_inputs(self, flat_batch: pa.RecordBatch, input_schema: StructType) -> list[Any]:
         """Adapt one flattened input batch (one aligned leaf Array per argument) to the UDF's
@@ -390,12 +390,12 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
     _multi_udf = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
-        for udf_index, udf in enumerate(udfs):
+        for udf_index, udf in enumerate(udf_descs):
             udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
                 self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
@@ -417,7 +417,7 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
                     udf_input_schema,
                 )
             )
-        self._col_names = [f"_{i}" for i in range(len(udfs))]
+        self._col_names = [f"_{i}" for i in range(len(udf_descs))]
 
     @abstractmethod
     def _verify_result(self, result: Any, return_type: DataType, num_elements: int) -> None:
@@ -516,8 +516,8 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
     _iter_based = True
 
-    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
+    def __init__(self, udf_descs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
+        super().__init__(udf_descs, runner_conf, eval_conf)
 
         assert not self._udf_desc.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
 

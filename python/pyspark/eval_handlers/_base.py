@@ -161,24 +161,27 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     _multi_udf: ClassVar[bool] = False
 
     def __init__(
-        self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+        self, udf_descs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
-        if not self._multi_udf and len(udfs) != 1:
+        if not self._multi_udf and len(udf_descs) != 1:
             raise PySparkRuntimeError(
                 errorClass="WRONG_NUM_UDFS",
-                messageParameters={"expected": self._expected_udf(), "num_udfs": str(len(udfs))},
+                messageParameters={
+                    "expected": self._expected_udf(),
+                    "num_udfs": str(len(udf_descs)),
+                },
             )
-        self._udfs: list[Any] = udfs
+        self._udf_descs: list[Any] = udf_descs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        # Each UDF's functions chained into one before any wrapping, at the indexes of _udfs: a
+        # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
         # single function is the pickled object itself (an incremental Aggregator) with its
         # signature. Empty for a UDTF.
         self._raw_funcs: list[Any] = []
         # Each raw function wrapped for profiling and, unless _fail_on_stopiteration is False,
-        # in fail_on_stopiteration, at the indexes of _udfs; empty for a UDTF.
+        # in fail_on_stopiteration, at the indexes of _udf_descs; empty for a UDTF.
         self._funcs: list[Callable[..., Any]] = []
-        for udf in udfs:
+        for udf in udf_descs:
             if isinstance(udf, UDF):
                 raw_func = functools.reduce(lambda f, g: lambda *a: g(f(*a)), udf.funcs)
                 self._raw_funcs.append(raw_func)
@@ -188,8 +191,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                     if self._fail_on_stopiteration
                     else profiling_func
                 )
-        if not self._multi_udf and isinstance(udfs[0], UDF):
-            self._udf_desc: UDF = udfs[0]
+        if not self._multi_udf and isinstance(udf_descs[0], UDF):
+            self._udf_desc: UDF = udf_descs[0]
             self._raw_func: Any = self._raw_funcs[0]
             self._func: Callable[..., Any] = self._funcs[0]
 

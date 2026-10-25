@@ -44,9 +44,13 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
     eval_type = PythonEvalType.SQL_BATCHED_UDF
     _multi_udf = True
 
-    def __init__(self, udfs: "list[UDF]", runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
-        super().__init__(udfs, runner_conf, eval_conf)
-        self._udf_infos = [self._prepare_udf(udf, func) for udf, func in zip(udfs, self._funcs)]
+    def __init__(
+        self, udf_descs: "list[UDF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
+    ) -> None:
+        super().__init__(udf_descs, runner_conf, eval_conf)
+        self._udf_infos = [
+            self._prepare_udf(udf, func) for udf, func in zip(udf_descs, self._funcs)
+        ]
 
     @staticmethod
     def _prepare_udf(udf: "UDF", func: Callable[..., Any]) -> tuple[list[int], Callable[..., Any]]:
