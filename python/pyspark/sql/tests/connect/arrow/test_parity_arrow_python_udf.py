@@ -153,6 +153,20 @@ class ArrowPythonUDFServerFallbackTests(ReusedConnectTestCase):
             self.assertEqual(result.collect(), df.collect())
             self.assertIn("ArrowEvalPython", result._explain_string())
 
+    def test_falls_back_without_pandas_in_legacy_mode(self):
+        with self._not_installed_on_server("pandas"), self.sql_conf(
+            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"}
+        ):
+
+            @udf("int")
+            def plus_one(x):
+                return x + 1
+
+            self.assertEqual(plus_one.evalType, PythonEvalType.SQL_ARROW_BATCHED_UDF)
+            df = self.spark.range(3).select(plus_one("id").alias("v"))
+            self.assertEqual([row.v for row in df.collect()], [1, 2, 3])
+            self.assertIn("BatchEvalPython", df._explain_string())
+
 
 if __name__ == "__main__":
     from pyspark.testing import main
