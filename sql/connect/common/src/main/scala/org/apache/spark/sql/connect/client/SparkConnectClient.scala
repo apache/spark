@@ -175,16 +175,24 @@ private[sql] class SparkConnectClient(
   }
 
   /**
-   * Returns true if the session is valid on both the client and the server. A session becomes
-   * invalid if the server side information about the client, e.g., session ID, does not
-   * correspond to the actual client state.
+   * Returns the locally tracked session validity without contacting the server. Response
+   * validation marks this state invalid when it detects a session mismatch. A true result does
+   * not guarantee that the server-side session is still available; use [[validateSession]] to
+   * actively validate the session.
    */
   private[sql] def isSessionValid: Boolean = {
-    // The last known state of the session is store in `responseValidator`, because it is where the
-    // client gets responses from the server.
     stubState.responseValidator.isSessionValid
   }
 
+  /**
+   * Validates the session with a server request, unless the local state already marks it invalid.
+   * Returns false if the session is locally invalid or server validation fails.
+   *
+   * @param timeout
+   *   Validation timeout in seconds. Zero means no deadline.
+   * @throws IllegalArgumentException
+   *   If the timeout is negative.
+   */
   private[sql] def validateSession(timeout: Int): Boolean = {
     require(timeout >= 0, "Validation timeout must not be negative.")
 
