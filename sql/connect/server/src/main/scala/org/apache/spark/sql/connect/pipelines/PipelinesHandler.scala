@@ -30,7 +30,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.{PlanWithUnresolvedIdentifier, UnresolvedExecuteImmediate}
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, ExecutableDuringAnalysis, InsertIntoDir, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DropView, ExecutableDuringAnalysis, InsertIntoDir, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, Union, UnresolvedWith}
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.command.{ShowCatalogsCommand, ShowNamespacesCommand}
@@ -146,6 +146,11 @@ private[connect] object PipelinesHandler extends Logging {
       // with a placeholder name and check it instead.
       case p: PlanWithUnresolvedIdentifier =>
         blockUnsupportedSqlCommand(p.planBuilder(List("placeholder"), p.children))
+      // The parser puts a DML statement with a CTE prefix, such as WITH ... INSERT INTO ..., under
+      // UnresolvedWith and builds a multi-insert, FROM ... INSERT ... INSERT ..., as a Union of
+      // its INSERTs. Check the statements under them.
+      case w: UnresolvedWith => blockUnsupportedSqlCommand(w.child)
+      case u: Union => u.children.foreach(blockUnsupportedSqlCommand)
       case _ =>
     }
     val allowlistedCommands = Set(
