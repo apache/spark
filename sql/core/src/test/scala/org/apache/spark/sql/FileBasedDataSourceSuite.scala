@@ -1338,6 +1338,56 @@ class FileBasedDataSourceSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60518: Geospatial types cannot be used as partition columns") {
+    // All of these file formats, including Parquet, do NOT support geospatial partition columns.
+    val dataSources = Seq("csv", "json", "orc", "parquet", "text", "xml")
+    // Test data: WKB representation of POINT(1 2).
+    val wkb = "0101000000000000000000F03F0000000000000040"
+    // Test GEOMETRY and GEOGRAPHY data types.
+    val geoTestCases = Seq(
+      (s"ST_GeomFromWKB(X'$wkb', 4326)", "GEOMETRY(4326)"),
+      (s"ST_GeogFromWKB(X'$wkb')", "GEOGRAPHY(4326)")
+    )
+    // Test both v1 and v2 data sources.
+    Seq(true, false).foreach { useV1 =>
+      val useV1List = if (useV1) {
+        dataSources.mkString(",")
+      } else {
+        ""
+      }
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+        dataSources.foreach { format =>
+          geoTestCases.foreach { case (expr, geoType) =>
+            def checkPartitionColumnError(f: => Unit): Unit = {
+              checkError(
+                exception = intercept[AnalysisException](f),
+                condition = "INVALID_PARTITION_COLUMN_DATA_TYPE",
+                parameters = Map("type" -> s""""$geoType""""))
+            }
+            // `TEXT` data source always has a single column whose name is `value`.
+            val query = s"SELECT 'a' AS value, $expr AS p"
+            withTable("t") {
+              checkPartitionColumnError {
+                sql(s"CREATE TABLE t (value STRING, p $geoType) USING $format PARTITIONED BY (p)")
+              }
+              checkPartitionColumnError {
+                sql(s"CREATE TABLE t USING $format PARTITIONED BY (p) AS $query")
+              }
+              checkPartitionColumnError {
+                sql(query).write.format(format).partitionBy("p").saveAsTable("t")
+              }
+            }
+            withTempPath { dir =>
+              checkPartitionColumnError {
+                sql(query).write.format(format).partitionBy("p").save(dir.getCanonicalPath)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-57166: ORC supports nanosecond timestamp types in v1 and v2") {
     withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
       // Validate both v1 and v2 ORC paths.

@@ -363,7 +363,8 @@ class ParquetFileFormat
             isCaseSensitive,
             datetimeRebaseSpec,
             variantExtractionSchema = variantExtractionSchema,
-            fieldIdReadSchema = fieldIdReadSchema)
+            fieldIdReadSchema = fieldIdReadSchema,
+            readSchema = Some(requiredSchema))
           filters
             // Collects all converted Parquet filter predicates. Notice that not all predicates
             // can be converted (`ParquetFilters.createFilter` returns an `Option`). That's why

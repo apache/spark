@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.{FileFormat, OutputWriter, Out
 import org.apache.spark.sql.hive.{HiveInspectors, HiveTableUtil}
 import org.apache.spark.sql.internal.SessionStateHelper
 import org.apache.spark.sql.sources.DataSourceRegister
-import org.apache.spark.sql.types.{AnyTimestampNanoType, ArrayType, DataType, MapType, StructType, TimeType, UserDefinedType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, ArrayType, DataType, GeographyType, GeometryType, MapType, StructType, TimeType, UserDefinedType}
 import org.apache.spark.util.SerializableJobConf
 
 /**
@@ -123,6 +123,9 @@ case class HiveFileFormat(fileSinkConf: FileSinkDesc)
     // Hive has no nanosecond-precision timestamp type. Reject it explicitly rather than silently
     // downgrading to microsecond precision (which the Hive serde would otherwise do).
     case _: AnyTimestampNanoType => false
+
+    // Hive has no geospatial types, so they cannot be stored in a Hive serde table.
+    case _: GeometryType | _: GeographyType => false
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
 

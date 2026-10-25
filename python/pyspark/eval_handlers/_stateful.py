@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     import pandas as pd
     import pyarrow as pa
 
+    from pyspark.eval_handlers._typing import UDF
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
@@ -77,6 +78,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
     into count/data/state RecordBatches."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
+    _iter_based = True
 
     # The output RecordBatch has three struct fields, accessed by position
     # (_0/_1/_2, not by name): a count column indicating how many data and
@@ -96,9 +98,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         ]
     )
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
@@ -107,8 +107,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
 
         # See FlatMapGroupsInPandasWithStateExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
-        self._func, arg_offsets, self._return_type = udfs[0]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
 
@@ -228,13 +227,13 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             # The number of columns of the result must match the return type,
             # but an empty result with no columns at all is acceptable.
             if not (
-                len(result.columns) == len(self._return_type)
+                len(result.columns) == len(self._udfs[0].return_type)
                 or (len(result.columns) == 0 and result.empty)
             ):
                 raise PySparkRuntimeError(
                     errorClass="RESULT_COLUMN_SCHEMA_MISMATCH",
                     messageParameters={
-                        "expected": str(len(self._return_type)),
+                        "expected": str(len(self._udfs[0].return_type)),
                         "actual": str(len(result.columns)),
                     },
                 )
@@ -262,7 +261,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
             else:
                 values = (pd.concat(x, axis=1) for x in value_series_gen)
 
-            result_iter = self._func(key, values, state)
+            result_iter = self._funcs[0](key, values, state)
 
             if isinstance(result_iter, pd.DataFrame):
                 raise PySparkTypeError(
@@ -393,7 +392,11 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
                     # Flush a batch once the record threshold is exceeded.
                     if pdf_data_cnt > self._arrow_max_records_per_batch:
                         yield construct_record_batch(
-                            pdfs, pdf_data_cnt, self._return_type, state_pdfs, state_data_cnt
+                            pdfs,
+                            pdf_data_cnt,
+                            self._udfs[0].return_type,
+                            state_pdfs,
+                            state_data_cnt,
                         )
                         pdfs = []
                         state_pdfs = []
@@ -408,7 +411,7 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
         # Flush the trailing batch if it has any data or state left.
         if pdf_data_cnt > 0 or state_data_cnt > 0:
             yield construct_record_batch(
-                pdfs, pdf_data_cnt, self._return_type, state_pdfs, state_data_cnt
+                pdfs, pdf_data_cnt, self._udfs[0].return_type, state_pdfs, state_data_cnt
             )
 
 
@@ -420,26 +423,23 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS UDF expected here."
-        self._func, arg_offsets, self._return_type = udfs[0]
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
         assert len(parsed_offsets) == 1, (
             "Expected one pair of offsets for TRANSFORM_WITH_STATE_PANDAS UDF."
         )
 
         self._key_offsets = parsed_offsets[0][0]
         self._value_offsets = parsed_offsets[0][1]
-        self._output_schema = StructType([StructField("_0", self._return_type)])
+        self._output_schema = StructType([StructField("_0", udfs[0].return_type)])
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
             eval_conf.state_server_socket_port,  # type: ignore[arg-type]
@@ -517,7 +517,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
 
         def convert_results(result_iter: Iterable[pd.DataFrame]) -> Iterator[pa.RecordBatch]:
             for result in result_iter:
-                if isinstance(self._return_type, StructType) and not isinstance(
+                if isinstance(self._udfs[0].return_type, StructType) and not isinstance(
                     result, pd.DataFrame
                 ):
                     raise PySparkValueError(
@@ -540,7 +540,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
             # This must be a generator expression - do not materialize.
             values_gen = (df.iloc[:, self._value_offsets] for _, df in group)
             yield from convert_results(
-                self._func(
+                self._funcs[0](
                     self._stateful_processor_api_client,
                     TransformWithStateInPandasFuncMode.PROCESS_DATA,
                     key,
@@ -549,7 +549,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
             )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
@@ -558,7 +558,7 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
         )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
@@ -575,15 +575,12 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PANDAS_INIT_STATE UDF expected here."
-        self._func, arg_offsets, self._return_type = udfs[0]
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -592,10 +589,10 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         #     [groupingKeyOffsets, dedupDataOffsets],
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._init_key_offsets = parsed_offsets[1][0]
-        self._output_schema = StructType([StructField("_0", self._return_type)])
+        self._output_schema = StructType([StructField("_0", udfs[0].return_type)])
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
             eval_conf.state_server_socket_port,  # type: ignore[arg-type]
@@ -732,7 +729,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             # TODO(SPARK-49100): add verification that elements in result_iter are
             # indeed of type pd.DataFrame and conform to assigned cols
             for result in result_iter:
-                if isinstance(self._return_type, StructType) and not isinstance(
+                if isinstance(self._udfs[0].return_type, StructType) and not isinstance(
                     result, pd.DataFrame
                 ):
                     raise PySparkValueError(
@@ -759,7 +756,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             state_values = (data_df for _, data_df, _ in group_data if not data_df.empty)
             init_states = (init_df for _, _, init_df in group_init if not init_df.empty)
             yield from convert_results(
-                self._func(
+                self._funcs[0](
                     self._stateful_processor_api_client,
                     TransformWithStateInPandasFuncMode.PROCESS_DATA,
                     key,
@@ -769,7 +766,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
             )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
@@ -779,7 +776,7 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
         )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
@@ -797,18 +794,15 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW UDF expected here."
-        self._func, arg_offsets, self._return_type = udfs[0]
 
         # See TransformWithStateInPySparkExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
 
         self._stateful_processor_api_client = StatefulProcessorApiClient(
@@ -856,7 +850,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # Convert spark type to arrow type
             # TODO: we need to make this configurable, currently using default values.
             arrow_type = to_arrow_type(
-                self._return_type,
+                self._udfs[0].return_type,
                 timezone="UTC",
                 prefers_large_types=False,
             )
@@ -871,7 +865,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # This must be a generator expression - do not materialize.
             values_gen = map(lambda x: x[1], group)
             yield from convert_results(
-                self._func(
+                self._funcs[0](
                     self._stateful_processor_api_client,
                     TransformWithStateInPandasFuncMode.PROCESS_DATA,
                     key,
@@ -880,7 +874,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
@@ -889,7 +883,7 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,
@@ -906,14 +900,11 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE UDF expected here."
-        self._func, arg_offsets, self._return_type = udfs[0]
 
         # See TransformWithStateInPandasExec for how arg_offsets are used to
         # distinguish between grouping attributes and data attributes.
@@ -922,7 +913,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         #     [groupingKeyOffsets, dedupDataOffsets],
         #     [initStateGroupingOffsets, dedupInitDataOffsets]
         # ]
-        parsed_offsets = extract_key_value_indexes(arg_offsets)
+        parsed_offsets = extract_key_value_indexes(udfs[0].args_offsets)
         self._key_offsets = parsed_offsets[0][0]
         self._init_key_offsets = parsed_offsets[1][0]
 
@@ -1039,7 +1030,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             # Convert spark type to arrow type
             # TODO: we need to make this configurable, currently using default values.
             arrow_type = to_arrow_type(
-                self._return_type,
+                self._udfs[0].return_type,
                 timezone="UTC",
                 prefers_large_types=False,
             )
@@ -1054,7 +1045,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
             # These must be generator expressions - do not materialize.
             for _, (values_gen, init_states_gen) in group:
                 yield from convert_results(
-                    self._func(
+                    self._funcs[0](
                         self._stateful_processor_api_client,
                         TransformWithStateInPandasFuncMode.PROCESS_DATA,
                         key,
@@ -1064,7 +1055,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
                 )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.PROCESS_TIMER,
                 None,
@@ -1074,7 +1065,7 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
         )
 
         yield from convert_results(
-            self._func(
+            self._funcs[0](
                 self._stateful_processor_api_client,
                 TransformWithStateInPandasFuncMode.COMPLETE,
                 None,

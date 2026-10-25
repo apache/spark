@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDe
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 
 /**
@@ -49,10 +50,7 @@ case class CreateHiveTableAsSelectCommand(
     val catalog = sparkSession.sessionState.catalog
     val tableExists = catalog.tableExists(tableIdentifier)
 
-    if (tableExists) {
-      assert(mode != SaveMode.Overwrite,
-        s"Expect the table $tableIdentifier has been dropped when the save mode is Overwrite")
-
+    if (tableExists && mode != SaveMode.Overwrite) {
       if (mode == SaveMode.ErrorIfExists) {
         throw QueryCompilationErrors.tableIdentifierExistsError(tableIdentifier)
       }
@@ -68,14 +66,24 @@ case class CreateHiveTableAsSelectCommand(
       tableDesc.storage.locationUri.foreach { p =>
         DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
       }
-      // TODO ideally, we should get the output data ready first and then
-      // add the relation into catalog, just in case of failure occurs while data
-      // processing.
       val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
       val tableSchema = CharVarcharUtils.getRawSchema(
         outputColumns.toStructType, sparkSession.sessionState.conf)
       assert(tableDesc.schema.isEmpty)
-      catalog.createTable(tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
+      val newTableDesc = tableDesc.copy(schema = tableSchema)
+      if (tableExists) {
+        // `SaveAsV1TableCommand` runs this command with `SaveMode.Overwrite` to replace the
+        // table. Drop it here, after the analysis and the checks of the new table, because the
+        // new table is created before the write.
+        sparkSession.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+          .validateHiveSerdeTable(
+            newTableDesc.copy(identifier = catalog.qualifyIdentifier(tableIdentifier)))
+        catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
+      }
+      // TODO ideally, we should get the output data ready first and then
+      // add the relation into catalog, just in case of failure occurs while data
+      // processing.
+      catalog.createTable(newTableDesc, ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.

@@ -253,7 +253,8 @@ case class ParquetPartitionReaderFactory(
           pushDownInFilterThreshold,
           isCaseSensitive,
           datetimeRebaseSpec,
-          fieldIdReadSchema = fieldIdReadSchema)
+          fieldIdReadSchema = fieldIdReadSchema,
+          readSchema = Some(readDataSchema))
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
           // converted (`ParquetFilters.createFilter` returns an `Option`). That's why a `flatMap`
