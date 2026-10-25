@@ -200,6 +200,8 @@ queue behind it and flushed only after it drains, so a duplicate of a key alread
 merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
 `first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
 again right before the aggregation map would spill, in which case the spill is skipped entirely.
+Keeping the aggregation past that point also pays to write the map to disk and merge it back later,
+so the evaluation before a spill demands a higher ratio, `minCompactionToSpill`.
 Because pass-through cannot be reversed, the evaluation before a spill also waits until the current
 map has processed `minRows` rows, so a map that fills sooner spills as usual instead of committing
 the task on a small sample.
@@ -248,6 +250,18 @@ start later.
       partial aggregation collapses ten rows into one key; when an evaluation finds the ratio below
       this value the partial aggregation is bypassed for the rest of the input. A larger value
       bypasses more aggressively.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill</code></td>
+    <td>2.0</td>
+    <td>
+      The minimum compaction ratio required to keep the partial aggregation when its map is about to
+      spill. Keeping it past that point also pays to write the map to disk and merge it back later,
+      so it must collapse more rows into each key to be worthwhile. When the ratio is below this
+      value the spill is skipped and the rest of the input is passed through. The evaluation uses
+      the larger of this value and <code>minCompaction</code>.
     </td>
     <td>4.4.0</td>
   </tr>

@@ -102,7 +102,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
    */
   private def checkAdaptiveMatchesReference(
       build: Int => DataFrame,
-      expectBypass: Boolean = true): Unit = {
+      expectBypass: Boolean = true,
+      extraConfs: Seq[(String, String)] = Nil): Unit = {
     for {
       inputPartitions <- Seq(1, 2)
       wholeStage <- Seq(true, false)
@@ -126,7 +127,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
           // Small `minRows` so the periodic check runs on modest inputs.
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8") ++
-          spillConf ++ fixedPlanConfs): _*) {
+          spillConf ++ extraConfs ++ fixedPlanConfs): _*) {
         val msg = s"inputPartitions=$inputPartitions wholeStage=$wholeStage " +
           s"twoLevelMap=$twoLevelMap forceSpill=$forceSpill"
         withClue(msg) {
@@ -705,8 +706,11 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   // The ROLLUP and CUBE cases below use two grouping columns, where the grand-total set keeps the
   // compaction ratio high enough that they decline to bypass -- they cover the eligible-but-
   // declining side. (Widening the rollup lowers the ratio: with five distinct columns the same
-  // shape does bypass.) The GROUPING SETS and multi-distinct tests, and `pass-through fires for
-  // high-cardinality input below an Expand`, cover an Expand that bypasses.
+  // shape does bypass.) Their forced-spill epochs compact only about 1.4x, which the default
+  // `minCompactionToSpill` would rightly pass through instead of spilling, so they pin it to 1.0
+  // and judge the spill check by `minCompaction` too. The GROUPING SETS and multi-distinct tests,
+  // and `pass-through fires for high-cardinality input below an Expand`, cover an Expand that
+  // bypasses.
 
   test("results unchanged for ROLLUP (Expand below partial aggregate)") {
     // The grand-total group repeats on every expanded row, so the compaction ratio stays above the
@@ -718,7 +722,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           .select(($"id" % 200) as "k1", ($"id" % 7) as "k2", $"id" as "v")
           .rollup($"k1", $"k2")
           .agg(sum($"v") as "s", count(lit(1)) as "c")
-      })
+      },
+      extraConfs = Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key -> "1.0"))
   }
 
   test("results unchanged for CUBE (Expand below partial aggregate)") {
@@ -731,7 +736,8 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           .select(($"id" % 150) as "k1", ($"id" % 5) as "k2", $"id" as "v")
           .cube($"k1", $"k2")
           .agg(sum($"v") as "s", count(lit(1)) as "c")
-      })
+      },
+      extraConfs = Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key -> "1.0"))
   }
 
   test("results unchanged for GROUPING SETS (Expand below partial aggregate)") {
@@ -1199,6 +1205,47 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
+  test("the spill check passes through an epoch that compacts too little to spill") {
+    // Keys `floor(2 * id / 3)` collapse every three rows into two keys, a steady ratio of about
+    // 1.5. That is above `minCompaction` (1.05), so the periodic checks at 10 and 20 rows keep
+    // aggregating. The forced fallback fills the map when id 30 arrives, after 30 rows over 20
+    // keys: keeping the aggregation would pay to spill the map and merge it back for a ratio of
+    // only 1.5, so the default `minCompactionToSpill` (2.0) passes the rest through instead, and
+    // the sorter is never created. Lowering it to 1.4 keeps the old behavior: every epoch spills,
+    // and nothing is passed through.
+    Seq(None -> true, Some("1.4") -> false).foreach { case (minCompactionToSpill, shouldBypass) =>
+      Seq(true, false).foreach { wholeStage =>
+        withSQLConf(
+          (Seq(
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+            SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "10",
+            "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 30") ++
+            minCompactionToSpill.map(
+              SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key -> _) ++
+            fixedPlanConfs): _*) {
+          val df = () => spark.range(0, 400, 1, 1)
+            .select(($"id" * 2 / 3).cast("long").cast("string") as "k", $"id" as "v")
+            .groupBy($"k")
+            .agg(sum($"v") as "s")
+          withClue(s"minCompactionToSpill=$minCompactionToSpill wholeStage=$wholeStage") {
+            val c = runAndReadCounters(df)
+            if (shouldBypass) {
+              assert(c.skipped == 400 - 30,
+                "the spill check should pass through from the row that found the map full")
+              assert(c.tasksFallBacked == 0,
+                "the spill check must replace the sort fallback, not trigger it")
+            } else {
+              assert(c.skipped == 0, "an epoch above minCompactionToSpill must keep aggregating")
+              assert(c.tasksFallBacked > 0, "an epoch that keeps aggregating must spill")
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("a new in-memory map epoch after a spill can still bypass") {
     // A spill starts a new in-memory map epoch and restarts the row counters, so an input whose
     // cardinality only turns unfavorable after an early spill is still caught. The first 100 rows
@@ -1270,8 +1317,14 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // failed insertion that becomes the first pass-through row, so both execution paths must judge
     // the same row set and reach the same decision. `id % 40` over 400 rows gives 40 keys when the
     // map fills at 50 aggregated rows, i.e. a compaction ratio of exactly 1.25: demanding 1.25 the
-    // aggregation is kept (`50 < 40 * 1.25` is false), demanding 1.3 it is bypassed.
-    Seq(1.25 -> false, 1.3 -> true).foreach { case (minCompaction, shouldBypass) =>
+    // aggregation is kept (`50 < 40 * 1.25` is false), demanding 1.3 it is bypassed. The spill
+    // check demands the larger of `minCompaction` and `minCompactionToSpill`, so either one can
+    // set the boundary.
+    Seq(
+      (1.0, 1.25, false),
+      (1.0, 1.3, true),
+      (1.3, 1.0, true)
+    ).foreach { case (minCompaction, minCompactionToSpill, shouldBypass) =>
       val skippedPerCodegen = Seq(true, false).map { wholeStage =>
         withSQLConf(
           (Seq(
@@ -1282,18 +1335,22 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
             // without a row floor, so the spill check alone decides at the boundary.
             SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "0",
             SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key -> minCompaction.toString,
+            SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key ->
+              minCompactionToSpill.toString,
             "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 50") ++
             fixedPlanConfs): _*) {
           val df = () => spark.range(0, 400, 1, 1)
             .select(($"id" % 40).cast("string") as "k", $"id" as "v")
             .groupBy($"k")
             .agg(sum($"v") as "s")
-          withClue(s"minCompaction=$minCompaction wholeStage=$wholeStage") {
+          withClue(s"minCompaction=$minCompaction minCompactionToSpill=$minCompactionToSpill " +
+              s"wholeStage=$wholeStage") {
             numPassthroughRows(df)
           }
         }
       }
-      withClue(s"minCompaction=$minCompaction skipped=$skippedPerCodegen") {
+      withClue(s"minCompaction=$minCompaction minCompactionToSpill=$minCompactionToSpill " +
+          s"skipped=$skippedPerCodegen") {
         assert(skippedPerCodegen.forall(_ > 0) == shouldBypass,
           s"expected bypass=$shouldBypass at the ratio boundary")
         assert(skippedPerCodegen.map(_ > 0).distinct.length == 1,
@@ -1353,17 +1410,21 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("minCompaction rejects values that cannot be generated as a Java literal") {
+  test("the compaction thresholds reject values that cannot be generated as a Java literal") {
     // The threshold is interpolated straight into the generated source, where a non-finite double
     // renders as `InfinityD` -- not a valid Java literal. Reject it at configuration time rather
     // than failing to compile the stage (or silently deoptimizing when codegen falls back).
-    Seq("Infinity", "-Infinity", "NaN", "1e309").foreach { v =>
+    for {
+      key <- Seq(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key,
+        SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key)
+      v <- Seq("Infinity", "-Infinity", "NaN", "1e309")
+    } {
       val e = intercept[IllegalArgumentException] {
-        spark.conf.set(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key, v)
+        spark.conf.set(key, v)
       }
-      assert(e.getMessage.contains("finite"), s"expected a finiteness error for '$v': $e")
+      assert(e.getMessage.contains("finite"), s"expected a finiteness error for $key='$v': $e")
+      spark.conf.unset(key)
     }
-    spark.conf.unset(SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key)
   }
 
   test("a larger minRows defers the decision so a small high-cardinality input is not bypassed") {

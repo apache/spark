@@ -139,7 +139,8 @@ case class HashAggregateExec(
             numPassthroughRows,
             adaptivePartialAggEnabled,
             adaptiveMinRows,
-            adaptiveMinCompaction)
+            adaptiveMinCompaction,
+            adaptiveMinCompactionToSpill)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -207,10 +208,15 @@ case class HashAggregateExec(
       requiredChildDistributionExpressions.isEmpty
   }
 
-  // The number of rows between two compaction-ratio evaluations, and the ratio below which the
-  // partial aggregation is considered ineffective. Only read when the feature applies.
+  // The number of rows between two compaction-ratio evaluations, and the ratios below which the
+  // partial aggregation is considered ineffective: at the periodic check, and when the map is
+  // about to spill. Keeping the aggregation past a spill also pays to write the map out and merge
+  // it back, so the spill check never demands less compaction than the periodic one. Only read
+  // when the feature applies.
   private val adaptiveMinRows: Long = conf.adaptivePartialAggregationMinRows
   private val adaptiveMinCompaction: Double = conf.adaptivePartialAggregationMinCompaction
+  private val adaptiveMinCompactionToSpill: Double =
+    math.max(adaptiveMinCompaction, conf.adaptivePartialAggregationMinCompactionToSpill)
 
   // The name for Fast HashMap
   private var fastHashMapTerm: String = _
@@ -772,15 +778,21 @@ case class HashAggregateExec(
     // the maps must precede the held rows so the downstream Final merges a group's map buffer
     // before its pass-through buffers (a group can straddle the freeze, since the maps only freeze
     // once pass-through fires), and the copies were made when the row was queued, so emitting them
-    // here cannot corrupt the build's reusable rows.
+    // here cannot corrupt the build's reusable rows. The iterator setup sorts and merges any
+    // spilled data, which the non-adaptive path times as part of the build, so it is timed here
+    // too; it runs once per task.
+    val aggTime = metricTerm(ctx, "aggTime")
     adaptiveOutputMapAndFlushFuncName = if (adaptivePartialAggEnabled) {
       val name = ctx.freshName("outputMapAndFlush")
       val pair = ctx.freshName("pendingRow")
+      val beforeFinish = ctx.freshName("beforeFinish")
       ctx.addNewFunction(name,
         s"""
            |private void $name() throws java.io.IOException {
            |  if (!$adaptiveMapSetupDoneTerm) {
+           |    long $beforeFinish = System.nanoTime();
            |    $finishHashMap
+           |    $aggTime.add((System.nanoTime() - $beforeFinish) / $NANOS_PER_MILLIS);
            |    $adaptiveMapSetupDoneTerm = true;
            |  }
            |  $outputFromFastHashMap
@@ -810,7 +822,6 @@ case class HashAggregateExec(
       outputFunc = generateResultFunction(ctx)
     }
 
-    val aggTime = metricTerm(ctx, "aggTime")
     val beforeAgg = ctx.freshName("beforeAgg")
     // Split by an exchange, `doAgg` may start appending pass-through rows to the output buffer
     // mid-build. In that case `shouldStop()` becomes true and we must return so the buffered rows
@@ -947,23 +958,22 @@ case class HashAggregateExec(
     }
 
     // The compaction ratio is measured at the operator level: all processed rows against the keys
-    // held by both maps, so two-level-map routing does not change the decision. The same predicate
-    // decides both check points -- periodically every `minRows` rows, and right before the map
-    // would spill (in which case the spill is skipped entirely). Pass-through cannot be undone
-    // within the task, so the spill check, like the periodic one, waits until the current epoch
-    // has processed `minRows` rows; a map that fills sooner spills as usual. `minRows = 0`
-    // disables the periodic check: the row count is only ever compared after being incremented
-    // past 0, so it never matches and only the spill check remains, without a row floor.
-    val adaptiveIneffective = if (adaptivePartialAggEnabled) {
+    // held by both maps, so two-level-map routing does not change the decision. The same ratio
+    // decides both check points -- periodically every `minRows` rows against `minCompaction`, and
+    // right before the map would spill against the higher `minCompactionToSpill` (in which case
+    // the spill is skipped entirely). Pass-through cannot be undone within the task, so the spill
+    // check, like the periodic one, waits until the current epoch has processed `minRows` rows; a
+    // map that fills sooner spills as usual. `minRows = 0` disables the periodic check: the row
+    // count is only ever compared after being incremented past 0, so it never matches and only
+    // the spill check remains, without a row floor.
+    def adaptiveIneffective(minCompaction: Double): String = {
       val totalKeys = if (isFastHashMapEnabled) {
         s"($fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
           s"$hashMapTerm.getNumKeys())"
       } else {
         s"$hashMapTerm.getNumKeys()"
       }
-      s"$processedRowsTerm < (double) $totalKeys * ${adaptiveMinCompaction}D"
-    } else {
-      ""
+      s"$processedRowsTerm < (double) $totalKeys * ${minCompaction}D"
     }
 
     val findOrInsertRegularHashMap: String = {
@@ -1030,7 +1040,8 @@ case class HashAggregateExec(
            |if (!$adaptivePassThroughTerm) {
            |  $probeRegularMap
            |  if ($unsafeRowBuffer == null) {
-           |    if ($processedRowsTerm >= ${spillCheckMinRows}L && $adaptiveIneffective) {
+           |    if ($processedRowsTerm >= ${spillCheckMinRows}L &&
+           |        ${adaptiveIneffective(adaptiveMinCompactionToSpill)}) {
            |      $adaptivePassThroughTerm = true;
            |    } else {
            |      $spillAndRestartEpoch
@@ -1112,7 +1123,7 @@ case class HashAggregateExec(
            |  if (!$adaptivePassThroughTerm) {
            |    $processedRowsTerm += 1;
            |    if ($processedRowsTerm == $adaptiveNextCheckRowTerm) {
-           |      if ($adaptiveIneffective) {
+           |      if (${adaptiveIneffective(adaptiveMinCompaction)}) {
            |        $adaptivePassThroughTerm = true;
            |      } else {
            |        $adaptiveNextCheckRowTerm += ${adaptiveMinRows}L;
