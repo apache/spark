@@ -75,6 +75,7 @@ class PandasScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     ``pyspark.sql.conversion`` directly with the runner_conf-derived parameters."""
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         require_minimum_pandas_version()
@@ -149,7 +150,6 @@ class PandasScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     Arrow<->pandas conversions in ``pyspark.sql.conversion`` directly."""
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF
-    _single_udf = True
     _iter_based = True
     _fail_on_stopiteration = False
 
@@ -222,7 +222,6 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     RecordBatch each. The pandas counterpart of ArrowMapUDFHandler."""
 
     eval_type = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
-    _single_udf = True
     _iter_based = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
@@ -288,7 +287,6 @@ class PandasCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
     back to one RecordBatch. The pandas counterpart of ArrowCoGroupedMapUDFHandler."""
 
     eval_type = PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         require_minimum_pandas_version()
@@ -368,7 +366,6 @@ class PandasGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     pandas counterpart of ArrowGroupedMapIterUDFHandler."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_ITER_UDF
-    _single_udf = True
     _iter_based = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
@@ -448,7 +445,6 @@ class PandasGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     ArrowGroupedMapUDFHandler."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         require_minimum_pandas_version()
@@ -529,6 +525,7 @@ class PandasGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     ArrowGroupedAggUDFHandler."""
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         require_minimum_pandas_version()
@@ -578,7 +575,6 @@ class PandasGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     ArrowGroupedAggIterUDFHandler."""
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_PANDAS_ITER_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         require_minimum_pandas_version()
@@ -628,6 +624,7 @@ class PandasWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     converted back to Arrow. The pandas counterpart of ArrowWindowAggUDFHandler."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_PANDAS_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         require_minimum_pandas_version()
@@ -721,6 +718,7 @@ class ArrowBatchedUDFLegacyPandasHandler(BatchEvalTypeHandler["pa.RecordBatch"])
     eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
     variant_conf = "use_legacy_pandas_udf_conversion"
     variant_value = True
+    _multi_udf = True
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 

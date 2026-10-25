@@ -42,6 +42,7 @@ class BatchedUDFHandler(EvalTypeHandler[Any, Any]):
     row."""
 
     eval_type = PythonEvalType.SQL_BATCHED_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: "list[UDF]", runner_conf: "RunnerConf", eval_conf: "EvalConf") -> None:
         super().__init__(udfs, runner_conf, eval_conf)

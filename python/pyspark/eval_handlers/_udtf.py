@@ -602,7 +602,6 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
     """Base for every UDTF eval type handler; ``__init__`` creates the UDTF instance as
     ``_udtf``."""
 
-    _single_udf = True
     # Wraps the UDTF when its TABLE argument has PARTITION BY expressions.
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 

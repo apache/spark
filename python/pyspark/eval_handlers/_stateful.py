@@ -78,7 +78,6 @@ class PandasGroupedMapWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]
     into count/data/state RecordBatches."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE
-    _single_udf = True
     _iter_based = True
 
     # The output RecordBatch has three struct fields, accessed by position
@@ -421,7 +420,6 @@ class PandasTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"])
     server through a ``StatefulProcessorApiClient``."""
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
@@ -572,7 +570,6 @@ class PandasTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.Recor
     iterators of pandas DataFrames."""
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PANDAS_INIT_STATE_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pandas_version()
@@ -790,7 +787,6 @@ class RowTransformWithStateUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     through a ``StatefulProcessorApiClient``."""
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -895,7 +891,6 @@ class RowTransformWithStateInitStateUDFHandler(BatchEvalTypeHandler["pa.RecordBa
     iterators of Rows per chunk."""
 
     eval_type = PythonEvalType.SQL_TRANSFORM_WITH_STATE_PYTHON_ROW_INIT_STATE_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()

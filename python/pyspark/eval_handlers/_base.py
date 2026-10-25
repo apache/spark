@@ -159,14 +159,14 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
     # user code fails the task instead of silently ending the loop that calls the UDF.
     _fail_on_stopiteration: ClassVar[bool] = True
-    # Whether the handler takes exactly one UDF (or UDTF); __init__ then exposes it as _udf and,
-    # for a UDF, its functions as _raw_func and _func.
-    _single_udf: ClassVar[bool] = False
+    # Whether the handler takes any number of UDFs. Otherwise it takes exactly one UDF (or UDTF),
+    # which __init__ exposes as _udf and, for a UDF, its functions as _raw_func and _func.
+    _multi_udf: ClassVar[bool] = False
 
     def __init__(
         self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
-        if self._single_udf and len(udfs) != 1:
+        if not self._multi_udf and len(udfs) != 1:
             raise RuntimeError(
                 "{} takes one UDF, but got {}.".format(type(self).__name__, len(udfs))
             )
@@ -190,7 +190,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                     if self._fail_on_stopiteration
                     else profiling_func
                 )
-        if self._single_udf:
+        if not self._multi_udf:
             self._udf: Any = udfs[0]
             if self._funcs:
                 self._raw_func: Any = self._raw_funcs[0]

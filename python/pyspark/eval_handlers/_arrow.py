@@ -78,7 +78,6 @@ class ArrowCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
     declared schema."""
 
     eval_type = PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -135,7 +134,6 @@ class ArrowGroupedMapIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     to the declared schema."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_ITER_UDF
-    _single_udf = True
     _iter_based = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
@@ -207,7 +205,6 @@ class ArrowGroupedMapUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     schema."""
 
     eval_type = PythonEvalType.SQL_GROUPED_MAP_ARROW_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -275,6 +272,7 @@ class ArrowGroupedAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     coerced to the declared schema."""
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -308,7 +306,6 @@ class ArrowGroupedAggIterUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     iterator of its input columns and returns one scalar; emit one row per group."""
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_ITER_UDF
-    _single_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -345,6 +342,7 @@ class ArrowWindowAggUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch"]):
     UDF, coerced to the declared schema."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -414,6 +412,7 @@ class ArrowGroupedAggIncrementalPartialUDFHandler(BatchEvalTypeHandler["pa.Recor
     compares unequal to itself) are merged downstream."""
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_PARTIAL_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -542,6 +541,7 @@ class ArrowGroupedAggIncrementalFinalUDFHandler(GroupedEvalTypeHandler["pa.Recor
     by the operator) still produces ``finish(zero)``."""
 
     eval_type = PythonEvalType.SQL_GROUPED_AGG_ARROW_INCREMENTAL_FINAL_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -594,6 +594,7 @@ class ArrowWindowAggIncrementalUDFHandler(GroupedEvalTypeHandler["pa.RecordBatch
     intermediate buffer never leaves the worker; ``merge`` is not used here."""
 
     eval_type = PythonEvalType.SQL_WINDOW_AGG_ARROW_INCREMENTAL_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -679,7 +680,6 @@ class ArrowMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     columns on the wire and wrapped back into a single struct column."""
 
     eval_type = PythonEvalType.SQL_MAP_ARROW_ITER_UDF
-    _single_udf = True
     _iter_based = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
@@ -720,7 +720,6 @@ class ArrowScalarIterUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     result and verify the total row count matches the input."""
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_ITER_UDF
-    _single_udf = True
     _iter_based = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
@@ -776,6 +775,7 @@ class ArrowScalarUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     the result to the declared schema, and check the row count."""
 
     eval_type = PythonEvalType.SQL_SCALAR_ARROW_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
@@ -816,6 +816,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     eval_type = PythonEvalType.SQL_ARROW_BATCHED_UDF
     variant_conf = "use_legacy_pandas_udf_conversion"
     variant_value = False
+    _multi_udf = True
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 

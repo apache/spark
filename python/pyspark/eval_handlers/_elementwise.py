@@ -179,6 +179,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     per element tuple, convert the results to the declared Arrow type and re-nest them."""
 
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
+    _multi_udf = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
@@ -387,6 +388,8 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     ``array<R>`` using the input's offsets - one row in, one row out, one Python round trip per
     batch. Subclasses supply the flavor's conversions and result check."""
 
+    _multi_udf = True
+
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
 
@@ -511,7 +514,6 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     input ones. Subclasses supply the flavor's conversions and result checks.
     """
 
-    _single_udf = True
     _iter_based = True
 
     def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
