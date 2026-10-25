@@ -564,9 +564,7 @@ errors are reported and how temporary views and UDF closures are resolved. See
 
 An older client can connect to a newer server; the server keeps its RPC definitions backward
 compatible. A newer client on an older server can fail when it uses an RPC or a setting that the
-server does not have. For example, a 4.2 or later client on a 4.1 server can run SQL and read
-tables, but cannot create a DataFrame from a local list. Keep the client version at or below the
-server version, and check `spark.version` in applications that can connect to servers of different
+server does not have. Keep the client version at or below the server version, and check `spark.version` in applications that can connect to servers of different
 versions.
 
 ## Troubleshooting
