@@ -30,6 +30,14 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   unsupported-operation checks. Existing queries can still restart from their persistent
   checkpoints using the compatibility value recorded in the offset log.
 
+- Since Spark 4.4, `spark.sql.streaming.checkpoint.renamedFileCheck.enabled` is `true` by default.
+  After renaming a checkpoint file from its temporary file, Spark verifies that the renamed file
+  exists and fails the write if it does not. Previously, a rename that reported success without
+  producing the file let the batch commit with a missing state or metadata file, and the query
+  then failed on every restart. The check adds one existence call per checkpoint file written.
+  To restore the previous behavior, set `spark.sql.streaming.checkpoint.renamedFileCheck.enabled`
+  to `false`.
+
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
 - Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.

@@ -4054,11 +4054,13 @@ object SQLConf {
 
   val CHECKPOINT_RENAMEDFILE_CHECK_ENABLED =
     buildConf("spark.sql.streaming.checkpoint.renamedFileCheck.enabled")
-      .doc("When true, Spark will validate if renamed checkpoint file exists.")
+      .doc("When true, after renaming a checkpoint file from its temporary file, Spark " +
+        "verifies that the renamed file exists and fails the write if it does not, instead " +
+        "of committing a batch whose checkpoint file is missing.")
       .internal()
       .version("3.4.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   /**
    * Note: this is defined in `RocksDBConf.FORMAT_VERSION`. These two places should be updated
