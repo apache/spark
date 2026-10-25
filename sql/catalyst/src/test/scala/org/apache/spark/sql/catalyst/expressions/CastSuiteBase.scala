@@ -1728,6 +1728,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-57838: cast nanosecond timestamps at the range boundaries") {
+    // The calendar range, the int64 epoch-nanosecond limits of Parquet/Avro and the
+    // epoch-microsecond (Long) limits. Years beyond 9999 are accepted, as for the micro types.
+    Seq(
+      "0001-01-01 00:00:00" -> nanosVal(-62135596800000000L, 0),
+      "9999-12-31 23:59:59.999999999" -> nanosVal(253402300799999999L, 999),
+      "+10000-01-01 00:00:00.000000001" -> nanosVal(253402300800000000L, 1),
+      "1677-09-21 00:12:43.145224192" -> nanosVal(-9223372036854776L, 192),
+      "2262-04-11 23:47:16.854775807" -> nanosVal(9223372036854775L, 807),
+      "-290308-12-21 19:59:05.224192" -> nanosVal(Long.MinValue, 0),
+      "+294247-01-10 04:00:54.775807999" -> nanosVal(Long.MaxValue, 999)).foreach {
+      case (str, v) =>
+        checkEvaluation(cast(Literal(str), TimestampNTZNanosType(9)), v)
+        checkEvaluation(cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), UTC_OPT), v)
+        checkEvaluation(cast(Literal.create(v, TimestampNTZNanosType(9)), StringType), str)
+        checkEvaluation(
+          cast(Literal.create(v, TimestampLTZNanosType(9)), StringType, UTC_OPT), str)
+        // To and from the micro type keeps the epoch-microseconds part.
+        checkEvaluation(
+          cast(Literal.create(v, TimestampNTZNanosType(9)), TimestampNTZType), v.epochMicros)
+        checkEvaluation(
+          cast(Literal.create(v.epochMicros, TimestampNTZType), TimestampNTZNanosType(9)),
+          nanosVal(v.epochMicros, 0))
+    }
+  }
+
   test("SPARK-57323: cast between date and timestamp_ntz with nanosecond precision") {
     // NTZ casts use a fixed UTC wall-clock grid, independent of the session time zone.
     val date = LocalDate.of(2020, 1, 1)
@@ -2670,6 +2696,59 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // Pairs that involve neither a TIME source nor a TIMESTAMP_LTZ target are false.
     assert(!Cast.isTimeToTimestampLTZ(DateType, TimestampType))
     assert(!Cast.isTimeToTimestampLTZ(TimestampType, TimestampType))
+  }
+
+  test("SPARK-60179: needsTimeZone covers complex types collapsing to a string") {
+    // An LTZ leaf is rendered in the session time zone at any nesting depth.
+    Seq(
+      ArrayType(TimestampType),
+      MapType(IntegerType, TimestampType),
+      MapType(TimestampType, IntegerType),
+      new StructType().add("t", TimestampType),
+      new StructType().add("i", IntegerType).add("t", TimestampLTZNanosType(9)),
+      ArrayType(ArrayType(TimestampType)),
+      ArrayType(new StructType().add("t", TimestampType)),
+      new PythonUserDefinedType(ArrayType(TimestampType), "pyClass", "serializedClass"))
+      .foreach { from =>
+      assert(Cast.needsTimeZone(from, StringType), s"$from -> STRING")
+      // One level further out, the ARRAY/ARRAY case recurses into the pair above.
+      assert(Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
+        s"ARRAY<$from> -> ARRAY<STRING>")
+    }
+    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders at UTC.
+    Seq(
+      ArrayType(TimestampNTZType),
+      MapType(IntegerType, DateType),
+      new StructType().add("t", TimestampNTZNanosType(9)).add("d", DateType),
+      ArrayType(ArrayType(TimeType(TimeType.MAX_PRECISION))),
+      ArrayType(VariantType),
+      MapType(IntegerType, VariantType),
+      new StructType().add("v", VariantType),
+      new PythonUserDefinedType(ArrayType(TimestampNTZType), "pyClass", "serializedClass"))
+      .foreach { from =>
+      assert(!Cast.needsTimeZone(from, StringType), s"$from -> STRING")
+      assert(!Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
+        s"ARRAY<$from> -> ARRAY<STRING>")
+    }
+    // A top-level VARIANT still reads the zone, element-wise casts included.
+    assert(Cast.needsTimeZone(VariantType, StringType))
+    assert(Cast.needsTimeZone(ArrayType(VariantType), ArrayType(StringType)))
+  }
+
+  test("SPARK-60179: a complex-to-string cast needs a time zone to be resolved") {
+    val arrayOfTimestamp = Literal.create(Seq(0L), ArrayType(TimestampType))
+    // Without a time zone the cast cannot be evaluated: the leaf formatter reads `zoneId`.
+    assert(!Cast(arrayOfTimestamp, StringType).resolved)
+    assert(Cast(arrayOfTimestamp, StringType, UTC_OPT).resolved)
+    // `canonicalized` may no longer drop the zone, so two zones are not semantically equal.
+    assert(!Cast(arrayOfTimestamp, StringType, UTC_OPT)
+      .semanticEquals(Cast(arrayOfTimestamp, StringType, Option(LA.getId))))
+    checkEvaluation(Cast(arrayOfTimestamp, StringType, UTC_OPT), "[1970-01-01 00:00:00]")
+    checkEvaluation(
+      Cast(arrayOfTimestamp, StringType, Option(LA.getId)), "[1969-12-31 16:00:00]")
+    // The NTZ control renders on a fixed grid and stays resolvable without a zone.
+    val arrayOfTimestampNTZ = Literal.create(Seq(0L), ArrayType(TimestampNTZType))
+    assert(Cast(arrayOfTimestampNTZ, StringType).resolved)
   }
 
   test("cast timestamp_ntz to time") {

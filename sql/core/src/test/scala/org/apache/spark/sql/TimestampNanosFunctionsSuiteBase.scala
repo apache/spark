@@ -1080,12 +1080,13 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       assert(nanosDF(7).selectExpr("to_timestamp(ltz)", "try_to_timestamp(ltz, 'yyyy')")
         .schema.map(_.dataType) === Seq(TimestampNTZNanosType(7), TimestampNTZNanosType(7)))
     }
-    // With a precision in [7, 9], a numeric input is parsed as a string.
+    // With a format, a numeric input is parsed as a string at every precision.
     val parsedNumeric = Instant.parse("2020-01-01T08:00:00Z")
     checkAnswer(
       sql("SELECT to_timestamp_ltz(20200101, 'yyyyMMdd', 9), " +
-        "to_timestamp(20200101, 'yyyyMMdd', 8), try_to_timestamp(20200101, 'yyyyMMdd', 7)"),
-      Row(parsedNumeric, parsedNumeric, parsedNumeric))
+        "to_timestamp(20200101, 'yyyyMMdd', 8), try_to_timestamp(20200101, 'yyyyMMdd', 7), " +
+        "to_timestamp_ltz(20200101, 'yyyyMMdd', 6)"),
+      Row(parsedNumeric, parsedNumeric, parsedNumeric, Timestamp.from(parsedNumeric)))
   }
 
   test("SPARK-57836: to_timestamp* with a precision on invalid input") {

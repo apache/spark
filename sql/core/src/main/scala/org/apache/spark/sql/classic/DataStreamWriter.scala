@@ -351,7 +351,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       className = source,
       options = optionsWithClusteringColumns,
       partitionColumns = normalizedParCols.getOrElse(Nil))
-    ds.createSink(outputMode)
+    ds.createSink(outputMode, this.ds.schema)
   }
 
   /** @inheritdoc */

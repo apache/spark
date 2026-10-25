@@ -427,16 +427,7 @@ class Analyzer(
 
   def getRelationResolution: RelationResolution = relationResolution
 
-  private def toUnresolvedRelation(target: UnresolvedInsertTarget): UnresolvedRelation = {
-    val relation = withOrigin(target.origin) {
-      UnresolvedRelation(target.multipartIdentifier, target.options)
-        .requireWritePrivileges(target.writePrivileges)
-    }
-    relation.copyTagsFrom(target)
-    relation
-  }
-
-  /** Lowers a parsed INSERT enough for transaction detection to inspect its target. */
+  /** Resolves only the dynamic identifier of an INSERT so transaction detection can inspect it. */
   private[sql] def resolveUnresolvedInsert(insert: UnresolvedInsert): LogicalPlan = {
     runWithSessionConf {
       val identifierResolvedTarget = insert.table match {
@@ -446,7 +437,7 @@ class Analyzer(
       withOrigin(insert.origin) {
         identifierResolvedTarget match {
           case target: UnresolvedInsertTarget =>
-            insert.toInsertIntoStatement(toUnresolvedRelation(target))
+            insert.toInsertIntoStatement(target.toUnresolvedRelation)
           case target if !target.fastEquals(insert.table) =>
             val updated = insert.copy(table = target)
             updated.copyTagsFrom(insert)
@@ -1461,12 +1452,12 @@ class Analyzer(
     }
   }
 
-  /** Lower a parsed INSERT as soon as its target identifier expression has been evaluated. */
+  /** Lower an INSERT as soon as its target identifier expression has been evaluated. */
   object ResolveUnresolvedInsert extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
-        insert.toInsertIntoStatement(toUnresolvedRelation(target))
+        insert.toInsertIntoStatement(target.toUnresolvedRelation)
     }
   }
 
@@ -2796,6 +2787,10 @@ class Analyzer(
         resolveSubQueries(j, j)
       case tvf: UnresolvedTableValuedFunction =>
         resolveSubQueries(tvf, tvf)
+      // An inline table has no output, so its subqueries cannot reference its columns.
+      case t: UnresolvedInlineTable
+          if conf.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) =>
+        resolveSubQueries(t, t)
       case s: SupportsSubquery if s.childrenResolved =>
         resolveSubQueries(s, s)
     }
@@ -4122,8 +4117,6 @@ class Analyzer(
       joinNames: Seq[String],
       condition: Option[Expression],
       hint: JoinHint): LogicalPlan = {
-    import org.apache.spark.sql.catalyst.util._
-
     val (projectList, hiddenList, newCondition) =
       NaturalAndUsingJoinResolution.computeJoinOutputsAndNewCondition(
         left,
@@ -4136,14 +4129,12 @@ class Analyzer(
         (attributeName, keyName) => resolver(attributeName, keyName)
       )
 
-    // use Project to hide duplicated common keys
-    // propagate hidden columns from nested USING/NATURAL JOINs
-    val project = Project(projectList, Join(left, right, joinType, newCondition, hint))
-    project.setTagValue(
-      Project.hiddenOutputTag,
-      hiddenList.map(_.markAsQualifiedAccessOnly()) ++
-        project.child.metadataOutput.filter(_.qualifiedAccessOnly))
-    project
+    val join = Join(left, right, joinType, newCondition, hint)
+    NaturalAndUsingJoinResolution.buildUsingJoinProject(
+      projectList,
+      hiddenList,
+      join,
+      join.metadataOutput)
   }
 
   /**

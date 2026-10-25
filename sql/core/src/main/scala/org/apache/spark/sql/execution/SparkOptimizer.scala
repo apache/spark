@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperatio
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
-import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFs, ExtractPythonUDTFs}
+import org.apache.spark.sql.execution.python.{ExtractGroupingPythonUDFFromAggregate, ExtractPythonUDFFromAggregate, ExtractPythonUDFFromLambda, ExtractPythonUDFs, ExtractPythonUDTFs}
 
 class SparkOptimizer(
     catalogManager: CatalogManager,
@@ -87,6 +87,10 @@ class SparkOptimizer(
       PruneFilters),
     postHocOptimizationBatches,
     Batch("Extract UDFs", Once,
+      // Lift Python UDFs out of higher-order function lambdas first. A UDF in a lambda reads the
+      // lambda's variables, so the rules below can place it by the columns it really reads (e.g.
+      // above an aggregate it is applied to) only once it is an ordinary UDF over a whole array.
+      ExtractPythonUDFFromLambda,
       ExtractPythonUDFFromJoinCondition,
       // Expose window results as attributes before creating external UDF evaluation nodes.
       ExtractExternalUDFFromWindow,
@@ -94,8 +98,6 @@ class SparkOptimizer(
       ExtractPythonUDFFromAggregate,
       // This must be executed after `ExtractPythonUDFFromAggregate` and before `ExtractPythonUDFs`.
       ExtractGroupingPythonUDFFromAggregate,
-      // `ExtractPythonUDFs` first lifts Python UDFs out of higher-order function lambdas
-      // (via `ExtractPythonUDFFromLambda`) and then extracts them as ordinary top-level UDFs.
       ExtractPythonUDFs,
       ExtractPythonUDTFs,
       // The eval-python node may be between Project/Filter and the scan node, which breaks
@@ -123,13 +125,14 @@ class SparkOptimizer(
 
   override def nonExcludableRules: Seq[String] = super.nonExcludableRules ++
     Seq(
+      // A plan with a Python UDF in a higher-order function lambda passes analysis only because
+      // this rule lifts the UDF out of the lambda.
+      ExtractPythonUDFFromLambda.ruleName,
       ExtractPythonUDFFromJoinCondition.ruleName,
       ExtractPythonUDFFromAggregate.ruleName,
       ExtractGroupingPythonUDFFromAggregate.ruleName,
       ExtractExternalUDFFromWindow.ruleName,
       PlanExternalUDFs.ruleName,
-      // Non-excludable: a plan with a Python UDF in a higher-order function lambda only works
-      // because `ExtractPythonUDFs` lifts it out (via `ExtractPythonUDFFromLambda`).
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
       V2ScanRelationPushDown.ruleName,

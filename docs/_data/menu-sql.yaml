@@ -101,6 +101,8 @@
       url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
 - text: PySpark Usage Guide for Pandas with Apache Arrow
   url: sql-pyspark-pandas-with-arrow.html
+- text: In-process Python UDFs
+  url: sql-pyspark-inprocess-udf.html
 - text: Migration Guide
   url: sql-migration-guide.html
 - text: SQL Reference
@@ -110,6 +112,9 @@
       url: sql-ref-ansi-compliance.html
     - text: Data Types
       url: sql-ref-datatypes.html
+      subitems:
+        - text: Character String Types (Preview)
+          url: sql-ref-character-string-types.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html
     - text: Number Pattern
