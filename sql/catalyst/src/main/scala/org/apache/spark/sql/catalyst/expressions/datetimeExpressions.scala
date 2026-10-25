@@ -4760,9 +4760,9 @@ object Extract {
  *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
  *     between given timestamps.
  *
- * Both microsecond and nanosecond-precision timestamp types are accepted as operands. Because the
- * difference is reported on the microsecond grid in either mode, a nanosecond operand contributes
- * only its `epochMicros`; the sub-microsecond remainder is truncated.
+ * Nanosecond-precision operands are only used by the as-of join ordering distance;
+ * `NanosTimestampSubtractionCheck` rejects them anywhere else, since the interval result has
+ * microsecond precision. A nanosecond operand contributes only its `epochMicros`.
  */
 case class SubtractTimestamps(
     left: Expression,

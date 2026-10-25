@@ -9478,6 +9478,11 @@
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
         ]
       },
+      "TIMESTAMP_NANOS_SUBTRACTION" : {
+        "message" : [
+          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The day-time interval result has microsecond precision. Use `unix_nanos(end) - unix_nanos(start)` for the exact difference in nanoseconds, or cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision."
+        ]
+      },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {
         "message" : [
           "Parsing or formatting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) under the LEGACY time parser policy. Set <config> to CORRECTED."

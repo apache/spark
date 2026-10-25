@@ -158,25 +158,18 @@ SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH;
 -- legacy calendar interval is still rejected by TimestampAddInterval's type check.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
--- SPARK-57832: TIMESTAMP_NTZ(p) - TIMESTAMP_NTZ(p) yields a microsecond-grid DayTimeIntervalType.
--- Only each operand's epochMicros participates, so the sub-microsecond remainder is truncated: the
--- 789/111 sub-micro digits drop out and the difference is exactly 1 day + 0.123456 s.
+-- Subtraction with a TIMESTAMP_NTZ(p) operand is rejected: the day-time interval result only has
+-- microsecond precision. Every operand mix fails, including micro, DATE and NULL operands.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111';
--- Two values inside the same microsecond subtract to zero once the remainder is truncated.
-SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456001';
--- The subtraction is antisymmetric.
-SELECT TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
--- Mixed precision (7 vs 9) widens to the common nanos type before subtracting; the result stays on
--- the micros grid.
 SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9));
--- Mixed with a micro TIMESTAMP_NTZ operand.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-02 03:04:05';
--- A DATE operand is cast to the nanos type (midnight); the fraction below the micro grid drops.
+SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05' - TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789';
 SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
--- Pre-epoch operand exercises the negative-epoch path.
-SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789' - TIMESTAMP_NTZ '1960-01-01 00:00:00.000000999';
--- NULL operand propagates.
+SELECT DATE '2020-01-03' - TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789';
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - CAST(NULL AS timestamp_ntz(9));
+-- The exact difference in nanoseconds, and subtraction at microsecond precision after a cast.
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111');
+SELECT CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ);
 
 -- SPARK-57818: convert_timezone over nanosecond-precision TIMESTAMP_NTZ. The sub-microsecond
 -- remainder is carried through unchanged; only the whole-microsecond part shifts with the zone

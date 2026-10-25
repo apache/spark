@@ -397,6 +397,28 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
       }
     }
   }
+
+  // The as-of join orders candidates by an internal timestamp subtraction, which stays allowed for
+  // nanosecond keys even though user-written nanosecond subtraction is rejected.
+  test("DataFrame as-of join over nanosecond keys") {
+    val schema = new StructType().add("k", TimestampNTZNanosType(9)).add("v", IntegerType)
+    def df(rows: (String, Int)*): classic.DataFrame = spark.createDataFrame(
+      spark.sparkContext.parallelize(rows.map { case (k, v) => Row(LocalDateTime.parse(k), v) }),
+      schema)
+    val left = df("2020-01-01T00:00:01.000000500" -> 1)
+    val right = df("2020-01-01T00:00:00.000000100" -> 10, "2020-01-01T00:00:03.000000200" -> 20)
+    Seq("false", "true").foreach { sortMerge =>
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
+        Seq("backward" -> 10, "forward" -> 20, "nearest" -> 10).foreach {
+          case (direction, expected) =>
+            val joined = left.joinAsOf(right, left("k"), right("k"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = null, allowExactMatches = true,
+              direction = direction)
+            checkAnswer(joined.select(left("v"), right("v")), Row(1, expected))
+        }
+      }
+    }
+  }
 }
 
 // Runs the nanosecond timestamp join tests with ANSI mode enabled explicitly.
