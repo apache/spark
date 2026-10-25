@@ -1201,6 +1201,8 @@ case class CollapseCodegenStages(
     case e: LeafExpression => true
     // CodegenFallback requires the input to be an InternalRow
     case e: CodegenFallback => false
+    // A partition transform generates the code of its function call, which is not a child.
+    case t: TransformExpression => t.evaluableFunction.exists(!_.exists(e => !supportCodegen(e)))
     case _ => true
   }
 
