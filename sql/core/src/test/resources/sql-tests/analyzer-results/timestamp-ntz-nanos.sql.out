@@ -1852,106 +1852,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT percentile(c, 0.5)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "percentile(c, 0.5)"
-  } ]
-}
-
-
--- !query
-SELECT median(c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"median(c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "median(c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
 SELECT time_trunc('HOUR', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
 -- !query analysis
@@ -2167,106 +2067,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-SELECT percentile(c, 0.5)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 25,
-    "fragment" : "percentile(c, 0.5)"
-  } ]
-}
-
-
--- !query
-SELECT median(c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"median(c)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 16,
-    "fragment" : "median(c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
-SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
--- !query analysis
-org.apache.spark.sql.catalyst.ExtendedAnalysisException
-{
-  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
-  "sqlState" : "42K09",
-  "messageParameters" : {
-    "inputSql" : "\"c\"",
-    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
-    "paramIndex" : "first",
-    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
-    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
-  },
-  "queryContext" : [ {
-    "objectType" : "",
-    "objectName" : "",
-    "startIndex" : 8,
-    "stopIndex" : 53,
-    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
-  } ]
-}
-
-
--- !query
 SELECT time_trunc('HOUR', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
 -- !query analysis
@@ -2321,6 +2121,114 @@ SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
 -- !query analysis
 Project [last_day(cast(c#x as date)) AS last_day(c)#x, next_day(cast(c#x as date), MO, false) AS next_day(c, MO)#x, datediff(cast(c#x as date), cast(2019-12-31 as date)) AS datediff(c, 2019-12-31)#x, add_months(cast(c#x as date), 1) AS add_months(c, 1)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_cont(0.25) WITHIN GROUP (ORDER BY c DESC),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000400'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001000'), (NULL) AS t(c)
+-- !query analysis
+Aggregate [median(c#x) AS median(c)#x, percentile(c#x, cast(0.25 as double), 1, 0, 0, false) AS percentile(c, 0.25, 1)#x, percentile_cont(c#x, cast(0.75 as double), false) AS percentile_cont(0.75) WITHIN GROUP (ORDER BY c)#x, percentile_cont(c#x, cast(0.25 as double), true) AS percentile_cont(0.25) WITHIN GROUP (ORDER BY c DESC)#x, percentile_disc(c#x, cast(0.5 as double), false, 0, 0, false) AS percentile_disc(0.5) WITHIN GROUP (ORDER BY c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT typeof(median(c)), typeof(percentile(c, array(0.25, 0.75))),
+       typeof(percentile_disc(0.5) WITHIN GROUP (ORDER BY c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c)
+-- !query analysis
+Aggregate [typeof(median(c#x)) AS typeof(median(c))#x, typeof(percentile(c#x, cast(array(0.25, 0.75) as array<double>), 1, 0, 0, false)) AS typeof(percentile(c, array(0.25, 0.75), 1))#x, typeof(percentile_disc(c#x, cast(0.5 as double), false, 0, 0, false)) AS typeof(percentile_disc(0.5) WITHIN GROUP (ORDER BY c))#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789'),
+                             (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456791') AS t(c)
+-- !query analysis
+Aggregate [median(c#x) AS median(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999000'),
+                             (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000001') AS t(c)
+-- !query analysis
+Aggregate [median(c#x) AS median(c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT median(c), percentile(c, array(0.0, 1.0))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))),
+              (CAST('2020-01-01 12:00:00.0000004' AS timestamp_ntz(7))) AS t(c)
+-- !query analysis
+Aggregate [median(c#x) AS median(c)#x, percentile(c#x, cast(array(cast(0.0 as decimal(2,1)), 1.0) as array<double>), 1, 0, 0, false) AS percentile(c, array(0.0, 1.0), 1)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT k, median(c) OVER (PARTITION BY k)
+  FROM VALUES (1, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000001'),
+              (1, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000003'),
+              (2, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000005') AS t(k, c)
+-- !query analysis
+Project [k#x, median(c) OVER (PARTITION BY k ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
++- Project [k#x, c#x, median(c) OVER (PARTITION BY k ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x, median(c) OVER (PARTITION BY k ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x]
+   +- Window [median(c#x) windowspecdefinition(k#x, specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS median(c) OVER (PARTITION BY k ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)#x], [k#x]
+      +- Project [k#x, c#x]
+         +- SubqueryAlias t
+            +- LocalRelation [k#x, c#x]
+
+
+-- !query
+SELECT percentile(c, 0.5, f)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000001', 3),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000009', 1) AS t(c, f)
+-- !query analysis
+Aggregate [percentile(c#x, cast(0.5 as double), f#x, 0, 0, false) AS percentile(c, 0.5, f)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x, f#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000400'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001000'), (NULL) AS t(c)
+-- !query analysis
+Aggregate [median(c#x) AS median(c)#x, percentile(c#x, cast(0.25 as double), 1, 0, 0, false) AS percentile(c, 0.25, 1)#x, percentile_cont(c#x, cast(0.75 as double), false) AS percentile_cont(0.75) WITHIN GROUP (ORDER BY c)#x, percentile_disc(c#x, cast(0.5 as double), false, 0, 0, false) AS percentile_disc(0.5) WITHIN GROUP (ORDER BY c)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SELECT typeof(median(c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c)
+-- !query analysis
+Aggregate [typeof(median(c#x)) AS typeof(median(c))#x]
 +- SubqueryAlias t
    +- LocalRelation [c#x]
 

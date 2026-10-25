@@ -821,6 +821,64 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     }
   }
 
+  test("SPARK-56822: percentile family over nanosecond timestamps keeps the input type") {
+    Seq(7, 8, 9).foreach { p =>
+      val schema = new StructType()
+        .add("ntz", TimestampNTZNanosType(p))
+        .add("ltz", TimestampLTZNanosType(p))
+      // Sub-microsecond offsets that are multiples of 100ns (exact at every p) plus a NULL row,
+      // spread over several partitions so that partial buffers get merged.
+      val ldt = LocalDateTime.parse("2020-01-01T12:00:00")
+      val ins = Instant.parse("2020-01-01T12:00:00Z")
+      val data = Seq(100, 400, 1000).map(n => Row(ldt.plusNanos(n), ins.plusNanos(n))) :+
+        Row(null, null)
+      val df = spark.createDataFrame(spark.sparkContext.parallelize(data, 3), schema)
+      val exprs = Seq(
+        "median(%s)",
+        "percentile(%s, 0.25)",
+        "percentile_cont(0.75) WITHIN GROUP (ORDER BY %s)",
+        "percentile_cont(0.25) WITHIN GROUP (ORDER BY %s DESC)",
+        "percentile_disc(0.5) WITHIN GROUP (ORDER BY %s)")
+      // The interpolated 250ns is floored to 200ns at p = 7.
+      val expectedNanos = Seq(400, if (p == 7) 200 else 250, 700, 700, 400)
+      val ntzRes = df.selectExpr(exprs.map(_.format("ntz")): _*)
+      assert(ntzRes.schema.map(_.dataType) === Seq.fill(exprs.length)(TimestampNTZNanosType(p)))
+      checkAnswer(ntzRes, Row(expectedNanos.map(ldt.plusNanos(_)): _*))
+      val ltzRes = df.selectExpr(exprs.map(_.format("ltz")): _*)
+      assert(ltzRes.schema.map(_.dataType) === Seq.fill(exprs.length)(TimestampLTZNanosType(p)))
+      checkAnswer(ltzRes, Row(expectedNanos.map(ins.plusNanos(_)): _*))
+
+      // The Scala Column API agrees, also for an array of percentages.
+      val arrayRes = df.select(
+        median(col("ntz")), percentile(col("ltz"), array(lit(0.25), lit(0.75))))
+      assert(arrayRes.schema.map(_.dataType) === Seq(
+        TimestampNTZNanosType(p), ArrayType(TimestampLTZNanosType(p), containsNull = false)))
+      checkAnswer(arrayRes,
+        Row(ldt.plusNanos(400), Seq(expectedNanos(1), 700).map(ins.plusNanos(_))))
+    }
+  }
+
+  test("SPARK-56822: percentile over nanosecond timestamps interpolates exactly") {
+    def median9(values: String*): DataFrame = spark.createDataFrame(
+      spark.sparkContext.parallelize(values.map(v => Row(LocalDateTime.parse(v)))),
+      new StructType().add("c", TimestampNTZNanosType(9))).selectExpr("median(c)")
+    // Both values map to the same double, so a double interpolation can't return .123456790.
+    checkAnswer(
+      median9("2020-01-01T12:00:00.123456789", "2020-01-01T12:00:00.123456791"),
+      Row(LocalDateTime.parse("2020-01-01T12:00:00.123456790")))
+    // Pre-epoch: the midpoint -499.5ns is floored to -500ns.
+    checkAnswer(
+      median9("1969-12-31T23:59:59.999999", "1970-01-01T00:00:00.000000001"),
+      Row(LocalDateTime.parse("1969-12-31T23:59:59.999999500")))
+    // The full 0001..9999 range overflows a long in nanoseconds.
+    checkAnswer(
+      median9("0001-01-01T00:00:00", "9999-12-31T23:59:59.999999999"),
+      Row(LocalDateTime.parse("5000-07-02T11:59:59.999999999")))
+    checkAnswer(median9("2020-01-01T12:00:00.123456789"),
+      Row(LocalDateTime.parse("2020-01-01T12:00:00.123456789")))
+    checkAnswer(median9(), Row(null))
+  }
+
   test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
     // The 9-`S` pattern is a fixed-width fraction field, so it always emits 9 digits; truncating to
     // precision `p` zeros the low digits (floor); it does not drop them. The session zone is

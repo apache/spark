@@ -611,14 +611,6 @@ SELECT percentile_approx(c, 0.5)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT histogram_numeric(c, 2)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT percentile(c, 0.5)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT median(c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT time_trunc('HOUR', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT time_diff('SECOND', TIME '12:00:00', c)
@@ -638,18 +630,51 @@ SELECT percentile_approx(c, 0.5)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT histogram_numeric(c, 2)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT percentile(c, 0.5)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT median(c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
-SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
-  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT time_trunc('HOUR', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT time_diff('SECOND', TIME '12:00:00', c)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
 SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
   FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c);
+SET spark.sql.ansi.enabled=true;
+
+-- percentile / median / percentile_cont / percentile_disc over TIMESTAMP_NTZ(p) keep the input
+-- type. Interpolation is exact in nanoseconds and floored to p; percentile_disc returns an input
+-- value; NULLs are ignored.
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_cont(0.25) WITHIN GROUP (ORDER BY c DESC),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000400'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001000'), (NULL) AS t(c);
+SELECT typeof(median(c)), typeof(percentile(c, array(0.25, 0.75))),
+       typeof(percentile_disc(0.5) WITHIN GROUP (ORDER BY c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c);
+-- A sub-microsecond midpoint that a double interpolation would lose.
+SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789'),
+                             (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456791') AS t(c);
+-- Pre-epoch: the midpoint -499.5ns is floored to -500ns.
+SELECT median(c) FROM VALUES (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999000'),
+                             (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000001') AS t(c);
+-- At p=7 the midpoint .00000025 is floored to .0000002.
+SELECT median(c), percentile(c, array(0.0, 1.0))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))),
+              (CAST('2020-01-01 12:00:00.0000004' AS timestamp_ntz(7))) AS t(c);
+-- As a window function, and with a frequency column.
+SELECT k, median(c) OVER (PARTITION BY k)
+  FROM VALUES (1, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000001'),
+              (1, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000003'),
+              (2, TIMESTAMP_NTZ '2020-01-01 12:00:00.000000005') AS t(k, c);
+SELECT percentile(c, 0.5, f)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000001', 3),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000009', 1) AS t(c, f);
+-- Same results with ANSI mode off.
+SET spark.sql.ansi.enabled=false;
+SELECT median(c), percentile(c, 0.25), percentile_cont(0.75) WITHIN GROUP (ORDER BY c),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000100'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000000400'),
+              (TIMESTAMP_NTZ '2020-01-01 12:00:00.000001000'), (NULL) AS t(c);
+SELECT typeof(median(c))
+  FROM VALUES (CAST('2020-01-01 12:00:00.0000001' AS timestamp_ntz(7))) AS t(c);
 SET spark.sql.ansi.enabled=true;
