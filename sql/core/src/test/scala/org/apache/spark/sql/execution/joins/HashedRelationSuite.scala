@@ -997,6 +997,33 @@ abstract class HashedRelationSuite extends SharedSparkSession {
     map.free()
     assert(smallUmm.executionMemoryUsed === 0)
   }
+
+  test("SPARK-60541: a joined row reads a binary build column again only when the build row " +
+      "changes") {
+    // A build row stays at one address of the relation, so the joined row hands out the same
+    // array while the build row stays the same. It does so only for the ordinals it is given.
+    val toUnsafe = UnsafeProjection.create(Array[DataType](IntegerType, BinaryType, BinaryType))
+    val rows = Seq(
+      InternalRow(1, Array[Byte](1), Array[Byte](10)),
+      InternalRow(2, Array[Byte](2), Array[Byte](20))).map(toUnsafe(_).copy())
+    val relation = UnsafeHashedRelation(
+      rows.iterator, Seq(BoundReference(0, IntegerType, false)), 1, mm)
+    val keyOf = UnsafeProjection.create(Array[DataType](IntegerType))
+    val joined = new BuildBinaryReusingJoinedRow(3, Seq(1))
+    // The binary column at `ordinal` of the build row of key `k`, joined to a one-column row.
+    def binary(k: Int, ordinal: Int): Array[Byte] =
+      joined(InternalRow(0), relation.getValue(keyOf(InternalRow(k)))).getBinary(1 + ordinal)
+
+    val first = binary(1, 1)
+    assert(first.toSeq === Seq[Byte](1))
+    assert(binary(1, 1) eq first, "the same build row must give the same array")
+    assert(binary(2, 1).toSeq === Seq[Byte](2))
+    val again = binary(1, 1)
+    assert(again.toSeq === Seq[Byte](1) && !(again eq first),
+      "another build row in between must read the column again")
+    assert(!(binary(1, 2) eq binary(1, 2)), "a column of another ordinal must be read on each call")
+    relation.close()
+  }
 }
 
 class HashedRelationOnHeapSuite extends HashedRelationSuite {

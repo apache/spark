@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.debug.codegenStringSeq
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BinaryType, LongType}
@@ -359,6 +360,70 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
     val first = check.bloomFilterOf(bytes)
     assert(check.bloomFilterOf(bytes) eq first, "the same array must give the same bloom filter")
     assert(!(check.bloomFilterOf(bytes.clone()) eq first), "another array must be read again")
+  }
+
+  // The rows a hash existence join checks against the blooms of `bloomsCte`, switching between
+  // build rows. The existence join is the one of the EXISTS under the OR, and its condition is
+  // `condition` and more.
+  private def existenceJoin(hint: String, condition: String = "TRUE"): DataFrame = spark.sql(
+    bloomsCte +
+      s"""
+        |SELECT pk, x
+        |FROM VALUES (1, 10L), (2, 10L), (1, 20L), (2, 20L), (1, 11L), (1, 21L) AS p(pk, x)
+        |WHERE x = 21 OR EXISTS (SELECT /*+ $hint(blooms) */ 1 FROM blooms
+        |  WHERE pk = k AND might_contain(bf, x) AND $condition)
+        |""".stripMargin)
+
+  // Whether the generated code of the existence join of `df` that `hint` asks for reads a binary
+  // build column again only when the build row changes. None when whole-stage codegen holds no
+  // such join.
+  private def readsBuildBinaryOnce(df: DataFrame, hint: String): Option[Boolean] = {
+    val join = if (hint == "BROADCAST") "BroadcastHashJoin" else "ShuffledHashJoin"
+    codegenStringSeq(df.queryExecution.executedPlan).collectFirst {
+      case (subtree, code, _) if subtree.contains(join) && subtree.contains("ExistenceJoin") =>
+        code.contains("buildBinaryBase")
+    }
+  }
+
+  test("SPARK-60541: a hash existence join checks each row against the bloom of its build row") {
+    for {
+      hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+      conf <- codegenModes
+    } {
+      withSQLConf(conf: _*) {
+        val df = existenceJoin(hint)
+        checkAnswer(df, Seq(Row(1, 10L), Row(2, 20L), Row(1, 11L), Row(1, 21L)))
+        if (conf == codegenModes.head) {
+          assert(readsBuildBinaryOnce(df, hint) === Some(true), df.queryExecution.executedPlan)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60541: a hash join condition that reads a bloom column elsewhere too gets an " +
+      "array of its own") {
+    // The function changes the array it gets. With one array per build row, the next probe of the
+    // build row would see that change. It reads a streamed column too, so it stays in the join
+    // rather than in a filter below it.
+    withUserDefinedFunction("first_then_bump" -> true) {
+      spark.udf.register("first_then_bump", (bin: Array[Byte], x: Long) => {
+        val first = bin(0)
+        bin(0) = (bin(0) + 1).toByte
+        first + x * 0
+      })
+      for {
+        hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+        conf <- codegenModes
+      } {
+        withSQLConf(conf: _*) {
+          val df = existenceJoin(hint, "first_then_bump(bf, x) = 0")
+          checkAnswer(df, Seq(Row(1, 10L), Row(2, 20L), Row(1, 11L), Row(1, 21L)))
+          if (conf == codegenModes.head) {
+            assert(readsBuildBinaryOnce(df, hint) === Some(false), df.queryExecution.executedPlan)
+          }
+        }
+      }
+    }
   }
 
   test("Test that bloom_filter_agg produces a NULL with empty input") {
