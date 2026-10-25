@@ -615,14 +615,21 @@ Project [date_add(cast(2020-01-01 00:00:00.123456789 as date), cast(2 as int)) A
 
 
 -- !query
-SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
-       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
 -- !query analysis
-[Analyzer test output redacted due to nondeterminism]
+Project [date_add(cast(2019-12-31 20:00:00.123456789 as date), 1) AS date_add(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1)#x]
++- OneRowRelation
 
 
 -- !query
-SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
+-- !query analysis
+Project [date_sub(cast(2019-12-31 20:00:00.123456789 as date), 1) AS date_sub(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1),
        date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
@@ -635,8 +642,14 @@ SetCommand (spark.sql.session.timeZone,Some(UTC))
 
 
 -- !query
-SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
-       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
+-- !query analysis
+Project [date_add(cast(2019-12-31 20:00:00.123456789 as date), 1) AS date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
 -- !query analysis
 [Analyzer test output redacted due to nondeterminism]
 
@@ -648,9 +661,9 @@ SetCommand (spark.sql.session.timeZone,Some(America/Los_Angeles))
 
 
 -- !query
-SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1)
+SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999 UTC', 1)
 -- !query analysis
-Project [date_add(cast(1969-12-31 23:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1)#x]
+Project [date_add(cast(1969-12-31 15:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_LTZ '1969-12-31 15:59:59.999999999', 1)#x]
 +- OneRowRelation
 
 

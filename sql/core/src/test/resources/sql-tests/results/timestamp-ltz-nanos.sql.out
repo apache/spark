@@ -692,21 +692,28 @@ struct<date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', 2):date>
 
 
 -- !query
-SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
-       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
 -- !query schema
-struct<date_add(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1):date,date_add(TIMESTAMP '2019-12-31 20:00:00.123456', 1):date>
+struct<date_add(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1):date>
 -- !query output
-2020-01-01	2020-01-01
+2020-01-01
 
 
 -- !query
-SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
+-- !query schema
+struct<date_sub(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1):date>
+-- !query output
+2019-12-30
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1),
        date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
 -- !query schema
-struct<date_sub(TIMESTAMP_LTZ '2019-12-31 20:00:00.123456789', 1):date,date_sub(TIMESTAMP '2019-12-31 20:00:00.123456', 1):date>
+struct<date_add(TIMESTAMP '2019-12-31 20:00:00.123456', 1):date,date_sub(TIMESTAMP '2019-12-31 20:00:00.123456', 1):date>
 -- !query output
-2019-12-30	2019-12-30
+2020-01-01	2019-12-30
 
 
 -- !query
@@ -718,12 +725,19 @@ spark.sql.session.timeZone	UTC
 
 
 -- !query
-SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
-       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1)
 -- !query schema
-struct<date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789', 1):date,date_add(TIMESTAMP '2020-01-01 04:00:00.123456', 1):date>
+struct<date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789', 1):date>
 -- !query output
-2020-01-02	2020-01-02
+2020-01-02
+
+
+-- !query
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1)
+-- !query schema
+struct<date_add(TIMESTAMP '2020-01-01 04:00:00.123456', 1):date>
+-- !query output
+2020-01-02
 
 
 -- !query
@@ -735,9 +749,9 @@ spark.sql.session.timeZone	America/Los_Angeles
 
 
 -- !query
-SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1)
+SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999 UTC', 1)
 -- !query schema
-struct<date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1):date>
+struct<date_add(TIMESTAMP_LTZ '1969-12-31 15:59:59.999999999', 1):date>
 -- !query output
 1970-01-01
 

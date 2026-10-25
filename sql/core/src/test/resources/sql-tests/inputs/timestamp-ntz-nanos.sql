@@ -140,8 +140,8 @@ SELECT map('k', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789') :: map<string, da
 SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ntz(9), string>;
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>;
 
--- date_add / date_sub (and the dateadd alias) over TIMESTAMP_NTZ(p) cast the start to DATE like
--- the micro types, so the time of day and sub-microsecond digits never affect the result.
+-- SPARK-60543: date_add / date_sub (and the dateadd alias) over TIMESTAMP_NTZ(p) cast the start to
+-- DATE like the micro types, so the time of day and sub-microsecond digits never affect the result.
 SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1);
 SELECT date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1);
 SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ntz(7), 30);

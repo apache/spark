@@ -657,7 +657,7 @@ abstract class TypeCoercionSuiteBase extends AnalysisTest {
         Cast(timestampNTZLiteral, TimestampNTZNanosType(9)),
         Cast(ltzNanos9, TimestampNTZNanosType(9))))
 
-    // date_add/date_sub cast a nanos start to DATE, like the micro types.
+    // SPARK-60543: date_add/date_sub cast a nanos start to DATE, like the micro types.
     Seq(ntzNanos9, ltzNanos9, ntzNanos7).foreach { nanosLiteral =>
       ruleTest(rule,
         DateAdd(nanosLiteral, intLiteral),

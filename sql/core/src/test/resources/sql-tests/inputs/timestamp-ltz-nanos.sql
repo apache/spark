@@ -161,24 +161,25 @@ SELECT map('k', TIMESTAMP_LTZ '2020-01-01 12:30:15.123456789') :: map<string, da
 SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ltz(9), string>;
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ltz(9)>;
 
--- date_add / date_sub (and the dateadd alias) over TIMESTAMP_LTZ(p) cast the start to DATE in the
--- session zone like the micro type, so the sub-microsecond digits never affect the result.
+-- SPARK-60543: date_add / date_sub (and the dateadd alias) over TIMESTAMP_LTZ(p) cast the start to
+-- DATE in the session zone like the micro type, so the sub-microsecond digits never affect the
+-- result.
 SELECT date_add(TIMESTAMP_LTZ '2020-02-28 23:59:59.999999999', 1);
 SELECT date_sub(TIMESTAMP_LTZ '2020-03-01 00:00:00.000000001', 1);
 SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ltz(7), 30);
 SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ltz(8), -1);
 SELECT date_add(TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789', '2');
 -- 04:00 UTC on Jan 1 is Dec 31 in the session zone (America/Los_Angeles), as for the micro type.
-SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
-       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1);
-SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1),
        date_sub(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1);
 SET spark.sql.session.timeZone=UTC;
-SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
-       date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1);
+SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456 UTC', 1);
 SET spark.sql.session.timeZone=America/Los_Angeles;
 -- Pre-epoch value exercises the negative-epoch path.
-SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999', 1);
+SELECT date_add(TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999 UTC', 1);
 SELECT date_add(NULL :: timestamp_ltz(9), 1), date_sub(NULL :: timestamp_ltz(9), 1);
 SET spark.sql.ansi.enabled=false;
 SELECT date_add(TIMESTAMP_LTZ '2020-01-01 04:00:00.123456789 UTC', 1),
