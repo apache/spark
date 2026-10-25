@@ -1490,13 +1490,14 @@ class ArrowConvertersSuite extends SharedSparkSession {
               TimestampNanosVal.fromParts(1234567L, 712.toShort),
               TimestampNanosVal.fromParts(-1234567L, 999.toShort))
             val ctx = TaskContext.empty()
+            // A trailing null exercises the null path.
             val batchIter = ArrowConverters.toBatchIterator(
-              values.map(v => InternalRow(v)).iterator,
+              (values.map(v => InternalRow(v)) :+ InternalRow(null)).iterator,
               StructType(Seq(StructField("value", writeType))), 5, timeZoneId, true, false, ctx)
             val got = ArrowConverters.fromBatchIterator(
               batchIter, StructType(Seq(StructField("value", readType))), timeZoneId, true, false,
               ctx).map { row =>
-              readType match {
+              if (row.isNullAt(0)) null else readType match {
                 case _: TimestampNTZNanosType => row.getTimestampNTZNanos(0)
                 case _: TimestampLTZNanosType => row.getTimestampLTZNanos(0)
               }
@@ -1504,7 +1505,7 @@ class ArrowConvertersSuite extends SharedSparkSession {
             assert(got === values.map { v =>
               TimestampNanosVal.fromParts(
                 v.epochMicros, (v.nanosWithinMicro / grid * grid).toShort)
-            })
+            } :+ null)
         }
       }
     }

@@ -233,11 +233,9 @@ public class ArrowColumnVector extends ColumnVector {
     } else if (vector instanceof TimeNanoVector timeNanoVector) {
       accessor = new TimeNanoAccessor(timeNanoVector);
     } else if (vector instanceof TimeStampNanoTZVector timeStampNanoTZVector) {
-      accessor = new TimestampLTZNanosAccessor(
-        timeStampNanoTZVector, ((TimestampLTZNanosType) type).precision());
+      accessor = new TimestampLTZNanosAccessor(timeStampNanoTZVector, nanosPrecision(type));
     } else if (vector instanceof TimeStampNanoVector timeStampNanoVector) {
-      accessor = new TimestampNTZNanosAccessor(
-        timeStampNanoVector, ((TimestampNTZNanosType) type).precision());
+      accessor = new TimestampNTZNanosAccessor(timeStampNanoVector, nanosPrecision(type));
     } else if (vector instanceof MapVector mapVector) {
       accessor = new MapAccessor(mapVector);
     } else if (vector instanceof ListVector listVector) {
@@ -663,6 +661,13 @@ public class ArrowColumnVector extends ColumnVector {
     final long getLong(int rowId) {
       return accessor.get(rowId);
     }
+  }
+
+  // The vector class and its field's time zone can disagree, so accept either nanos type.
+  private static int nanosPrecision(DataType type) {
+    if (type instanceof TimestampNTZNanosType t) return t.precision();
+    if (type instanceof TimestampLTZNanosType t) return t.precision();
+    return TimestampNTZNanosType.MAX_PRECISION();
   }
 
   // Decodes a single int64 of epoch-nanoseconds back into the (epochMicros, nanosWithinMicro)

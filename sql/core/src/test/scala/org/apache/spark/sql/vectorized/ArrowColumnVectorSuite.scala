@@ -25,6 +25,7 @@ import scala.util.{Failure, Random, Success, Try, Using}
 import org.apache.arrow.memory.RootAllocator
 import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
+import org.apache.arrow.vector.types.TimeUnit
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
 import org.apache.spark.SparkFunSuite
@@ -942,6 +943,31 @@ class ArrowColumnVectorSuite extends SparkFunSuite {
       TimestampNanosVal.fromParts(123456L, 700.toShort))
 
     columnVector.close()
+    allocator.close()
+  }
+
+  test("timestamp nanos vectors whose time zone disagrees with the vector class") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("mismatch", 0, Long.MaxValue)
+    // A TZ vector without a time zone reads as NTZ; a plain vector with one reads as LTZ.
+    val tzVector = new TimeStampNanoTZVector("ts", allocator, null)
+    val ntzVector = new TimeStampNanoVector(
+      "ts", FieldType.nullable(new ArrowType.Timestamp(TimeUnit.NANOSECOND, "UTC")), allocator)
+    Seq(tzVector, ntzVector).foreach { vector =>
+      vector.allocateNew()
+      vector.setSafe(0, 123456789L)
+      vector.setValueCount(1)
+    }
+    val expected = TimestampNanosVal.fromParts(123456L, 789.toShort)
+
+    val tzColumn = new ArrowColumnVector(tzVector)
+    assert(tzColumn.dataType === TimestampNTZNanosType(9))
+    assert(tzColumn.getTimestampNTZNanos(0) === expected)
+    val ntzColumn = new ArrowColumnVector(ntzVector)
+    assert(ntzColumn.dataType === TimestampLTZNanosType(9))
+    assert(ntzColumn.getTimestampLTZNanos(0) === expected)
+
+    tzColumn.close()
+    ntzColumn.close()
     allocator.close()
   }
 
