@@ -18,15 +18,19 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import scala.annotation.tailrec
+import scala.util.Try
 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.plans.LeftSemi
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LEFT_SEMI_OR_ANTI_JOIN, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.IntegerType
 
 /**
  * Insert a runtime filter on one side of the join (we call this side the application side) if
@@ -48,11 +52,116 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
       filterCreationSide: FilterCreationSide): LogicalPlan = {
-    injectBloomFilter(
+    injectPerPartitionBloomFilter(
       filterApplicationSideKey,
-      filterApplicationSidePlan,
-      filterCreationSide
-    )
+      injectBloomFilter(filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide),
+      filterCreationSide)
+  }
+
+  /**
+   * Adds a left semi join of the application side with one bloom filter per partition key of the
+   * creation side, when a V2 scan under each side reports a keyed partitioning by the same
+   * transform of its join key. The condition matches the partition keys of the two sides, so each
+   * row is checked against the bloom filter of its own partition key. The application side gets
+   * the transform as a column to join on, and loses it again above the semi join.
+   *
+   * The bloom filter `injectBloomFilter` added to `planWithBloomFilter`, if any, stays. A key gets
+   * one per-partition bloom filter at most, so a later join on the same key adds none.
+   */
+  private def injectPerPartitionBloomFilter(
+      filterApplicationSideKey: Expression,
+      planWithBloomFilter: LogicalPlan,
+      filterCreationSide: FilterCreationSide): LogicalPlan = {
+    if (!conf.runtimeBloomFilterPerPartitionEnabled) {
+      return planWithBloomFilter
+    }
+    val transforms = for {
+      application <- partitionTransform(filterApplicationSideKey, planWithBloomFilter)
+      creation <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
+      if application.isSameFunction(creation)
+    } yield (application, creation)
+    transforms match {
+      case Some((application, creation))
+          if !hasPerPartitionBloomFilter(planWithBloomFilter, filterApplicationSideKey) =>
+        val creationPartitionKey = Alias(creation, "partitionKey")()
+        val bloomFilter = Alias(new BloomFilterAggregate(
+          new XxHash64(Seq(filterCreationSide.key))).toAggregateExpression(), "bloomFilter")()
+        val aggregate = ColumnPruning(PullOutGroupingExpressions(Aggregate(
+          Seq(creation), Seq(creationPartitionKey, bloomFilter), filterCreationSide.plan)))
+        if (aggregate.containsPattern(PYTHON_UDF)) {
+          planWithBloomFilter
+        } else {
+          perPartitionSemiJoin(planWithBloomFilter, filterApplicationSideKey, application,
+            aggregate, creationPartitionKey.toAttribute, bloomFilter.toAttribute)
+        }
+      case _ => planWithBloomFilter
+    }
+  }
+
+  /**
+   * `plan` in a left semi join with `creation`. The join checks each row's `key` against the bloom
+   * filter of the row's partition key. `transform` of `key` gives that partition key, and
+   * `creation` gives the bloom filter `bloomFilter` of each partition key `creationPartitionKey`.
+   */
+  private def perPartitionSemiJoin(
+      plan: LogicalPlan,
+      key: Expression,
+      transform: TransformExpression,
+      creation: LogicalPlan,
+      creationPartitionKey: Attribute,
+      bloomFilter: Attribute): LogicalPlan = {
+    val partitionKey = Alias(transform.copy(children = Seq(key)), "partitionKey")()
+    val condition = And(
+      EqualTo(partitionKey.toAttribute, creationPartitionKey),
+      BloomFilterMightContain(bloomFilter, new XxHash64(Seq(key))))
+    val semiJoin = Join(
+      Project(plan.output :+ partitionKey, plan),
+      creation,
+      LeftSemi,
+      Some(condition),
+      JoinHint(None, Some(HintInfo(strategy = Some(SHUFFLE_HASH)))))
+    Project(plan.output, semiJoin)
+  }
+
+  /**
+   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`.
+   * Defined when:
+   *  - V2 bucketing is on;
+   *  - `key` is one of the scan's columns, followed down through `plan`;
+   *  - the scan reports a keyed partitioning by a single transform of that column;
+   *  - the transform is deterministic, since both sides of the semi join evaluate it;
+   *  - Spark can evaluate the transform as is.
+   *
+   * The semi join is correct whatever lies between `plan` and the scan, since it checks each row
+   * against the bloom filter of its own partition key. It matches the partition keys with `=`, so
+   * it relies on the transform returning null only for a null key, which the join above never
+   * matches. Whether it pays off is up to `ChoosePerPartitionBloomFilters`.
+   */
+  private def partitionTransform(
+      key: Expression,
+      plan: LogicalPlan): Option[TransformExpression] = {
+    if (!conf.v2BucketingEnabled) {
+      None
+    } else {
+      findExpressionAndTrackLineageDown(key, plan).flatMap {
+        case (column: Attribute, scan: DataSourceV2ScanRelation) =>
+          scan.keyGroupedPartitioning.collect {
+            case Seq(t @ TransformExpression(_, Seq(child), _, _))
+                if child.semanticEquals(column) && t.function.isDeterministic &&
+                  evaluableAsIs(t) =>
+              t.copy(children = Seq(key))
+          }
+        case _ => None
+      }
+    }
+  }
+
+  // Whether Spark can build `t`'s function call and evaluate it as is. Nothing casts the
+  // arguments, so the function must ask for exactly their types.
+  private def evaluableAsIs(t: TransformExpression): Boolean = {
+    val argumentTypes = t.numBucketsOpt.map(_ => IntegerType).toSeq ++ t.children.map(_.dataType)
+    t.function.inputTypes().toSeq == argumentTypes &&
+      Try(t.resolvedFunction).toOption.flatten.isDefined
   }
 
   private def injectBloomFilter(
@@ -396,17 +505,24 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
-  private def hasBloomFilter(plan: LogicalPlan, key: Expression): Boolean = {
-    plan.exists {
-      case Filter(condition, _) =>
-        splitConjunctivePredicates(condition).exists {
-          case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
-            if valueExpression.fastEquals(key) => true
-          case _ => false
-        }
+  private def checksBloomFilter(condition: Expression, key: Expression): Boolean =
+    splitConjunctivePredicates(condition).exists {
+      case BloomFilterMightContain(_, XxHash64(Seq(valueExpression), _))
+        if valueExpression.fastEquals(key) => true
       case _ => false
     }
+
+  private def hasBloomFilter(plan: LogicalPlan, key: Expression): Boolean = plan.exists {
+    case Filter(condition, _) => checksBloomFilter(condition, key)
+    case _ => false
   }
+
+  // Whether `plan` already holds a semi join with a per-partition bloom filter of `key`.
+  private def hasPerPartitionBloomFilter(plan: LogicalPlan, key: Expression): Boolean =
+    plan.containsPattern(LEFT_SEMI_OR_ANTI_JOIN) && plan.exists {
+      case Join(_, _, LeftSemi, Some(condition), _) => checksBloomFilter(condition, key)
+      case _ => false
+    }
 
   private def tryInjectRuntimeFilter(plan: LogicalPlan): LogicalPlan = {
     var filterCounter = 0
@@ -436,13 +552,16 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                 newLeft = injectFilter(l, newLeft, creationSide)
               }
             }
-            // Did we actually inject on the left? If not, try on the right
+            // Did we actually inject a bloom filter of the whole creation side on the left? If not,
+            // try on the right
             // Check if:
             // 1. The current join type supports prune the right side with runtime filter
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the right key yet
-            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
+            if ((newLeft.fastEquals(oldLeft) ||
+                (conf.runtimeBloomFilterPerPartitionEnabled && !hasBloomFilter(newLeft, l))) &&
+              canPruneRight(joinType) &&
               (hasShuffle || probablyHasShuffle(right)) && !hasBloomFilter(newRight, r)) {
               extractBeneficialFilterCreatePlan(right, left, r, l).foreach { creationSide =>
                 newRight = injectFilter(r, newRight, creationSide)
