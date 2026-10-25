@@ -92,16 +92,16 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @classmethod
     def _grouped_handler(cls, handler_cls, udf, arg_offsets, runner_conf=None):
-        """Build a grouped/cogrouped-map handler. As from ``read_single_udf``, ``func`` is
-        wrapped (losing the signature) while ``raw_func`` keeps it."""
+        """Build a grouped/cogrouped-map handler. The function the handler wraps loses its
+        signature, so the handler reads it from the record's ``raw_func``."""
         return handler_cls(
             udfs=[
                 UDF(
-                    func=lambda *a: udf(*a),
                     raw_func=udf,
                     args_offsets=arg_offsets,
                     kwargs_offsets={},
                     return_type=cls._GROUPED_RETURN_TYPE,
+                    result_id=0,
                 )
             ],
             runner_conf=runner_conf or RunnerConf({}),
@@ -115,13 +115,13 @@ class PandasEvalTypeHandlerTestCase(PySparkBaseTestCase):
 
     @staticmethod
     def _udf(func, return_type=None, args=(0,), kwargs=None):
-        """A ``UDF`` record for a pandas UDF."""
+        """A ``UDF`` record for a pandas UDF, as the worker builds it."""
         return UDF(
-            func=func,
             raw_func=func,
             args_offsets=list(args),
             kwargs_offsets=dict(kwargs or {}),
             return_type=return_type or LongType(),
+            result_id=0,
         )
 
     @staticmethod

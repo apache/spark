@@ -589,6 +589,21 @@ private[hive] class HiveClientImpl(
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
   }
 
+  override def validateTable(table: CatalogTable): Unit = withHiveState {
+    val hiveTable = toHiveTable(table, Some(userName))
+    // These are the checks of `Hive.createTable` before it calls Hive metastore. Like it, wrap
+    // their errors in `HiveException`.
+    try {
+      if (hiveTable.getCols.isEmpty || hiveTable.getSd.getColsSize == 0) {
+        // `Hive.createTable` gets the columns from the SerDe here, e.g., for an Avro table.
+        hiveTable.getDeserializer
+      }
+      hiveTable.checkValidity(conf)
+    } catch {
+      case NonFatal(e) => throw new HiveException(e)
+    }
+  }
+
   override def dropTable(
       dbName: String,
       tableName: String,

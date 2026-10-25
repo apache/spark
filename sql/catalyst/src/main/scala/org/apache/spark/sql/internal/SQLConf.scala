@@ -4670,9 +4670,10 @@ object SQLConf {
   val ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS =
     buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minRows")
       .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
-        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Setting this to 0 " +
-        "disables the periodic evaluation. The ratio may still be evaluated when the aggregation " +
-        "map is about to spill.")
+        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The ratio is also " +
+        "evaluated when the aggregation map is about to spill, but only once the current map " +
+        "has processed at least this many rows. Setting this to 0 disables the periodic " +
+        "evaluation, leaving only the evaluation when the map is about to spill.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -5548,7 +5549,9 @@ object SQLConf {
         "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
         "the number of records is limited when sending it to the downstream operator. This is " +
         "used to avoid large batches being sent to the downstream operator including " +
-        "the columnar-based operator implemented by third-party libraries.")
+        "the columnar-based operator implemented by third-party libraries. " +
+        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that take " +
+        "columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .intConf
@@ -5564,7 +5567,8 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record.")
+        "Spark will create a batch with one record. applyInPandasWithState, Arrow Python " +
+        "UDTFs and Arrow Python UDFs that take columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -7491,6 +7495,17 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL =
+    buildConf("spark.sql.legacy.variantPathBackslashAsLiteral")
+      .internal()
+      .doc("When true, backslashes in quoted Variant path keys are treated as literal " +
+        "characters, restoring the behavior before Spark 4.4. When false, quoted keys decode " +
+        "recognized JSONPath escape sequences.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val VARIANT_ALLOW_READING_SHREDDED =
     buildConf("spark.sql.variant.allowReadingShredded")

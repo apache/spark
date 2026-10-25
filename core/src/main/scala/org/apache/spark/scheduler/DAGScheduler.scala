@@ -1436,18 +1436,9 @@ private[spark] class DAGScheduler(
     val consumerRDDs = new HashSet[RDD[_]]            // RDDs that READ a pipelined shuffle
     val narrowChildren = new HashMap[RDD[_], ListBuffer[RDD[_]]]
     val reliablyCheckpointed = new HashSet[RDD[_]]     // RDDs with a reliable checkpoint pending
-    var hasNonDefaultResourceProfile = false          // any member RDD with a non-default RP
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
       if (rdd.checkpointData.exists(_.isInstanceOf[ReliableRDDCheckpointData[_]])) {
         reliablyCheckpointed += rdd
-      }
-      // An RDD's EFFECTIVE profile is its explicit one, or the default when unset. The slot check
-      // measures capacity against the default profile (see rejectUnadmittablePipelinedGroup), so
-      // the whole group must run on the default profile; any explicit non-default profile on a
-      // member makes the group span profiles (against the default the rest use) and is rejected.
-      val rp = rdd.getResourceProfile()
-      if (rp != null && rp.id != ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID) {
-        hasNonDefaultResourceProfile = true
       }
       rdd.dependencies.foreach {
         case pd: PipelinedShuffleDependency[_, _, _] =>
@@ -1478,6 +1469,19 @@ private[spark] class DAGScheduler(
     // profile -- that both spans profiles (against the default the other members use) and would be
     // admitted against the wrong (default) capacity pool. This is a real check, not just a
     // documented assumption: nothing else enforces it.
+    //
+    // Check only the members' within-stage chains, rooted at the result stage and at each
+    // pipelined producer, the only stages this job runs. A materialized regular prefix (see
+    // JobShuffleShape) never runs, so its profile is not a member's. An RDD's EFFECTIVE profile is
+    // its explicit one, or the default when unset.
+    val usesDefaultProfile = (r: RDD[_]) => {
+      val rp = r.getResourceProfile()
+      rp == null || rp.id == ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    }
+    val memberVisited = new HashSet[RDD[_]]
+    val hasNonDefaultResourceProfile = (Iterator.single(finalRDD) ++ producerRoots).exists {
+      root => !traverseParentRDDsWithinStage(root, usesDefaultProfile, memberVisited)
+    }
     if (hasNonDefaultResourceProfile) {
       throw pipelinedUnsupportedError(
         "a pipelined group member with a non-default resource profile (the whole group must run " +
@@ -2819,6 +2823,18 @@ private[spark] class DAGScheduler(
       listener.jobFailed(new SparkException(
         "A pipelined shuffle dependency cannot be submitted as a map-stage job: it has no durable " +
           "map output to produce statistics from. This is not supported."))
+      return
+    }
+    // A map-stage job also runs its missing ancestor stages, and submitStage co-schedules a
+    // pipelined producer with the stage reading it, but none of handleJobSubmitted's pipelined
+    // setup applies here (shape check, gang admission, idiom checks, run epoch, group-atomic
+    // failure). A pipelined shuffle anywhere below `dependency` is the pipelined-below-regular
+    // shape that handleJobSubmitted rejects, so reject it here too, before any stage is created.
+    if (rddGraphHasPipelinedDependency(dependency.rdd)) {
+      val e = pipelinedUnsupportedError("a map-stage job that depends on a pipelined shuffle")
+      logWarning(log"Rejecting map-stage job ${MDC(JOB_ID, jobId)}: unsupported " +
+        log"pipelined-shuffle idiom", e)
+      listener.jobFailed(e)
       return
     }
     // Submitting this map stage might still require the creation of some parent stages, so make

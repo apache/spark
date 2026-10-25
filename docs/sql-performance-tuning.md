@@ -200,6 +200,9 @@ queue behind it and flushed only after it drains, so a duplicate of a key alread
 merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
 `first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
 again right before the aggregation map would spill, in which case the spill is skipped entirely.
+Because pass-through cannot be reversed, the evaluation before a spill also waits until the current
+map has processed `minRows` rows, so a map that fills sooner spills as usual instead of committing
+the task on a small sample.
 
 Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
 pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
@@ -208,8 +211,8 @@ on until a spill restarts the accounting; conversely, a distinct-heavy prefix ca
 pass-through early and keep it tripped even where the rest of the input would aggregate well. To
 catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
 the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
-To avoid committing the task to pass-through on the latter, raise `minRows` so the periodic
-evaluations start later.
+To avoid committing the task to pass-through on the latter, raise `minRows` so the evaluations
+start later.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -227,12 +230,13 @@ evaluations start later.
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minRows</code></td>
     <td>100000</td>
     <td>
-      The number of rows between periodic compaction-ratio evaluations. Setting this to
-      <code>0</code> disables the periodic evaluation. The ratio may still be evaluated when the
-      aggregation map is about to spill. A larger value also delays the periodic evaluations, so
-      when one of them trips pass-through the frozen map tends to hold more rows; the frozen map
-      stays resident until its output is drained, so a larger value raises that transient memory
-      peak.
+      The number of rows between periodic compaction-ratio evaluations. The ratio is also evaluated
+      when the aggregation map is about to spill, but only once the current map has processed at
+      least this many rows. Setting this to <code>0</code> disables the periodic evaluation, leaving
+      only the evaluation when the map is about to spill. A larger value also delays the
+      evaluations, so when one of them trips pass-through the frozen map tends to hold more rows;
+      the frozen map stays resident until its output is drained, so a larger value raises that
+      transient memory peak.
     </td>
     <td>4.4.0</td>
   </tr>

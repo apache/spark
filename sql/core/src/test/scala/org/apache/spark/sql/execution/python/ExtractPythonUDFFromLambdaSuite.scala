@@ -22,8 +22,8 @@ import org.apache.spark.sql.{AnalysisException, QueryTest}
 import org.apache.spark.sql.catalyst.expressions.{ArraysZip, LambdaFunction, Literal,
   NamedArgumentExpression, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, ArrowEvalPython, Join}
-import org.apache.spark.sql.functions.{array_sort, col, collect_list, forall, lit, map_filter,
-  map_zip_with, transform, transform_keys, transform_values, when, zip_with}
+import org.apache.spark.sql.functions.{array_sort, col, collect_list, filter, forall, lit,
+  map_filter, map_zip_with, transform, transform_keys, transform_values, when, zip_with}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePointUDT, SharedSparkSession}
 import org.apache.spark.sql.types.{ArrayType, IntegerType, MapType, StringType}
@@ -201,6 +201,17 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
     assert(liftedUDFs(df).size == 4)
   }
 
+  test("SPARK-60508: calls capturing different lambda variables are lifted distinctly") {
+    // `f(filter(c, y -> y < a))` and `f(filter(c, y -> y < b))` differ only in the lambda variable
+    // they capture, so keying them by canonical form must not merge them into one lifted call.
+    val df = Seq((Seq(1, 2), Seq(10, 20), Seq(0, 5, 15))).toDF("l", "r", "c").select(
+      zip_with(col("l"), col("r"), (a, b) =>
+        pythonUDF(filter(col("c"), y => y < a)) || pythonUDF(filter(col("c"), y => y < b)))
+        .as("res"))
+    assert(udfsInsideLambda(df).isEmpty)
+    assert(liftedUDFs(df).size == 2)
+  }
+
   test("transform_values whose result type equals the key type replaces values, not keys") {
     // SPARK-27052: dispatch is by concrete function, not result type. For map<string, string>,
     // transform_values' lambda also returns string, which must not be treated as new keys.
@@ -264,6 +275,32 @@ class ExtractPythonUDFFromLambdaSuite extends QueryTest with SharedSparkSession 
           transform(col("arr"), x => pythonUDF(x).cast("int"))) + i).as("r"))
     assert(udfsInsideLambda(df).isEmpty)
     assert(liftedUDFs(df).size == 1)
+  }
+
+  test("SPARK-60509: lifted UDFs of different nesting depths are not chained") {
+    // `transform(values, x -> transform(f(x), y -> g(y)))`: `f(x)` is the inner function's
+    // argument, so it lifts to depth 1 over `values`, while `g` lifts onto `f(x)` and then again
+    // onto `values`, ending at depth 2 over `f`'s lifted result. A chain `g(f(...))` runs in the
+    // worker as one function under the outer UDF's depth, so `g` must instead be evaluated by a
+    // later operator over `f`'s result column.
+    val f = UserDefinedPythonFunction("f", new DummyUDF, ArrayType(IntegerType),
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val g = UserDefinedPythonFunction("g", new DummyUDF, IntegerType,
+      PythonEvalType.SQL_BATCHED_UDF, udfDeterministic = true)
+    val df = arrayDF.select(transform(col("values"), x => transform(f(x), y => g(y))).as("r"))
+    assert(udfsInsideLambda(df).isEmpty)
+    // `collect` is pre-order, so the upper operator comes first.
+    val evals = df.queryExecution.optimizedPlan.collect { case a: ArrowEvalPython => a }
+    assert(evals.map(_.udfs.map(u => u.name -> u.elementwiseNestingDepth)) ==
+      Seq(Seq("g" -> 2), Seq("f" -> 1)))
+    assert(evals.head.udfs.head.children == evals.last.resultAttrs)
+
+    // Lifted UDFs of the same depth are still chained, here both at depth 2.
+    val sameDepth = Seq(Seq(Seq(1, 2), Seq(3))).toDF("values")
+      .select(transform(col("values"), row => transform(row, x => g(g(x)))).as("r"))
+    val lifted = liftedUDFs(sameDepth)
+    assert(lifted.map(_.elementwiseNestingDepth).toSet == Set(2))
+    assert(lifted.exists(_.children.exists(_.isInstanceOf[PythonUDF])))
   }
 
   test("a lambda with no Python UDF is left unchanged") {
