@@ -26,6 +26,7 @@ from abc import ABCMeta, abstractmethod
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Optional
 
+from pyspark.errors import PySparkRuntimeError
 from pyspark.eval_handlers._typing import (
     UDF,
     UDTF,
@@ -40,7 +41,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.util import fail_on_stopiteration
+from pyspark.util import PythonEvalType, fail_on_stopiteration
 
 if TYPE_CHECKING:
     import pyarrow as pa  # noqa: F401  # only in the batch category's forward-ref subscript
@@ -163,8 +164,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self, udfs: "list[UDF] | list[UDTF]", runner_conf: "RunnerConf", eval_conf: "EvalConf"
     ) -> None:
         if not self._multi_udf and len(udfs) != 1:
-            raise RuntimeError(
-                "{} takes one UDF, but got {}.".format(type(self).__name__, len(udfs))
+            raise PySparkRuntimeError(
+                errorClass="WRONG_NUM_UDFS",
+                messageParameters={"expected": self._expected_udf(), "num_udfs": str(len(udfs))},
             )
         self._udfs: list[Any] = udfs
         self._runner_conf = runner_conf
@@ -190,6 +192,20 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
             self._udf_desc: UDF = udfs[0]
             self._raw_func: Any = self._raw_funcs[0]
             self._func: Callable[..., Any] = self._funcs[0]
+
+    def _expected_udf(self) -> str:
+        """What a single-UDF handler takes, as named when it is given another number of UDFs:
+        its eval type without the ``SQL_`` prefix and ``_UDF`` suffix, e.g. ``MAP_ARROW_ITER
+        UDF``."""
+        name = next(
+            (
+                k
+                for k, v in vars(PythonEvalType).items()
+                if k.startswith("SQL_") and v == self.eval_type
+            ),
+            type(self).__name__,
+        )
+        return "{} UDF".format(name.removeprefix("SQL_").removesuffix("_UDF"))
 
     def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is

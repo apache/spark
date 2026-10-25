@@ -1300,6 +1300,11 @@
       "Function `<func_name>` should take at least <num_cols> columns."
     ]
   },
+  "WRONG_NUM_UDFS": {
+    "message": [
+      "One <expected> expected, but got <num_udfs>."
+    ]
+  },
   "ZERO_INDEX": {
     "message": [
       "Index must be non-zero."

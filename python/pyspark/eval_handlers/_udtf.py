@@ -605,6 +605,9 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
     # Wraps the UDTF when its TABLE argument has PARTITION BY expressions.
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
 
+    def _expected_udf(self) -> str:
+        return "UDTF"
+
     def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         """Create, as ``_udtf``, the instance of the UDTF's class (wrapped in
         ``partition_wrapper`` when its TABLE argument has PARTITION BY expressions, its

@@ -40,7 +40,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
 )
 from pyspark.sql.types import LongType
-from pyspark.testing.utils import PySparkBaseTestCase
+from pyspark.testing.utils import PySparkBaseTestCase, PySparkErrorTestUtils
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -276,7 +276,7 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
-class HandlerUDFsTests(PySparkBaseTestCase):
+class HandlerUDFsTests(PySparkErrorTestUtils, PySparkBaseTestCase):
     class _Handler(BatchEvalTypeHandler["pa.RecordBatch"]):
         _multi_udf = True
 
@@ -347,11 +347,35 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         self.assertEqual(handler._func(1), 2)
         for udfs in ([], [self._udf(f), self._udf(f)]):
             with self.subTest(num_udfs=len(udfs)):
-                with self.assertRaisesRegex(RuntimeError, "_Single takes one UDF, but got"):
+                with self.assertRaises(PySparkRuntimeError) as cm:
                     _Single(udfs, RunnerConf({}), None)
+                self.check_error(
+                    exception=cm.exception,
+                    errorClass="WRONG_NUM_UDFS",
+                    messageParameters={"expected": "_Single UDF", "num_udfs": str(len(udfs))},
+                )
 
         handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)
         self.assertFalse(hasattr(handler, "_udf_desc"))
+
+    def test_single_udf_count_error_names_eval_type(self):
+        for eval_type, expected in (
+            (PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF, "COGROUPED_MAP_ARROW UDF"),
+            (
+                PythonEvalType.SQL_GROUPED_MAP_PANDAS_UDF_WITH_STATE,
+                "GROUPED_MAP_PANDAS_UDF_WITH_STATE UDF",
+            ),
+            (PythonEvalType.SQL_TABLE_UDF, "UDTF"),
+        ):
+            handler_cls = _eval_type_handlers[eval_type][1][None]
+            with self.subTest(handler=handler_cls.__name__):
+                with self.assertRaises(PySparkRuntimeError) as cm:
+                    handler_cls([self._udf(str), self._udf(str)], RunnerConf({}), None)
+                self.check_error(
+                    exception=cm.exception,
+                    errorClass="WRONG_NUM_UDFS",
+                    messageParameters={"expected": expected, "num_udfs": "2"},
+                )
 
     def test_multi_udf_per_handler(self):
         multi = {
