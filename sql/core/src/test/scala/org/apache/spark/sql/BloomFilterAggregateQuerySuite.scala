@@ -361,6 +361,23 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
     assert(!(check.bloomFilterOf(bytes.clone()) eq first), "another array must be read again")
   }
 
+  test("SPARK-60541: a hash semi join checks each row against the bloom of its build row") {
+    def query(hint: String): String = bloomsCte +
+      s"""
+        |SELECT /*+ $hint(blooms) */ pk, x
+        |FROM VALUES (1, 10L), (2, 10L), (1, 20L), (2, 20L), (1, 11L) AS p(pk, x)
+        |LEFT SEMI JOIN blooms ON pk = k AND might_contain(bf, x)
+        |""".stripMargin
+    for {
+      hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+      conf <- codegenModes
+    } {
+      withSQLConf(conf: _*) {
+        checkAnswer(spark.sql(query(hint)), Seq(Row(1, 10L), Row(2, 20L), Row(1, 11L)))
+      }
+    }
+  }
+
   test("Test that bloom_filter_agg produces a NULL with empty input") {
     checkAnswer(
       spark.sql("""SELECT bloom_filter_agg(cast(id as long)) from range(1, 1)"""),

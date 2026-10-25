@@ -61,6 +61,21 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       buildRow: Option[String]): (String, String, Seq[ExprCode]) = {
     val buildSideRow = buildRow.getOrElse(ctx.freshName("buildRow"))
     val buildVars = genOneSideJoinVars(ctx, buildSideRow, buildPlan, setDefaultValue = false)
+    getJoinCondition(ctx, conditionExpr, streamVars, streamPlan, buildPlan, buildSideRow, buildVars)
+  }
+
+  /**
+   * Generate the (non-equi) condition used to filter joined rows from an explicit expression,
+   * over the given variables of the build side row `buildSideRow`.
+   */
+  protected def getJoinCondition(
+      ctx: CodegenContext,
+      conditionExpr: Expression,
+      streamVars: Seq[ExprCode],
+      streamPlan: SparkPlan,
+      buildPlan: SparkPlan,
+      buildSideRow: String,
+      buildVars: Seq[ExprCode]): (String, String, Seq[ExprCode]) = {
     // We want to evaluate the passed streamVars. However, evaluation modifies the contained
     // ExprCode instances, which may surprise the caller to this method (in particular,
     // full outer join will want to evaluate streamVars in a different scope than the
