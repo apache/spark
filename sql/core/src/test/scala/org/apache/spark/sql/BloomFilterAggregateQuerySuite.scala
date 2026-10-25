@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{BinaryType, LongType}
 import org.apache.spark.tags.ExtendedSQLTest
 
 /**
@@ -273,31 +273,13 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
       context = ExpectedContext(fragment = "might_contain(NULL, 0.1)", start = 7, stop = 30))
   }
 
-  test("Test that might_contain errors out non-constant Bloom filter") {
-    val exception1 = intercept[AnalysisException] {
-      spark.sql("""
-                  |SELECT might_contain(cast(a as binary), cast(5 as long))
-                  |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)""".stripMargin)
-    }
+  test("Test that might_contain errors out a correlated Bloom filter subquery") {
     checkError(
-      exception = exception1,
-      condition = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
-      parameters = Map(
-        "sqlExpr" -> "\"might_contain(CAST(a AS BINARY), CAST(5 AS BIGINT))\"",
-        "functionName" -> "`might_contain`",
-        "actual" -> "\"CAST(a AS BINARY)\""),
-      context = ExpectedContext(
-        fragment = "might_contain(cast(a as binary), cast(5 as long))",
-        start = 8,
-        stop = 56))
-
-    val exception2 = intercept[AnalysisException] {
-      spark.sql("""
-                  |SELECT might_contain((select cast(a as binary)), cast(5 as long))
-                  |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)""".stripMargin)
-    }
-    checkError(
-      exception = exception2,
+      exception = intercept[AnalysisException] {
+        spark.sql("""
+                    |SELECT might_contain((select cast(a as binary)), cast(5 as long))
+                    |FROM values (cast(1 as string)), (cast(2 as string)) as t(a)""".stripMargin)
+      },
       condition = "DATATYPE_MISMATCH.BLOOM_FILTER_BINARY_OP_WRONG_TYPE",
       parameters = Map(
         "sqlExpr" -> "\"might_contain(scalarsubquery(a), CAST(5 AS BIGINT))\"",
@@ -323,6 +305,60 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
         |X'0000000200000005000000000000000343A2EC6EA8C117E2D3CDB767296B144FC5BFBCED9737F267',
         |cast(201 as long))""".stripMargin),
       Row(false))
+  }
+
+  // Whole-stage codegen, expression codegen alone, and no codegen at all.
+  private val codegenModes = Seq(
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"),
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"),
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString))
+
+  // One bloom per key, of the values 10 and 11 for key 1, and of 20 and 21 for key 2.
+  private val bloomsCte =
+    """
+      |WITH blooms AS (
+      |  SELECT k, bloom_filter_agg(v) AS bf
+      |  FROM VALUES (1, 10L), (1, 11L), (2, 20L), (2, 21L) AS t(k, v)
+      |  GROUP BY k)
+      |""".stripMargin
+
+  test("SPARK-60541: might_contain reads a bloom filter from a column") {
+    // The blooms joined to the values of both keys, so the expression reads more than one bloom.
+    // A null value makes it null.
+    val query = bloomsCte +
+      """
+        |SELECT k, x, might_contain(bf, x), might_contain(bf, NULL)
+        |FROM blooms
+        |JOIN VALUES (1, 10L), (2, 10L), (1, 20L), (2, 20L), (1, 21L) AS p(pk, x) ON k = pk
+        |""".stripMargin
+    codegenModes.foreach { conf =>
+      withSQLConf(conf: _*) {
+        checkAnswer(spark.sql(query), Seq(
+          Row(1, 10L, true, null), Row(2, 10L, false, null), Row(1, 20L, false, null),
+          Row(2, 20L, true, null), Row(1, 21L, false, null)))
+      }
+    }
+  }
+
+  test("SPARK-60541: might_contain takes an aggregate as its bloom filter") {
+    // `CollapseProject` inlines `bf`, so the bloom is the aggregate itself.
+    codegenModes.foreach { conf =>
+      withSQLConf(conf: _*) {
+        checkAnswer(spark.sql(bloomsCte + "SELECT k, might_contain(bf, 10L) FROM blooms"),
+          Seq(Row(1, true), Row(2, false)))
+      }
+    }
+  }
+
+  test("SPARK-60541: might_contain reads a bloom filter again only for another array") {
+    val bytes =
+      spark.sql(bloomsCte + "SELECT bf FROM blooms WHERE k = 1").head().getAs[Array[Byte]](0)
+    val check = BloomFilterMightContain(
+      BoundReference(0, BinaryType, nullable = true), BoundReference(1, LongType, nullable = true))
+    val first = check.bloomFilterOf(bytes)
+    assert(check.bloomFilterOf(bytes) eq first, "the same array must give the same bloom filter")
+    assert(!(check.bloomFilterOf(bytes.clone()) eq first), "another array must be read again")
   }
 
   test("Test that bloom_filter_agg produces a NULL with empty input") {
