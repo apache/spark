@@ -39,6 +39,8 @@ import org.apache.spark.util.ArrayImplicits._
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
 
+  private val catalogIdentifierResolution = new CatalogIdentifierResolution(catalogManager)
+
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
     // yet. We need to resolve `UnresolvedIdentifier` for variable commands specially.
@@ -163,13 +165,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       }
       AttributeReference(col.name, dataType, col.nullable, col.metadata)()
     }
-    if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
-      val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
-      ResolvedIdentifier(FakeSystemCatalog, ident, columnOutput)
-    } else {
-      val CatalogAndIdentifier(catalog, identifier) = nameParts
-      ResolvedIdentifier(catalog, identifier, columnOutput)
-    }
+    catalogIdentifierResolution.resolveIdentifier(nameParts, allowTemp, columnOutput)
   }
 
   private def rejectTimeTravelOptionsForWrite(

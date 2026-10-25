@@ -25,7 +25,7 @@ import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.PythonUDF.{correctEvalType, isScalarPythonUDF}
+import org.apache.spark.sql.catalyst.expressions.PythonUDF.{chainsInWorker, correctEvalType, isScalarPythonUDF}
 import org.apache.spark.sql.catalyst.expressions.SubqueryExpression.hasCorrelatedSubquery
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
@@ -1407,9 +1407,11 @@ object ConvertToCatalyst extends Rule[LogicalPlan] {
         // preserve the UDF batch pipeline (e.g. an outer UDF that could not be
         // transpiled wrapping one that could).
         //
+        // An in-process UDF never chains with worker UDFs, so it has no pipeline to preserve.
+        //
         // A conditional branch is not treated like a lambda, on purpose: the column stands, which
         // makes the argument eager, and the interpreted UDF is eager there too. See `transpile.py`.
-        expression.mapChildren(applyExpr(_, parentIsUdf = isScalarPythonUDF(expression),
+        expression.mapChildren(applyExpr(_, parentIsUdf = chainsInWorker(expression),
           preEvaluate, inLambda || expression.isInstanceOf[LambdaFunction]))
     }
   }
@@ -1679,7 +1681,7 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
       // Extend the set of types with the new types found in the current project node
       case p: Project =>
         pythonUDFEvalTypesInUpperProjects ++ p.projectList.flatMap(_.collect {
-          case udf: PythonUDF if isScalarPythonUDF(udf) =>
+          case udf: PythonUDF if chainsInWorker(udf) =>
             correctEvalType(udf, pythonUDFArrowFallbackOnUDT)
         }).toSet
 
@@ -2551,7 +2553,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)
@@ -2973,6 +2975,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
  * And also pushes down the join filter, where the `condition` can be evaluated using only the
  * attributes of the left or right side of sub query when applicable.
  *
+ * Also pushes the safe predicates through an [[AsOfJoin]]
+ *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
 object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
@@ -3088,6 +3092,40 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
+      }
+    // Left-side WHERE predicate can run before the ASOF join, but a right-side one cannot
+    case f @ Filter(filterCondition, j: AsOfJoin) =>
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
+        split(splitConjunctivePredicates(filterCondition), j.left, j.right)
+      if (leftFilterConditions.isEmpty) {
+        f
+      } else {
+        val newJoin = j.copy(left = Filter(leftFilterConditions.reduceLeft(And), j.left))
+        (rightFilterConditions ++ commonFilterCondition).
+          reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      }
+
+    // Right-side ON predicates can filter the right input first.
+    // Left-side ON predicates can filter the left input only for an inner join
+    // because a left outer join keeps every left row.
+    case j: AsOfJoin =>
+      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+        split(j.condition.map(splitConjunctivePredicates).getOrElse(Nil), j.left, j.right)
+      val (pushedLeftConditions, keptLeftConditions) = j.joinType match {
+        case Inner => (leftJoinConditions, Nil)
+        case LeftOuter => (Nil, leftJoinConditions)
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      if (pushedLeftConditions.isEmpty && rightJoinConditions.isEmpty) {
+        j
+      } else {
+        val newLeft = pushedLeftConditions.
+          reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left)
+        val newRight = rightJoinConditions.
+          reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right)
+        j.copy(left = newLeft, right = newRight,
+          condition = (keptLeftConditions ++ commonJoinCondition).reduceLeftOption(And))
       }
   }
 }

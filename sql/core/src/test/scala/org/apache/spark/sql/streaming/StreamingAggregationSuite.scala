@@ -1273,7 +1273,7 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
   }
 
   // Append mode is the one mode that drives the operator's eviction path: a windowed grouping key
-  // is emitted only once the watermark passes it, via EvictionIterator (which removes in hasNext).
+  // is emitted only once the watermark passes it, via EvictionIterator.
   // Mirrors the stateStoreSave Append test above so the streamline operator is held to the same
   // watermark/eviction behaviour.
   testWithAllStateVersions("streamline aggregation: append mode emits windows past the watermark",

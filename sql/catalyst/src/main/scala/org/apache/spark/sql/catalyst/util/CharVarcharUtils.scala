@@ -209,6 +209,30 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   }
 
   /**
+   * True if a CHAR/VARCHAR map key is not a valid identity key: CHAR(n) must be exactly n
+   * characters (shorter keys fail too); VARCHAR(n) must be at most n. STRING and other
+   * key types never violate. Avro map-key checks use this; JSON/XML keep local checks.
+   */
+  def charVarcharMapKeyViolatesLength(key: UTF8String, keyType: DataType): Boolean = {
+    keyType match {
+      case c: CharType => key.numChars() != c.length
+      case v: VarcharType => key.numChars() > v.length
+      case _ => false
+    }
+  }
+
+  /**
+   * Caps a map key echoed in an error so a long user-supplied name cannot blow the message.
+   */
+  def truncateMapKeyForError(key: UTF8String, maxChars: Int = 128): UTF8String = {
+    if (key != null && key.numChars() > maxChars) {
+      UTF8String.concat(key.substring(0, maxChars), UTF8String.fromString("..."))
+    } else {
+      key
+    }
+  }
+
+  /**
    * Returns an expression to apply write-side string length check for the given expression. A
    * string value can not exceed N characters if it's written into a CHAR(N)/VARCHAR(N)
    * column/field.

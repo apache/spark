@@ -191,7 +191,10 @@ class ArrowWriterSuite extends SparkFunSuite {
       TimestampNanosVal.fromParts(-1234567L, 13.toShort),
       // large positive/negative epoch-nanoseconds within the representable range
       fromEpochNanos(9000000000000000000L),
-      fromEpochNanos(-9000000000000000000L))
+      fromEpochNanos(-9000000000000000000L),
+      // the Arrow limits: the int64 minimum itself is NaT in pandas (see the test below)
+      fromEpochNanos(Long.MaxValue),
+      fromEpochNanos(Long.MinValue + 1))
 
     def check(dt: DataType, timeZoneId: String, grid: Int): Unit = {
       val schema = new StructType().add("value", dt, nullable = true)
@@ -230,13 +233,32 @@ class ArrowWriterSuite extends SparkFunSuite {
       val schema = new StructType().add("value", dt, nullable = true)
       val writer = ArrowWriter.create(schema, timeZoneId)
       // epochMicros past the int64 epoch-nanosecond range overflows when packed, but still
-      // renders as a valid Instant/LocalDateTime in the error message.
-      val tooLarge = TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort)
-      val e = intercept[SparkArithmeticException] {
-        writer.write(InternalRow(tooLarge))
+      // renders as a valid Instant/LocalDateTime in the error message. One nanosecond past either
+      // limit overflows too.
+      Seq(
+        TimestampNanosVal.fromParts(Long.MaxValue / 1000L + 1L, 0.toShort),
+        TimestampNanosVal.fromParts(Long.MaxValue / 1000L, 808.toShort),
+        TimestampNanosVal.fromParts(Long.MinValue / 1000L - 1L, 191.toShort)).foreach { v =>
+        val e = intercept[SparkArithmeticException] {
+          writer.write(InternalRow(v))
+        }
+        assert(e.getCondition === "DATETIME_OVERFLOW")
+        assert(e.getMessage.contains("Arrow INT64"))
       }
-      assert(e.getCondition === "DATETIME_OVERFLOW")
-      assert(e.getMessage.contains("Arrow INT64"))
+      // The int64 minimum is rejected too: pandas/numpy read it as NaT.
+      val int64Min = TimestampNanosVal.fromParts(Long.MinValue / 1000L - 1L, 192.toShort)
+      val rendered = dt match {
+        case _: TimestampNTZNanosType => "1677-09-21T00:12:43.145224192"
+        case _ => "1677-09-21T00:12:43.145224192Z"
+      }
+      checkError(
+        exception = intercept[SparkArithmeticException] {
+          writer.write(InternalRow(int64Min))
+        },
+        condition = "DATETIME_OVERFLOW",
+        parameters = Map("operation" ->
+          (s"write the timestamp value $rendered as Arrow INT64 epoch-nanoseconds " +
+            "(supported range: 1677-09-21T00:12:43.145224193Z to 2262-04-11T23:47:16.854775807Z)")))
       writer.root.close()
     }
 
