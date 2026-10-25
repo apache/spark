@@ -503,4 +503,78 @@ class AutoCdcReservedColumnMaterializationSuite
         s"downstream $seqField ${copy.mkString(",")} != target ${target.mkString(",")}")
     }
   }
+
+  test("materialization preserves a user COMMENT on a declared reserved metadata column") {
+    // A declared schema may list the engine-owned reserved metadata column to attach metadata such
+    // as a COMMENT. reconcileReservedField builds the materialized column from the declared field,
+    // substituting only the engine's type and nullability, so the comment must survive onto the
+    // created target rather than be dropped.
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(AutoCdcReservedNames.cdcMetadataColName, scd1MetadataType, nullable = true,
+        "cdc bookkeeping")
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable(
+        "target",
+        catalog = Some(catalog),
+        database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")))
+    }
+    runPipeline(ctx)
+
+    val metaField = spark.table(s"$catalog.$namespace.target").schema
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+    assert(metaField.getComment().contains("cdc bookkeeping"),
+      "the declared COMMENT on the reserved metadata column should survive materialization, got " +
+        metaField.getComment())
+  }
+
+  test("materialization appends engine nested fields a declared reserved column omits") {
+    // A declared reserved metadata column may list only some of the engine's nested fields.
+    // reconcileReservedStruct appends the omitted ones so the created target carries the full
+    // engine-owned struct the AUTO CDC MERGE writes.
+    val partialMetadata = new StructType()
+      .add(Scd1BatchProcessor.cdcUpsertSequenceFieldName, LongType)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("version", LongType, nullable = false)
+      .add(AutoCdcReservedNames.cdcMetadataColName, partialMetadata)
+
+    val stream = MemoryStream[(Int, Long)]
+    stream.addData((1, 5L))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable(
+        "target",
+        catalog = Some(catalog),
+        database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(
+        name = "auto_cdc_flow",
+        target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+        keys = Seq("id"),
+        sequencing = functions.col("version")))
+    }
+    runPipeline(ctx)
+
+    val metaStruct = spark.table(s"$catalog.$namespace.target").schema
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+      .dataType.asInstanceOf[StructType]
+    assert(
+      metaStruct.fieldNames.toSet == Set(
+        Scd1BatchProcessor.cdcUpsertSequenceFieldName,
+        Scd1BatchProcessor.cdcDeleteSequenceFieldName),
+      "materialization should append the omitted engine nested field, got " +
+        metaStruct.fieldNames.mkString(", "))
+  }
 }

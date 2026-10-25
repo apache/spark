@@ -186,20 +186,30 @@ private[pipelines] object AutoCdcReservedNames {
     declared.foreach { df =>
       engine.find(ef => resolver(df.name, ef.name)).foreach { ef =>
         val col = Some(reservedColumn.map(c => s"$c.${df.name}").getOrElse(df.name))
-        (df.dataType, ef.dataType) match {
-          case (ds: StructType, es: StructType) =>
-            validateReservedLevel(tableName, col, ds.fields.toSeq, es.fields.toSeq, resolver)
-          case (da: ArrayType, ea: ArrayType) =>
-            (da.elementType, ea.elementType) match {
-              case (ds: StructType, es: StructType) =>
-                validateReservedLevel(tableName, col, ds.fields.toSeq, es.fields.toSeq, resolver)
-              case _ =>
-            }
-          case _ =>
-        }
+        validateReservedType(tableName, col, df.dataType, ef.dataType, resolver)
       }
     }
   }
+
+  // Descend a matched reserved field's type to validate its nested fields: a struct checks its
+  // fields one level down, and an array recurses into its element type so the struct inside an
+  // arbitrarily nested sequencing type (e.g. `ARRAY<ARRAY<STRUCT<...>>>`) is still reached. This
+  // mirrors how `reconcileReservedType` descends, so validation rejects exactly the nested shapes
+  // reconciliation would otherwise carry into the target. Any other type has no reserved nested
+  // field to check.
+  private def validateReservedType(
+      tableName: String,
+      reservedColumn: Option[String],
+      declared: DataType,
+      engine: DataType,
+      resolver: Resolver): Unit =
+    (declared, engine) match {
+      case (ds: StructType, es: StructType) =>
+        validateReservedLevel(tableName, reservedColumn, ds.fields.toSeq, es.fields.toSeq, resolver)
+      case (da: ArrayType, ea: ArrayType) =>
+        validateReservedType(tableName, reservedColumn, da.elementType, ea.elementType, resolver)
+      case _ =>
+    }
 
   /**
    * Reconcile a declared reserved field against its engine-owned counterpart: keep the declared

@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.pipelines.graph
 
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
@@ -29,7 +29,8 @@ import org.apache.spark.sql.pipelines.autocdc.{
 }
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, TestGraphRegistrationContext}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DataType, IntegerType, LongType, StringType,
+  StructField, StructType}
 
 /**
  * Tests for `GraphValidations.validateUserSpecifiedSchemas`, which requires a table's
@@ -88,7 +89,8 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   private def autoCdcGraph(
       flowName: String,
       declaredSchema: Option[StructType],
-      scdType: ScdType = ScdType.Type1): DataflowGraph = {
+      scdType: ScdType = ScdType.Type1,
+      sequencing: Column = functions.col("version")): DataflowGraph = {
     val ctx = new TestGraphRegistrationContext(spark)
     ctx.registerTable("target", specifiedSchema = declaredSchema)
     ctx.registerFlow(AutoCdcFlow(
@@ -101,7 +103,7 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
       origin = QueryOrigin.empty,
       changeArgs = ChangeArgs(
         keys = Seq(UnqualifiedColumnName(Seq("id"))),
-        sequencing = functions.col("version"),
+        sequencing = sequencing,
         columnSelection = None,
         deleteCondition = None,
         storedAsScdType = scdType)))
@@ -111,8 +113,9 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
   /** The full inferred AUTO CDC output schema (data columns plus the reserved metadata column). */
   private def autoCdcInferredSchema(
       flowName: String,
-      scdType: ScdType = ScdType.Type1): StructType =
-    autoCdcGraph(flowName, declaredSchema = None, scdType)
+      scdType: ScdType = ScdType.Type1,
+      sequencing: Column = functions.col("version")): StructType =
+    autoCdcGraph(flowName, declaredSchema = None, scdType, sequencing)
       .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
 
   private def validateGraph(graph: DataflowGraph): DataflowGraph =
@@ -321,5 +324,44 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     val ex = intercept[AnalysisException](
       validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema))))
     assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_NESTED_FIELD")
+  }
+
+  test("a declared reserved metadata column with an unknown nested field under consecutive " +
+    "array levels is rejected for an AUTO CDC flow") {
+    // AUTO CDC supports a sequencing expression whose type nests a struct under more than one array
+    // level, e.g. ARRAY<ARRAY<STRUCT<ordinal: BIGINT>>>. Validation must descend through every
+    // array level, matching reconcileReservedType, so a bogus field in the innermost struct is
+    // rejected up front instead of being reconciled into the target, where the SCD1 MERGE would
+    // then fail on the incompatible sequencing type.
+    val arraySeq = functions.expr("array(array(named_struct('ordinal', version)))")
+    val meta = autoCdcInferredSchema("target", sequencing = arraySeq).fields
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+    val metaStruct = meta.dataType.asInstanceOf[StructType]
+
+    // The array levels from `dt` down to the first struct, or None if it holds no nested struct.
+    def arrayDepthToStruct(dt: DataType): Option[Int] = dt match {
+      case a: ArrayType => arrayDepthToStruct(a.elementType).map(_ + 1)
+      case _: StructType => Some(0)
+      case _ => None
+    }
+    // Guard against a vacuous pass: the engine must really nest a struct under >= 2 array levels
+    // here, otherwise this would exercise the already-covered single-array path.
+    val seqField = metaStruct.fields.find(f => arrayDepthToStruct(f.dataType).exists(_ >= 2))
+      .getOrElse(fail(s"expected a struct nested under >= 2 array levels in ${metaStruct.sql}"))
+
+    // Declare the same column with a bogus field added to that innermost struct.
+    def addBogus(dt: DataType): DataType = dt match {
+      case a: ArrayType => a.copy(elementType = addBogus(a.elementType))
+      case s: StructType => s.add("bogus", LongType)
+      case other => other
+    }
+    val mutatedMeta = meta.copy(dataType = StructType(metaStruct.fields.map { f =>
+      if (f.name == seqField.name) f.copy(dataType = addBogus(f.dataType)) else f
+    }))
+    val schema = StructType(dataSchema.fields :+ mutatedMeta)
+
+    val ex = intercept[AnalysisException](
+      validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema), sequencing = arraySeq)))
+    assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_NESTED_FIELD")
   }
 }
