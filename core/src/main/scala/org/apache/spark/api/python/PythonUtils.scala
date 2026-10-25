@@ -200,9 +200,9 @@ private[spark] object PythonUtils extends Logging {
 
   /**
    * Checks whether `pythonExec` can run Arrow-optimized Python UDFs, that is, whether it has
-   * PyArrow at the version PySpark requires, and pandas as well when the legacy pandas conversion
-   * path is enabled. A Python client runs the same check before it creates such a UDF, see
-   * `_create_py_udf` in `pyspark.sql.udf`.
+   * PyArrow at the version PySpark requires, and pandas too if `requirePandas`, which the legacy
+   * pandas conversion needs. A Python client runs a similar check before it creates such a UDF,
+   * see `_create_py_udf` in `pyspark.sql.udf`, where it always requires pandas.
    *
    * It runs `pythonExec` with the environment, Python path and working directory that
    * `PythonWorkerFactory` gives a Python worker launched with `envVars`.
@@ -213,23 +213,18 @@ private[spark] object PythonUtils extends Logging {
   private[spark] def checkArrowOptimization(
       pythonExec: String,
       envVars: Map[String, String],
-      timeoutMs: Long = PythonWorkerFactory.PROCESS_WAIT_TIMEOUT_MS,
-      requirePandas: Boolean = false): Option[String] = {
+      requirePandas: Boolean = false,
+      timeoutMs: Long = PythonWorkerFactory.PROCESS_WAIT_TIMEOUT_MS): Option[String] = {
     // Exits with 3 only when PyArrow, or pandas when required, is missing or too old, so that no
     // other failure, such as PySpark not being importable, is taken for that.
-    val imports = if (requirePandas) {
-      "require_minimum_pandas_version, require_minimum_pyarrow_version"
-    } else {
+    val checks = (if (requirePandas) Seq("require_minimum_pandas_version") else Nil) :+
       "require_minimum_pyarrow_version"
-    }
-    val pandasCheck = if (requirePandas) "require_minimum_pandas_version()" else ""
     val code =
       s"""
         |import sys
-        |from pyspark.sql.pandas.utils import $imports
+        |from pyspark.sql.pandas.utils import ${checks.mkString(", ")}
         |try:
-        |    $pandasCheck
-        |    require_minimum_pyarrow_version()
+        |    ${checks.map(_ + "()").mkString("; ")}
         |except ImportError as e:
         |    print(e)
         |    sys.exit(3)
@@ -254,14 +249,15 @@ private[spark] object PythonUtils extends Logging {
         s"read stdout for $pythonExec", process.getInputStream, appendToOutput)
       if (!process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
         throw new SparkException(
-          s"Checking PyArrow in $pythonExec did not finish within $timeoutMs ms")
+          s"The Arrow optimization check in $pythonExec did not finish within $timeoutMs ms")
       }
       reader.join(timeoutMs)
       process.exitValue() match {
         case 0 => None
         case 3 => Some(output.toString.trim)
         case exitCode =>
-          throw new SparkException(s"Checking PyArrow in $pythonExec exited with code $exitCode")
+          throw new SparkException(
+            s"The Arrow optimization check in $pythonExec exited with code $exitCode")
       }
     } finally {
       process.destroyForcibly()

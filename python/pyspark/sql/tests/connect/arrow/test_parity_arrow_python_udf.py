@@ -154,8 +154,11 @@ class ArrowPythonUDFServerFallbackTests(ReusedConnectTestCase):
             self.assertIn("ArrowEvalPython", result._explain_string())
 
     def test_falls_back_without_pandas_in_legacy_mode(self):
-        with self._not_installed_on_server("pandas"), self.sql_conf(
-            {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"}
+        with (
+            self._not_installed_on_server("pandas"),
+            self.sql_conf(
+                {"spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled": "true"}
+            ),
         ):
 
             @udf("int")

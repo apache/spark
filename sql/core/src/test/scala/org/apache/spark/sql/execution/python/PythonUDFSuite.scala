@@ -364,17 +364,11 @@ class PythonUDFSuite extends SharedSparkSession {
     assume(shouldTestPandasUDFs)
     withPythonModules() { envVars =>
       assert(PythonUtils.checkArrowOptimization(pythonExec, envVars).isEmpty)
-      assert(PythonUtils.checkArrowOptimization(
-        pythonExec,
-        envVars,
-        requirePandas = true).isEmpty)
+      assert(PythonUtils.checkArrowOptimization(pythonExec, envVars, requirePandas = true).isEmpty)
     }
     withPythonModules("pandas" -> notInstalled("pandas")) { envVars =>
       assert(PythonUtils.checkArrowOptimization(pythonExec, envVars).isEmpty)
-      val reason = PythonUtils.checkArrowOptimization(
-        pythonExec,
-        envVars,
-        requirePandas = true)
+      val reason = PythonUtils.checkArrowOptimization(pythonExec, envVars, requirePandas = true)
       assert(reason.exists(_.startsWith("[PACKAGE_NOT_INSTALLED] Pandas >= ")))
     }
   }

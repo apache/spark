@@ -21,7 +21,7 @@ Upgrading PySpark
 
 Upgrading from PySpark 4.3 to 4.4
 ---------------------------------
-* In Spark 4.4, Spark Connect falls back to a regular Python UDF when the server's Python cannot run an Arrow-optimized Python UDF because PyArrow is unavailable, or because pandas is unavailable while legacy pandas conversion is enabled, instead of failing on an Arrow-optimized Python UDF (the default since Spark 4.2). It logs a warning on the server. Like Spark Classic, it checks the Python on the driver, so if only the executors have the required packages installed, these UDFs now run as regular Python UDFs. To keep them Arrow-optimized, install the required packages on the driver as well.
+* In Spark 4.4, Spark Connect falls back to a regular Python UDF when the server's Python does not have PyArrow installed, instead of failing on an Arrow-optimized Python UDF (the default since Spark 4.2), and logs a warning on the server. With ``spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled`` enabled, it also falls back when the server's Python does not have pandas installed. Like Spark Classic, it checks the Python on the driver, so if only the executors have these packages installed, Arrow-optimized Python UDFs now run as regular Python UDFs. To keep them Arrow-optimized, install the packages on the driver as well.
 
 Upgrading from PySpark 4.2 to 4.3
 ---------------------------------

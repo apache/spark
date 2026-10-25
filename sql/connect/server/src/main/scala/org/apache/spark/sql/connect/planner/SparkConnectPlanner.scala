@@ -80,7 +80,6 @@ import org.apache.spark.sql.execution.stat.StatFunctions
 import org.apache.spark.sql.execution.streaming.operators.stateful.flatmapgroupswithstate.GroupStateImpl.groupStateTimeoutFromString
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.expressions.{Aggregator, ReduceAggregator, SparkUserDefinedFunction, UserDefinedAggregator, UserDefinedFunction}
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StatefulProcessor, StatefulProcessorWithInitialState, StreamingQuery, StreamingQueryListener, StreamingQueryProgress, Trigger}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -2357,15 +2356,17 @@ class SparkConnectPlanner(
    * Falls back to a regular Python UDF when the Python that runs an Arrow-optimized one cannot
    * run it, as a Python client does before it creates the UDF, see `_create_py_udf` in
    * `pyspark.sql.udf`. A Spark Connect client checks its own Python rather than the one that runs
-   * the UDF, so the server checks again. It checks once per session for each Python executable
-   * and environment, and keeps the UDF Arrow-optimized if the check cannot run.
+   * the UDF, so the server checks again. It checks once per session for each Python executable,
+   * environment and pandas requirement, and keeps the UDF Arrow-optimized if the check cannot
+   * run.
    */
   private def correctPythonEvalType(evalType: Int, function: SimplePythonFunction): Int = {
     if (evalType == PythonEvalType.SQL_ARROW_BATCHED_UDF) {
       val conf = session.sessionState.conf
       // The executable and environment that the Python UDF runners launch workers with.
       val pythonExec = conf.pysparkWorkerPythonExecutable.getOrElse(function.pythonExec)
-      val requirePandas = conf.getConf(SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED)
+      // Arrow-optimized Python UDFs need pandas only with the legacy pandas conversion.
+      val requirePandas = conf.legacyPandasConversionUDF
       // An invalid environment fails the worker launch with the reason, so it is left to that.
       val canRunArrow = Try(PythonWorkerEnvironment.mergeValidated(function.envVars, conf))
         .map(_.asScala.toMap)
@@ -2386,10 +2387,7 @@ class SparkConnectPlanner(
       envVars: Map[String, String],
       requirePandas: Boolean): Boolean = {
     try {
-      PythonUtils.checkArrowOptimization(
-          pythonExec,
-          envVars,
-          requirePandas = requirePandas) match {
+      PythonUtils.checkArrowOptimization(pythonExec, envVars, requirePandas) match {
         case Some(reason) =>
           logWarning(log"Arrow optimization failed to enable because the server-side Python " +
             log"does not have the required packages installed. " +
