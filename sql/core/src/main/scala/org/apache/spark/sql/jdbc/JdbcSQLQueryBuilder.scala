@@ -216,6 +216,25 @@ class JdbcSQLQueryBuilder(dialect: JdbcDialect, options: JDBCOptions) {
     this
   }
 
+  def withExistenceJoin(
+      left: JdbcSQLQueryBuilder,
+      right: JdbcSQLQueryBuilder,
+      leftSideQualifier: String,
+      rightSideQualifier: String,
+      columns: Array[String],
+      joinType: String,
+      joinCondition: String): JdbcSQLQueryBuilder = {
+    columnList = columns.mkString(",")
+    joinQuery = Some(
+      s"""(
+         |SELECT ${columns.mkString(",")} FROM
+         |(${left.build()}) $leftSideQualifier
+         |WHERE $joinType (SELECT 1 FROM (${right.build()}) $rightSideQualifier
+         |WHERE $joinCondition)
+         |) ${JoinPushdownAliasGenerator.getSubqueryQualifier}""".stripMargin)
+    this
+  }
+
   // If join has been pushed down, reuse join query as a subquery. Otherwise, fallback to
   // what is provided in options.
   protected final def tableOrQuery: String = joinQuery.getOrElse(options.tableOrQuery)

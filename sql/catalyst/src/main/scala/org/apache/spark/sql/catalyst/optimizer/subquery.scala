@@ -27,7 +27,7 @@ import org.apache.spark.sql.catalyst.expressions.ScalarSubquery._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils._
 import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.optimizer.RewriteCorrelatedScalarSubquery.splitSubquery
-import org.apache.spark.sql.catalyst.planning.PhysicalAggregation
+import org.apache.spark.sql.catalyst.planning.{PhysicalAggregation, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
@@ -43,6 +43,34 @@ import org.apache.spark.util.Utils
  * This file defines optimization rules related to subqueries.
  */
 
+object RewriteExistsSubquery extends Rule[LogicalPlan] with PredicateHelper {
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    def canRewrite(e: Exists): Boolean = e.isCorrelated && e.joinCond.nonEmpty &&
+      !e.joinCond.exists(SubqueryExpression.hasSubquery) &&
+      !e.plan.containsPattern(PLAN_EXPRESSION) && (e.plan match {
+        case PhysicalOperation(_, _, _: LeafNode) => true
+        case _ => false
+      })
+
+    if (!conf.dataSourceV2JoinPushdown) {
+      plan
+    } else {
+      plan.transformUpWithPruning(_.containsPattern(EXISTS_SUBQUERY)) {
+        case filter @ Filter(condition, child)
+            if !child.containsPattern(PLAN_EXPRESSION) &&
+              splitConjunctivePredicates(condition).exists {
+                case e: Exists => canRewrite(e)
+                case Not(e: Exists) => canRewrite(e)
+                case _ => false
+              } && splitConjunctivePredicates(condition).forall {
+                case e: Exists => canRewrite(e)
+                case Not(e: Exists) => canRewrite(e)
+                case other => !SubqueryExpression.hasSubquery(other)
+              } => RewritePredicateSubquery(filter)
+      }
+    }
+  }
+}
 
 /**
  * This rule rewrites predicate sub-queries into left semi/anti joins. The following predicates
