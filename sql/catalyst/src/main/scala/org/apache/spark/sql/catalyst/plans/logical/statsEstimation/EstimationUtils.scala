@@ -26,6 +26,22 @@ import org.apache.spark.sql.types.{DecimalType, _}
 
 object EstimationUtils {
 
+  /**
+   * The maximum size in bytes used to bound an estimated size. Operators such as joins multiply
+   * their children's sizes, so the estimate can grow without limit when a plan repeatedly combines
+   * its own output (e.g. a sequence of self-joins). Left unbounded, the backing `BigInt` keeps
+   * growing until its arithmetic overflows (SPARK-52163). We cap the estimate at `Long.MaxValue`
+   * (8 EiB), which is far larger than any physical dataset.
+   */
+  val MAX_SIZE_IN_BYTES: BigInt = BigInt(Long.MaxValue)
+
+  /** Caps the size in bytes and row count of the given statistics at [[MAX_SIZE_IN_BYTES]]. */
+  def capStats(stats: Statistics): Statistics = {
+    stats.copy(
+      sizeInBytes = stats.sizeInBytes.min(MAX_SIZE_IN_BYTES),
+      rowCount = stats.rowCount.map(_.min(MAX_SIZE_IN_BYTES)))
+  }
+
   /** Check if each plan has rowCount in its statistics. */
   def rowCountsExist(plans: LogicalPlan*): Boolean =
     plans.forall(_.stats.rowCount.isDefined)
