@@ -159,8 +159,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
     # user code fails the task instead of silently ending the loop that calls the UDF.
     _fail_on_stopiteration: ClassVar[bool] = True
-    # Whether the handler takes any number of UDFs. Otherwise it takes exactly one UDF (or UDTF),
-    # which __init__ exposes as _udf_desc and, for a UDF, its functions as _raw_func and _func.
+    # Whether the handler takes any number of UDFs. Otherwise it takes exactly one UDF or UDTF:
+    # __init__ exposes a UDF as _udf_desc and its functions as _raw_func and _func, and
+    # UDTFHandlerBase exposes a UDTF as _udtf_desc.
     _multi_udf: ClassVar[bool] = False
 
     def __init__(
@@ -190,11 +191,10 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
                     if self._fail_on_stopiteration
                     else profiling_func
                 )
-        if not self._multi_udf:
-            self._udf_desc: Any = udfs[0]
-            if self._funcs:
-                self._raw_func: Any = self._raw_funcs[0]
-                self._func: Callable[..., Any] = self._funcs[0]
+        if not self._multi_udf and isinstance(udfs[0], UDF):
+            self._udf_desc: UDF = udfs[0]
+            self._raw_func: Any = self._raw_funcs[0]
+            self._func: Callable[..., Any] = self._funcs[0]
 
     def _with_profiler(self, f: Callable[..., Any], result_id: int) -> Callable[..., Any]:
         """Return ``f`` profiled by the profiler its config selects, or ``f`` itself when none is

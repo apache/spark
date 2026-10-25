@@ -599,8 +599,8 @@ def build_null_checker(return_type: StructType) -> Optional[Callable[[Any], None
 
 
 class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
-    """Base for every UDTF eval type handler; ``__init__`` creates the UDTF instance as
-    ``_udtf``."""
+    """Base for every UDTF eval type handler; ``__init__`` keeps the UDTF record as
+    ``_udtf_desc`` and creates the UDTF instance as ``_udtf``."""
 
     # Wraps the UDTF when its TABLE argument has PARTITION BY expressions.
     partition_wrapper: ClassVar[type[PartitionedUDTF]] = UDTFWithPartitions
@@ -611,7 +611,8 @@ class UDTFHandlerBase(EvalTypeHandler[InputBatch, OutputBatch]):
         constructor given the AnalyzeResult when it takes one), and check its 'eval' signature
         against the call arguments."""
         super().__init__(udfs, runner_conf, eval_conf)
-        udtf = self._udf_desc
+        self._udtf_desc: UDTF = udfs[0]
+        udtf = self._udtf_desc
         if not isinstance(udtf.udtf_cls, type):
             raise PySparkRuntimeError(
                 f"Invalid UDTF handler type. Expected a class (type 'type'), but "
@@ -687,7 +688,7 @@ class UDTFEvalTypeHandler(UDTFHandlerBase[InputBatch, OutputBatch]):
     def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
         self._eval_method, self._args_kwargs_offsets = wrap_kwargs_support(
-            self._udtf.eval, self._udf_desc.args_offsets, self._udf_desc.kwargs_offsets
+            self._udtf.eval, self._udtf_desc.args_offsets, self._udtf_desc.kwargs_offsets
         )
         self._terminate_method = getattr(self._udtf, "terminate", None)
         self._cleanup_method = getattr(self._udtf, "cleanup", None)
@@ -725,17 +726,17 @@ class TableUDTFHandler(UDTFHandlerBase[Any, tuple]):
 
     def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
-        self._check_output_row_against_schema = build_null_checker(self._udf_desc.return_type)
+        self._check_output_row_against_schema = build_null_checker(self._udtf_desc.return_type)
 
         eval_func_kwargs_support, self._args_kwargs_offsets = wrap_kwargs_support(
-            self._udtf.eval, self._udf_desc.args_offsets, self._udf_desc.kwargs_offsets
+            self._udtf.eval, self._udtf_desc.args_offsets, self._udtf_desc.kwargs_offsets
         )
-        self._eval = self._wrap_udtf(eval_func_kwargs_support, self._udf_desc.return_type)
+        self._eval = self._wrap_udtf(eval_func_kwargs_support, self._udtf_desc.return_type)
 
         self._terminate: Optional[Callable[..., tuple]]
         if hasattr(self._udtf, "terminate"):
             self._terminate = self._wrap_udtf(
-                getattr(self._udtf, "terminate"), self._udf_desc.return_type
+                getattr(self._udtf, "terminate"), self._udtf_desc.return_type
             )
         else:
             self._terminate = None
@@ -854,11 +855,11 @@ class ArrowUDTFHandler(
 
         super().__init__(udfs, runner_conf, eval_conf)
         arrow_return_type = to_arrow_type(
-            self._udf_desc.return_type,
+            self._udtf_desc.return_type,
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
-        self._return_type_size = len(self._udf_desc.return_type)
+        self._return_type_size = len(self._udtf_desc.return_type)
         self._target_schema = pa.schema(list(arrow_return_type))
 
         self._table_arg_offsets = (
@@ -963,8 +964,8 @@ class ArrowTableUDTFHandler(
 
     def __init__(self, udfs: list[UDTF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
-        self._return_type_size = len(self._udf_desc.return_type)
-        self._check_output_row_against_schema = build_null_checker(self._udf_desc.return_type)
+        self._return_type_size = len(self._udtf_desc.return_type)
+        self._check_output_row_against_schema = build_null_checker(self._udtf_desc.return_type)
 
     @abstractmethod
     def _to_columns(self, batch: pa.RecordBatch) -> list:
@@ -1019,7 +1020,7 @@ class ArrowTableUDTFLegacyPandasHandler(ArrowTableUDTFHandler):
         super().__init__(udfs, runner_conf, eval_conf)
         # The output pandas DataFrame is converted as a single struct column named
         # "_0" against this schema.
-        self._output_schema = StructType([StructField("_0", self._udf_desc.return_type)])
+        self._output_schema = StructType([StructField("_0", self._udtf_desc.return_type)])
 
     def _verify_result(self, result: Any, method_name: str) -> Any:
         import pandas as pd
@@ -1052,7 +1053,7 @@ class ArrowTableUDTFLegacyPandasHandler(ArrowTableUDTFHandler):
         # Verify the type and the schema of the result.
         verify_pandas_result(
             result,
-            self._udf_desc.return_type,
+            self._udtf_desc.return_type,
             assign_cols_by_name=False,
             truncate_return_schema=False,
         )
@@ -1131,7 +1132,7 @@ class ArrowTableUDTFArrowHandler(ArrowTableUDTFHandler):
 
         super().__init__(udfs, runner_conf, eval_conf)
         self._arrow_return_type = to_arrow_type(
-            self._udf_desc.return_type,
+            self._udtf_desc.return_type,
             timezone="UTC",
             prefers_large_types=runner_conf.use_large_var_types,
         )
@@ -1216,14 +1217,14 @@ class ArrowTableUDTFArrowHandler(ArrowTableUDTFHandler):
                 errorClass="UDTF_ARROW_DATA_CONVERSION_ERROR",
                 messageParameters={
                     "data": str(data),
-                    "schema": self._udf_desc.return_type.simpleString(),
+                    "schema": self._udtf_desc.return_type.simpleString(),
                     "arrow_schema": str(arrow_return_type),
                 },
             ) from original_exception
 
         try:
             table = LocalDataToArrowConversion.convert(
-                data, self._udf_desc.return_type, self._runner_conf.use_large_var_types
+                data, self._udtf_desc.return_type, self._runner_conf.use_large_var_types
             )
         except PySparkValueError as e:
             if e.getErrorClass() == "AXIS_LENGTH_MISMATCH":

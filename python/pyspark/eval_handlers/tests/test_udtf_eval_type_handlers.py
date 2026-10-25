@@ -565,6 +565,8 @@ class UDTFHandlerInitTests(UDTFEvalTypeHandlerTestCase):
         self.assertIsInstance(handler._udtf, Udtf)
         udtf = handler._udfs[0]
         self.assertIsInstance(udtf, UDTF)
+        self.assertIs(handler._udtf_desc, udtf)
+        self.assertFalse(hasattr(handler, "_udf_desc"))
         self.assertEqual(udtf.args_offsets, [0])
         self.assertEqual(udtf.kwargs_offsets, {})
         self.assertEqual(udtf.return_type, self._RETURN_TYPE)
