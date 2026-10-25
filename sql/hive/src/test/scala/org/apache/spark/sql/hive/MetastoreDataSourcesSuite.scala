@@ -23,9 +23,10 @@ import java.time.LocalTime
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.ErrorMsg
 import org.apache.logging.log4j.Level
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.{SparkException, SparkThrowable}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -1368,6 +1369,30 @@ class MetastoreDataSourcesSuite extends QueryTest
         .mode(SaveMode.Overwrite).saveAsTable("t")
       checkAnswer(table("t"), df)
       assert(table("t").schema("c").dataType === StringType("UNICODE_CI"))
+    }
+  }
+
+  test("SPARK-60544: saveAsTable with mode Overwrite keeps the existing hive table when " +
+      "the dynamic partition checks fail") {
+    Seq(
+      ("hive.exec.dynamic.partition.mode", "strict", ErrorMsg.DYNAMIC_PARTITION_STRICT_MODE),
+      ("hive.exec.dynamic.partition", "false", ErrorMsg.DYNAMIC_PARTITION_DISABLED)
+    ).foreach { case (key, value, errorMsg) =>
+      // A partitioned Hive CTAS is not converted to a data source write, even with Parquet.
+      Seq("textfile", "parquet").foreach { fileFormat =>
+        withSQLConf(key -> value) {
+          withTable("t") {
+            spark.range(3).write.format("hive").saveAsTable("t")
+            val e = intercept[SparkException] {
+              spark.range(5).selectExpr("id", "id % 2 AS p").write.format("hive")
+                .option("fileFormat", fileFormat).partitionBy("p")
+                .mode(SaveMode.Overwrite).saveAsTable("t")
+            }
+            assert(e.getMessage === errorMsg.getMsg)
+            checkAnswer(table("t"), spark.range(3).toDF())
+          }
+        }
+      }
     }
   }
 
