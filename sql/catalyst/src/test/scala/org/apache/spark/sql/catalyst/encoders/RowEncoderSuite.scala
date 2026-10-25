@@ -254,6 +254,17 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     assert(encoder.serializer.head.nullable == false)
   }
 
+  test("SPARK-60528: RowEncoder should support nested empty structs") {
+    val schema = new StructType().add(
+      "s",
+      new StructType().add("a", new StructType(), nullable = false),
+      nullable = false)
+    val encoder = ExpressionEncoder(schema).resolveAndBind()
+    assert(encoder.schema === schema)
+    val row = Row(Row(Row()))
+    assert(roundTrip(encoder, row) === row)
+  }
+
   test("RowEncoder should support primitive arrays") {
     val schema = new StructType()
       .add("booleanPrimitiveArray", ArrayType(BooleanType, false))
@@ -337,6 +348,16 @@ class RowEncoderSuite extends CodegenInterpretedPlanTest {
     }
     assert(e4.getCause.getMessage.contains("The external type java.lang.String is not valid " +
       "for the type \"TIMESTAMP\""))
+  }
+
+  test("SPARK-60528: RowEncoder should validate the input of empty structs") {
+    val schema = new StructType().add("s", new StructType(), nullable = false)
+    val encoder = ExpressionEncoder(schema)
+    val e1 = intercept[RuntimeException](toRow(encoder, Row(null)))
+    assert(e1.getCause.getMessage.contains("The 0th field 's' of input row cannot be null."))
+    val e2 = intercept[RuntimeException](toRow(encoder, Row("a")))
+    assert(e2.getCause.getMessage.contains("The external type java.lang.String is not valid " +
+      "for the type \"STRUCT<>\""))
   }
 
   private def roundTripArray[T](dt: DataType, nullable: Boolean, data: Array[T]): Unit = {
