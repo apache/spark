@@ -306,6 +306,16 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
     }
   }
 
+  /**
+   * Runs the checks that Hive runs on a new Hive serde table before creating it in Hive
+   * metastore, e.g., the SerDe initialization with the table columns, without creating it.
+   * A command that replaces an existing table calls this before dropping the existing table.
+   */
+  private[hive] def validateHiveSerdeTable(tableDefinition: CatalogTable): Unit = withClient {
+    // Like `createTable`, remove the collations, which Hive doesn't support.
+    client.validateTable(tableDefinition.copy(schema = removeCollation(tableDefinition.schema)))
+  }
+
   private def createDataSourceTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = {
     // data source table always have a provider, it's guaranteed by `DDLUtils.isDatasourceTable`.
     val provider = table.provider.get
