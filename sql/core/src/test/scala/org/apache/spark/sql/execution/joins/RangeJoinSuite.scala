@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, Expression, GreaterThan, 
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
-import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PointInRangeJoin, RangeJoinKind}
+import org.apache.spark.sql.catalyst.planning.{GreaterPartialRangeJoin, IntervalOverlapJoin, LessPartialRangeJoin, PartialRangeJoin, PointInRangeJoin, RangeJoinKind}
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftAnti, LeftOuter, LeftSemi, RightOuter}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.internal.SQLConf
@@ -303,26 +303,28 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
   test("strict partial scans skip duplicated build keys instead of scanning them") {
     // A strict inequality rejects build keys equal to the probe value, and the
     // scan arm must skip them rather than surface them for the condition to
-    // reject one by one. With 10 duplicated rows per date and the probe at
-    // date 50, `<` must evaluate the condition on exactly the 49 later
-    // dates' rows and `>` on exactly the 50 earlier ones: an inclusive scan
+    // reject one by one. With 10 duplicated rows per key and the probe at
+    // key 50, `<` must evaluate the condition on exactly the 49 larger
+    // keys' rows and `>` on exactly the 50 smaller ones: an inclusive scan
     // wired by mistake surfaces the probe's own 10 duplicates too, and an
     // over-exclusive one silently drops passing rows. Both strict invariant
-    // answers are checked elsewhere; this pins the surfaced count itself.
+    // answers are checked elsewhere; this pins the surfaced count itself,
+    // under both BuildRight and BuildLeft so the strict scan arm is exercised
+    // regardless of which physical child holds the index.
     val dup = 10
     val n = 100
     val probe = 50
     val bounds = spark.createDataFrame(
-      sparkContext.parallelize((0 until n).flatMap(d => (0 until dup).map(_ => Row(d))), 1),
+      sparkContext.parallelize((0 until n).flatMap(k => (0 until dup).map(_ => Row(k))), 1),
       new StructType().add("b", IntegerType))
     val points = spark.createDataFrame(
       sparkContext.parallelize(Seq(Row(probe))),
       new StructType().add("a", IntegerType))
 
-    val leftPlan = points.queryExecution.sparkPlan
-    val rightPlan = bounds.queryExecution.sparkPlan
-    val a = leftPlan.output.head
-    val b = rightPlan.output.head
+    val pointsPlan = points.queryExecution.sparkPlan
+    val boundsPlan = bounds.queryExecution.sparkPlan
+    val a = pointsPlan.output.head
+    val b = boundsPlan.output.head
 
     // Strict `<` with the bound on the build side scans from the exclusive
     // FROM bound; strict `>` scans up to the exclusive UP TO bound. The inner
@@ -330,28 +332,46 @@ class RangeJoinSuite extends QueryTest with SharedSparkSession {
     val expectations = Seq(
       (LessPartialRangeJoin(strict = true), LessThan(a, b), (n - 1 - probe) * dup),
       (GreaterPartialRangeJoin(strict = true), GreaterThan(a, b), probe * dup))
-    Seq(true, false).foreach { codegenEnabled =>
-      val factoryMode = if (codegenEnabled) "CODEGEN_ONLY" else "NO_CODEGEN"
-      withSQLConf(
-        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
-        SQLConf.CODEGEN_FALLBACK.key -> "false",
-        SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
-        expectations.foreach { case (tag, cond, expected) =>
-          val counter = spark.sparkContext.longAccumulator("numCandidates")
-          val exec = rangeJoinExec(
-            leftPlan, rightPlan, BuildRight, Inner,
-            buildKeys = b :: Nil,
-            streamedKeys = a :: Nil,
-            condition = CountingPredicate(counter, cond),
-            rangeJoinKind = tag)
-          QueryTest.executePlan(exec, spark.sqlContext)
-          assert(counter.value == expected,
-            s"$tag (codegen=$codegenEnabled): examined ${counter.value} candidates, " +
-              s"expected exactly $expected, so the probe's own duplicated key was " +
-              "scanned or passing rows were dropped")
+
+    // `leftIsLower` is relative to whichever plan is passed as `left`: swapping which
+    // relation is `left` to move the build side between BuildRight and BuildLeft must
+    // flip Less/Greater too, or the scan direction for the (unchanged) condition flips.
+    def orient(kind: PartialRangeJoin): PartialRangeJoin = kind match {
+      case LessPartialRangeJoin(strict) => GreaterPartialRangeJoin(strict)
+      case GreaterPartialRangeJoin(strict) => LessPartialRangeJoin(strict)
+    }
+
+    def checkCandidateCounts(
+        left: SparkPlan,
+        right: SparkPlan,
+        buildSide: BuildSide,
+        rangeJoinKindOf: PartialRangeJoin => PartialRangeJoin): Unit = {
+      Seq(true, false).foreach { codegenEnabled =>
+        val factoryMode = if (codegenEnabled) "CODEGEN_ONLY" else "NO_CODEGEN"
+        withSQLConf(
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegenEnabled.toString,
+          SQLConf.CODEGEN_FALLBACK.key -> "false",
+          SQLConf.CODEGEN_FACTORY_MODE.key -> factoryMode) {
+          expectations.foreach { case (tag, cond, expected) =>
+            val counter = spark.sparkContext.longAccumulator("numCandidates")
+            val exec = rangeJoinExec(
+              left, right, buildSide, Inner,
+              buildKeys = b :: Nil,
+              streamedKeys = a :: Nil,
+              condition = CountingPredicate(counter, cond),
+              rangeJoinKind = rangeJoinKindOf(tag))
+            QueryTest.executePlan(exec, spark.sqlContext)
+            assert(counter.value == expected,
+              s"${rangeJoinKindOf(tag)} $buildSide (codegen=$codegenEnabled): examined " +
+                s"${counter.value} candidates, expected exactly $expected, so the probe's " +
+                "own duplicated key was scanned or passing rows were dropped")
+          }
         }
       }
     }
+
+    checkCandidateCounts(pointsPlan, boundsPlan, BuildRight, identity)
+    checkCandidateCounts(boundsPlan, pointsPlan, BuildLeft, orient)
   }
 
   test("left semi and left anti stop probing once the first candidate matches") {

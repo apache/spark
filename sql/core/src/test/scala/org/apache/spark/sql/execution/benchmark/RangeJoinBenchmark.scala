@@ -44,11 +44,12 @@ import org.apache.spark.sql.types.StringType
  * side instead of one nested-loop scan, and a fully overlapping inner join,
  * where every pair matches and the index prunes nothing.
  *
- * Staggered high-overlap builds cover the regime between those: most, but not
- * all, build intervals overlap each probe window, miss intervals are
- * interleaved so no subtree's max high falls under the probe, and the build
- * has no common core, so the tree is walked without pruning and evaluated per
- * candidate. Long and double (boxed) keys both run at 50% and 90% overlap.
+ * Staggered-overlap builds cover the regime between those: a fraction of build
+ * intervals -- from a small minority at 5%/10%/25% to half or more at 50%/90% --
+ * overlap each probe window, miss intervals are interleaved so no subtree's
+ * max high falls under the probe, and the build has no common core, so the
+ * tree is walked without pruning and evaluated per candidate. Long and double
+ * (boxed) keys run at 5%, 10%, 25%, 50%, and 90% overlap.
  *
  * To run this benchmark:
  * {{{
@@ -168,15 +169,22 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   // low order, so no subtree's max high falls under the probe and the walk
   // prunes nothing. The build has no common core either, so no shortcut can
   // answer the probe: this measures the full walk plus K candidate checks
-  // against nested loop's B condition checks, at K/B of 50% and 90%.
+  // against nested loop's B condition checks, at K/B of 5%, 10%, 25%, 50%, and 90%.
   private val staggerBuildRows = 2000
   private val staggerProbeRows = 10000
-  private def staggerBuild(missEvery: Int, boxedAsDouble: Boolean = false): DataFrame = {
+  private def staggerBuild(overlapPct: Int, boxedAsDouble: Boolean = false): DataFrame = {
+    val isSpan = overlapPct match {
+      case 5 => col("id") % lit(20L) === lit(0L)
+      case 10 => col("id") % lit(10L) === lit(0L)
+      case 25 => col("id") % lit(4L) === lit(0L)
+      case 50 => col("id") % lit(2L) =!= lit(0L)
+      case 90 => col("id") % lit(10L) =!= lit(0L)
+      case other => throw new IllegalArgumentException(s"Unsupported overlap: $other")
+    }
     val raw = spark.range(staggerBuildRows).select(
       (col("id") * lit(10L)).as("blo"),
-      when(col("id") % lit(missEvery.toLong) === lit(0L),
-        col("id") * lit(10L) + lit(9000L))
-        .otherwise(col("id") * lit(10L) + lit(40000L)).as("bhi"))
+      when(isSpan, col("id") * lit(10L) + lit(40000L))
+        .otherwise(col("id") * lit(10L) + lit(9000L)).as("bhi"))
     cached(if (boxedAsDouble) raw.select(
       col("blo").cast("double").as("blo"),
       col("bhi").cast("double").as("bhi")) else raw)
@@ -189,10 +197,16 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
       col("alo").cast("double").as("alo"),
       col("ahi").cast("double").as("ahi")) else raw)
   }
-  private lazy val staggerBuild50: DataFrame = staggerBuild(missEvery = 2)
-  private lazy val staggerBuild90: DataFrame = staggerBuild(missEvery = 10)
-  private lazy val staggerBuild50Double: DataFrame = staggerBuild(2, boxedAsDouble = true)
-  private lazy val staggerBuild90Double: DataFrame = staggerBuild(10, boxedAsDouble = true)
+  private lazy val staggerBuild5: DataFrame = staggerBuild(5)
+  private lazy val staggerBuild10: DataFrame = staggerBuild(10)
+  private lazy val staggerBuild25: DataFrame = staggerBuild(25)
+  private lazy val staggerBuild50: DataFrame = staggerBuild(50)
+  private lazy val staggerBuild90: DataFrame = staggerBuild(90)
+  private lazy val staggerBuild5Double: DataFrame = staggerBuild(5, boxedAsDouble = true)
+  private lazy val staggerBuild10Double: DataFrame = staggerBuild(10, boxedAsDouble = true)
+  private lazy val staggerBuild25Double: DataFrame = staggerBuild(25, boxedAsDouble = true)
+  private lazy val staggerBuild50Double: DataFrame = staggerBuild(50, boxedAsDouble = true)
+  private lazy val staggerBuild90Double: DataFrame = staggerBuild(90, boxedAsDouble = true)
   private lazy val staggerProbeLong: DataFrame = staggerProbe()
   private lazy val staggerProbeDouble: DataFrame = staggerProbe(boxedAsDouble = true)
 
@@ -305,8 +319,14 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
     decimalPoints
     stringRanges
     stringPoints
+    staggerBuild5
+    staggerBuild10
+    staggerBuild25
     staggerBuild50
     staggerBuild90
+    staggerBuild5Double
+    staggerBuild10Double
+    staggerBuild25Double
     staggerBuild50Double
     staggerBuild90Double
     staggerProbeLong
@@ -464,23 +484,31 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
 
   private def staggeredOverlapCases(): Unit = {
     val n = s"probe=$staggerProbeRows, ranges=$staggerBuildRows"
-    compare(s"interval overlap inner, staggered 50% overlap ($n)",
-      staggerProbeRows, "IntervalOverlapJoin") {
-      staggerProbeLong.join(broadcast(staggerBuild50), overlapCond, "inner")
-    }
-    compare(s"interval overlap inner, staggered 90% overlap ($n)",
-      staggerProbeRows, "IntervalOverlapJoin") {
-      staggerProbeLong.join(broadcast(staggerBuild90), overlapCond, "inner")
+    val longBuilds = Seq(
+      (5, staggerBuild5),
+      (10, staggerBuild10),
+      (25, staggerBuild25),
+      (50, staggerBuild50),
+      (90, staggerBuild90))
+    longBuilds.foreach { case (pct, df) =>
+      compare(s"interval overlap inner, staggered $pct% overlap ($n)",
+        staggerProbeRows, "IntervalOverlapJoin") {
+        staggerProbeLong.join(broadcast(df), overlapCond, "inner")
+      }
     }
     // Double keys stay on the generic boxed index, so the same regime rides
     // Ordering[Any] at every tree node.
-    compare(s"interval overlap inner, staggered 50% overlap on double ($n)",
-      staggerProbeRows, "IntervalOverlapJoin") {
-      staggerProbeDouble.join(broadcast(staggerBuild50Double), overlapCond, "inner")
-    }
-    compare(s"interval overlap inner, staggered 90% overlap on double ($n)",
-      staggerProbeRows, "IntervalOverlapJoin") {
-      staggerProbeDouble.join(broadcast(staggerBuild90Double), overlapCond, "inner")
+    val doubleBuilds = Seq(
+      (5, staggerBuild5Double),
+      (10, staggerBuild10Double),
+      (25, staggerBuild25Double),
+      (50, staggerBuild50Double),
+      (90, staggerBuild90Double))
+    doubleBuilds.foreach { case (pct, df) =>
+      compare(s"interval overlap inner, staggered $pct% overlap on double ($n)",
+        staggerProbeRows, "IntervalOverlapJoin") {
+        staggerProbeDouble.join(broadcast(df), overlapCond, "inner")
+      }
     }
   }
 

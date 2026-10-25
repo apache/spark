@@ -133,10 +133,7 @@ case class BroadcastRangeJoinExec(
   private def innerJoin(relation: Broadcast[RangeRelation]): RDD[InternalRow] = {
     perPartition(relation) { p =>
       p.stream.flatMap { row =>
-        p.candidates(row).flatMap { buildRow =>
-          val joined = p.join(row, buildRow)
-          if (p.condition(joined)) Iterator.single(joined) else Iterator.empty
-        }
+        p.candidates(row).map(p.join(row, _)).filter(p.condition)
       }
     }
   }
@@ -284,7 +281,7 @@ case class BroadcastRangeJoinExec(
 
   /**
    * Box each streamed range key. The index compares the same boxed values
-   * `RangeIndex.getValue` produces on the build side.
+   * each build key expression evaluates to on the build side.
    */
   private def genProbeKeys(
       ctx: CodegenContext,

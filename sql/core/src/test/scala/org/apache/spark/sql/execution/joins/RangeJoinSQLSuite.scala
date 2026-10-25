@@ -111,10 +111,17 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     // Double and string keys stay on the boxed point index, so these queries reach
     // its generated probe code (or, interpreted, the per-index dispatch in
     // BroadcastRangeJoinExec.makeCandidateFn), which int partial ranges never do.
+    // The partial-range fixtures include probe values equal to build keys, so an
+    // inclusive (<=/>=) scan wired to its exclusive counterpart by mistake would
+    // drop those boundary matches.
     "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d < b.lo",
     "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d > b.lo",
+    "SELECT p.d, b.lo FROM dbl_partial_points p JOIN dbl_partial_bounds b ON p.d <= b.lo",
+    "SELECT p.d, b.lo FROM dbl_partial_bounds b JOIN dbl_partial_points p ON p.d >= b.lo",
     "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s < b.lo",
-    "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo")
+    "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s > b.lo",
+    "SELECT p.s, b.lo FROM str_partial_points p JOIN str_partial_bounds b ON p.s <= b.lo",
+    "SELECT p.s, b.lo FROM str_partial_bounds b JOIN str_partial_points p ON p.s >= b.lo")
 
   private def setupIpLookupViews(): Unit = {
     sql(
@@ -224,12 +231,16 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         |""".stripMargin)
   }
 
-  /** Points and bounds for single-inequality joins on boxed key families. */
+  /**
+   * Points and bounds for single-inequality joins on boxed key families. Each points
+   * view includes values equal to a bound, so the inclusive (<=/>=) queries in
+   * `probeCoverageQueries` exercise the boundary, not just the strict (</>) ones.
+   */
   private def setupPartialRangeViews(): Unit = {
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW dbl_partial_points(d) AS VALUES
-        |  (0.5), (3.0), (6.0),
+        |  (0.5), (1.0), (3.0), (4.0), (6.0), (7.5),
         |  (CAST(NULL AS DOUBLE))
         |""".stripMargin)
     sql(
@@ -240,7 +251,7 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
     sql(
       """
         |CREATE OR REPLACE TEMP VIEW str_partial_points(s) AS VALUES
-        |  ('a'), ('m'), ('z')
+        |  ('a'), ('b'), ('m'), ('n'), ('z')
         |""".stripMargin)
     sql(
       """
@@ -395,20 +406,20 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
   }
 
   test("strict inequalities over duplicated build keys match the nested loop join") {
-    // 10,000 build rows over 100 dates, 100 per date. Under `<`, a point
+    // 10,000 build rows over 100 distinct integer keys, 100 per key. Under `<`, a point
     // index that kept the probe's own key would surface 100 duplicates that
     // all fail the condition before the first passing row; the strict scan
     // must skip them, and semi/anti must still match the nested loop answers.
-    sql("CREATE OR REPLACE TEMP VIEW dup_dates(d) AS SELECT id % 100 FROM range(10000)")
-    sql("CREATE OR REPLACE TEMP VIEW probe_dates(d) AS SELECT id FROM range(100)")
+    sql("CREATE OR REPLACE TEMP VIEW dup_keys(k) AS SELECT id % 100 FROM range(10000)")
+    sql("CREATE OR REPLACE TEMP VIEW probe_keys(k) AS SELECT id FROM range(100)")
     val operators = Seq("<", "<=", ">", ">=")
     val joinTypes = Seq("JOIN", "LEFT SEMI JOIN", "LEFT ANTI JOIN")
     for (op <- operators; joinType <- joinTypes) {
-      // BROADCAST(b) pins dup_dates as the build side (BuildRight). Left semi/anti
-      // already require BuildRight, but a plain JOIN would otherwise pick probe_dates
+      // BROADCAST(b) pins dup_keys as the build side (BuildRight). Left semi/anti
+      // already require BuildRight, but a plain JOIN would otherwise pick probe_keys
       // (the smaller side) as build, leaving the duplicated keys on the streamed side.
       val query =
-        s"SELECT /*+ BROADCAST(b) */ p.d FROM probe_dates p $joinType dup_dates b ON p.d $op b.d"
+        s"SELECT /*+ BROADCAST(b) */ p.k FROM probe_keys p $joinType dup_keys b ON p.k $op b.k"
       val expected = sql(query).collect()
       withRangeJoin() {
         val df = sql(query)
@@ -416,11 +427,11 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         checkAnswer(df, expected)
       }
     }
-    // Inner joins can also build the left side; repeat with dup_dates on the left and
+    // Inner joins can also build the left side; repeat with dup_keys on the left and
     // pinned as build so the strict scan is exercised under BuildLeft too.
     for (op <- operators) {
       val query =
-        s"SELECT /*+ BROADCAST(b) */ p.d FROM dup_dates b JOIN probe_dates p ON b.d $op p.d"
+        s"SELECT /*+ BROADCAST(b) */ p.k FROM dup_keys b JOIN probe_keys p ON b.k $op p.k"
       val expected = sql(query).collect()
       withRangeJoin() {
         val df = sql(query)
@@ -788,6 +799,47 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
         .collectFirst { case s: SparkException => s }
         .getOrElse(throw thrown)
       assert(ex.getCondition == "_LEGACY_ERROR_TEMP_2249")
+    }
+  }
+
+  test("outer loop's stream-reuse ordering holds when the join falls out of codegen") {
+    // An output wider than spark.sql.codegen.maxFields excludes the join itself from
+    // whole-stage codegen (CollapseCodegenStages.supportCodegen), but a streamed child
+    // that supports codegen on its own still gets its own whole-stage region beneath an
+    // InputAdapter. range() is such a child: its generated iterator reuses one output row
+    // across calls, unlike a VALUES view (LocalTableScanExec), which CollapseCodegenStages
+    // never makes a whole-stage root and which hands out its own rows. outerJoin's loop
+    // must check `streamRow` before `stream.hasNext`, or this reused row is overwritten
+    // while candidates for the current streamed row are still pending.
+    sql(
+      "CREATE OR REPLACE TEMP VIEW stream_reuse_bounds(b) AS VALUES " +
+        "(10L), (20L), (30L), (40L), (50L)")
+    val leftOuter =
+      "SELECT /*+ BROADCAST(b) */ s.id, b.b FROM range(3) s LEFT JOIN stream_reuse_bounds b " +
+        "ON s.id < b.b"
+    val rightOuter =
+      "SELECT /*+ BROADCAST(b) */ b.b, s.id FROM stream_reuse_bounds b RIGHT JOIN range(3) s " +
+        "ON s.id < b.b"
+    Seq(leftOuter, rightOuter).foreach { query =>
+      val expected = sql(query).collect()
+      // Every streamed id (0, 1, 2) is less than all 5 bounds, so the outer loop holds
+      // one streamed row across several candidates before advancing to the next.
+      assert(expected.length == 15, query)
+      withRangeJoin(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+        SQLConf.CODEGEN_FALLBACK.key -> "false",
+        SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql(query)
+        val plan = df.queryExecution.executedPlan
+        assert(findRangeJoin(plan).size == 1, query)
+        assert(!rangeJoinIsCodegen(plan), s"$query\n${plan.treeString}")
+        val wholeStages = collect(plan) { case w: WholeStageCodegenExec => w }
+        assert(wholeStages.exists(w => collect(w.child) { case r: RangeExec => r }.nonEmpty),
+          s"range() must still run under its own whole-stage codegen region: " +
+            s"$query\n${plan.treeString}")
+        checkAnswer(df, expected)
+      }
     }
   }
 }

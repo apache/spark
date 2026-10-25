@@ -86,9 +86,12 @@ class ExtractRangeJoinKeysSuite extends PlanTest {
     // Three predicates give three candidate pairs under predicates.combinations(2):
     // (P0, P1), (P0, P2), (P1, P2). (P0, P1) and (P0, P2) are each independently a
     // valid point-in-range join -- p bounded by (rLo3, rHi3), and separately by
-    // (rLo3, rHi2) -- while (P1, P2) shares no endpoint. combinations(2) enumerates
-    // (P0, P1) first, so that is the pair that must win, not the otherwise-equally
-    // valid (P0, P2).
+    // (rLo3, rHi2). (P1, P2) does share an endpoint: p <= rHi3 and p <= rHi2 both
+    // have p as their low bound. But they aren't a point-in-range pair, since
+    // neither one's high equals the other's low, and the interval-overlap
+    // regrouping fails `place` because each side would mix both relations.
+    // combinations(2) enumerates (P0, P1) first, so that is the pair that must
+    // win, not the otherwise-equally valid (P0, P2).
     val ranges3 = LocalRelation($"lo".int, $"hi".int, $"hi2".int)
     val rLo3 = ranges3.output(0)
     val rHi3 = ranges3.output(1)
