@@ -3295,6 +3295,39 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-60545: Disallow TIMESTAMP_NTZ columns when the provider is Hive") {
+    val tbl = "tbl_with_timestamp_ntz"
+    def checkUnsupported(sqlCmd: String, columnType: String): Unit = {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(sqlCmd)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+    }
+    withTable(tbl) {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        checkUnsupported(s"CREATE TABLE $tbl (c TIMESTAMP) STORED AS PARQUET", "TIMESTAMP_NTZ")
+        checkUnsupported(
+          s"CREATE TABLE $tbl STORED AS ORC AS SELECT TIMESTAMP'2026-01-01 00:00:00' AS c",
+          "TIMESTAMP_NTZ")
+      }
+      Seq(
+        "TIMESTAMP_NTZ",
+        "STRUCT<a: TIMESTAMP_NTZ>",
+        "ARRAY<TIMESTAMP_NTZ>",
+        "MAP<STRING, TIMESTAMP_NTZ>").foreach { dataType =>
+        checkUnsupported(s"CREATE TABLE $tbl (c $dataType) STORED AS TEXTFILE", dataType)
+        checkUnsupported(s"CREATE TABLE $tbl (c $dataType) USING HIVE", dataType)
+        checkUnsupported(
+          s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT CAST(NULL AS $dataType) AS c", dataType)
+      }
+    }
+  }
+
   test("SPARK-37046: Alter view should preserve column case with view definition change") {
     withView("v") {
       // Changing view definition should preserve column case

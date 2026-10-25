@@ -800,6 +800,25 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
     }
   }
 
+  test("SPARK-60545: TIMESTAMP_NTZ type is unsupported when writing to a Hive serde directory") {
+    withTempDir { dir =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""
+               |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+               |STORED AS TEXTFILE
+               |SELECT TIMESTAMP_NTZ'2026-01-01 00:00:00' AS c
+             """.stripMargin)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> "\"TIMESTAMP_NTZ\"",
+          "format" -> "Hive"))
+    }
+  }
+
   test("insert overwrite to dir from temp table") {
     withTempView("test_insert_table") {
       spark.range(10).selectExpr("id", "id AS str").createOrReplaceTempView("test_insert_table")

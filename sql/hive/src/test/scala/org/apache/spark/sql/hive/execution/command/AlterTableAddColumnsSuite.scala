@@ -18,8 +18,10 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.SparkUnsupportedOperationException
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.command.v1
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The class contains tests for the `ALTER TABLE .. ADD COLUMNS` command to check
@@ -46,6 +48,28 @@ class AlterTableAddColumnsSuite
     withNamespaceAndTable("ns", "tbl") { tbl =>
       sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT 1")
       check(tbl)
+    }
+  }
+
+  test("SPARK-60545: Disallow TIMESTAMP_NTZ columns when the provider is Hive") {
+    def check(tbl: String, dataType: String, columnType: String): Unit = {
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(s"ALTER TABLE $tbl ADD COLUMNS (c $dataType)")
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+    }
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (id INT) $defaultUsing")
+      check(tbl, "TIMESTAMP_NTZ", "TIMESTAMP_NTZ")
+      check(tbl, "ARRAY<TIMESTAMP_NTZ>", "ARRAY<TIMESTAMP_NTZ>")
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        check(tbl, "TIMESTAMP", "TIMESTAMP_NTZ")
+      }
     }
   }
 }
