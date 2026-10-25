@@ -40,7 +40,7 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
 )
 from pyspark.sql.types import LongType
-from pyspark.testing.utils import PySparkBaseTestCase, PySparkErrorTestUtils
+from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -276,7 +276,7 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
         self.assertNotIn(unused_eval_type, _eval_type_handlers)
 
 
-class HandlerUDFsTests(PySparkErrorTestUtils, PySparkBaseTestCase):
+class HandlerUDFsTests(PySparkBaseTestCase):
     class _Handler(BatchEvalTypeHandler["pa.RecordBatch"]):
         _multi_udf = True
 
@@ -347,13 +347,11 @@ class HandlerUDFsTests(PySparkErrorTestUtils, PySparkBaseTestCase):
         self.assertEqual(handler._func(1), 2)
         for udf_descs in ([], [self._udf(f), self._udf(f)]):
             with self.subTest(num_udfs=len(udf_descs)):
-                with self.assertRaises(PySparkRuntimeError) as cm:
+                with self.assertRaisesRegex(
+                    PySparkRuntimeError,
+                    "^One _Single UDF expected, but got {}.$".format(len(udf_descs)),
+                ):
                     _Single(udf_descs, RunnerConf({}), None)
-                self.check_error(
-                    exception=cm.exception,
-                    errorClass="WRONG_NUM_UDFS",
-                    messageParameters={"expected": "_Single UDF", "num_udfs": str(len(udf_descs))},
-                )
 
         handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)
         self.assertFalse(hasattr(handler, "_udf_desc"))
@@ -369,13 +367,10 @@ class HandlerUDFsTests(PySparkErrorTestUtils, PySparkBaseTestCase):
         ):
             handler_cls = _eval_type_handlers[eval_type][1][None]
             with self.subTest(handler=handler_cls.__name__):
-                with self.assertRaises(PySparkRuntimeError) as cm:
+                with self.assertRaisesRegex(
+                    PySparkRuntimeError, "^One {} expected, but got 2.$".format(expected)
+                ):
                     handler_cls([self._udf(str), self._udf(str)], RunnerConf({}), None)
-                self.check_error(
-                    exception=cm.exception,
-                    errorClass="WRONG_NUM_UDFS",
-                    messageParameters={"expected": expected, "num_udfs": "2"},
-                )
 
     def test_multi_udf_per_handler(self):
         multi = {

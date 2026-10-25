@@ -165,11 +165,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     ) -> None:
         if not self._multi_udf and len(udf_descs) != 1:
             raise PySparkRuntimeError(
-                errorClass="WRONG_NUM_UDFS",
-                messageParameters={
-                    "expected": self._expected_udf(),
-                    "num_udfs": str(len(udf_descs)),
-                },
+                "One {} expected, but got {}.".format(self._expected_udf(), len(udf_descs))
             )
         self._udf_descs: list[Any] = udf_descs
         self._runner_conf = runner_conf
