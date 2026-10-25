@@ -561,7 +561,7 @@ $$;
 
 ### Renaming, Properties and Dropping
 
-`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` work as they do for other views. `ALTER VIEW ... AS query` is not rejected on a metric view, but it replaces the YAML with the query text and every later query on the view fails with `INVALID_METRIC_VIEW_YAML`; replace the view as above instead. `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
+`ALTER VIEW ... RENAME TO`, `SET TBLPROPERTIES` and `UNSET TBLPROPERTIES` work as they do for other views. `ALTER VIEW ... AS query` is not rejected on a metric view, but it replaces the YAML with the query text and every later query on the view fails with `INVALID_METRIC_VIEW_YAML`; replace the view as described in [Changing a Definition](#changing-a-definition) instead. `DROP VIEW` removes the view. A metric view keeps no data, so dropping it removes only the definition.
 
 ```sql
 ALTER VIEW order_metrics SET TBLPROPERTIES ('team' = 'finance');
