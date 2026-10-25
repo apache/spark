@@ -27,7 +27,7 @@ import json
 import os
 import sys
 import warnings
-from typing import Any, BinaryIO, Callable
+from typing import BinaryIO
 
 from pyspark import shuffle
 from pyspark.accumulators import _accumulatorRegistry
@@ -41,12 +41,11 @@ from pyspark.messages import (
     SparkSocketMessageReceiver,
 )
 from pyspark.serializers import (
-    FramedSerializer,
     SpecialLengths,
     write_int,
     write_with_length,
 )
-from pyspark.sql.types import DataType, StructType, _parse_datatype_json_string
+from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
     PythonEvalType,
@@ -75,18 +74,6 @@ def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     payload = json.dumps(metrics, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.METRICS_DATA, outfile)
     write_with_length(payload, outfile)
-
-
-def unpickle_udf_funcs(
-    pickleSer: FramedSerializer, pickled_udfs: list[memoryview]
-) -> tuple[list[Callable[..., Any]], DataType]:
-    """Unpickle the functions applied in turn to one column; returns them in call order and the
-    return type of the last one."""
-    funcs = []
-    for pickled_udf in pickled_udfs:
-        f, return_type = read_command(pickleSer, pickled_udf)
-        funcs.append(f)
-    return funcs, return_type
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
@@ -170,13 +157,15 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                 assert isinstance(init_info.udf_info, list)
                 udfs = []
                 for udf_info in init_info.udf_info:
-                    funcs, return_type = unpickle_udf_funcs(pickleSer, udf_info.udfs)
+                    # The functions applied in turn to one column; the last one's return type
+                    # is the UDF's.
+                    funcs, return_types = zip(*(read_command(pickleSer, c) for c in udf_info.udfs))
                     udfs.append(
                         UDF(
-                            funcs=funcs,
+                            funcs=list(funcs),
                             args_offsets=udf_info.args,
                             kwargs_offsets=udf_info.kwargs,
-                            return_type=return_type,
+                            return_type=return_types[-1],
                             result_id=udf_info.result_id,
                         )
                     )

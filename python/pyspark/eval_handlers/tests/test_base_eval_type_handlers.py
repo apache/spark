@@ -34,19 +34,17 @@ from pyspark.eval_handlers._base import (
     get_eval_type_handler,
 )
 from pyspark.eval_handlers._typing import UDF
-from pyspark.serializers import CloudPickleSerializer
 from pyspark.sql.pandas.serializers import (
     ArrowStreamCoGroupSerializer,
     ArrowStreamGroupSerializer,
     ArrowStreamSerializer,
 )
-from pyspark.sql.types import LongType, StringType
+from pyspark.sql.types import LongType
 from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
-    from pyspark.worker import unpickle_udf_funcs
-    from pyspark.worker_util import RunnerConf, pickleSer
+    from pyspark.worker_util import RunnerConf
 
 
 class EvalTypeHandlerTests(PySparkBaseTestCase):
@@ -376,26 +374,6 @@ class HandlerUDFsTests(PySparkBaseTestCase):
             for handler_cls in variants.values():
                 with self.subTest(handler=handler_cls.__name__):
                     self.assertEqual(handler_cls._multi_udf, handler_cls.eval_type in multi)
-
-
-class UnpickleUDFFuncsTests(PySparkBaseTestCase):
-    def test_unpickles_in_order(self):
-        ser = CloudPickleSerializer()
-        funcs, return_type = unpickle_udf_funcs(
-            pickleSer,
-            [
-                ser.dumps((lambda x: x + 1, LongType())),
-                ser.dumps((lambda x: str(x * 2), StringType())),
-            ],
-        )
-        self.assertEqual([f(3) for f in funcs], [4, "6"])
-        self.assertEqual(return_type, StringType())
-
-    def test_unpickles_single(self):
-        ser = CloudPickleSerializer()
-        funcs, return_type = unpickle_udf_funcs(pickleSer, [ser.dumps((str, StringType()))])
-        self.assertEqual(funcs, [str])
-        self.assertEqual(return_type, StringType())
 
 
 if __name__ == "__main__":
