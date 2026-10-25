@@ -43,7 +43,7 @@ class RangeIndexSuite extends SparkFunSuite {
     buildIntervals(IntegerType, spans)
 
   /**
-   * Builds the boxed interval index through the production build. The row
+   * Builds the boxed interval index through `IntervalIndex.apply`. The row
    * layout puts the asserted id at ordinal 0, exactly where a real build row
    * carries its columns; the keys bind to ordinals 1 and 2.
    */
@@ -53,7 +53,7 @@ class RangeIndexSuite extends SparkFunSuite {
     val keys = Seq(
       BoundReference(1, keyType, nullable = true),
       BoundReference(2, keyType, nullable = true))
-    IntervalIndex.build(keyType, keys,
+    IntervalIndex(keyType, keys,
       spans.iterator.map(t => InternalRow(t._3.getInt(0), t._1, t._2)),
       Some(spans.size.toLong))
   }
@@ -61,7 +61,7 @@ class RangeIndexSuite extends SparkFunSuite {
   /** The point-index build with the same row layout: id at 0, key at 1. */
   private def buildPoints(keyType: DataType, keyed: Seq[(Any, InternalRow)]): PointIndex = {
     val key = Seq(BoundReference(1, keyType, nullable = true))
-    PointIndex.build(keyType, key,
+    PointIndex(keyType, key,
       keyed.iterator.map(t => InternalRow(t._2.getInt(0), t._1)),
       Some(keyed.size.toLong))
   }
@@ -140,8 +140,8 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(ids(index.overlapping(4, 4)).isEmpty)
   }
 
-  test("IntervalIndex.build defends against a build-side iterator reusing its row buffer") {
-    // If build() captured keys or rows by reference instead of copying them, every stored
+  test("IntervalIndex.apply defends against a build-side iterator reusing its row buffer") {
+    // If apply() captured keys or rows by reference instead of copying them, every stored
     // entry would collapse to the iterator's last value once the shared buffer is mutated
     // again after the build-side iterator is drained -- the hazard guarded against is any
     // producer whose rows or projected keys alias a reused buffer (e.g. a typed UDF result),
@@ -152,7 +152,7 @@ class RangeIndexSuite extends SparkFunSuite {
       BoundReference(0, IntegerType, nullable = true),
       BoundReference(1, IntegerType, nullable = true))
     val (shared, rows) = reusingRowIterator(fields = 3, n)
-    val index = IntervalIndex.build(IntegerType, buildKeys, rows, Some(n))
+    val index = IntervalIndex(IntegerType, buildKeys, rows, Some(n))
 
     // Simulate the caller reusing the buffer after the build-side iterator is exhausted.
     shared.update(0, -1)
@@ -165,13 +165,13 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
-  test("IntervalIndex.build defends against string keys sharing a reused byte buffer") {
+  test("IntervalIndex.apply defends against string keys sharing a reused byte buffer") {
     val n = 50
     val buildKeys = Seq(
       BoundReference(0, StringType, nullable = true),
       BoundReference(0, StringType, nullable = true))
     val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
-    val index = IntervalIndex.build(StringType, buildKeys, rows, Some(n))
+    val index = IntervalIndex(StringType, buildKeys, rows, Some(n))
 
     java.util.Arrays.fill(sharedBytes, 'X'.toByte)
 
@@ -189,7 +189,7 @@ class RangeIndexSuite extends SparkFunSuite {
     val n = 50
     val oneKey = Seq(BoundReference(0, StringType, nullable = true))
     val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
-    val index = IntervalIndex.build(StringType, oneKey, rows, Some(n))
+    val index = IntervalIndex(StringType, oneKey, rows, Some(n))
 
     java.util.Arrays.fill(sharedBytes, 'X'.toByte)
 
@@ -206,7 +206,7 @@ class RangeIndexSuite extends SparkFunSuite {
       BoundReference(0, StringType, nullable = true),
       BoundReference(0, StringType, nullable = true))
     val (_, moreRows) = reusingByteBufferStringIterator(n)
-    val twoCopy = IntervalIndex.build(StringType, twoKeys, moreRows, Some(n))
+    val twoCopy = IntervalIndex(StringType, twoKeys, moreRows, Some(n))
     assert(index.estimatedSize < twoCopy.estimatedSize)
   }
 
@@ -277,8 +277,9 @@ class RangeIndexSuite extends SparkFunSuite {
   }
 
   test("interval tree is correct under heavy build-side overlap") {
-    // Every interval nests inside the one before it, so a point in the middle
-    // hits about half of the rows. The tree still stores one node per row.
+    // Every interval nests inside the one before it and contains n, so the probe
+    // at n hits all 300 rows; the probe at n/2 hits about half (151), since only
+    // intervals with i <= n/2 reach that far. The tree still stores one node per row.
     val n = 300
     val nested = buildIntervals((0 until n).map(i => span(i, 2 * n - i, i)))
 
@@ -514,13 +515,13 @@ class RangeIndexSuite extends SparkFunSuite {
     assert(ids(longPoints.fromExclusive(3L)).size == 200)
   }
 
-  test("PointIndex.build defends against a build-side iterator reusing its row buffer") {
+  test("PointIndex.apply defends against a build-side iterator reusing its row buffer") {
     // Same hazard as the IntervalIndex case above: a point index built straight off a
     // reused row buffer must copy both the key and the row, not just reference them.
     val n = 50
     val buildKeys = Seq(BoundReference(0, IntegerType, nullable = true))
     val (shared, rows) = reusingRowIterator(fields = 2, n)
-    val index = PointIndex.build(IntegerType, buildKeys, rows, Some(n))
+    val index = PointIndex(IntegerType, buildKeys, rows, Some(n))
 
     shared.update(0, -1)
     shared.update(1, -1)
@@ -531,11 +532,11 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
-  test("PointIndex.build defends against string keys sharing a reused byte buffer") {
+  test("PointIndex.apply defends against string keys sharing a reused byte buffer") {
     val n = 50
     val buildKeys = Seq(BoundReference(0, StringType, nullable = true))
     val (sharedBytes, rows) = reusingByteBufferStringIterator(n)
-    val index = PointIndex.build(StringType, buildKeys, rows, Some(n))
+    val index = PointIndex(StringType, buildKeys, rows, Some(n))
 
     java.util.Arrays.fill(sharedBytes, 'X'.toByte)
 
@@ -838,7 +839,7 @@ class RangeIndexSuite extends SparkFunSuite {
     val bound = 50
     for (_ <- 0 until 30) {
       val n = 1 + rand.nextInt(300)
-      // Endpoints are not pre-sorted, exercising build()'s lo/hi-swap normalization.
+      // Endpoints are not pre-sorted, exercising apply()'s lo/hi-swap normalization.
       val raw = (0 until n).map(i => (rand.nextInt(bound), rand.nextInt(bound), i))
       val index = buildIntervals(raw.map { case (a, b, i) => span(a, b, i) })
       val normalized = raw.map { case (a, b, i) => (math.min(a, b), math.max(a, b), i) }
@@ -1062,7 +1063,7 @@ class RangeIndexSuite extends SparkFunSuite {
     }
   }
 
-  test("LongIntervalIndex.build defends against a build-side iterator reusing its buffer") {
+  test("LongIntervalIndex.apply defends against a build-side iterator reusing its buffer") {
     // Same hazard as the generic case: keys and rows are copied out, so a
     // reused row buffer cannot corrupt the finished index.
     val n = 50

@@ -26,7 +26,7 @@ import com.esotericsoftware.kryo.io.{Input, Output}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression, InterpretedProjection}
+import org.apache.spark.sql.catalyst.expressions.{BoundReference, Expression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildSide}
 import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, PartialRangeJoin, PointInRangeJoin, RangeJoinKind}
 import org.apache.spark.sql.catalyst.plans.physical.BroadcastMode
@@ -134,22 +134,14 @@ private[joins] object RangeIndex {
   def initialCapacity(sizeHint: Option[Long]): Int =
     sizeHint.map(n => math.min(n, 1L << 20).toInt).getOrElse(64)
 
-  /** Accessor reading a single field from `InternalRow` as a boxed value (or null). */
-  def getValue(dt: DataType, ordinal: Int): InternalRow => Any = {
-    val accessor = InternalRow.getAccessor(dt)
-    (input: InternalRow) => accessor(input, ordinal)
-  }
-
   /**
-   * One key type's bridge to an order-preserving long: reading a projected build
-   * field, converting an evaluated streamed value, and turning generated Java for
-   * a typed key into generated Java for a long. The three agree, so a build key
-   * and a probe key of the same type become the same long.
+   * One key type's bridge to an order-preserving long: converting an evaluated
+   * key value (from either the build or the streamed side), and turning
+   * generated Java for a typed key into generated Java for a long. The two
+   * agree, so a build key and a probe key of the same type become the same
+   * long.
    */
-  final case class LongKey(
-      field: (InternalRow, Int) => Long,
-      value: Any => Long,
-      code: String => String)
+  final case class LongKey(value: Any => Long, code: String => String)
 
   /**
    * An order-preserving long for a key type that has one, or None when the type
@@ -160,27 +152,20 @@ private[joins] object RangeIndex {
    * indexes and the generated probe code both consult it.
    */
   def longKey(dt: DataType): Option[LongKey] = {
-    def key(field: (InternalRow, Int) => Long, value: Any => Long): LongKey =
-      LongKey(field, value, v => s"((long) $v)")
+    def key(value: Any => Long): LongKey = LongKey(value, v => s"((long) $v)")
     dt match {
       case _: BooleanType =>
-        Some(LongKey(
-          (r, o) => if (r.getBoolean(o)) 1L else 0L,
-          v => if (v.asInstanceOf[Boolean]) 1L else 0L,
-          v => s"($v ? 1L : 0L)"))
+        Some(LongKey(v => if (v.asInstanceOf[Boolean]) 1L else 0L, v => s"($v ? 1L : 0L)"))
       case _: ByteType =>
-        Some(key((r, o) => r.getByte(o).toLong, v => v.asInstanceOf[Byte].toLong))
+        Some(key(v => v.asInstanceOf[Byte].toLong))
       case _: ShortType =>
-        Some(key((r, o) => r.getShort(o).toLong, v => v.asInstanceOf[Short].toLong))
+        Some(key(v => v.asInstanceOf[Short].toLong))
       case _: IntegerType | _: DateType =>
-        Some(key((r, o) => r.getInt(o).toLong, v => v.asInstanceOf[Int].toLong))
+        Some(key(v => v.asInstanceOf[Int].toLong))
       case _: LongType | _: TimestampType | _: TimestampNTZType =>
-        Some(key((r, o) => r.getLong(o), v => v.asInstanceOf[Long]))
+        Some(key(v => v.asInstanceOf[Long]))
       case d: DecimalType if d.precision <= Decimal.MAX_LONG_DIGITS =>
-        Some(LongKey(
-          (r, o) => r.getDecimal(o, d.precision, d.scale).toUnscaledLong,
-          v => v.asInstanceOf[Decimal].toUnscaledLong,
-          v => s"$v.toUnscaledLong()"))
+        Some(LongKey(v => v.asInstanceOf[Decimal].toUnscaledLong, v => s"$v.toUnscaledLong()"))
       case _ => None
     }
   }
@@ -227,8 +212,8 @@ private[joins] object RowSlice {
 
 // ===== Boxed-key indexes ====================================================
 //
-// Keys are the boxed values `RangeIndex.getValue` reads, compared through
-// `BoxedKeyOrdering`. Floating point, strings, binary, and decimals wider
+// Keys are the boxed values each build key expression evaluates to, compared
+// through `BoxedKeyOrdering`. Floating point, strings, binary, and decimals wider
 // than 18 digits stay here: these types have no order-preserving
 // single-long form, which is the property that routes a key type to the
 // long indexes below (`RangeIndex.longKey`).
@@ -390,35 +375,33 @@ private[joins] object IntervalIndex {
     }
   }
 
-  def build(
+  def apply(
       keyType: DataType,
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): IntervalIndex = {
     val buffer = new ArrayBuffer[(Any, Any, InternalRow)](RangeIndex.initialCapacity(sizeHint))
-    val projection = new InterpretedProjection(buildKeys)
-    val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
     val ordering = PhysicalDataType.ordering(keyType)
 
     if (buildKeys.length == 1) {
       // A point build key is one key used as both ends, so it is copied once
-      // and serves as both bounds, matching `LongIntervalIndex.build`.
+      // and serves as both bounds, matching `LongIntervalIndex.apply`.
+      val lowExpr = buildKeys.head
       while (rows.hasNext) {
         val r = rows.next()
-        val p = projection(r)
-        val rawLo = lowOf(p)
+        val rawLo = lowExpr.eval(r)
         if (rawLo != null) {
           val key = InternalRow.copyValue(rawLo)
           buffer += ((key, key, r.copy()))
         }
       }
     } else {
-      val highOf = RangeIndex.getValue(buildKeys(1).dataType, 1)
+      val lowExpr = buildKeys.head
+      val highExpr = buildKeys(1)
       while (rows.hasNext) {
         val r = rows.next()
-        val p = projection(r)
-        val rawLo = lowOf(p)
-        val rawHi = highOf(p)
+        val rawLo = lowExpr.eval(r)
+        val rawHi = highExpr.eval(r)
         if (rawLo != null && rawHi != null) {
           val lo = InternalRow.copyValue(rawLo)
           val hi = InternalRow.copyValue(rawHi)
@@ -653,20 +636,18 @@ private[joins] class PointIndex private (
 
 private[joins] object PointIndex {
 
-  def build(
+  def apply(
       keyType: DataType,
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): PointIndex = {
     val buffer = new ArrayBuffer[(Any, InternalRow)](RangeIndex.initialCapacity(sizeHint))
-    val projection = new InterpretedProjection(buildKeys)
-    val lowOf = RangeIndex.getValue(buildKeys.head.dataType, 0)
+    val keyExpr = buildKeys.head
     val ordering = PhysicalDataType.ordering(keyType)
 
     while (rows.hasNext) {
       val r = rows.next()
-      val p = projection(r)
-      val rawKey = lowOf(p)
+      val rawKey = keyExpr.eval(r)
       if (rawKey != null) {
         val key = InternalRow.copyValue(rawKey)
         buffer += ((key, r.copy()))
@@ -856,23 +837,24 @@ private[joins] object LongIntervalIndex {
     }
   }
 
-  def build(
+  def apply(
       keyType: DataType,
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): LongIntervalIndex = {
-    val toLongs: Seq[(InternalRow, Int) => Long] =
-      buildKeys.map(k => RangeIndex.requiredLongKey(k.dataType).field)
+    val toLongs: Seq[Any => Long] = buildKeys.map(k => RangeIndex.requiredLongKey(k.dataType).value)
     val valid = new ArrayBuffer[(Long, Long, InternalRow)](RangeIndex.initialCapacity(sizeHint))
-    val projection = new InterpretedProjection(buildKeys)
+    val lowExpr = buildKeys.head
+    val highExpr = if (buildKeys.length == 1) null else buildKeys(1)
 
     while (rows.hasNext) {
       val r = rows.next()
-      val p = projection(r)
-      if (!p.isNullAt(0) && (buildKeys.length == 1 || !p.isNullAt(1))) {
+      val rawLo = lowExpr.eval(r)
+      val rawHi = if (buildKeys.length == 1) rawLo else highExpr.eval(r)
+      if (rawLo != null && rawHi != null) {
         // A point build key is one key used as both ends, so it is read once.
-        var lo = toLongs.head(p, 0)
-        var hi = if (buildKeys.length == 1) lo else toLongs(1)(p, 1)
+        var lo = toLongs.head(rawLo)
+        var hi = if (buildKeys.length == 1) lo else toLongs(1)(rawHi)
         if (lo > hi) {
           val t = lo
           lo = hi
@@ -1095,21 +1077,21 @@ private[joins] class LongPointIndex private (
 
 private[joins] object LongPointIndex {
 
-  def build(
+  def apply(
       keyType: DataType,
       buildKeys: Seq[Expression],
       rows: Iterator[InternalRow],
       sizeHint: Option[Long]): LongPointIndex = {
     require(buildKeys.length == 1, "A long point index expects one build key.")
-    val keyAt = RangeIndex.requiredLongKey(buildKeys.head.dataType).field
+    val toLong = RangeIndex.requiredLongKey(buildKeys.head.dataType).value
     val valid = new ArrayBuffer[(Long, InternalRow)](RangeIndex.initialCapacity(sizeHint))
-    val projection = new InterpretedProjection(buildKeys)
+    val keyExpr = buildKeys.head
 
     while (rows.hasNext) {
       val r = rows.next()
-      val p = projection(r)
-      if (!p.isNullAt(0)) {
-        valid += ((keyAt(p, 0), r.copy()))
+      val rawKey = keyExpr.eval(r)
+      if (rawKey != null) {
+        valid += ((toLong(rawKey), r.copy()))
       }
     }
 
@@ -1203,17 +1185,17 @@ private[execution] case class RangeRelationBroadcastMode private (
         require(buildKeys.nonEmpty && buildKeys.length <= 2,
           "An interval index expects (low, high), or one point used as both ends.")
         if (longKeys) {
-          LongIntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          LongIntervalIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
         } else {
-          IntervalIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          IntervalIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
         }
 
       case PointIndexKind =>
         require(buildKeys.length == 1, "A point index expects one build key.")
         if (longKeys) {
-          LongPointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          LongPointIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
         } else {
-          PointIndex.build(buildKeys.head.dataType, buildKeys, rows, sizeHint)
+          PointIndex(buildKeys.head.dataType, buildKeys, rows, sizeHint)
         }
     }
   }
