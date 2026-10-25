@@ -43,15 +43,102 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       materializedRowCount: Option[BigInt] = None,
       materializedSizeInBytes: Option[BigInt] = None)
 
+  // `filterApplicationSidePlan` with its runtime filters, whether it got a bloom filter of the
+  // whole creation side, and whether it got a per-partition one. It can get a per-partition one
+  // only when `perPartition` is true.
   private def injectFilter(
       filterApplicationSideKey: Expression,
       filterApplicationSidePlan: LogicalPlan,
+      filterCreationSide: FilterCreationSide,
+      perPartition: Boolean): (LogicalPlan, Boolean, Boolean) = {
+    val planWithBloomFilter =
+      injectBloomFilter(filterApplicationSideKey, filterApplicationSidePlan, filterCreationSide)
+    val planWithFilters = if (perPartition) {
+      injectPerPartitionRuntimeFilter(
+        filterApplicationSideKey, planWithBloomFilter, filterCreationSide)
+    } else {
+      planWithBloomFilter
+    }
+    (planWithFilters, planWithBloomFilter ne filterApplicationSidePlan,
+      planWithFilters ne planWithBloomFilter)
+  }
+
+  /**
+   * Adds a per-partition bloom filter to the application side, when a V2 scan under each side
+   * reports a keyed partitioning by the same transform of its join key. It is a semi join of the
+   * application side with one bloom filter per partition key of the creation side. The condition
+   * matches the partition keys of the two sides, so each row is checked against the bloom filter of
+   * its own partition key.
+   *
+   * This adds a [[PerPartitionRuntimeFilterPlaceholder]] in a `Filter` on top of the application
+   * side. Predicate pushdown moves it along the key. [[InsertPerPartitionRuntimeFilterJoins]] then
+   * replaces it with the semi join where it landed, or drops it.
+   *
+   * The bloom filter `injectBloomFilter` added to `planWithBloomFilter`, if any, stays. A key gets
+   * one per-partition bloom filter at most, so a later join on the same key adds none.
+   */
+  private def injectPerPartitionRuntimeFilter(
+      filterApplicationSideKey: Expression,
+      planWithBloomFilter: LogicalPlan,
       filterCreationSide: FilterCreationSide): LogicalPlan = {
-    injectBloomFilter(
-      filterApplicationSideKey,
-      filterApplicationSidePlan,
-      filterCreationSide
-    )
+    if (!conf.runtimeBloomFilterPerPartitionEnabled) {
+      return planWithBloomFilter
+    }
+    val placeholder = for {
+      application <- partitionTransform(filterApplicationSideKey, planWithBloomFilter)
+      creation <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
+      if application.isSameFunction(creation)
+      if !hasPerPartitionRuntimeFilter(planWithBloomFilter, filterApplicationSideKey)
+      creationPartitionKey = Alias(creation, "partitionKey")()
+      bloomFilter = Alias(new BloomFilterAggregate(
+        new XxHash64(Seq(filterCreationSide.key))).toAggregateExpression(), "bloomFilter")()
+      aggregate = withNewSubqueryIds(ColumnPruning(PullOutGroupingExpressions(Aggregate(
+        Seq(creation), Seq(creationPartitionKey, bloomFilter), filterCreationSide.plan))))
+      if canEvaluateApart(aggregate)
+    } yield PerPartitionRuntimeFilterPlaceholder(filterApplicationSideKey, application, aggregate,
+      creationPartitionKey.toAttribute, bloomFilter.toAttribute)
+    placeholder.map(Filter(_, planWithBloomFilter)).getOrElse(planWithBloomFilter)
+  }
+
+  // `aggregate` with new exprIds for its scalar subqueries. It holds a copy of the creation side,
+  // which no rule sees until the semi join puts it into the plan. `MergeSubplans` can rewrite the
+  // scalar subqueries of the creation side in the plan, and they keep their exprIds. Adaptive query
+  // execution plans the subqueries of a plan by exprId, so the copy's own would get another plan.
+  private def withNewSubqueryIds(aggregate: LogicalPlan): LogicalPlan =
+    aggregate.transformAllExpressions {
+      case subquery: ScalarSubquery => subquery.copy(exprId = NamedExpression.newExprId)
+    }
+
+  /**
+   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`.
+   * Defined when:
+   *  - V2 bucketing is on;
+   *  - `key` is one of the scan's columns, followed down through `plan`;
+   *  - the scan reports a keyed partitioning by a single transform of that column;
+   *  - the transform is deterministic, since both sides of the semi join evaluate it;
+   *  - Spark can evaluate the transform (`TransformExpression.evaluableFunction`).
+   *
+   * The semi join is correct whatever lies between `plan` and the scan, since it checks each row
+   * against the bloom filter of its own partition key. A row whose partition key is null passes it,
+   * so the transform may return null for any key.
+   */
+  private def partitionTransform(
+      key: Expression,
+      plan: LogicalPlan): Option[TransformExpression] = {
+    if (!conf.v2BucketingEnabled) {
+      None
+    } else {
+      findExpressionAndTrackLineageDown(key, plan).flatMap {
+        case (column: Attribute, scan: DataSourceV2ScanRelation) =>
+          scan.keyGroupedPartitioning.collect {
+            case Seq(t @ TransformExpression(_, Seq(child), _, _))
+                if child.semanticEquals(column) && t.function.isDeterministic &&
+                  t.evaluableFunction.isDefined =>
+              t.copy(children = Seq(key))
+          }
+        case _ => None
+      }
+    }
   }
 
   private def injectBloomFilter(
@@ -82,21 +169,26 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =
       ConstantFolding(ColumnPruning(Aggregate(Nil, Seq(alias), filterCreationSidePlan)))
-    // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
-    // creation-side subquery cannot be extracted into a Python evaluation operator.
-    if (aggregate.containsPattern(PYTHON_UDF)) {
-      return filterApplicationSidePlan
-    }
-    // The subquery evaluates the creation side again, apart from the join. A non-deterministic
-    // filter or key can give it different keys than the join sees. This check does not see into
-    // a leaf that returns other rows when read again, like a cache whose plan is not repeatable.
-    if (!aggregate.deterministic) {
+    if (!canEvaluateApart(aggregate)) {
       return filterApplicationSidePlan
     }
     val bloomFilterSubquery = ScalarSubquery(aggregate, Nil)
     val filter = BloomFilterMightContain(bloomFilterSubquery,
       new XxHash64(Seq(filterApplicationSideKey)))
     Filter(filter, filterApplicationSidePlan)
+  }
+
+  // Whether `aggregate`, the bloom filter aggregate of a creation side, can evaluate that creation
+  // side again, apart from the join. The subquery of a global bloom filter and the aggregate of a
+  // per-partition one both do.
+  private def canEvaluateApart(aggregate: LogicalPlan): Boolean = {
+    // Runtime filters are introduced after subquery optimization, so Python UDFs in a new
+    // creation-side subquery cannot be extracted into a Python evaluation operator.
+    !aggregate.containsPattern(PYTHON_UDF) &&
+      // A non-deterministic filter or key can give it different keys than the join sees. This
+      // check does not see into a leaf that returns other rows when read again, like a cache whose
+      // plan is not repeatable.
+      aggregate.deterministic
   }
 
   /**
@@ -396,6 +488,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     case _ => Nil
   }
 
+  // `plan` without the placeholders of per-partition bloom filters, which joins below added. A
+  // creation side leaves them out. Nothing can evaluate a placeholder, so with one the creation
+  // side of a key with DPP filters would fail `canEvaluateAgain`. A copy in a subquery or an
+  // aggregate would only become `true`, as `InsertPerPartitionRuntimeFilterJoins` builds no semi
+  // join there.
+  private def withoutPerPartitionRuntimeFilters(plan: LogicalPlan): LogicalPlan =
+    PerPartitionRuntimeFilterPlaceholder.replaced(plan)((below, _) => below)
+
   // `plan` without the DPP filters on top of it that `drop` picks, by default all of them.
   private def withoutDppFilters(
       plan: LogicalPlan,
@@ -476,8 +576,32 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
   }
 
+  // Whether `plan` already holds a per-partition bloom filter of `key`. It is a placeholder, or the
+  // semi join that an earlier optimizer pass built, as for an IN subquery that became a join. Each
+  // holds the key as pushdown left it, rewritten through the aliases it passed. So the keys are
+  // compared by the scan column they come from.
+  private def hasPerPartitionRuntimeFilter(plan: LogicalPlan, key: Expression): Boolean = {
+    def columnOf(k: Expression, below: LogicalPlan): Option[Expression] =
+      findExpressionAndTrackLineageDown(k, below).map(_._1)
+    lazy val column = columnOf(key, plan)
+    def isKey(k: Expression, below: LogicalPlan): Boolean =
+      columnOf(k, below).exists(c => column.exists(_.semanticEquals(c)))
+    plan.exists {
+      case Filter(condition, child) => splitConjunctivePredicates(condition).exists {
+        case p: PerPartitionRuntimeFilterPlaceholder => isKey(p.child, child)
+        case _ => false
+      }
+      case join: Join =>
+        PerPartitionRuntimeFilterPlaceholder.semiJoinKey(join).exists(isKey(_, join.left))
+      case _ => false
+    }
+  }
+
   private def tryInjectRuntimeFilter(plan: LogicalPlan): LogicalPlan = {
     var filterCounter = 0
+    // Per-partition bloom filters count apart, under the same threshold. So one that is dropped
+    // later takes no place of a bloom filter of a whole creation side.
+    var perPartitionCounter = 0
     val numFilterThreshold = conf.getConf(SQLConf.RUNTIME_FILTER_NUMBER_THRESHOLD)
     // A key with a DPP filter gets no bloom filter, unless physical planning drops that filter. It
     // drops an `onlyInBroadcast` DPP filter when no broadcast join broadcasts a plan that the
@@ -538,8 +662,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
           // 2. There is no DPP filter on the key that physical planning may keep
           if (filterCounter < numFilterThreshold &&
             isSimpleExpression(l) && isSimpleExpression(r) && !keyDpps.exists(isKept)) {
-            val oldLeft = newLeft
-            val oldRight = newRight
+            // Whether each side got a bloom filter of the whole creation side. A per-partition one
+            // alone does not count.
+            var leftBloomFilter = false
+            // Whether the left side got a per-partition bloom filter. Then the right side can get
+            // only a bloom filter of the whole creation side, so a join gets a semi join on one
+            // side at most.
+            var leftPerPartition = false
+            var rightBloomFilter = false
             // The creation side for a bloom filter on `key` of `side`. It leaves out the key's own
             // DPP filters, which physical planning drops. An expression such as a UDF or a `LIKE`
             // in their build plan would also stop the search for the creation side, since
@@ -555,7 +685,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
                 other: LogicalPlan,
                 otherKey: Expression): Option[FilterCreationSide] =
               extractBeneficialFilterCreatePlan(
-                side, withoutDppFilters(other, keyDpps.contains), key, otherKey).filter { c =>
+                side, withoutPerPartitionRuntimeFilters(withoutDppFilters(other, keyDpps.contains)),
+                key, otherKey).filter { c =>
                 keyDpps.isEmpty || (UnsafeRowUtils.isBinaryStable(key.dataType) &&
                   canPushDown(key, side) && canEvaluateAgain(c))
               }
@@ -567,19 +698,33 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             val hasShuffle = isProbablyShuffleJoin(left, right, hint)
             if (canPruneLeft(joinType) && (hasShuffle || probablyHasShuffle(left)) &&
               !hasBloomFilter(newLeft, l)) {
-              creationSide(left, l, right, r).foreach(c => newLeft = injectFilter(l, newLeft, c))
+              creationSide(left, l, right, r).foreach { c =>
+                val (injected, bloomFilter, perPartition) =
+                  injectFilter(l, newLeft, c, perPartitionCounter < numFilterThreshold)
+                newLeft = injected
+                leftBloomFilter = bloomFilter
+                leftPerPartition = perPartition
+                if (perPartition) perPartitionCounter += 1
+              }
             }
-            // Did we actually inject on the left? If not, try on the right
+            // Did we actually inject a bloom filter of the whole creation side on the left? If not,
+            // try on the right
             // Check if:
             // 1. The current join type supports prune the right side with runtime filter
             // 2. The current join is a shuffle join or a broadcast join that
             //    has a shuffle below it
             // 3. There is no bloom filter on the right key yet
-            if (newLeft.fastEquals(oldLeft) && canPruneRight(joinType) &&
+            if (!leftBloomFilter && canPruneRight(joinType) &&
               (hasShuffle || probablyHasShuffle(right)) && !hasBloomFilter(newRight, r)) {
-              creationSide(right, r, left, l).foreach(c => newRight = injectFilter(r, newRight, c))
+              creationSide(right, r, left, l).foreach { c =>
+                val (injected, bloomFilter, perPartition) = injectFilter(r, newRight, c,
+                  !leftPerPartition && perPartitionCounter < numFilterThreshold)
+                newRight = injected
+                rightBloomFilter = bloomFilter
+                if (perPartition) perPartitionCounter += 1
+              }
             }
-            if (!newLeft.fastEquals(oldLeft) || !newRight.fastEquals(oldRight)) {
+            if (leftBloomFilter || rightBloomFilter) {
               filterCounter = filterCounter + 1
             }
           }
