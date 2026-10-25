@@ -40,7 +40,7 @@ case class CreateHiveTableAsSelectCommand(
     query: LogicalPlan,
     outputColumnNames: Seq[String],
     mode: SaveMode)
-  extends LeafRunnableCommand with CTEInChildren {
+  extends LeafRunnableCommand with CTEInChildren with V1WritesHiveUtils {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -75,9 +75,13 @@ case class CreateHiveTableAsSelectCommand(
         // `SaveAsV1TableCommand` runs this command with `SaveMode.Overwrite` to replace the
         // table. Drop it here, after the analysis and the checks of the new table, because the
         // new table is created before the write.
+        val qualifiedNewTableDesc =
+          newTableDesc.copy(identifier = catalog.qualifyIdentifier(tableIdentifier))
         sparkSession.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
-          .validateHiveSerdeTable(
-            newTableDesc.copy(identifier = catalog.qualifyIdentifier(tableIdentifier)))
+          .validateHiveSerdeTable(qualifiedNewTableDesc)
+        // The dynamic partition checks of the write, e.g., the strict mode.
+        getDynamicPartitionColumns(qualifiedNewTableDesc,
+          qualifiedNewTableDesc.partitionColumnNames.map(_ -> None).toMap, query)
         catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
       }
       // TODO ideally, we should get the output data ready first and then
