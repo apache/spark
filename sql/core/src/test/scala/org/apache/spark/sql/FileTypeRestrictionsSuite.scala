@@ -113,16 +113,25 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
 
   test("schema evolution cannot add a FILE without a qualifier") {
     withTable("testcat.t") {
-      sql("CREATE TABLE testcat.t (id INT)")
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql("INSERT WITH SCHEMA EVOLUTION INTO testcat.t " +
-            "SELECT 1 AS id, CAST(NULL AS FILE) AS f")
-        },
-        condition = "FILE_TYPE_UNKNOWN_WRITE",
-        parameters = Map("colNames" -> "[`f`]"))
-      // The table is not changed.
-      assert(spark.table("testcat.t").schema === new StructType().add("id", IntegerType))
+      sql("CREATE TABLE testcat.t (id INT, s STRUCT<a: INT>)")
+      val schema = spark.table("testcat.t").schema
+      Seq(
+        "SELECT 1 AS id, named_struct('a', 1) AS s, CAST(NULL AS FILE) AS f" -> "[`f`]",
+        "SELECT 1 AS id, named_struct('a', 1, 'f', CAST(NULL AS FILE)) AS s" -> "[`s`.`f`]"
+      ).foreach { case (query, colNames) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"INSERT WITH SCHEMA EVOLUTION INTO testcat.t $query")
+          },
+          condition = "FILE_TYPE_UNKNOWN_WRITE",
+          parameters = Map("colNames" -> colNames))
+        // The table is not changed.
+        assert(spark.table("testcat.t").schema === schema)
+      }
+      // A FILE EXTERNAL column can be added.
+      sql("INSERT WITH SCHEMA EVOLUTION INTO testcat.t " +
+        "SELECT 1 AS id, named_struct('a', 1) AS s, CAST(NULL AS FILE EXTERNAL) AS f")
+      assert(spark.table("testcat.t").schema === schema.add("f", FileType.external))
     }
   }
 
@@ -131,7 +140,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       withView("pv") {
         sql("CREATE TEMPORARY VIEW v AS SELECT 1 AS id, CAST(NULL AS FILE) AS f")
         sql("CREATE VIEW pv AS SELECT 1 AS id, CAST(NULL AS FILE) AS f")
-        Seq("v" -> "t", "pv" -> "t", "v" -> "testcat.t").foreach { case (source, target) =>
+        for (source <- Seq("v", "pv"); target <- Seq("t", "testcat.t")) {
           withTable(target) {
             checkError(
               exception = intercept[AnalysisException] {
@@ -140,6 +149,15 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
               condition = "FILE_TYPE_UNKNOWN_WRITE",
               parameters = Map("colNames" -> "[`f`]"))
             assert(!spark.catalog.tableExists(target))
+            // As for CREATE TABLE AS SELECT, IF NOT EXISTS does not skip the check when the
+            // table exists.
+            sql(s"CREATE TABLE $target (id INT)")
+            checkError(
+              exception = intercept[AnalysisException] {
+                sql(s"CREATE TABLE IF NOT EXISTS $target LIKE $source")
+              },
+              condition = "FILE_TYPE_UNKNOWN_WRITE",
+              parameters = Map("colNames" -> "[`f`]"))
           }
         }
       }
@@ -153,26 +171,21 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       ("CLUSTERED BY (f) INTO 4 BUCKETS", "PARTITION_COLUMN"),
       ("CLUSTER BY (f)", "CLUSTERING_COLUMN")).foreach { case (clause, usage) =>
       Seq("testcat.t", "t").foreach { table =>
-        // `bucket` is a V2 transform, and CLUSTERED BY ... INTO ... BUCKETS is V1 syntax.
-        val isV2 = table.startsWith("testcat")
-        if (isV2 != clause.startsWith("CLUSTERED BY")) {
-          val provider = if (isV2) "" else "USING parquet"
-          withTable(table) {
-            checkError(
-              exception = intercept[AnalysisException] {
-                sql(s"CREATE TABLE $table (id INT, f FILE EXTERNAL) $provider $clause")
-              },
-              condition = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
-              parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
-            if (!clause.contains("bucket")) {
-              checkError(
-                exception = intercept[AnalysisException] {
-                  sql(s"CREATE TABLE $table $provider $clause AS $externalFile")
-                },
-                condition = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
-                parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
-            }
-          }
+        val provider = if (table.startsWith("testcat")) "" else "USING parquet"
+        withTable(table) {
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TABLE $table (id INT, f FILE EXTERNAL) $provider $clause")
+            },
+            condition = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
+            parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
+          checkError(
+            exception = intercept[AnalysisException] {
+              sql(s"CREATE TABLE $table $provider $clause AS " +
+                "SELECT 1 AS id, CAST(NULL AS FILE EXTERNAL) AS f")
+            },
+            condition = s"FILE_TYPE_UNSUPPORTED_COLUMN_USAGE.$usage",
+            parameters = Map("colName" -> "`f`", "dataType" -> "\"FILE EXTERNAL\""))
         }
       }
     }
@@ -444,10 +457,20 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       spark.udf.register("file_udf", fileUdf, FileType())
       spark.udf.register("file_udaf", new FileTypeUDAF(FileType()))
     }
+    // A UDAF class registered by name is checked only when it is used in a query.
+    withUserDefinedFunction("class_udaf" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION class_udaf AS '${classOf[ExternalFileTypeUDAF].getName}'")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT class_udaf(id) FROM range(1)")
+        },
+        condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
+        parameters = Map("routineType" -> "function", "routineName" -> "`class_udaf`"))
+    }
   }
 
   test("a Python UDF and UDTF declare a plain FILE in their return type") {
-    // Registration does not run Python, so the function body is never used.
+    // Neither registration nor analysis runs Python, so the function body is never used.
     val func = SimplePythonFunction(
       command = Seq.empty[Byte],
       envVars = new java.util.HashMap[String, String](),
@@ -479,6 +502,14 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
       condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_MAP_KEY",
       parameters = Map("routineType" -> "function", "routineName" -> "`py_udf`"))
 
+    // A Python UDF that is not registered is checked when it is used in a query.
+    checkError(
+      exception = intercept[AnalysisException] {
+        spark.range(1).select(pythonUdf(FileType.external)(col("id")))
+      },
+      condition = "FILE_TYPE_IN_ROUTINE_SIGNATURE_UNSUPPORTED_QUALIFIER",
+      parameters = Map("routineType" -> "function", "routineName" -> "`py_udf`"))
+
     // A plain FILE is accepted, and a UDTF with an analyze method has no static return type.
     withUserDefinedFunction("py_udf" -> true, "py_udtf" -> true) {
       spark.udf.registerPython("py_udf", pythonUdf(FileType()))
@@ -499,3 +530,6 @@ private class FileTypeUDAF(override val dataType: DataType) extends UserDefinedA
   override def merge(buffer1: MutableAggregationBuffer, buffer2: Row): Unit = {}
   override def evaluate(buffer: Row): Any = null
 }
+
+/** A UDAF that returns a FILE EXTERNAL, for registration by class name. */
+private class ExternalFileTypeUDAF extends FileTypeUDAF(FileType.external)

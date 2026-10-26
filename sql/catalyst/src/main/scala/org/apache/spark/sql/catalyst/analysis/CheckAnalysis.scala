@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
-import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogV2Util, LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.connector.expressions.ClusterByTransform
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -1084,6 +1084,20 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 }
                 genExpr.validate(col.name, col.dataType, create.columns)
               }
+            }
+
+          // A view can hold a FILE without a qualifier, which a table cannot store. A V1 target
+          // is checked by `CreateTableLikeCommand`, as the V1 command carries no resolved source.
+          case CreateTableLike(_: ResolvedIdentifier, source, _, _, _, _, _) =>
+            source match {
+              case ResolvedTable(_, _, table, _) =>
+                TypeUtils.checkNoUnknownFileTypeInTableSchema(
+                  CatalogV2Util.v2ColumnsToStructType(table.columns()))
+              case view: ResolvedPersistentView =>
+                TypeUtils.checkNoUnknownFileTypeInTableSchema(view.info.schema)
+              case ResolvedTempView(_, metadata) =>
+                TypeUtils.checkNoUnknownFileTypeInTableSchema(metadata.schema)
+              case _ =>
             }
 
           case write: V2WriteCommand if write.resolved =>

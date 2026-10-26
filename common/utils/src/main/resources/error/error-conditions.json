@@ -3048,7 +3048,7 @@
   },
   "FILE_TYPE_UNKNOWN_WRITE" : {
     "message" : [
-      "Column(s) <colNames> have an ambiguous FILE type, so they cannot be stored in a table. A table column must be FILE EXTERNAL, so the values written to these columns must be FILE EXTERNAL."
+      "Column(s) <colNames> contain a FILE without the EXTERNAL qualifier, which a table cannot store."
     ],
     "sqlState" : "42K01"
   },
