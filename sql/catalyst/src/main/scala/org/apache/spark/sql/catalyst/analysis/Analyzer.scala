@@ -63,6 +63,7 @@ import org.apache.spark.sql.execution.datasources.v2.{ChangelogTable, DataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.{PartitionOverwriteMode, StoreAssignmentPolicy}
 import org.apache.spark.sql.internal.connector.{SchemaAlignmentConfig, SupportsConfigurableSchemaAlignment, V1Function}
+import org.apache.spark.sql.metricview.logical.MetricViewPlaceholder
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
@@ -569,6 +570,21 @@ class Analyzer(
           analyze()
         }
       }
+    }
+  }
+
+  /**
+   * Analyzes `plan` and returns the temporary functions it refers to, recorded the same way as
+   * for a view's query. Used to reject temporary functions in a metric view's source, which is
+   * resolved in the metric view's own context when it is read. It runs the fixed-point analyzer
+   * without `checkAnalysis`, so call it after `plan` has been analyzed successfully.
+   */
+  private[sql] def referredTempFunctions(plan: LogicalPlan): Seq[String] = {
+    AnalysisContext.withNewAnalysisContext {
+      AnalysisHelper.markInAnalyzer {
+        executeSameContext(plan)
+      }
+      AnalysisContext.get.referredTempFunctionNames.toSeq
     }
   }
 
@@ -1231,6 +1247,9 @@ class Analyzer(
         view.copy(child = resolveTableReferencesInTempView(view.child))
       case p @ SubqueryAlias(_, view: View) =>
         p.copy(child = resolveViews(view, options))
+      case mv: MetricViewPlaceholder if !mv.isCreate && !mv.child.resolved =>
+        ViewResolution.resolveMetricView(
+          mv, resolveChild = executeSameContext, checkAnalysis = checkAnalysis)
       case _ => plan
     }
 

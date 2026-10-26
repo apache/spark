@@ -206,8 +206,12 @@ object MetricViewHelper {
       } else {
         referredTempVariablesUnderIdentifier
       }
+    // The source is resolved in the metric view's own context when read, where temporary
+    // functions are not visible, so reject them as for a regular view. Dimension and measure
+    // expressions are resolved in the querying session and may still use them.
+    val referredTempFunctions = analyzer.referredTempFunctions(placeholder.child)
     ViewHelper.verifyTemporaryObjectsNotExists(
-      isTemporary = false, nameParts, analyzed, Seq.empty, referredVarsUnderIdentifier)
+      isTemporary = false, nameParts, analyzed, referredTempFunctions, referredVarsUnderIdentifier)
     (analyzed, metricView)
   }
 }
