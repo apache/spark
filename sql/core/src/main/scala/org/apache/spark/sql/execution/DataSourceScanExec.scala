@@ -519,12 +519,10 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   private def translateToV1Filters(
       dataFilters: Seq[Expression],
-      scalarSubqueryToLiteral: execution.ScalarSubquery => Literal): Seq[Filter] = {
-    val scalarSubqueryReplaced = dataFilters.map(_.transform {
-      // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
-      // support translating it.
-      case scalarSubquery: execution.ScalarSubquery => scalarSubqueryToLiteral(scalarSubquery)
-    })
+      replaceScalarSubqueries: Expression => Expression): Seq[Filter] = {
+    // Replace scalar subquery to literal so that `DataSourceStrategy.translateFilter` can
+    // support translating it.
+    val scalarSubqueryReplaced = dataFilters.map(replaceScalarSubqueries)
 
     val supportNestedPredicatePushdown = DataSourceUtils.supportNestedPredicatePushdown(relation)
     // `dataFilters` should not include any constant metadata col filters
@@ -539,7 +537,8 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
 
   // This field may execute subquery expressions and should not be accessed during planning.
   @transient
-  protected lazy val pushedDownFilters: Seq[Filter] = translateToV1Filters(dataFilters, _.toLiteral)
+  protected lazy val pushedDownFilters: Seq[Filter] =
+    translateToV1Filters(dataFilters, execution.ScalarSubquery.replaceWithLiterals)
 
   override lazy val metadata: Map[String, String] = {
     def seqToString(seq: Seq[Any]) = seq.mkString("[", ", ", "]")
@@ -550,13 +549,19 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
     // `metadata` is accessed during planning and the scalar subquery is not executed yet. Here
     // we get the pretty string of the scalar subquery, for display purpose only. A filter with an
     // `In` that has a scalar subquery in its list is not displayed, since the values of an `In`
-    // are converted to the type of its column, which the string does not have.
+    // are converted to the type of its column, which the string does not have. A field read out
+    // of a subquery that `MergeSubplans` merged with others gets the string as a whole, since the
+    // string has no field to read.
     val pushedFiltersForDisplay = translateToV1Filters(
       dataFilters.filterNot(_.exists {
         case in: In => in.list.exists(_.exists(_.isInstanceOf[execution.ScalarSubquery]))
         case _ => false
       }),
-      s => Literal("ScalarSubquery#" + s.exprId.id))
+      _.transform {
+        case GetStructField(s: execution.ScalarSubquery, _, _) =>
+          Literal("ScalarSubquery#" + s.exprId.id)
+        case s: execution.ScalarSubquery => Literal("ScalarSubquery#" + s.exprId.id)
+      })
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,

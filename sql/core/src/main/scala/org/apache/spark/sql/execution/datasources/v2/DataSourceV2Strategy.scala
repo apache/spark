@@ -1054,10 +1054,7 @@ private[sql] object DataSourceV2Strategy extends Logging {
    */
   protected[sql] def translateScalarSubqueryFilterV2(
       expr: Expression): Option[Predicate] = {
-    val literalized = expr.transform {
-      case s: ExecScalarSubquery => s.toLiteral
-    }
-    translateFilterV2(literalized)
+    translateFilterV2(ExecScalarSubquery.replaceWithLiterals(expr))
   }
 
   /**

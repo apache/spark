@@ -23,8 +23,8 @@ import org.apache.spark.{SparkArithmeticException, SparkConf, SparkRuntimeExcept
 import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{CreateNamedStruct, EqualTo, Expression,
-  ExprId, GreaterThanOrEqual, Literal, NamedExpression, OuterReference, PlanExpression, Rand,
-  SubqueryExpression}
+  ExprId, GetStructField, GreaterThanOrEqual, Literal, NamedExpression, OuterReference,
+  PlanExpression, Rand, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GeneratePredicate}
 import org.apache.spark.sql.catalyst.plans.{LeftAnti, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Sort, Union}
@@ -2566,6 +2566,51 @@ class SubquerySuite extends SharedSparkSession
           Seq(SimpleMode, FormattedMode).foreach(df.queryExecution.explainString(_))
           df.collect()
         }
+      }
+    }
+  }
+
+  test("SPARK-60569: FileSourceScanExec pushes down data filters with merged scalar subqueries") {
+    def checkFileSourceScan(query: String, answer: Seq[Row]): Unit = {
+      val df = sql(query)
+      checkAnswer(df, answer)
+      val fileSourceScanExec = collect(df.queryExecution.executedPlan) {
+        case f: FileSourceScanExec => f
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(fileSourceScanExec.size === 1)
+      // `MergeSubplans` merged the two subqueries into one, and each filter reads its result out
+      // of the struct the merged one returns.
+      val mergedSubqueryResults = fileSourceScanExec.head.dataFilters.flatMap(_.collect {
+        case g @ GetStructField(_: ScalarSubquery, _, _) => g
+      })
+      assert(mergedSubqueryResults.length === 2)
+      val pushedFilters = fileSourceScanExec.head.metadata("PushedFilters")
+      assert(pushedFilters.contains("GreaterThan(c1,ScalarSubquery#"))
+      assert(pushedFilters.contains("LessThan(c1,ScalarSubquery#"))
+      assert(fileSourceScanExec.head.metrics("numFiles").value === 1)
+      assert(fileSourceScanExec.head.metrics("numOutputRows").value === answer.size)
+    }
+
+    withTable("t1", "t2") {
+      withSQLConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1") {
+        Seq(1, 2, 3).toDF("c1").write.format("parquet").saveAsTable("t1")
+        Seq(4, 5, 6).toDF("c2").write.format("parquet").saveAsTable("t2")
+
+        // The row group is skipped by `c1 > 4`.
+        checkFileSourceScan(
+          "SELECT * FROM t1 WHERE c1 > (SELECT min(c2) FROM t2) AND c1 < (SELECT max(c2) FROM t2)",
+          Seq.empty)
+        // The row group is skipped by `c1 < 1`.
+        checkFileSourceScan(
+          "SELECT * FROM t1 " +
+            "WHERE c1 > (SELECT min(c2) - 10 FROM t2) AND c1 < (SELECT max(c2) - 5 FROM t2)",
+          Seq.empty)
+        // The row group is kept by `c1 > -6` and `c1 < 6`, but not if the fields were swapped.
+        checkFileSourceScan(
+          "SELECT * FROM t1 " +
+            "WHERE c1 > (SELECT min(c2) - 10 FROM t2) AND c1 < (SELECT max(c2) FROM t2)",
+          Row(1) :: Row(2) :: Row(3) :: Nil)
       }
     }
   }
