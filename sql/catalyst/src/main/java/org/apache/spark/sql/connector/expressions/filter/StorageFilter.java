@@ -49,7 +49,8 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * and converted.
  * <p>
  * Spark hands the filter to each task in a {@link StorageFilterRequest}. The readers of a task
- * share one instance, which is not thread-safe.
+ * share one instance, which is not thread-safe. A reader must not copy or serialize it, since an
+ * evaluated instance may have released what a copy would be built from.
  *
  * @since 5.0.0
  */

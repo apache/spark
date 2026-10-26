@@ -47,7 +47,8 @@ import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
  *    Here the unit is the partition;
  *  - `markAllChecked`: reads without the filter but marks every row checked, which breaks the
  *    contract on purpose;
- *  - `dropChecked`: never appends the checked column, which breaks the contract on purpose;
+ *  - `dropChecked`: `true` never appends the checked column, and `later` appends it to the first
+ *    row or batch only. Either breaks the contract on purpose;
  *  - `declared`: the comma-separated storage-filter columns, `k` by default, a dot separating a
  *    nested field;
  *  - `valueName`: the name of the value column, `v` by default;
@@ -198,7 +199,7 @@ class StorageFilterTestScanBuilder(tableSchema: StructType, options: CaseInsensi
       columnar = options.getBoolean("columnar", false),
       giveUp = options.getBoolean("giveUp", false),
       marksAllChecked = options.getBoolean("markAllChecked", false),
-      dropsChecked = options.getBoolean("dropChecked", false))
+      dropChecked = options.getOrDefault("dropChecked", ""))
     val declared = options.getOrDefault("declared", "k").split(",").filter(_.nonEmpty).toSeq
     val numPartitions = options.getInt("numPartitions", 1)
     options.getOrDefault("runtimeFiltering", "") match {
@@ -272,7 +273,7 @@ case class StorageFilterTestReaderFactory(
     columnar: Boolean,
     giveUp: Boolean,
     marksAllChecked: Boolean,
-    dropsChecked: Boolean)
+    dropChecked: String)
   extends PartitionReaderFactory {
 
   override def supportColumnarReads(partition: InputPartition): Boolean = columnar
@@ -294,7 +295,8 @@ case class StorageFilterTestReaderFactory(
       partition: InputPartition,
       request: StorageFilterRequest): PartitionReader[InternalRow] =
     new StorageFilterTestReader(keys(partition), schema, filterOf(request),
-      request.appendsCheckedColumn() && !dropsChecked, marksAllChecked)
+      request.appendsCheckedColumn() && dropChecked != "true", marksAllChecked,
+      dropsCheckedLater = dropChecked == "later")
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] =
     new StorageFilterTestColumnarReader(keys(partition), schema, None, appendsChecked = false)
@@ -303,7 +305,8 @@ case class StorageFilterTestReaderFactory(
       partition: InputPartition,
       request: StorageFilterRequest): PartitionReader[ColumnarBatch] =
     new StorageFilterTestColumnarReader(keys(partition), schema, filterOf(request),
-      request.appendsCheckedColumn() && !dropsChecked, marksAllChecked)
+      request.appendsCheckedColumn() && dropChecked != "true", marksAllChecked,
+      dropsCheckedLater = dropChecked == "later")
 
   private def keys(partition: InputPartition): StorageFilterTestPartition =
     partition.asInstanceOf[StorageFilterTestPartition]
@@ -313,19 +316,22 @@ case class StorageFilterTestReaderFactory(
  * Serves the rows of `partition` row by row, holding the columns of `schema`, and drops any row
  * `filter` rejects, with the checked column last when `appendsChecked`. The filter's row holds
  * the values of its `references()`. `filter` is cleared when it cannot be applied.
- * `marksAllChecked` marks every row checked.
+ * `marksAllChecked` marks every row checked. `dropsCheckedLater` appends the checked column to
+ * the first row only.
  */
 class StorageFilterTestReader(
     partition: StorageFilterTestPartition,
     schema: StructType,
     private var filter: Option[StorageFilter],
     appendsChecked: Boolean,
-    marksAllChecked: Boolean = false)
+    marksAllChecked: Boolean = false,
+    dropsCheckedLater: Boolean = false)
   extends PartitionReader[InternalRow] {
 
   private val referenceNames = filter.map(StorageFilterTestSource.columnsOf).getOrElse(Nil)
   private var current: Long = partition.start - 1L
   private var row: InternalRow = _
+  private var returnedAny = false
 
   override def next(): Boolean = {
     var found = false
@@ -345,7 +351,9 @@ class StorageFilterTestReader(
       if (passes) {
         val values = schema.fieldNames.map(StorageFilterTestSource.valueOf(_, key)).toArray[Any]
         val checked = filter.isDefined || marksAllChecked
-        row = new GenericInternalRow(if (appendsChecked) values :+ checked else values)
+        val withChecked = appendsChecked && !(dropsCheckedLater && returnedAny)
+        row = new GenericInternalRow(if (withChecked) values :+ checked else values)
+        returnedAny = true
         StorageFilterTestSource.rowsReturned.incrementAndGet()
         found = true
       }
@@ -362,14 +370,16 @@ class StorageFilterTestReader(
  * Serves the rows of `partition` in batches of up to `batchSize` rows, holding the columns of
  * `schema`. It keeps the rows `filter.select` keeps over a batch of the filter's `references()`,
  * with the checked column last when `appendsChecked`. `filter` is cleared when it cannot be
- * applied. `marksAllChecked` marks every row checked.
+ * applied. `marksAllChecked` marks every row checked. `dropsCheckedLater` appends the checked
+ * column to the first batch only.
  */
 class StorageFilterTestColumnarReader(
     partition: StorageFilterTestPartition,
     schema: StructType,
     private var filter: Option[StorageFilter],
     appendsChecked: Boolean,
-    marksAllChecked: Boolean = false)
+    marksAllChecked: Boolean = false,
+    dropsCheckedLater: Boolean = false)
   extends PartitionReader[ColumnarBatch] {
 
   private val batchSize = StorageFilterTestSource.batchSize
@@ -382,6 +392,10 @@ class StorageFilterTestColumnarReader(
     new OnHeapColumnVector(batchSize, BooleanType)
   }
   private val batch = new ColumnarBatch((values ++ checked).toArray[ColumnVector])
+  // The same vectors without the checked column, which `batch` closes.
+  private val narrowBatch = new ColumnarBatch(values.toArray[ColumnVector])
+  private var current = batch
+  private var returnedAny = false
   private var start = partition.start
 
   override def next(): Boolean = {
@@ -414,12 +428,14 @@ class StorageFilterTestColumnarReader(
       checked.foreach(_.putBooleans(0, count, filter.isDefined || marksAllChecked))
       start += n
     }
-    batch.setNumRows(count)
+    if (dropsCheckedLater && returnedAny) current = narrowBatch
+    current.setNumRows(count)
+    returnedAny = returnedAny || count > 0
     StorageFilterTestSource.rowsReturned.addAndGet(count)
     count > 0
   }
 
-  override def get(): ColumnarBatch = batch
+  override def get(): ColumnarBatch = current
 
   override def close(): Unit = {
     batch.close()

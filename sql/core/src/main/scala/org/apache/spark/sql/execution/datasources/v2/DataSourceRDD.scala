@@ -143,9 +143,9 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  *                             Serialized with the task, so each task has its own instance of the
  *                             filter.
  * @param checkedOutputWidth The width of the rows or batches a reader returns when the request asks
- *                           for the checked column. Each reader's first one is checked against it,
- *                           since a reader that leaves the column out would have the plan above
- *                           the scan read past its rows.
+ *                           for the checked column. Each one is checked against it, since a reader
+ *                           that leaves the column out would have the plan above the scan read past
+ *                           its rows.
  */
 class DataSourceRDD(
     sc: SparkContext,
@@ -237,10 +237,9 @@ private class PartitionIterator[T](
     private var reader: PartitionReader[T],
     rowCount: T => Int,
     taskState: TaskState,
-    checkFirst: Option[T => Unit] = None) extends Iterator[T] {
+    check: Option[T => Unit] = None) extends Iterator[T] {
   private var valuePrepared = false
   private var hasMoreInput = true
-  private var firstChecked = checkFirst.isEmpty
 
   // Cached final metrics snapshot, captured just before the reader is closed on natural
   // exhaustion. Allows mergeAndUpdateCustomMetrics() to include this reader's contribution
@@ -280,10 +279,7 @@ private class PartitionIterator[T](
     }
     valuePrepared = false
     val result = reader.get()
-    if (!firstChecked) {
-      firstChecked = true
-      checkFirst.get(result)
-    }
+    check.foreach(_(result))
     taskState.updateMetrics(rowCount(result))
     result
   }

@@ -183,18 +183,24 @@ class StorageFilterPushDownSuite
       }
     }
 
-    test(s"a $kind reader that leaves out the checked column it was asked for fails the task") {
-      withBloomJoin() {
-        StorageFilterTestSource.reset()
-        val df = bloomJoin(v2Probe("columnar" -> columnar.toString, "dropChecked" -> "true"))
-        val e = intercept[SparkException](df.collect())
-        val missing = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).collectFirst {
-          case t: SparkThrowable
-              if t.getCondition == "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" => t
+    test(s"a $kind reader that leaves out the checked column it was asked for fails the task, " +
+        "from any row or batch") {
+      // A reader that gives the filter up returns every row, so it returns several batches.
+      Seq(Seq("dropChecked" -> "true"), Seq("dropChecked" -> "later", "giveUp" -> "true"))
+        .foreach { options =>
+          withBloomJoin() {
+            StorageFilterTestSource.reset()
+            val df = bloomJoin(v2Probe(options :+ ("columnar" -> columnar.toString): _*))
+            val e = intercept[SparkException](df.collect())
+            val missing =
+              Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).collectFirst {
+                case t: SparkThrowable
+                    if t.getCondition == "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" => t
+              }
+            assert(missing.exists(_.getMessageParameters.get("class") ==
+              classOf[StorageFilterTestReaderFactory].getName), s"with $options got $e")
+          }
         }
-        assert(missing.exists(_.getMessageParameters.get("class") ==
-          classOf[StorageFilterTestReaderFactory].getName), s"got $e")
-      }
     }
 
     test(s"a $kind test reader gives a filter up when it throws, and returns its rows unchecked") {

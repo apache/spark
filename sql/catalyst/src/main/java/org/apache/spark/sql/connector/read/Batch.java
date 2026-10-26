@@ -39,7 +39,7 @@ public interface Batch {
    * <p>
    * Spark may call this method more than once for the same scan, for instance when it plans the
    * scan again for runtime filtering. A data source whose planning is costly can cache the
-   * partitions in its {@link Scan}.
+   * partitions in its {@link Scan}, and plan them again once runtime filtering narrows the scan.
    */
   InputPartition[] planInputPartitions();
 

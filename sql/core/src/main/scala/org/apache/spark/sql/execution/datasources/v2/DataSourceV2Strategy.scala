@@ -141,8 +141,11 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     // A scan that took a pushed limit, offset, top-N or sample, or an aggregate or join, would have
     // its readers filter ahead of it.
     if (!relation.onlyRowWisePushdowns) return Nil
-    val metadataColumns = relation.relation.output.filter(_.isMetadataCol).map(_.exprId).toSet
-    val dataColumns = relation.output.filterNot(a => metadataColumns.contains(a.exprId))
+    // By name, since a variant-extraction scan's output has fresh exprIds. No data column shares
+    // its name with a metadata column, see `metadataOutputWithOutConflicts`.
+    val resolver = session.sessionState.conf.resolver
+    val metadataNames = relation.relation.output.filter(_.isMetadataCol).map(_.name)
+    val dataColumns = relation.output.filterNot(a => metadataNames.exists(resolver(_, a.name)))
     StorageFilterPlanning.offeredConjuncts(filters, relation.storageFilterAttrs,
       AttributeSet(dataColumns), _.isInstanceOf[BloomFilterMightContain])
   }
