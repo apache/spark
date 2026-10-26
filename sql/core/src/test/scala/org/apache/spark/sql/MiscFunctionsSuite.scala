@@ -327,10 +327,18 @@ class MiscFunctionsSuite extends SharedSparkSession {
     assertResult(Seq(16777217.0d, 1.00000001d))(result.head().getSeq[Double](0))
   }
 
+  test("vector_avg preserves double precision in DataFrames") {
+    val df = Seq(Seq(16777216.0d, 1.0d), Seq(16777218.0d, 2.0d)).toDF("v").repartition(2)
+    val result = df.select(vector_avg($"v"))
+    assertResult(ArrayType(DoubleType, containsNull = false))(result.schema.head.dataType)
+    assertResult(Seq(16777217.0d, 1.5d))(result.head().getSeq[Double](0))
+  }
+
   gridTest("SPARK-60245: observe vector aggregates")(Seq(
       ("float", "vector_sum"),
       ("double", "vector_sum"),
-      ("float", "vector_avg"))) { case (elementType, functionName) =>
+      ("float", "vector_avg"),
+      ("double", "vector_avg"))) { case (elementType, functionName) =>
     val df = spark.range(0, 8, 1, 4).select(
       array($"id".cast(elementType), lit(1).cast(elementType)).as("v"))
     val aggregate = if (functionName == "vector_sum") vector_sum($"v") else vector_avg($"v")
