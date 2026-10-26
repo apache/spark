@@ -25,6 +25,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{CTEInChildren, CTERelationDe
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.command.{DataWritingCommand, LeafRunnableCommand}
+import org.apache.spark.sql.hive.HiveExternalCatalog
 import org.apache.spark.sql.hive.execution.InsertIntoHiveTable.BY_CTAS
 
 /**
@@ -39,7 +40,7 @@ case class CreateHiveTableAsSelectCommand(
     query: LogicalPlan,
     outputColumnNames: Seq[String],
     mode: SaveMode)
-  extends LeafRunnableCommand with CTEInChildren {
+  extends LeafRunnableCommand with CTEInChildren with V1WritesHiveUtils {
   assert(query.resolved)
   override def innerChildren: Seq[LogicalPlan] = query :: Nil
 
@@ -65,20 +66,28 @@ case class CreateHiveTableAsSelectCommand(
       tableDesc.storage.locationUri.foreach { p =>
         DataWritingCommand.assertEmptyRootPath(p, mode, sparkSession.sessionState.newHadoopConf())
       }
+      val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
+      val tableSchema = CharVarcharUtils.getRawSchema(
+        outputColumns.toStructType, sparkSession.sessionState.conf)
+      assert(tableDesc.schema.isEmpty)
+      val newTableDesc = tableDesc.copy(schema = tableSchema)
       if (tableExists) {
         // `SaveAsV1TableCommand` runs this command with `SaveMode.Overwrite` to replace the
-        // table. Drop it here, after the analysis, because the new table is created before the
-        // write.
+        // table. Drop it here, after the analysis and the checks of the new table, because the
+        // new table is created before the write.
+        val qualifiedNewTableDesc =
+          newTableDesc.copy(identifier = catalog.qualifyIdentifier(tableIdentifier))
+        sparkSession.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
+          .validateHiveSerdeTable(qualifiedNewTableDesc)
+        // The dynamic partition checks of the write, e.g., the strict mode.
+        getDynamicPartitionColumns(qualifiedNewTableDesc,
+          qualifiedNewTableDesc.partitionColumnNames.map(_ -> None).toMap, query)
         catalog.dropTable(tableIdentifier, ignoreIfNotExists = true, purge = false)
       }
       // TODO ideally, we should get the output data ready first and then
       // add the relation into catalog, just in case of failure occurs while data
       // processing.
-      val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(query, outputColumnNames)
-      val tableSchema = CharVarcharUtils.getRawSchema(
-        outputColumns.toStructType, sparkSession.sessionState.conf)
-      assert(tableDesc.schema.isEmpty)
-      catalog.createTable(tableDesc.copy(schema = tableSchema), ignoreIfExists = false)
+      catalog.createTable(newTableDesc, ignoreIfExists = false)
 
       try {
         // Read back the metadata of the table which was created just now.

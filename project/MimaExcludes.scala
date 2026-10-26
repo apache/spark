@@ -116,8 +116,6 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-56700][SS] Make DataStreamReader.name public
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
-    // [SPARK-34591][ML] Add pruneTree parameter to Strategy
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
     // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin"),
     // [SPARK-57332][SQL] MySQLDialect no longer overrides the visit methods below; the public

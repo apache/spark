@@ -2904,6 +2904,11 @@ class DataFrameSuite extends SharedSparkSession
       assert(lateCalls.value === 10)
     }
   }
+
+  test("SPARK-60528: collect a nested empty struct") {
+    val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
+    checkAnswer(df, Row(0L, Row(Row())))
+  }
 }
 
 case class GroupByKey(a: Int, b: Int)
