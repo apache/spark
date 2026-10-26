@@ -3383,6 +3383,76 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-60493: Disallow Hive incompatible partition column types in Hive serde tables") {
+    val tbl = "tbl_with_incompatible_partition"
+    def checkUnsupported(columnType: String)(createTable: => Unit): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](createTable),
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`pt`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+      assert(!spark.catalog.tableExists(tbl))
+    }
+    withTable(tbl, "src") {
+      Seq(
+        "TIMESTAMP_NTZ",
+        "INTERVAL YEAR",
+        "INTERVAL DAY TO SECOND",
+        "TIMESTAMP_NTZ(9)",
+        "TIMESTAMP_LTZ(9)",
+        "TIME(6)").foreach { dataType =>
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (i INT) PARTITIONED BY (pt $dataType) STORED AS PARQUET")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (i INT, pt $dataType) USING HIVE PARTITIONED BY (pt)")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl PARTITIONED BY (pt) STORED AS TEXTFILE " +
+            s"AS SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+        }
+        checkUnsupported(dataType) {
+          sql(s"SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+            .write.format("hive").partitionBy("pt").saveAsTable(tbl)
+        }
+        sql(s"CREATE TABLE src (i INT, pt $dataType) USING PARQUET PARTITIONED BY (pt)")
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl LIKE src STORED AS ORC")
+        }
+        sql("DROP TABLE src")
+      }
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl (i INT) PARTITIONED BY (pt TIMESTAMP) STORED AS AVRO")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60493: saveAsTable with mode Overwrite keeps the existing table when the new " +
+      "Hive serde table has a Hive incompatible partition column type") {
+    val tbl = "tbl_with_incompatible_partition"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (i INT, pt INT) USING HIVE PARTITIONED BY (pt)")
+      sql(s"INSERT INTO $tbl PARTITION (pt = 2) VALUES (1)")
+      Seq("TIMESTAMP_NTZ", "INTERVAL YEAR", "TIMESTAMP_NTZ(9)", "TIME(6)").foreach { dataType =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+              .write.format("hive").mode(SaveMode.Overwrite).partitionBy("pt").saveAsTable(tbl)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`pt`",
+            "columnType" -> s""""$dataType"""",
+            "format" -> "Hive"))
+        checkAnswer(spark.table(tbl), Row(1, 2))
+      }
+    }
+  }
+
   test("SPARK-52272: V2SessionCatalog does not alter schema on Hive Catalog") {
     val spyCatalog = spy(spark.sessionState.catalog.externalCatalog)
     val v1SessionCatalog = new SessionCatalog(spyCatalog)
