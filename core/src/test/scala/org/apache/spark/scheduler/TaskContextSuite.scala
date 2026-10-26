@@ -179,6 +179,79 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(e.getMessage.contains("test interrupt"))
   }
 
+  test("SPARK-60554: a failing TaskFailureListener does not escape markInterrupted") {
+    val context = TaskContext.empty()
+    val failureListenerCalls = new AtomicInteger(0)
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit =
+        throw new Exception("exception in interrupt listener")
+    })
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = {
+        failureListenerCalls.incrementAndGet()
+        throw new Exception("exception in failure listener")
+      }
+    })
+
+    // Neither the interrupt listener failure nor the failure listener failure it triggers may be
+    // thrown from `markInterrupted` (kill / RPC thread must not see them).
+    context.markInterrupted("test interrupt")
+    assert(context.isInterrupted())
+    assert(context.isFailed())
+    assert(failureListenerCalls.get() == 1)
+
+    // The task failure is the interrupt listener failure and keeps the failure listener failure.
+    val taskFailure = context.getTaskFailure.get
+    assert(taskFailure.isInstanceOf[TaskCompletionListenerException])
+    assert(taskFailure.getMessage.contains("exception in interrupt listener"))
+    assert(taskFailure.getSuppressed.exists(
+      _.getMessage.contains("exception in failure listener")))
+  }
+
+  test("SPARK-60554: Task.kill interrupts the task thread even if interrupt and " +
+    "failure listeners fail") {
+    sc = new SparkContext("local", "test")
+    val taskStarted = new CountDownLatch(1)
+    val threadInterrupted = new CountDownLatch(1)
+    val serializedTaskMetrics =
+      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array()
+    val task = new Task[Int](0, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet,
+      serializedTaskMetrics = serializedTaskMetrics) {
+      override def runTask(context: TaskContext): Int = {
+        context.addTaskInterruptListener(new TaskInterruptListener {
+          override def onTaskInterrupted(context: TaskContext, reason: String): Unit =
+            throw new Exception("exception in interrupt listener")
+        })
+        context.addTaskFailureListener(new TaskFailureListener {
+          override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+            throw new Exception("exception in failure listener")
+        })
+        taskStarted.countDown()
+        try {
+          // Block until `Task.kill` interrupts this thread.
+          new CountDownLatch(1).await(10, TimeUnit.SECONDS)
+        } catch {
+          case _: InterruptedException => threadInterrupted.countDown()
+        }
+        0
+      }
+    }
+    val taskThread = new Thread(
+      () => Utils.tryLogNonFatalError { task.run(0, 0, null, 1, null, Option.empty) },
+      "task-kill-test")
+    taskThread.start()
+    try {
+      assert(taskStarted.await(10, TimeUnit.SECONDS))
+      task.kill(interruptThread = true, "test kill")
+      assert(threadInterrupted.await(10, TimeUnit.SECONDS))
+      assert(task.context.isInterrupted())
+      assert(task.context.isFailed())
+    } finally {
+      taskThread.interrupt()
+      taskThread.join(10000)
+    }
+  }
+
   test("immediately call an interrupt listener if the context is already interrupted") {
     var invocations = 0
     var lastReason: String = null
