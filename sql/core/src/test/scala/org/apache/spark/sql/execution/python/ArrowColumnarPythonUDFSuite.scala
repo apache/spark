@@ -21,6 +21,7 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.IntegratedUDFTestUtils
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.execution.{ColumnarToRowExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.StringType
@@ -47,14 +48,28 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       numRows: Int = 100,
       numPartitions: Int = 1,
       reuseVectors: Boolean = false,
-      batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE) = {
+      batchSize: Int = ArrowBackedDataSourceV2.BATCH_SIZE,
+      arrowIdColumn: Boolean = true) = {
     spark.read
       .format(arrowSource)
       .option("numRows", numRows.toString)
       .option("numPartitions", numPartitions.toString)
       .option("reuseVectors", reuseVectors.toString)
       .option("batchSize", batchSize.toString)
+      .option("arrowIdColumn", arrowIdColumn.toString)
       .load()
+  }
+
+  /**
+   * Whether `exec` takes the Arrow columnar path, which outputs its input columns as they are,
+   * while the other paths output on-heap vectors.
+   */
+  private def takesArrowColumnarPath(exec: ArrowEvalPythonExec): Boolean = {
+    val columnClasses = exec.executeColumnar().mapPartitionsInternal { batches =>
+      batches.map(_.column(0).getClass.getName)
+    }.collect().toSet
+    assert(columnClasses.size == 1, s"Expected one path for all batches: $columnClasses")
+    columnClasses.head != classOf[OnHeapColumnVector].getName
   }
 
   private def collectNodes[T <: SparkPlan](
@@ -115,7 +130,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("ColumnarToRow releases each batch once its rows are consumed") {
+  test("SPARK-60306: ColumnarToRow releases each batch once its rows are consumed") {
     Seq(true, false).foreach { codegen =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
         val numRows = 2000
@@ -137,7 +152,7 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
     }
   }
 
-  test("Arrow Python UDF over many batches releases each input batch") {
+  test("SPARK-60306: Arrow Python UDF over many batches releases each input batch") {
     assume(shouldTestPandasUDFs)
     val pandasUDF = TestScalarPandasUDF(
       name = "arrow_release_udf", returnType = Some(StringType))
@@ -145,17 +160,20 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
 
     val numRows = 20000
     val numBatches = 20
-    // On a string column, the cast of the test UDF is removed, so the batches take the Arrow
-    // columnar path, whose output batches carry the input columns to the ColumnarToRowExec above
-    // ArrowEvalPythonExec, which releases them. On an expression, they take the row fallback
-    // path, which releases each batch once it has been written to Python.
+    // On a string column, the cast of the test UDF is removed, so the batches of the Arrow-backed
+    // source take the Arrow columnar path, whose output batches carry the input columns to the
+    // ColumnarToRowExec above ArrowEvalPythonExec, which releases them. If the `id` column is not
+    // an ArrowColumnVector, they take the row queue path, and on an expression, the row fallback
+    // path. Both release each batch once it has been written to Python.
     for {
       codegen <- Seq(true, false)
-      (input, suffix) <- Seq("name" -> "", "concat(name, '_')" -> "_")
+      (input, suffix, arrowIdColumn) <- Seq(
+        ("name", "", true), ("name", "", false), ("concat(name, '_')", "_", true))
     } withSQLConf(
         SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true",
         SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
-        val result = readArrowSource(numRows = numRows, batchSize = numRows / numBatches)
+        val result = readArrowSource(
+            numRows = numRows, batchSize = numRows / numBatches, arrowIdColumn = arrowIdColumn)
           .selectExpr("id", "name", "value", "data", s"arrow_release_udf($input) as udf_out")
         val plan = result.queryExecution.executedPlan
         val arrowExec = collectNodes[ArrowEvalPythonExec](plan)
@@ -164,6 +182,8 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
           == suffix.isEmpty, s"Unexpected UDF inputs:\n$plan")
         assert(collectNodes[ColumnarToRowExec](plan).exists(
           _.find(_.isInstanceOf[ArrowEvalPythonExec]).isDefined), s"No ColumnarToRowExec:\n$plan")
+        val arrowColumnarPath = suffix.isEmpty && arrowIdColumn
+        assert(takesArrowColumnarPath(arrowExec.head) == arrowColumnarPath)
 
         ArrowBackedDataSourceV2.resetBatchCounters()
         val rows = result.collect()
@@ -175,12 +195,12 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
           assert(row.getString(3).length == 100, s"data mismatch for id $id")
           assert(row.getString(4) == s"row_$id$suffix", s"UDF result mismatch for id $id")
         }
-        // Every batch is released before the task completes. The row fallback path releases a
-        // batch before it reads the next one, while the Arrow columnar path holds the batches
-        // that it has written to Python until their results are consumed.
+        // Every batch is released before the task completes. The row queue and row fallback
+        // paths release a batch before they read the next one, while the Arrow columnar path
+        // holds the batches that it has written to Python until their results are consumed.
         assert(ArrowBackedDataSourceV2.returnedBatches.get == numBatches)
         assert(ArrowBackedDataSourceV2.releasedBatches.get == numBatches)
-        if (suffix.nonEmpty) {
+        if (!arrowColumnarPath) {
           assert(ArrowBackedDataSourceV2.maxUnreleasedBatches.get == 1)
         }
 
@@ -190,7 +210,8 @@ class ArrowColumnarPythonUDFSuite extends SharedSparkSession {
       }
   }
 
-  test("A plan built with columnar input runs as built after the configuration changes") {
+  test("SPARK-60306: A plan built with columnar input runs as built after the configuration " +
+      "changes") {
     assume(shouldTestPandasUDFs)
     withSQLConf(SQLConf.ARROW_PYSPARK_EXECUTION_ENABLED.key -> "true") {
       val pandasUDF = TestScalarPandasUDF(

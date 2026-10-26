@@ -78,7 +78,8 @@ class ArrowOutputProcessorSuite extends SparkFunSuite {
     "records limit" -> (new SliceRecordsArrowOutputProcessorImpl(_, metrics(), rowsPerBatch)),
     "bytes limit" -> (new SliceBytesArrowOutputProcessorImpl(_, metrics(), Int.MaxValue))
   ).foreach { case (name, newProcessor) =>
-    test(s"Struct output columns stay valid after a consumer releases each batch: $name") {
+    test(s"SPARK-60306: Struct output columns stay valid after a consumer releases each " +
+        s"batch: $name") {
       val allocator =
         ArrowUtils.rootAllocator.newChildAllocator("arrow-output-reader", 0, Long.MaxValue)
       val reader = new ArrowStreamReader(new ByteArrayInputStream(arrowStream()), allocator)

@@ -50,7 +50,12 @@ import org.apache.spark.util.Utils
  *    reuse or release the vectors of a batch once it is asked for the next
  *    one. So `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled`
  *    is disabled by default. Output is produced by columnar combining:
- *    passThruCols ++ resultCols -> ColumnarBatch.
+ *    passThruCols ++ resultCols -> ColumnarBatch, so the consumer of the
+ *    output releases the pass-through columns with closeIfFreeable on the
+ *    task thread. With `spark.python.udf.pipelined.enabled`, the Python
+ *    writer reads the next input batches on its own thread meanwhile, so
+ *    the upstream operator must allow its vectors to be released while it
+ *    returns the next batches.
  *
  * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
  *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar

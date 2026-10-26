@@ -28,7 +28,9 @@ import org.apache.spark.sql.vectorized.ArrowColumnVector;
  * <p>Like the vectors that {@link WritableColumnVector} and {@link ConstantColumnVector} reuse
  * across batches, the producer releases it: {@link #closeIfFreeable()}, which a consumer calls
  * once it is done with a batch, is a no-op, and the producer frees the vector with
- * {@link #close()}.
+ * {@link #close()}. This covers the vector itself: the vectors that {@link #getChild(int)}
+ * returns for the fields of a struct are plain {@link ArrowColumnVector}s, which consumers do not
+ * release on their own.
  */
 public class ReusedArrowColumnVector extends ArrowColumnVector {
 
