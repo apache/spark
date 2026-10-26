@@ -112,11 +112,14 @@ jobs:
             const isActionRequiredBuildCheck = (cr) =>
               cr.name == 'Build' && cr.conclusion == 'action_required';
 
-            // PRs whose sync failed on this pass. A failed call skips only that PR (it is retried
-            // on the next pass) instead of aborting the whole scheduled run and leaving every PR
-            // later in the iteration unsynced. The step still fails after the pass, so an error
-            // that keeps recurring (e.g. a 422 for a value the endpoint rejects) stays visible
-            // instead of hiding in the log of a green run.
+            // PRs whose sync failed on this pass: listing their check runs, PATCHing a Build
+            // check, or backfilling one. A failed call skips only that PR (it is retried on the
+            // next pass) instead of aborting the whole scheduled run and leaving every PR later
+            // in the iteration unsynced. The step still fails after the pass, so an error that
+            // keeps recurring (e.g. a 422 for a value the endpoint rejects) stays visible instead
+            // of hiding in the log of a green run. Transient fork-run lookup failures (see
+            // isTransientError) are not recorded: they also skip the PR until a later pass, but
+            // leave the step green.
             const failedPRs = new Set();
 
             // PATCH a Build check-run, recording a failure against the PR instead of throwing.
