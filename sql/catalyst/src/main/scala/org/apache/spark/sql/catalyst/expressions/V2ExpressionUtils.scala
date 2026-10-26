@@ -22,7 +22,7 @@ import java.lang.reflect.{Method, Modifier}
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.{InternalRow, SQLConfHelper}
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow, SQLConfHelper}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, UnresolvedAttribute}
 import org.apache.spark.sql.catalyst.encoders.EncoderUtils
 import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
@@ -213,12 +213,16 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
 
   /**
    * Binds a V2 [[UnboundFunction]] to the given arguments and turns the resulting
-   * [[BoundFunction]] into a Catalyst expression.
+   * [[BoundFunction]] into a Catalyst expression. The optional display name preserves identifier
+   * parts in diagnostics.
    *
    * An aggregate function is returned as a bare [[V2Aggregator]] so that callers can wrap it into
    * an `AggregateExpression` carrying DISTINCT / FILTER, which is not known here.
    */
-  def bindFunction(unbound: UnboundFunction, arguments: Seq[Expression]): Expression = {
+  def bindFunction(
+      unbound: UnboundFunction,
+      arguments: Seq[Expression],
+      displayName: Option[FunctionIdentifier] = None): Expression = {
     val inputType = StructType(arguments.zipWithIndex.map {
       case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
     })
@@ -227,28 +231,34 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
     } catch {
       case unsupported: UnsupportedOperationException =>
         throw QueryCompilationErrors.functionCannotProcessInputError(
-          unbound, arguments, unsupported)
+          displayName.map(_.unquotedString).getOrElse(unbound.name()), arguments, unsupported)
     }
 
-    if (bound.inputTypes().length != arguments.length) {
-      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(bound, arguments)
+    val inputTypesLength = bound.inputTypes().length
+    if (inputTypesLength != arguments.length) {
+      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(
+        displayName.map(_.unquotedString).getOrElse(bound.name()),
+        arguments.length,
+        inputTypesLength)
     }
 
     bound match {
       case scalarFunc: ScalarFunction[_] =>
-        resolveScalarFunction(scalarFunc, arguments)
+        resolveScalarFunction(scalarFunc, arguments, displayName)
       case aggFunc: AggregateFunction[_, _] =>
         V2Aggregator(aggFunc, arguments)
       case _ =>
         throw new AnalysisException(
           errorClass = "INVALID_UDF_IMPLEMENTATION",
-          messageParameters = Map("funcName" -> toSQLId(bound.name())))
+          messageParameters = Map(
+            "funcName" -> displayName.map(_.quotedString).getOrElse(toSQLId(bound.name()))))
     }
   }
 
   def resolveScalarFunction(
       scalarFunc: ScalarFunction[_],
-      arguments: Seq[Expression]): Expression = {
+      arguments: Seq[Expression],
+      displayName: Option[FunctionIdentifier] = None): Expression = {
     val declaredInputTypes = scalarFunc.inputTypes().toImmutableArraySeq
     val argClasses = declaredInputTypes.map(EncoderUtils.dataTypeJavaClass)
     findMethod(scalarFunc, MAGIC_METHOD_NAME, argClasses) match {
@@ -274,7 +284,9 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
           case _ =>
             throw new AnalysisException(
               errorClass = "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
-              messageParameters = Map("scalarFunc" -> toSQLId(scalarFunc.name())))
+              messageParameters = Map(
+                "scalarFunc" -> displayName.map(_.quotedString).getOrElse(
+                  toSQLId(scalarFunc.name()))))
         }
     }
   }
