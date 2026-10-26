@@ -287,9 +287,18 @@ private[spark] object AccumulatorContext extends Logging {
    * Returns the [[AccumulatorV2]] registered with the given ID, if any.
    */
   def get(id: Long): Option[AccumulatorV2[_, _]] = {
+    Option(getOrNull(id))
+  }
+
+  /**
+   * Same as [[get]] but returns null instead of None when the accumulator is not registered or has
+   * been garbage collected. Used on the driver's per-task accumulator update path to avoid
+   * allocating an Option for every lookup.
+   */
+  def getOrNull(id: Long): AccumulatorV2[_, _] = {
     val ref = originals.get(id)
     if (ref eq null) {
-      None
+      null
     } else {
       // Since we are storing weak references, warn when the underlying data is not valid.
       val acc = ref.get
@@ -297,7 +306,7 @@ private[spark] object AccumulatorContext extends Logging {
         logWarning(log"Attempted to access garbage collected accumulator " +
           log"${MDC(ACCUMULATOR_ID, id)}")
       }
-      Option(acc)
+      acc
     }
   }
 
