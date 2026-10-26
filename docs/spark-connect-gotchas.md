@@ -496,8 +496,8 @@ A client can only change runtime SQL configuration of its own session. Static SQ
 key raises `CANNOT_MODIFY_STATIC_CONFIG` or `CANNOT_MODIFY_CONFIG`, but in PySpark the same key on
 the builder does not: the builder applies its options after the session exists, and a static one
 produces a `UserWarning` and no change. The Scala builder raises the same error from
-`getOrCreate()` instead, except for `enableHiveSupport()`, which the Scala client drops with a log
-warning before contacting the server.
+`getOrCreate()` instead, except for `spark.sql.catalogImplementation` (set with `.config` or with
+`enableHiveSupport()`), which the Scala client drops with a log warning before contacting the server.
 
 ```python
 spark = SparkSession.builder.remote("sc://localhost:15002").enableHiveSupport().getOrCreate()

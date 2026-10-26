@@ -202,11 +202,11 @@ configuration [reference](https://github.com/apache/spark/blob/master/sql/connec
 A connection string has the form `sc://host:port/;param1=value;param2=value`: the scheme is
 always `sc://`, the path component must stay empty because gRPC uses the HTTP/2 path for its own
 method names, and parameters such as `token`, `use_ssl`, `user_id` and `user_agent` follow a `/;`
-separator. Setting `token` turns on TLS as well, except that the Python client connecting to
-`localhost` uses a local channel without TLS.
+separator. Setting `token` turns on TLS for any host except `localhost`; to use TLS with
+`localhost`, set `use_ssl=true` as well.
 
-A parameter value cannot contain a `/`, because the parser reads everything from the first `/`
-as the path:
+In the Python client, a parameter value cannot contain a literal `/`, because its parser reads
+everything from the first `/` as the path:
 
 {% highlight python %}
 SparkSession.builder.remote("sc://localhost:15002/;user_agent=myapp/1").getOrCreate()
@@ -214,7 +214,7 @@ SparkSession.builder.remote("sc://localhost:15002/;user_agent=myapp/1").getOrCre
 #   The path component '/;user_agent=myapp/1' must be empty.
 {% endhighlight %}
 
-`user_agent=myapp-1` is accepted.
+Write the `/` as `%2F` instead: `user_agent=myapp%2F1` is accepted and read as `myapp/1`.
 
 ## Set SPARK_REMOTE environment variable
 
@@ -440,9 +440,9 @@ Additionally, Spark Connect offers convenient options for local testing. By sett
 to `local[...]` or `local-cluster[...]`, you can start a local Spark Connect server and access a Spark
 Connect session.
 
-This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, to start a
-local server, `spark.remote` and `--remote` take only `local*` values, while `--conf spark.api.mode=connect`
-with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
+This is similar to using `--conf spark.api.mode=connect` with `--master ...`. However, a `local*`
+value of `spark.remote` or `--remote` starts a local server and an `sc://` value connects to an
+existing server, while `--conf spark.api.mode=connect` with `--master ...` supports additional cluster URLs, such as spark://, for broader compatibility with
 Spark Classic.
 
 # Client application authentication

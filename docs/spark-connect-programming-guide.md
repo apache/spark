@@ -402,7 +402,7 @@ Setting a static or core key from the client has no effect on the server:
 | PySpark `builder.config(key, value)` | `UserWarning: Failed to set <key> (CANNOT_MODIFY_CONFIG)` or `(CANNOT_MODIFY_STATIC_CONFIG)`; the session is created without the setting |
 | PySpark `builder.enableHiveSupport()` | the same warning for `spark.sql.catalogImplementation`; the session keeps the server's catalog |
 | Scala `builder.config(key, value)` | `getOrCreate()` raises `CANNOT_MODIFY_CONFIG` or `CANNOT_MODIFY_STATIC_CONFIG` |
-| Scala `builder.enableHiveSupport()` | dropped by the client with a log warning; the session keeps the server's catalog |
+| Scala `builder.enableHiveSupport()` or `builder.config("spark.sql.catalogImplementation", ...)` | dropped by the client with a log warning; the session keeps the server's catalog |
 | `spark.conf.set(key, value)` | raises `CANNOT_MODIFY_CONFIG` or `CANNOT_MODIFY_STATIC_CONFIG` |
 
 Servers up to the 4.3 line word the PySpark warning as
@@ -544,7 +544,7 @@ In PySpark, `spark.sparkContext`, `spark._jvm` and `df._jdf` raise `JVM_ATTRIBUT
 `df.rdd` raises `JVM_ATTRIBUTE_NOT_SUPPORTED` with `pyspark-client` and `NOT_IMPLEMENTED` with the
 other packages. In Scala, these raise `UNSUPPORTED_CONNECT_FEATURE`.
 
-With the `pyspark` package, an application that creates its session with
+With the `pyspark[connect]` package, an application that creates its session with
 `SparkSession.builder.getOrCreate()` runs on Spark Connect when `SPARK_REMOTE` is set and on Spark
 Classic otherwise. Do not set the master in the builder: builder options override the
 `spark-submit` command line. Without `SPARK_REMOTE` or `spark-submit`, the master defaults to
