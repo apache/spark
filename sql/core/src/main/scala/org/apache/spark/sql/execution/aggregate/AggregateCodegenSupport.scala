@@ -270,14 +270,10 @@ trait AggregateCodegenSupport
   }
 
   /**
-   * Eliminates the common subexpressions of the bound update expressions of the aggregate
-   * functions and generates their code. Returns the common subexpressions shared by the functions
-   * without a FILTER clause, the code that evaluates them, which goes before the code of all the
-   * functions, and for each function the code of its own common subexpressions and of its update
-   * expressions. Only a function with a FILTER clause has its own common subexpressions: their
-   * code goes at the start of the function's code, after its FILTER check, so that they are not
-   * evaluated on a row that the FILTER rejects, as `AggregationIterator` does with
-   * `If(filter, updateExpr, buffer)`.
+   * Generates the update expressions and their common subexpressions.
+   *
+   * Functions without a FILTER clause share subexpressions before all the updates. A function
+   * with a FILTER clause evaluates its own subexpressions after its FILTER check.
    */
   protected def generateUpdateExprsCode(
       ctx: CodegenContext,
