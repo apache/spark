@@ -40,9 +40,8 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
       ltzType <- Seq(TimestampType, TimestampLTZNanosType(9))
       (ntzType, convertedType) <- Seq(
         (TimestampNTZType, TimestampType), (TimestampNTZNanosType(7), TimestampLTZNanosType(7)))
-      (leftType, rightType, leftTarget, rightTarget) <- Seq(
-        (ltzType, ntzType, ltzType, convertedType),
-        (ntzType, ltzType, convertedType, ltzType))
+      (leftType, rightType, rightTarget) <- Seq(
+        (ltzType, ntzType, convertedType), (ntzType, ltzType, ltzType))
       keyType <- keyTypes
     } {
       val leftOperand = AttributeReference("l", keyType(leftType))()
@@ -56,11 +55,8 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
           )
         }
       assert(condition.children == Seq(leftOperand, rightOperand))
-      assert(leftKeys.map(_.dataType) == Seq(keyType(if (convertNtz) leftTarget else leftType)))
+      assert(leftKeys == Seq(leftOperand))
       assert(rightKeys.map(_.dataType) == Seq(keyType(if (convertNtz) rightTarget else rightType)))
-      if (!convertNtz || TimestampFamily.isLtz(leftType)) {
-        assert(leftKeys == Seq(leftOperand))
-      }
       if (!convertNtz || TimestampFamily.isLtz(rightType)) {
         assert(rightKeys == Seq(rightOperand))
       }
@@ -91,7 +87,7 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
         }
       assert(leftKeys.length == 2)
       assert(rightKeys.length == 2)
-      assert(leftKeys.head.dataType == TimestampType)
+      assert(leftKeys.head == leftTimestamp)
       assert(rightKeys.head.dataType == TimestampType)
       assert(leftKeys(1) == leftNumber)
       assert(rightKeys(1) == rightNumber)
@@ -105,18 +101,18 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
       nullable = false,
       metadata = new MetadataBuilder().putString("comment", "timestamp key").build()
     )
-    val leftFields = Seq(
+    val rightFields = Seq(
       timestampField,
       StructField(name = "d", dataType = DecimalType(38, 30), nullable = false),
       StructField(name = "n", dataType = IntegerType, nullable = false))
-    val rightFields = Seq(
+    val leftFields = Seq(
       StructField(name = "ts", dataType = TimestampType),
       StructField(name = "d", dataType = DecimalType(38, 30)),
       StructField(name = "n", dataType = LongType))
-    val leftType = ArrayType(StructType(leftFields), containsNull = false)
-    val rightType = ArrayType(StructType(rightFields), containsNull = true)
-    val expectedLeft = ArrayType(
-      StructType(timestampField.copy(dataType = TimestampType) +: leftFields.tail),
+    val leftType = ArrayType(StructType(leftFields), containsNull = true)
+    val rightType = ArrayType(StructType(rightFields), containsNull = false)
+    val expectedRight = ArrayType(
+      StructType(timestampField.copy(dataType = TimestampType) +: rightFields.tail),
       containsNull = false)
     val (_, _, leftKeys, rightKeys) =
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
@@ -126,8 +122,8 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper 
           normalizedOp = GreaterThanOrEqualOp
         )
       }
-    assert(leftKeys.map(_.dataType) == Seq(expectedLeft))
-    assert(rightKeys.map(_.dataType) == Seq(rightType))
+    assert(leftKeys.map(_.dataType) == Seq(leftType))
+    assert(rightKeys.map(_.dataType) == Seq(expectedRight))
   }
 
   test("scalar types widen via TypeCoercion") {

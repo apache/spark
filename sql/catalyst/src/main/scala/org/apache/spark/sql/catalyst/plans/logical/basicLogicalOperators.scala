@@ -2759,14 +2759,15 @@ object AsOfJoin {
     val (asOfCondition, orderExpression) =
       buildMatchExpressions(coercedLeft, coercedRight, normalizedOp)
     val timeZone = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
-    val (leftTarget, rightTarget) = if (timeZone.getRules.isFixedOffset) {
+    val rightTarget = if (timeZone.getRules.isFixedOffset) {
       // A fixed offset preserves the order of NTZ values, including inside composite keys.
-      (coercedLeft.dataType, coercedRight.dataType)
+      coercedRight.dataType
     } else {
-      matchTimestampTargetTypes(coercedLeft.dataType, coercedRight.dataType)
+      rightTimestampSortType(coercedLeft.dataType, coercedRight.dataType)
     }
+    // The scan searches the right buffer independently for each left row.
     val (leftSortExprs, rightSortExprs) = matchSortExpressions(
-      castMatchOperand(coercedLeft, leftTarget), castMatchOperand(coercedRight, rightTarget))
+      coercedLeft, castMatchOperand(coercedRight, rightTarget))
     (asOfCondition, orderExpression, leftSortExprs, rightSortExprs)
   }
 
@@ -2784,31 +2785,23 @@ object AsOfJoin {
   }
 
   /**
-   * Converts mixed NTZ leaves to LTZ for sorting, preserving each leaf's precision.
+   * Returns right sort types with mixed NTZ leaves converted to LTZ at their own precision.
    * NTZ-to-LTZ conversion can change order across DST gaps; precision widening preserves it.
    */
-  private def matchTimestampTargetTypes(
+  private def rightTimestampSortType(
       leftType: DataType,
-      rightType: DataType): (DataType, DataType) = (leftType, rightType) match {
+      rightType: DataType): DataType = (leftType, rightType) match {
     case (left: StructType, right: StructType) if left.length == right.length =>
-      val (leftFields, rightFields) = left.fields.zip(right.fields).map { case (l, r) =>
-        val (leftTarget, rightTarget) = matchTimestampTargetTypes(l.dataType, r.dataType)
-        (l.copy(dataType = leftTarget), r.copy(dataType = rightTarget))
-      }.unzip
-      (StructType(leftFields), StructType(rightFields))
+      StructType(left.fields.zip(right.fields).map { case (l, r) =>
+        r.copy(dataType = rightTimestampSortType(l.dataType, r.dataType))
+      })
     case (left: ArrayType, right: ArrayType) =>
-      val (leftTarget, rightTarget) =
-        matchTimestampTargetTypes(left.elementType, right.elementType)
-      (left.copy(elementType = leftTarget), right.copy(elementType = rightTarget))
-    case (TimestampNTZType, right) if TimestampFamily.isLtz(right) =>
-      (TimestampType, right)
+      right.copy(elementType = rightTimestampSortType(left.elementType, right.elementType))
     case (left, TimestampNTZType) if TimestampFamily.isLtz(left) =>
-      (left, TimestampType)
-    case (left: TimestampNTZNanosType, right) if TimestampFamily.isLtz(right) =>
-      (TimestampLTZNanosType(left.precision), right)
+      TimestampType
     case (left, right: TimestampNTZNanosType) if TimestampFamily.isLtz(left) =>
-      (left, TimestampLTZNanosType(right.precision))
-    case _ => (leftType, rightType)
+      TimestampLTZNanosType(right.precision)
+    case _ => rightType
   }
 
   private def castMatchOperand(operand: Expression, targetType: DataType): Expression = {
