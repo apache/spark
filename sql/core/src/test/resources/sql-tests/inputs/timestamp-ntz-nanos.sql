@@ -140,6 +140,25 @@ SELECT map('k', TIMESTAMP_NTZ '2020-01-01 12:30:15.123456789') :: map<string, da
 SELECT map(DATE '2020-01-01', 'v') :: map<timestamp_ntz(9), string>;
 SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>;
 
+-- SPARK-60543: date_add / date_sub (and the dateadd alias) over TIMESTAMP_NTZ(p) cast the start to
+-- DATE like the micro types, so the time of day and sub-microsecond digits never affect the result.
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1);
+SELECT date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1);
+SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ntz(7), 30);
+SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ntz(8), -1);
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2');
+-- Pre-epoch value exercises the negative-epoch path.
+SELECT date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1);
+-- Same result as the micro type.
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1),
+       date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1);
+SELECT date_add(NULL :: timestamp_ntz(9), 1), date_sub(NULL :: timestamp_ntz(9), 1);
+SET spark.sql.ansi.enabled=false;
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1),
+       date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1);
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2');
+SET spark.sql.ansi.enabled=true;
+
 -- SPARK-57501: TIMESTAMP_NTZ(p) +/- ANSI day-time interval preserves nanos remainder.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - INTERVAL '1 00:04:00.000321' DAY TO SECOND;
