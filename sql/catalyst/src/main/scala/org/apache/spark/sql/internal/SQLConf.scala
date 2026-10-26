@@ -8540,11 +8540,16 @@ object SQLConf {
         "join child's layout can make skew join optimization or local shuffle reads invalidate " +
         "an ancestor's distribution. AQE may discard that optimization or add another shuffle " +
         "when skew optimization is forced. Join inputs and join branches are opt-in. Requires " +
-        "spark.sql.unionOutputPartitioning to be enabled.")
+        "spark.sql.unionOutputPartitioning to be enabled. Adaptive cost compensation applies " +
+        "only to SimpleCostEvaluator. If spark.sql.adaptive.customCostEvaluatorClass is set, " +
+        "this rule is disabled unless explicitly enabled. With a custom evaluator, adapt its " +
+        "cost model to the replacement of one union exchange by multiple branch " +
+        "exchanges; otherwise the increased exchange count may cause AQE to reject a re-plan " +
+        "and its other runtime optimizations.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
-      .createWithDefault(true)
+      .createOptional
 
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED =
     buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.lookThroughOperators.enabled")
@@ -9491,6 +9496,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def costEvaluatorCountLocalSortEnabled: Boolean =
     getConf(ADAPTIVE_COST_EVALUATOR_COUNT_LOCAL_SORT_ENABLED)
+
+  def pushDownShuffleThroughUnionEnabled: Boolean =
+    getConf(PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
+      .getOrElse(getConf(ADAPTIVE_CUSTOM_COST_EVALUATOR_CLASS).isEmpty)
 
   def coalesceShufflePartitionsEnabled: Boolean = getConf(COALESCE_PARTITIONS_ENABLED)
 

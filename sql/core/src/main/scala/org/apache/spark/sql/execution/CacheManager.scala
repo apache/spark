@@ -692,7 +692,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
   /**
    * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS` and
+   * `PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED`.
    * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
@@ -706,10 +707,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
       disableConfigs =
-        disableConfigs ++ Seq(SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS,
-          SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED)
+        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
+      SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs,
+        Seq(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED))
+    } else {
+      SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
     }
-    SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }
 }
 

@@ -76,7 +76,7 @@ case class SimpleCostEvaluator(
           AQEUtils.isPushedDownShuffle(shuffle) =>
       case _: ShuffleExchangeLike => numShuffles += 1
       case union: UnionExec if pushDownShuffleThroughUnion &&
-          AQEUtils.isPushedThroughUnion(union) =>
+          AQEUtils.isPushedThroughUnion(union) && !union.isPlainUnion =>
         numPushedThroughUnion += 1
       case s: SortExec if countLocalSort && !s.global => numLocalSorts += 1
       case _ =>

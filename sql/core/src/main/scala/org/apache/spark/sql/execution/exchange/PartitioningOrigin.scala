@@ -21,7 +21,18 @@ import org.apache.spark.sql.catalyst.plans.physical.{CoalescedHashPartitioning, 
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.SparkPlan
 
-/** The hash layout of a user repartition elided at this plan node. */
+/**
+ * Records the hash layout and shuffle origin of a user repartition removed by EnsureRequirements.
+ * The retained plan node carries this requirement as a tag, outside its canonical form, so a
+ * physical rewrite can preserve it when rebuilding or replacing the node and validate it later.
+ * Each node retains the outermost elided repartition; requirements at different nodes stay local.
+ *
+ * Validation accepts a matching hash layout or a matching member of a partitioning collection.
+ * Coalesced layouts preserve the keys in order, and REPARTITION_BY_NUM also requires the explicit
+ * output partition count. A node without an origin imposes no additional requirement.
+ * Push-down validates these records on its proposals; recording them does not constrain other
+ * adaptive rules automatically.
+ */
 private[execution] case class PartitioningOrigin(
     partitioning: HashPartitioning,
     shuffleOrigin: ShuffleOrigin)
