@@ -371,9 +371,10 @@ class DatasetCacheSuite extends SharedSparkSession
     }
   }
 
-  test("uncaching an unrelated Dataset does not wait for an in-progress cache fill") {
-    // A shuffle-backed cache fill under AQE holds the CachedRDDBuilder monitor while its map stage
-    // runs; a non-cascade uncache must not take that monitor for cache entries it does not affect.
+  test("uncaching an unrelated Dataset does not wait for an in-progress cache materialization") {
+    // A shuffle-backed cache materialization under AQE holds the CachedRDDBuilder monitor while
+    // its map stage runs; a non-cascade uncache must not take that monitor for cache entries it
+    // does not affect.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       val unrelated = spark.range(10).toDF("u").cache()
       unrelated.count()
@@ -382,7 +383,8 @@ class DatasetCacheSuite extends SharedSparkSession
       val slow = spark.range(0, 1, 1, 1).select(blockFill($"id").as("v")).repartition(2).cache()
       val fill = Future { slow.count() }(ExecutionContext.global)
       try {
-        assert(DatasetCacheSuite.fillStarted.await(60, TimeUnit.SECONDS), "cache fill did not start")
+        assert(DatasetCacheSuite.fillStarted.await(60, TimeUnit.SECONDS),
+          "cache materialization did not start")
         val uncache = Future { unrelated.unpersist() }(ExecutionContext.global)
         ThreadUtils.awaitResult(uncache, Duration(10, TimeUnit.SECONDS))
       } finally {
