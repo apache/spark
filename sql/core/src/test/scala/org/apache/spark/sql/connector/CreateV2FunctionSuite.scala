@@ -23,9 +23,10 @@ import java.lang.management.ManagementFactory
 import scala.reflect.ClassTag
 
 import test.org.apache.spark.sql.connector.catalog.functions.{JavaInitTrackingStrLen, JavaStaticInitFailingStrLen}
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenNoImpl
 
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, InternalRow}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, ScalarFunction, SimpleFunction, UnboundFunction}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType}
@@ -192,6 +193,36 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  gridTest("class whose description throws")(
+      Seq(classOf[V2FunctionThrowingDescription].getName,
+        classOf[V2FunctionLinkageErrorDescription].getName)) { className =>
+    withUserDefinedFunction("tstrlen" -> true, "default.pstrlen" -> false) {
+      sql(s"CREATE TEMPORARY FUNCTION tstrlen AS '$className'")
+      sql(s"CREATE FUNCTION pstrlen AS '$className'")
+
+      def checkUnavailableDescription(name: String): Unit = {
+        val output = sql(s"DESCRIBE FUNCTION $name").collect().map(_.getString(0))
+        assert(output.contains(s"Class: $className"))
+        assert(output.contains("Usage: N/A."))
+        assert(spark.catalog.getFunction(name).className == className)
+        val info = spark.sessionState.catalog.lookupFunctionInfo(FunctionIdentifier(name))
+        assert(info.getSource == "v2_function")
+      }
+
+      checkUnavailableDescription("tstrlen")
+      checkUnavailableDescription("pstrlen")
+      checkAnswer(sql("SELECT tstrlen(CAST(id AS STRING)) FROM range(9, 11)"),
+        Row(1) :: Row(2) :: Nil)
+      checkAnswer(sql("SELECT pstrlen(CAST(id AS STRING)) FROM range(9, 11)"),
+        Row(1) :: Row(2) :: Nil)
+      checkUnavailableDescription("pstrlen")
+
+      sql("REFRESH FUNCTION pstrlen")
+      checkAnswer(sql("SELECT pstrlen('abc')"), Row(3))
+      checkUnavailableDescription("pstrlen")
+    }
+  }
+
   test("DROP FUNCTION") {
     sql(s"CREATE FUNCTION strlen AS '$strLenClass'")
     checkAnswer(sql("SELECT strlen('abc')"), Row(3))
@@ -221,6 +252,44 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
       checkUnsupported(
         "iavg(id) WITHIN GROUP (ORDER BY id)", "`iavg`", "WITHIN GROUP (ORDER BY ...)")
     }
+  }
+
+  gridTest("bind-time errors use the registered function name")(for {
+    isTemp <- Seq(true, false)
+    funcName <- Seq("my_len", "my.len", "my`len")
+  } yield (isTemp, funcName)) { case (isTemp, funcName) =>
+    val ident = FunctionIdentifier(funcName, if (isTemp) None else Some("default"))
+    val name = ident.quotedString
+    val registeredIdent = if (isTemp) ident else ident.copy(catalog = Some("spark_catalog"))
+    val registeredName = registeredIdent.unquotedString
+    val quotedName = registeredIdent.quotedString
+    val create = if (isTemp) "CREATE TEMPORARY FUNCTION" else "CREATE FUNCTION"
+
+    def checkBindingError(
+        className: String,
+        args: String,
+        condition: String,
+        parameters: Map[String, String]): Unit = {
+      withUserDefinedFunction(name -> isTemp) {
+        sql(s"$create $name AS '$className'")
+        val call = s"$name($args)"
+        checkError(
+          exception = intercept[AnalysisException](sql(s"SELECT $call")),
+          condition = condition,
+          parameters = parameters,
+          context = ExpectedContext(call, 7, 6 + call.length))
+      }
+    }
+
+    checkBindingError(strLenClass, "1", "_LEGACY_ERROR_TEMP_1198",
+      Map("unbound" -> registeredName, "arguments" -> "int", "unsupported" -> "Expect StringType"))
+    checkBindingError(classOf[V2SimpleStrLen].getName, "'a', 'b'", "_LEGACY_ERROR_TEMP_1199",
+      Map("bound" -> registeredName, "argsLen" -> "2", "inputTypesLen" -> "1"))
+    checkBindingError(classOf[V2StrLenBadBound].getName, "'abc'", "INVALID_UDF_IMPLEMENTATION",
+      Map("funcName" -> quotedName))
+    checkBindingError(
+      classOf[V2StrLenNoImpl].getName, "'abc'", "SCALAR_FUNCTION_NOT_FULLY_IMPLEMENTED",
+      Map("scalarFunc" -> quotedName))
   }
 
   test("input type that the function cannot bind") {
@@ -278,6 +347,34 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
 
   test("class whose constructor throws") {
     checkCannotInstantiate(classOf[V2FunctionThrowingConstructor].getName, "constructor failed")
+  }
+
+  test("class whose constructor throws a linkage error") {
+    checkCannotInstantiate(
+      classOf[V2FunctionLinkageErrorConstructor].getName, "constructor dependency")
+  }
+
+  gridTest("fatal constructor failures propagate")(
+      Seq(
+        (classOf[V2FunctionOutOfMemoryConstructor].getName, classOf[OutOfMemoryError]),
+        (classOf[V2FunctionStackOverflowConstructor].getName, classOf[StackOverflowError]),
+        (classOf[V2FunctionInterruptedConstructor].getName, classOf[InterruptedException]))) {
+    case (className, errorClass) =>
+      def checkFatal(operation: => Any): Unit = {
+        val e = intercept[Throwable](operation)
+        assert(e.getClass == errorClass)
+        assert(e.getMessage == "constructor failed")
+      }
+
+      checkFatal(sql(s"CREATE TEMPORARY FUNCTION f AS '$className'"))
+      withUserDefinedFunction("default.f" -> false) {
+        sql(s"CREATE FUNCTION f AS '$className'")
+        checkFatal(sql("DESCRIBE FUNCTION f").collect())
+        checkFatal(spark.catalog.getFunction("f"))
+        checkFatal(spark.catalog.listFunctions().collect())
+        checkFatal(sql("SELECT f('abc')").collect())
+        checkFatal(sql("REFRESH FUNCTION f"))
+      }
   }
 
   test("class that fails to initialize") {
@@ -350,6 +447,14 @@ class V2StrLenMagic extends V2StrLen {
   }
 }
 
+class V2StrLenBadBound extends V2StrLen {
+  override def bind(inputType: StructType): BoundFunction = BadBoundFunction
+}
+
+class V2StrLenNoImpl extends V2StrLen {
+  override def bind(inputType: StructType): BoundFunction = new JavaStrLenNoImpl
+}
+
 class V2SimpleStrLen extends SimpleFunction with ScalarFunction[Int] {
   override def inputTypes(): Array[DataType] = Array(StringType)
   override def resultType(): DataType = IntegerType
@@ -364,8 +469,40 @@ class V2IntegralAverage extends UnboundFunction {
   override def description(): String = IntegralAverage.description()
 }
 
+class V2FunctionThrowingDescription extends V2StrLen {
+  override def description(): String = throw new UnsupportedOperationException("description failed")
+}
+
+class V2FunctionLinkageErrorDescription extends V2StrLen {
+  // scalastyle:off throwerror
+  override def description(): String = throw new NoClassDefFoundError("description dependency")
+  // scalastyle:on throwerror
+}
+
 class V2FunctionThrowingConstructor extends V2StrLen {
   throw new IllegalStateException("constructor failed")
+}
+
+class V2FunctionLinkageErrorConstructor extends V2StrLen {
+  // scalastyle:off throwerror
+  throw new NoClassDefFoundError("constructor dependency")
+  // scalastyle:on throwerror
+}
+
+class V2FunctionOutOfMemoryConstructor extends V2StrLen {
+  // scalastyle:off throwerror
+  throw new OutOfMemoryError("constructor failed")
+  // scalastyle:on throwerror
+}
+
+class V2FunctionStackOverflowConstructor extends V2StrLen {
+  // scalastyle:off throwerror
+  throw new StackOverflowError("constructor failed")
+  // scalastyle:on throwerror
+}
+
+class V2FunctionInterruptedConstructor extends V2StrLen {
+  throw new InterruptedException("constructor failed")
 }
 
 class V2FunctionWithoutNoArgConstructor(name: String) extends UnboundFunction {

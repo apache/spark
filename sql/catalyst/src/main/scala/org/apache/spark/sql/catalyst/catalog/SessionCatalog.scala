@@ -2093,7 +2093,8 @@ class SessionCatalog(
       // like the Hive UDF wrappers do.
       val unbound = newV2FunctionInstance(clazz, func.identifier)
       val builder = (input: Seq[Expression]) => {
-        val expr = V2ExpressionUtils.bindFunction(unbound, input)
+        val expr = V2ExpressionUtils.bindFunction(
+          unbound, input, displayName = Some(func.identifier))
         expr.setTagValue(FunctionRegistry.FUNC_ALIAS, name)
         expr
       }
@@ -2128,8 +2129,13 @@ class SessionCatalog(
       clazz.getDeclaredConstructor().newInstance().asInstanceOf[UnboundFunction]
     } catch {
       case e: InvocationTargetException =>
-        throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
-          clazz.getName, ident, e.getCause)
+        val cause = e.getCause
+        if (NonFatal(cause) || cause.isInstanceOf[LinkageError]) {
+          throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
+            clazz.getName, ident, cause)
+        } else {
+          throw cause
+        }
       case NonFatal(e) =>
         throw QueryCompilationErrors.cannotInstantiateFunctionClassError(
           clazz.getName, ident, e)
@@ -2255,11 +2261,16 @@ class SessionCatalog(
   private def makeExprInfoForV2Function(
       func: CatalogFunction,
       unbound: UnboundFunction): ExpressionInfo = {
+    val description = try {
+      unbound.description()
+    } catch {
+      case NonFatal(_) | _: LinkageError => null
+    }
     new ExpressionInfo(
       func.className,
       func.identifier.database.orNull,
       func.identifier.funcName,
-      unbound.description(),
+      description,
       "",
       "",
       "",
