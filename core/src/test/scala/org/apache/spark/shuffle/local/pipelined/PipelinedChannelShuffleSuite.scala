@@ -599,6 +599,33 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60497: a map-stage job that depends on a channel shuffle is rejected up front") {
+    // A map-stage job gets no run epoch, so its channel tasks would be killed on their first
+    // rendezvous access and relaunched forever. The scheduler rejects such a job before any task
+    // runs; the same pipelined shuffle still runs as a result job afterwards.
+    withPipelinedSparkContext(cores = 4) { sc =>
+      val events = new JobEvents
+      sc.addSparkListener(events)
+      val keyed: RDD[(Int, Int)] = sc.parallelize(0 until 100, 2).map(v => (v, v))
+      val consumer = new PipelinedShuffledRDD[Int, Int, Int](keyed, new HashPartitioner(2))
+      val regularDep =
+        new org.apache.spark.ShuffleDependency[Int, Int, Int](consumer, new HashPartitioner(2))
+      val future = sc.submitMapStage(regularDep)
+      org.apache.spark.util.ThreadUtils.awaitReady(
+        future, scala.concurrent.duration.Duration(1, TimeUnit.MINUTES))
+      checkError(
+        exception = future.value.get.failed.get.asInstanceOf[SparkException],
+        condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+        sqlState = Some("0A000"),
+        parameters = Map("reason" -> "a map-stage job that depends on a pipelined shuffle"))
+      sc.listenerBus.waitUntilEmpty()
+      assert(events.taskStarts.isEmpty)
+      assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
+
+      assert(consumer.map(_._2).collect().sorted === (0 until 100).toArray)
+    }
+  }
+
   test("unregister preserves an active run until its owner finishes") {
     ChannelShuffleRendezvous.clear()
     try {

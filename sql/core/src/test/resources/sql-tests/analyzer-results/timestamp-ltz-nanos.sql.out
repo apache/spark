@@ -1733,6 +1733,121 @@ SELECT timestampadd(NANOSECOND, 1, TIMESTAMP_LTZ '2020-01-01 00:00:00 UTC')
 
 
 -- !query
+SELECT to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ltz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7)
+-- !query analysis
+Project [to_timestamp_ltz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampLTZNanosType(7), Some(America/Los_Angeles), true) AS to_timestamp_ltz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_to_timestamp('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8)
+-- !query analysis
+Project [try_to_timestamp(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampLTZNanosType(8), Some(America/Los_Angeles), false) AS try_to_timestamp(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(to_timestamp('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)),
+  typeof(to_timestamp_ltz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6))
+-- !query analysis
+Project [typeof(to_timestamp(2020-01-01 13:24:35.1, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampLTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS))#x, typeof(to_timestamp_ltz(2020-01-01 13:24:35.1, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampType, Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ltz(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9)
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456789 UTC, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS z), TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(2020-01-01 13:24:35.123456789 UTC, yyyy-MM-dd HH:mm:ss.SSSSSSSSS z)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_to_timestamp('bad', 'yyyy', 9)
+-- !query analysis
+Project [try_to_timestamp(bad, Some(yyyy), TimestampLTZNanosType(9), Some(America/Los_Angeles), false) AS try_to_timestamp(bad, yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp('bad', 'yyyy', 9)
+-- !query analysis
+Project [to_timestamp(bad, Some(yyyy), TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(bad, yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'))
+-- !query analysis
+Project [to_timestamp_ltz(2020-01-01 13:24:35.123456789, None, TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')#x, typeof(to_timestamp_ltz(2020-01-01 13:24:35.123456789, None, TimestampLTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ltz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'),
+  typeof(try_to_timestamp('2020-01-01 13:24:35.12345678' :: timestamp_ltz(8), 'yyyy'))
+-- !query analysis
+Project [try_to_timestamp(cast(2020-01-01 13:24:35.12345678 as timestamp_ltz(8)), Some(yyyy), TimestampLTZNanosType(8), Some(America/Los_Angeles), false) AS try_to_timestamp(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_LTZ(8)), yyyy)#x, typeof(try_to_timestamp(cast(2020-01-01 13:24:35.12345678 as timestamp_ltz(8)), Some(yyyy), TimestampLTZNanosType(8), Some(America/Los_Angeles), false)) AS typeof(try_to_timestamp(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_LTZ(8)), yyyy))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7)
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456789, Some(yyyy), TimestampLTZNanosType(7), Some(America/Los_Angeles), true) AS to_timestamp(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'))
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, None, TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789')#x, typeof(to_timestamp_ntz(2020-01-01 13:24:35.123456789, None, TimestampNTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp('2020', 'yyyy', 5)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "5",
+    "type" : "TIMESTAMP_LTZ"
+  }
+}
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', 'yyyy', 9)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(TIMESTAMP_LTZ '2020-01-01 13:24:35.123456789', yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456', 'yyyy', 9)
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456, Some(yyyy), TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456', yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ltz(DATE '2020-01-01', 'yyyy-MM-dd', 9)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT timestampdiff(MICROSECOND, TIMESTAMP_LTZ '2020-01-01 00:00:00.000000999',
     TIMESTAMP_LTZ '2020-01-01 00:00:00.000001001')
 -- !query analysis

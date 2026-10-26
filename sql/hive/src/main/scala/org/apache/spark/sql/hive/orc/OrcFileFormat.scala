@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.{Base64, Properties}
 
 import scala.jdk.CollectionConverters._
@@ -43,6 +45,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
@@ -139,7 +142,8 @@ case class OrcFileFormat() extends FileFormat
 
     if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(withoutNanosTimestamps(requiredSchema), filters).foreach { f =>
+      val pushedFilters = filters.filterNot(hasSubMillisTimestamp)
+      OrcFilters.createFilter(withoutNanosTimestamps(requiredSchema), pushedFilters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
@@ -197,6 +201,7 @@ case class OrcFileFormat() extends FileFormat
 
     case _: AnsiIntervalType => false
     case _: TimeType => false
+    case _: GeometryType | _: GeographyType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -221,6 +226,32 @@ case class OrcFileFormat() extends FileFormat
     case f @ StructField(_, st: StructType, _, _) => f.copy(dataType = withoutNanosTimestamps(st))
     case f if !f.dataType.isInstanceOf[AnyTimestampNanoType] => f
   })
+
+  // Whether the filter has a TIMESTAMP value with a sub-millisecond part. Such a top-level filter
+  // is not pushed down, because the Kryo round trip of the search argument (see `toKryo`)
+  // truncates the value to milliseconds, while ORC compares it with nanosecond statistics.
+  private def hasSubMillisTimestamp(filter: Filter): Boolean = {
+    import org.apache.spark.sql.sources._
+
+    def isSubMillis(value: Any): Boolean = value match {
+      case t: Timestamp => t.getNanos % NANOS_PER_MILLIS != 0
+      case i: Instant => i.getNano % NANOS_PER_MILLIS != 0
+      case _ => false
+    }
+    filter match {
+      case And(left, right) => hasSubMillisTimestamp(left) || hasSubMillisTimestamp(right)
+      case Or(left, right) => hasSubMillisTimestamp(left) || hasSubMillisTimestamp(right)
+      case Not(child) => hasSubMillisTimestamp(child)
+      case EqualTo(_, value) => isSubMillis(value)
+      case EqualNullSafe(_, value) => isSubMillis(value)
+      case LessThan(_, value) => isSubMillis(value)
+      case LessThanOrEqual(_, value) => isSubMillis(value)
+      case GreaterThan(_, value) => isSubMillis(value)
+      case GreaterThanOrEqual(_, value) => isSubMillis(value)
+      case In(_, values) => values.exists(isSubMillis)
+      case _ => false
+    }
+  }
 
   // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.
   // This is copied from Hive 1.2's SearchArgumentImpl.toKryo().
