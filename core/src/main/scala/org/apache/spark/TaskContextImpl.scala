@@ -268,7 +268,14 @@ private[spark] class TaskContextImpl(
           case t: Throwable => e.addSuppressed(t)
         }
         listenerExceptions += e
-        logError(log"Error in ${MDC(LISTENER, "TaskPreCompletionListener")}", e)
+        // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
+        // must not end the loop in `markTaskCompleted()` before it sets `completed`, or the
+        // completion listeners would never run. It is reported with `e` instead.
+        try {
+          logError(log"Error in ${MDC(LISTENER, "TaskPreCompletionListener")}", e)
+        } catch {
+          case t: Throwable => e.addSuppressed(t)
+        }
     }
   }
 
