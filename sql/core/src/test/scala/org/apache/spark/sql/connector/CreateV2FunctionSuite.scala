@@ -19,6 +19,7 @@ package org.apache.spark.sql.connector
 
 import java.io.File
 import java.lang.management.ManagementFactory
+import java.util.concurrent.atomic.AtomicInteger
 
 import scala.reflect.ClassTag
 
@@ -190,6 +191,34 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
       val output = sql("DESCRIBE FUNCTION default.strlen").collect().map(_.getString(0))
       assert(output.exists(_.contains(strLenClass)))
       assert(output.exists(_.contains("strlen(string) -> int")))
+    }
+  }
+
+  test("persistent existence and first invocation do not construct unused metadata instances") {
+    V2MetadataTrackingStrLen.constructions.set(0)
+    val className = classOf[V2MetadataTrackingStrLen].getName
+    withUserDefinedFunction("default.metadata_len" -> false) {
+      sql(s"CREATE FUNCTION metadata_len AS '$className'")
+      assert(spark.catalog.functionExists("metadata_len"))
+      assert(spark.catalog.functionExists("default", "metadata_len"))
+      assert(V2MetadataTrackingStrLen.constructions.get() == 0)
+      checkAnswer(sql("SELECT metadata_len('abc')"), Row(3))
+      assert(V2MetadataTrackingStrLen.constructions.get() == 1)
+      assert(spark.catalog.getFunction("metadata_len").className == className)
+      assert(V2MetadataTrackingStrLen.constructions.get() == 1)
+    }
+  }
+
+  test("persistent metadata-only reads recover after ADD JAR") {
+    val className = "test.v2udf.MetadataAfterAddJarStrLen"
+    assert(!Utils.classIsLoadable(className))
+    withUserDefinedFunction("default.metadata_len" -> false) {
+      sql(s"CREATE FUNCTION metadata_len AS '$className'")
+      assert(spark.catalog.getFunction("metadata_len").description == "N/A.")
+      sql(s"ADD JAR '${createStrLenJar(className)}'")
+      assert(spark.catalog.getFunction("metadata_len").description == "jar_strlen(string) -> int")
+      assert(sql("DESCRIBE FUNCTION metadata_len").collect().map(_.getString(0))
+        .exists(_.contains("jar_strlen(string) -> int")))
     }
   }
 
@@ -390,6 +419,7 @@ class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
     val jar = createStrLenJar("test.v2udf.UsingResourceStrLen")
     withUserDefinedFunction("default.f" -> false) {
       sql(s"CREATE FUNCTION f AS '$className' USING JAR '$jar'")
+      assert(spark.catalog.functionExists("f"))
       spark.catalog.listFunctions().collect()
       spark.catalog.getFunction("f")
       val describe = sql("DESCRIBE FUNCTION f").collect().map(_.getString(0))
@@ -438,6 +468,14 @@ class V2StrLen extends UnboundFunction {
   }
 
   override def description(): String = "strlen: strlen(string) -> int"
+}
+
+object V2MetadataTrackingStrLen {
+  val constructions = new AtomicInteger
+}
+
+class V2MetadataTrackingStrLen extends V2StrLen {
+  V2MetadataTrackingStrLen.constructions.incrementAndGet()
 }
 
 class V2StrLenMagic extends V2StrLen {
