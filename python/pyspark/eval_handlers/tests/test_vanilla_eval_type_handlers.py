@@ -17,17 +17,20 @@
 
 """Tests for the plain Python (pickle) UDF eval type handler (``_vanilla``).
 
-The handler is built from ``(arg_offsets, eval_func)`` pairs, the shape ``read_single_udf``
-prepares for SQL_BATCHED_UDF, and fed pickled-row input via ``run(0, <rows>)``.
+The handler is built from ``UDF`` records and fed
+pickled-row input via ``run(0, <rows>)``.
 """
 
+import datetime
 import io
 import os
 from unittest.mock import patch
 
 from pyspark.eval_handlers._base import get_eval_type_handler
+from pyspark.eval_handlers._typing import UDF
 from pyspark.eval_handlers._vanilla import BatchedUDFHandler
 from pyspark.serializers import BatchedSerializer, CPickleSerializer
+from pyspark.sql.types import DateType, LongType
 from pyspark.testing.utils import PySparkBaseTestCase
 from pyspark.util import PythonEvalType
 
@@ -37,9 +40,21 @@ with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
 
 class BatchedUDFHandlerTests(PySparkBaseTestCase):
     @staticmethod
-    def _handler(*udfs):
+    def _handler(*udfs, kwargs_offsets=None, return_type=None):
+        """Build the handler from ``(arg_offsets, func)`` pairs."""
         return BatchedUDFHandler(
-            udfs=list(udfs), runner_conf=RunnerConf({}), eval_conf=EvalConf({})
+            udfs=[
+                UDF(
+                    raw_func=f,
+                    args_offsets=arg_offsets,
+                    kwargs_offsets=kwargs_offsets or {},
+                    return_type=return_type or LongType(),
+                    result_id=0,
+                )
+                for arg_offsets, f in udfs
+            ],
+            runner_conf=RunnerConf({}),
+            eval_conf=EvalConf({}),
         )
 
     def test_registered(self):
@@ -70,6 +85,18 @@ class BatchedUDFHandlerTests(PySparkBaseTestCase):
         handler = self._handler(([0], lambda a: a + 1), ([0, 1], lambda a, b: a * b))
         rows = [(1, 10), (2, 20)]
         self.assertEqual(list(handler.run(0, iter(rows))), [(2, 10), (3, 40)])
+
+    def test_kwargs_are_bound_by_name(self):
+        handler = self._handler(([1], lambda a, b: a - b), kwargs_offsets={"b": 0})
+        rows = [(1, 10), (2, 20)]
+        self.assertEqual(list(handler.run(0, iter(rows))), [9, 18])
+
+    def test_result_converted_when_return_type_needs_conversion(self):
+        handler = self._handler(
+            ([0], lambda d: d + datetime.timedelta(days=1)), return_type=DateType()
+        )
+        rows = [(datetime.date(1970, 1, 1),), (datetime.date(1970, 1, 10),)]
+        self.assertEqual(list(handler.run(0, iter(rows))), [1, 10])
 
     def test_empty_input(self):
         handler = self._handler(([0], lambda a: a))

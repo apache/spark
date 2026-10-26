@@ -1426,9 +1426,19 @@
           "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
+      "CHECKPOINT_RELATION_ID_EMPTY" : {
+        "message" : [
+          "The checkpoint relation ID must not be empty."
+        ]
+      },
       "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
         "message" : [
           "ChunkedCachedLocalRelation should contain data."
+        ]
+      },
+      "DATAFRAME_ALREADY_EXISTS" : {
+        "message" : [
+          "A DataFrame with id <dfId> already exists in the session <sessionId>."
         ]
       },
       "DATAFRAME_NOT_FOUND" : {
@@ -1661,6 +1671,11 @@
       "STRUCT_LITERAL_NOT_SET" : {
         "message" : [
           "Struct literal is not set."
+        ]
+      },
+      "SUBQUERY_PLAN_NOT_ATTACHED" : {
+        "message" : [
+          "The subquery plan referenced by plan id <planId> is not attached to the request."
         ]
       },
       "UDT_TYPE_FIELD_INVALID" : {
@@ -5279,6 +5294,11 @@
           "<sparkSubmitDeployModeKey> can only be \"cluster\" or \"client\"."
         ]
       },
+      "MISSING_IN_PROCESS_PYTHON_PLUGIN" : {
+        "message" : [
+          "In-process Python UDFs require <plugin>, or a subclass of it, in spark.plugins. Install JEP and Arrow CDI on executors and configure the plugin before starting Spark."
+        ]
+      },
       "NETWORK_AUTH_MUST_BE_ENABLED" : {
         "message" : [
           "<networkAuthEnabledConf> must be enabled when enabling encryption."
@@ -5297,6 +5317,11 @@
       "RESERVED_PYTHON_WORKER_ENV_VAR_NAME" : {
         "message" : [
           "The environment variable name <name>, set under <prefix>, is reserved for Spark. Names beginning with <reservedPrefixes>, and the names <reservedNames>, are set by Spark for its own Python workers and cannot be set by a session."
+        ]
+      },
+      "UNSUPPORTED_IN_PROCESS_PYTHON_UDF" : {
+        "message" : [
+          "In-process Python UDFs do not support <config>. Unset this configuration or use Python worker UDFs."
         ]
       }
     },
@@ -9998,8 +10023,8 @@
   },
   "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" : {
     "message" : [
-      "XML map keys of CHAR or VARCHAR cannot be padded or trimmed.",
-      "The key <key> is not valid for type <dataType>."
+      "The XML name <key> is not a valid key for the map key type <dataType>.",
+      "A CHAR key must match the declared length exactly and a VARCHAR key must not exceed it; keys are never padded or trimmed. Use a STRING map key to accept any name."
     ],
     "sqlState" : "0A000"
   },

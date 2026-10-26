@@ -57,11 +57,12 @@ from pyspark.sql.conversion import (
 from pyspark.sql.pandas.types import to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import ArrayType, DataType, StructField, StructType
-from pyspark.util import PythonEvalType, fail_on_stopiteration
+from pyspark.util import PythonEvalType
 
 if TYPE_CHECKING:
     import pyarrow as pa
 
+    from pyspark.eval_handlers._typing import UDF
     from pyspark.worker_util import EvalConf, RunnerConf
 
 
@@ -179,9 +180,7 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_ARROW_ELEMENTWISE_UDF
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         # This path exchanges data with the JVM over Arrow, so PyArrow is required. Fail with a
         # clear message rather than a bare ImportError from `import pyarrow`.
         require_minimum_pyarrow_version()
@@ -199,9 +198,9 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
-            udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type = udf
+            udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf_func, udf_args_offsets, udf_kwargs_offsets
+                self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
             )
             depth = nesting[udf_index] if nesting is not None else 1
             # Each argument arrives as ``array^depth<T>``; convert its leaves with the element type
@@ -241,7 +240,6 @@ class ArrowElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
-        @fail_on_stopiteration
         def _evaluate_elementwise_udf(udf_func: Any, rows: Iterator[tuple]) -> list[Any]:
             if self._runner_conf.arrow_concurrency_level <= 0:
                 return [udf_func(*row) for row in rows]
@@ -308,9 +306,7 @@ class _VectorizedElementwiseUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     whole flat columns. The conversions below are the Arrow flavor (``pa.Array`` in and out);
     ``_PandasElementwiseUDFHandler`` overrides them for pandas."""
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         require_minimum_pyarrow_version()
         super().__init__(udfs, runner_conf, eval_conf)
 
@@ -390,17 +386,15 @@ class _ScalarElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
     ``array<R>`` using the input's offsets - one row in, one row out, one Python round trip per
     batch. Subclasses supply the flavor's conversions and result check."""
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
 
         nesting = eval_conf.elementwise_nesting
         self._udf_infos = []
         for udf_index, udf in enumerate(udfs):
-            udf_func, udf_args_offsets, udf_kwargs_offsets, udf_return_type = udf
+            udf_return_type = udf.return_type
             wrapped_func, args_kwargs_offsets = wrap_kwargs_support(
-                udf_func, udf_args_offsets, udf_kwargs_offsets
+                self._funcs[udf_index], udf.args_offsets, udf.kwargs_offsets
             )
             udf_output_schema = _elementwise_output_schema(udf_return_type, runner_conf)
             depth = nesting[udf_index] if nesting is not None else 1
@@ -518,14 +512,12 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
     _iter_based = True
 
-    def __init__(
-        self, udfs: list[tuple[Any, ...]], runner_conf: RunnerConf, eval_conf: EvalConf
-    ) -> None:
+    def __init__(self, udfs: list[UDF], runner_conf: RunnerConf, eval_conf: EvalConf) -> None:
         super().__init__(udfs, runner_conf, eval_conf)
 
         assert len(udfs) == 1, "One SCALAR_*_ITER_ELEMENTWISE UDF expected here."
-        self._udf_func, self._args_offsets, kwargs_offsets, self._return_type = udfs[0]
-        assert not kwargs_offsets, "Iterator UDFs do not take keyword arguments."
+        udf = udfs[0]
+        assert not udf.kwargs_offsets, "Iterator UDFs do not take keyword arguments."
 
         # Each argument arrives as ``array^depth<T>``; the vectorized function must see the leaf
         # element type ``T`` (arguments may differ, e.g. an outer column repeated into an aligned
@@ -533,9 +525,9 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         nesting = eval_conf.elementwise_nesting
         self._depth = nesting[0] if nesting is not None else 1
         self._udf_input_schema = _elementwise_input_schema(
-            eval_conf.input_type, self._args_offsets, self._depth
+            eval_conf.input_type, udf.args_offsets, self._depth
         )
-        self._udf_output_schema = _elementwise_output_schema(self._return_type, runner_conf)
+        self._udf_output_schema = _elementwise_output_schema(udf.return_type, runner_conf)
 
     @abstractmethod
     def _verify_return_type(self, results: Any) -> Iterator[Any]:
@@ -557,7 +549,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
             # shapes re-nest this batch's rows. The user function sees the flat leaves as a
             # pandas Series / DataFrame (pandas) or a pa.Array (Arrow), each with its leaf type.
             flat_batch, list_lengths_by_level, large_list_by_level = _elementwise_flatten_inputs(
-                batch, self._args_offsets, self._depth
+                batch, self._udfs[0].args_offsets, self._depth
             )
             pending_shapes.append((list_lengths_by_level, large_list_by_level, flat_batch.num_rows))
             num_input_elements += flat_batch.num_rows
@@ -566,7 +558,7 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
 
         flat_args_iter = map(extract_flat, data)
 
-        verified_iter = self._verify_return_type(self._udf_func(flat_args_iter))
+        verified_iter = self._verify_return_type(self._funcs[0](flat_args_iter))
 
         # Buffer the streamed flat element results and emit an ``array<R>`` row as soon as the
         # shape at the head of the FIFO is fully covered. A row whose length is 0 (an empty
@@ -608,7 +600,9 @@ class _ScalarIterElementwiseUDFHandler(_VectorizedElementwiseUDFHandler):
         def process_results() -> Iterator[pa.RecordBatch]:
             nonlocal pending_chunks, pending_len, empty_schema, num_output_elements
             for result in verified_iter:
-                chunk = self._to_flat_batch(result, self._return_type, self._udf_output_schema)
+                chunk = self._to_flat_batch(
+                    result, self._udfs[0].return_type, self._udf_output_schema
+                )
                 num_output_elements += chunk.num_rows
                 # Fail fast if the UDF over-produces, before the buffer grows unbounded (the
                 # base iterator paths do the same via verify_output_row_limit).
@@ -658,13 +652,14 @@ class PandasScalarIterElementwiseUDFHandler(
     an iterator of pandas Series (DataFrames for struct types)."""
 
     eval_type = PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF
+    _fail_on_stopiteration = False
 
     def _verify_return_type(self, results: Any) -> Iterator[Any]:
         import pandas as pd
 
         pandas_iter_type = (
             Iterator[pd.DataFrame]
-            if isinstance(self._return_type, StructType)
+            if isinstance(self._udfs[0].return_type, StructType)
             else Iterator[pd.Series]
         )
         return verify_return_type(results, pandas_iter_type)

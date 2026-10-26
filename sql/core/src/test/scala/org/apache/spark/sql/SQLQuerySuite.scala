@@ -4965,18 +4965,21 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
   }
 
   test("SPARK-49659: Unsupported scalar subqueries in VALUES") {
-    checkError(
-      exception = intercept[AnalysisException](
-        sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
-      ),
-      condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
-      parameters = Map(),
-      context = ExpectedContext(
-        fragment = "VALUES ((SELECT 1) + (SELECT 2))",
-        start = 14,
-        stop = 45
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException](
+          sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))")
+        ),
+        condition = "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.SCALAR_SUBQUERY_IN_VALUES",
+        parameters = Map(),
+        context = ExpectedContext(
+          fragment = "VALUES ((SELECT 1) + (SELECT 2))",
+          start = 14,
+          stop = 45
+        )
       )
-    )
+    }
+    checkAnswer(sql("SELECT * FROM VALUES ((SELECT 1) + (SELECT 2))"), Row(3))
   }
 
   test("SPARK-49743: OptimizeCsvJsonExpr does not change schema when pruning struct") {

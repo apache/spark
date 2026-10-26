@@ -272,6 +272,19 @@ class TimestampNanosParquetOpsSuite extends SparkFunSuite {
     assert(ntzOps.acceptsValue(LocalDateTime.parse("2020-01-01T00:00:00")))
   }
 
+  test("SPARK-57838: filterOps accepts exactly the INT64 epoch-nanos range") {
+    val ltzOps = TimestampNanosParquetOps.ltzFilterOps
+    val ntzOps = TimestampNanosParquetOps.ntzFilterOps
+    Seq(
+      "1677-09-21T00:12:43.145224192" -> true,
+      "2262-04-11T23:47:16.854775807" -> true,
+      "1677-09-21T00:12:43.145224191" -> false,
+      "2262-04-11T23:47:16.854775808" -> false).foreach { case (ts, inRange) =>
+      assert(ltzOps.acceptsValue(Instant.parse(s"${ts}Z")) === inRange, ts)
+      assert(ntzOps.acceptsValue(LocalDateTime.parse(ts)) === inRange, ts)
+    }
+  }
+
   test("filterOps make* throws on an out-of-range value - why acceptsValue must gate every In " +
     "element, not just the head") {
     // The encoder is exact (Math.addExact/multiplyExact), so building a predicate directly from an

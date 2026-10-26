@@ -2753,14 +2753,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   // surfaces it).
   def unsupportedJsonCharVarcharMapKey(
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
-    // The key is a raw JSON object name, which in map-shaped data is often user data (ids,
-    // emails) and can run up to Jackson's 50,000-character name limit, so cap what we echo.
-    val maxKeyChars = 128
-    val displayKey = if (key.numChars() > maxKeyChars) {
-      UTF8String.concat(key.substring(0, maxKeyChars), UTF8String.fromString("..."))
-    } else {
-      key
-    }
+    val displayKey = CharVarcharUtils.truncateMapKeyForError(key)
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
@@ -2775,10 +2768,11 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
    */
   def unsupportedXmlCharVarcharMapKey(
       key: UTF8String, dataType: DataType): SparkRuntimeException = {
+    val displayKey = CharVarcharUtils.truncateMapKeyForError(key)
     new SparkRuntimeException(
       errorClass = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
       messageParameters = Map(
-        "key" -> toSQLValue(key, StringType),
+        "key" -> toSQLValue(displayKey, StringType),
         "dataType" -> toSQLType(dataType)))
   }
 
@@ -2821,7 +2815,10 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   }
 
   def timestampNanosEpochNanosOverflowError(
-      value: TimestampNanosVal, isNtz: Boolean, sink: String): SparkArithmeticException = {
+      value: TimestampNanosVal,
+      isNtz: Boolean,
+      sink: String,
+      minInstant: String = "1677-09-21T00:12:43.145224192Z"): SparkArithmeticException = {
     // Render TIMESTAMP_NTZ values without a zone (LocalDateTime, no trailing `Z`); TIMESTAMP_LTZ
     // values are absolute instants and render as UTC with a trailing `Z`.
     val rendered =
@@ -2832,7 +2829,21 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "operation" -> (s"write the timestamp value $rendered as $sink " +
           "epoch-nanoseconds " +
-          "(supported range: 1677-09-21T00:12:43.145224192Z to 2262-04-11T23:47:16.854775807Z)")),
+          s"(supported range: $minInstant to 2262-04-11T23:47:16.854775807Z)")),
+      context = Array.empty,
+      summary = "")
+  }
+
+  def timestampNanosAddIntervalOverflowError(
+      start: TimestampNanosVal,
+      startType: DataType,
+      interval: Any,
+      intervalType: DataType): SparkArithmeticException = {
+    new SparkArithmeticException(
+      errorClass = "DATETIME_OVERFLOW",
+      messageParameters = Map(
+        "operation" ->
+          s"add ${toSQLValue(interval, intervalType)} to ${toSQLValue(start, startType)}"),
       context = Array.empty,
       summary = "")
   }

@@ -113,6 +113,10 @@ private[hive] class HiveClientImpl(
     override def hiveTableProps(): Map[String, String] = {
       rawTable.getParameters.asScala.toMap
     }
+
+    override def hivePartitionColumnNames(): Seq[String] = {
+      rawTable.getPartCols.asScala.map(_.getName).toSeq
+    }
   }
 
   import HiveClientImpl._
@@ -587,6 +591,21 @@ private[hive] class HiveClientImpl(
 
   override def createTable(table: CatalogTable, ignoreIfExists: Boolean): Unit = withHiveState {
     shim.createTable(client, toHiveTable(table, Some(userName)), ignoreIfExists)
+  }
+
+  override def validateTable(table: CatalogTable): Unit = withHiveState {
+    val hiveTable = toHiveTable(table, Some(userName))
+    // These are the checks of `Hive.createTable` before it calls Hive metastore. Like it, wrap
+    // their errors in `HiveException`.
+    try {
+      if (hiveTable.getCols.isEmpty || hiveTable.getSd.getColsSize == 0) {
+        // `Hive.createTable` gets the columns from the SerDe here, e.g., for an Avro table.
+        hiveTable.getDeserializer
+      }
+      hiveTable.checkValidity(conf)
+    } catch {
+      case NonFatal(e) => throw new HiveException(e)
+    }
   }
 
   override def dropTable(
@@ -1127,6 +1146,17 @@ private[hive] object HiveClientImpl extends Logging {
     new FieldSchema(c.name, typeString, c.getComment().orNull)
   }
 
+  /**
+   * Parses a Hive type string. The parser resolves `timestamp` by spark.sql.timestampType, but
+   * Hive `timestamp` is always TIMESTAMP_LTZ in Spark and Hive has no TIMESTAMP_NTZ type, so map
+   * TIMESTAMP_NTZ back to TIMESTAMP_LTZ.
+   */
+  def parseHiveType(typeStr: String): DataType = {
+    CatalystSqlParser.parseDataType(typeStr).transformRecursively {
+      case TimestampNTZType => TimestampType
+    }
+  }
+
   /** Get the Spark SQL native DataType from Hive's FieldSchema. */
   private def getSparkSQLDataType(hc: FieldSchema): DataType = {
     // For struct types, Hive metastore API uses unquoted element names, so does the spark catalyst
@@ -1141,7 +1171,7 @@ private[hive] object HiveClientImpl extends Logging {
     //   map<string,struct<x:int,y.z:int>> -> map<string,struct<`x`:int,`y.z`:int>>
     val typeStr = hc.getType.replaceAll("(?<=struct<|,)([^,<:]+)(?=:)", "`$1`")
     try {
-      CatalystSqlParser.parseDataType(typeStr)
+      parseHiveType(typeStr)
     } catch {
       case e: ParseException =>
         // Hive's union type (uniontype<...>) is not supported by Spark SQL and makes the parser
