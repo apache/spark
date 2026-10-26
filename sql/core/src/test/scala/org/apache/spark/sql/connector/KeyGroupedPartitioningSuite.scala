@@ -3437,17 +3437,20 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        // When the outer key is on the reduced side, the outer join falls back to a shuffle.
         Seq(
-          ("b12", "b4", "c12"),
-          ("b4", "b12", "c12"),
-          ("b8", "b4", "b2"),
-          ("b4", "b8", "b2")).foreach { case (t1, t2, t3) =>
+          ("b12", "b4", "c12", 2),
+          ("b4", "b12", "c12", 0),
+          ("b8", "b4", "b2", 2),
+          ("b4", "b8", "b2", 0)).foreach { case (t1, t2, t3, numShuffles) =>
           val df = sql(
             s"""
                |SELECT /*+ MERGE($t1, $t2, $t3) */ $t1.id, $t2.id, $t3.id
                |FROM testcat.ns.$t1 JOIN testcat.ns.$t2 ON $t1.id = $t2.id
                |JOIN testcat.ns.$t3 ON $t1.id = $t3.id
                |""".stripMargin)
+          assert(collectShuffles(df.queryExecution.executedPlan).size == numShuffles,
+            s"$t1 JOIN $t2 JOIN $t3 should plan $numShuffles shuffles")
           checkAnswer(df, expected)
         }
       }
@@ -3533,15 +3536,26 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        Seq("l2", "ld").foreach { third =>
+        Seq("l2" -> 1, "ld" -> 2).foreach { case (third, numShuffles) =>
           val df = sql(
             s"""
                |SELECT /*+ MERGE(l12, l4, $third) */ l12.id, l4.id, $third.id
                |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
                |JOIN testcat.ns.$third ON l12.id = $third.id
                |""".stripMargin)
+          assert(collectShuffles(df.queryExecution.executedPlan).size == numShuffles,
+            s"the join with $third should plan $numShuffles shuffles")
           checkAnswer(df, expected)
         }
+
+        // An outer join reports a single partitioning rather than a collection.
+        val outerDf = sql(
+          """
+            |SELECT /*+ MERGE(l12, l4, ld) */ l12.id, l4.id, ld.id
+            |FROM testcat.ns.l12 LEFT JOIN testcat.ns.l4 ON l12.id = l4.id
+            |JOIN testcat.ns.ld ON l12.id = ld.id
+            |""".stripMargin)
+        checkAnswer(outerDf, expected)
       }
     }
   }
@@ -3643,15 +3657,20 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
         SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
         SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
-        val df = sql(
-          """
-            |SELECT /*+ MERGE(x, l3) */ x.id2, x.id4, l3.id
-            |FROM (
-            |  SELECT /*+ MERGE(l12, l4) */ l12.id AS id2, l4.id AS id4
-            |  FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id) x
-            |JOIN testcat.ns.l3 ON x.id2 = l3.id
-            |""".stripMargin)
-        checkAnswer(df, (0L until 24L).map(i => Row(i, i, i)))
+        // The nested join may also output the original column next to its alias.
+        Seq("", "l12.id, ").foreach { extraColumn =>
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(x, l3) */ x.id2, x.id4, l3.id
+               |FROM (
+               |  SELECT /*+ MERGE(l12, l4) */ ${extraColumn}l12.id AS id2, l4.id AS id4
+               |  FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id) x
+               |JOIN testcat.ns.l3 ON x.id2 = l3.id
+               |""".stripMargin)
+          assert(collectShuffles(df.queryExecution.executedPlan).size == 2,
+            "the outer join should fall back to shuffling both sides")
+          checkAnswer(df, (0L until 24L).map(i => Row(i, i, i)))
+        }
       }
     }
   }
@@ -3677,7 +3696,117 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
             |FROM testcat.ns.nb4 JOIN testcat.ns.nb12 ON nb4.id = nb12.id
             |JOIN testcat.ns.nc6 ON nb12.id = nc6.id
             |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).size == 1,
+          "the nested join should be shuffled onto nc6's layout")
         checkAnswer(df, Seq(0L, 1L, 2L, 3L, 6L).map(i => Row(i, i, i)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ keeps SPJ on an unreduced column with the same transform") {
+    val cols = Array(Column.create("a", LongType), Column.create("b", LongType))
+    createTable("pa", cols, Array(bucket(12, "a"), bucket(12, "b")))
+    createTable("pb", cols, Array(bucket(4, "a"), bucket(12, "b")))
+    createTable("pc", cols, Array(bucket(12, "b")))
+    Seq("pa", "pb", "pc").foreach { t =>
+      sql(s"INSERT INTO testcat.ns.$t SELECT id, id FROM range(24)")
+    }
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        // The inner join reduces pa at a only, so bucket(12, b) still holds pa's own values.
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(pa, pb, pc) */ pa.a, pc.b
+            |FROM testcat.ns.pa JOIN testcat.ns.pb ON pa.a = pb.a AND pa.b = pb.b
+            |JOIN testcat.ns.pc ON pa.b = pc.b
+            |""".stripMargin)
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          "SPJ should be triggered for both joins")
+        checkAnswer(df, (0L until 24L).map(i => Row(i, i)))
+      }
+    }
+  }
+
+  test("SPARK-60232: ordering a subset-key SPJ range-shuffles when a one-side shuffle is below") {
+    val cols = Array(
+      Column.create("store", IntegerType),
+      Column.create("dept", IntegerType),
+      Column.create("data", StringType))
+    createTable("sa", cols, Array(identity("store"), identity("dept")))
+    // The dept keys come out as 20, 10, so ordering by dept reorders them.
+    sql("INSERT INTO testcat.ns.sa VALUES (1, 20, 'a1'), (2, 10, 'a2')")
+
+    createTable("sb", cols, Array.empty)
+    sql("INSERT INTO testcat.ns.sb VALUES (0, 10, 'b10'), (0, 20, 'b20')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        Seq("LEFT JOIN", "JOIN").foreach { joinType =>
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(sa, sb) */ sa.dept, sa.data, sb.data, sa.store
+               |FROM testcat.ns.sa $joinType testcat.ns.sb ON sa.dept = sb.dept
+               |ORDER BY sa.dept
+               |""".stripMargin)
+          checkAnswer(df, Seq(Row(10, "a2", "b10", 2), Row(20, "a1", "b20", 1)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60232: SPJ does not push common values below a shuffle") {
+    createTable("sa7", Array(Column.create("dept", IntegerType)), Array(identity("dept")))
+    sql("INSERT INTO testcat.ns.sa7 VALUES (1), (2), (3)")
+
+    createTable("sb7", Array(Column.create("dept", IntegerType),
+      Column.create("region", IntegerType)), Array(identity("region")))
+    sql("INSERT INTO testcat.ns.sb7 VALUES (1, 10), (2, 20), (3, 30)")
+
+    createTable("pa", Array(Column.create("id", IntegerType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pa VALUES (1), (2), (3)")
+
+    createTable("pb", Array(Column.create("id", IntegerType),
+      Column.create("region", IntegerType)), Array(identity("region")))
+    sql("INSERT INTO testcat.ns.pb VALUES (1, 10), (2, 20), (3, 30)")
+
+    createTable("pc", Array(Column.create("id", IntegerType)), Array(identity("id")))
+    sql("INSERT INTO testcat.ns.pc VALUES (1), (2), (3)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+        // sb7 is shuffled onto sa7's layout, and ordering then pushes sa7's values.
+        val orderedDf = sql(
+          """
+            |SELECT /*+ MERGE(sa7, sb7) */ sa7.dept, sb7.region
+            |FROM testcat.ns.sa7 LEFT JOIN testcat.ns.sb7 ON sa7.dept = sb7.dept
+            |ORDER BY sa7.dept
+            |""".stripMargin)
+        checkAnswer(orderedDf, Seq(Row(1, 10), Row(2, 20), Row(3, 30)))
+
+        // pb is shuffled for the inner join, and the outer join then pushes its values.
+        val nestedDf = sql(
+          """
+            |SELECT /*+ MERGE(pa, pb, pc) */ pa.id, pb.region, pc.id
+            |FROM testcat.ns.pa JOIN testcat.ns.pb ON pa.id = pb.id
+            |JOIN testcat.ns.pc ON pa.id = pc.id
+            |""".stripMargin)
+        checkAnswer(nestedDf, Seq(Row(1, 10, 1), Row(2, 20, 2), Row(3, 30, 3)))
       }
     }
   }
