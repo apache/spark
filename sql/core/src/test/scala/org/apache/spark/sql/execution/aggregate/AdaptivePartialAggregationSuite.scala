@@ -1391,9 +1391,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   test("a split adaptive aggregate times only its build, never the pass-through rows") {
     // Split by an exchange, a passed-through row returns from the build and re-enters it, so a
     // timer around the resumed build or around each passed-through row would cost two
-    // `System.nanoTime()` calls per row. The partial aggregate's generated code must hold only the
-    // build timer: its start, its stop once the build returns, and its stop at the map setup where
-    // the first passed-through row ends the build.
+    // `System.nanoTime()` calls per row. The generated code of the partial aggregate's stage, whose
+    // other operators take no time, must hold only the build timer: its start, and its stop in the
+    // map setup of the output function, which runs once, before the aggregate outputs anything.
     withSQLConf(
       (Seq(
         SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
@@ -1413,7 +1413,13 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
       }
       assert(partialStages.length == 1, "expected the partial aggregate in a stage of its own")
       val code = partialStages.head.doCodeGen()._2.body
-      assert("System\\.nanoTime\\(\\)".r.findAllMatchIn(code).length == 3, code)
+      def timerCalls(code: String): Seq[String] =
+        code.split("\n").filter(_.contains("System.nanoTime()")).toSeq
+      assert(timerCalls(code).length == 2, timerCalls(code).mkString("\n"))
+      val outputFunction = ("(?s)private void \\w*outputMapAndFlush_\\d+\\(\\).*?" +
+        "(?=\\n\\s*(private|protected|public) |\\z)").r.findFirstIn(code)
+      assert(outputFunction.exists(timerCalls(_).length == 1),
+        "the map setup in the output function should stop the build timer")
     }
   }
 

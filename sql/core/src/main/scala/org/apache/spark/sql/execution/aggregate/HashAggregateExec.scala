@@ -240,10 +240,9 @@ case class HashAggregateExec(
   // row queues a copy behind the maps, advancing one map row per queued row (see
   // `handlePassThroughRow`); this flag lets the later output skip the maps.
   private var adaptiveMapOutputDoneTerm: String = _
-  // Whether the map iterators have been set up (`finishHashMap`). The setup is reached both from
-  // the end of the build and from the map-output function, which may be re-entered when its loops
-  // return via `shouldStop()` to drain the buffer, and `finishAggregate` destructs the map, so the
-  // setup must run only once.
+  // Whether the map iterators have been set up (`finishHashMap`). The map-output function may be
+  // re-entered when its loops return via `shouldStop()` to drain the buffer, and `finishAggregate`
+  // destructs the map, so the setup must run only once.
   private var adaptiveMapSetupDoneTerm: String = _
   // The processed-row count at which the compaction ratio is evaluated next. It advances by
   // `minRows` after every check, and the count is reset after a spill so the new in-memory map
@@ -682,44 +681,16 @@ case class HashAggregateExec(
       outputFunc = generateResultFunction(ctx)
     }
 
-    // `aggTime` times the build up to the point where pass-through starts, plus the map iterator
-    // setup (`finishHashMap`, which sorts and merges any spilled data), but never the pass-through
-    // rows: timing them would cost two `System.nanoTime()` calls per row, comparable to passing a
-    // row through. The setup runs inside the timed build either way -- at the end of the input if
-    // pass-through never starts, otherwise for the first passed-through row. In the latter case the
-    // build timer stops right after the setup, because fused with the Final the same timed `doAgg`
-    // goes on to pass the rest of the input through.
-    val (adaptiveBuildStartTerm, adaptiveSetupMapFuncName) = if (adaptivePartialAggEnabled) {
-      val buildStart = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveBuildStart")
-      val aggTime = metricTerm(ctx, "aggTime")
-      val name = ctx.freshName("setupMapOutput")
-      val funcName = ctx.addNewFunction(name,
-        s"""
-           |private void $name() throws java.io.IOException {
-           |  if (!$adaptiveMapSetupDoneTerm) {
-           |    $finishHashMap
-           |    $adaptiveMapSetupDoneTerm = true;
-           |    if ($adaptivePassThroughTerm) {
-           |      $aggTime.add((System.nanoTime() - $buildStart) / $NANOS_PER_MILLIS);
-           |    }
-           |  }
-           |}
-         """.stripMargin)
-      (buildStart, funcName)
-    } else {
-      ("", "")
-    }
-
-    // After the child input is consumed, finish the build and set up the map iterators for the
-    // output below. With adaptive partial aggregation, also mark that the child is fully consumed
-    // (to support re-entry); the setup is skipped if the first passed-through row already ran it.
+    // After the child input is consumed, finish the build: with adaptive partial aggregation mark
+    // that the child is fully consumed (to support re-entry; the map iterators are set up inside
+    // the map-output function), otherwise set up the map iterators for the output below.
     // A child may leave its produce loop early rather than exhausting its input: `UnionExec` runs
     // each child inside its own helper, so a streamed row that fills the output buffer returns
     // only as far as here. Reaching the end of `produce` therefore does not by itself mean the
     // input is consumed -- pending output says the child parked instead, and the build resumes on
     // re-entry. Without this the rest of that partition is silently dropped.
     val postChildProduce = if (adaptivePartialAggEnabled) {
-      s"if (!shouldStop()) { $adaptiveChildrenConsumedTerm = true; $adaptiveSetupMapFuncName(); }"
+      s"if (!shouldStop()) { $adaptiveChildrenConsumedTerm = true; }"
     } else {
       finishHashMap
     }
@@ -790,6 +761,20 @@ case class HashAggregateExec(
        """.stripMargin
     }
 
+    // With adaptive partial aggregation, `aggTime` times the build up to the point where
+    // pass-through starts, plus the map iterator setup below (which in a task that has spilled also
+    // writes the map to disk and merges it with the spilled data), but never the pass-through rows:
+    // timing them would cost two `System.nanoTime()` calls per row, comparable to passing a row
+    // through. The timer starts before the build and stops right after the setup, which runs once,
+    // before the aggregate outputs anything: for the first passed-through row, or right after the
+    // build if no row is passed through. Fused with the Final, the build then goes on to pass the
+    // rest of the input through untimed.
+    val adaptiveBuildStartTerm = if (adaptivePartialAggEnabled) {
+      ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveBuildStart")
+    } else {
+      ""
+    }
+
     // With adaptive partial aggregation the maps are frozen once pass-through is active, so their
     // output (which also frees them) can happen as soon as pass-through fires, releasing the memory
     // before the remaining input is streamed. The output loops are wrapped in a function so the
@@ -797,20 +782,24 @@ case class HashAggregateExec(
     // The done flag is set inside, after the loops, so a mid-output drain (the loops return via
     // `shouldStop()`) leaves it unset and the caller resumes the map iterator on re-entry; once it
     // is set the maps have been fully output and freed and will not be touched again. The iterator
-    // setup (`finishHashMap`, which destructs the map) runs only once: here for the first
-    // passed-through row, or already at the end of the build if pass-through never started. The
-    // queue of passed-through rows held behind the maps is flushed here, right after the done flag
-    // is set: the maps must precede the held rows so the downstream Final merges a group's map
-    // buffer before its pass-through buffers (a group can straddle the freeze, since the maps only
-    // freeze once pass-through fires), and the copies were made when the row was queued, so
-    // emitting them here cannot corrupt the build's reusable rows.
+    // setup (`finishHashMap`, which destructs the map) is guarded to run only once, and stops the
+    // build timer (see `aggTime` above). The queue of passed-through rows held behind the maps is
+    // flushed here, right after the done flag is set: the maps must precede the held rows so the
+    // downstream Final merges a group's map buffer before its pass-through buffers (a group can
+    // straddle the freeze, since the maps only freeze once pass-through fires), and the copies were
+    // made when the row was queued, so emitting them here cannot corrupt the build's reusable rows.
     adaptiveOutputMapAndFlushFuncName = if (adaptivePartialAggEnabled) {
       val name = ctx.freshName("outputMapAndFlush")
       val pair = ctx.freshName("pendingRow")
+      val aggTime = metricTerm(ctx, "aggTime")
       ctx.addNewFunction(name,
         s"""
            |private void $name() throws java.io.IOException {
-           |  $adaptiveSetupMapFuncName();
+           |  if (!$adaptiveMapSetupDoneTerm) {
+           |    $finishHashMap
+           |    $adaptiveMapSetupDoneTerm = true;
+           |    $aggTime.add((System.nanoTime() - $adaptiveBuildStartTerm) / $NANOS_PER_MILLIS);
+           |  }
            |  $outputFromFastHashMap
            |  $outputFromRegularHashMap
            |  $adaptiveMapOutputDoneTerm = true;
@@ -838,17 +827,12 @@ case class HashAggregateExec(
       outputFunc = generateResultFunction(ctx)
     }
 
-    val aggTime = metricTerm(ctx, "aggTime")
-    // The build timer. With adaptive partial aggregation, once pass-through has started the map
-    // setup stops it instead (see `aggTime` above), so its start is kept in a field.
+    // The build timer. With adaptive partial aggregation the map setup stops it (see `aggTime`
+    // above), so its start is kept in a field.
     val (startBuildTimer, stopBuildTimer) = if (adaptivePartialAggEnabled) {
-      (s"$adaptiveBuildStartTerm = System.nanoTime();",
-        s"""
-           |if (!$adaptivePassThroughTerm) {
-           |  $aggTime.add((System.nanoTime() - $adaptiveBuildStartTerm) / $NANOS_PER_MILLIS);
-           |}
-         """.stripMargin)
+      (s"$adaptiveBuildStartTerm = System.nanoTime();", "")
     } else {
+      val aggTime = metricTerm(ctx, "aggTime")
       val beforeAgg = ctx.freshName("beforeAgg")
       (s"long $beforeAgg = System.nanoTime();",
         s"$aggTime.add((System.nanoTime() - $beforeAgg) / $NANOS_PER_MILLIS);")
