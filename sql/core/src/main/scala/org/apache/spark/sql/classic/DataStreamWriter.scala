@@ -292,10 +292,10 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         table match {
           case table: SupportsWrite if table.supports(STREAMING_WRITE) =>
             table
-          case _ => createV1Sink(optionsWithPath)
+          case _ => createV1Sink(optionsWithPath, catalogTable)
         }
       } else {
-        createV1Sink(optionsWithPath)
+        createV1Sink(optionsWithPath, catalogTable)
       }
 
       startQuery(sink, optionsWithPath, catalogTable = catalogTable)
@@ -333,7 +333,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       catalogTable = catalogTable)
   }
 
-  private def createV1Sink(optionsWithPath: CaseInsensitiveMap[String]): Sink = {
+  private def createV1Sink(
+      optionsWithPath: CaseInsensitiveMap[String],
+      catalogTable: Option[CatalogTable]): Sink = {
     // Do not allow the user to specify clustering columns in the options. Ignoring this option is
     // consistent with the behavior of DataFrameWriter on non Path-based tables and with the
     // behavior of DataStreamWriter on partitioning columns specified in options.
@@ -350,6 +352,7 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
       this.ds.sparkSession,
       className = source,
       options = optionsWithClusteringColumns,
+      catalogTable = catalogTable,
       partitionColumns = normalizedParCols.getOrElse(Nil))
     ds.createSink(outputMode, this.ds.schema)
   }
