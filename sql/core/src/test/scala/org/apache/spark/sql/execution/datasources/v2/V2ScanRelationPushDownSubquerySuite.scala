@@ -64,6 +64,20 @@ class V2ScanRelationPushDownSubquerySuite extends QueryTest with SharedSparkSess
     }
   }
 
+  test("scan context equality, hashing and string representation") {
+    for (inSubquery <- Seq(false, true)) {
+      val context = new ScanContext(inSubquery)
+      val sameContext = new ScanContext(inSubquery)
+      assert(context.equals(context))
+      assert(context == sameContext)
+      assert(context.hashCode() == sameContext.hashCode())
+      assert(context != new ScanContext(!inSubquery))
+      assert(!context.equals(null))
+      assert(!context.equals(new Object))
+      assert(context.toString == s"ScanContext{isInSubquery=$inSubquery}")
+    }
+  }
+
   test("the context overload delegates to an existing options-only implementation") {
     val options = new CaseInsensitiveStringMap(Map("MiXeD" -> "value").asJava)
     var receivedOptions: CaseInsensitiveStringMap = null

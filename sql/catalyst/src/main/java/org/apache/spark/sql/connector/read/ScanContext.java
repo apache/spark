@@ -44,4 +44,21 @@ public class ScanContext {
   public boolean isInSubquery() {
     return isInSubquery;
   }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) return true;
+    if (!(o instanceof ScanContext that)) return false;
+    return isInSubquery == that.isInSubquery;
+  }
+
+  @Override
+  public int hashCode() {
+    return Boolean.hashCode(isInSubquery);
+  }
+
+  @Override
+  public String toString() {
+    return "ScanContext{isInSubquery=" + isInSubquery + "}";
+  }
 }
