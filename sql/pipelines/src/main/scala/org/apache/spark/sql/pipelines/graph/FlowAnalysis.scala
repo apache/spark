@@ -17,15 +17,27 @@
 
 package org.apache.spark.sql.pipelines.graph
 
+import java.util.Locale
+
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{AliasIdentifier, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{CTESubstitution, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, HiveTableRelation}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, SubqueryAlias}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.{DataFrame, DataFrameReader, Dataset, DataStreamReader, SparkSession}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, CatalogPlugin, Identifier}
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.graph.GraphIdentifierManager.{ExternalDatasetIdentifier, InternalDatasetIdentifier}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 
 object FlowAnalysis {
@@ -108,9 +120,9 @@ object FlowAnalysis {
     val planWithInlinedCTEs = CTESubstitution(plan)
 
     val spark = context.spark
-    // Traverse the user's query plan and recursively resolve nodes that reference Pipelines
-    // features that the Spark analyzer is unable to resolve
-    val resolvedPlan = planWithInlinedCTEs transformWithSubqueries {
+    // Resolves nodes that reference Pipelines features that the Spark analyzer is unable to
+    // resolve.
+    val readUnresolvedRelation: PartialFunction[LogicalPlan, LogicalPlan] = {
         // Streaming read on another dataset
         // This branch will be hit for the following kinds of queries:
         // - SELECT ... FROM STREAM(t1)
@@ -136,8 +148,96 @@ object FlowAnalysis {
           // to allow correct analysis of the parent plan that contains this subquery
           resolved.mergeTagsFrom(u)
           resolved
-      }
+    }
+    val readResolvedTableRead: PartialFunction[LogicalPlan, LogicalPlan] = {
+        // Table read that was already resolved against the catalog before flow analysis. Spark
+        // Connect operators that need their child's schema, such as `withColumn`, analyze it
+        // eagerly, which resolves the read once the table exists, i.e. on every run of a
+        // pipeline after the first. Read it like the UnresolvedRelation it was resolved from,
+        // so that a dependency on a dataset in the pipeline is recorded and the read reflects
+        // the table's current data rather than the data when the flow was defined.
+        case r @ ResolvedTableRead(u) =>
+          val resolved = readUnresolvedRelation(u)
+          // The operators above this read are already analyzed and reference its output
+          // attributes, so expose the new read under the same attributes and types. Types may
+          // differ in nullability, e.g. between a dataset's inferred schema and its table. A
+          // column that is missing or changed its type is left out, which fails analysis of its
+          // references.
+          val resolver = SQLConf.get.resolver
+          val projectList = r.output.flatMap { attr =>
+            resolved.output
+              .find { col =>
+                resolver(col.name, attr.name) && DataTypeUtils.sameType(col.dataType, attr.dataType)
+              }
+              .map { col =>
+                val child = if (col.dataType == attr.dataType) col else Cast(col, attr.dataType)
+                Alias(child, attr.name)(exprId = attr.exprId, qualifier = attr.qualifier)
+              }
+          }
+          val project = Project(projectList, resolved)
+          project.mergeTagsFrom(r)
+          project
+    }
+    // Traverse the user's query plan and recursively resolve these nodes. The traversal is
+    // bottom-up so that the plans substituted for them are never traversed themselves.
+    val resolvedPlan = planWithInlinedCTEs.transformUpWithSubqueries(
+      readUnresolvedRelation.orElse(readResolvedTableRead))
     Dataset.ofRows(spark, resolvedPlan)
+  }
+
+  /**
+   * Extractor that recovers the [[UnresolvedRelation]] that a read of a catalog table was resolved
+   * from. Reads whose name or read options cannot be recovered do not match: relations without a
+   * catalog identifier (e.g. path-based reads), time travel reads, and V1 relations other than
+   * file sources and Hive tables.
+   */
+  private object ResolvedTableRead {
+    def unapply(plan: LogicalPlan): Option[UnresolvedRelation] = {
+      val nameOptionsAndStreaming = plan match {
+        case r: DataSourceV2Relation if r.timeTravelSpec.isEmpty =>
+          r.identifier.map(id => (v2NameParts(r.catalog, id), r.options, false))
+        case r: StreamingRelationV2 =>
+          r.identifier.map(id => (v2NameParts(r.catalog, id), r.extraOptions, true))
+        case r: LogicalRelation =>
+          (r.relation, r.catalogTable) match {
+            case (fs: HadoopFsRelation, Some(table)) =>
+              Some((sessionNameParts(table), readOptions(fs.options, table), r.isStreaming))
+            case _ => None
+          }
+        case r: StreamingRelation =>
+          r.dataSource.catalogTable.map { table =>
+            (sessionNameParts(table), readOptions(r.dataSource.options, table), true)
+          }
+        // Reads of Hive tables do not use read options.
+        case r: HiveTableRelation =>
+          Some((sessionNameParts(r.tableMeta), CaseInsensitiveStringMap.empty(), false))
+        case _ => None
+      }
+      nameOptionsAndStreaming.collect {
+        // Pipeline datasets, and identifiers that pipelines can read, have at most three parts.
+        case (nameParts, options, isStreaming) if nameParts.length <= 3 =>
+          UnresolvedRelation(nameParts, options, isStreaming)
+      }
+    }
+
+    private def v2NameParts(catalog: Option[CatalogPlugin], id: Identifier): Seq[String] =
+      catalog.map(_.name).toSeq ++ id.namespace.toSeq :+ id.name
+
+    // V1 relations come from the session catalog, whose name the identifier may omit.
+    private def sessionNameParts(table: CatalogTable): Seq[String] =
+      table.identifier.copy(catalog = table.identifier.catalog.orElse(
+        Some(CatalogManager.SESSION_CATALOG_NAME))).nameParts
+
+    // The options of a V1 relation of a catalog table combine the read options with the table's
+    // storage properties and location (see `DataSourceUtils.generateDatasourceOptions`).
+    private def readOptions(
+        relationOptions: Map[String, String],
+        table: CatalogTable): CaseInsensitiveStringMap = {
+      val tableKeys = (table.storage.properties.keySet + "path").map(_.toLowerCase(Locale.ROOT))
+      new CaseInsensitiveStringMap(
+        relationOptions.filter { case (k, _) => !tableKeys.contains(k.toLowerCase(Locale.ROOT)) }
+          .asJava)
+    }
   }
 
   /**
