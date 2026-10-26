@@ -424,6 +424,42 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     }
   }
 
+  gridTest("local limit pushdown below unions and cross joins")(
+      for (partitions <- Seq(1, 2); crossJoin <- Seq(false, true))
+        yield (partitions, crossJoin)) {
+    case (partitions, crossJoin) =>
+      val employees = spark.read
+        .option("partitionColumn", "dept")
+        .option("lowerBound", "1")
+        .option("upperBound", "7")
+        .option("numPartitions", partitions.toString)
+        .table("h2.test.employee")
+        .select($"NAME")
+      val input = if (crossJoin) {
+        employees.crossJoin(employees)
+      } else {
+        employees.union(employees)
+      }
+
+      val queries = Seq(
+        (input.limit(3), 3, 3),
+        (input.limit(3).offset(1), 3, 2),
+        (input.offset(1).limit(3), 4, 3))
+      queries.foreach { case (df, pushedLimit, expectedRows) =>
+        val scans = df.queryExecution.optimizedPlan.collect {
+          case scan: DataSourceV2ScanRelation => scan
+        }
+        assert(scans.size == 2)
+        scans.foreach { scan =>
+          val pushed = scan.scan.asInstanceOf[V1ScanWrapper].pushedDownOperators
+          assert(pushed.limit.contains(pushedLimit))
+          assert(pushed.offset.isEmpty)
+        }
+        checkLimitRemoved(df, false)
+        assert(df.collect().length == expectedRows)
+      }
+  }
+
   private def checkOffsetRemoved(df: DataFrame, removed: Boolean = true): Unit = {
     val offsets = df.queryExecution.optimizedPlan.collectFirst {
       case offset: Offset => offset
