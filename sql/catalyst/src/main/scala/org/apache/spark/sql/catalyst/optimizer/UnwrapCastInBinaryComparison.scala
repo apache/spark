@@ -118,18 +118,21 @@ object UnwrapCastInBinaryComparison extends Rule[LogicalPlan] {
   }
 
   /**
-   * Unwraps the casts of the given filter, with the comparisons that a value out of the column's
-   * range reduces to returned in a form a data source can express: `FalseLiteral` when no row can
-   * match, and `IsNotNull` when every non-null row matches. The rule returns them as
-   * `and(isnull(col), null)` and `or(isnotnull(col), null)`, which have no source predicate of
-   * their own. The two forms are interchangeable here because a filter only has to tell the rows
-   * it keeps from the ones it drops, and a null result drops the row just like a false one does.
+   * Unwraps the casts of the given filter, with the comparisons that the rule reduces to a
+   * constant for a non-null column (for example a value out of the column's range, or one rounded
+   * by the conversion to the column type) returned in a form a data source can express:
+   * `FalseLiteral` when no row can match, and `IsNotNull` when every non-null row matches. The
+   * rule returns them as `and(isnull(col), null)` and `or(isnotnull(col), null)`, which have no
+   * source predicate of their own. The two forms are interchangeable here because a filter only
+   * has to tell the rows it keeps from the ones it drops, and a null result drops the row just
+   * like a false one does.
    *
    * That equivalence is the filter's and not the expression's, and a `Not` tells the two forms
    * apart, so the subtrees below one are unwrapped the way the rule does.
    *
-   * Besides the rule, this is used at runtime to unwrap the cast of a scalar subquery filter,
-   * whose value is only known once its subquery has been evaluated.
+   * The rule itself does not use this, and since the substitution only holds in filter position
+   * it must not be used elsewhere. Its only use is at runtime, to unwrap the cast of a scalar
+   * subquery filter, whose value is only known once its subquery has been evaluated.
    */
   private[sql] def unwrapCastInFilter(filter: Expression): Expression = filter match {
     case And(left, right) => And(unwrapCastInFilter(left), unwrapCastInFilter(right))
