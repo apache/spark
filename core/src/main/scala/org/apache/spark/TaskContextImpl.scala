@@ -444,7 +444,16 @@ private[spark] class TaskContextImpl(
         // SPARK-56330: Do not propagate to the executor kill / RPC thread; record the aggregate
         // failure for the task (not the first listener exception only).
         logError(log"Exception(s) in TaskInterruptListener(s) after task was interrupted", e)
-        markTaskFailed(e)
+        try {
+          markTaskFailed(e)
+        } catch {
+          case t: TaskCompletionListenerException =>
+            // A task failure listener failed too. The task is already marked failed and each
+            // failing listener is logged by `invokeListeners()`. Do not propagate this either, or
+            // the caller skips interrupting the task thread (and, with the task reaper, the
+            // executor JVM exits on the uncaught exception).
+            e.addSuppressed(t)
+        }
     }
   }
 
