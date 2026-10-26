@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
@@ -626,6 +626,76 @@ class HiveDDLSuite
           |""".stripMargin)
       sql("MSCK REPAIR TABLE t")
       checkAnswer(spark.table("t"), Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33), "APACHE"))
+    }
+  }
+
+  test("SPARK-60492: Keep Hive incompatible partition columns in alterTable and renameTable") {
+    Seq(
+      ("TIMESTAMP_NTZ", "TIMESTAMP_NTZ '2018-11-17 13:33:33'",
+        LocalDateTime.of(2018, 11, 17, 13, 33, 33)),
+      ("TIME", "TIME '12:34:56'", LocalTime.of(12, 34, 56))
+    ).foreach { case (dataType, literal, value) =>
+      def checkTable(partitionColumnNames: Seq[String], expected: Row): Unit = {
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+        assert(table.properties.get("k").contains("v"))
+        assert(table.partitionColumnNames == partitionColumnNames)
+        checkAnswer(spark.table("t2"), expected)
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, pt $dataType) USING PARQUET PARTITIONED BY (pt)")
+        // This stores the data columns in Hive metastore as they are Hive compatible.
+        sql("ALTER TABLE t ADD COLUMNS (c STRING)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, 'a', $literal")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("pt"), Row(1, "a", value))
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, P1 STRING, P2 $dataType) USING PARQUET " +
+          "PARTITIONED BY (P1, P2)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, 'a', $literal")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("P1", "P2"), Row(1, "a", value))
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, P1 STRING, P2 $dataType) USING PARQUET " +
+          "PARTITIONED BY (P2, P1)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, $literal, 'a'")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("P2", "P1"), Row(1, value, "a"))
+      }
+    }
+  }
+
+  test("SPARK-60492: alterTable and renameTable of a partitioned table created by Spark 2.0") {
+    // Spark 2.0 or prior stores the partition columns of a data source table only in the table
+    // properties, not in Hive metastore.
+    withTable("t", "t2") {
+      val schema = new StructType().add("i", "int").add("p", "int")
+      hiveClient.createTable(CatalogTable(
+        identifier = TableIdentifier("t", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty.copy(properties = Map(
+          "path" -> spark.sessionState.catalog.defaultTablePath(TableIdentifier("t")).toString)),
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
+        provider = Some("json"),
+        properties = Map(
+          "spark.sql.sources.provider" -> "json",
+          "spark.sql.sources.schema.numParts" -> "1",
+          "spark.sql.sources.schema.part.0" -> schema.json,
+          "spark.sql.sources.schema.numPartCols" -> "1",
+          "spark.sql.sources.schema.partCol.0" -> "p")), ignoreIfExists = false)
+      sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+      sql("ALTER TABLE t RENAME TO t2")
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(table.properties.get("k").contains("v"))
+      assert(table.schema == schema)
+      assert(table.partitionColumnNames == Seq("p"))
     }
   }
 
