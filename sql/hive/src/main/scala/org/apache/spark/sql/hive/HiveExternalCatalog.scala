@@ -272,6 +272,9 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
         ignoreIfExists)
     } else {
       verifyHiveSerdePartitionColumnTypes(tableDefinition)
+      if (!tableDefinition.isViewLike) {
+        verifyHiveSerdeDataColumnTypes(tableDefinition)
+      }
       val hiveCompatibleSchema = schemaWithNoCollation match {
         // Spark-created views do not have to be Hive compatible. If the data type is not
         // Hive compatible, we can set schema to empty so that Spark can still read this
@@ -802,6 +805,7 @@ private[spark] class HiveExternalCatalog(conf: SparkConf, hadoopConf: Configurat
           client.alterTableDataSchema(db, table, EMPTY_DATA_SCHEMA, schemaProps)
       }
     } else {
+      verifyHiveSerdeDataColumnTypes(oldTable.copy(schema = newSchema))
       client.alterTableDataSchema(db, table, hiveSchema, schemaProps)
     }
   }
@@ -1583,6 +1587,19 @@ object HiveExternalCatalog {
     SchemaUtils.replaceCollatedStringWithString(table.schema).asInstanceOf[StructType]
       .filter(f => table.partitionColumnNames.contains(f.name))
       .find(f => !isHiveCompatibleDataType(f.dataType))
+      .foreach { f =>
+        throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("Hive", f)
+      }
+  }
+
+  /**
+   * Hive has no TIMESTAMP_NTZ type. So, this throws an error if the given Hive serde table has a
+   * TIMESTAMP_NTZ data column, including the nested types.
+   */
+  private[hive] def verifyHiveSerdeDataColumnTypes(table: CatalogTable): Unit = {
+    table.schema
+      .filterNot(f => table.partitionColumnNames.contains(f.name))
+      .find(_.dataType.existsRecursively(_.isInstanceOf[TimestampNTZType]))
       .foreach { f =>
         throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError("Hive", f)
       }
