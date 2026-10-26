@@ -21,6 +21,7 @@ import java.util
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
+import scala.util.DynamicVariable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
@@ -156,25 +157,24 @@ class JDBCTableCatalog extends TableCatalog
   override def tableStateOptionKeys(): util.Set[String] =
     util.Set.of(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
 
+  // Carries the state options down the default dispatch to loadTable(ident), so subclass
+  // overrides of loadTable(ident) and loadTable(ident, writePrivileges) stay in the path.
+  private val currentStateOptions =
+    new DynamicVariable[collection.Map[String, String]](Map.empty)
+
   override def loadTable(
       ident: Identifier,
       context: TableContext,
       stateOptions: CaseInsensitiveStringMap): Table = {
-    if (context.timeTravel().isPresent || stateOptions.isEmpty) {
+    currentStateOptions.withValue(stateOptions.asCaseSensitiveMap().asScala) {
       super.loadTable(ident, context, stateOptions)
-    } else {
-      loadTableWithStateOptions(ident, stateOptions.asCaseSensitiveMap().asScala)
     }
   }
 
-  override def loadTable(ident: Identifier): Table = loadTableWithStateOptions(ident, Map.empty)
-
-  private def loadTableWithStateOptions(
-      ident: Identifier,
-      stateOptions: collection.Map[String, String]): Table = {
+  override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
-      val tableOptions = new JDBCOptions(withPlanTimeOptions(
-        options.parameters ++ stateOptions + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))))
+      val tableOptions = new JDBCOptions(withPlanTimeOptions(options.parameters ++
+        currentStateOptions.value + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))))
       JdbcUtils.classifyException(
         condition = "FAILED_JDBC.LOAD_TABLE",
         messageParameters = Map(

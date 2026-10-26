@@ -28,7 +28,7 @@ import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchNamespaceException, NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableChange, TableSummary}
+import org.apache.spark.sql.connector.catalog.{Identifier, Table, TableChange, TableSummary, TableWritePrivilege}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLStmt}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.internal.SQLConf
@@ -818,25 +818,38 @@ class JDBCTableCatalogSuite extends SharedSparkSession {
     }
   }
 
-  test("loads without state options keep a subclass loadTable(ident) in the path") {
+  test("loads keep subclass loadTable overrides in the path, with and without state options") {
     withSQLConf(
         "spark.sql.catalog.h2counting" -> classOf[CountingJDBCTableCatalog].getName,
         "spark.sql.catalog.h2counting.url" -> url,
         "spark.sql.catalog.h2counting.driver" -> "org.h2.Driver") {
       withTable("h2counting.test.counted") {
         sql("CREATE TABLE h2counting.test.counted (id INTEGER)")
-        CountingJDBCTableCatalog.loads.set(0)
-        sql("INSERT INTO h2counting.test.counted VALUES (1)")
-        assert(CountingJDBCTableCatalog.loads.get() > 0)
-        CountingJDBCTableCatalog.loads.set(0)
-        checkAnswer(sql("SELECT id FROM h2counting.test.counted"), Row(1))
-        assert(CountingJDBCTableCatalog.loads.get() > 0)
+        // H2 ignores the option, but setting it still makes it a state option of the load.
+        Seq("", " WITH ('zonelessTimestampAsNTZ' = 'true')").zipWithIndex.foreach {
+          case (withClause, i) =>
+            CountingJDBCTableCatalog.reset()
+            sql(s"INSERT INTO h2counting.test.counted$withClause VALUES ($i)")
+            assert(CountingJDBCTableCatalog.writeLoads.get() > 0)
+            assert(CountingJDBCTableCatalog.loads.get() > 0)
+            CountingJDBCTableCatalog.reset()
+            checkAnswer(sql(s"SELECT id FROM h2counting.test.counted$withClause"),
+              (0 to i).map(Row(_)))
+            assert(CountingJDBCTableCatalog.loads.get() > 0)
+        }
       }
     }
   }
 }
 
 class CountingJDBCTableCatalog extends JDBCTableCatalog {
+  override def loadTable(
+      ident: Identifier,
+      writePrivileges: java.util.Set[TableWritePrivilege]): Table = {
+    CountingJDBCTableCatalog.writeLoads.incrementAndGet()
+    super.loadTable(ident, writePrivileges)
+  }
+
   override def loadTable(ident: Identifier): Table = {
     CountingJDBCTableCatalog.loads.incrementAndGet()
     super.loadTable(ident)
@@ -845,4 +858,10 @@ class CountingJDBCTableCatalog extends JDBCTableCatalog {
 
 object CountingJDBCTableCatalog {
   val loads = new java.util.concurrent.atomic.AtomicInteger()
+  val writeLoads = new java.util.concurrent.atomic.AtomicInteger()
+
+  def reset(): Unit = {
+    loads.set(0)
+    writeLoads.set(0)
+  }
 }
