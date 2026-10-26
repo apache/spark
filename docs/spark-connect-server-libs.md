@@ -18,7 +18,6 @@ license: |
   See the License for the specific language governing permissions and
   limitations under the License.
 ---
-# Redefining Spark Applications using Spark Connect
 
 With its decoupled client-server architecture, Spark Connect simplifies how Spark Applications are
 developed.
@@ -30,28 +29,27 @@ and inference.
 [MLlib](ml-guide.html) (distributed ML libraries that use Spark's powerful distributed processing). Spark Connect
 can be extended to expose client-side interfaces for Spark Server Libraries.
 
-With Spark Connect, the development of Spark Client Applications is simplified, and
+With Spark 3.4 and Spark Connect, the development of Spark Client Applications is simplified, and
 clear extension points and guidelines are provided on how to build Spark Server Libraries, making
 it easy for both types of applications to evolve alongside Spark. As illustrated in Fig.1, Spark
 Client applications connect to Spark using the Spark Connect API, which is essentially the
-DataFrame API and fully declarative. How client applications differ from classic Spark
-applications is described in the [Spark Connect Overview](spark-connect-overview.html#how-spark-connect-client-applications-differ-from-classic-spark-applications);
-switching an existing application between the two modes is described in
-[Setting up Spark Connect](spark-connect-setup.html#switching-between-spark-connect-and-spark-classic).
+DataFrame API and fully declarative.
 
 <p style="text-align: center;">
-  <img src="img/extending-spark-connect.png" title="Figure 1: Architecture" alt="Extending Spark
-Connect Diagram"/>
+  <img
+    src="img/extending-spark-connect.png"
+    alt="Extending Spark Connect Diagram"
+  />
+  <figcaption style="text-align: center;">Figure 1: Architecture</figcaption>
 </p>
+
 Spark Server Libraries extend Spark. They typically provide additional server-side logic integrated
 with Spark, which is exposed to client applications as part of the Spark Connect API, using Spark
 Connect extension points. For example, the _Spark Server Library_ consists of custom
 service-side logic (as indicated by the blue box labeled _Custom Library Plugin_), which is exposed
 to the client via the blue box as part of the Spark Connect API. The client uses this API, e.g.,
 alongside PySpark or the Spark Scala client, making it easy for Spark client applications to work
-with the custom logic/library. 
-
-## Spark Server Libraries
+with the custom logic/library.
 
 Until Spark 3.4, extensions to Spark (e.g., [Spark ML](ml-guide#:~:text=What%20is%20%E2%80%9CSpark%20ML%E2%80%9D%3F,to%20emphasize%20the%20pipeline%20concept.)
 or [Spark-NLP](https://github.com/JohnSnowLabs/spark-nlp)) were built and deployed like Spark
@@ -61,7 +59,10 @@ exposed to a client, which differs from existing extension points in Spark such 
 [SparkSession extensions](api/java/org/apache/spark/sql/SparkSessionExtensions.html) or
 [Spark Plugins](api/java/org/apache/spark/api/plugin/SparkPlugin.html). 
 
-### Getting Started: Extending Spark with Spark Server Libraries
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
+# Extending Spark with Spark Server Libraries
 
 A Spark Server Library consists of the following components, illustrated in Fig. 2:
 
@@ -71,16 +72,19 @@ A Spark Server Library consists of the following components, illustrated in Fig.
 4. The client package that exposes the Spark Server Library application logic to the Spark Client
 Application, alongside PySpark or the Scala Spark Client. 
 <p style="text-align: center;">
-  <img src="img/extending-spark-connect-labelled.png" title="Figure 2: Labelled Architecture" alt="Extending Spark
-Connect Diagram - Labelled Steps"/>
-</p> 
+  <img
+    src="img/extending-spark-connect-labelled.png"
+    alt="Extending Spark Connect Diagram - Labelled Steps"
+  />
+  <figcaption style="text-align: center;">Figure 2: Labelled Architecture</figcaption>
+</p>
 
-#### (1) Spark Connect Protocol Extension
+# Spark Connect Protocol Extension
 
 To extend Spark with a new Spark Server Library, developers can extend the three main operation
 types in the Spark Connect protocol: _Relation_, _Expression_, and _Command_. 
 
-{% highlight protobuf %}
+```protobuf
 message Relation {
   oneof rel_type {
     Read read = 1;
@@ -103,25 +107,26 @@ message Command {
     // ...
     google.protobuf.Any extension = 999;
   } 
-} 
-{% endhighlight %}
+}
+```
 Their extension fields allow serializing arbitrary protobuf messages as part of the Spark Connect
 protocol. These messages represent the parameters or state of the extension implementation.
 To build a custom expression type, the developer first defines the custom protobuf definition
 of the expression.
 
-{% highlight protobuf %}
+```protobuf
 message ExamplePluginExpression {
   Expression child = 1;
   string custom_field = 2;
 }
-{% endhighlight %}
+```
 
-#### (2) Spark Connect Plugin implementation with (3) custom application logic
+# Spark Connect Plugin implementation with custom application logic
 
-As a next step, the developer implements the _ExpressionPlugin_ class of Spark Connect with custom
+As a next step, the developer implements the `ExpressionPlugin` class of Spark Connect with custom
 application logic based on the input parameters of the protobuf message. 
-{% highlight protobuf %}
+
+```scala
 class ExampleExpressionPlugin extends ExpressionPlugin {
   override def transform(
       relation: protobuf.Any,
@@ -136,22 +141,22 @@ class ExampleExpressionPlugin extends ExpressionPlugin {
         exp.getChild), exp.getCustomField)(explicitMetadata = None))
   }
 }
-{% endhighlight %} 
+```
 
 Once the application logic is developed, the code must be packaged as a jar and Spark must be
 configured to pick up the additional logic. The relevant Spark configuration options are: 
-* _spark.jars_ which define the location of the Jar file containing the application logic built for
+* `spark.jars` which define the location of the Jar file containing the application logic built for
 the custom expression. 
-* _spark.connect.extensions.expression.classes_ specifying the full class name
+* `spark.connect.extensions.expression.classes` specifying the full class name
 of each expression extension loaded by Spark. Based on these configuration options, Spark will
 load the values at startup and make them available for processing.
 
-#### (4) Spark Server Library Client Package
+# Spark Server Library Client Package
 
 Once the server component is deployed, any client can use it with the right protobuf messages.
 In the example above, the following message payload sent to the Spark Connect endpoint would be
 enough to trigger the extension mechanism.
-{% highlight json %}
+```json
 {
   "project": {
     "input": {
@@ -168,14 +173,14 @@ enough to trigger the extension mechanism.
       }
     ]
   }
-} 
-{% endhighlight %} 
+}
+```
 To make the example available in Python, the application developer provides a Python library that
 wraps the new expression and embeds it into PySpark. The easiest way to provide a function for any
 expression is to take a PySpark column instance as an argument and return a new Column instance
 with the expression applied. 
 
-{% highlight python %}
+```python
 from pyspark.sql.connect.column import Expression
 import pyspark.sql.connect.proto as proto
 
@@ -201,4 +206,4 @@ def example_expression(col: Column) -> Column:
 # Using the expression in the Spark Connect client code.
 df = spark.read.table("samples.nyctaxi.trips")
 df.select(example_expression(df["fare_amount"])).collect()
-{% endhighlight %} 
+```

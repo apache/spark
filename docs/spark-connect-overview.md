@@ -26,6 +26,9 @@ Spark Connect has been part of Apache Spark since the 3.4 release.
 
 To get started, see [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html).
 
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
 <p style="text-align: center;">
   <img src="img/spark-connect-api.png" title="Spark Connect API" alt="Spark Connect API Diagram" />
 </p>
