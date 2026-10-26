@@ -24,11 +24,13 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.SparkThrowable
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, CreateTableAsSelect, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning}
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
 import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo, Txn, TxnTableCatalog, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -83,6 +85,16 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       sqlState = "42703",
       parameters = Map("cols" -> cols),
       context = ExpectedContext(stmt, 0, stmt.length - 1))
+  }
+
+  private def checkRejected(stmt: String, tableName: String): Unit = {
+    checkError(
+      exception = intercept[Exception](sql(stmt)).asInstanceOf[SparkThrowable],
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      sqlState = "0A000",
+      parameters = Map(
+        "tableName" -> tableName,
+        "operation" -> WriteDistributionAndOrdering.CLAUSES))
   }
 
   private def checkUnsupported(stmt: String, tableName: String, operation: String): Unit = {
@@ -612,14 +624,18 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("the built-in session catalog rejects a request that an extension passes to it") {
-    val catalogClass = classOf[ForwardingSessionCatalog].getName
-    withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> catalogClass) {
-      spark.sessionState.catalogManager.reset()
-      checkUnsupported(
-        s"CREATE TABLE spark_catalog.default.t (id INT) USING ${classOf[FakeV2Provider].getName} " +
-          "ORDERED BY id",
-        "`spark_catalog`.`default`.`t`", "CREATE TABLE")
+  test("the built-in session catalog and a delegating extension reject a request they get") {
+    Seq(classOf[ForwardingSessionCatalog], classOf[SuperCallingSessionCatalog]).foreach { cls =>
+      withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> cls.getName) {
+        spark.sessionState.catalogManager.reset()
+        val provider = classOf[FakeV2Provider].getName
+        val create = "CREATE TABLE spark_catalog.default.t"
+        Seq(
+          s"$create (id INT) USING $provider ORDERED BY id",
+          s"CREATE OR REPLACE TABLE spark_catalog.default.t (id INT) USING $provider ORDERED BY id",
+          s"$create USING $provider ORDERED BY id AS SELECT 1 AS id"
+        ).foreach(checkRejected(_, "`spark_catalog`.`default`.`t`"))
+      }
     }
   }
 
@@ -788,15 +804,20 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("SHOW CREATE TABLE looks up the provider only for clauses that parse") {
+  test("SHOW CREATE TABLE looks up the provider only for clauses that are emitted") {
     val catalogClass = classOf[CountingProviderSessionCatalog].getName
     withSQLConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> catalogClass) {
       spark.sessionState.catalogManager.reset()
-      Seq("plain" -> false, "unmoded" -> false, "unparsable" -> false, "t" -> true).foreach {
-        case (table, looksUp) =>
-          val before = CountingProvider.instances.get()
-          showCreate(s"spark_catalog.default.$table")
-          assert((CountingProvider.instances.get() > before) === looksUp, table)
+      Seq(
+        "plain" -> false,
+        "unmoded" -> false,
+        "unparsable" -> false,
+        "missingcol" -> false,
+        "t" -> true
+      ).foreach { case (table, looksUp) =>
+        val before = CountingProvider.instances.get()
+        showCreate(s"spark_catalog.default.$table")
+        assert((CountingProvider.instances.get() > before) === looksUp, table)
       }
     }
   }
@@ -985,6 +1006,26 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           val rows = described("reportcat.t")
           assert(rows.get("Distribution") === Some("range"))
           assert(rows.get("Ordering") === Some(ordering))
+        }
+      }
+    }
+  }
+
+  test("a null write ordering array is read as no ordering") {
+    withSQLConf(
+        "spark.sql.catalog.reportcat" -> classOf[ReportingInMemoryTableCatalog].getName,
+        "spark.sql.catalog.plaincat" -> classOf[NonAcceptingReportingCatalog].getName) {
+      Seq("reportcat" -> Some("range"), "plaincat" -> None).foreach { case (catalog, mode) =>
+        withTable(s"$catalog.t") {
+          val modeProperty = mode.map(m => s"'${ReportingInMemoryTable.MODE_OVERRIDE}' = '$m', ")
+          sql(s"CREATE TABLE $catalog.t (id INT) USING foo TBLPROPERTIES (" +
+            modeProperty.getOrElse("") +
+            s"'${ReportingInMemoryTable.ORDERING_OVERRIDE}' = 'nullarray')")
+
+          assert(writeClauseLines(showCreate(s"$catalog.t")).isEmpty, catalog)
+          val rows = described(s"$catalog.t")
+          assert(rows.get("Distribution") === mode, catalog)
+          assert(!rows.contains("Ordering"), catalog)
         }
       }
     }
@@ -1251,31 +1292,36 @@ class ReportingInMemoryTable(tableName: String, tableInfo: TableInfo)
   // has a literal with no constant form; `bucketswapped` and `daystz` have an argument shape the
   // parser rejects for their name; `missing` and `nestedmissing` reference a column the table does
   // not have, the second inside an identity transform; `string` has a `java.lang.String` literal;
-  // `connectorref` has a connector's own column reference; and `broken` has one that throws.
+  // `connectorref` has a connector's own column reference; `broken` has one that throws; and
+  // `nullarray` makes the whole array null.
   override def writeOrdering(): Array[SortOrder] = {
     def f(arg: Expression): Transform = LogicalExpressions.apply("f", FieldReference("id"), arg)
-    val key = Option(tableInfo.properties().get(ReportingInMemoryTable.ORDERING_OVERRIDE)).map {
-      case "nested" =>
-        LogicalExpressions.apply("f", LogicalExpressions.apply("g", FieldReference("id")))
-      case "nan" => f(literal(Float.NaN))
-      case "string" => f(literal("x"))
-      case "missing" => FieldReference("missing")
-      case "nestedmissing" =>
-        LogicalExpressions.apply("f", LogicalExpressions.identity(FieldReference("missing")))
-      case "bucketswapped" =>
-        LogicalExpressions.apply("bucket", FieldReference("id"), literal(16))
-      case "daystz" => LogicalExpressions.apply("days", FieldReference("id"), literal("UTC"))
-      case "connectorref" => LogicalExpressions.apply("f", new NamedReference {
-        override def fieldNames(): Array[String] = Array("order-id")
-      })
-      case "broken" => f(new NamedReference {
-        override def fieldNames(): Array[String] = throw new IllegalStateException("broken")
-        override def describe(): String = "broken"
-      })
+    val overrideKey = Option(tableInfo.properties().get(ReportingInMemoryTable.ORDERING_OVERRIDE))
+    if (overrideKey.contains("nullarray")) {
+      null
+    } else {
+      overrideKey.map {
+        case "nested" =>
+          LogicalExpressions.apply("f", LogicalExpressions.apply("g", FieldReference("id")))
+        case "nan" => f(literal(Float.NaN))
+        case "string" => f(literal("x"))
+        case "missing" => FieldReference("missing")
+        case "nestedmissing" =>
+          LogicalExpressions.apply("f", LogicalExpressions.identity(FieldReference("missing")))
+        case "bucketswapped" =>
+          LogicalExpressions.apply("bucket", FieldReference("id"), literal(16))
+        case "daystz" => LogicalExpressions.apply("days", FieldReference("id"), literal("UTC"))
+        case "connectorref" => LogicalExpressions.apply("f", new NamedReference {
+          override def fieldNames(): Array[String] = Array("order-id")
+        })
+        case "broken" => f(new NamedReference {
+          override def fieldNames(): Array[String] = throw new IllegalStateException("broken")
+          override def describe(): String = "broken"
+        })
+      }.map(k =>
+        Array(LogicalExpressions.sort(k, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
+        .getOrElse(tableInfo.writeOrdering())
     }
-    key.map(k =>
-      Array(LogicalExpressions.sort(k, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
-      .getOrElse(tableInfo.writeOrdering())
   }
 }
 
@@ -1338,9 +1384,10 @@ class GenericClusterByTableCatalog extends ReportingInMemoryTableCatalog {
 
 /**
  * A session catalog extension that reports the capability and records the request it receives.
- * It loads three tables with a v1 provider, `parquet`: `t` declares a range ordering on `id`,
- * `plain` declares nothing, `unmoded` declares an ordering without a distribution mode, and
- * `unparsable` declares a key that has no clause form because it nests a transform in another.
+ * It loads five tables with a v1 provider, `parquet`: `t` declares a range ordering on `id`,
+ * `plain` declares nothing, `unmoded` declares an ordering without a distribution mode,
+ * `unparsable` declares a key that has no clause form because it nests a transform in another,
+ * and `missingcol` declares an ordering on a column that the table does not have.
  */
 class V1ProviderSessionCatalog extends DelegatingCatalogExtension with RecordsWriteSpecs {
 
@@ -1355,7 +1402,7 @@ class V1ProviderSessionCatalog extends DelegatingCatalogExtension with RecordsWr
   }
 
   override def tableExists(ident: Identifier): Boolean = {
-    Set("t", "plain", "unmoded", "unparsable").contains(ident.name)
+    Set("t", "plain", "unmoded", "unparsable", "missingcol").contains(ident.name)
   }
 
   override def loadTable(ident: Identifier): Table = {
@@ -1368,6 +1415,9 @@ class V1ProviderSessionCatalog extends DelegatingCatalogExtension with RecordsWr
     ident.name match {
       case "t" => builder.withWriteDistributionMode(RANGE).withWriteOrdering(ordering)
       case "unmoded" => builder.withWriteOrdering(ordering)
+      case "missingcol" =>
+        builder.withWriteDistributionMode(RANGE).withWriteOrdering(Array(LogicalExpressions.sort(
+          FieldReference("missing"), SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)))
       case "unparsable" =>
         builder.withWriteDistributionMode(RANGE).withWriteOrdering(Array(LogicalExpressions.sort(
           LogicalExpressions.apply("f", LogicalExpressions.apply("g", FieldReference("id"))),
@@ -1413,6 +1463,11 @@ class CountingProviderSessionCatalog extends V1ProviderSessionCatalog {
   override protected def provider: Option[String] = Some(classOf[CountingProvider].getName)
 }
 
+/** The same, for tables that report no provider. */
+class NoProviderSessionCatalog extends V1ProviderSessionCatalog {
+  override protected def provider: Option[String] = None
+}
+
 /**
  * A session catalog extension that reports the capability and passes a request on to the built-in
  * session catalog, as an extension that routes a table by its provider does.
@@ -1426,9 +1481,14 @@ class ForwardingSessionCatalog extends DelegatingCatalogExtension {
     delegate.asTableCatalog.createTable(ident, tableInfo)
 }
 
-/** The same, for tables that report no provider. */
-class NoProviderSessionCatalog extends V1ProviderSessionCatalog {
-  override protected def provider: Option[String] = None
+/** A session catalog extension that reports the capability and calls `super.createTable`. */
+class SuperCallingSessionCatalog extends DelegatingCatalogExtension {
+
+  override def capabilities: util.Set[TableCatalogCapability] =
+    WriteSpecCapability.add(super.capabilities)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table =
+    super.createTable(ident, tableInfo)
 }
 
 /** A staging catalog that supports the clauses but rejects `CLUSTER BY` with `UNORDERED`. */

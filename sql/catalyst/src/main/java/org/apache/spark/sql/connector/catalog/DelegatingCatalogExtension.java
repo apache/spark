@@ -23,6 +23,7 @@ import java.util.Set;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.analysis.*;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
@@ -33,6 +34,11 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * by calling the built-in session catalog directly. This is created for convenience, so that users
  * only need to override some methods where they want to apply custom logic. For example, they can
  * override {@code createTable}, do something else before calling {@code super.createTable}.
+ * <p>
+ * {@code super.createTable(ident, tableInfo)} cannot carry a requested write distribution and
+ * ordering: it throws an unchecked {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} error instead.
+ * Spark sends a request only to a catalog that reports the capability, so only a subclass that
+ * reports it reaches that error through a statement.
  *
  * @since 3.0.0
  */
@@ -57,11 +63,11 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   /**
    * Returns the delegate's capabilities, except
    * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
-   * This class does not override {@link #createTable(Identifier, TableInfo)}, so its default
-   * implementation would drop the requested write distribution and ordering. A subclass that
-   * overrides each {@link TableInfo} overload it can be reached through may add the capability
-   * back, but it has to reject the request itself for a table that it passes to the built-in
-   * session catalog; see
+   * This class passes {@link #createTable(Identifier, TableInfo)} on through the {@code Column[]}
+   * overload, which cannot carry a requested write distribution and ordering, so it rejects the
+   * request instead. A subclass that overrides each {@link TableInfo} overload it can be reached
+   * through may add the capability back, but it has to reject the request itself for a table that
+   * it passes to the built-in session catalog through any other overload; see
    * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
    */
   @Override
@@ -123,6 +129,25 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return asTableCatalog().createTable(ident, columns, partitions, properties);
+  }
+
+  /**
+   * Creates the table with the {@code Column[]} overload, as the default does, but rejects a
+   * requested write distribution and ordering, which that overload cannot carry, with an unchecked
+   * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} error. A subclass that reports
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}
+   * therefore gets an error instead of a silently dropped request when it calls
+   * {@code super.createTable(ident, tableInfo)}. For a {@code REPLACE TABLE} of an existing table
+   * the error comes after Spark has dropped the table, because this class is not a
+   * {@link StagingTableCatalog}.
+   */
+  @Override
+  public Table createTable(Identifier ident, TableInfo tableInfo)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    if (tableInfo.writeDistributionMode() != null || tableInfo.writeOrdering().length > 0) {
+      throw WriteDistributionAndOrdering.unsupportedClausesException(this, ident);
+    }
+    return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
   @Override

@@ -19,14 +19,16 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.ZoneOffset
 
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
+import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.CreateTable
-import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog, TableCatalogCapability, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog, TableCatalogCapability, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, GetArrayItem, IdentityTransform, Literal, NamedReference, SortOrder, Transform, VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -41,10 +43,20 @@ import org.apache.spark.util.ArrayImplicits._
  */
 object WriteDistributionAndOrdering {
 
-  // Runs a call into a connector's expression or literal, or into the parser on text built from
-  // them. `NonFatal` does not cover a `LinkageError`, from a connector class whose dependency is
-  // missing, or a `StackOverflowError`, from a deeply nested expression, and neither should fail
-  // DESCRIBE or SHOW CREATE TABLE.
+  // Runs a call into a connector's expression or literal at one node of a key. `NonFatal` does not
+  // cover a `LinkageError`, from a connector class whose dependency is missing, and it should not
+  // fail DESCRIBE or SHOW CREATE TABLE. A `StackOverflowError` is left to `attempt` at the entry
+  // points: caught at every node of a key deeper than the stack, the fallback would render each
+  // subtree again at every level and never finish.
+  private def attemptNode[T](body: => T): Try[T] = {
+    try Success(body) catch {
+      case NonFatal(e) => Failure(e)
+      case e: LinkageError => Failure(e)
+    }
+  }
+
+  // Runs a whole rendering at an entry point, where a `StackOverflowError` from a key nested
+  // deeper than the stack is caught once, after the stack has unwound.
   private def attempt[T](body: => T): Try[T] = {
     try Success(body) catch {
       case NonFatal(e) => Failure(e)
@@ -72,6 +84,25 @@ object WriteDistributionAndOrdering {
    */
   def hasPartitioning(partitioning: Seq[Transform]): Boolean = {
     partitioning.exists(_.name != "cluster_by")
+  }
+
+  /** The write ordering a table declares, which is empty also for a connector that returns null. */
+  def writeOrderingOf(table: Table): Seq[SortOrder] = {
+    Option(table.writeOrdering()).map(_.toImmutableArraySeq).getOrElse(Seq.empty)
+  }
+
+  /**
+   * The `UNSUPPORTED_FEATURE.TABLE_OPERATION` error for a requested write distribution and
+   * ordering that `catalog` cannot carry, as an unchecked exception that a Java override of
+   * `createTable` can throw.
+   */
+  def unsupportedClausesException(
+      catalog: CatalogPlugin,
+      ident: Identifier): SparkUnsupportedOperationException = {
+    val error = QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, CLAUSES)
+      .asInstanceOf[SparkThrowable]
+    new SparkUnsupportedOperationException(
+      error.getCondition, error.getMessageParameters.asScala.toMap)
   }
 
   /** True when `catalog` accepts a create-time write distribution and ordering. */
@@ -215,7 +246,7 @@ object WriteDistributionAndOrdering {
 
   private def keyOf(e: Expression): Any = e match {
     case r: NamedReference => r.fieldNames().toSeq
-    case l: Literal[_] => attempt(CatalystLiteral.create(l.value, l.dataType)).toOption
+    case l: Literal[_] => attemptNode(CatalystLiteral.create(l.value, l.dataType)).toOption
     case t: Transform => (t.name, t.arguments().toSeq.map(keyOf))
     case other => other
   }
@@ -234,13 +265,13 @@ object WriteDistributionAndOrdering {
     case null => "null"
     case r: NamedReference => r.fieldNames.map(quote).mkString(".")
     case l: Literal[_] =>
-      attempt(literalToSQL(CatalystLiteral.create(l.value, l.dataType)))
+      attemptNode(literalToSQL(CatalystLiteral.create(l.value, l.dataType)))
         .getOrElse(describeLiteral(l))
     case o: SortOrder => sortOrderToSQL(o, quote)
     case t: Transform =>
       t.arguments().map(toSQL(_, quote)).mkString(s"${quote(t.name)}(", ", ", ")")
     case _: ExpressionWithToString => new DescribingSQLBuilder(quote).build(e)
-    case other => attempt(other.describe).getOrElse(childrenToSQL(other, quote))
+    case other => attemptNode(other.describe).getOrElse(childrenToSQL(other, quote))
   }
 
   private def childrenToSQL(e: Expression, quote: String => String): String = {
@@ -260,7 +291,11 @@ object WriteDistributionAndOrdering {
   // so that a parent keeps its own rendering.
   private class DescribingSQLBuilder(quote: String => String) extends ToStringSQLBuilder {
     override def build(expr: Expression): String = {
-      if (expr == null) "null" else attempt(super.build(expr)).getOrElse(childrenToSQL(expr, quote))
+      if (expr == null) {
+        "null"
+      } else {
+        attemptNode(super.build(expr)).getOrElse(childrenToSQL(expr, quote))
+      }
     }
 
     override protected def visitLiteral(literal: Literal[_]): String = toSQL(literal, quote)
@@ -300,7 +335,7 @@ object WriteDistributionAndOrdering {
 
   // `LiteralValue.describe` also rejects a value that does not match its type.
   private def describeLiteral(l: Literal[_]): String = {
-    attempt(l.describe).getOrElse(String.valueOf(l.value))
+    attemptNode(l.describe).getOrElse(String.valueOf(l.value))
   }
 
   // Catalyst renders a FLOAT as a CAST, which the parser does not accept here, so a finite FLOAT

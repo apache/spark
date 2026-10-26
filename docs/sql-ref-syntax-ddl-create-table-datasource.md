@@ -165,10 +165,11 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     support them. In the session catalog, Spark also rejects the clauses when the statement would
     create a v1 table, for example with a file source such as `parquet` or with `STORED AS`, even
     if a catalog extension registered as `spark_catalog` advertises support. `ORDERED BY`,
-    `LOCALLY ORDERED BY`, and `UNORDERED` may also be combined with `CLUSTER BY`, subject to the catalog accepting the combination: Spark passes the clustering
-    columns and the requested distribution and ordering to the catalog without reconciling them,
-    so the catalog decides how they interact and may reject a combination it does not support.
-    `DISTRIBUTED BY PARTITION` cannot be combined with `CLUSTER BY`, as described above.
+    `LOCALLY ORDERED BY`, and `UNORDERED` may also be combined with `CLUSTER BY`, subject to the
+    catalog accepting the combination: Spark passes the clustering columns and the requested
+    distribution and ordering to the catalog without reconciling them, so the catalog decides how
+    they interact and may reject a combination it does not support. `DISTRIBUTED BY PARTITION`
+    cannot be combined with `CLUSTER BY`, as described above.
 
     What the catalog records is a *default* for later writes, not a statement about the data
     already in the table: an individual write may override it, and rewriting existing data to match
@@ -176,9 +177,8 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     only when the pair can be written as clauses (`DISTRIBUTED BY PARTITION` needs a partitioned
     table), the catalog accepts them, the statement would not create a v1 table, every sort key
     renders, every column they reference exists, and parsing them in the current session gives
-    back the same pair. A
-    sort key with a `TRUE`, `FALSE` or `NULL` argument, for example, is read back as a column
-    reference when that keyword is not reserved, so it is not reproduced.
+    back the same pair. A sort key with a `TRUE`, `FALSE` or `NULL` argument, for example, is read
+    back as a column reference when that keyword is not reserved, so it is not reproduced.
     `DESCRIBE TABLE EXTENDED` reports the requested values whether or not `SHOW CREATE TABLE` can
     reproduce them.
 

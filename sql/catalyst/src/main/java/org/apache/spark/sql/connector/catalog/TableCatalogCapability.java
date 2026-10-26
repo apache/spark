@@ -125,9 +125,10 @@ public enum TableCatalogCapability {
    * to reject a replacement without losing the table should implement
    * {@link StagingTableCatalog}.
    * <p>
-   * {@link DelegatingCatalogExtension} does not forward this capability from its delegate, because
-   * it does not override {@code createTable(Identifier, TableInfo)}. A subclass that overrides the
-   * {@link TableInfo} overloads may report it again.
+   * {@link DelegatingCatalogExtension} does not forward this capability from its delegate: its
+   * {@code createTable(Identifier, TableInfo)} rejects a requested layout instead of passing it on,
+   * because the {@code Column[]} overload it would call cannot carry it. A subclass that overrides
+   * the {@link TableInfo} overloads may report it again.
    * <p>
    * The built-in session catalog does not support this capability. It rejects a request passed to
    * {@code createTable(Identifier, TableInfo)} with {@code UNSUPPORTED_FEATURE.TABLE_OPERATION},
@@ -137,8 +138,9 @@ public enum TableCatalogCapability {
    * built-in session catalog through those overloads. As above, it can do so before a
    * {@code REPLACE TABLE} drops the existing table only if it is a {@link StagingTableCatalog}.
    * <p>
-   * Without this capability, such a statement fails with
-   * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} before anything is created or dropped.
+   * Without this capability, Spark rejects such a statement before anything is created or dropped,
+   * normally with {@code UNSUPPORTED_FEATURE.TABLE_OPERATION}. An analysis error about the
+   * statement itself, such as a missing schema to order by or an unknown column, can come first.
    * <p>
    * {@code ORDERED BY}, {@code LOCALLY ORDERED BY} and {@code UNORDERED} may be combined with
    * {@code CLUSTER BY}; Spark passes the clustering columns and the requested distribution and

@@ -277,10 +277,12 @@ class V2SessionCatalog(catalog: SessionCatalog)
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
-    WriteDistributionAndOrdering.validateCatalogForWriteDistributionAndOrdering(
-      this, ident, "CREATE TABLE", tableInfo.writeDistributionMode(),
-      tableInfo.writeOrdering().toImmutableArraySeq)
-    createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties())
+    if (WriteDistributionAndOrdering.isRequested(
+        tableInfo.writeDistributionMode(), tableInfo.writeOrdering().toImmutableArraySeq)) {
+      throw QueryCompilationErrors.unsupportedTableOperationError(
+        this, ident, WriteDistributionAndOrdering.CLAUSES)
+    }
+    super.createTable(ident, tableInfo)
   }
 
   private def toOptions(properties: Map[String, String]): Map[String, String] = {

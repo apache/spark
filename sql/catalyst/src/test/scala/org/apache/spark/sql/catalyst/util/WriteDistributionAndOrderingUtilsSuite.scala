@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.util
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -48,10 +49,15 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
   }
 
   // A key whose arguments and `describe` both throw `error`.
-  private class UnrenderableTransform(error: () => Throwable) extends Transform {
+  private class UnrenderableTransform(
+      error: () => Throwable,
+      calls: AtomicInteger = new AtomicInteger(0)) extends Transform {
     override def name(): String = "unrenderable"
     override def references(): Array[NamedReference] = Array.empty
-    override def arguments(): Array[Expression] = throw error()
+    override def arguments(): Array[Expression] = {
+      calls.incrementAndGet()
+      throw error()
+    }
     override def toString: String = s"unrenderable(${arguments().mkString(", ")})"
   }
 
@@ -306,6 +312,54 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
         s"${classOf[UnrenderableTransform].getName} ASC NULLS FIRST", error().getClass.getName)
       assert(emitted(unrenderable).isEmpty, error().getClass.getName)
     }
+  }
+
+  test("a key that fails with a StackOverflowError costs the same at any depth") {
+    def callsFor(depth: Int): Int = {
+      val calls = new AtomicInteger(0)
+      val leaf = new UnrenderableTransform(() => new StackOverflowError(), calls)
+      val nested = (1 to depth).foldLeft[Expression](leaf) { (child, _) =>
+        new GeneralScalarExpression("ABS", Array[Expression](child))
+      }
+      assert(describeSortOrder(key(nested)) ===
+        s"${classOf[GeneralScalarExpression].getName} ASC NULLS FIRST")
+      assert(emitted(nested).isEmpty)
+      calls.get()
+    }
+
+    assert(callsFor(10) === callsFor(1))
+  }
+
+  // Runs `f` on a thread with a small (256 KiB) stack so that a recursive rendering overflows
+  // deterministically, and returns whatever it threw (or null if nothing did). The test thread
+  // waits in `join`, which SparkFunSuite's per-test timeout can interrupt.
+  private def runOnSmallStack(f: => Unit): Throwable = {
+    @volatile var thrown: Throwable = null
+    val runnable = new Runnable {
+      override def run(): Unit = {
+        try f catch { case t: Throwable => thrown = t }
+      }
+    }
+    val t = new Thread(null, runnable, "write-ordering-deep-key", 256 * 1024)
+    t.setDaemon(true)
+    t.start()
+    t.join()
+    thrown
+  }
+
+  // Without the entry-point handling this test never finishes, so the test above is the one that
+  // fails with a message. This one checks the result for a key that really overflows the stack.
+  test("a key that contains itself overflows the stack and is described by its class") {
+    val children = new Array[Expression](1)
+    val selfContaining = new GeneralScalarExpression("ABS", children)
+    children(0) = selfContaining
+
+    val thrown = runOnSmallStack {
+      assert(describeSortOrder(key(selfContaining)) ===
+        s"${classOf[GeneralScalarExpression].getName} ASC NULLS FIRST")
+      assert(emitted(selfContaining).isEmpty)
+    }
+    assert(thrown == null, s"expected no error but got: $thrown")
   }
 
   test("DESCRIBE renders a null sort order as null") {

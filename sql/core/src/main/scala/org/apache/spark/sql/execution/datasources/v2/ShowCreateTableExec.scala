@@ -153,19 +153,19 @@ case class ShowCreateTableExec(
       provider: Option[String],
       builder: StringBuilder): Unit = {
     val table = resolvedTable.table
-    val writeDistributionMode = table.writeDistributionMode()
-    val writeOrdering = table.writeOrdering().toImmutableArraySeq
-    if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering) &&
-        WriteDistributionAndOrdering.supportsWriteDistributionAndOrdering(resolvedTable.catalog)) {
-      lazy val createsV1 = createsV1Table(resolvedTable.catalog, provider)
-      val replay = WriteDistributionAndOrdering.replayWith(session.sessionState.sqlParser) _
-      WriteDistributionAndOrdering.writeClausesSQL(
-        writeDistributionMode,
-        writeOrdering,
-        partitioning.toImmutableArraySeq,
-        schema,
-        clauses => replay(clauses).filter(_ => !createsV1)
-      ).foreach(clauses => builder ++= s"$clauses\n")
+    if (WriteDistributionAndOrdering.supportsWriteDistributionAndOrdering(resolvedTable.catalog)) {
+      val writeDistributionMode = table.writeDistributionMode()
+      val writeOrdering = WriteDistributionAndOrdering.writeOrderingOf(table)
+      if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
+        WriteDistributionAndOrdering.writeClausesSQL(
+          writeDistributionMode,
+          writeOrdering,
+          partitioning.toImmutableArraySeq,
+          schema,
+          WriteDistributionAndOrdering.replayWith(session.sessionState.sqlParser)
+        ).filter(_ => !createsV1Table(resolvedTable.catalog, provider))
+          .foreach(clauses => builder ++= s"$clauses\n")
+      }
     }
   }
 
@@ -173,16 +173,16 @@ case class ShowCreateTableExec(
   // the replay would be rejected. It has the table's provider, if any, as USING and no STORED AS
   // or ROW FORMAT, so CREATE TABLE picks its provider as `createTableProvider` does. A provider
   // that cannot be looked up or linked fails the replay too. The lookup is costly, so it runs
-  // only for clauses that parse.
+  // only for clauses that are emitted.
   private def createsV1Table(catalog: TableCatalog, provider: Option[String]): Boolean = {
-    V1CommandUtils.supportsV1Command(catalog) && {
-      val tableProvider = DataSourceV2Utils.createTableProvider(
-        provider, hasSerde = false, ctas = false, conf)
-      try {
+    try {
+      V1CommandUtils.supportsV1Command(catalog) && {
+        val tableProvider = DataSourceV2Utils.createTableProvider(
+          provider, hasSerde = false, ctas = false, conf)
         !DataSourceV2Utils.isV2Provider(tableProvider, conf)
-      } catch {
-        case NonFatal(_) | _: LinkageError => true
       }
+    } catch {
+      case NonFatal(_) | _: LinkageError => true
     }
   }
 

@@ -235,7 +235,7 @@ case class DescribeTableExec(
    */
   private def addTableWriteDistributionAndOrdering(rows: ArrayBuffer[InternalRow]): Unit = {
     val writeDistributionMode = table.writeDistributionMode()
-    val writeOrdering = table.writeOrdering().toImmutableArraySeq
+    val writeOrdering = WriteDistributionAndOrdering.writeOrderingOf(table)
     if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
       rows += emptyRow()
       rows += toCatalystRow("# Write Distribution and Ordering", "", "")
