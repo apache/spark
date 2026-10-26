@@ -109,6 +109,10 @@ Besides, the ANSI SQL mode disallows the following type conversions which are al
 
  The valid combinations of source and target data type in a `CAST` expression are given by the following table.
 “Y” indicates that the combination is syntactically valid without restriction and “N” indicates that the combination is not valid.
+The String row represents STRING. With the preview flag
+`spark.sql.charVarchar.standardSemantics.enabled`, it also covers the CHAR/VARCHAR/STRING
+family. For length and padding of casts among CHAR, VARCHAR, and STRING, see
+[Character String Types](sql-ref-character-string-types.html#casts).
 
 | Source\Target | Numeric                              | String                               | Date                                 | Time | Timestamp                            | Timestamp_NTZ                        | Interval                             | Boolean                              | Binary | Array                                | Map                                  | Struct                               |
 |---------------|--------------------------------------|--------------------------------------|--------------------------------------|------|--------------------------------------|--------------------------------------|--------------------------------------|--------------------------------------|--------|--------------------------------------|--------------------------------------|--------------------------------------|
@@ -198,6 +202,16 @@ While casting of a decimal with a fraction to an interval type with SECOND as th
 
 ### Store assignment
 As mentioned at the beginning, when `spark.sql.storeAssignmentPolicy` is set to `ANSI`(which is the default value), Spark SQL complies with the ANSI store assignment rules on table insertions. The valid combinations of source and target data type in table insertions are given by the following table.
+Table CHAR/VARCHAR columns apply length checks, trailing-space trimming, and CHAR padding on
+insert in the default overlay. CHAR/VARCHAR that survive in query plans require first-class
+CHAR/VARCHAR types (the preview flag or `spark.sql.preserveCharVarcharTypeInfo`). Distinct
+CAST and assignment semantics require the preview flag: an explicit CAST from a character
+string type truncates or pads to the length; a CAST from any other type, like assignment,
+raises `EXCEED_LIMIT_LENGTH` when the value does not fit (`TRY_CAST` returns NULL).
+Assignment pads CHAR, trims only excess trailing spaces, and otherwise raises
+`EXCEED_LIMIT_LENGTH`. With only `spark.sql.preserveCharVarcharTypeInfo`, an explicit CAST to
+CHAR/VARCHAR applies the same checks as assignment. See
+[Character String Types](sql-ref-character-string-types.html#assignment-and-reading).
 
 | Source\Target | Numeric | String | Date | Time | Timestamp | Timestamp_NTZ | Interval | Boolean | Binary | Array | Map | Struct |
 |:-------------:|:-------:|:------:|:----:|:----:|:---------:|---------------|:--------:|:-------:|:------:|:-----:|:---:|:------:|
@@ -243,6 +257,8 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 | Date      | Date -> Timestamp_NTZ -> Timestamp                                              |
 | Time      | Time                                                                            |
 | Timestamp | Timestamp                                                                       |
+| Char      | Char -> Varchar -> String****                                                   |
+| Varchar   | Varchar -> String****                                                            |
 | String    | String, Long -> Double, Date -> Timestamp_NTZ -> Timestamp , Boolean, Binary ** |
 | Binary    | Binary                                                                          |
 | Boolean   | Boolean                                                                         |
@@ -256,6 +272,11 @@ At the heart of this conflict resolution is the Type Precedence List which defin
 \*\* String can be promoted to multiple kinds of data types. Note that Byte/Short/Int/Decimal/Float is not on this precedent list. The least common type between Byte/Short/Int and String is Long, while the least common type between Decimal/Float is Double.
 
 \*\*\* For a complex type, the precedence rule applies recursively to its component elements.
+
+\*\*\*\* Preview (`spark.sql.charVarchar.standardSemantics.enabled`). By default, CHAR
+and VARCHAR are rewritten to STRING and this row does not apply. After CHAR or VARCHAR
+reaches STRING, the STRING precedence branches also apply. See
+[Character String Types](sql-ref-character-string-types.html).
 
 The `TIME` type does not promote to any other type. Note that Spark's `TIME` type deviates from the SQL standard in two ways: the default fractional-seconds precision is `6` (the ANSI default is `0`), and `TIME WITH TIME ZONE` is not supported.
 
@@ -280,6 +301,13 @@ A least common type between decimal types should have enough digits in both inte
 More precisely, a least common type between `decimal(p1, s1)` and `decimal(p2, s2)` has the scale of `max(s1, s2)` and precision of `max(s1, s2) + max(p1 - s1, p2 - s2)`.
 However, decimal types in Spark have a maximum precision: 38. If the final decimal type need more precision, we must do truncation.
 Since the digits in the integral part are more significant, Spark truncates the digits in the fractional part first. For example, `decimal(48, 20)` will be reduced to `decimal(38, 10)`.
+
+CHAR and VARCHAR also have a type parameter: length. This length-aware least common type is
+part of the preview flag `spark.sql.charVarchar.standardSemantics.enabled`. When that flag is
+`true`, least common type resolution uses the widest input length. The least common type of two
+CHAR types is `CHAR(max(n, m))`; a VARCHAR input makes the result `VARCHAR(max(n, m))`; and a
+STRING input makes the result STRING. By default, CHAR and VARCHAR are rewritten to STRING
+and this paragraph does not apply.
 
 Note, arithmetic operations have special rules to calculate the least common type for decimal inputs:
 
@@ -563,6 +591,7 @@ Below is a list of all the keywords in Spark SQL.
 |FALSE|reserved|non-reserved|reserved|
 |FETCH|reserved|non-reserved|reserved|
 |FIELDS|non-reserved|non-reserved|non-reserved|
+|FILE|non-reserved|non-reserved|non-reserved|
 |FILTER|reserved|non-reserved|reserved|
 |FILEFORMAT|non-reserved|non-reserved|non-reserved|
 |FIRST|non-reserved|non-reserved|non-reserved|
@@ -622,6 +651,7 @@ Below is a list of all the keywords in Spark SQL.
 |JSON|non-reserved|non-reserved|non-reserved|
 |JSON_ARRAY|non-reserved|non-reserved|reserved|
 |JSON_EXISTS|non-reserved|non-reserved|reserved|
+|JSON_OBJECT|non-reserved|non-reserved|reserved|
 |JSON_QUERY|non-reserved|non-reserved|reserved|
 |JSON_TABLE|non-reserved|non-reserved|reserved|
 |JSON_VALUE|non-reserved|non-reserved|reserved|

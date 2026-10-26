@@ -1340,7 +1340,8 @@ case class UnixNanos(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampNanoType)
 
   // epochMicros * 1000 overflows a 64-bit BIGINT across the full [0001..9999] calendar range, so
-  // the result is a lossless DECIMAL with enough precision to hold every value (~2.5e20 max).
+  // the result is a DECIMAL that holds every value in that range (~2.5e20 max). Values beyond
+  // ~+/-31,700 years from the epoch exceed 21 digits and raise NUMERIC_VALUE_OUT_OF_RANGE.
   override def dataType: DataType = DecimalType(21, 0)
 
   override def nullSafeEval(input: Any): Any = {
@@ -2044,6 +2045,7 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp with local time zone.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2084,6 +2086,7 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -2610,7 +2613,8 @@ case class TimestampAddInterval(
       left.dataType match {
         case _: AnyTimestampNanoType =>
           timestampNanosAddDayTime(
-            start.asInstanceOf[TimestampNanosVal], interval.asInstanceOf[Long], zoneIdInEval)
+            start.asInstanceOf[TimestampNanosVal], interval.asInstanceOf[Long], zoneIdInEval,
+            left.dataType, right.dataType)
         case _ =>
           timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneIdInEval)
       }
@@ -2626,7 +2630,10 @@ case class TimestampAddInterval(
       case _: DayTimeIntervalType =>
         left.dataType match {
           case _: AnyTimestampNanoType =>
-            defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampNanosAddDayTime($sd, $dt, $zid)""")
+            val st = ctx.addReferenceObj("startType", left.dataType, classOf[DataType].getName)
+            val it = ctx.addReferenceObj("intervalType", right.dataType, classOf[DataType].getName)
+            defineCodeGen(ctx, ev, (sd, dt) =>
+              s"""$dtu.timestampNanosAddDayTime($sd, $dt, $zid, $st, $it)""")
           case _ =>
             defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
         }
@@ -2997,7 +3004,8 @@ case class TimestampAddYMInterval(
   override def nullSafeEval(start: Any, months: Any): Any = left.dataType match {
     case _: AnyTimestampNanoType =>
       timestampNanosAddMonths(
-        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval)
+        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval,
+        left.dataType, right.dataType)
     case _ =>
       timestampAddMonths(start.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
@@ -3007,8 +3015,10 @@ case class TimestampAddYMInterval(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     left.dataType match {
       case _: AnyTimestampNanoType =>
+        val st = ctx.addReferenceObj("startType", left.dataType, classOf[DataType].getName)
+        val it = ctx.addReferenceObj("intervalType", right.dataType, classOf[DataType].getName)
         defineCodeGen(ctx, ev, (sd, months) =>
-          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid)""")
+          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid, $st, $it)""")
       case _ =>
         defineCodeGen(ctx, ev, (micros, months) =>
           s"""$dtu.timestampAddMonths($micros, $months, $zid)""")
@@ -3236,6 +3246,7 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
@@ -3289,8 +3300,12 @@ case class ParseToTimestamp(
         DateType,
         TimestampType,
         TimestampNTZType)
+    // NumericType is only accepted without a format, where `replacement` is a plain Cast. With a
+    // format, `replacement` is GetTimestamp, which does not accept numeric inputs, so numeric
+    // inputs are implicitly cast to string and parsed with the format instead.
+    val acceptsNumeric = dataType.isInstanceOf[TimestampType] && format.isEmpty
     TypeCollection(
-      (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
+      (if (acceptsNumeric) types :+ NumericType else types): _*
     ) +: format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
   }
 

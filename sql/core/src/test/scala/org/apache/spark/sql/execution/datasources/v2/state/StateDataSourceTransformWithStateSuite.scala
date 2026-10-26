@@ -102,6 +102,30 @@ class SessionGroupsStatefulProcessor extends
   }
 }
 
+class SessionGroupsPutAndAppendListProcessor extends
+  StatefulProcessor[String, (String, String), String] {
+  @transient private var _groupsList: ListState[String] = _
+
+  override def init(
+      outputMode: OutputMode,
+      timeMode: TimeMode): Unit = {
+    _groupsList = getHandle.getListState("groupsList", Encoders.STRING, TTLConfig.NONE)
+  }
+
+  override def handleInputRows(
+      key: String,
+      inputRows: Iterator[(String, String)],
+      timerValues: TimerValues): Iterator[String] = {
+    val groups = inputRows.map(_._2).toArray.sorted
+    if (_groupsList.exists()) {
+      _groupsList.appendList(groups)
+    } else {
+      _groupsList.put(groups)
+    }
+    Iterator.empty
+  }
+}
+
 class SessionGroupsStatefulProcessorWithTTL extends
   StatefulProcessor[String, (String, String), String] {
   @transient private var _groupsListWithTTL: ListState[String] = _
@@ -471,6 +495,52 @@ class StateDataSourceTransformWithStateSuite extends StateDataSourceTestBase
             Row("append", "session1", "group4", 0),
             Row("append", "session2", "group1", 0),
             Row("append", "session3", "group7", 3)))
+      }
+    }
+  }
+
+  Seq(1, 2).foreach { mergeOperatorVersion =>
+    testWithChangelogCheckpointingEnabled("state data source cdf integration - list state " +
+      s"put and appendList (mergeOperatorVersion = $mergeOperatorVersion)") {
+      withTempDir { tempDir =>
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key ->
+          mergeOperatorVersion.toString) {
+          val inputData = MemoryStream[(String, String)]
+          val result = inputData.toDS()
+            .groupByKey(x => x._1)
+            .transformWithState(new SessionGroupsPutAndAppendListProcessor(),
+              TimeMode.None(),
+              OutputMode.Update())
+
+          testStream(result, OutputMode.Update())(
+            StartStream(checkpointLocation = tempDir.getAbsolutePath),
+            AddData(inputData, ("session1", "group1"), ("session1", "group2"),
+              ("session2", "group3")),
+            CheckNewAnswer(),
+            AddData(inputData, ("session1", "group3"), ("session1", "group4"),
+              ("session2", "group5"), ("session2", "group6")),
+            CheckNewAnswer(),
+            StopStream
+          )
+
+          val changeFeedDf = spark.read
+            .format("statestore")
+            .option(StateSourceOptions.PATH, tempDir.getAbsolutePath)
+            .option(StateSourceOptions.STATE_VAR_NAME, "groupsList")
+            .option(StateSourceOptions.READ_CHANGE_FEED, true)
+            .option(StateSourceOptions.CHANGE_START_BATCH_ID, 0)
+            .load()
+            .selectExpr("batch_id", "change_type", "key.value", "list_element.value")
+
+          checkAnswer(changeFeedDf,
+            Seq(Row(0L, "update", "session1", "group1"),
+              Row(0L, "append", "session1", "group2"),
+              Row(0L, "update", "session2", "group3"),
+              Row(1L, "append", "session1", "group3"),
+              Row(1L, "append", "session1", "group4"),
+              Row(1L, "append", "session2", "group5"),
+              Row(1L, "append", "session2", "group6")))
+        }
       }
     }
   }
