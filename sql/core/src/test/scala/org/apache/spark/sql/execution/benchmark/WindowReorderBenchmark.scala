@@ -69,7 +69,8 @@ object WindowReorderBenchmark extends SqlBasedBenchmark {
   private val WINDOW_REORDER_ENABLED =
     SQLConf.WINDOW_REORDER_ENABLED.key
 
-  private val N = 16L << 20 // ~16M rows
+  // ~16M rows.
+  private val N = 16L << 20
 
   override def getSparkSession: SparkSession = {
     val conf = new SparkConf()
