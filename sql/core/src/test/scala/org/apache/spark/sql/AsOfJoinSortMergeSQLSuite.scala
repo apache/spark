@@ -18,13 +18,19 @@
 package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
+import java.time.{Instant, LocalDateTime}
 
+import org.apache.spark.sql.api.java.UDF0
+import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, Cast}
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
-import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
+import org.apache.spark.sql.execution.{FileSourceScanExec, ProjectExec, SortExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.LongType
 
 /**
  * SQL ASOF JOIN tests that exercise the sort-merge physical operator.
@@ -162,6 +168,207 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       // Single-pass analysis does not support the deserializer used by checkToRDD.
       QueryTest.checkAnswer(df = query, expectedAnswer = Seq(Row(2)), checkToRDD = false)
     }
+  }
+
+  gridTest("SQL ASOF JOIN projects computed keys and preserves its output")(Seq(false, true)) {
+    singlePass =>
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+        for {
+          ltzOnLeft <- Seq(false, true)
+          tuple <- Seq(false, true)
+        } {
+          val (leftType, rightType) = if (ltzOnLeft) {
+            ("TIMESTAMP_LTZ", "TIMESTAMP_NTZ")
+          } else {
+            ("TIMESTAMP_NTZ", "TIMESTAMP_LTZ")
+          }
+          val leftKey = if (tuple) "(l.ts, l.ts)" else "l.ts"
+          val rightKey = if (tuple) "(r.ts, r.ts)" else "r.ts"
+          val query = sql(
+            s"""SELECT *
+               |FROM VALUES
+               |  ($leftType '2024-03-10 01:00:00', 1),
+               |  ($leftType '2024-03-10 03:00:00', 2) l(ts, _asof_key)
+               |LEFT ASOF JOIN VALUES
+               |  ($rightType '2024-03-10 01:30:00', 3) r(ts, _asof_key)
+               |MATCH_CONDITION ($leftKey >= $rightKey)
+               |""".stripMargin)
+          val logicalJoin = query.queryExecution.optimizedPlan.collectFirst {
+            case j: AsOfJoin => j
+          }.get
+          val plan = query.queryExecution.sparkPlan
+          val outputProject = plan.collectFirst {
+            case p: ProjectExec if p.child.isInstanceOf[SortMergeAsOfJoinExec] => p
+          }.get
+          val join = outputProject.child.asInstanceOf[SortMergeAsOfJoinExec]
+          assert(outputProject.output == logicalJoin.output)
+          assert(join.leftSortExprs.forall(_.isInstanceOf[Attribute]))
+          assert(join.rightSortExprs.forall(_.isInstanceOf[Attribute]))
+          assert(!join.asOfCondition.exists(_.isInstanceOf[Cast]))
+          val projectedChild = if (ltzOnLeft) join.right else join.left
+          val aliases = projectedChild.asInstanceOf[ProjectExec].projectList.collect {
+            case a: Alias => a
+          }
+          // Repeated tuple fields share one conversion, even if an input has the helper's name.
+          assert(aliases.size == 1)
+          assert(join.asOfCondition.references.contains(aliases.head.toAttribute))
+          val leftExtra = if (ltzOnLeft) 0 else 1
+          assert(join.left.output.size == logicalJoin.left.output.size + leftExtra)
+          assert(join.right.output.size == logicalJoin.right.output.size + 1 - leftExtra)
+
+          def timestamp(value: String, ltz: Boolean): Any = {
+            if (ltz) Timestamp.from(Instant.parse(value + "Z")) else LocalDateTime.parse(value)
+          }
+          QueryTest.checkAnswer(
+            df = query,
+            expectedAnswer = Seq(
+              Row(timestamp(if (ltzOnLeft) "2024-03-10T09:00:00" else "2024-03-10T01:00:00",
+                ltzOnLeft), 1, null, null),
+              Row(timestamp(if (ltzOnLeft) "2024-03-10T10:00:00" else "2024-03-10T03:00:00",
+                ltzOnLeft), 2,
+                timestamp(if (ltzOnLeft) "2024-03-10T01:30:00" else "2024-03-10T09:30:00",
+                  !ltzOnLeft), 3)),
+            checkToRDD = false)
+        }
+      }
+  }
+
+  gridTest("SQL ASOF JOIN keeps reference-free tuple keys on their own side")(Seq(false, true)) {
+    singlePass =>
+      withUserDefinedFunction("constant_key" -> true) {
+        spark.udf.register(
+          name = "constant_key",
+          f = new UDF0[Long] {
+            override def call(): Long = 5L
+          },
+          returnType = LongType)
+        withSQLConf(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+          val query = sql(
+            """SELECT l.k, r.k
+              |FROM VALUES (1), (2) l(k) ASOF JOIN VALUES (0), (1) r(k)
+              |MATCH_CONDITION ((l.k, constant_key()) >= (r.k, constant_key()))
+              |""".stripMargin)
+          assertUsesSortMergeAsOfJoin(query)
+          QueryTest.checkAnswer(
+            df = query,
+            expectedAnswer = Seq(Row(1, 1), Row(2, 1)),
+            checkToRDD = false)
+        }
+      }
+  }
+
+  gridTest("SQL ASOF JOIN preserves projected key ordering")(Seq(false, true)) { singlePass =>
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.REMOVE_REDUNDANT_SORTS_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      val inGap = LocalDateTime.parse("2024-03-10T02:50:00")
+      val afterGap = LocalDateTime.parse("2024-03-10T03:00:00")
+      for ((ordering, sortCount, expected) <- Seq(
+          ("CAST(l.ts AS TIMESTAMP_LTZ)", 2, Seq(afterGap, inGap)),
+          ("CAST(l.ts AS TIMESTAMP_LTZ) DESC", 3, Seq(inGap, afterGap)),
+          ("l.ts", 3, Seq(inGap, afterGap)))) {
+        val query = sql(
+          s"""SELECT l.ts, r.rts
+             |FROM VALUES
+             |  (TIMESTAMP_NTZ '2024-03-10 02:50:00'),
+             |  (TIMESTAMP_NTZ '2024-03-10 03:00:00') l(ts)
+             |ASOF JOIN VALUES
+             |  (TIMESTAMP_LTZ '2024-03-10 09:00:00Z'),
+             |  (TIMESTAMP_LTZ '2024-03-10 10:00:00Z') r(rts)
+             |MATCH_CONDITION (CAST(l.ts AS TIMESTAMP_LTZ) >= r.rts)
+             |ORDER BY $ordering
+             |""".stripMargin)
+        val plan = query.queryExecution.executedPlan
+        assert(plan.collect { case s: SortExec => s }.size == sortCount, plan.treeString)
+        assert(query.collect().map(_.getAs[LocalDateTime](0)).toSeq == expected)
+      }
+    }
+  }
+
+  gridTest("SQL ASOF JOIN preserves projected key partitioning")(Seq(false, true)) { singlePass =>
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "2",
+        SQLConf.SINGLE_TASK_EXECUTION_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      for ((joinType, leftType, rightType, groupedSide) <- Seq(
+          ("LEFT", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "l"),
+          ("INNER", "TIMESTAMP_NTZ", "TIMESTAMP_LTZ", "l"),
+          ("INNER", "TIMESTAMP_LTZ", "TIMESTAMP_NTZ", "r"))) {
+        val groupKey = s"CAST($groupedSide.ts AS TIMESTAMP_LTZ)"
+        val query = sql(
+          s"""SELECT $groupKey, count(r.id)
+             |FROM VALUES ($leftType '2024-03-10 01:00:00'),
+             |  ($leftType '2024-03-10 01:01:00'),
+             |  ($leftType '2024-03-10 01:02:00'),
+             |  ($leftType '2024-03-10 01:03:00') l(ts)
+             |$joinType ASOF JOIN VALUES ($rightType '2024-03-10 01:00:00', 0),
+             |  ($rightType '2024-03-10 01:01:00', 1),
+             |  ($rightType '2024-03-10 01:02:00', 2) r(ts, id)
+             |MATCH_CONDITION (l.ts >= r.ts)
+             |ON l.ts = r.ts
+             |GROUP BY $groupKey
+             |""".stripMargin)
+        val plan = query.queryExecution.executedPlan
+        assertUsesSortMergeAsOfJoin(query)
+        // Only the join inputs shuffle; the aggregation reuses the join's partitioning.
+        assert(plan.collect { case s: ShuffleExchangeExec => s }.size == 2, plan.treeString)
+        val rowCount = if (joinType == "LEFT") 4 else 3
+        val start = Instant.parse("2024-03-10T09:00:00Z")
+        val expected = (0 until rowCount).map { i =>
+          Row(Timestamp.from(start.plusSeconds(i * 60L)), if (i < 3) 1L else 0L)
+        }
+        QueryTest.checkAnswer(df = query, expectedAnswer = expected, checkToRDD = false)
+      }
+    }
+  }
+
+  gridTest("SQL ASOF JOIN projects keys from hidden USING columns")(Seq(false, true)) {
+    singlePass =>
+      withSQLConf(
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+        val query = sql(
+          """SELECT *, h.ts AS hidden_ts
+            |FROM (
+            |  VALUES (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1),
+            |    (TIMESTAMP_NTZ '2024-03-10 03:00:00', 2) b(ts, id)
+            |  LEFT JOIN VALUES (TIMESTAMP_NTZ '2024-03-10 03:00:00') h(ts) USING (ts))
+            |LEFT ASOF JOIN VALUES (TIMESTAMP_LTZ '2024-03-10 10:00:00Z') r(lts)
+            |MATCH_CONDITION (h.ts >= r.lts)
+            |""".stripMargin)
+        assert(query.columns.toSeq == Seq("ts", "id", "lts", "hidden_ts"))
+        assertUsesSortMergeAsOfJoin(query)
+        QueryTest.checkAnswer(
+          df = query,
+          expectedAnswer = Seq(
+            Row(LocalDateTime.parse("2024-03-10T02:50:00"), 1, null, null),
+            Row(LocalDateTime.parse("2024-03-10T03:00:00"), 2,
+              Timestamp.from(Instant.parse("2024-03-10T10:00:00Z")),
+              LocalDateTime.parse("2024-03-10T03:00:00"))),
+          checkToRDD = false)
+      }
   }
 
   gridTest("SQL ASOF JOIN sorts mixed timestamp keys across DST gaps")(

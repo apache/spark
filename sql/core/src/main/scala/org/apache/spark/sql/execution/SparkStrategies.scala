@@ -462,11 +462,51 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
             (Seq(leftAsOf), Seq(rightAsOf))
           }
 
-        joins.SortMergeAsOfJoinExec(
-          leftKeys, rightKeys, leftSort, rightSort,
-          j.asOfCondition, j.direction, j.joinType, residual,
-          planLater(j.left), planLater(j.right)) :: Nil
+        val (left, leftAliases) = projectSortKeys(j.left, leftSort)
+        val (right, rightAliases) = projectSortKeys(j.right, rightSort)
+        val aliases = leftAliases ++ rightAliases
+        val keyAttributes = aliases.map(a => a.child.canonicalized -> a.toAttribute).toMap
+        def replaceProjectedKeys(expression: Expression): Expression = {
+          expression.transformDown {
+            case e => keyAttributes.getOrElse(e.canonicalized, e)
+          }
+        }
+
+        val join = joins.SortMergeAsOfJoinExec(
+          leftKeys = leftKeys.map(replaceProjectedKeys),
+          rightKeys = rightKeys.map(replaceProjectedKeys),
+          leftSortExprs = leftSort.map(replaceProjectedKeys),
+          rightSortExprs = rightSort.map(replaceProjectedKeys),
+          asOfCondition = replaceProjectedKeys(j.asOfCondition),
+          direction = j.direction,
+          joinType = j.joinType,
+          condition = residual.map(replaceProjectedKeys),
+          left = left,
+          right = right,
+          keyAliases = aliases)
+        if (aliases.isEmpty) {
+          join :: Nil
+        } else {
+          ProjectExec(j.output, join) :: Nil
+        }
       case _ => Nil
+    }
+
+    /** Projects computed sort keys so sorting and matching reuse the same values. */
+    private def projectSortKeys(
+        child: LogicalPlan,
+        sortKeys: Seq[Expression]): (SparkPlan, Seq[Alias]) = {
+      val aliases = sortKeys.filter {
+        case _: Attribute => false
+        case e => e.deterministic && e.references.nonEmpty
+      }.distinctBy(_.canonicalized).map(e => Alias(e, "_asof_key")())
+      val plan = planLater(child)
+      val projected = if (aliases.isEmpty) {
+        plan
+      } else {
+        ProjectExec(child.output ++ aliases, plan)
+      }
+      (projected, aliases)
     }
 
     /**

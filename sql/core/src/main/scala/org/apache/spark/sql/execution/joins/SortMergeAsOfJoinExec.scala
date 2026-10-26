@@ -59,7 +59,8 @@ case class SortMergeAsOfJoinExec(
     condition: Option[Expression],
     left: SparkPlan,
     right: SparkPlan,
-    isSkewJoin: Boolean = false) extends ShuffledJoin {
+    isSkewJoin: Boolean = false,
+    keyAliases: Seq[Alias] = Nil) extends ShuffledJoin with AliasHelper {
 
   // The sides may have different key counts: each side is sorted on its own, and only the
   // equi-keys are compared across sides.
@@ -68,6 +69,8 @@ case class SortMergeAsOfJoinExec(
 
   require(Seq(Inner, LeftOuter).exists(joinType == _),
     s"$nodeName does not support join type: $joinType")
+
+  private lazy val keyAliasMap = getAliasMap(keyAliases)
 
   override lazy val metrics: Map[String, SQLMetric] = Map(
     "numOutputRows" -> SQLMetrics.createMetric(sparkContext, "number of output rows"),
@@ -97,7 +100,26 @@ case class SortMergeAsOfJoinExec(
     leftOrdering :: rightOrdering :: Nil
   }
 
-  override def outputOrdering: Seq[SortOrder] = left.outputOrdering
+  override def outputOrdering: Seq[SortOrder] = {
+    if (keyAliases.isEmpty) {
+      left.outputOrdering
+    } else {
+      left.outputOrdering.map { order =>
+        // Preserve ordering by the original expressions when helper columns are projected away.
+        val originalExpressions = order.children.map(replaceAlias(_, keyAliasMap))
+        val sameOrderExpressions =
+          ExpressionSet(order.sameOrderExpressions ++ originalExpressions) - order.child
+        order.copy(sameOrderExpressions = sameOrderExpressions.toSeq)
+      }
+    }
+  }
+
+  override def outputPartitioning: Partitioning = super.outputPartitioning match {
+    // Preserve partitioning through the original keys when helper columns are projected away.
+    case p: Expression if keyAliases.nonEmpty =>
+      replaceAlias(p, keyAliasMap).asInstanceOf[Partitioning]
+    case other => other
+  }
 
   protected override def doExecute(): RDD[InternalRow] = {
     val numOutputRows = longMetric("numOutputRows")
