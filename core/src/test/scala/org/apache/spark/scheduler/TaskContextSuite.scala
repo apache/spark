@@ -255,6 +255,112 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     }
   }
 
+  test("SPARK-60567: all TaskInterruptListeners should be called even if logging a failure " +
+    "fails") {
+    val context = TaskContext.empty()
+    val listener = mock(classOf[TaskInterruptListener])
+    val first = new Exception("exception in listener1")
+    context.addTaskInterruptListener(listener)
+    // Added last, so it runs first.
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = throw first
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskInterruptListener", logFailure)) {
+      context.markInterrupted("test interrupt")
+    }
+    verify(listener, times(1)).onTaskInterrupted(any(), mockitoEq("test interrupt"))
+    assert(context.isFailed())
+    val taskFailure = context.getTaskFailure.get
+    assert(taskFailure.isInstanceOf[TaskCompletionListenerException])
+    assert(taskFailure.getSuppressed.toSeq === Seq(first))
+    // The failure to log is reported with the failure it was logging.
+    assert(first.getSuppressed.length === 1)
+    val causes = Iterator.iterate[Throwable](first.getSuppressed.head)(_.getCause)
+    assert(causes.takeWhile(_ != null).contains(logFailure))
+  }
+
+  test("SPARK-60567: markInterrupted marks the task failed even if logging the listener " +
+    "failures fails") {
+    val context = TaskContext.empty()
+    val failureListenerCalls = new AtomicInteger(0)
+    val first = new Exception("exception in interrupt listener")
+    context.addTaskInterruptListener(new TaskInterruptListener {
+      override def onTaskInterrupted(context: TaskContext, reason: String): Unit = throw first
+    })
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+        failureListenerCalls.incrementAndGet()
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Exception(s) in TaskInterruptListener(s)", logFailure)) {
+      // The failure to log must not be thrown from `markInterrupted` (kill / RPC thread must not
+      // see it).
+      context.markInterrupted("test interrupt")
+    }
+    assert(context.isInterrupted())
+    assert(context.isFailed())
+    assert(failureListenerCalls.get() == 1)
+
+    // The task failure is the aggregate failure of the interrupt listeners and reports the failure
+    // to log it.
+    val taskFailure = context.getTaskFailure.get
+    assert(taskFailure.isInstanceOf[TaskCompletionListenerException])
+    assert(taskFailure.getMessage.contains("exception in interrupt listener"))
+    assert(taskFailure.getSuppressed.contains(first))
+    assert(taskFailure.getSuppressed.exists { t =>
+      Iterator.iterate[Throwable](t)(_.getCause).takeWhile(_ != null).contains(logFailure)
+    })
+  }
+
+  test("SPARK-60567: Task.kill interrupts the task thread even if logging the listener " +
+    "failures fails") {
+    sc = new SparkContext("local", "test")
+    val taskStarted = new CountDownLatch(1)
+    val threadInterrupted = new CountDownLatch(1)
+    val serializedTaskMetrics =
+      SparkEnv.get.closureSerializer.newInstance().serialize(TaskMetrics.registered).array()
+    val task = new Task[Int](0, 0, 0, 1, JobArtifactSet.emptyJobArtifactSet,
+      serializedTaskMetrics = serializedTaskMetrics) {
+      override def runTask(context: TaskContext): Int = {
+        // Both listeners fail, so both the per-listener and the aggregate failure are logged.
+        (1 to 2).foreach { i =>
+          context.addTaskInterruptListener(new TaskInterruptListener {
+            override def onTaskInterrupted(context: TaskContext, reason: String): Unit =
+              throw new Exception(s"exception in interrupt listener $i")
+          })
+        }
+        taskStarted.countDown()
+        try {
+          // Block until `Task.kill` interrupts this thread.
+          new CountDownLatch(1).await(10, TimeUnit.SECONDS)
+        } catch {
+          case _: InterruptedException => threadInterrupted.countDown()
+        }
+        0
+      }
+    }
+    val taskThread = new Thread(
+      () => Utils.tryLogNonFatalError { task.run(0, 0, null, 1, null, Option.empty) },
+      "task-kill-test")
+    taskThread.start()
+    try {
+      assert(taskStarted.await(10, TimeUnit.SECONDS))
+      withLogAppender(
+        new FailingAppender("TaskInterruptListener", new IllegalStateException("log failure"))) {
+        task.kill(interruptThread = true, "test kill")
+      }
+      assert(threadInterrupted.await(10, TimeUnit.SECONDS))
+      assert(task.context.isInterrupted())
+      assert(task.context.isFailed())
+    } finally {
+      taskThread.interrupt()
+      taskThread.join(10000)
+    }
+  }
+
   test("immediately call an interrupt listener if the context is already interrupted") {
     var invocations = 0
     var lastReason: String = null
