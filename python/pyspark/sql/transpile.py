@@ -203,8 +203,9 @@ def _is_definitely_basic_type(node: ast.AST) -> bool:
             return _is_definitely_basic_type(operand)
         case ast.Name():
             return True
-        case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
-            return _is_definitely_basic_type(arg)
+        case ast.Call(func=ast.Name(id="len"), args=[_], keywords=[]):
+            # len() always returns an int: CPython raises if __len__ returns anything else.
+            return True
         case _:
             return False
 
@@ -799,24 +800,24 @@ class CatalystTranspiler(AbstractTranspiler):
                 # NULL-as-falsy lowering with the if-statement case.
                 test_col = self._convert_chunk(params, test)
                 body_nonnull, else_nonnull = _null_narrowed(params, test)
-                saved = self._nonnull_params
-                self._nonnull_params = saved | body_nonnull
+                saved_nonnull = self._nonnull_params
+                self._nonnull_params = saved_nonnull | body_nonnull
                 body_col = self._convert_chunk(params, body_expr)
-                self._nonnull_params = saved | else_nonnull
+                self._nonnull_params = saved_nonnull | else_nonnull
                 else_col = self._convert_chunk(params, orelse_expr)
-                self._nonnull_params = saved
+                self._nonnull_params = saved_nonnull
                 return self._convert_if_like(
                     params, test_col, body_col, else_col, test, body_expr, orelse_expr
                 )
             case ast.If(test, success, orelse):
                 test_col = self._convert_chunk(params, test)
                 body_nonnull, else_nonnull = _null_narrowed(params, test)
-                saved = self._nonnull_params
-                self._nonnull_params = saved | body_nonnull
+                saved_nonnull = self._nonnull_params
+                self._nonnull_params = saved_nonnull | body_nonnull
                 body_col = self._convert_branch(params, success, "body")
-                self._nonnull_params = saved | else_nonnull
+                self._nonnull_params = saved_nonnull | else_nonnull
                 else_col = self._convert_branch(params, orelse, "else body")
-                self._nonnull_params = saved
+                self._nonnull_params = saved_nonnull
                 return self._convert_if_like(
                     params,
                     test_col,
