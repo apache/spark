@@ -167,7 +167,7 @@ def determine_shell_script_test_goals(
 
     >>> from pathlib import Path
     >>> goals = determine_shell_script_test_goals(
-    ...     [modules.root], modules.TestStage.PRE_BUILD)
+    ...     [modules.build, modules.root], modules.TestStage.PRE_BUILD)
     >>> [g.path for g in goals].count(Path("dev/test-dependencies.sh"))
     1
     """
