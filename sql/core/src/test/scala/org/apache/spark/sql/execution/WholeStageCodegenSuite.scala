@@ -3164,6 +3164,11 @@ class WholeStageCodegenSuite extends SharedSparkSession
       val aggs = "avg(y + 1) FILTER (WHERE s = '1'), sum(y + 1) FILTER (WHERE s = '1'), count(1)"
       val noKeys = s"SELECT $aggs FROM t"
       val withKeys = s"SELECT b, $aggs FROM t GROUP BY b"
+      // Different FILTER clauses still keep `y + 1` local to each aggregate.
+      val filteredAggs =
+        "avg(y + 1) FILTER (WHERE s = '1'), sum(y + 1) FILTER (WHERE x = 1)"
+      val filteredNoKeys = s"SELECT $filteredAggs FROM t"
+      val filteredWithKeys = s"SELECT b, $filteredAggs FROM t GROUP BY b"
       val hashMapConfs = Seq(
         // Regular hash map.
         Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false"),
@@ -3189,6 +3194,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
               codegen)
             checkAnswer(df, Row(1.0, 1L, 2L))
             checkAnswer(sql(withKeys), Row(1, 1.0, 1L, 2L))
+            checkAnswer(sql(filteredNoKeys), Row(1.0, 1L))
+            checkAnswer(sql(filteredWithKeys), Row(1, 1.0, 1L))
           }
         }
       }
