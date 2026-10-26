@@ -44,7 +44,7 @@ import re
 import subprocess
 import sys
 import traceback
-from typing import Iterator, List, Optional, Tuple
+from typing import Iterator, List, Optional
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -1895,7 +1895,10 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     try:
         parsed = Title.parse(jira_title)
         tags.update(parsed.leading)
-        tags.update(parsed.components)
+        # Normalize aliases such as FOLLOW-UP, as main() does for ordinary titles.
+        for tag in parsed.components:
+            c = Component.find(tag)
+            tags.add(c.tag if c is not None else tag)
     except ValueError:
         pass
     skipped = [tag for tag in skip_jira_title_tags if tag in tags]
@@ -2031,7 +2034,7 @@ _BARE_SPARK_ID_RE = re.compile(r"SPARK-[0-9]+\b", re.IGNORECASE | re.ASCII)
 _WRAPPER_RE = re.compile(r'(?:Revert|Reapply) "(.*)"', re.DOTALL)
 
 
-def _iter_bracket_tags(raw: str) -> Iterator[Tuple[str, int]]:
+def _iter_bracket_tags(raw: str) -> Iterator[tuple[str, int]]:
     """Yield ``(TAG, end)`` for each tag in the leading run of bracket tags of ``raw``.
 
     ``TAG`` is upper-cased, and ``end`` is the position just past the tag and
@@ -2219,6 +2222,10 @@ def leading_jira_ids(title: str) -> List[str]:
 
     >>> leading_jira_ids("[SPARK-1234][SPARK-5678][SQL] Follow up to SPARK-9999")
     ['SPARK-1234', 'SPARK-5678']
+    >>> leading_jira_ids('Reapply "[SPARK-1234][SQL] Fix"')
+    ['SPARK-1234']
+    >>> leading_jira_ids('Revert "Revert "[SPARK-1234][SQL] Fix""')
+    ['SPARK-1234']
     >>> leading_jira_ids("[SPARK-1234][spark-1234] Fix")
     ['SPARK-1234']
     >>> leading_jira_ids("[SPARK-123456][SQL] Fix")
@@ -2908,7 +2915,7 @@ __test__ = {
     ...     client.transition_issue.assert_not_called()
     """,
     "update_jira_for_revert": """
-    Reverts update each referenced JIRA once and bypass the resolve/add path.
+    Reverts update each leading JIRA id once and bypass the resolve/add path.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -2920,7 +2927,7 @@ __test__ = {
     ...     confirm.reset_mock()
     ...     with (
     ...         patch.dict(update_jira_for_pr.__globals__, revert_jira_issue=reverter,
-    ...                    resolve_jira_issues=resolver, continue_maybe=confirm),
+    ...                    resolve_jira_issue=resolver, continue_maybe=confirm),
     ...         redirect_stdout(StringIO()),
     ...     ):
     ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
@@ -2937,13 +2944,18 @@ __test__ = {
     >>> reverter.assert_called_once_with(["branch-4.2"], "SPARK-1234")
     >>> update('Revert "Fix"', ["master"], is_revert=True)
     >>> reverter.assert_called_once_with(["master"], "")
+
+    A bare leading id, as in the old subject SPARK-49004, still reaches the revert path.
+
     >>> update('Revert "SPARK-49004"', ["master"], is_revert=True)
     >>> reverter.assert_called_once_with(["master"], "SPARK-49004")
 
-    Wrapped skip tags preserve the existing policy for MINOR, TRIVIAL, and FOLLOWUP changes.
+    Wrapped skip tags follow the same policy as direct merges for MINOR, TRIVIAL, and FOLLOWUP
+    changes, including the FOLLOW-UP alias.
 
     >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
-    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"'):
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOW-UP] Fix"'):
     ...     update(title, ["master"], is_revert=True)
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
@@ -2951,7 +2963,8 @@ __test__ = {
 
     Reapply titles are unwrapped too, so their skip tags apply as well.
 
-    >>> for title in ('Reapply "[MINOR][SQL] Fix"', 'Reapply "[SPARK-1234][SQL][FOLLOWUP] Fix"'):
+    >>> for title in ('Reapply "[MINOR][SQL] Fix"', 'Reapply "[SPARK-1234][SQL][FOLLOWUP] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOW-UP] Fix"'):
     ...     update(title, ["master"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
@@ -2969,15 +2982,16 @@ __test__ = {
     >>> update('Revert "Reapply "[SPARK-1234][SQL] Fix""', ["master"], is_revert=True)
     >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
 
-    Ordinary merges and reapplies still resolve the issue or add fix versions.
+    Ordinary merges and reapplies resolve the leading id, not an id in the title body.
 
-    >>> for title in ('[SPARK-1234][SQL] Fix', 'Reapply "[SPARK-1234][SQL] Fix"'):
+    >>> for title in ('[SPARK-1234][SQL] Fix mentions SPARK-9999',
+    ...               'Reapply "[SPARK-1234][SQL] Fix"'):
     ...     update(title, ["master"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_called_once_with(
-    ...         title, ["master"],
+    ...         ["master"],
     ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
-    ...         [])
+    ...         "SPARK-1234", title_components=[])
     """,
     "reconcile_jira_affects_versions": """
     Blank input accepts the suggested version and appends it to the existing versions:
