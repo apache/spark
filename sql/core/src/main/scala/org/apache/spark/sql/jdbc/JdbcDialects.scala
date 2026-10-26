@@ -143,25 +143,6 @@ abstract class JdbcDialect extends Serializable with Logging {
       sqlType: Int, typeName: String, size: Int, md: MetadataBuilder): Option[DataType] = None
 
   /**
-   * `getCatalystType(sqlType, typeName, size, md)` with access to the JDBC options of the current
-   * read or write. This is what Spark calls when resolving a schema from the remote table.
-   * By default, it delegates to the 4-arg method, so dialects that only override that keep working.
-   *
-   * @param options The JDBC options of the current read or write.
-   * @return An option the actual DataType (subclasses of [[org.apache.spark.sql.types.DataType]])
-   *         or None if the default type mapping should be used.
-   */
-  @Since("4.4.0")
-  def getCatalystType(
-      sqlType: Int,
-      typeName: String,
-      size: Int,
-      md: MetadataBuilder,
-      options: JDBCOptions): Option[DataType] = {
-    getCatalystType(sqlType, typeName, size, md)
-  }
-
-  /**
    * Retrieve the jdbc / sql type for a given datatype.
    * @param dt The datatype (e.g. [[org.apache.spark.sql.types.StringType]])
    * @return The new JdbcType if there is an override for this DataType

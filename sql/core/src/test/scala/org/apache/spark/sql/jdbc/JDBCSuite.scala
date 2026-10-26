@@ -3157,8 +3157,7 @@ class JDBCSuite extends SharedSparkSession {
     when(mockRs.getMetaData).thenReturn(mockRsmd)
 
     val mockDialect = mock(classOf[JdbcDialect])
-    when(mockDialect.getCatalystType(
-        anyInt(), anyString(), anyInt(), any[MetadataBuilder], any[JDBCOptions]))
+    when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
     val options = new JDBCOptions(url, "t", Map.empty[String, String])
