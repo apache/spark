@@ -29,14 +29,14 @@ The `CREATE TABLE` statement defines a new table using a Data Source.
 CREATE [ EXTERNAL ] TABLE [ IF NOT EXISTS ] table_identifier
     [ ( col_name1 col_type1 [ COMMENT col_comment1 ], ... ) ]
     USING data_source
-    [ OPTIONS ( key1=val1, key2=val2, ... ) ]
+    [ OPTIONS ( key1 [=] val1, key2 [=] val2, ... ) ]
     [ PARTITIONED BY ( col_name1, col_name2, ... ) ]
     [ CLUSTERED BY ( col_name3, col_name4, ... ) 
         [ SORTED BY ( col_name [ ASC | DESC ], ... ) ] 
         INTO num_buckets BUCKETS ]
     [ LOCATION path ]
     [ COMMENT table_comment ]
-    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ TBLPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) ]
     [ AS select_statement ]
 ```
 
@@ -58,6 +58,8 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **OPTIONS**
 
     Options of data source which will be injected to storage properties.
+    The `=` between a key and its value is optional; `OPTIONS ('key1' 'val1')`
+    is equivalent to `OPTIONS ('key1'='val1')`.
 
 * **PARTITIONED BY**
 
@@ -97,6 +99,8 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
 * **TBLPROPERTIES**
 
     A list of key-value pairs that is used to tag the table definition.
+    The `=` between a key and its value is optional; `TBLPROPERTIES ('key1' 'val1')`
+    is equivalent to `TBLPROPERTIES ('key1'='val1')`.
 
 * **AS select_statement**
 

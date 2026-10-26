@@ -265,13 +265,14 @@ ALTER TABLE table_identifier CLUSTER BY NONE
 #### SET PROPERTIES
 
 `ALTER TABLE SET` command is used for setting the table properties. If a particular property was already set, 
-this overrides the old value with the new one.
+this overrides the old value with the new one. The `=` between a key and its value is optional; 
+`SET TBLPROPERTIES ('key1' 'val1')` is equivalent to `SET TBLPROPERTIES ('key1'='val1')`.
 
 ##### Syntax
 
 ```sql
 -- Set Properties
-ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 = val1, key2 = val2, ... )
+ALTER TABLE table_identifier SET TBLPROPERTIES ( key1 [=] val1, key2 [=] val2, ... )
 ```
 
 #### UNSET PROPERTIES
@@ -296,10 +297,10 @@ ALTER TABLE table_identifier UNSET TBLPROPERTIES ( key1, key2, ... )
 ```sql
 -- Set SERDE Properties
 ALTER TABLE table_identifier [ partition_spec ]
-    SET SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )
+    SET SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... )
 
 ALTER TABLE table_identifier [ partition_spec ] SET SERDE serde_class_name
-    [ WITH SERDEPROPERTIES ( key1 = val1, key2 = val2, ... ) ]
+    [ WITH SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) ]
 ```
 
 #### SET LOCATION And SET FILE FORMAT
@@ -333,9 +334,10 @@ ALTER TABLE table_identifier [ partition_spec ] SET LOCATION 'new_location'
 
     **Syntax:** `PARTITION ( partition_col_name  = partition_col_val [ , ... ] )`
 
-* **SERDEPROPERTIES ( key1 = val1, key2 = val2, ... )**
+* **SERDEPROPERTIES ( key1 [=] val1, key2 [=] val2, ... )**
 
-    Specifies the SERDE properties to be set.
+    Specifies the SERDE properties to be set. The `=` between a key and its value is optional;
+    `SERDEPROPERTIES ('key1' 'val1')` is equivalent to `SERDEPROPERTIES ('key1'='val1')`.
 
 ### RECOVER PARTITIONS
 

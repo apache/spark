@@ -30,7 +30,7 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
     USING data_source
     [ ROW FORMAT row_format ]
     [ STORED AS file_format ]
-    [ TBLPROPERTIES ( key1=val1, key2=val2, ... ) ]
+    [ TBLPROPERTIES ( key1 [=] val1, key2 [=] val2, ... ) ]
     [ LOCATION path ]
 ```
 
@@ -57,6 +57,8 @@ CREATE TABLE [IF NOT EXISTS] table_identifier LIKE source_table_identifier
 * **TBLPROPERTIES**
 
     Table properties that have to be set are specified, such as `created.by.user`, `owner`, etc.
+    The `=` between a key and its value is optional; `TBLPROPERTIES ('key1' 'val1')`
+    is equivalent to `TBLPROPERTIES ('key1'='val1')`.
 
 * **LOCATION**
 
