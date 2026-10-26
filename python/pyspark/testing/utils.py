@@ -18,6 +18,7 @@
 import difflib
 import faulthandler
 import functools
+import math
 import os
 import signal
 import struct
@@ -1121,6 +1122,10 @@ def assertDataFrameEqual(
                     and all(compare_vals(val1[k], val2[k]) for k in val1)
                 )
             elif isinstance(val1, float) and isinstance(val2, float):
+                if math.isnan(val1) or math.isnan(val2):
+                    return math.isnan(val1) and math.isnan(val2)
+                if math.isinf(val1) or math.isinf(val2):
+                    return val1 == val2
                 if abs(val1 - val2) > (atol + rtol * abs(val2)):
                     return False
             elif isinstance(val1, Decimal) and isinstance(val2, Decimal):
