@@ -1342,7 +1342,7 @@ class MetastoreDataSourcesSuite extends QueryTest
       }
     }
     // The Hive SerDe can't parse these types.
-    Seq("TIME(6)", "TIMESTAMP_NTZ", "VARIANT").foreach { dataType =>
+    Seq("TIME(6)", "VARIANT").foreach { dataType =>
       checkKeepsTable("textfile", "id", s"CAST(NULL AS $dataType) AS c")
     }
     // The Parquet Hive SerDe doesn't support the void type.
