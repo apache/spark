@@ -1113,7 +1113,9 @@ def assertDataFrameEqual(
                     compare_vals(x, y) for x, y in zip(val1, val2)
                 )
             elif isinstance(val1, Row) and isinstance(val2, Row):
-                return all(compare_vals(x, y) for x, y in zip(val1, val2))
+                return len(val1) == len(val2) and all(
+                    compare_vals(x, y) for x, y in zip(val1, val2)
+                )
             elif isinstance(val1, dict) and isinstance(val2, dict):
                 return (
                     len(val1) == len(val2)
