@@ -122,9 +122,10 @@ object ExtractJoinWithBuckets {
   }
 
   /**
-   * Bucketed scan whose partitioning this side exposes. Broadcast joins
-   * expose the streamed child, so a bucketed build scan is not the count
-   * the parent sort-merge or shuffled-hash join coalesces against.
+   * The bucketed scan whose partitioning can reach the parent join through this side, by
+   * walking through filters, projects, and the streamed child of a broadcast join. The
+   * caller still checks that this scan's partitioning satisfies the parent join's keys via
+   * `satisfiesOutputPartitioning`.
    */
   @tailrec
   private def findBucketedScan(plan: SparkPlan): Option[FileSourceScanExec] = {
