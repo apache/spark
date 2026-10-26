@@ -6830,6 +6830,12 @@
     ],
     "sqlState" : "42000"
   },
+  "PARTITION_LOCATION_URI_NOT_SPECIFIED" : {
+    "message" : [
+      "Partition [<specString>] did not specify locationUri."
+    ],
+    "sqlState" : "42601"
+  },
   "PARTITION_RENAME_NOT_SUPPORTED" : {
     "message" : [
       "Partition renaming is not supported."
@@ -10501,11 +10507,6 @@
   "_LEGACY_ERROR_TEMP_1080" : {
     "message" : [
       "Table <identifier> did not specify database."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1082" : {
-    "message" : [
-      "Partition [<specString>] did not specify locationUri."
     ]
   },
   "_LEGACY_ERROR_TEMP_1089" : {
