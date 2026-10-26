@@ -431,7 +431,14 @@ private[spark] class TaskContextImpl(
             }
           }
           listenerExceptions += e
-          logError(log"Error in ${MDC(LISTENER, name)}", e)
+          // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
+          // must not end the loop, or the remaining listeners would not run and this thread would
+          // stay registered as the listener invocation thread. It is reported with `e` instead.
+          try {
+            logError(log"Error in ${MDC(LISTENER, name)}", e)
+          } catch {
+            case t: Throwable => e.addSuppressed(t)
+          }
       }
     }
     if (listenerExceptions.nonEmpty) {

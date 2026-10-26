@@ -929,6 +929,55 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(context.isCompleted())
   }
 
+  test("SPARK-60556: completion listeners still run if logging a listener's failure fails") {
+    val context = TaskContext.empty()
+    val invocations = new ConcurrentLinkedQueue[(String, Thread)]()
+    val first = new Exception("first")
+    context.addTaskCompletionListener(loggingListener(invocations, "B"))
+    // Added last, so it runs first.
+    context.addTaskCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw first
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskCompletionListener", logFailure)) {
+      val e = intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+      assert(e.getSuppressed.toSeq === Seq(first))
+      // The failure to log is reported with the failure it was logging.
+      assert(first.getSuppressed.length === 1)
+    }
+    assert(invocations.asScala.map(_._1).toSeq === Seq("B"))
+    // This thread no longer counts as the one invoking listeners: a listener added now runs
+    // right away.
+    context.addTaskCompletionListener(loggingListener(invocations, "C"))
+    assert(invocations.asScala.map(_._1).toSeq === Seq("B", "C"))
+  }
+
+  test("SPARK-60556: completion listeners run if logging a failure listener's failure fails") {
+    val context = TaskContext.empty()
+    val invocations = new ConcurrentLinkedQueue[(String, Thread)]()
+    context.addTaskCompletionListener(loggingListener(invocations, "A"))
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit =
+        throw new Exception("failure listener")
+    })
+    // Its failure runs the failure listener, which fails too.
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("pre")
+    })
+
+    val logFailure = new IllegalStateException("log failure")
+    withLogAppender(new FailingAppender("Error in TaskFailureListener", logFailure)) {
+      intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+    }
+    assert(invocations.asScala.map(_._1).toSeq === Seq("A"))
+    assert(context.isCompleted())
+  }
+
   /** A completion listener that records its id and the thread it runs on in `invocations`. */
   private def loggingListener(
       invocations: ConcurrentLinkedQueue[(String, Thread)],
