@@ -113,6 +113,10 @@ private[hive] class HiveClientImpl(
     override def hiveTableProps(): Map[String, String] = {
       rawTable.getParameters.asScala.toMap
     }
+
+    override def hivePartitionColumnNames(): Seq[String] = {
+      rawTable.getPartCols.asScala.map(_.getName).toSeq
+    }
   }
 
   import HiveClientImpl._
