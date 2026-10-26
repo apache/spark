@@ -192,6 +192,7 @@
 | org.apache.spark.sql.catalyst.expressions.JaroWinkler | jaro_winkler_similarity | SELECT jaro_winkler_similarity('MARTHA', 'MARHTA') | struct<jaro_winkler_similarity(MARTHA, MARHTA):double> |
 | org.apache.spark.sql.catalyst.expressions.JsonArrayExpressionBuilder | json_array | SELECT json_array(1, 'x', true) | struct<JSON_ARRAY(1, x, true):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonExistsExpressionBuilder | json_exists | SELECT json_exists('{"a":1}', '$.a') | struct<JSON_EXISTS({"a":1}, '$.a'):boolean> |
+| org.apache.spark.sql.catalyst.expressions.JsonObjectExpressionBuilder | json_object | SELECT json_object('id', 7, 'name', 'Ada') | struct<JSON_OBJECT(id VALUE 7, name VALUE Ada):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonObjectKeys | json_object_keys | SELECT json_object_keys('{}') | struct<json_object_keys({}):array<string>> |
 | org.apache.spark.sql.catalyst.expressions.JsonQueryExpressionBuilder | json_query | SELECT json_query('{"a":[1,2]}', '$.a') | struct<JSON_QUERY({"a":[1,2]}, '$.a'):string> |
 | org.apache.spark.sql.catalyst.expressions.JsonToStructs | from_json | SELECT from_json('{"a":1, "b":0.8}', 'a INT, b DOUBLE') | struct<from_json({"a":1, "b":0.8}):struct<a:int,b:double>> |
@@ -285,7 +286,7 @@
 | org.apache.spark.sql.catalyst.expressions.Overlay | overlay | SELECT overlay('Spark SQL' PLACING '_' FROM 6) | struct<overlay(Spark SQL, _, 6, -1):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseSql | parse_sql | SELECT parse_sql('SELECT 1;SELECT 2') | struct<parse_sql(SELECT 1;SELECT 2):string> |
 | org.apache.spark.sql.catalyst.expressions.ParseToDate | to_date | SELECT to_date('2009-07-30 04:17:52') | struct<to_date(2009-07-30 04:17:52):date> |
-| org.apache.spark.sql.catalyst.expressions.ParseToTimestamp | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
+| org.apache.spark.sql.catalyst.expressions.ParseToTimestampExpressionBuilder | to_timestamp | SELECT to_timestamp('2016-12-31 00:12:00') | struct<to_timestamp(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampLTZExpressionBuilder | to_timestamp_ltz | SELECT to_timestamp_ltz('2016-12-31 00:12:00') | struct<to_timestamp_ltz(2016-12-31 00:12:00):timestamp> |
 | org.apache.spark.sql.catalyst.expressions.ParseToTimestampNTZExpressionBuilder | to_timestamp_ntz | SELECT to_timestamp_ntz('2016-12-31 00:12:00') | struct<to_timestamp_ntz(2016-12-31 00:12:00):timestamp_ntz> |
 | org.apache.spark.sql.catalyst.expressions.ParseUrl | parse_url | SELECT parse_url('http://spark.apache.org/path?query=1', 'HOST') | struct<parse_url(http://spark.apache.org/path?query=1, HOST):string> |

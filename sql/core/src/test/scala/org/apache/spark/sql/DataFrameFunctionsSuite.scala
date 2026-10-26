@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -359,6 +359,37 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         checkAnswer(
           nestedDf.select(nullif(col("c.provider"), lower(lit("ERROR_MULTIPLE_PROVIDERS")))),
           Seq(Row(null), Row("openai")))
+      }
+    }
+  }
+
+  test("nullif keeps the coerced type of its first argument") {
+    Seq(true, false).foreach { alwaysInlineCommonExpr =>
+      Seq(true, false).foreach { ansiEnabled =>
+        withSQLConf(
+          SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> alwaysInlineCommonExpr.toString,
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.CONCAT_BINARY_AS_STRING.key -> "true") {
+          // The analyzers apply different comparison coercions to binary concat. Exercise result
+          // typing under each analyzer independently. Pure single-pass does not support the RDD
+          // deserialization check performed by the suite's checkAnswer helper.
+          Seq(false, true).foreach { singlePassResolverEnabled =>
+            withSQLConf(
+              SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key ->
+                singlePassResolverEnabled.toString) {
+              QueryTest.checkAnswer(
+                sql("SELECT nullif(concat(X'61', X'62'), 'z')"),
+                Row("ab") :: Nil,
+                checkToRDD = false)
+            }
+          }
+
+          val result = sql("SELECT nullif(1, 2.1D)")
+          checkAnswer(result, Row(1))
+          assert(result.schema.head.dataType == IntegerType)
+        }
       }
     }
   }
@@ -2503,6 +2534,17 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
       ),
       queryContext = Array(ExpectedContext("", "", 0, 28, "array_position(array(1), '1')"))
     )
+  }
+
+  test("SPARK-59992: coalesce over element_at with a null index is not simplified away") {
+    // Under ANSI, element_at was marked non-nullable for a non-null array regardless of the
+    // index, so the optimizer dropped the coalesce and the null index leaked through.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkAnswer(
+        sql("SELECT coalesce(element_at(array('a', 'b'), CAST(nullif(id, 0) AS INT)), 'z'), " +
+          "coalesce(array('a', 'b')[CAST(nullif(id, 0) AS INT) - 1], 'z') FROM range(2)"),
+        Seq(Row("z", "z"), Row("a", "a")))
+    }
   }
 
   test("element_at function") {
@@ -6169,6 +6211,40 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     )
   }
 
+  test("SPARK-60508: nested higher-order functions capturing lambda variables") {
+    // A file source, because a `LocalRelation` is evaluated before the optimizer simplifies the
+    // expressions below.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS " +
+        "SELECT array(1, 5) AS xs1, array(3, 2) AS xs2, array(1, 2, 3, 4, 5) AS ys")
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "IF(x1 > x2, filter(ys, y -> y > x1), filter(ys, y -> y > x2))) FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "CASE WHEN x1 > x2 THEN filter(ys, y -> y > x1) ELSE filter(ys, y -> y > x2) END) " +
+          "FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "exists(ys, y -> y > x1) OR exists(ys, y -> y > x2)) FROM t"),
+        Row(Seq(true, true)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "filter(ys, y -> y > x1) <=> filter(ys, y -> y > x2)) FROM t"),
+        Row(Seq(false, false)))
+
+      // The functions capturing the same variable are still simplified into one.
+      val df = sql("SELECT transform(xs1, x -> " +
+        "exists(ys, y -> y > x) AND exists(ys, y -> y > x)) FROM t")
+      checkAnswer(df, Row(Seq(true, false)))
+      assert(df.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case e: ArrayExists => e
+      }).size == 1)
+    }
+  }
+
   test("from_json - invalid schema string") {
     checkError(
       exception = intercept[AnalysisException] {
@@ -6521,6 +6597,14 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
     assert(r2.length == 2)
     assert(r2.exists(_.isNaN))
     assert(r2.exists(isPositiveZero))
+  }
+
+  test("SPARK-59602: array_distinct normalizes nested floating-point values") {
+    val result = Seq(Seq(Seq(-0.0d), Seq(0.0d))).toDF("a")
+      .select(array_distinct($"a")).head().getSeq[Seq[Double]](0)
+
+    assert(result.length == 1)
+    assert(isPositiveZero(result.head.head))
   }
 
   test("SPARK-54918: array_distinct normalizes -0.0 to +0.0") {

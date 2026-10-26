@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -106,7 +105,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       if (ref.outputSet == cteDefPlan.outputSet) {
         cteDefPlan
       } else {
-        val ctePlan = deduplicatePlan(cteDefPlan)
+        val ctePlan = DeduplicateRelations.deduplicateRight(cteDefPlan, cteDefPlan)
         val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
           Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
         }
@@ -122,12 +121,5 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
         }
 
     case _ => plan
-  }
-
-  private def deduplicatePlan(plan: LogicalPlan): LogicalPlan = {
-    // The CTE definition plan is duplicated when inlined into each reference. Re-assign fresh
-    // exprIds to the duplicated copy (via DeduplicateRelations) to avoid attribute conflicts.
-    DeduplicateRelations(
-      Join(plan, plan, Inner, None, JoinHint(None, None))).children(1)
   }
 }

@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
 import org.apache.spark.sql.hive.{HiveUtils, StaticInitFlags, StaticInitInputFormat, StaticInitOutputFormat}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{ArrayType, MapType, StructType, TimestampType}
 
 class HiveClientImplSuite extends SparkFunSuite {
 
@@ -102,5 +102,19 @@ class HiveClientImplSuite extends SparkFunSuite {
       parameters = Map(
         "fieldType" -> "\"STRUCT<A:UNIONTYPE<INT,STRING>>\"",
         "fieldName" -> "`c`"))
+  }
+
+  test("SPARK-60424: Hive timestamp type is TIMESTAMP_LTZ regardless of " +
+      "spark.sql.timestampType") {
+    val column = new FieldSchema(
+      "c", "struct<a:timestamp,b:array<timestamp>,c:map<timestamp,timestamp>>", null)
+    val conf = new SQLConf()
+    conf.setConf(SQLConf.TIMESTAMP_TYPE, SQLConf.TimestampTypes.TIMESTAMP_NTZ)
+    SQLConf.withExistingConf(conf) {
+      assert(HiveClientImpl.fromHiveColumn(column).dataType === new StructType()
+        .add("a", TimestampType)
+        .add("b", ArrayType(TimestampType))
+        .add("c", MapType(TimestampType, TimestampType)))
+    }
   }
 }

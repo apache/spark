@@ -33,12 +33,12 @@ import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.execution.{BinaryExecNode, DummySparkPlan, LeafExecNode, SafeForKWayMerge, SortExec, UnaryExecNode}
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, GroupPartitionsExec}
-import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{ShuffledHashJoinExec, SortMergeAsOfJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.execution.python.FlatMapCoGroupsInPandasExec
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 
 class EnsureRequirementsSuite extends SharedSparkSession {
   private val exprA = AttributeReference("a", IntegerType)()
@@ -1467,22 +1467,28 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         KeyedPartitioning(Seq(id, t1), keys))))
     val unpartitioned = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
 
-    withSQLConf(
-        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
-      val smj = SortMergeJoinExec(Seq(id, t1), Seq(id, t1), Inner, None, keyed, unpartitioned)
-      val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
+    // The coarse member covers only `id`. With the co-partition key requirement on, it cannot
+    // serve at all. With it off, it can, and only the ranking keeps it from being picked. The
+    // placement is the same either way.
+    Seq("true", "false").foreach { requireAll =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll) {
+        val smj = SortMergeJoinExec(Seq(id, t1), Seq(id, t1), Inner, None, keyed, unpartitioned)
+        val planned = EnsureRequirements.apply(smj).asInstanceOf[SortMergeJoinExec]
 
-      // The keyed side needs no grouping node at all: the member covering both join keys is already
-      // the child's layout, so its spec reports no projection. Picking the coarse member instead
-      // would project onto `id` alone and insert a node carrying `Some(Seq(0))`.
-      assert(groupPartitionsNodes(planned.left).isEmpty,
-        "the member covering both join keys is already the child's layout")
-      // And the shuffled side lands on that same member. Reading the collection instead would take
-      // whichever member came first and could put the two sides on different key sets.
-      val shuffles = planned.right.collect { case s: ShuffleExchangeExec => s }
-      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(3),
-        "the re-shuffled side must land on the same member, not on whichever came first")
+        // The keyed side needs no grouping node at all: the member covering both join keys is
+        // already the child's layout, so its spec reports no projection. Picking the coarse
+        // member instead would project onto `id` alone and insert a node carrying `Some(Seq(0))`.
+        assert(groupPartitionsNodes(planned.left).isEmpty,
+          s"requireAll = $requireAll: the member covering both join keys is already the layout")
+        // And the shuffled side lands on that same member. Reading the collection instead would
+        // take whichever member came first and could put the two sides on different key sets.
+        val shuffles = planned.right.collect { case s: ShuffleExchangeExec => s }
+        assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(3),
+          s"requireAll = $requireAll: the re-shuffled side must land on the same member")
+      }
     }
   }
 
@@ -1540,6 +1546,100 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-59688: a cogroup does not pair two key spaces as they stand") {
+    val idL = AttributeReference("idL", LongType)()
+    val idR = AttributeReference("idR", LongType)()
+    // `flip_low_bit` permutes its key space, so the two sides report the same key list, [0, 1],
+    // while a key stands for different rows on each. A cogroup has no reduce branch:
+    // `checkKeyGroupCompatible` declines for anything that is not a `ShuffledJoin`, so
+    // `pickCoPartitionTarget` pairs the children on `isCompatibleWith` alone. Reading that pair as
+    // it stands would hand the user's function rows that do not belong together, and unlike a join
+    // there is no equi-predicate to drop them again.
+    val keys = Seq(InternalRow(0L), InternalRow(1L))
+    val left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(idL), keys))
+    val right = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+      Seq(TransformExpression(FlipLowBitFunction, Seq(idR))), keys))
+    assert(left.outputPartitioning.satisfies(ClusteredDistribution(Seq(idL))) &&
+      right.outputPartitioning.satisfies(ClusteredDistribution(Seq(idR))),
+      "test setup: each side answers its own clustering, so only the pairing is in question")
+
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(idL), Seq(idR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      val result = EnsureRequirements.apply(cogroup)
+      val shuffles = result.collect { case s: ShuffleExchangeExec => s }
+      assert(shuffles.size == 1,
+        s"one side must be laid out on the other rather than read as it stands:\n$result")
+      // Which side, and onto what: the transform side is the one laid out, on the identity side's
+      // keys, so the answer is not merely "something was shuffled".
+      assert(shuffles.head.outputPartitioning match {
+        case k: KeyedPartitioning => k.expressions == Seq(idR) && k.numPartitions == keys.size
+        case _ => false
+      }, s"the transform side must be laid out on the identity side's keys, got " +
+        s"${shuffles.head.outputPartitioning}\n$result")
+      assert(EnsureRequirements.apply(result) == result, "and the rule must be idempotent")
+
+      // Positive control: this path still pairs a side with one that holds the same key space, so
+      // the refusal above is the two key spaces' doing rather than the pairing always failing.
+      val sameSpace = cogroup.copy(left = DummySparkPlan(outputPartitioning = KeyedPartitioning(
+        Seq(TransformExpression(FlipLowBitFunction, Seq(idL))), keys)))
+      assert(EnsureRequirements.apply(sameSpace).collect {
+        case s: ShuffleExchangeExec => s
+      }.isEmpty, "two sides holding one key space must still be read as they stand")
+    }
+  }
+
+  test("SPARK-59971: a cogroup runs on a keyed side only if it covers every cogroup key") {
+    val idL = AttributeReference("idL", IntegerType)()
+    val tL = AttributeReference("tL", IntegerType)()
+    val idR = AttributeReference("idR", IntegerType)()
+    val tR = AttributeReference("tR", IntegerType)()
+    // The cogroup is on `(id, t)`, and the left side is partitioned by `id` alone.
+    val left = new DummySparkPlanWithBatchScanChild(outputPartitioning =
+      KeyedPartitioning(Seq(idL), Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
+    val right = DummySparkPlan(outputPartitioning = UnknownPartitioning(0))
+    val pythonUdf = PythonUDF("pyUDF", null,
+      StructType(Seq(StructField("value", IntegerType))),
+      Seq.empty,
+      PythonEvalType.SQL_COGROUPED_MAP_PANDAS_UDF,
+      true)
+    val cogroup = FlatMapCoGroupsInPandasExec(
+      Seq(idL, tL), Seq(idR, tR), pythonUdf,
+      AttributeReference("value", IntegerType)() :: Nil, left, right)
+
+    Seq(true, false).foreach { requireAll =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll.toString) {
+        val shuffles = EnsureRequirements.apply(cogroup).collect {
+          case s: ShuffleExchangeExec => s.outputPartitioning match {
+            case h: HashPartitioning => ("hash", h.expressions)
+            case k: KeyedPartitioning => ("keyed", k.expressions)
+            case p => (p.toString, Nil)
+          }
+        }
+        val expected = if (requireAll) {
+          // `id` alone does not cover `t`, so both sides are shuffled on all the cogroup keys.
+          Seq(("hash", Seq(idL, tL)), ("hash", Seq(idR, tR)))
+        } else {
+          // Without the requirement, only the right side is shuffled, onto the left side's keys.
+          Seq(("keyed", Seq(idR)))
+        }
+        assert(shuffles === expected, s"requireAll = $requireAll")
+      }
+    }
+  }
+
   test("SPARK-59256: a collection is ranked on its best member, not on whichever came first") {
     val id = AttributeReference("id", IntegerType)()
     val t1 = AttributeReference("t1", IntegerType)()
@@ -1557,24 +1657,30 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val hashed = DummySparkPlan(outputPartitioning = HashPartitioning(Seq(id, t1), 3))
     val distribution = ClusteredDistribution(Seq(id, t1))
 
-    withSQLConf(
-        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
-        SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
-      // Pin the premise, ordered: the coarse member really is the one a head read would take.
-      val memberPartitions = keyed.outputPartitioning.createShuffleSpec(distribution)
-        .flatten.map(_.numPartitions)
-      assert(memberPartitions === Seq(2, 5))
+    // The coarse member covers only `id`. With the co-partition key requirement on, it cannot
+    // serve at all. With it off, it can, and only the ranking keeps it from deciding. The
+    // placement is the same either way.
+    Seq("true", "false").foreach { requireAll =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> requireAll) {
+        // Pin the premise, ordered: the coarse member really is the one a head read would take.
+        val memberPartitions = keyed.outputPartitioning.createShuffleSpec(distribution)
+          .flatten.map(_.numPartitions)
+        assert(memberPartitions === Seq(2, 5))
 
-      val parent = DummySparkPlan(
-        children = Seq(keyed, hashed),
-        requiredChildDistribution = Seq(distribution, distribution),
-        requiredChildOrdering = Seq(Nil, Nil))
-      val planned = EnsureRequirements.apply(parent)
-      assert(planned.children.head.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-        "the keyed side wins the ranking, so it is not re-shuffled")
-      val shuffles = planned.children(1).collect { case s: ShuffleExchangeExec => s }
-      assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(5),
-        "the hashed side lands on the keyed side's finest member")
+        val parent = DummySparkPlan(
+          children = Seq(keyed, hashed),
+          requiredChildDistribution = Seq(distribution, distribution),
+          requiredChildOrdering = Seq(Nil, Nil))
+        val planned = EnsureRequirements.apply(parent)
+        assert(planned.children.head.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+          s"requireAll = $requireAll: the keyed side wins the ranking, so it is not re-shuffled")
+        val shuffles = planned.children(1).collect { case s: ShuffleExchangeExec => s }
+        assert(shuffles.map(_.outputPartitioning.numPartitions) === Seq(5),
+          s"requireAll = $requireAll: the hashed side lands on the keyed side's finest member")
+      }
     }
   }
 
@@ -1774,19 +1880,27 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     val right = new DummySparkPlanWithBatchScanChild(
       outputPartitioning = KeyedPartitioning(Seq(days(aR), years(bR)), rightKeys))
 
-    // No `withSQLConf` on purpose. `pushPartValues` is on by default, which is all the push branch
-    // needs, so this is what a user gets out of the box.
-    val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
-    val planned = EnsureRequirements.apply(smj)
+    // `pushPartValues` stays at its default (on), which is all the push branch needs.
+    def assertPairingPushesKeys(expected: Int, clue: String): Unit = {
+      val smj = SortMergeJoinExec(Seq(xL, yL), Seq(aR, bR), Inner, None, left, right)
+      val planned = EnsureRequirements.apply(smj)
 
-    // Without the pairing, the left's first member is taken and its `days(yL)` is matched against
-    // `days(aR)`, which names the other join key, so the join declines and both sides are shuffled
-    // onto the default partitioning.
-    assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
-      "the second member pairs with the other side, so neither side is shuffled")
-    assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
-      Seq(Some(3), Some(3)),
-      "both sides are pushed the union of the two key sets")
+      // Without the pairing, the left's first member is taken and its `days(yL)` is matched
+      // against `days(aR)`, which names the other join key, so the join declines and both sides
+      // are shuffled onto the default partitioning.
+      assert(planned.collect { case s: ShuffleExchangeExec => s }.isEmpty,
+        "the second member pairs with the other side, so neither side is shuffled")
+      assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) ===
+        Seq(Some(expected), Some(expected)), clue)
+    }
+
+    // The unset arm is what pins the shipped default: an explicit true would keep passing if
+    // `createWithDefault(true)` were reverted. It pushes the intersection of the two key sets;
+    // the pinned-off rollback arm pushes their union.
+    assertPairingPushesKeys(1, "the unset default pushes the intersection of the key sets")
+    withSQLConf(SQLConf.V2_BUCKETING_PARTITION_FILTER_ENABLED.key -> "false") {
+      assertPairingPushesKeys(3, "filtering off pushes the union of the key sets")
+    }
   }
 
   test("SPARK-59256: no agreeing pair leaves the join alone however many members each side has") {
@@ -1972,6 +2086,34 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       assert(groupPartitionsNodes(newChild).isEmpty,
         "a single partition is trivially sorted, so no node is needed")
       assert(newChild.outputPartitioning.numPartitions == 1)
+    }
+  }
+
+  test("SPARK-59671: an ordering spread carries its own reason and serves only the ordering") {
+    val exprKey = AttributeReference("k", IntegerType)()
+    // The keys arrive out of order for the ascending ordering the operator reads, and key 1 holds
+    // two splits. The spread that settles the order keeps the splits, so the layout it reports
+    // stays ungrouped, on purpose and for the ordering only.
+    val child = new DummySparkPlanWithBatchScanChild(
+      outputPartitioning = KeyedPartitioning(Seq(exprKey),
+        Seq(InternalRow(2), InternalRow(1), InternalRow(1))))
+    val ordering = OrderedDistribution(Seq(SortOrder(exprKey, Ascending)))
+
+    withSQLConf(SQLConf.V2_BUCKETING_SORTING_ENABLED.key -> "true") {
+      val newChild = EnsureRequirements.apply(parentRequiring(child, ordering)).children.head
+      val groupings = groupPartitionsNodes(newChild)
+      assert(groupings.size == 1,
+        s"the unsorted keys are spread into order, got ${newChild.getClass.getSimpleName} " +
+          s"with ${groupings.size} grouping nodes")
+      assert(groupings.head.distributePartitions)
+      assert(groupings.head.ungroupingOrigin == Some(SPLIT_FOR_ORDERING))
+      val layout = newChild.outputPartitioning.asInstanceOf[KeyedPartitioning]
+      assert(!layout.isGrouped)
+      assert(layout.partitionKeys.map(_.row.getInt(0)) == Seq(1, 1, 2))
+      // The spread serves the ordering it was built for...
+      assert(layout.satisfies(ordering))
+      // ...and its stamp is no pairing role: the same layout must not serve a clustering.
+      assert(!layout.satisfies(ClusteredDistribution(Seq(exprKey))))
     }
   }
 
@@ -2536,6 +2678,78 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         ((false, true)))
   }
 
+  test("SPARK-59671: the alignment stamps one repeating side, only where the join type may") {
+    // The replicate side is the one with fewer pre-alignment partitions (the dummy plans carry no
+    // `logicalLink`, which forces the fallback). A join type may duplicate one side, both, or
+    // neither, and the stamps follow: a side that may not repeat groups instead, and a join type
+    // that may repeat neither side builds no spread pair at all.
+    def stampsOf(smj: SparkPlan): Seq[(Option[UngroupingOrigin], Boolean)] =
+      withSQLConf(
+          SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+        EnsureRequirements.apply(smj).children.map { child =>
+          val gpe = child.collectFirst { case g: GroupPartitionsExec => g }.get
+          (gpe.ungroupingOrigin,
+            gpe.outputPartitioning.asInstanceOf[KeyedPartitioning].isGrouped)
+        }
+      }
+    def smj(joinType: JoinType, leftKeys: Seq[InternalRow],
+        rightKeys: Seq[InternalRow]): SortMergeJoinExec =
+      SortMergeJoinExec(Seq(exprA), Seq(exprB), joinType, None,
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA), leftKeys)),
+        DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB), rightKeys)))
+    val threeSplits = Seq(InternalRow(1), InternalRow(1), InternalRow(1))
+    val twoKeys = Seq(InternalRow(1), InternalRow(2))
+
+    // The right side holds fewer partitions and is picked to repeat. An inner join may duplicate
+    // either side and a left outer join the right one, so both get one spread and one repeating
+    // side.
+    assert(stampsOf(smj(Inner, threeSplits, twoKeys)) ===
+      Seq((Some(SPLIT_FOR_JOIN), false), (Some(REPLICATED_FOR_JOIN), false)))
+    assert(stampsOf(smj(LeftOuter, threeSplits, twoKeys)) ===
+      Seq((Some(SPLIT_FOR_JOIN), false), (Some(REPLICATED_FOR_JOIN), false)))
+
+    // The mirrored left outer join picks the left side, which it may not duplicate: the spread
+    // is skipped and both sides group.
+    assert(stampsOf(smj(LeftOuter, Seq(InternalRow(1)), threeSplits)) ===
+      Seq((None, true), (None, true)))
+
+    // A full outer join may duplicate neither side: both group, whichever is picked.
+    assert(stampsOf(smj(FullOuter, threeSplits, twoKeys)) ===
+      Seq((None, true), (None, true)))
+  }
+
+  test("SPARK-59671: an as-of join gets no keyed alignment, so its sides shuffle") {
+    // `EnsureRequirements.checkKeyGroupCompatible` plans a keyed alignment for the sort-merge and
+    // shuffled-hash joins only, and an as-of join is a `ShuffledJoin` outside that list: its
+    // matches are read in the order within a partition, which neither a spread nor a repeating
+    // side preserves. The same shapes an inner join stamps and aligns must fall back to a
+    // shuffle here.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+      val asOf = SortMergeAsOfJoinExec(
+        leftKeys = Seq(exprA),
+        rightKeys = Seq(exprB),
+        leftSortExprs = Seq(exprA),
+        rightSortExprs = Seq(exprB),
+        asOfCondition = GreaterThan(exprA, exprB),
+        direction = Backward,
+        joinType = Inner,
+        condition = None,
+        left = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprA),
+          Seq(InternalRow(1), InternalRow(1), InternalRow(1)))),
+        right = DummySparkPlan(outputPartitioning = KeyedPartitioning(Seq(exprB),
+          Seq(InternalRow(1), InternalRow(2)))))
+      EnsureRequirements.apply(asOf).children.foreach { child =>
+        assert(groupPartitionsNodes(child).isEmpty,
+          s"an as-of join builds no stamped side:\n$child")
+        assert(child.collectFirst { case s: ShuffleExchangeExec => s }.isDefined,
+          s"the side shuffles onto a hash layout:\n$child")
+      }
+    }
+  }
+
   test("SPARK-58996: a single-child operator over a partially clustered layout still gets " +
       "grouped") {
     // A partially clustered `GroupPartitionsExec` reports a non-grouped partitioning by design,
@@ -2588,7 +2802,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // behind. `KeyedPartitioning.apply` keeps the order it is given.
       val marked = KeyedPartitioning(Seq(exprA),
         Seq(InternalRow(3), InternalRow(4), InternalRow(1), InternalRow(2)))
-        .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
       assert(marked.isGrouped, "test setup: the keys are distinct, so the layout is grouped")
 
       val smj = SortMergeJoinExec(Seq(exprA), Seq(exprB), Inner, None,
@@ -2616,17 +2830,15 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
   test("SPARK-59272: every plan the rule produces for a generated pair of shapes validates") {
     // A generated sweep asserting the property rather than a count: every plan this rule produces
-    // for a pair of shapes has to satisfy both children's required distribution. The shapes that
-    // make it fail are the marked ones, where a `GroupPartitionsExec` gives up the keyed claim
-    // while regrouping, which is an answer that arrives after the child's fate was decided, at
-    // either of the two sites that insert such a node.
+    // for a pair of shapes has to satisfy both children's required distribution. Plain regrouping
+    // keeps a marked layout keyed, with lost routing if partitions move. Rewritten keys or a
+    // non-identity expected-key alignment drop the keyed claim, so either insertion site must
+    // account for the grouping node's output before deciding the child's fate.
     //
     // `v2BucketingPartiallyClusteredDistributionEnabled` is deliberately not one of the cells.
     // That family leaves both children keyed but ungrouped on purpose, so neither satisfies its
     // distribution on its own and the oracle below rejects a plan this rule is right to produce.
-    // A marked layout cannot occur with it either: `KeyedShuffleSpec.createPartitioning` is the
-    // only producer of the marker, and it is only ever reached through `canCreatePartitioning`,
-    // which requires the config to be off.
+    // The ungrouped input shapes below still exercise plain regrouping with this config off.
     def shapes(a: Attribute): Seq[(String, KeyedPartitioning)] = {
       val keySets = Seq(
         "12" -> Seq(InternalRow(1), InternalRow(2)),
@@ -2635,7 +2847,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         // Not ascending, which is what a one-side shuffle onto a union's key order leaves behind.
         // `KeyedPartitioning.apply` keeps the order it is given, and for a marked layout that
         // order is part of the claim.
-        "312" -> Seq(InternalRow(3), InternalRow(1), InternalRow(2)))
+        "312" -> Seq(InternalRow(3), InternalRow(1), InternalRow(2)),
+        // Duplicate keys separated by another key force regrouping on either side of the join.
+        "121-interleaved" -> Seq(InternalRow(1), InternalRow(2), InternalRow(1)))
       val exprSets = Seq(
         "id" -> Seq[Expression](a),
         "bucket4" -> Seq[Expression](bucket(4, a)),
@@ -2643,13 +2857,14 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       for {
         (keyName, keys) <- keySets
         (exprName, exprs) <- exprSets
-        // A marked layout pins rows outside the declared keys to `hash(key) % numPartitions`, so
-        // regrouping one moves them and the node stops claiming the layout.
-        marked <- Seq(false, true)
+        // Hash routing locates undeclared keys; lost routing retains only full-key clustering.
+        (originName, origin) <- Seq(
+          "unmarked" -> None,
+          "hash-routing" -> Some(HASH_ROUTING),
+          "routing-lost" -> Some(ROUTING_LOST))
       } yield {
-        val kp = KeyedPartitioning(exprs, keys)
-        val p = if (marked) kp.withLayout(_.copy(mayContainUnknownPartitionKeys = true)) else kp
-        (s"$exprName/$keyName${if (marked) "/marked" else ""}", p)
+        val kp = KeyedPartitioning(exprs, keys).withLayout(_.copy(unknownKeysOrigin = origin))
+        (s"$exprName/$keyName/$originName", kp)
       }
     }
 
@@ -2657,8 +2872,8 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // `Inner` and `LeftOuter`, so they would repeat those cells exactly.
     val joinTypes = Seq(Inner, LeftOuter, RightOuter, FullOuter)
     val configCells = for {
-      // Without this one no marked layout is reachable and no keyed spec can serve as a shuffle
-      // template, so the second grouping site is never entered.
+      // Without keyed shuffle no keyed spec can serve as a shuffle template, so the second
+      // grouping site is never entered. Marked inputs can still come from a union.
       keyedShuffle <- Seq(false, true)
       pushPartValues <- Seq(false, true)
       subsetKeys <- Seq(false, true)
@@ -2708,11 +2923,11 @@ class EnsureRequirementsSuite extends SharedSparkSession {
     // The two join types put the marker on opposite sides on purpose, because that is the side
     // `rank` reads for the one-sided arms.
     val marked = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plain = KeyedPartitioning(Seq(exprB), Seq(InternalRow(1), InternalRow(2)))
     val markedRight = KeyedPartitioning(
       Seq(exprB), Seq(InternalRow(1), InternalRow(2), InternalRow(3)))
-      .withLayout(_.copy(mayContainUnknownPartitionKeys = true))
+      .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
     val plainLeft = KeyedPartitioning(Seq(exprA), Seq(InternalRow(1), InternalRow(2)))
 
     Seq(
@@ -2763,6 +2978,22 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       assert(declared.forall(_.isDefined), s"both sides stay keyed:\n${planned.treeString}")
       assert(declared.head == declared(1),
         s"both sides must declare one key sequence:\n${planned.treeString}")
+    }
+  }
+
+  test("SPARK-60044: pushing join key positions into a merging node keeps its ordering") {
+    val keys = Seq(InternalRow(1, 1), InternalRow(1, 2))
+    // Safe for the merge, so the rebuilt node can merge, which `Seq(0)` makes it do.
+    val leaf = DummyLeafSafeForKWayMerge(
+      outputPartitioning = KeyedPartitioning(Seq(exprA, exprB), keys))
+    val frozen = Seq(SortOrder(exprA, Ascending), SortOrder(exprB, Ascending))
+    val merging = GroupPartitionsExec(leaf, sortedMergeOrdering = Some(frozen))
+    assert(leaf.outputOrdering.isEmpty, "test setup: the child reports no ordering now")
+    EnsureRequirements.withJoinKeyPositions(merging, Seq(0)) match {
+      case g: GroupPartitionsExec =>
+        assert(g.sortedMergeOrdering.contains(frozen))
+        assert(g.outputOrdering == frozen, "the rebuilt node merges by the frozen ordering")
+      case other => fail(s"expected a rebuilt GroupPartitionsExec, got $other")
     }
   }
 

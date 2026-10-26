@@ -197,7 +197,9 @@ class TungstenAggregationIterator(
   // `minCompaction` rows into one key:
   //   - periodically, every `minRows` processed rows;
   //   - when the map is about to spill, in which case the spill is skipped entirely and the row
-  //     that could not be inserted becomes the first pass-through row.
+  //     that could not be inserted becomes the first pass-through row. Pass-through cannot be
+  //     undone within the task, so like the periodic check this waits until the current epoch has
+  //     processed `minRows` rows; a map that fills sooner spills as usual.
   // A spill starts a new in-memory map epoch: the row counters restart so that epoch is judged on
   // its own rows, which lets an input whose cardinality only turns unfavorable later still be
   // passed through. Pass-through may therefore coexist with earlier spills. The output order
@@ -223,6 +225,9 @@ class TungstenAggregationIterator(
       // compared after being incremented past 0, so it never matches and only the spill check
       // below remains.
       var nextCheckRow = minRows
+      // The spill check waits for `minRows` rows of the current epoch, and for at least one row
+      // when `minRows = 0`.
+      val spillCheckMinRows = math.max(minRows, 1L)
       // The partial aggregation is ineffective when it does not collapse `minCompaction` rows into
       // one key. There is no fast map on this path, so the map's keys are all the operator holds.
       def ineffective(): Boolean =
@@ -238,7 +243,7 @@ class TungstenAggregationIterator(
           // The map is full and would normally spill. Adaptive partial aggregation may instead
           // bypass: keep the in-memory map as-is, pass this row and all remaining rows through,
           // and skip the spill entirely.
-          if (adaptivePartialAggEnabled && processedRows > 0 && ineffective()) {
+          if (adaptivePartialAggEnabled && processedRows >= spillCheckMinRows && ineffective()) {
             passThrough = true
             // `newInput` could not be inserted; stash a copy as the first pass-through row so it
             // is not lost when we drain the rest of `inputIter`.

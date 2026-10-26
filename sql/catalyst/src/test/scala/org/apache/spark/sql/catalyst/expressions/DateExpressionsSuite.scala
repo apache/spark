@@ -28,7 +28,7 @@ import scala.language.postfixOps
 import scala.reflect.ClassTag
 import scala.util.Random
 
-import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUpgradeException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkArithmeticException, SparkDateTimeException, SparkException, SparkFunSuite, SparkIllegalArgumentException, SparkRuntimeException, SparkUnsupportedOperationException, SparkUpgradeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -37,6 +37,7 @@ import org.apache.spark.sql.catalyst.util.{DateTimeUtils, IntervalUtils, Timesta
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.TimestampTypes
 import org.apache.spark.sql.types._
@@ -1282,6 +1283,84 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ToUnixTimestamp(Literal.create(null, TimestampLTZNanosType(9)), fmt, UTC_OPT), null)
   }
 
+  test("SPARK-57836: GetTimestamp with a nanosecond-precision result type") {
+    import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils._
+    val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    val ldt = timestampNTZ(2020, 1, 1, 13, 24, 35, 123456789)
+    def ntz(e: Expression, p: Int, failOnError: Boolean): GetTimestamp =
+      GetTimestamp(e, Literal(fmt), TimestampNTZNanosType(p), timeZoneId = PST_OPT,
+        failOnError = failOnError)
+    def ltz(e: Expression, p: Int, failOnError: Boolean): GetTimestamp =
+      GetTimestamp(e, Literal(fmt), TimestampLTZNanosType(p), timeZoneId = PST_OPT,
+        failOnError = failOnError)
+
+    Seq(true, false).foreach { failOnError =>
+      foreachNanosPrecision { p =>
+        val floored = ldt.withNano(nanoOfSecTruncator(p)(ldt.getNano))
+        // Digits beyond `p` are floored. NTZ ignores the zone; LTZ parses in it.
+        Seq(Literal(fmt), NonFoldableLiteral(fmt)).foreach { f =>
+          checkEvaluation(
+            ntz(Literal("2020-01-01 13:24:35.123456789"), p, failOnError).copy(right = f),
+            localDateTimeToNanosVal(floored))
+          checkEvaluation(
+            ltz(Literal("2020-01-01 13:24:35.123456789"), p, failOnError).copy(right = f),
+            localDateTimeToNanosVal(floored, PST))
+        }
+        // Fewer fractional digits than `p`, and a pre-epoch value.
+        checkEvaluation(
+          ntz(Literal("2020-01-01 13:24:35.1"), p, failOnError),
+          localDateTimeToNanosVal(timestampNTZ(2020, 1, 1, 13, 24, 35, 100000000)))
+        checkEvaluation(
+          ntz(Literal("1969-12-31 23:59:59.999999999"), p, failOnError),
+          localDateTimeToNanosVal(
+            timestampNTZ(1969, 12, 31, 23, 59, 59, nanoOfSecTruncator(p)(999999999))))
+
+        // Only a string is accepted; ParseToTimestamp casts other inputs.
+        Seq(
+          Literal.create(0, DateType),
+          Literal.create(0L, TimestampType),
+          Literal.create(0L, TimestampNTZType),
+          Literal.create(nanosVal(5L, 999), TimestampLTZNanosType(9))).foreach { e =>
+          assert(ntz(e, p, failOnError).checkInputDataTypes().isFailure)
+          assert(ltz(e, p, failOnError).checkInputDataTypes().isFailure)
+        }
+
+        // NULL input or format.
+        checkEvaluation(ntz(Literal.create(null, StringType), p, failOnError), null)
+        checkEvaluation(
+          ltz(Literal("2020-01-01 13:24:35"), p, failOnError)
+            .copy(right = Literal.create(null, StringType)),
+          null)
+
+        // Invalid input fails in ANSI mode like the microsecond path, and is NULL otherwise.
+        Seq("Unparseable", "2020-01-01 13:24:35.1234567891").foreach { s =>
+          Seq(ntz(Literal(s), p, failOnError), ltz(Literal(s), p, failOnError)).foreach { e =>
+            if (failOnError) {
+              checkExceptionInExpression[SparkDateTimeException](e, "could not be parsed")
+            } else {
+              checkEvaluation(e, null)
+            }
+          }
+        }
+      }
+    }
+
+    // The LEGACY parser can't parse nanoseconds: LTZ raises a clean error even when
+    // failOnError is false. NTZ always uses the non-legacy parser.
+    withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> "LEGACY") {
+      Seq(true, false).foreach { failOnError =>
+        Seq(Literal(fmt), NonFoldableLiteral(fmt)).foreach { f =>
+          checkExceptionInExpression[SparkUnsupportedOperationException](
+            ltz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError).copy(right = f),
+            "LEGACY time parser policy")
+          checkEvaluation(
+            ntz(Literal("2020-01-01 13:24:35.123456789"), 9, failOnError).copy(right = f),
+            localDateTimeToNanosVal(ldt))
+        }
+      }
+    }
+  }
+
   test("datediff") {
     checkEvaluation(
       DateDiff(Literal(Date.valueOf("2015-07-24")), Literal(Date.valueOf("2015-07-21"))), 3)
@@ -2462,6 +2541,98 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkConsistencyBetweenInterpretedAndCodegen(
         (ts: Expression, ym: Expression) => TimestampAddYMInterval(ts, ym, Some("UTC")),
         ltzType, it)
+    }
+  }
+
+  test("SPARK-57838: nanos timestamp arithmetic at the range boundaries") {
+    def utc(s: String): TimestampNanosVal =
+      DateTimeUtils.localDateTimeToTimestampNanos(LocalDateTime.parse(s), precision = 9)
+    val maxCalendar = utc("9999-12-31T23:59:59.999999999")
+    val max = nanosVal(Long.MaxValue, 999)
+    val min = nanosVal(Long.MinValue, 0)
+    val int64Max = DateTimeUtils.epochNanosToTimestampNanos(Long.MaxValue, 9)
+    val int64Min = DateTimeUtils.epochNanosToTimestampNanos(Long.MinValue, 9)
+
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        TimestampNTZNanosType(9) -> "TIMESTAMP_NTZ",
+        TimestampLTZNanosType(9) -> "TIMESTAMP_LTZ").foreach { case (t, typeName) =>
+        def lit(v: TimestampNanosVal): Literal = Literal.create(v, t)
+        // Crossing 9999-12-31 is not an error, as for the microsecond types.
+        checkEvaluation(
+          TimestampAddInterval(lit(maxCalendar), Literal(Duration.ofDays(1)), Some("UTC")),
+          utc("+10000-01-01T23:59:59.999999999"))
+        checkEvaluation(
+          TimestampAddYMInterval(lit(maxCalendar), Literal(Period.ofYears(1)), Some("UTC")),
+          utc("+10000-12-31T23:59:59.999999999"))
+        checkEvaluation(
+          TimestampAdd("DAY", Literal(1L), lit(maxCalendar), Some("UTC")),
+          utc("+10000-01-01T23:59:59.999999999"))
+        // The int64 epoch-nanosecond limits are ordinary values: no wrap-around past them.
+        checkEvaluation(
+          TimestampAdd("NANOSECOND", Literal(1L), lit(int64Max), Some("UTC")),
+          nanosVal(int64Max.epochMicros, int64Max.nanosWithinMicro + 1))
+        checkEvaluation(
+          TimestampAdd("NANOSECOND", Literal(-1L), lit(int64Min), Some("UTC")),
+          nanosVal(int64Min.epochMicros, int64Min.nanosWithinMicro - 1))
+
+        // Past the epoch-microsecond limits, interval arithmetic raises DATETIME_OVERFLOW, with
+        // the operands rendered as SQL literals of their own types.
+        val maxSql = s"$typeName '+294247-01-10 04:00:54.775807999'"
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddInterval(lit(max), Literal(Duration.ofDays(1)), Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> s"add INTERVAL '1 00:00:00' DAY TO SECOND to $maxSql"))
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddInterval(
+            lit(max), Literal(MICROS_PER_HOUR, DayTimeIntervalType(DayTimeIntervalType.HOUR)),
+            Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> s"add INTERVAL '01' HOUR to $maxSql"))
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddInterval(lit(min), UnaryMinus(Literal(Duration.ofDays(1))), Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> (s"add INTERVAL '-1 00:00:00' DAY TO SECOND to " +
+            s"$typeName '-290308-12-21 19:59:05.224192000'")))
+        checkErrorInExpression[SparkArithmeticException](
+          TimestampAddYMInterval(
+            lit(max), Literal(1, YearMonthIntervalType(YearMonthIntervalType.MONTH)), Some("UTC")),
+          condition = "DATETIME_OVERFLOW",
+          parameters = Map("operation" -> s"add INTERVAL '1' MONTH to $maxSql"))
+      }
+    }
+  }
+
+  test("SPARK-57838: unix_nanos at the range boundaries") {
+    def unixNanos(v: TimestampNanosVal): UnixNanos =
+      UnixNanos(Literal.create(v, TimestampNTZNanosType(9)))
+    def decimal(n: BigInt): Decimal = Decimal(BigDecimal(n), 21, 0)
+    // The int64 epoch-nanosecond limits and the calendar range map to exact values.
+    checkEvaluation(
+      unixNanos(DateTimeUtils.epochNanosToTimestampNanos(Long.MaxValue, 9)),
+      decimal(Long.MaxValue))
+    checkEvaluation(
+      unixNanos(DateTimeUtils.epochNanosToTimestampNanos(Long.MinValue, 9)),
+      decimal(Long.MinValue))
+    checkEvaluation(
+      unixNanos(DateTimeUtils.localDateTimeToTimestampNanos(
+        LocalDateTime.parse("0001-01-01T00:00:00"), precision = 9)),
+      decimal(BigInt("-62135596800000000000")))
+    // DECIMAL(21, 0) holds +/-(10^21 - 1) nanoseconds (about +/-31,700 years from the epoch);
+    // timestamps further out raise NUMERIC_VALUE_OUT_OF_RANGE instead of wrapping.
+    val maxDecimalMicros = (BigInt(10).pow(21) - 1) / 1000
+    checkEvaluation(
+      unixNanos(TimestampNanosVal.fromParts(maxDecimalMicros.toLong, 999.toShort)),
+      decimal(BigInt(10).pow(21) - 1))
+    checkEvaluation(
+      unixNanos(TimestampNanosVal.fromParts(-maxDecimalMicros.toLong - 1, 1.toShort)),
+      decimal(-(BigInt(10).pow(21) - 1)))
+    Seq(
+      TimestampNanosVal.fromParts(maxDecimalMicros.toLong + 1, 0.toShort),
+      TimestampNanosVal.fromParts(Long.MaxValue, 999.toShort),
+      TimestampNanosVal.fromParts(Long.MinValue, 0.toShort)).foreach { v =>
+      checkExceptionInExpression[SparkArithmeticException](
+        unixNanos(v), "NUMERIC_VALUE_OUT_OF_RANGE")
     }
   }
 
@@ -3836,8 +4007,9 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Add(Literal(4),
       Literal(5)))) === CurrentTimestampNanos(9))
 
-    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION.
-    Seq(0, 3, 5, 10).foreach { p =>
+    // Out-of-range precision (other than 6) is rejected with INVALID_TIMESTAMP_PRECISION. A
+    // BIGINT precision does not wrap into range.
+    Seq[Any](0, 3, 5, 10, 4294967305L).foreach { p =>
       checkError(
         exception = intercept[SparkException] {
           CurrentTimestampExpressionBuilder.build("current_timestamp", Seq(Literal(p)))

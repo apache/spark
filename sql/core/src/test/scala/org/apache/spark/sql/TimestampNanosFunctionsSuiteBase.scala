@@ -17,9 +17,11 @@
 
 package org.apache.spark.sql
 
-import java.time.{Instant, LocalDateTime}
+import java.sql.Timestamp
+import java.time.{Instant, LocalDateTime, LocalTime}
 
-import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_DOC_ROOT, SparkConf, SparkDateTimeException, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanoOfSecTruncator
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -29,9 +31,9 @@ import org.apache.spark.sql.types._
  * End-to-end tests over the nanosecond-precision timestamp types `TIMESTAMP_NTZ(p)` /
  * `TIMESTAMP_LTZ(p)` (`p` in `[7, 9]`), part of the nanosecond timestamp preview (SPARK-56822).
  * Covers the datetime functions (`hour`/`minute`/`second`, `EXTRACT`/`date_part`, the date-field
- * functions) and the `MIN`/`MAX` aggregates (plus `min_by`/`max_by`/`greatest`/`least`). Most
- * tests use the SQL path (`selectExpr`); several also cross-check the Scala `Column` API. The two
- * subclasses run every test with ANSI mode on and off.
+ * functions, `date_add`/`date_sub`) and the `MIN`/`MAX` aggregates (plus `min_by`/`max_by`/
+ * `greatest`/`least`). Most tests use the SQL path (`selectExpr`); several also cross-check the
+ * Scala `Column` API. The two subclasses run every test with ANSI mode on and off.
  */
 abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
 
@@ -238,6 +240,94 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
         new StructType().add("c", TimestampNTZNanosType(p)))
       checkAnswer(
         ntz.selectExpr("year(c)", "month(c)", "day(c)", "extract(DOY FROM c)"),
+        Row(null, null, null, null))
+    }
+  }
+
+  // SPARK-60543: date_add / date_sub (and the dateadd alias) cast a nanos start to DATE like the
+  // micro types, so the precision, time-of-day and sub-microsecond digits never change the result.
+  private val dateAddSubExprs = Seq(
+    "date_add(c, 1)", "date_sub(c, 1)", "dateadd(c, -31)", "date_add(c, '2')", "date_sub(c, 366)")
+
+  test("SPARK-60543: date_add/date_sub over nanosecond TIMESTAMP_NTZ match the micro path") {
+    val ldts = Seq(
+      "2020-02-28T23:59:59.999999999",
+      "2021-01-01T00:00:00.000000001",
+      "1969-12-31T23:59:59.999999999",
+      "1960-07-15T06:07:08.123456789")
+    ldts.foreach { s =>
+      val micro = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(LocalDateTime.parse(s)))),
+        new StructType().add("c", TimestampNTZType)).selectExpr(dateAddSubExprs: _*).collect()
+      Seq(7, 8, 9).foreach { p =>
+        checkAnswer(ntzNanos(s, p).selectExpr(dateAddSubExprs: _*), micro.toSeq)
+      }
+    }
+    Seq(7, 8, 9).foreach { p =>
+      checkAnswer(
+        ntzNanos("2020-02-28T23:59:59.999999999", p).selectExpr("date_add(c, 1)", "date_sub(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-02-29"), java.sql.Date.valueOf("2020-02-27")))
+    }
+  }
+
+  test("SPARK-60543: date_add/date_sub over nanosecond TIMESTAMP_LTZ match the micro path") {
+    // In America/Los_Angeles the second and third instants fall on the previous calendar day; in
+    // Asia/Tokyo the last one falls on the next day.
+    val instants = Seq(
+      "2020-02-29T12:34:56.123456789Z",
+      "2020-01-01T04:00:00.123456789Z",
+      "2020-03-01T07:59:59.999999999Z",
+      "1960-07-15T06:07:08.123456789Z",
+      "2020-02-29T20:00:00.123456789Z")
+    Seq("America/Los_Angeles", "UTC", "Asia/Tokyo").foreach { zone =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> zone) {
+        instants.foreach { s =>
+          val micro = spark.createDataFrame(
+            spark.sparkContext.parallelize(Seq(Row(Instant.parse(s)))),
+            new StructType().add("c", TimestampType)).selectExpr(dateAddSubExprs: _*).collect()
+          Seq(7, 8, 9).foreach { p =>
+            checkAnswer(ltzNanos(s, p).selectExpr(dateAddSubExprs: _*), micro.toSeq)
+          }
+        }
+      }
+    }
+    // 2020-01-01T04:00Z is 2019-12-31 in America/Los_Angeles but 2020-01-01 in UTC, and
+    // 2020-02-29T20:00Z is 2020-03-01 in Asia/Tokyo.
+    checkAnswer(
+      ltzNanos("2020-01-01T04:00:00.123456789Z", 9).selectExpr("date_add(c, 1)"),
+      Row(java.sql.Date.valueOf("2020-01-01")))
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      checkAnswer(
+        ltzNanos("2020-01-01T04:00:00.123456789Z", 9).selectExpr("date_add(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-01-02")))
+    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "Asia/Tokyo") {
+      checkAnswer(
+        ltzNanos("2020-02-29T20:00:00.123456789Z", 9).selectExpr("date_add(c, 1)"),
+        Row(java.sql.Date.valueOf("2020-03-02")))
+    }
+  }
+
+  test("SPARK-60543: date_add/date_sub match the functions.* Column API over nanos") {
+    val df = ntzNanos("2020-02-29T12:34:56.123456789", 9)
+    val expected = Row(
+      java.sql.Date.valueOf("2020-03-01"),
+      java.sql.Date.valueOf("2020-02-28"),
+      java.sql.Date.valueOf("2020-03-01"))
+    checkAnswer(df.selectExpr("date_add(c, 1)", "date_sub(c, 1)", "dateadd(c, 1)"), expected)
+    checkAnswer(
+      df.select(date_add(col("c"), 1), date_sub(col("c"), 1), dateadd(col("c"), lit(1))),
+      expected)
+  }
+
+  test("SPARK-60543: date_add/date_sub over NULL nanosecond timestamps") {
+    Seq(7, 8, 9).foreach { p =>
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(null, null))),
+        new StructType().add("ntz", TimestampNTZNanosType(p)).add("ltz", TimestampLTZNanosType(p)))
+      checkAnswer(
+        df.selectExpr(
+          "date_add(ntz, 1)", "date_sub(ntz, 1)", "date_add(ltz, 1)", "date_sub(ltz, 1)"),
         Row(null, null, null, null))
     }
   }
@@ -1045,6 +1135,228 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
       Row(Seq(
         LocalDateTime.parse("2020-01-01T00:00:00.000000900"),
         LocalDateTime.parse("2020-01-01T00:00:01.000000900"))))
+  }
+
+  private val toTimestampFns =
+    Seq("to_timestamp", "to_timestamp_ltz", "to_timestamp_ntz", "try_to_timestamp")
+
+  test("SPARK-57836: to_timestamp* with a precision parse nanosecond-precision timestamps") {
+    import testImplicits._
+    val fmt = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS"
+    val df = Seq("2020-01-01 13:24:35.123456789", null).toDF("s")
+    Seq(7, 8, 9).foreach { p =>
+      val sqlRes = df.selectExpr(toTimestampFns.map(fn => s"$fn(s, '$fmt', $p)"): _*)
+      val colRes =
+        df.select(toTimestampFns.map(call_function(_, col("s"), lit(fmt), lit(p))): _*)
+      checkAnswer(sqlRes, colRes)
+      assert(sqlRes.schema.map(_.dataType) === Seq(
+        TimestampLTZNanosType(p), TimestampLTZNanosType(p),
+        TimestampNTZNanosType(p), TimestampLTZNanosType(p)))
+      // Digits beyond `p` are floored. LTZ parses in the session time zone (UTC-8 in January).
+      val nanos = nanoOfSecTruncator(p)(123456789)
+      val ltz = Instant.parse("2020-01-01T21:24:35Z").plusNanos(nanos)
+      val ntz = LocalDateTime.parse("2020-01-01T13:24:35").plusNanos(nanos)
+      checkAnswer(sqlRes, Seq(Row(ltz, ltz, ntz, ltz), Row(null, null, null, null)))
+    }
+    // Precision 6 keeps the microsecond types.
+    assert(df.selectExpr(toTimestampFns.map(fn => s"$fn(s, '$fmt', 6)"): _*).schema
+      .map(_.dataType) === Seq(TimestampType, TimestampType, TimestampNTZType, TimestampType))
+    // to_timestamp and try_to_timestamp follow spark.sql.timestampType.
+    withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      assert(df.selectExpr(s"to_timestamp(s, '$fmt', 9)", s"try_to_timestamp(s, '$fmt', 8)")
+        .schema.map(_.dataType) === Seq(TimestampNTZNanosType(9), TimestampNTZNanosType(8)))
+      assert(nanosDF(7).selectExpr("to_timestamp(ltz)", "try_to_timestamp(ltz, 'yyyy')")
+        .schema.map(_.dataType) === Seq(TimestampNTZNanosType(7), TimestampNTZNanosType(7)))
+    }
+    // With a format, a numeric input is parsed as a string at every precision.
+    val parsedNumeric = Instant.parse("2020-01-01T08:00:00Z")
+    checkAnswer(
+      sql("SELECT to_timestamp_ltz(20200101, 'yyyyMMdd', 9), " +
+        "to_timestamp(20200101, 'yyyyMMdd', 8), try_to_timestamp(20200101, 'yyyyMMdd', 7), " +
+        "to_timestamp_ltz(20200101, 'yyyyMMdd', 6)"),
+      Row(parsedNumeric, parsedNumeric, parsedNumeric, Timestamp.from(parsedNumeric)))
+  }
+
+  test("SPARK-57836: to_timestamp* with a precision on invalid input") {
+    import testImplicits._
+    val df = Seq("bad").toDF("s")
+    // try_to_timestamp is always NULL; the others fail in ANSI mode like the microsecond path.
+    checkAnswer(df.selectExpr("try_to_timestamp(s, 'yyyy', 9)"), Row(null))
+    toTimestampFns.filter(_ != "try_to_timestamp").foreach { fn =>
+      val res = df.selectExpr(s"$fn(s, 'yyyy', 9)")
+      if (conf.ansiEnabled) {
+        checkError(
+          exception = intercept[SparkDateTimeException](res.collect()),
+          condition = "CANNOT_PARSE_TIMESTAMP",
+          parameters = Map(
+            "func" -> "`try_to_timestamp`",
+            "message" -> "Text 'bad' could not be parsed at index 0"))
+      } else {
+        checkAnswer(res, Row(null))
+      }
+    }
+  }
+
+  test("SPARK-57836: to_timestamp* reject an invalid precision") {
+    val df = spark.range(1)
+    // A BIGINT precision does not wrap into range.
+    Seq(
+      ("to_timestamp", 5L, "TIMESTAMP_LTZ"),
+      ("try_to_timestamp", 0L, "TIMESTAMP_LTZ"),
+      ("to_timestamp_ntz", 10L, "TIMESTAMP_NTZ"),
+      ("to_timestamp_ltz", 4294967305L, "TIMESTAMP_LTZ")).foreach { case (fn, p, typeName) =>
+      checkError(
+        exception = intercept[SparkException](
+          df.selectExpr(s"$fn('2020', 'yyyy', $p)").collect()),
+        condition = "INVALID_TIMESTAMP_PRECISION",
+        parameters = Map("precision" -> p.toString, "type" -> typeName))
+    }
+    val nonFoldable = "to_timestamp('2020', 'yyyy', id)"
+    checkError(
+      exception = intercept[AnalysisException](df.selectExpr(nonFoldable)),
+      condition = "NON_FOLDABLE_ARGUMENT",
+      parameters = Map(
+        "funcName" -> "`to_timestamp`", "paramName" -> "`precision`", "paramType" -> "\"BIGINT\""),
+      context = ExpectedContext(fragment = nonFoldable, start = 0, stop = nonFoldable.length - 1))
+    val nonIntegral = "to_timestamp('2020', 'yyyy', '9')"
+    checkError(
+      exception = intercept[AnalysisException](df.selectExpr(nonIntegral)),
+      condition = "UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "paramIndex" -> "third",
+        "functionName" -> "`to_timestamp`",
+        "requiredType" -> "\"INT\"",
+        "inputSql" -> "\"9\"",
+        "inputType" -> "\"STRING\""),
+      context = ExpectedContext(fragment = nonIntegral, start = 0, stop = nonIntegral.length - 1))
+    val nullPrecision = "to_timestamp('2020', 'yyyy', CAST(NULL AS INT))"
+    checkError(
+      exception = intercept[AnalysisException](df.selectExpr(nullPrecision)),
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+      parameters = Map("exprName" -> "`precision`", "sqlExpr" -> "\"CAST(NULL AS INT)\""),
+      context =
+        ExpectedContext(fragment = nullPrecision, start = 0, stop = nullPrecision.length - 1))
+    val tooManyArgs = "to_timestamp_ntz('2020', 'yyyy', 9, 9)"
+    checkError(
+      exception = intercept[AnalysisException](df.selectExpr(tooManyArgs)),
+      condition = "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+      parameters = Map(
+        "functionName" -> "`to_timestamp_ntz`",
+        "expectedNum" -> "[1, 2, 3]",
+        "actualNum" -> "4",
+        "docroot" -> SPARK_DOC_ROOT),
+      context = ExpectedContext(fragment = tooManyArgs, start = 0, stop = tooManyArgs.length - 1))
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkException](
+          df.selectExpr("to_timestamp_ltz('2020', 'yyyy', 9)").collect()),
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"))
+      // Precision 6 does not need the flag.
+      assert(df.selectExpr("to_timestamp('2020', 'yyyy', 6)").schema.head.dataType ===
+        TimestampType)
+    }
+  }
+
+  test("SPARK-57836: to_timestamp* keep the precision of a nanosecond-precision input") {
+    Seq(7, 8, 9).foreach { p =>
+      val df = nanosDF(p)
+      val res = df.selectExpr(
+        "to_timestamp(ntz)", "to_timestamp_ntz(ltz)", "try_to_timestamp(ltz)",
+        "to_timestamp_ntz(ntz, 'yyyy')", "to_timestamp_ltz(ltz, 'yyyy')",
+        "to_timestamp(ntz, 'yyyy')", "to_timestamp_ntz(ltz, 'yyyy')")
+      assert(res.schema.map(_.dataType) === Seq(
+        TimestampLTZNanosType(p), TimestampNTZNanosType(p), TimestampLTZNanosType(p),
+        TimestampNTZNanosType(p), TimestampLTZNanosType(p),
+        TimestampLTZNanosType(p), TimestampNTZNanosType(p)))
+      // With or without a format, NTZ and LTZ convert in the session time zone (13:24:35 local).
+      val ntzNanos = nanoOfSecTruncator(p)(123456789)
+      val ltzNanos = nanoOfSecTruncator(p)(987654321)
+      val ntz = LocalDateTime.parse("2020-01-01T13:24:35").plusNanos(ntzNanos)
+      val ltz = Instant.parse("2020-01-01T21:24:35Z").plusNanos(ltzNanos)
+      val ntzAsLtz = Instant.parse("2020-01-01T21:24:35Z").plusNanos(ntzNanos)
+      val ltzAsNtz = LocalDateTime.parse("2020-01-01T13:24:35").plusNanos(ltzNanos)
+      checkAnswer(res, Seq(
+        Row(ntzAsLtz, ltzAsNtz, ltz, ntz, ltz, ntzAsLtz, ltzAsNtz),
+        Row(null, null, null, null, null, null, null)))
+    }
+    // An explicit precision converts a nanosecond input, flooring it when narrower.
+    val res =
+      nanosDF(9).selectExpr("to_timestamp_ntz(ntz, 'yyyy', 7)", "to_timestamp(ltz, 'yyyy', 6)")
+    assert(res.schema.map(_.dataType) === Seq(TimestampNTZNanosType(7), TimestampType))
+    checkAnswer(res, Seq(
+      Row(
+        LocalDateTime.parse("2020-01-01T13:24:35.123456700"),
+        Timestamp.from(Instant.parse("2020-01-01T21:24:35.987654Z"))),
+      Row(null, null)))
+  }
+
+  test("SPARK-57836: to_timestamp* cast a DATE or timestamp input to or from nanoseconds") {
+    // The format only applies to a string, so these match CAST in the session time zone.
+    val df = nanosDF(9).selectExpr(
+      "ntz", "ltz", "CAST(ntz AS TIMESTAMP_NTZ) AS ntz6", "CAST(ltz AS TIMESTAMP) AS ltz6",
+      "CAST(ltz AS DATE) AS d")
+    Seq("ntz", "ltz", "ntz6", "ltz6", "d").foreach { c =>
+      checkAnswer(
+        df.selectExpr(
+          s"to_timestamp($c, 'yyyy', 9)", s"to_timestamp_ltz($c, 'yyyy', 8)",
+          s"to_timestamp_ntz($c, 'yyyy', 7)", s"try_to_timestamp($c, 'yyyy', 9)"),
+        df.selectExpr(
+          s"CAST($c AS TIMESTAMP_LTZ(9))", s"CAST($c AS TIMESTAMP_LTZ(8))",
+          s"CAST($c AS TIMESTAMP_NTZ(7))", s"CAST($c AS TIMESTAMP_LTZ(9))"))
+    }
+    Seq("ntz", "ltz").foreach { c =>
+      checkAnswer(
+        df.selectExpr(s"to_timestamp($c, 'yyyy', 6)", s"to_timestamp_ntz($c, 'yyyy', 6)"),
+        df.selectExpr(s"CAST($c AS TIMESTAMP)", s"CAST($c AS TIMESTAMP_NTZ)"))
+    }
+    // Without a nanosecond input, precision 6 is the two-argument microsecond form.
+    Seq("ntz6", "ltz6", "d").foreach { c =>
+      checkAnswer(
+        df.selectExpr(s"to_timestamp($c, 'yyyy', 6)", s"to_timestamp_ntz($c, 'yyyy', 6)"),
+        df.selectExpr(s"to_timestamp($c, 'yyyy')", s"to_timestamp_ntz($c, 'yyyy')"))
+    }
+    // A DATE is midnight for TIMESTAMP_NTZ(p), not midnight in the session time zone.
+    checkAnswer(
+      sql("SELECT to_timestamp_ntz(DATE '2020-01-01', 'yyyy-MM-dd', 9)"),
+      Row(LocalDateTime.parse("2020-01-01T00:00:00")))
+  }
+
+  test("typed Scala UDFs reject nanosecond inputs instead of narrowing them") {
+    val ldt = LocalDateTime.parse("2020-01-01T12:00:00.123456789")
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(ldt, Seq(ldt)))),
+      new StructType()
+        .add("c", TimestampNTZNanosType(9))
+        .add("a", ArrayType(TimestampNTZNanosType(9))))
+    val toStr = udf((t: LocalDateTime) => t.toString)
+    val timesToStr = udf((ts: Seq[LocalTime]) => ts.mkString(","))
+    Seq(
+      (toStr(col("c")), "input", "\"TIMESTAMP_NTZ\"",
+        "- root class: \"java.time.LocalDateTime\""),
+      (timesToStr(col("a")), "array element", "\"TIME(6)\"",
+        "- array element class: \"java.time.LocalTime\"\n" +
+          "- root class: \"scala.collection.immutable.Seq\"")).foreach {
+      case (c, expression, to, typePath) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.select(c)
+          },
+          condition = "CANNOT_UP_CAST_DATATYPE",
+          parameters = Map(
+            "expression" -> expression,
+            "sourceType" -> "\"TIMESTAMP_NTZ(9)\"",
+            "targetType" -> to,
+            "details" -> (s"The type path of the target object is:\n$typePath\nYou can either " +
+              "add an explicit cast to the input data or choose a higher precision type of the " +
+              "field in the target object")))
+    }
+    // An explicit CAST still narrows.
+    checkAnswer(
+      df.select(toStr(col("c").cast(TimestampNTZType))), Row("2020-01-01T12:00:00.123456"))
   }
 }
 

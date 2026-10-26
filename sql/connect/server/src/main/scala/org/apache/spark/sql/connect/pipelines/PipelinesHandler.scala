@@ -29,9 +29,9 @@ import org.apache.spark.connect.proto.PipelineCommand.DefineFlow.AutoCdcFlowDeta
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.{AnalysisException, Column}
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.analysis.{PlanWithUnresolvedIdentifier, UnresolvedAttribute, UnresolvedExecuteImmediate, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, UnresolvedInsert}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, CreateNamespace, CreateTable, CreateTableAsSelect, CreateView, DescribeRelation, DescribeTablePartition, DropView, ExecutableDuringAnalysis, InsertIntoDir, InsertIntoStatement, LogicalPlan, RenameTable, ShowColumns, ShowCreateTable, ShowFunctions, ShowTableProperties, ShowTables, ShowViews, Union, UnresolvedInsert, UnresolvedWith}
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.connect.common.DataTypeProtoConverter
 import org.apache.spark.sql.connect.service.SessionHolder
@@ -150,6 +150,19 @@ private[connect] object PipelinesHandler extends Logging {
    * set of read-only operations (e.g., SHOW, DESCRIBE).
    */
   def blockUnsupportedSqlCommand(queryPlan: LogicalPlan): Unit = {
+    queryPlan match {
+      // The parser can leave a statement named by an IDENTIFIER clause, such as
+      // IDENTIFIER('a' || 'b'), unbuilt until analysis evaluates the clause. Build the statement
+      // with a placeholder name and check it instead.
+      case p: PlanWithUnresolvedIdentifier =>
+        blockUnsupportedSqlCommand(p.planBuilder(Seq("placeholder"), p.children))
+      // The parser puts a DML statement with a CTE prefix, such as WITH ... INSERT INTO ..., under
+      // UnresolvedWith and builds a multi-insert, FROM ... INSERT ... INSERT ..., as a Union of
+      // its INSERTs. Check the statements under them.
+      case w: UnresolvedWith => blockUnsupportedSqlCommand(w.child)
+      case u: Union => u.children.foreach(blockUnsupportedSqlCommand)
+      case _ =>
+    }
     val allowlistedCommands = Set(
       classOf[DescribeRelation],
       classOf[DescribeTablePartition],
@@ -168,12 +181,17 @@ private[connect] object PipelinesHandler extends Logging {
       // Disable all [[Command]] except the ones that are explicitly allowlisted
       // in "allowlistedCommands".
       queryPlan.isInstanceOf[Command] ||
+      // EXECUTE IMMEDIATE runs a SQL string that is parsed only during analysis, and CALL runs a
+      // procedure during analysis.
+      queryPlan.isInstanceOf[UnresolvedExecuteImmediate] ||
+      queryPlan.isInstanceOf[ExecutableDuringAnalysis] ||
       // Following commands are not subclasses of [[Command]] but have side effects.
       queryPlan.isInstanceOf[CreateTableAsSelect] ||
       queryPlan.isInstanceOf[CreateTable] ||
       queryPlan.isInstanceOf[CreateView] ||
       queryPlan.isInstanceOf[InsertIntoStatement] ||
       queryPlan.isInstanceOf[UnresolvedInsert] ||
+      queryPlan.isInstanceOf[InsertIntoDir] ||
       queryPlan.isInstanceOf[RenameTable] ||
       queryPlan.isInstanceOf[CreateNamespace] ||
       queryPlan.isInstanceOf[DropView]

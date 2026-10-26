@@ -510,6 +510,90 @@ SELECT named_struct('f', DATE '2020-01-01') :: struct<f: timestamp_ntz(9)>
 
 
 -- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1)
+-- !query analysis
+Project [date_add(cast(2020-02-28 23:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query analysis
+Project [date_sub(cast(2020-03-01 00:00:00.000000001 as date), 1) AS date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ntz(7), 30)
+-- !query analysis
+Project [date_add(cast(cast(2020-01-31 12:00:00.1234567 as timestamp_ntz(7)) as date), 30) AS date_add(CAST(2020-01-31 12:00:00.1234567 AS TIMESTAMP_NTZ(7)), 30)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ntz(8), -1)
+-- !query analysis
+Project [date_sub(cast(cast(2020-01-01 12:00:00.12345678 as timestamp_ntz(8)) as date), -1) AS date_sub(CAST(2020-01-01 12:00:00.12345678 AS TIMESTAMP_NTZ(8)), -1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query analysis
+Project [date_add(cast(2020-01-01 00:00:00.123456789 as date), cast(2 as int)) AS date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 2)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1)
+-- !query analysis
+Project [date_add(cast(1969-12-31 23:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1),
+       date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1)
+-- !query analysis
+Project [date_add(cast(2020-01-01 00:00:00.123456789 as date), 1) AS date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1)#x, date_add(cast(2020-01-01 00:00:00.123456 as date), 1) AS date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(NULL :: timestamp_ntz(9), 1), date_sub(NULL :: timestamp_ntz(9), 1)
+-- !query analysis
+Project [date_add(cast(cast(null as timestamp_ntz(9)) as date), 1) AS date_add(CAST(NULL AS TIMESTAMP_NTZ(9)), 1)#x, date_sub(cast(cast(null as timestamp_ntz(9)) as date), 1) AS date_sub(CAST(NULL AS TIMESTAMP_NTZ(9)), 1)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1),
+       date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query analysis
+Project [date_add(cast(2020-02-28 23:59:59.999999999 as date), 1) AS date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1)#x, date_sub(cast(2020-03-01 00:00:00.000000001 as date), 1) AS date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query analysis
+Project [date_add(cast(2020-01-01 00:00:00.123456789 as date), 2) AS date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 2)#x]
++- OneRowRelation
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND
 -- !query analysis
 Project [cast(2020-01-02 03:04:05.123456789 + INTERVAL '2 00:03:00.000456' DAY TO SECOND as timestamp_ntz(9)) AS TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND#x]
@@ -916,6 +1000,38 @@ Sort [c#x ASC NULLS FIRST], true
          :  +- Project [cast(1582-10-04 12:30:45.1234567 as timestamp_ntz(7)) AS c#x]
          :     +- OneRowRelation
          +- Project [cast(1582-10-15 23:59:59.123456789 as timestamp_ntz(9)) AS CAST(1582-10-15 23:59:59.123456789 AS TIMESTAMP_NTZ(9))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.1234567' :: timestamp_ntz(7) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.12345678' :: timestamp_ntz(8)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ntz(8)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.1234567 as timestamp_ntz(7)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2021-07-15 12:34:56.12345678 as timestamp_ntz(8)) AS CAST(2021-07-15 12:34:56.12345678 AS TIMESTAMP_NTZ(8))#x]
+            +- OneRowRelation
+
+
+-- !query
+SELECT typeof(c), c FROM (
+    SELECT '2020-01-01 00:00:00.12345678' :: timestamp_ntz(8) AS c
+    UNION ALL SELECT '2021-07-15 12:34:56.123456789' :: timestamp_ntz(9)) ORDER BY c
+-- !query analysis
+Sort [c#x ASC NULLS FIRST], true
++- Project [typeof(c#x) AS typeof(c)#x, c#x]
+   +- SubqueryAlias __auto_generated_subquery_name
+      +- Union false, false
+         :- Project [cast(c#x as timestamp_ntz(9)) AS c#x]
+         :  +- Project [cast(2020-01-01 00:00:00.12345678 as timestamp_ntz(8)) AS c#x]
+         :     +- OneRowRelation
+         +- Project [cast(2021-07-15 12:34:56.123456789 as timestamp_ntz(9)) AS CAST(2021-07-15 12:34:56.123456789 AS TIMESTAMP_NTZ(9))#x]
             +- OneRowRelation
 
 
@@ -1667,3 +1783,770 @@ SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_n
 -- !query analysis
 Project [timestampadd(NANOSECOND, cast(50 as bigint), cast(2020-01-01 00:00:00.0000001 as timestamp_ntz(7)), Some(America/Los_Angeles)) AS timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7)))#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(8), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(7), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZType, Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('1969-12-31 23:59:59.999999999', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query analysis
+Project [to_timestamp_ntz(1969-12-31 23:59:59.999999999, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(1969-12-31 23:59:59.999999999, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789 UTC, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS z), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(2020-01-01 13:24:35.123456789 UTC, yyyy-MM-dd HH:mm:ss.SSSSSSSSS z)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT typeof(to_timestamp_ntz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8))
+-- !query analysis
+Project [typeof(to_timestamp_ntz(2020-01-01 13:24:35.1, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampNTZNanosType(8), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('bad', 'yyyy-MM-dd', 9)
+-- !query analysis
+Project [to_timestamp_ntz(bad, Some(yyyy-MM-dd), TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(bad, yyyy-MM-dd)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, None, TimestampNTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x, typeof(to_timestamp_ntz(2020-01-01 13:24:35.123456789, None, TimestampNTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'),
+  typeof(to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'))
+-- !query analysis
+Project [to_timestamp_ntz(cast(2020-01-01 13:24:35.12345678 as timestamp_ntz(8)), Some(yyyy), TimestampNTZNanosType(8), Some(America/Los_Angeles), true) AS to_timestamp_ntz(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_NTZ(8)), yyyy)#x, typeof(to_timestamp_ntz(cast(2020-01-01 13:24:35.12345678 as timestamp_ntz(8)), Some(yyyy), TimestampNTZNanosType(8), Some(America/Los_Angeles), true)) AS typeof(to_timestamp_ntz(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_NTZ(8)), yyyy))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7)
+-- !query analysis
+Project [to_timestamp_ntz(2020-01-01 13:24:35.123456789, Some(yyyy), TimestampNTZNanosType(7), Some(America/Los_Angeles), true) AS to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456789, None, TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')#x, typeof(to_timestamp(2020-01-01 13:24:35.123456789, None, TimestampLTZNanosType(9), Some(America/Los_Angeles), true)) AS typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 10)
+-- !query analysis
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query analysis
+Project [to_timestamp(2020-01-01 13:24:35.123456789, Some(yyyy-MM-dd HH:mm:ss.SSSSSSSSS), TimestampLTZNanosType(9), Some(America/Los_Angeles), true) AS to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT to_timestamp_ntz(DATE '2020-01-01', 'yyyy-MM-dd', 9)
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "4",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2, 3]",
+    "functionName" : "`to_timestamp_ntz`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9)"
+  } ]
+}
+
+
+-- !query
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000001001')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', TIMESTAMP_NTZ '2020-01-01 00:00:00.000001001')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 131,
+    "fragment" : "timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999',\n    TIMESTAMP_NTZ '2020-01-01 00:00:00.000001001')"
+  } ]
+}
+
+
+-- !query
+SELECT months_between(TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001'\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"months_between(TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 119,
+    "fragment" : "months_between(TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001',\n    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')"
+  } ]
+}
+
+
+-- !query
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"window(c, 1000000, 1000000, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"sessionwindow(c, 1 second)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "session_window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_approx(c, 0.5)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"percentile_approx(c, 0.5, 10000)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "percentile_approx(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"histogram_numeric(c, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "histogram_numeric(c, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "percentile(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT median(c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"median(c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "median(c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_trunc(HOUR, c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "time_trunc('HOUR', c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_diff(SECOND, TIME '12:00:00', c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "time_diff('SECOND', TIME '12:00:00', c)"
+  } ]
+}
+
+
+-- !query
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+Project [last_day(cast(c#x as date)) AS last_day(c)#x, next_day(cast(c#x as date), MO, true) AS next_day(c, MO)#x, datediff(cast(c#x as date), cast(2019-12-31 as date)) AS datediff(c, 2019-12-31)#x, add_months(cast(c#x as date), 1) AS add_months(c, 1)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000001001')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999'\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999', TIMESTAMP_NTZ '2020-01-01 00:00:00.000001001')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 131,
+    "fragment" : "timestampdiff(MICROSECOND, TIMESTAMP_NTZ '2020-01-01 00:00:00.000000999',\n    TIMESTAMP_NTZ '2020-01-01 00:00:00.000001001')"
+  } ]
+}
+
+
+-- !query
+SELECT months_between(TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001',
+    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001'\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"months_between(TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001', TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001', true)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 119,
+    "fragment" : "months_between(TIMESTAMP_NTZ '2020-02-01 00:00:00.000000001',\n    TIMESTAMP_NTZ '2020-01-01 00:00:00.000000001')"
+  } ]
+}
+
+
+-- !query
+SELECT window(c, '1 second')
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"window(c, 1000000, 1000000, 0)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT session_window(c, '1 second')
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"(TIMESTAMP OR TIMESTAMP WITHOUT TIME ZONE)\" or \"STRUCT<start: TIMESTAMP, end: TIMESTAMP>\" or \"STRUCT<start: TIMESTAMP_NTZ, end: TIMESTAMP_NTZ>\")",
+    "sqlExpr" : "\"sessionwindow(c, 1 second)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "session_window(c, '1 second')"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_approx(c, 0.5)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"percentile_approx(c, 0.5, 10000)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "percentile_approx(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT histogram_numeric(c, 2)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")",
+    "sqlExpr" : "\"histogram_numeric(c, 2)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 30,
+    "fragment" : "histogram_numeric(c, 2)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(c, 0.5)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile(c, 0.5, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "percentile(c, 0.5)"
+  } ]
+}
+
+
+-- !query
+SELECT median(c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"median(c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 16,
+    "fragment" : "median(c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_cont(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_cont(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_disc(0.5) WITHIN GROUP (ORDER BY c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "first",
+    "requiredType" : "((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" or \"INTERVAL YEAR TO MONTH\") or \"TIME\")",
+    "sqlExpr" : "\"percentile_disc(c, 0.5)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 53,
+    "fragment" : "percentile_disc(0.5) WITHIN GROUP (ORDER BY c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_trunc('HOUR', c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "second",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_trunc(HOUR, c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "time_trunc('HOUR', c)"
+  } ]
+}
+
+
+-- !query
+SELECT time_diff('SECOND', TIME '12:00:00', c)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"c\"",
+    "inputType" : "\"TIMESTAMP_NTZ(9)\"",
+    "paramIndex" : "third",
+    "requiredType" : "\"TIME\"",
+    "sqlExpr" : "\"time_diff(SECOND, TIME '12:00:00', c)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "time_diff('SECOND', TIME '12:00:00', c)"
+  } ]
+}
+
+
+-- !query
+SELECT last_day(c), next_day(c, 'MO'), datediff(c, '2019-12-31'), add_months(c, 1)
+  FROM VALUES (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789') AS t(c)
+-- !query analysis
+Project [last_day(cast(c#x as date)) AS last_day(c)#x, next_day(cast(c#x as date), MO, false) AS next_day(c, MO)#x, datediff(cast(c#x as date), cast(2019-12-31 as date)) AS datediff(c, 2019-12-31)#x, add_months(cast(c#x as date), 1) AS add_months(c, 1)#x]
++- SubqueryAlias t
+   +- LocalRelation [c#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))

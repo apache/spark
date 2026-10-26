@@ -96,7 +96,9 @@ case class WindowExec(
       SQLMetrics.createMetric(sparkContext, "number of segment-tree frames prepared"),
     "numSegmentTreeFallbackFrames" ->
       SQLMetrics.createMetric(sparkContext,
-        "number of segment-tree fallback frames prepared")
+        "number of segment-tree fallback frames prepared"),
+    "numMonotonicDequeFrames" ->
+      SQLMetrics.createMetric(sparkContext, "number of monotonic-deque frames prepared")
   )
 
   protected override def doExecute(): RDD[InternalRow] = {
@@ -108,7 +110,8 @@ case class WindowExec(
         child.output,
         longMetric("spillSize"),
         longMetric("numSegmentTreeFrames"),
-        longMetric("numSegmentTreeFallbackFrames"))
+        longMetric("numSegmentTreeFallbackFrames"),
+        longMetric("numMonotonicDequeFrames"))
 
     // Start processing.
     if (conf.usePartitionEvaluator) {

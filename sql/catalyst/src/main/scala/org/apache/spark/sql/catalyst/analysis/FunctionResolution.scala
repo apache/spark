@@ -128,7 +128,9 @@ class FunctionResolution(
 
   private def resolutionCandidates(nameParts: Seq[String]): Seq[Seq[String]] = {
     if (nameParts.size == 1) {
-      sqlResolutionPathEntriesForAnalysis.map(_ ++ nameParts)
+      // Built lazily so an early-returning consumer (built-in hit, routed direct-star owner walk)
+      // skips concatenating the unused PATH suffix; consumers walk candidates in order.
+      sqlResolutionPathEntriesForAnalysis.to(LazyList).map(_ ++ nameParts)
     } else if (nameParts.size == 2 &&
         FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
       val systemCandidate = CatalogManager.SYSTEM_CATALOG_NAME +: nameParts
@@ -190,6 +192,20 @@ class FunctionResolution(
 
   def resolveFunction(unresolvedFunc: UnresolvedFunction): Expression = {
     withPosition(unresolvedFunc) {
+      // Preprocessing already bound this call's owner (a shadow of a routed SQL/JSON built-in) and
+      // expanded its star. Resolve only that candidate so a shadow dropped since then fails here
+      // instead of falling through the PATH to the stock built-in.
+      unresolvedFunc.boundOwner match {
+        case Some(candidate) =>
+          return resolveFunctionCandidate(candidate, unresolvedFunc).getOrElse {
+            throw QueryCompilationErrors.unresolvedRoutineError(
+              unresolvedFunc.nameParts,
+              sqlResolutionPathEntriesForAnalysis.map(toSQLId),
+              unresolvedFunc.origin)
+          }
+        case None =>
+      }
+
       // Internal functions resolve via the internal registry when the parser marks them as
       // internal; they are not resolved via the search path.
       if (unresolvedFunc.isInternal && unresolvedFunc.nameParts.size == 1) {
@@ -456,20 +472,68 @@ class FunctionResolution(
     }
   }
 
-  // All routed SQL/JSON functions (JSON_ARRAY, JSON_VALUE, JSON_QUERY, JSON_EXISTS) forbid a direct
-  // star argument (a bare `*` or a qualified `t.*`). Derived from the single registry list so a
-  // newly routed function is covered without editing this file too.
+  // All routed SQL/JSON functions forbid a direct star argument (a bare `*` or a qualified
+  // `t.*`). Derived from the single registry list so a newly routed function is covered without
+  // editing this file too.
   private val starDisallowedSqlJsonFunctions = FunctionRegistry.routedSqlJsonFunctionNames
 
   /**
-   * True if `nameParts` resolves to Spark's stock built-in routed SQL/JSON function that forbids a
-   * direct star. The `isStockBuiltinFunction` check excludes an `injectFunction` replacement of
-   * the name, whose expanded star is passed through rather than rejected.
+   * Resolves, once, who owns a routed SQL/JSON call (e.g. `json_array(*)`) that carries a direct
+   * star, so direct-star preprocessing and the later [[resolveFunction]] consume a single SQL PATH
+   * decision. Otherwise each phase probes ownership independently, and a temp/persistent shadow
+   * dropped between them lets preprocessing expand the star for the shadow while resolution falls
+   * through to the stock built-in, which no longer sees a [[Star]] and skips
+   * `INVALID_USAGE_OF_STAR_OR_REGEX`. See [[RoutedSqlJsonStarOwner]] for outcomes.
    */
-  def resolvesToStarDisallowedSqlJsonFunction(nameParts: Seq[String]): Boolean =
-    starDisallowedSqlJsonFunctions.exists { name =>
-      functionNameResolvesToBuiltin(nameParts, name) &&
-        v1SessionCatalog.isStockBuiltinFunction(name)
+  def selectRoutedSqlJsonDirectStarOwner(nameParts: Seq[String]): RoutedSqlJsonStarOwner = {
+    routedSqlJsonBuiltinName(nameParts) match {
+      case None => RoutedSqlJsonStarOwner.NoBinding
+      case Some(name) => routedSqlJsonStarOwnerFromPath(nameParts, name)
+    }
+  }
+
+  /**
+   * One ordered pass over the SQL PATH candidates: bind the first shadow that owns the call ahead
+   * of the stock `system.builtin`; reach `system.builtin` first and the stock builder owns it
+   * (reject the star, unless an injectFunction replacement holds the slot -- keep pass-through).
+   * A single pass avoids two independent probes disagreeing when a shadow is dropped between them,
+   * which could bind the stock built-in with the [[Star]] already expanded away.
+   */
+  private def routedSqlJsonStarOwnerFromPath(
+      nameParts: Seq[String],
+      name: String): RoutedSqlJsonStarOwner = {
+    for (candidate <- resolutionCandidates(nameParts)) {
+      if (isSystemBuiltinCandidate(candidate)) {
+        return if (v1SessionCatalog.isStockBuiltinFunction(name)) {
+          RoutedSqlJsonStarOwner.RejectStockBuiltin
+        } else {
+          RoutedSqlJsonStarOwner.NoBinding
+        }
+      } else if (candidateOwnsFunction(candidate)) {
+        return RoutedSqlJsonStarOwner.BindShadowOwner(candidate)
+      }
+    }
+    RoutedSqlJsonStarOwner.NoBinding
+  }
+
+  /** The routed SQL/JSON built-in name this unqualified/`builtin`-qualified call could refer to. */
+  private def routedSqlJsonBuiltinName(nameParts: Seq[String]): Option[String] =
+    starDisallowedSqlJsonFunctions.find { name =>
+      FunctionResolution.isUnqualifiedOrBuiltinFunctionName(nameParts, name)
+    }
+
+  /** Whether `candidate` is the stock `system.builtin.<name>` terminus of the PATH walk. */
+  private def isSystemBuiltinCandidate(candidate: Seq[String]): Boolean =
+    isSystemCatalogQualified(candidate) &&
+      candidate(1).equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE)
+
+  /** Whether `candidate` owns a function, branching as [[resolveFunctionCandidate]] does. */
+  private def candidateOwnsFunction(candidate: Seq[String]): Boolean =
+    if (isSystemCatalogQualified(candidate)) {
+      lookupBuiltinOrTempFunction(candidate, None).isDefined ||
+        lookupBuiltinOrTempTableFunction(candidate).isDefined
+    } else {
+      persistentFunctionExists(candidate)
     }
 
   private def persistentFunctionExists(nameParts: Seq[String]): Boolean = {
@@ -940,4 +1004,24 @@ object FunctionResolution {
     nameParts.lastOption.exists(_.equalsIgnoreCase(expectedName)) &&
       (nameParts.length == 1 || maybeBuiltinFunctionName(nameParts))
   }
+}
+
+/**
+ * Who owns a routed SQL/JSON call carrying a direct star, resolved once during star preprocessing
+ * (see [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]]) so later resolution reuses it.
+ */
+sealed trait RoutedSqlJsonStarOwner
+object RoutedSqlJsonStarOwner {
+  /** Spark's stock routed SQL/JSON builder owns the call; reject the direct star. */
+  case object RejectStockBuiltin extends RoutedSqlJsonStarOwner
+
+  /**
+   * A temp/persistent shadow owns the call. `candidate` is the winning SQL PATH candidate; bind it
+   * via [[UnresolvedFunction.boundOwner]] so later resolution resolves it (or fails), never the
+   * stock built-in.
+   */
+  case class BindShadowOwner(candidate: Seq[String]) extends RoutedSqlJsonStarOwner
+
+  /** Not a routed built-in, or an injectFunction replacement owns the slot: expand the star. */
+  case object NoBinding extends RoutedSqlJsonStarOwner
 }

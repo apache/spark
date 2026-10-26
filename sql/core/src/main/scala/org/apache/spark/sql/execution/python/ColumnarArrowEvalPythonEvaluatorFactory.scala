@@ -45,9 +45,12 @@ import org.apache.spark.util.Utils
  * 1. '''Arrow columnar path''' (UDF inputs are simple column refs AND
  *    columns are [[ArrowColumnVector]]): Arrow FieldVectors are extracted
  *    directly and serialized to IPC. Pass-through columns are kept as
- *    [[ColumnVector]] references (safe because Arrow vectors are
- *    independently allocated per batch). Output is produced by columnar
- *    combining: passThruCols ++ resultCols -> ColumnarBatch.
+ *    [[ColumnVector]] references, which is only correct if the batches stay
+ *    valid until their results come back from Python: a columnar reader may
+ *    reuse or release the vectors of a batch once it is asked for the next
+ *    one. So `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled`
+ *    is disabled by default. Output is produced by columnar combining:
+ *    passThruCols ++ resultCols -> ColumnarBatch.
  *
  * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
  *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar
@@ -175,9 +178,10 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
 
     /**
-     * Path 1: Arrow columnar. ColumnVector references are safe
-     * because Arrow vectors are independently allocated per batch.
-     * Combines pass-through + UDF result columns into ColumnarBatch.
+     * Path 1: Arrow columnar. Keeps references to the pass-through
+     * ColumnVectors, which requires the input batches to stay valid until
+     * their results come back from Python, and combines them with the UDF
+     * result columns into ColumnarBatch.
      */
     private def evalArrowColumnar(
         inputIter: Iterator[ColumnarBatch],
