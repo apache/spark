@@ -2247,8 +2247,8 @@ class SessionCatalog(
       return makeExprInfoForHiveFunction(func)
     }
     try {
-      if (Utils.classIsLoadableAndAssignableFrom(func.className, classOf[UnboundFunction])) {
-        val clazz = Utils.classForName(func.className)
+      val clazz = Utils.classForName(func.className, initialize = false)
+      if (isV2FunctionClass(clazz)) {
         makeExprInfoForV2Function(func, newV2FunctionInstance(clazz, func.identifier))
       } else {
         makeExprInfoForHiveFunction(func)
@@ -2794,20 +2794,21 @@ class SessionCatalog(
     // Check if already cached in either registry
     functionRegistry.lookupFunction(qualifiedIdent)
       .orElse(tableFunctionRegistry.lookupFunction(qualifiedIdent))
-      .getOrElse {
-        val funcMetadata = fetchCatalogFunction(qualifiedIdent)
-        if (funcMetadata.isUserDefinedFunction) {
-          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
-        } else {
-          makeExprInfoForClassFunction(funcMetadata)
-        }
-      }
+      .getOrElse(makePersistentFunctionInfo(fetchCatalogFunction(qualifiedIdent)))
+  }
+
+  private def makePersistentFunctionInfo(func: CatalogFunction): ExpressionInfo = {
+    if (func.isUserDefinedFunction) {
+      UserDefinedFunction.fromCatalogFunction(func, parser).toExpressionInfo
+    } else {
+      makeExprInfoForClassFunction(func)
+    }
   }
 
   /**
    * Load a persistent scalar function by name.
    * Returns V1Function with:
-   * - Eager info (from cache or catalog fetch, no resource loading)
+   * - Lazy info (no resource loading)
    * - Lazy builder (resource loading only on first invoke)
    *
    * This matches V1 behavior where DESCRIBE doesn't load resources.
@@ -2824,11 +2825,6 @@ class SessionCatalog(
       case None =>
         // Fetch metadata eagerly (no resource loading yet)
         val funcMetadata = fetchCatalogFunction(qualifiedIdent)
-        val info = if (funcMetadata.isUserDefinedFunction) {
-          UserDefinedFunction.fromCatalogFunction(funcMetadata, parser).toExpressionInfo
-        } else {
-          makeExprInfoForClassFunction(funcMetadata)
-        }
 
         // Builder factory - loads resources only on first invoke()
         val builderFactory: () => FunctionBuilder = () => synchronized {
@@ -2843,15 +2839,17 @@ class SessionCatalog(
                 makeUserDefinedScalarFuncBuilder(udf))
             } else {
               loadFunctionResources(funcMetadata.resources)
-              val (builder, loadedInfo) = makeFunctionBuilderAndInfo(funcMetadata)
-              registerFunction(
-                funcMetadata, overrideIfExists = false, functionRegistry, builder, Some(loadedInfo))
+              registerFunction(funcMetadata, overrideIfExists = false)
             }
             functionRegistry.lookupFunctionBuilder(qualifiedIdent).get
           }
         }
 
-        V1Function(info, builderFactory)
+        // Once invoked, the registered function carries the complete info.
+        val infoFactory: () => ExpressionInfo = () =>
+          functionRegistry.lookupFunction(qualifiedIdent)
+            .getOrElse(makePersistentFunctionInfo(funcMetadata))
+        V1Function.lazyInfo(infoFactory, builderFactory)
     }
   }
 

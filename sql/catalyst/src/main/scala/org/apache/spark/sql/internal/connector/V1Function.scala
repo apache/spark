@@ -30,15 +30,17 @@ import org.apache.spark.sql.types.StructType
  * 1. Provide ExpressionInfo for DESCRIBE FUNCTION (accessed via `info`)
  * 2. Provide a function builder for invocation (accessed via `invoke()`)
  *
- * The key design is two-phase lazy loading:
- * - `info` is computed eagerly or from cache (no resource loading)
- * - `functionBuilder` is computed lazily on first `invoke()` (triggers resource loading)
+ * Metadata and invocation are loaded independently:
+ * - `info` is computed on first access (no resource loading)
+ * - `functionBuilder` is computed on first `invoke()` (triggers resource loading)
  *
  * This matches V1 behavior where DESCRIBE doesn't load resources but invocation does.
  */
 class V1Function private (
-    val info: ExpressionInfo,
+    infoFactory: () => ExpressionInfo,
     builderFactory: () => FunctionBuilder) extends UnboundFunction {
+
+  lazy val info: ExpressionInfo = infoFactory()
 
   /**
    * Lazy function builder - only computed on first invoke().
@@ -75,14 +77,21 @@ object V1Function {
    * The builderFactory is called on first invoke().
    */
   def apply(info: ExpressionInfo, builderFactory: () => FunctionBuilder): V1Function = {
-    new V1Function(info, builderFactory)
+    new V1Function(() => info, builderFactory)
   }
 
   /**
    * Create a V1Function with eager info and builder (for built-in/temp/cached functions).
    */
   def apply(info: ExpressionInfo, builder: FunctionBuilder): V1Function = {
-    new V1Function(info, () => builder)
+    new V1Function(() => info, () => builder)
+  }
+
+  /** Create a V1Function whose metadata and builder are loaded independently on first use. */
+  def lazyInfo(
+      infoFactory: () => ExpressionInfo,
+      builderFactory: () => FunctionBuilder): V1Function = {
+    new V1Function(infoFactory, builderFactory)
   }
 
   /**
@@ -90,6 +99,6 @@ object V1Function {
    * If invoke() is called, it will throw an error.
    */
   def metadataOnly(info: ExpressionInfo): V1Function = {
-    new V1Function(info, () => metadataOnlyBuilder)
+    new V1Function(() => info, () => metadataOnlyBuilder)
   }
 }
