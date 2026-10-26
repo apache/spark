@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{
   ShuffledHashJoinExec, SortMergeJoinExec, StoragePartitionJoinParams}
@@ -209,8 +210,8 @@ case class EnsureRequirements(
       // from one member, otherwise the sides end up grouped on different keys, or on a key set the
       // child does not even have. Pick that member once, preferring the finest when several
       // qualify. Only the branch that shuffles a child reads these, hence `lazy`.
-      // A child whose matching member comes from a reduced scan only looks compatible on the
-      // transform the scan still reports, so it is shuffled onto the best spec instead.
+      // A child with a member built from a reduced scan only looks compatible on the transform
+      // the scan still reports, so it is shuffled onto the best spec instead.
       lazy val matchedIndexes = bestSpecOpt.toSeq.flatMap { best =>
         childrenIndexes.filter(i => best.isCompatibleWith(specs(i)) &&
           !flattenSpec(specs(i)).exists {
@@ -365,8 +366,22 @@ case class EnsureRequirements(
         // output partitions are ordered. A join below may already have pushed key positions and
         // reducers that these values are expressed in, so keep them rather than reset them.
         val sorted = partitionValues.sorted(partitionOrdering)
-        populateSpjParams(plan, commonPartitionValues = Some(sorted.map((_, 1))),
-          joinKeyPositions = None)
+        // A one-side shuffle below routed its other child into the current order of the values.
+        // Sorting only the scans would leave that child behind, so fall back to a range shuffle.
+        val hasKeyGroupedShuffle = plan.exists {
+          case s @ (_: ShuffleExchangeLike | _: ShuffleQueryStageExec) =>
+            s.outputPartitioning.isInstanceOf[KeyGroupedPartitioning]
+          case _ => false
+        }
+        val reorders = partitionValues.zip(sorted).exists { case (a, b) =>
+          partitionOrdering.compare(a, b) != 0
+        }
+        if (hasKeyGroupedShuffle && reorders) {
+          ShuffleExchangeExec(d.createPartitioning(conf.numShufflePartitions), plan)
+        } else {
+          populateSpjParams(plan, commonPartitionValues = Some(sorted.map((_, 1))),
+            joinKeyPositions = None)
+        }
       case _ => plan
       }
   }
@@ -826,7 +841,15 @@ case class EnsureRequirements(
    * does not have. Positions without a reducer still hold the scan's own values and are sound.
    */
   private def isBuiltFromReducedScan(plan: SparkPlan, spec: KeyGroupedShuffleSpec): Boolean = {
-    val specExpressions = spec.partitioning.expressions
+    // A `Project` between the joins can rename the column under the transform, so map the spec's
+    // columns back through the aliases below `plan` before comparing them with the scan's.
+    val aliases = AttributeMap(plan.flatMap(_.expressions).flatMap(_.collect {
+      case a @ Alias(child: Attribute, _) => a.toAttribute -> child
+    }))
+    def unalias(e: Expression): Expression = e.transformUp {
+      case a: Attribute if aliases.contains(a) => unalias(aliases(a))
+    }
+    val specExpressions = spec.partitioning.expressions.map(unalias)
     // Only a nested join can hand a reduced scan's layout to a later join. Looking below a join
     // also keeps a re-run of this rule over an already planned join from matching its own scans.
     plan.exists {
@@ -835,15 +858,7 @@ case class EnsureRequirements(
           (reportedLayout(scan.spjParams), scan.spjParams.reducers) match {
             case (Some(layout), Some(reducers)) =>
               layout.zip(reducers).exists { case (e, r) =>
-                // A `Project` between the joins can rename the column under the transform, so
-                // match a transform by its function rather than by the column it reads.
-                r.isDefined && specExpressions.exists {
-                  case s: TransformExpression => e match {
-                    case t: TransformExpression => s.isSameFunction(t)
-                    case _ => false
-                  }
-                  case s => s.semanticEquals(e)
-                }
+                r.isDefined && specExpressions.exists(_.semanticEquals(e))
               }
             case _ => false
           }
@@ -886,6 +901,8 @@ case class EnsureRequirements(
       )
     // A broadcast build side does not feed this join's partitioning.
     case b: BroadcastExchangeLike => b
+    // Nor does the input of a shuffle.
+    case s: ShuffleExchangeLike => s
     case node =>
       // Recurse through every child down to the scans.
       node.mapChildren(child => populateSpjParams(
