@@ -65,6 +65,7 @@ import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.execution.vectorized.{OffHeapColumnVector, OnHeapColumnVector, WritableColumnVector}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.connector.StorageFilterErrors
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
@@ -705,7 +706,7 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     def under(levels: Int, fatal: Throwable): Throwable =
       (0 until levels).foldLeft(fatal)((cause, _) => new IllegalStateException("wraps", cause))
     def rethrow(e: Throwable, fromRead: Boolean): Unit =
-      ParquetStorageFilter.rethrowIfMustPropagate(e, fromRead)
+      StorageFilterErrors.rethrowIfMustPropagate(e, fromRead)
     def fallsBack(e: Throwable, fromRead: Boolean): Unit =
       try rethrow(e, fromRead) catch {
         // ScalaTest would abort the whole suite on these rather than fail this test.

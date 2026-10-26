@@ -17,22 +17,17 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, If, Literal}
-import org.apache.spark.sql.connector.read.SupportsStorageFilters
-import org.apache.spark.sql.execution.WholeStageCodegenExec
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Expression, ExpressionSet, If, Literal}
+import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.BooleanType
+import org.apache.spark.sql.types.{BinaryType, BooleanType}
 
 /**
- * The planning rules file-source and DSv2 scans share for storage filters, see
+ * The rules file-source and DSv2 scans share for storage filters, see
  * `FileFormat.buildReaderWithStorageFilters` and `SupportsStorageFilters`. Each strategy decides
  * on its own whether its scan can take any.
  */
 object StorageFilterPlanning {
-
-  /** Whether one of `names` is the checked column's, in which case no filter is offered. */
-  def clashesWithCheckedColumn(names: Seq[String]): Boolean =
-    names.exists(_.equalsIgnoreCase(SupportsStorageFilters.CHECKED_COLUMN_NAME))
 
   /**
    * The conjuncts of `filters` offered to the scan, each once, as an `ExpressionSet` counts them.
@@ -60,17 +55,18 @@ object StorageFilterPlanning {
   }
 
   /**
-   * The column the reader marks the rows it checked in, added after `output` when a filter is
-   * `offered`. Only where whole-stage codegen is on and `output` with the column still fits it, so
-   * the column never changes how the scan runs. Elsewhere the Project that drops the column could
-   * copy every surviving row.
+   * The column the reader marks the rows it checked in, when a filter is `offered`. The caller
+   * places it in the scan's output. Only where whole-stage codegen is on and `output` with the
+   * column still fits it, so the column keeps the scan in whole-stage codegen. Elsewhere the
+   * Project that drops the column could copy every surviving row. A post-scan conjunct that cannot
+   * be generated still puts that Project in a stage of its own, the trade-off SPARK-60034 accepted.
    */
   def checkedColumn(
       conf: SQLConf,
       offered: Seq[Expression],
       output: Seq[Attribute]): Option[AttributeReference] = {
     if (offered.isEmpty) return None
-    val checked = AttributeReference(SupportsStorageFilters.CHECKED_COLUMN_NAME, BooleanType)()
+    val checked = AttributeReference(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME, BooleanType)()
     Option.when(conf.wholeStageEnabled &&
       !WholeStageCodegenExec.isTooManyFields(conf, (output :+ checked).toStructType))(checked)
   }
@@ -91,5 +87,17 @@ object StorageFilterPlanning {
       val offeredSet = ExpressionSet(offered)
       filters.map(f => if (offeredSet.contains(f)) If(c, Literal.TrueLiteral, f) else f)
     case None => filters
+  }
+
+  /**
+   * `filter` with each scalar subquery replaced by its result, for the readers. Each bloom filter
+   * becomes a literal of its own bytes. A subquery `MergeSubplans` merged returns the blooms of
+   * several filters in one struct, so a bloom read out of it would otherwise carry the whole
+   * struct.
+   */
+  def withSubqueryResults(filter: Expression): Expression = filter.transformUp {
+    case s: ExecScalarSubquery => s.toLiteral
+    case m @ BloomFilterMightContain(bloom, _) if bloom.foldable && !bloom.isInstanceOf[Literal] =>
+      m.copy(bloomFilterExpression = Literal(bloom.eval(), BinaryType))
   }
 }

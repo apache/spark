@@ -33,7 +33,7 @@ import org.apache.spark.sql.catalyst.optimizer.UnwrapCastInBinaryComparison
 import org.apache.spark.sql.catalyst.planning.PhysicalOperation
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.SCALAR_SUBQUERY
-import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
+import org.apache.spark.sql.catalyst.util.{quoteIfNeeded, toPrettySQL, GeneratedColumn, IdentityColumn, MetadataColumnHelper, ResolveDefaultColumns, ResolveTableConstraints, V2ExpressionBuilder}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Dependency, DependencyList, Identifier, StagingTableCatalog, SupportsDeleteV2, SupportsNamespaces, SupportsPartitionManagement, SupportsWrite, TableCapability, TableCatalog, TableSummary, TruncatableTable, V1Table, V1View, ViewCatalog}
 import org.apache.spark.sql.connector.catalog.TableChange
@@ -130,7 +130,8 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
   /**
    * The conjuncts of `filters` offered to the scan as storage filters, see
    * `SupportsStorageFilters` and `StorageFilterPlanning.offeredConjuncts`. Only runtime blooms for
-   * now, as on the file-source side.
+   * now, as on the file-source side. The columns left to skip are the data columns, as there, so a
+   * scan that reads only the key and metadata columns is offered none.
    */
   private def storageFiltersFor(
       relation: DataSourceV2ScanRelation,
@@ -138,16 +139,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
     if (!session.sessionState.conf.v2StorageFilterPushdownEnabled) return Nil
     if (relation.storageFilterAttrs.isEmpty) return Nil
     // A scan that took a pushed limit, offset, top-N or sample, or an aggregate or join, would have
-    // its readers filter ahead of it. `V2ScanRelationPushDown` leaves every such scan, and any scan
-    // a later pushdown builds, not mergeable.
-    if (!relation.mergeableScan) return Nil
-    // Over the whole table, as on the file-source side, since `SupportsStorageFilters` reserves
-    // the name.
-    if (StorageFilterPlanning.clashesWithCheckedColumn(relation.relation.output.map(_.name))) {
-      return Nil
-    }
+    // its readers filter ahead of it.
+    if (!relation.onlyRowWisePushdowns) return Nil
+    val metadataColumns = relation.relation.output.filter(_.isMetadataCol).map(_.exprId).toSet
+    val dataColumns = relation.output.filterNot(a => metadataColumns.contains(a.exprId))
     StorageFilterPlanning.offeredConjuncts(filters, relation.storageFilterAttrs,
-      AttributeSet(relation.output), _.isInstanceOf[BloomFilterMightContain])
+      AttributeSet(dataColumns), _.isInstanceOf[BloomFilterMightContain])
   }
 
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
@@ -233,7 +230,7 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
         session.sessionState.conf, storageFilters, relation.output)
       val batchExec = BatchScanExec(relation.output ++ checked, relation.scan, runtimeFilters,
         relation.ordering, relation.relation.table, relation.keyGroupedPartitioning,
-        storageFilters, checked)
+        storageFilters, checked.isDefined)
       // With the checked column the scan's output differs from `project`, so a Project drops it.
       DataSourceV2Strategy.withProjectAndFilter(project,
         StorageFilterPlanning.skipCheckedRows(filtersAbove, storageFilters, checked),

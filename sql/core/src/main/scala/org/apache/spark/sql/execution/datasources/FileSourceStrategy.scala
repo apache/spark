@@ -176,8 +176,8 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
       readerDataSchema: StructType): Seq[Expression] = {
     val sparkSession = fsRelation.sparkSession
     if (!fsRelation.fileFormat.supportsStorageFilterPushdown(sparkSession)) return Nil
-    if (StorageFilterPlanning.clashesWithCheckedColumn(
-        fsRelation.schema.fieldNames.toImmutableArraySeq)) {
+    if (fsRelation.schema.fieldNames.exists(
+        _.equalsIgnoreCase(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME))) {
       return Nil
     }
     val resultSchema = StructType(fsRelation.partitionSchema.fields ++ readerDataSchema.fields)

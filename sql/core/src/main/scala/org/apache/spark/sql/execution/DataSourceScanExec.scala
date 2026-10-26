@@ -817,8 +817,8 @@ case class FileSourceScanExec(
   protected lazy val preparedStorageFilters: Seq[Expression] = {
     val requestedDataAttrs = output.take(requiredSchema.length)
     storageFilters.map { expr =>
-      val subqueryReplaced = expr.transform { case s: execution.ScalarSubquery => s.toLiteral }
-      BindReferences.bindReference(subqueryReplaced, requestedDataAttrs)
+      BindReferences.bindReference(
+        StorageFilterPlanning.withSubqueryResults(expr), requestedDataAttrs)
     }
   }
 

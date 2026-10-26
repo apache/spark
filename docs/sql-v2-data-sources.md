@@ -322,7 +322,9 @@ input partition. The reader iterates over rows (or `ColumnarBatch` instances for
 and is closed after consumption. For a `SupportsStorageFilters` scan that Spark offered a storage
 filter, `createReader(partition, request)` or `createColumnarReader(partition, request)` creates the
 reader instead. The `StorageFilterRequest` carries the filter, and whether the reader appends a
-column that marks the rows it applied the filter to.
+boolean column that is true only on the rows the filter was evaluated on and kept. When the filter
+throws `StorageFilterNotAppliedException`, the reader reads the rest of the unit without it. Scala
+does not check exceptions, so a reader written in Scala must catch it all the same.
 
 ### Scan Mix-ins
 

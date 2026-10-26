@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.{SparkArithmeticException, SparkConf, SparkException, SparkFunSuite, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Cast, Divide, EqualTo, EvalMode, Expression, GreaterThan, Literal, NumericEvalContext, Remainder, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
@@ -100,8 +101,8 @@ class StorageFilterImplSuite extends SparkFunSuite {
     }
     val request = StorageFilterRequestImpl(evenKeys, appendsCheckedColumn = false)
     Seq(
-      () => factory.createReader(StorageFilterTestPartition, request),
-      () => factory.createColumnarReader(StorageFilterTestPartition, request)
+      () => factory.createReader(StorageFilterTestPartition(0, 1), request),
+      () => factory.createColumnarReader(StorageFilterTestPartition(0, 1), request)
     ).foreach { create =>
       val e = intercept[SparkUnsupportedOperationException](create())
       assert(e.getCondition == "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED",
@@ -109,19 +110,48 @@ class StorageFilterImplSuite extends SparkFunSuite {
     }
   }
 
-  test("an error holding a fatal one propagates as it is") {
-    val error = new RuntimeException("wrapper", new OutOfMemoryError("deep"))
+  // The file-source reader's rule, see `StorageFilterErrors`, which its own suite covers in full.
+  test("a fatal error in the cause chain propagates as itself") {
+    val fatal = new OutOfMemoryError("deep")
+    val error = new RuntimeException("wraps", fatal)
     val filter = StorageFilterImpl(ThrowingPredicate(k, error), Seq(k))
-    val e = intercept[RuntimeException](filter.eval(InternalRow(1L)))
-    assert(e eq error, s"got $e")
+    val e = intercept[OutOfMemoryError](filter.eval(InternalRow(1L)))
+    assert(e eq fatal, s"got $e")
   }
 
-  test("an error during a task kill propagates as it is") {
+  test("an InternalError propagates in an UnknownError, so it cannot pass for a corrupt file") {
+    val internal = new InternalError("fatal")
+    val filter = StorageFilterImpl(ThrowingPredicate(k, internal), Seq(k))
+    val e = intercept[UnknownError](filter.eval(InternalRow(1L)))
+    assert(e.getCause eq internal, s"got ${e.getCause}")
+  }
+
+  test("an error during a task kill propagates in a checked SparkException") {
     val context = TaskContext.empty()
     context.markInterrupted("test")
     TaskContext.withTaskContext(context) {
-      intercept[SparkArithmeticException](positiveInverse.eval(InternalRow(0L)))
+      val e = intercept[SparkException](positiveInverse.eval(InternalRow(0L)))
+      assert(e.getCause.isInstanceOf[SparkArithmeticException], s"got ${e.getCause}")
     }
+  }
+
+  test("a LinkageError answers that the filter is not applied") {
+    val error = new LinkageError("not fatal to the executor")
+    val filter = StorageFilterImpl(ThrowingPredicate(k, error), Seq(k))
+    val e = intercept[StorageFilterNotAppliedException](filter.eval(InternalRow(1L)))
+    assert(e.getCause eq error, s"got ${e.getCause}")
+  }
+
+  test("an evaluated filter releases its expression, so a later copy cannot be evaluated") {
+    // The readers of a task share the instance their task deserialized, and only the first
+    // evaluation builds the predicate. A copy of an evaluated instance has nothing to build from.
+    val filter = evenKeys
+    assert(filter.eval(InternalRow(4L)))
+    assert(!filter.eval(InternalRow(3L)), "the predicate built first is used again")
+    val copy = new JavaSerializer(new SparkConf()).newInstance()
+    val copied = copy.deserialize[StorageFilterImpl](copy.serialize(filter))
+    val e = intercept[SparkException](copied.eval(InternalRow(4L)))
+    assert(e.getCondition == "INTERNAL_ERROR", s"got ${e.getCondition}")
   }
 }
 

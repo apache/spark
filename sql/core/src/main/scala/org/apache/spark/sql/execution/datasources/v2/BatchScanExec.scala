@@ -29,9 +29,11 @@ import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
 import org.apache.spark.sql.connector.write.RowLevelOperationTable
-import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, ScalarSubquery => ExecScalarSubquery}
+import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
 import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -42,8 +44,8 @@ import org.apache.spark.util.ArrayImplicits._
  *                       only for a scan that declared their columns. Each task's readers get them
  *                       ANDed into one filter, in a [[StorageFilterRequest]]. They stay in the
  *                       post-scan `Filter` too.
- * @param checkedColumn The column the readers mark the rows they checked in, last in `output`, when
- *                      the planner asked for one, see `StorageFilterPlanning.checkedColumn`.
+ * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
+ *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
@@ -53,12 +55,17 @@ case class BatchScanExec(
     @transient table: Table,
     keyGroupedPartitioning: Option[Seq[Expression]] = None,
     storageFilters: Seq[Expression] = Nil,
-    checkedColumn: Option[AttributeReference] = None
+    appendsCheckedColumn: Boolean = false
   ) extends DataSourceV2ScanExecBase {
 
   // The readers are asked for the column only with storage filters, and append it last.
-  require(checkedColumn.isEmpty || (storageFilters.nonEmpty && output.lastOption == checkedColumn),
+  require(!appendsCheckedColumn ||
+    (storageFilters.nonEmpty && output.lastOption.exists(_.dataType == BooleanType)),
     "A checked column comes with storage filters, last in the output")
+
+  // The output the scan was planned for, without the checked column the readers append.
+  private def scanOutput: Seq[AttributeReference] =
+    if (appendsCheckedColumn) output.init else output
 
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
 
@@ -83,13 +90,13 @@ case class BatchScanExec(
           this.runtimeFilters == other.runtimeFilters &&
           this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning &&
           this.storageFilters == other.storageFilters &&
-          this.checkedColumn.isDefined == other.checkedColumn.isDefined
+          this.appendsCheckedColumn == other.appendsCheckedColumn
     case _ =>
       false
   }
 
   override def hashCode(): Int = Objects.hash(
-    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, checkedColumn.isDefined)
+    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, appendsCheckedColumn)
 
   /**
    * The reported partitioning keys restricted to those still present in `output`. A key may
@@ -104,13 +111,14 @@ case class BatchScanExec(
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
 
-  // Visible for testing
+  // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
+  // column must not take part in.
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
     PushDownUtils.replanWithRuntimeFilters(
       scan,
       runtimeFilters,
       table,
-      output,
+      scanOutput,
       reportedKeyedPartitioning,
       inputPartitions)
 
@@ -118,11 +126,11 @@ case class BatchScanExec(
 
   // What every task's readers get, the storage filters ANDed into one. A runtime bloom arrives as
   // a ScalarSubquery over the build side, which SparkPlan has computed by the time this is forced.
-  // The readers get its literal, so the task does not carry the subquery's plan.
+  // The readers get its result, so the task does not carry the subquery's plan.
   @transient private lazy val storageFilterRequest: Option[StorageFilterRequest] =
-    storageFilters.map(_.transform { case s: ExecScalarSubquery => s.toLiteral })
+    storageFilters.map(StorageFilterPlanning.withSubqueryResults)
       .reduceOption(And)
-      .map(c => StorageFilterRequestImpl(StorageFilterImpl(c, output), checkedColumn.isDefined))
+      .map(c => StorageFilterRequestImpl(StorageFilterImpl(c, scanOutput), appendsCheckedColumn))
 
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
@@ -131,7 +139,7 @@ case class BatchScanExec(
     } else {
       new DataSourceRDD(
         sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
-        storageFilterRequest)
+        storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
@@ -147,8 +155,7 @@ case class BatchScanExec(
         _.map(QueryPlan.normalizeExpressions(_, output))),
       // Storage filters change what the scan returns, so a scan carrying one must not be reused for
       // a plain scan of the same table.
-      storageFilters = QueryPlan.normalizePredicates(storageFilters, output),
-      checkedColumn = checkedColumn.map(QueryPlan.normalizeExpressions(_, output)))
+      storageFilters = QueryPlan.normalizePredicates(storageFilters, output))
   }
 
   override def simpleString(maxFields: Int): String = {

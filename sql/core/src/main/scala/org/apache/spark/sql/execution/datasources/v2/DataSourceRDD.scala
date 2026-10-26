@@ -142,6 +142,10 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  * @param storageFilterRequest What every reader gets when the scan was offered storage filters.
  *                             Serialized with the task, so each task has its own instance of the
  *                             filter.
+ * @param checkedOutputWidth The width of the rows or batches a reader returns when the request asks
+ *                           for the checked column. Each reader's first one is checked against it,
+ *                           since a reader that leaves the column out would have the plan above
+ *                           the scan read past its rows.
  */
 class DataSourceRDD(
     sc: SparkContext,
@@ -149,7 +153,8 @@ class DataSourceRDD(
     partitionReaderFactory: PartitionReaderFactory,
     columnarReads: Boolean,
     customMetrics: Map[String, SQLMetric],
-    storageFilterRequest: Option[StorageFilterRequest] = None)
+    storageFilterRequest: Option[StorageFilterRequest] = None,
+    checkedOutputWidth: Option[Int] = None)
   extends RDD[InternalRow](sc, Nil) {
 
   // One TaskState per task attempt.
@@ -195,13 +200,15 @@ class DataSourceRDD(
           case Some(request) => partitionReaderFactory.createColumnarReader(inputPartition, request)
           case None => partitionReaderFactory.createColumnarReader(inputPartition)
         }
-        new PartitionIterator[ColumnarBatch](batchReader, _.numRows, taskState)
+        new PartitionIterator[ColumnarBatch](batchReader, _.numRows, taskState,
+          checkedOutputWidth.map(width => batch => checkWidth(width, batch.numCols())))
       } else {
         val rowReader = storageFilterRequest match {
           case Some(request) => partitionReaderFactory.createReader(inputPartition, request)
           case None => partitionReaderFactory.createReader(inputPartition)
         }
-        new PartitionIterator[InternalRow](rowReader, _ => 1, taskState)
+        new PartitionIterator[InternalRow](rowReader, _ => 1, taskState,
+          checkedOutputWidth.map(width => row => checkWidth(width, row.numFields)))
       }
 
       // Track this iterator; early-stop close and final metrics-flush for iterators not yet
@@ -214,6 +221,13 @@ class DataSourceRDD(
     }
   }
 
+  private def checkWidth(expected: Int, actual: Int): Unit = {
+    if (actual != expected) {
+      throw QueryExecutionErrors.storageFilterCheckedColumnMissingError(
+        partitionReaderFactory.getClass.getName, expected, actual)
+    }
+  }
+
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartition.toSeq.flatMap(_.preferredLocations())
   }
@@ -222,9 +236,11 @@ class DataSourceRDD(
 private class PartitionIterator[T](
     private var reader: PartitionReader[T],
     rowCount: T => Int,
-    taskState: TaskState) extends Iterator[T] {
+    taskState: TaskState,
+    checkFirst: Option[T => Unit] = None) extends Iterator[T] {
   private var valuePrepared = false
   private var hasMoreInput = true
+  private var firstChecked = checkFirst.isEmpty
 
   // Cached final metrics snapshot, captured just before the reader is closed on natural
   // exhaustion. Allows mergeAndUpdateCustomMetrics() to include this reader's contribution
@@ -264,6 +280,10 @@ private class PartitionIterator[T](
     }
     valuePrepared = false
     val result = reader.get()
+    if (!firstChecked) {
+      firstChecked = true
+      checkFirst.get(result)
+    }
     taskState.updateMetrics(rowCount(result))
     result
   }

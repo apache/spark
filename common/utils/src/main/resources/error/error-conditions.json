@@ -2397,6 +2397,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
+    "message" : [
+      "A reader of <class> was asked to append the column that marks the rows a storage filter checked, but it returned <actual> columns, not <expected>."
+    ],
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED" : {
     "message" : [
       "<class> cannot create a reader that applies a storage filter."

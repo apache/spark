@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector.expressions.filter;
 
+import java.io.Serializable;
+
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.expressions.NamedReference;
@@ -32,7 +34,7 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * <p>
  * The filter is a predicate on the rows the scan returns. Spark offers none to a scan that took a
  * pushed operation that decides which rows it returns, such as a limit, an offset, a top-N, a
- * sample or an aggregate.
+ * sample, an aggregate or a join.
  * <p>
  * Spark implements the predicate, and the reader only supplies the values. For example, a scan
  * does not have to reproduce the Spark sketch and hash of a runtime bloom filter. The values must
@@ -52,23 +54,14 @@ import org.apache.spark.sql.vectorized.ColumnarBatch;
  * @since 5.0.0
  */
 @Evolving
-public abstract class StorageFilter extends Predicate {
-
-  public static final String NAME = "STORAGE_FILTER";
-
-  protected StorageFilter() {
-    super(NAME, EMPTY_EXPRESSION);
-  }
+public abstract class StorageFilter implements Serializable {
 
   /**
-   * {@inheritDoc}
-   * <p>
-   * For a StorageFilter these are the columns the predicate reads, and their order is the layout of
-   * the row {@link #eval(InternalRow)} and the batch {@link #select(ColumnarBatch, int[])} expect.
-   * Each names one of the scan's {@link SupportsStorageFilters#storageFilterAttributes()}, as
+   * The columns the predicate reads. Their order is the layout of the row
+   * {@link #eval(InternalRow)} and the batch {@link #select(ColumnarBatch, int[])} expect. Each
+   * names one of the scan's {@link SupportsStorageFilters#storageFilterAttributes()}, as
    * {@link Scan#readSchema()} spells it.
    */
-  @Override
   public abstract NamedReference[] references();
 
   /**

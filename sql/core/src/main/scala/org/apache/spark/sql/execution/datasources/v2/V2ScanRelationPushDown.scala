@@ -865,8 +865,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * Whether the plain-scan path ([[pruneColumns]]) carries a pushdown that a Spark-side scan merge
    * (see `TableCapability.SCAN_MERGING`) cannot reproduce by
    * rebuilding the scan from a fresh `ScanBuilder` and re-applying the pushed filters and pruned
-   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`),
-   * which also keeps storage filters away from such a scan, see `DataSourceV2Strategy`.
+   * columns. Used only to decide the plain-scan `mergeableScan` flag (`!hasBlockingPushdown`).
    *
    * Scan merging is default-safe: [[DataSourceV2ScanRelation.mergeableScan]] defaults to false and
    * this is the ONLY site that ever sets it true. Every other scan-relation build path -- the
@@ -888,6 +887,18 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * plain-scan state to [[ScanBuilderHolder]], list it above so it keeps the scan not-mergeable.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
+    holder.pushedLimit.isDefined ||
+      holder.pushedOffset.isDefined ||
+      holder.pushedSample.isDefined ||
+      holder.sortOrders.nonEmpty
+
+  /**
+   * Whether the scan took a pushed operation that decides which rows it returns, rather than one
+   * that works on each row by itself. It decides the `onlyRowWisePushdowns` flag of the plain and
+   * the variant-extraction scans, see [[DataSourceV2ScanRelation.onlyRowWisePushdowns]]. A pushed
+   * aggregate or join never reaches those builds, and their scans keep the flag's default.
+   */
+  private def hasRowSelectingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||
       holder.pushedOffset.isDefined ||
       holder.pushedSample.isDefined ||
@@ -958,7 +969,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
       // Pushed variant extraction cannot be reproduced by rebuilding the scan, so this scan stays
       // not-mergeable (the default `mergeableScan = false`).
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
+        onlyRowWisePushdowns = !hasRowSelectingPushdown(holder))
 
       // Create projection to map real output to expected output (with transformed types)
       val outputProjection = realOutput.zip(holder.output).map { case (realAttr, expectedAttr) =>
@@ -1039,7 +1051,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         inferredFilters = remappedInferredFilters,
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
-        mergeableScan = !hasBlockingPushdown(sHolder))
+        mergeableScan = !hasBlockingPushdown(sHolder),
+        onlyRowWisePushdowns = !hasRowSelectingPushdown(sHolder))
 
       val inferredAdjustmentFilters =
         if (shouldAddPostPushdownAdjustmentFilters(scanRelation)) {

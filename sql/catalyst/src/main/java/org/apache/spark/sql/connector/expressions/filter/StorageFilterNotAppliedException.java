@@ -29,7 +29,8 @@ import org.apache.spark.annotation.Evolving;
  * filtering, such as a file or a row group, without the filter. The cause is the error the filter
  * met.
  * <p>
- * It is checked, so a reader handles it where it can fall back to reading without the filter. A
+ * It is checked, so a reader handles it where it can fall back to reading without the filter.
+ * Scala does not check exceptions, so a reader written in Scala must catch it all the same. A
  * reader that lets it out anyway fails the task, instead of dropping or keeping rows the filter
  * never decided on. Its error condition, {@code STORAGE_FILTER_NOT_APPLIED}, then points at the
  * data source's reader.

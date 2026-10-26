@@ -755,6 +755,19 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = null)
   }
 
+  def storageFilterCheckedColumnMissingError(
+      factoryClass: String,
+      expected: Int,
+      actual: Int): Throwable = {
+    new SparkException(
+      errorClass = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
+      messageParameters = Map(
+        "class" -> factoryClass,
+        "expected" -> expected.toString,
+        "actual" -> actual.toString),
+      cause = null)
+  }
+
   def dataPathNotSpecifiedError(): SparkIllegalArgumentException = {
     new SparkIllegalArgumentException("_LEGACY_ERROR_TEMP_2047")
   }

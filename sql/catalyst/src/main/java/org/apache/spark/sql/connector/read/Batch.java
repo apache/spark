@@ -37,7 +37,9 @@ public interface Batch {
    * If the {@link Scan} supports filter pushdown, this Batch is likely configured with a filter
    * and is responsible for creating splits for that filter, which is not a full scan.
    * <p>
-   * This method will be called only once during a data source scan, to launch one Spark job.
+   * Spark may call this method more than once for the same scan, for instance when it plans the
+   * scan again for runtime filtering. A data source whose planning is costly can cache the
+   * partitions in its {@link Scan}.
    */
   InputPartition[] planInputPartitions();
 
