@@ -393,7 +393,10 @@ private[sql] final case class LiteralValue[T](value: T, dataType: DataType) exte
       "NULL"
     } else {
       dataType match {
-        case StringType => s"'${s"$value".replace("'", "''")}'"
+        // The StringType value pattern matches only the default UTF8_BINARY collation.
+        // Other collations are StringType instances and need the same quoting and escaping.
+        // Pattern predicates also rely on these quotes when extracting the literal contents.
+        case _: StringType => s"'${s"$value".replace("'", "''")}'"
         case BinaryType =>
           assert(value.isInstanceOf[Array[Byte]])
           val bytes = value.asInstanceOf[Array[Byte]]

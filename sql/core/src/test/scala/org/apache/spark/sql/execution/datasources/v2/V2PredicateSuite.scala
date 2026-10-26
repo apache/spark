@@ -308,6 +308,22 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate4) == None)
   }
 
+  Seq("STARTS_WITH", "ENDS_WITH", "CONTAINS").foreach { predicateName =>
+    test(s"$predicateName descriptions preserve collated string literals") {
+      for {
+        collation <- Seq("UTF8_LCASE", "UNICODE_CI")
+        value <- Seq("", "a", "abc", "it's", "a%b_c", "a\\b")
+      } {
+        val string = UTF8String.fromString(value)
+        val predicate = new Predicate(predicateName,
+          Array[Expression](ref("a"), LiteralValue(string, StringType(collation))))
+        val binaryPredicate = new Predicate(predicateName,
+          Array[Expression](ref("a"), LiteralValue(string, StringType)))
+        assert(predicate.describe() == binaryPredicate.describe())
+      }
+    }
+  }
+
   test("StringStartsWith") {
     val literal = LiteralValue(UTF8String.fromString("str"), StringType)
     val predicate1 = new Predicate("STARTS_WITH",
