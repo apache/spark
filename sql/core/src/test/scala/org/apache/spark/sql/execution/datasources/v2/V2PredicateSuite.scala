@@ -18,12 +18,15 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, Literal, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter._
 import org.apache.spark.sql.execution.datasources.v2.V2PredicateSuite.ref
 import org.apache.spark.sql.internal.connector.PredicateUtils
 import org.apache.spark.sql.sources.{AlwaysFalse => V1AlwaysFalse, AlwaysTrue => V1AlwaysTrue, And => V1And, EqualNullSafe, EqualTo, GreaterThan, GreaterThanOrEqual, In, IsNotNull, IsNull, LessThan, LessThanOrEqual, Not => V1Not, Or => V1Or, StringContains, StringEndsWith, StringStartsWith}
-import org.apache.spark.sql.types.{IntegerType, StringType}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class V2PredicateSuite extends SparkFunSuite {
@@ -171,6 +174,52 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get == v1Filter)
     assert(PredicateUtils.toV1(v1Filter.toV2).get == v1Filter)
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
+  }
+
+  for ((operand, expected) <- Seq(
+      (new Predicate("OR", Array[Expression](ref("a"), ref("b"))),
+        "((a) OR (b)) IN (true, false)"),
+      (new Predicate("NOT", Array[Expression](ref("a"))), "(NOT (a)) IN (true, false)"),
+      (new Predicate("=", Array[Expression](ref("a"), ref("b"))), "(a = b) IN (true, false)"))) {
+    test(s"IN preserves value operand precedence: ${operand.name()}") {
+      val predicate = new Predicate("IN", Array[Expression](
+        operand, LiteralValue(true, BooleanType), LiteralValue(false, BooleanType)))
+      assert(predicate.describe() == expected)
+      val empty = new Predicate("IN", Array[Expression](operand))
+      val groupedOperand = expected.stripSuffix(" IN (true, false)")
+      assert(empty.describe() == s"CASE WHEN $groupedOperand IS NULL THEN NULL ELSE FALSE END")
+    }
+  }
+
+  test("IN preserves three-valued logic for compound operands") {
+    def evaluate(sql: String, a: java.lang.Boolean, b: java.lang.Boolean): Any = {
+      CatalystSqlParser.parseExpression(sql).transform {
+        case attr: UnresolvedAttribute =>
+          CatalystLiteral.create(if (attr.name == "a") a else b, BooleanType)
+      }.eval()
+    }
+
+    val values = Seq[java.lang.Boolean](true, false, null)
+    for {
+      (operand, expectedOperand) <- Seq(
+        (new Predicate("OR", Array[Expression](ref("a"), ref("b"))), "(a OR b)"),
+        (new Predicate("NOT", Array[Expression](ref("a"))), "(NOT a)"),
+        (new Predicate("=", Array[Expression](ref("a"), ref("b"))), "(a = b)"))
+      a <- values
+      b <- values
+      list <- Seq(Seq.empty, Seq(true), Seq(false), Seq(true, false))
+    } {
+      val predicate = new Predicate("IN", Array[Expression](operand) ++
+        list.map(value => LiteralValue(value, BooleanType)))
+      val expected = if (list.isEmpty) {
+        s"CASE WHEN $expectedOperand IS NULL THEN NULL ELSE FALSE END"
+      } else {
+        s"$expectedOperand IN (${list.mkString(", ")})"
+      }
+      withClue(s"${predicate.describe()}, a=$a, b=$b: ") {
+        assert(evaluate(predicate.describe(), a, b) == evaluate(expected, a, b))
+      }
+    }
   }
 
   test("In") {
