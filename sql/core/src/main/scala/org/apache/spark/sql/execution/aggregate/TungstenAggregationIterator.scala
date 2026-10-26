@@ -542,8 +542,9 @@ class TungstenAggregationIterator(
       } else {
         // Adaptive partial aggregation bypassed partial aggregation: emit the remaining input
         // rows as single-row partial buffers, after the frozen map output above. The drain is
-        // not timed: `next()` is pulled lazily, so timing from the first to the last pass-through
-        // row would also count the downstream work between the calls.
+        // not timed: timing each row would cost two `System.nanoTime()` calls per row, comparable
+        // to passing it through, and `next()` is pulled lazily, so timing from the first to the
+        // last pass-through row would also count the downstream work between the calls.
         nextPassThroughOutput()
       }
 

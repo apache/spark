@@ -200,6 +200,9 @@ queue behind it and flushed only after it drains, so a duplicate of a key alread
 merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
 `first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
 again right before the aggregation map would spill, in which case the spill is skipped entirely.
+The SQL UI counts the passed-through rows in `number of pass-through output rows`; they are not
+timed, so `time in aggregation build` covers only the aggregation up to the point where
+pass-through starts.
 Because pass-through cannot be reversed, the evaluation before a spill also waits until the current
 map has processed `minRows` rows, so a map that fills sooner spills as usual instead of committing
 the task on a small sample.
