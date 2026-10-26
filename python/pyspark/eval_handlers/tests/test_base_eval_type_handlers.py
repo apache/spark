@@ -22,6 +22,7 @@ Handler-flavor tests live alongside their module, e.g. the Arrow handlers in
 """
 
 import os
+import unittest
 from unittest.mock import patch
 
 from pyspark.errors import PySparkRuntimeError
@@ -40,7 +41,13 @@ from pyspark.sql.pandas.serializers import (
     ArrowStreamSerializer,
 )
 from pyspark.sql.types import LongType
-from pyspark.testing.utils import PySparkBaseTestCase
+from pyspark.testing.utils import (
+    PySparkBaseTestCase,
+    have_pandas,
+    have_pyarrow,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 from pyspark.util import PythonEvalType
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
@@ -316,6 +323,57 @@ class HandlerUDFsTests(PySparkBaseTestCase):
             udf.funcs[0](1)
         self.assertIs(handler._raw_funcs[0], self._stop)
 
+    def test_fail_on_stopiteration_per_handler(self):
+        not_wrapped = {
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
+            PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
+            PythonEvalType.SQL_ARROW_BATCHED_UDF,
+        }
+        for _, variants in list(_eval_type_handlers.values()):
+            for handler_cls in variants.values():
+                with self.subTest(handler=handler_cls.__name__):
+                    self.assertEqual(
+                        handler_cls._fail_on_stopiteration,
+                        handler_cls.eval_type not in not_wrapped,
+                    )
+
+        class _NotWrapped(self._Handler):
+            _fail_on_stopiteration = False
+
+        with self.assertRaises(StopIteration):
+            self._new(_NotWrapped)._funcs[0](1)
+
+    def test_profiler_selected_by_conf(self):
+        def f(x):
+            return x
+
+        def data_source_f(x):
+            return x
+
+        data_source_f.__module__ = "pyspark.sql.worker.plan_data_source_read"
+
+        udf_perf = self._Handler([], RunnerConf({"spark.sql.pyspark.udf.profiler": "perf"}), None)
+        data_source_perf = self._Handler(
+            [], RunnerConf({"spark.sql.pyspark.dataSource.profiler": "perf"}), None
+        )
+        udf_memory = self._Handler(
+            [], RunnerConf({"spark.sql.pyspark.udf.profiler": "memory"}), None
+        )
+        no_profiler = self._Handler([], RunnerConf({}), None)
+        with patch.object(
+            EvalTypeHandler, "_with_perf_profiler", side_effect=lambda func, result_id: "perf"
+        ) as perf:
+            self.assertEqual(udf_perf._with_profiler(f, 0), "perf")
+            self.assertIs(data_source_perf._with_profiler(f, 0), f)
+            self.assertIs(udf_perf._with_profiler(data_source_f, 0), data_source_f)
+            self.assertEqual(data_source_perf._with_profiler(data_source_f, 0), "perf")
+            self.assertEqual(perf.call_count, 2)
+        with patch.object(
+            EvalTypeHandler, "_with_memory_profiler", side_effect=lambda func, result_id: "memory"
+        ):
+            self.assertEqual(udf_memory._with_profiler(f, 0), "memory")
+        self.assertIs(no_profiler._with_profiler(f, 0), f)
+
     def test_chains_funcs_in_order(self):
         handler = self._Handler(
             [self._udf(lambda x: x + 1, lambda x: x * 2, str)], RunnerConf({}), None
@@ -356,6 +414,10 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         handler = self._Handler([self._udf(f), self._udf(f)], RunnerConf({}), None)
         self.assertFalse(hasattr(handler, "_udf_desc"))
 
+    @unittest.skipIf(
+        not (have_pandas and have_pyarrow),
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
     def test_single_udf_count_error_names_eval_type(self):
         for eval_type, expected in (
             (PythonEvalType.SQL_COGROUPED_MAP_ARROW_UDF, "COGROUPED_MAP_ARROW UDF"),
