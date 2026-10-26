@@ -293,6 +293,52 @@ abstract class FileStreamSinkSuite extends StreamTest {
     }
   }
 
+  test("SPARK-60563: Check INTERVAL and empty struct columns when starting a query") {
+    val df = MemoryStream[Int].toDF()
+    val intervalDf = df.selectExpr("value AS i", "make_interval(0, 0, 0, value) AS d")
+    val emptyStructDf = df.selectExpr("value AS i", "struct() AS s")
+
+    def startQuery(data: DataFrame, format: String): StreamingQuery = {
+      data.writeStream
+        .option("checkpointLocation",
+          Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath)
+        .format(format)
+        .start(Utils.createTempDir(namePrefix = "stream.output").getCanonicalPath)
+    }
+
+    Seq("parquet" -> "Parquet", "orc" -> "ORC", "json" -> "JSON", "csv" -> "CSV").foreach {
+      case (format, formatName) =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            startQuery(intervalDf, format)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`d`", "columnType" -> "\"INTERVAL\"", "format" -> formatName))
+        checkError(
+          exception = intercept[AnalysisException] {
+            startQuery(emptyStructDf, format)
+          },
+          condition = "EMPTY_SCHEMA_NOT_SUPPORTED_FOR_DATASOURCE",
+          parameters = Map("format" -> formatName))
+    }
+
+    withSQLConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES.key -> "true") {
+      startQuery(emptyStructDf, "json").stop()
+    }
+
+    // Like `DataFrameWriter.saveAsTable`, writing to a table does not check empty structs.
+    withTable("t") {
+      sql("CREATE TABLE t (i INT, s STRUCT<>) USING json")
+      emptyStructDf.writeStream
+        .option("checkpointLocation",
+          Utils.createTempDir(namePrefix = "stream.checkpoint").getCanonicalPath)
+        .format("json")
+        .toTable("t")
+        .stop()
+    }
+  }
+
   test("parquet") {
     testFormat(None) // should not throw error as default format parquet when not specified
     testFormat(Some("parquet"))
