@@ -1045,7 +1045,7 @@ class UnionCodegenSuite extends SharedSparkSession with AdaptiveSparkPlanHelper 
 
   test("SPARK-59122: the stamp uses the conf the exchanges were planned against") {
     // `EnsureRequirements` asks the union what it reports, and the barrier behind it freezes that
-    // answer at the next barrier. `conf` is live, so another thread turning
+    // answer one rule later in classic preparation. `conf` is live, so another thread turning
     // `UNION_OUTPUT_PARTITIONING` off in between would leave the parent's elided exchange standing
     // over a union that then concatenates. `SnapshotUnionPreparationConf` records the value ahead
     // of `EnsureRequirements` for both to use. Driven rule by rule, because the two sit next to

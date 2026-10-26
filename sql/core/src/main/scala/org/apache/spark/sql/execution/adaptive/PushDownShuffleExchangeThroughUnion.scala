@@ -84,6 +84,9 @@ import org.apache.spark.sql.internal.SQLConf
  * The rule runs only in AQE preparation, after `EnsureRequirements` and before
  * `StampUnionDecisions`. It preserves the root distribution and all user repartition layouts
  * recorded when `EnsureRequirements` elides exchanges, including requirements below the root.
+ * These origin checks apply only to this rule's proposals, not to other adaptive optimizations.
+ * Cost compensation belongs to SimpleCostEvaluator. Custom evaluators should account for the
+ * one-to-many exchange rewrite when this rule is enabled, or they may reject the entire re-plan.
  *
  * TODO: support push down of a keyed layout.
  */
@@ -94,7 +97,7 @@ case class PushDownShuffleExchangeThroughUnion(
 
   override def apply(plan: SparkPlan): SparkPlan = {
     if (!snapshot.outputPartitioning ||
-        !conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED) ||
+        !conf.pushDownShuffleThroughUnionEnabled ||
         (queryContainsSubqueries &&
           !conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED))) {
       return plan
@@ -165,7 +168,7 @@ case class PushDownShuffleExchangeThroughUnion(
         case None =>
           ValidateRequirements.validate(pushed)
       }
-      if (satisfied) {
+      if (satisfied && !pushed.exists(node => !PartitioningOrigin.validateNode(node))) {
         pushed
       } else {
         plan
@@ -394,26 +397,38 @@ case class PushDownShuffleExchangeThroughUnion(
   }
 
   /**
-   * Whether a child may offer a target. Shuffle boundaries isolate their input layouts; join
-   * policies apply above those boundaries, and broadcast joins only depend on streamed sources.
+   * Whether a union child may retain its layout as a target. Check every input path, stopping at
+   * shuffle boundaries: column repartitions are eligible, fixed-count shuffles and non-shuffle
+   * leaves require the non-coalescible allowance, and other shuffle origins are rejected.
+   * Shuffled joins require the join-branch opt-in; exploding joins require the non-coalescible
+   * allowance. Broadcast joins inspect only their streamed side. `fromBroadcastHashJoinExec`
+   * follows that probe through wrappers and stages so requirement shuffles also require the
+   * join-branch opt-in, preserving opportunities for adaptive skew splitting and local reads.
    */
-  private def keepableLayout(plan: SparkPlan, policy: LayoutPolicy): Boolean = plan match {
+  private def keepableLayout(
+      plan: SparkPlan,
+      policy: LayoutPolicy,
+      fromBroadcastHashJoinExec: Boolean = false): Boolean = plan match {
     case shuffle: ShuffleExchangeLike =>
       shuffle.shuffleOrigin match {
-        case ENSURE_REQUIREMENTS | REPARTITION_BY_COL => true
+        case ENSURE_REQUIREMENTS => !fromBroadcastHashJoinExec || policy.keepJoinBranches
+        case REPARTITION_BY_COL => true
         case REPARTITION_BY_NUM => policy.allowNonCoalescible
         case _ => false
       }
-    case stage: ShuffleQueryStageExec => keepableLayout(stage.shuffle, policy)
+    case stage: ShuffleQueryStageExec =>
+      keepableLayout(stage.shuffle, policy, fromBroadcastHashJoinExec)
     case _: ShuffledJoin if !policy.keepJoinBranches => false
     case _: BroadcastNestedLoopJoinExec | _: CartesianProductExec
         if !policy.allowNonCoalescible => false
     case join: BroadcastHashJoinExec =>
-      keepableLayout(if (join.buildSide == BuildLeft) { join.right } else { join.left }, policy)
+      val streamed = if (join.buildSide == BuildLeft) { join.right } else { join.left }
+      keepableLayout(streamed, policy, fromBroadcastHashJoinExec = true)
     case join: BroadcastNestedLoopJoinExec =>
-      keepableLayout(if (join.buildSide == BuildLeft) { join.right } else { join.left }, policy)
+      val streamed = if (join.buildSide == BuildLeft) { join.right } else { join.left }
+      keepableLayout(streamed, policy, fromBroadcastHashJoinExec)
     case leaf if leaf.children.isEmpty => policy.allowNonCoalescible
-    case other => other.children.forall(keepableLayout(_, policy))
+    case other => other.children.forall(keepableLayout(_, policy, fromBroadcastHashJoinExec))
   }
 
   /**
@@ -423,6 +438,7 @@ case class PushDownShuffleExchangeThroughUnion(
    * direct, unshared requirement or column-repartition exchanges; if their recorded user layout
    * would change, keep the original exchange and add one above it. Tag newly added exchanges
    * for cost accounting; retargeting an existing exchange does not add to the shuffle count.
+   * Always build a fresh union so rejected zero-move candidates cannot tag the input plan.
    */
   private def rebuildUnion(
       union: UnionExec,
@@ -455,9 +471,10 @@ case class PushDownShuffleExchangeThroughUnion(
         }
       }
     }
-    // Rebuilt rather than constructed, so the preparation conf and the decision
-    // `StampUnionDecisions` may already have stamped travel onto the new node.
-    val rebuilt = union.withNewChildren(newChildren)
+    // withNewChildren returns the input when no child moves. Copy before tagging so rejected
+    // candidates leave it untouched, and carry existing tags because case-class copy does not.
+    val rebuilt = union.copy(children = newChildren)
+    rebuilt.copyTagsFrom(union)
     rebuilt.setTagValue(AQEUtils.PUSHED_THROUGH_UNION, true)
     Option.when(
       PartitioningCollection.flatten(rebuilt.outputPartitioning).contains(target))(rebuilt)
