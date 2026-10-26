@@ -208,7 +208,8 @@ class Module(object):
             module are changed.
         :param sbt_test_goals: A set of SBT test goals for testing this module.
         :param python_test_goals: A set of Python test goals for testing this module.
-        :param shell_script_test_goals: A set of shell script test goals for testing this module.
+        :param shell_script_test_goals: A sequence (e.g., a list or tuple) of shell script test goals
+            for testing this module.
         :param excluded_python_implementations: A set of Python implementations that are not
             supported by this module's Python components. The values in this set should match
             strings returned by Python's `platform.python_implementation()`.
