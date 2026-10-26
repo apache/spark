@@ -75,6 +75,7 @@ case class CreateHiveTableAsSelectCommand(
         // `SaveAsV1TableCommand` runs this command with `SaveMode.Overwrite` to replace the
         // table. Drop it here, after the analysis and the checks of the new table, because the
         // new table is created before the write.
+        HiveExternalCatalog.verifyHiveSerdePartitionColumnTypes(newTableDesc)
         val qualifiedNewTableDesc =
           newTableDesc.copy(identifier = catalog.qualifyIdentifier(tableIdentifier))
         sparkSession.sharedState.externalCatalog.unwrapped.asInstanceOf[HiveExternalCatalog]
