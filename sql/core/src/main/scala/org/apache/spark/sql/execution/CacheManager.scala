@@ -334,10 +334,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
         // as it does not rely on the plan that has been uncached anymore, it will just produce
         // data from the cache buffer.
         // Note that `CachedRDDBuilder.isCachedColumnBuffersLoaded` takes the builder's monitor,
-        // which `cachedColumnBuffers` can hold for the whole cache fill (e.g. a cached plan with a
-        // shuffle under AQE). Test the plan match first so an uncache only waits on entries that
-        // actually depend on the uncached plan, never on unrelated in-progress fills. The status
-        // may also be stale by the time it is acted on, so the worst case scenario can be:
+        // which `cachedColumnBuffers` can hold for the whole cache materialization (e.g. a cached
+        // plan with a shuffle under AQE). Test the plan match first so an uncache only waits on
+        // entries that actually depend on the uncached plan, never on unrelated in-progress
+        // materializations. The status may also be stale by the time it is acted on, so the
+        // worst case scenario can be:
         // 1) The buffer has been loaded, but `isCachedColumnBuffersLoaded` returns false, then we
         //    will clear the buffer and re-compiled the plan. It is inefficient but doesn't affect
         //    correctness.
