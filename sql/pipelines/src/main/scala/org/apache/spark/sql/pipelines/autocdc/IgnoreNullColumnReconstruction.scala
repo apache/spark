@@ -91,7 +91,10 @@ private[autocdc] object IgnoreNullColumnReconstruction {
    * @return `value`, cast to the type of `field` and aliased to its name and metadata. Evaluating
    *         it raises `NOT_NULL_ASSERT_VIOLATION` if `field` is non-nullable and `value` is null.
    */
-  private def conformToField(value: Column, path: Seq[String], field: StructField): Column = {
+  private[autocdc] def conformToField(
+      value: Column,
+      path: Seq[String],
+      field: StructField): Column = {
     val withDeclaredNullability =
       if (field.nullable) {
         // Spark may report `value`, such as a rebuilt struct, as non-nullable; only
