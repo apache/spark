@@ -361,16 +361,16 @@ trait GeneratePredicateHelper extends PredicateHelper {
         }
       }.mkString("\n").trim
 
-      // A check on an expression that the predicate contains is generated before the predicate
-      // (SPARK-51356). After a predicate that can be NULL, the checks written before this one
-      // are generated above when one of them or the predicate can raise, and a check written
-      // after it is left to the remaining checks, as `And.eval` evaluates it after the
-      // predicate, so that it does not raise an error on a row that the predicate drops. The
-      // columns of the expression are covered by the checks above.
+      // A check on an expression that the predicate contains is generated before it only when
+      // the check precedes the predicate (SPARK-51356). A check written after the predicate stays
+      // after it, as `And.eval` evaluates it after the predicate, so that it does not raise an
+      // error on a row that the predicate drops. After a predicate that can be NULL, the checks
+      // written before this one are generated above when one of them or the predicate can raise.
+      // The columns of the expression are covered by the checks above.
       val nestedNullChecks = if (afterNullable) "" else notNullPreds.zipWithIndex.collect {
         case (p @ IsNotNull(n), idx)
-            if !generatedIsNotNullChecks(idx) && !n.isInstanceOf[Attribute] &&
-              c.exists(_.semanticEquals(n)) =>
+            if idx < precedingNotNulls(k) && !generatedIsNotNullChecks(idx) &&
+              !n.isInstanceOf[Attribute] && c.exists(_.semanticEquals(n)) =>
           generatedIsNotNullChecks(idx) = true
           genNotNull(p)
       }.mkString("\n").trim
@@ -609,8 +609,8 @@ case class FilterExec(condition: Expression, child: SparkPlan)
                 if (!afterNullable) {
                   notNullPreds.zipWithIndex.foreach {
                     case (p @ IsNotNull(n), ni)
-                        if !generatedIsNotNullChecks(ni) && !n.isInstanceOf[Attribute] &&
-                          orig.exists(_.semanticEquals(n)) =>
+                        if ni < precedingNotNulls(idx) && !generatedIsNotNullChecks(ni) &&
+                          !n.isInstanceOf[Attribute] && orig.exists(_.semanticEquals(n)) =>
                       generatedIsNotNullChecks(ni) = true
                       parts.append(genNotNullWithoutCSE(p))
                       parts.append('\n')
