@@ -18,28 +18,52 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateNamedStruct, Literal}
 import org.apache.spark.sql.catalyst.plans.GreaterThanOrEqualOp
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
+class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper {
 
-  test("mixed timestamp sort keys use the comparison precision and time zone family") {
+  test("mixed timestamp sort keys preserve precision and convert NTZ only when needed") {
+    val keyTypes: Seq[DataType => DataType] = Seq(
+      identity,
+      dt => StructType(Seq(StructField("ts", dt))),
+      dt => ArrayType(dt),
+      dt => StructType(Seq(
+        StructField("items", ArrayType(StructType(Seq(StructField("ts", dt))))))))
     for {
+      (timeZone, convertNtz) <- Seq(
+        ("UTC", false), ("+05:30", false), ("America/Los_Angeles", true))
       ltzType <- Seq(TimestampType, TimestampLTZNanosType(9))
-      ntzType <- Seq(TimestampNTZType, TimestampNTZNanosType(7))
-      (leftType, rightType) <- Seq((ltzType, ntzType), (ntzType, ltzType))
+      (ntzType, convertedType) <- Seq(
+        (TimestampNTZType, TimestampType), (TimestampNTZNanosType(7), TimestampLTZNanosType(7)))
+      (leftType, rightType, leftTarget, rightTarget) <- Seq(
+        (ltzType, ntzType, ltzType, convertedType),
+        (ntzType, ltzType, convertedType, ltzType))
+      keyType <- keyTypes
     } {
-      val expected = MatchConditionTypes.tightestCommonType(leftType, rightType).get
-      val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(
-        leftOperand = AttributeReference("l", leftType)(),
-        rightOperand = AttributeReference("r", rightType)(),
-        normalizedOp = GreaterThanOrEqualOp
-      )
-      assert(TimestampFamily.isLtz(expected))
-      assert(leftKeys.map(_.dataType) == Seq(expected))
-      assert(rightKeys.map(_.dataType) == Seq(expected))
+      val leftOperand = AttributeReference("l", keyType(leftType))()
+      val rightOperand = AttributeReference("r", keyType(rightType))()
+      val (condition, _, leftKeys, rightKeys) =
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+          AsOfJoin.materializeMatchComparison(
+            leftOperand = leftOperand,
+            rightOperand = rightOperand,
+            normalizedOp = GreaterThanOrEqualOp
+          )
+        }
+      assert(condition.children == Seq(leftOperand, rightOperand))
+      assert(leftKeys.map(_.dataType) == Seq(keyType(if (convertNtz) leftTarget else leftType)))
+      assert(rightKeys.map(_.dataType) == Seq(keyType(if (convertNtz) rightTarget else rightType)))
+      if (!convertNtz || TimestampFamily.isLtz(leftType)) {
+        assert(leftKeys == Seq(leftOperand))
+      }
+      if (!convertNtz || TimestampFamily.isLtz(rightType)) {
+        assert(rightKeys == Seq(rightOperand))
+      }
     }
   }
 
@@ -55,13 +79,16 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
         name = "ts", dataType = rightType, metadata = metadata)()
       val leftNumber = AttributeReference("n", IntegerType)()
       val rightNumber = AttributeReference("n", LongType)()
-      val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(
-        leftOperand = CreateNamedStruct(Seq(
-          Literal("ts"), leftTimestamp, Literal("n"), leftNumber)),
-        rightOperand = CreateNamedStruct(Seq(
-          Literal("ts"), rightTimestamp, Literal("n"), rightNumber)),
-        normalizedOp = GreaterThanOrEqualOp
-      )
+      val (_, _, leftKeys, rightKeys) =
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          AsOfJoin.materializeMatchComparison(
+            leftOperand = CreateNamedStruct(Seq(
+              Literal("ts"), leftTimestamp, Literal("n"), leftNumber)),
+            rightOperand = CreateNamedStruct(Seq(
+              Literal("ts"), rightTimestamp, Literal("n"), rightNumber)),
+            normalizedOp = GreaterThanOrEqualOp
+          )
+        }
       assert(leftKeys.length == 2)
       assert(rightKeys.length == 2)
       assert(leftKeys.head.dataType == TimestampType)
@@ -91,11 +118,14 @@ class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
     val expectedLeft = ArrayType(
       StructType(timestampField.copy(dataType = TimestampType) +: leftFields.tail),
       containsNull = false)
-    val (_, _, leftKeys, rightKeys) = AsOfJoin.materializeMatchComparison(
-      leftOperand = AttributeReference("l", leftType)(),
-      rightOperand = AttributeReference("r", rightType)(),
-      normalizedOp = GreaterThanOrEqualOp
-    )
+    val (_, _, leftKeys, rightKeys) =
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        AsOfJoin.materializeMatchComparison(
+          leftOperand = AttributeReference("l", leftType)(),
+          rightOperand = AttributeReference("r", rightType)(),
+          normalizedOp = GreaterThanOrEqualOp
+        )
+      }
     assert(leftKeys.map(_.dataType) == Seq(expectedLeft))
     assert(rightKeys.map(_.dataType) == Seq(rightType))
   }

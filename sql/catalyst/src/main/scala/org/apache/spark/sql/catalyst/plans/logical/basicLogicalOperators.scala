@@ -2755,31 +2755,38 @@ object AsOfJoin {
       rightOperand: Expression,
       normalizedOp: MatchComparisonOperator)
       : (Expression, Expression, Seq[Expression], Seq[Expression]) = {
-    val (coercedLeft, coercedRight) = coerceMatchOperands(leftOperand, rightOperand)
+    val (coercedLeft, coercedRight) = coerceMatchStringOperands(leftOperand, rightOperand)
     val (asOfCondition, orderExpression) =
       buildMatchExpressions(coercedLeft, coercedRight, normalizedOp)
-    val (leftSortExprs, rightSortExprs) = matchSortExpressions(coercedLeft, coercedRight)
+    val timeZone = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+    val (leftTarget, rightTarget) = if (timeZone.getRules.isFixedOffset) {
+      // A fixed offset preserves the order of NTZ values, including inside composite keys.
+      (coercedLeft.dataType, coercedRight.dataType)
+    } else {
+      matchTimestampTargetTypes(coercedLeft.dataType, coercedRight.dataType)
+    }
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(
+      castMatchOperand(coercedLeft, leftTarget), castMatchOperand(coercedRight, rightTarget))
     (asOfCondition, orderExpression, leftSortExprs, rightSortExprs)
   }
 
-  /**
-   * Coerces operands shared by the comparison, order expression, and sort keys.
-   * NTZ-to-LTZ casts can change the sort order across DST gaps, including inside STRUCT/ARRAY.
-   */
-  private def coerceMatchOperands(
+  /** Coerces string/non-string operands so sorting and comparison use the same value domain. */
+  private def coerceMatchStringOperands(
       leftOperand: Expression,
       rightOperand: Expression): (Expression, Expression) = {
-    val leftType = leftOperand.dataType
-    val rightType = rightOperand.dataType
-    val (leftTarget, rightTarget) =
-      MatchConditionTypes.stringComparisonCommonType(leftType, rightType) match {
-        case Some(commonType) => (commonType, commonType)
-        case None => matchTimestampTargetTypes(leftType, rightType)
-      }
-    (castMatchOperand(leftOperand, leftTarget), castMatchOperand(rightOperand, rightTarget))
+    val commonType = MatchConditionTypes.stringComparisonCommonType(
+      leftOperand.dataType, rightOperand.dataType)
+    commonType match {
+      case Some(commonType) =>
+        (castMatchOperand(leftOperand, commonType), castMatchOperand(rightOperand, commonType))
+      case None => (leftOperand, rightOperand)
+    }
   }
 
-  /** Returns target types for mixed LTZ/NTZ leaves, preserving other types and field properties. */
+  /**
+   * Converts mixed NTZ leaves to LTZ for sorting, preserving each leaf's precision.
+   * NTZ-to-LTZ conversion can change order across DST gaps; precision widening preserves it.
+   */
   private def matchTimestampTargetTypes(
       leftType: DataType,
       rightType: DataType): (DataType, DataType) = (leftType, rightType) match {
@@ -2793,13 +2800,14 @@ object AsOfJoin {
       val (leftTarget, rightTarget) =
         matchTimestampTargetTypes(left.elementType, right.elementType)
       (left.copy(elementType = leftTarget), right.copy(elementType = rightTarget))
-    case (left, right) if
-        (TimestampFamily.isLtz(left) && TimestampFamily.isNtz(right)) ||
-        (TimestampFamily.isNtz(left) && TimestampFamily.isLtz(right)) =>
-      val commonType = MatchConditionTypes.tightestCommonType(left, right).getOrElse {
-        throw SparkException.internalError("MATCH_CONDITION timestamp operands have no common type")
-      }
-      (commonType, commonType)
+    case (TimestampNTZType, right) if TimestampFamily.isLtz(right) =>
+      (TimestampType, right)
+    case (left, TimestampNTZType) if TimestampFamily.isLtz(left) =>
+      (left, TimestampType)
+    case (left: TimestampNTZNanosType, right) if TimestampFamily.isLtz(right) =>
+      (TimestampLTZNanosType(left.precision), right)
+    case (left, right: TimestampNTZNanosType) if TimestampFamily.isLtz(left) =>
+      (left, TimestampLTZNanosType(right.precision))
     case _ => (leftType, rightType)
   }
 

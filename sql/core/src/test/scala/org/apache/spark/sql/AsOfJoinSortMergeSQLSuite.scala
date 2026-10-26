@@ -19,7 +19,9 @@ package org.apache.spark.sql
 
 import java.sql.{Date, Timestamp}
 
+import org.apache.spark.sql.catalyst.expressions.Cast
 import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, Backward, Forward}
+import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.execution.FileSourceScanExec
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.SortMergeAsOfJoinExec
@@ -136,11 +138,12 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     for {
       singlePass <- Seq(false, true)
       sortMergeEnabled <- Seq(false, true)
-    } yield (singlePass, sortMergeEnabled)
-  ) { case (singlePass, sortMergeEnabled) =>
+      timeZone <- Seq("UTC", "+05:30")
+    } yield (singlePass, sortMergeEnabled, timeZone)
+  ) { case (singlePass, sortMergeEnabled, timeZone) =>
     withSQLConf(
         SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMergeEnabled.toString,
-        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone,
         SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_LTZ",
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
         SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
@@ -159,6 +162,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |""".stripMargin
       )
       assertUsesSortMergeAsOfJoin(query)
+      val join = query.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+      assert(join.leftSortExprs == Seq(join.left.output.head))
+      assert(join.rightSortExprs == Seq(join.right.output.head))
       // Single-pass analysis does not support the deserializer used by checkToRDD.
       QueryTest.checkAnswer(df = query, expectedAnswer = Seq(Row(2)), checkToRDD = false)
     }
@@ -220,14 +226,18 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
       }
 
       for (op <- Seq(">=", "<=")) {
-        withClue(s"nanosecond keys, op=$op: ") {
+        for ((ltzType, ntzType, leftFraction, beforeFraction, afterFraction) <- Seq(
+            ("TIMESTAMP_LTZ(9)", "TIMESTAMP_NTZ(7)", "000000150", "0000001", "0000002"),
+            ("TIMESTAMP_LTZ", "TIMESTAMP_NTZ(7)", "000001", "0000009", "0000011"),
+            ("TIMESTAMP_LTZ(9)", "TIMESTAMP_NTZ", "000000150", "000000", "000001"))) withClue(
+            s"ltzType=$ltzType, ntzType=$ntzType, op=$op: ") {
           val query = sql(
             s"""SELECT r.id
-               |FROM VALUES (CAST('2024-03-10 10:15:00.000000150Z' AS TIMESTAMP_LTZ(9))) l(ts)
+               |FROM VALUES (CAST('2024-03-10 10:15:00.${leftFraction}Z' AS $ltzType)) l(ts)
                |LEFT ASOF JOIN VALUES
-               |  (CAST('2024-03-10 02:50:00.0000001' AS TIMESTAMP_NTZ(7)), 1),
-               |  (CAST('2024-03-10 03:15:00.0000001' AS TIMESTAMP_NTZ(7)), 2),
-               |  (CAST('2024-03-10 03:15:00.0000002' AS TIMESTAMP_NTZ(7)), 3) r(ts, id)
+               |  (CAST('2024-03-10 02:50:00.$beforeFraction' AS $ntzType), 1),
+               |  (CAST('2024-03-10 03:15:00.$beforeFraction' AS $ntzType), 2),
+               |  (CAST('2024-03-10 03:15:00.$afterFraction' AS $ntzType), 3) r(ts, id)
                |MATCH_CONDITION (l.ts $op r.ts)
                |""".stripMargin
           )
@@ -239,12 +249,20 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           )
         }
 
-        withClue(s"mixed timestamp and integral struct fields, op=$op: ") {
+        val structKey = "named_struct('ts', ts, 'n', n)"
+        val compositeKeys = Seq(
+          "struct" -> structKey,
+          "array" -> s"array($structKey)",
+          "nested" -> s"named_struct('items', array($structKey))")
+        for {
+          (shape, key) <- compositeKeys
+          if !singlePass || shape != "array"
+        } withClue(s"mixed timestamp and integral fields, shape=$shape, op=$op: ") {
           val query = sql(
             s"""SELECT r.id
-               |FROM (SELECT named_struct('ts', ts, 'n', n) AS k
+               |FROM (SELECT $key AS k
                |  FROM VALUES (TIMESTAMP_LTZ '2024-03-10 10:15:00Z', 2L) v(ts, n)) l
-               |LEFT ASOF JOIN (SELECT named_struct('ts', ts, 'n', n) AS k, id FROM VALUES
+               |LEFT ASOF JOIN (SELECT $key AS k, id FROM VALUES
                |  (TIMESTAMP_NTZ '2024-03-10 02:50:00', 1, 1),
                |  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 1, 2),
                |  (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3, 3) v(ts, n, id)) r
@@ -252,6 +270,9 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
                |""".stripMargin
           )
           assertUsesSortMergeAsOfJoin(query)
+          val join = query.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+          val casts = join.asOfCondition.collect { case c: Cast => c }
+          assert(casts.size == 1, join.asOfCondition.treeString)
           QueryTest.checkAnswer(
             df = query,
             expectedAnswer = Seq(Row(if (op == ">=") 2 else 3)),
