@@ -3159,28 +3159,26 @@ class WholeStageCodegenSuite extends SharedSparkSession
   test("SPARK-60393: an aggregate FILTER is checked before the common subexpressions of the " +
     "update expressions") {
     withNullConjunctTable(Int.MaxValue) {
-      // `avg` uses `y + 1` in two update expressions, so it is a common subexpression. It
-      // overflows on the first row, which the FILTER rejects, so it must not be evaluated there,
-      // as with codegen off. `count(1)` has no FILTER and takes the shared common subexpressions.
+      // `avg` and `sum` must not evaluate `y + 1` on rows their FILTER rejects.
+      // `count(1)` still uses the shared common subexpressions.
       val aggs = "avg(y + 1) FILTER (WHERE s = '1'), sum(y + 1) FILTER (WHERE s = '1'), count(1)"
       val noKeys = s"SELECT $aggs FROM t"
       val withKeys = s"SELECT b, $aggs FROM t GROUP BY b"
       val hashMapConfs = Seq(
-        // The regular hash map only.
+        // Regular hash map.
         Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false"),
-        // The row-based fast hash map.
+        // Row-based fast hash map.
         Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true"),
-        // The vectorized fast hash map.
+        // Vectorized fast hash map.
         Seq(
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
           SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true"),
-        // The sort aggregate.
+        // Sort aggregate.
         Seq(
           SQLConf.USE_HASH_AGG.key -> "false",
           SQLConf.USE_OBJECT_HASH_AGG.key -> "false"))
       for (codegen <- Seq(true, false); split <- Seq(true, false); confs <- hashMapConfs) {
-        // A small threshold splits the aggregate functions and the common subexpressions into
-        // functions of their own.
+        // A small threshold splits both the aggregate code and the CSE code.
         val splitConfs = if (split) Seq(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") else Nil
         withSQLConf(confs ++ splitConfs ++ Seq(
             SQLConf.ANSI_ENABLED.key -> "true",
