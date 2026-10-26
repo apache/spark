@@ -18,7 +18,7 @@
 package org.apache.spark.sql.hive.execution.command
 
 import org.apache.spark.SparkUnsupportedOperationException
-import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.execution.command.v1
 import org.apache.spark.sql.internal.SQLConf
@@ -70,6 +70,16 @@ class AlterTableAddColumnsSuite
       withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
         check(tbl, "TIMESTAMP", "TIMESTAMP_NTZ")
       }
+    }
+  }
+
+  test("SPARK-60565: Add columns to a table with collated CHAR and VARCHAR columns") {
+    withNamespaceAndTable("ns", "tbl") { tbl =>
+      sql(s"CREATE TABLE $tbl (c CHAR(3) COLLATE UTF8_LCASE, v VARCHAR(3) COLLATE UNICODE_CI) " +
+        defaultUsing)
+      sql(s"ALTER TABLE $tbl ADD COLUMNS (i INT)")
+      sql(s"INSERT INTO $tbl VALUES ('a', 'b', 1)")
+      checkAnswer(sql(s"SELECT * FROM $tbl WHERE c = 'A' AND v = 'B'"), Row("a  ", "b", 1))
     }
   }
 }
