@@ -117,7 +117,7 @@ case class AdaptiveSparkPlanExec(
       case _ => SimpleCostEvaluator(
         conf.getConf(SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN),
         conf.costEvaluatorCountLocalSortEnabled,
-        conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED))
+        conf.pushDownShuffleThroughUnionEnabled)
     }
 
   // Read once for this execution so that the union barriers in the lists below, which run per

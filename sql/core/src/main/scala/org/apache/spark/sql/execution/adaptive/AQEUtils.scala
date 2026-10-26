@@ -29,28 +29,28 @@ object AQEUtils {
   private[adaptive] val PUSHED_DOWN_SHUFFLE = TreeNodeTag[Boolean]("unionPushedDownShuffle")
   private[adaptive] val PUSHED_THROUGH_UNION = TreeNodeTag[Boolean]("shufflePushedThroughUnion")
 
-  private[adaptive] def isPushedDownShuffle(plan: SparkPlan): Boolean = {
+  /**
+   * Whether this node carries the mark of a shuffle inserted below a union by push-down.
+   * Custom cost evaluators can use it to distinguish these exchanges from ordinary shuffles;
+   * exchanges only retargeted by the rule are not newly marked.
+   */
+  def isPushedDownShuffle(plan: SparkPlan): Boolean = {
     plan.getTagValue(PUSHED_DOWN_SHUFFLE).contains(true)
   }
 
-  private[adaptive] def isPushedThroughUnion(plan: SparkPlan): Boolean = {
+  /**
+   * Whether this node carries the mark of a union rebuilt after removing its input exchange.
+   * The default cost evaluator counts a marked, non-plain union in place of added branch
+   * shuffles. The mark survives plan copies and does not imply its inputs are still unstaged.
+   */
+  def isPushedThroughUnion(plan: SparkPlan): Boolean = {
     plan.getTagValue(PUSHED_THROUGH_UNION).contains(true)
   }
 
   /**
-   * Canonicalized forms of shuffle exchanges occurring more than once across the plan,
-   * materialized stages, and subquery plans -- flipping one of these loses stage reuse.
-   *
-   * Note: `ShuffleExchangeExec.pipelined` is a plain case-class field with no doCanonicalize
-   * override, so it PARTICIPATES in the canonical form. An already-flipped (pipelined = true)
-   * exchange and a structurally identical unflipped twin therefore canonicalize DIFFERENTLY and
-   * would not be paired here. The counts are taken over the CURRENT plan on each replanning
-   * round (and this rule does re-run in later rounds on a plan that may already contain an
-   * earlier round's flip -- it is NOT a before-any-flip pass). That is still safe: a flipped and
-   * an unflipped structural twin cannot coexist as a real duplicate, because reuse collapses
-   * twins (ReuseExchangeAndSubquery / ShuffleQueryStageExec) before this rule runs, and if one
-   * somehow slipped through, the DAGScheduler's fan-out check rejects a multi-consumer pipelined
-   * producer rather than producing wrong results. So missing such a pair here is fail-safe.
+   * Canonical shuffle forms occurring more than once in the current plan, its shuffle query
+   * stages, and visible subquery plans. Stages contribute their pre-optimization canonical form.
+   * Adaptive subquery plans are opaque to this walk, so their internal exchanges are not counted.
    */
   private[adaptive] def duplicatedShuffleForms(plan: SparkPlan): Set[SparkPlan] = {
     val counts = mutable.HashMap.empty[SparkPlan, Int]

@@ -50,6 +50,11 @@ object AQEEnablePipelinedShuffle extends Rule[SparkPlan] {
    * The plan-shape core of the rule, factored out of [[apply]]'s environment guards (opt-in flag,
    * local mode, channel manager) so it can be unit-tested on a hand-built plan directly. Collects
    * the eligible exchanges and returns the plan with each flipped to `pipelined = true`.
+   *
+   * The pipelined field participates in canonicalization, so already-flipped exchanges do not
+   * pair with unflipped twins in the duplicate scan. Reuse normally collapses twins before this
+   * rule runs; if a shared pipelined producer escapes the scan, the scheduler's fan-out check
+   * rejects it rather than producing wrong results.
    */
   private[adaptive] def flipEligibleExchanges(plan: SparkPlan): SparkPlan = {
     val shared =
