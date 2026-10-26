@@ -3295,6 +3295,90 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-60545: Disallow TIMESTAMP_NTZ columns when the provider is Hive") {
+    val tbl = "tbl_with_timestamp_ntz"
+    def checkUnsupported(columnType: String)(createTable: => Unit): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](createTable),
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+      assert(!spark.catalog.tableExists(tbl))
+    }
+    withTable(tbl, "src") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl (c TIMESTAMP) STORED AS PARQUET")
+        }
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl STORED AS ORC AS SELECT TIMESTAMP'2026-01-01 00:00:00' AS c")
+        }
+      }
+      Seq(
+        "TIMESTAMP_NTZ",
+        "STRUCT<a: TIMESTAMP_NTZ>",
+        "ARRAY<TIMESTAMP_NTZ>",
+        "MAP<STRING, TIMESTAMP_NTZ>").foreach { dataType =>
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (c $dataType) STORED AS TEXTFILE")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (pt INT, c $dataType) USING HIVE PARTITIONED BY (pt)")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT CAST(NULL AS $dataType) AS c")
+        }
+        checkUnsupported(dataType) {
+          sql(s"SELECT CAST(NULL AS $dataType) AS c").write.format("hive").saveAsTable(tbl)
+        }
+        sql(s"CREATE TABLE src (c $dataType) USING PARQUET")
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl LIKE src STORED AS ORC")
+        }
+        sql("DROP TABLE src")
+      }
+    }
+  }
+
+  test("SPARK-60545: CREATE TABLE IF NOT EXISTS with TIMESTAMP_NTZ columns is a no-op for " +
+      "an existing Hive serde table") {
+    val tbl = "tbl_with_timestamp_ntz"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c TIMESTAMP) STORED AS PARQUET")
+      sql(s"INSERT INTO $tbl VALUES (TIMESTAMP'2026-01-01 00:00:00')")
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        sql(s"CREATE TABLE IF NOT EXISTS $tbl (c TIMESTAMP) STORED AS PARQUET")
+        sql(s"CREATE TABLE IF NOT EXISTS $tbl STORED AS PARQUET " +
+          "AS SELECT TIMESTAMP'2026-01-01 00:00:00' AS c")
+      }
+      sql(s"CREATE TABLE IF NOT EXISTS $tbl (c TIMESTAMP_NTZ) STORED AS PARQUET")
+      assert(spark.table(tbl).schema === new StructType().add("c", TimestampType))
+      assert(spark.table(tbl).count() === 1)
+    }
+  }
+
+  test("SPARK-60545: saveAsTable with mode Overwrite keeps the existing table when the new " +
+      "Hive serde table has a TIMESTAMP_NTZ column") {
+    val tbl = "tbl_with_timestamp_ntz"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c INT) STORED AS PARQUET")
+      sql(s"INSERT INTO $tbl VALUES (1)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT TIMESTAMP_NTZ'2026-01-01 00:00:00' AS c")
+            .write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tbl)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> "\"TIMESTAMP_NTZ\"",
+          "format" -> "Hive"))
+      checkAnswer(spark.table(tbl), Row(1))
+    }
+  }
+
   test("SPARK-37046: Alter view should preserve column case with view definition change") {
     withView("v") {
       // Changing view definition should preserve column case
