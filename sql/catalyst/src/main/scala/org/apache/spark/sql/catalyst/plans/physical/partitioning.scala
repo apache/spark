@@ -579,6 +579,41 @@ case class KeyLayout(
    */
   def describesSameKeys(other: KeyLayout): Boolean =
     dataTypes == other.dataTypes && partitionKeys == other.partitionKeys
+
+  /**
+   * Whether every key of this layout is one of `other`'s. The types are asked; the order and how
+   * often a key repeats are not. Callers ask this beside `describesSameLayoutState`, and only
+   * where a later node merges the key lists: the rows are already in the partitions `other` names
+   * for their keys, and the layouts declaring the remaining keys supply the rest.
+   */
+  def describesSubsetOfKeys(other: KeyLayout): Boolean =
+    dataTypes == other.dataTypes && {
+      val declared = other.partitionKeys.toSet
+      partitionKeys.forall(declared.contains)
+    }
+
+  /**
+   * Whether `other` describes the same keys as this layout as a set: the same key values at the
+   * same types, whatever their order and how often each repeats. The types are asked for the reason
+   * given on `describesSameKeys`.
+   *
+   * A call site may read a domain this way only when a merge and a sort have already settled the
+   * key order: the caller compares such a result against the layout it was built for. A pairing
+   * and a concatenation keep the order they are given, so they ask `describesSameKeys`. Callers ask
+   * this beside `describesSameLayoutState`, which makes the repeats harmless: equal grouping state
+   * means both lists hold unique keys, so the set says the same as the multiset.
+   */
+  def describesSameKeySet(other: KeyLayout): Boolean =
+    dataTypes == other.dataTypes && partitionKeys.toSet == other.partitionKeys.toSet
+
+  /**
+   * Whether `other` carries the same layout state: whether the keys are unique, whether they were
+   * collapsed, and why they repeat. The unknown-keys state is not asked, since it records where
+   * rows of an undeclared key were placed rather than how the layout describes its keys.
+   */
+  def describesSameLayoutState(other: KeyLayout): Boolean =
+    isGrouped == other.isGrouped && isCollapsed == other.isCollapsed &&
+      ungroupingOrigin == other.ungroupingOrigin
 }
 
 /**

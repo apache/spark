@@ -23,23 +23,26 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{
-  Alias, Ascending, Attribute, AttributeReference, BloomFilterMightContain, ExprId, GreaterThan,
-  IsNotNull, Literal, Rand,
-  RowNumber, SortOrder}
+  Add, Alias, Ascending, Attribute, AttributeReference, BloomFilterMightContain, Expression, ExprId,
+  GreaterThan, IsNotNull, Literal, Rand,
+  RowNumber, SortOrder, TransformExpression}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, RepartitionByExpression}
 import org.apache.spark.sql.catalyst.plans.physical.{
   ClusteredDistribution, CoalescedBoundary, CoalescedHashPartitioning, Distribution,
-  HashPartitioning, IdentityBroadcastMode, NullAwareHashPartitioning, Partitioning,
-  PartitioningCollection, RoundRobinPartitioning, UnknownPartitioning}
+  HASH_ROUTING, HashPartitioning, IdentityBroadcastMode, KeyedPartitioning,
+  NullAwareHashPartitioning, Partitioning, PartitioningCollection, RoundRobinPartitioning,
+  ROUTING_LOST, UnknownPartitioning}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.connector.catalog.functions.BucketFunction
 import org.apache.spark.sql.execution.{
   FilterExec, InputAdapter, LocalLimitExec, ProjectExec, QueryExecution, ScalarSubquery, SortExec,
   SparkPlan, SparkStrategy, StampUnionDecisions, SubqueryExec, UnaryExecNode, UnionConfSnapshot,
   UnionExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
+import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.exchange.{
   BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, PartitioningOrigin,
   REBALANCE_PARTITIONS_BY_COL, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec,
@@ -50,7 +53,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions.{row_number, udf}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{BinaryType, IntegerType}
 
 class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSparkSession
   with AdaptiveSparkPlanHelper {
@@ -147,6 +150,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
         "true")(f)
 
+  // V2 bucketing with keyed push-down opted in, the configuration every keyed target needs.
+  private def withKeyedLayouts(f: => Unit): Unit = withPushDown {
+    withSQLConf(
+        SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key -> "true")(f)
+  }
+
   private def attr(name: String): AttributeReference = AttributeReference(name, IntegerType)()
 
   private def leaf(
@@ -200,6 +212,36 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
     withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key -> "false") {
       spark.sql(sql).collect().toSeq
     }
+
+  test("SPARK-61785: a query on the defaults keeps its shuffle") {
+    // The suite opens every opt-in for the rest of its tests. Here they are put back to their
+    // defaults, with only AQE turned on, so the plan is the one an ordinary query gets.
+    withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "4",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_JOIN_INPUTS_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED.key -> "false",
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_WITH_SUBQUERIES_ENABLED.key -> "false",
+        SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false",
+        SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+      withTempView("t1", "t2") {
+        createTables()
+        val sql = """SELECT /*+ MERGE(u, r) */ u.id, u.v, r.v FROM (
+          | SELECT /*+ REPARTITION(4, id) */ id, v FROM t1 UNION ALL SELECT id, v FROM t2) u
+          | JOIN t1 r ON u.id = r.id""".stripMargin
+        val df = spark.sql(sql)
+        checkAnswer(df, expectedResult(sql))
+        val initial = aqeInitialPlan(df)
+        assert(numShufflesOnUnion(initial) === 1,
+          s"a join input is off by default, so the union keeps its shuffle:\n$initial")
+        assert(ValidateRequirements.validate(initial))
+      }
+    }
+  }
+
 
   Seq("MERGE", "SHUFFLE_HASH").foreach { hint =>
     Seq("INNER", "FULL OUTER").foreach { joinType =>
@@ -1167,6 +1209,15 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
         assert(newUnion.children.head.fastEquals(union.children.head))
         assertReshuffled(newUnion.children(1), hash(a1, 2), union.children(1))
         assert(ValidateRequirements.validate(newPlan), s"invalid plan:\n$newPlan")
+        // The co-partition key requirement asks the rebuilt child's layout, which the alias makes
+        // comparable to the requirement; the target, in the union's attributes, would not match.
+        withSQLConf(SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "true") {
+          val strict = pushDown(parent)
+          assert(strict.children.head.isInstanceOf[ProjectExec],
+            s"the key requirement still admits the aliased target:\n$strict")
+          assert(strict.children.head.outputPartitioning === hash(k, 2),
+            s"the alias still carries the target under the key requirement:\n$strict")
+        }
       }
     }
   }
@@ -3542,6 +3593,529 @@ class PushDownShuffleExchangeThroughUnionSuite extends QueryTest with SharedSpar
       withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_UNION_CHILDREN.key -> "11") {
         assert(numShufflesOnUnion(pushDown(tooMany)) === 0)
       }
+    }
+  }
+
+  test("SPARK-61785: keyed targets regroup matching V2 domains") {
+    withPushDown {
+      withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false") {
+        val a = attr("id")
+        val b = attr("id")
+        val left = leaf(a, KeyedPartitioning(Seq(a), Seq(InternalRow(2), InternalRow(1))))
+        val right = leaf(b, KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(2))))
+        val union = UnionExec(Seq(left, right))
+        val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+          required = Seq(clustered(a)), output = Seq(a))
+        // The permission is on by default; turning it off leaves the exchange in place.
+        withSQLConf(
+            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key -> "false") {
+          assert(pushDown(parent).fastEquals(parent))
+        }
+        val result = pushDown(parent)
+        val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+        assert(grouped.child.children === union.children)
+        assert(grouped.outputPartitioning ===
+          KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))))
+        assert(ValidateRequirements.validate(result))
+        val keyedShuffle = parent.withNewChildren(Seq(ensureShuffle(
+          KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))), union)))
+        assert(numShufflesOnUnion(pushDown(keyedShuffle)) === 0)
+        val split = leaf(a, KeyedPartitioning(Seq(a),
+          Seq(InternalRow(1), InternalRow(1), InternalRow(2))))
+        val splitParent = parent.withNewChildren(Seq(ensureShuffle(hash(a, 2),
+          UnionExec(Seq(split, right)))))
+        val splitResult = pushDown(splitParent)
+        assert(splitResult.children.head.isInstanceOf[GroupPartitionsExec])
+        assert(splitResult.children.head.outputPartitioning.numPartitions === 2)
+        assert(ValidateRequirements.validate(splitResult))
+        // A source-reported layout, keyed or not, is not kept while AQE can still coalesce the
+        // consumer's shuffle group.
+        withSQLConf(
+            SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key ->
+              "false",
+            SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true") {
+          assert(pushDown(parent).fastEquals(parent))
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false") {
+          assert(pushDown(parent).fastEquals(parent))
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true") {
+          assert(pushDown(parent).fastEquals(parent))
+        }
+        val belowFloor = parent.withNewChildren(Seq(ensureShuffle(hash(a, 3), union)))
+        assert(pushDown(belowFloor).fastEquals(belowFloor))
+        withSQLConf(SQLConf.V2_BUCKETING_ENABLED.key -> "false") {
+          assert(pushDown(parent).fastEquals(parent))
+        }
+        val x = attr("id")
+        val sibling = leaf(x, KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2))))
+        val paired = TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(a, 2), union), sibling),
+          required = Seq(clustered(a), clustered(x)), output = Seq(a, x))
+        val pairedResult = pushDown(paired)
+        assert(pairedResult.children.head.isInstanceOf[GroupPartitionsExec])
+        assert(pairedResult.children(1).fastEquals(sibling))
+        assert(ValidateRequirements.validate(pairedResult))
+        val incompatible = paired.withNewChildren(Seq(paired.children.head,
+          leaf(x, KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(3))))))
+        assert(pushDown(incompatible).fastEquals(incompatible))
+      }
+    }
+  }
+
+  test("SPARK-61785: children that do not declare the keyed domain are laid out on it") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val left = leaf(a, KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))))
+      def push(union: UnionExec): GroupPartitionsExec = {
+        val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+          required = Seq(clustered(a)), output = Seq(a))
+        val result = pushDown(parent)
+        assert(ValidateRequirements.validate(result))
+        result.children.head.asInstanceOf[GroupPartitionsExec]
+      }
+      def assertLaidOutOnDomain(child: SparkPlan, key: Attribute): Unit = {
+        // The child may hold rows of a key the domain does not declare; they were routed by their
+        // hash.
+        val expected = KeyedPartitioning(Seq(key), Seq(InternalRow(1), InternalRow(2)))
+          .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+        assert(child.outputPartitioning === expected)
+      }
+      val marked = KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(2)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+      // A child that already holds the domain keeps its layout, marked or not; the others are
+      // laid out on it.
+      val others = Seq(
+        (leaf(b), false),
+        (leaf(b, KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(3)))), false),
+        (leaf(b, marked), true))
+      others.foreach { case (other, kept) =>
+        val grouped = push(UnionExec(Seq(left, other)))
+        assert(grouped.child.children.head.fastEquals(left))
+        if (kept) {
+          assert(grouped.child.children(1).fastEquals(other))
+        } else {
+          assert(grouped.child.children(1).isInstanceOf[ShuffleExchangeExec])
+        }
+        assertLaidOutOnDomain(grouped.child.children(1), b)
+        // The grouped union keeps the full-key claim; where an undeclared key sits is no longer
+        // the hash of the layout it is reported under.
+        assert(grouped.outputPartitioning ===
+          KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
+            .withLayout(_.copy(unknownKeysOrigin = Some(ROUTING_LOST))))
+      }
+      // A co-partitioned sibling that already holds the keys pairs as it stands. One the planner
+      // shuffled is left as it is, and the rewrite is dropped.
+      val x = attr("id")
+      val sibling = leaf(x, KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2))))
+      val paired = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(left, leaf(b)))), sibling),
+        required = Seq(clustered(a), clustered(x)), output = Seq(a, x))
+      val pairedResult = pushDown(paired)
+      assert(pairedResult.children.head.isInstanceOf[GroupPartitionsExec])
+      assert(pairedResult.children(1).fastEquals(sibling))
+      assert(ValidateRequirements.validate(pairedResult))
+      val shuffled = ensureShuffle(hash(x, 2), sibling)
+      val withShuffled = paired.withNewChildren(Seq(paired.children.head, shuffled))
+      assert(pushDown(withShuffled).fastEquals(withShuffled))
+      // A requirement exchange the child already takes is retargeted, not doubled.
+      val inner = leaf(b)
+      val staged = ensureShuffle(hash(b, 2), inner)
+      val retargeted = push(UnionExec(Seq(left, staged))).child.children(1)
+      assert(retargeted.isInstanceOf[ShuffleExchangeExec])
+      assert(retargeted.asInstanceOf[ShuffleExchangeExec].child.fastEquals(inner))
+      assertLaidOutOnDomain(retargeted, b)
+      // The permission covers the output layout, not only what the children report: a hash
+      // shuffle pushed down onto a keyed domain needs it too.
+      def hashSite: TestPartitioningPlan = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(left, leaf(b))))),
+        required = Seq(clustered(a)), output = Seq(a))
+      withSQLConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED.key ->
+          "false") {
+        assert(pushDown(hashSite).fastEquals(hashSite))
+      }
+      withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false") {
+        assert(pushDown(hashSite).fastEquals(hashSite))
+      }
+    }
+  }
+
+  test("SPARK-61785: keyed and hash targets move the side that keeps more children") {
+    withKeyedLayouts {
+      def keyed(id: Attribute): TestPartitioningPlan =
+        leaf(id, KeyedPartitioning(Seq(id), Seq(InternalRow(1), InternalRow(2))))
+      def hashed(id: Attribute): TestPartitioningPlan = leaf(id, hash(id, 2))
+      def push(children: Seq[SparkPlan]): SparkPlan = {
+        val first = children.head.output.head
+        pushDown(TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(first, 2), UnionExec(children))),
+          required = Seq(clustered(first)), output = Seq(first)))
+      }
+      val a = attr("id")
+      val b = attr("id")
+      val c = attr("id")
+      val keyedA = keyed(a)
+      val keyedB = keyed(b)
+      val hashedC = hashed(c)
+      // Two children declare the keyed domain, so the hash child is the one that moves.
+      val keyedKept = push(Seq(keyedA, keyedB, hashedC))
+      val grouped = keyedKept.children.head.asInstanceOf[GroupPartitionsExec]
+      assert(grouped.child.children.head.fastEquals(keyedA))
+      assert(grouped.child.children(1).fastEquals(keyedB))
+      assert(grouped.child.children(2).isInstanceOf[ShuffleExchangeExec])
+      assert(ValidateRequirements.validate(keyedKept))
+      val x = attr("id")
+      val y = attr("id")
+      val z = attr("id")
+      val keyedX = keyed(x)
+      val hashedY = hashed(y)
+      val hashedZ = hashed(z)
+      // Only one child declares the keyed domain, so the keyed target moves two and loses.
+      val hashKept = push(Seq(keyedX, hashedY, hashedZ))
+      val union = hashKept.children.head.asInstanceOf[UnionExec]
+      assert(union.children.head.isInstanceOf[ShuffleExchangeExec])
+      assert(union.children(1).fastEquals(hashedY))
+      assert(union.children(2).fastEquals(hashedZ))
+      assert(ValidateRequirements.validate(hashKept))
+    }
+  }
+
+  test("SPARK-61785: a transform domain that coarsens its key needs permission") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      def bucket(id: Attribute): TransformExpression =
+        TransformExpression(BucketFunction, Seq(id), Some(2))
+      val left = leaf(a,
+        KeyedPartitioning(Seq(bucket(a)), Seq(InternalRow(0), InternalRow(1))))
+      val right = leaf(b,
+        KeyedPartitioning(Seq(bucket(b)), Seq(InternalRow(1), InternalRow(0))))
+      val union = UnionExec(Seq(left, right))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      // `bucket(2, id)` is a function of the cluster key, not the key itself.
+      withSQLConf(SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false") {
+        assert(pushDown(parent).fastEquals(parent))
+      }
+      withSQLConf(SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "true") {
+        val result = pushDown(parent)
+        val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+        assert(grouped.child.children === union.children)
+        assert(grouped.outputPartitioning ===
+          KeyedPartitioning(Seq(bucket(a)), Seq(InternalRow(0), InternalRow(1))))
+        assert(ValidateRequirements.validate(result))
+      }
+    }
+  }
+
+  test("SPARK-61785: a multi-column keyed domain is kept and laid out") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("ts")
+      val domain = KeyedPartitioning(Seq(a, b), Seq(InternalRow(1, 2), InternalRow(1, 3)))
+      val keyed = TestPartitioningPlan(output = Seq(a, b), outputPartitioning = domain)
+      val plain = TestPartitioningPlan(output = Seq(attr("id"), attr("ts")))
+      val union = UnionExec(Seq(keyed, plain))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(HashPartitioning(Seq(a, b), 2), union)),
+        required = Seq(ClusteredDistribution(Seq(a, b))), output = Seq(a, b))
+      val result = pushDown(parent)
+      assert(ValidateRequirements.validate(result))
+      val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+      assert(grouped.child.children.head.fastEquals(keyed))
+      assert(grouped.child.children(1).isInstanceOf[ShuffleExchangeExec])
+      val partitioning = grouped.outputPartitioning.asInstanceOf[KeyedPartitioning]
+      assert(partitioning.isGrouped && partitioning.partitionKeys === domain.partitionKeys,
+        s"expected the two-column domain:\n$result")
+    }
+  }
+
+  test("SPARK-61785: a hash-routed keyed child supplies the target") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val marked = leaf(a, KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(marked, leaf(b))))),
+        required = Seq(clustered(a)), output = Seq(a))
+      val result = pushDown(parent)
+      assert(ValidateRequirements.validate(result))
+      val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+      assert(grouped.child.children.head.fastEquals(marked))
+      assert(grouped.child.children(1).isInstanceOf[ShuffleExchangeExec])
+      assert(grouped.outputPartitioning.asInstanceOf[KeyedPartitioning]
+        .mayContainUnknownPartitionKeys, s"expected ROUTING_LOST after grouping:\n$result")
+    }
+  }
+
+  test("SPARK-61785: a marked child whose key order differs is laid out") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      def marked(keys: Seq[InternalRow]): TestPartitioningPlan =
+        leaf(a, KeyedPartitioning(Seq(a), keys)
+          .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
+      val first = marked(Seq(InternalRow(1), InternalRow(2)))
+      val reversed = marked(Seq(InternalRow(2), InternalRow(1)))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(first, reversed, leaf(b))))),
+        required = Seq(clustered(a)), output = Seq(a))
+      val result = pushDown(parent)
+      assert(ValidateRequirements.validate(result))
+      val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+      // A marked leg keeps only when it declares the target's list in the same order.
+      assert(grouped.child.children.head.fastEquals(first))
+      assert(grouped.child.children(1).isInstanceOf[ShuffleExchangeExec])
+      assert(grouped.child.children(2).isInstanceOf[ShuffleExchangeExec])
+    }
+  }
+
+  test("SPARK-61785: a collapsed union is grouped only with the subset permission") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val collapsed = leaf(a, KeyedPartitioning(Seq(a),
+        Seq(InternalRow(1), InternalRow(1), InternalRow(2)))
+        .withLayout(_.copy(isCollapsed = true)))
+      val parent = TestPartitioningPlan(
+        children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(collapsed, leaf(b))))),
+        required = Seq(clustered(a)), output = Seq(a))
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "false") {
+        assert(pushDown(parent).fastEquals(parent))
+      }
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
+        assert(pushDown(parent).children.head.isInstanceOf[GroupPartitionsExec])
+      }
+    }
+  }
+
+  test("SPARK-61785: every child that reports the domain unsorted is kept") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val unsorted = Seq(InternalRow(2), InternalRow(1))
+      val left = leaf(a, KeyedPartitioning(Seq(a), unsorted))
+      val right = leaf(b, KeyedPartitioning(Seq(b), unsorted))
+      val union = UnionExec(Seq(left, right))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      // No child is laid out, so only the grouping reorders the keys: the concatenation keeps
+      // [2, 1, 2, 1] and the grouping sorts it to [1, 2]. The final check compares key sets, and
+      // that is what keeps this candidate.
+      val result = pushDown(parent)
+      val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+      assert(grouped.child.children === union.children)
+      assert(grouped.outputPartitioning ===
+        KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))))
+      assert(ValidateRequirements.validate(result))
+    }
+  }
+
+  test("SPARK-61785: a child whose keys are a subset of the domain keeps its layout") {
+    withKeyedLayouts {
+      def push(union: UnionExec, key: Attribute): GroupPartitionsExec = {
+        val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(key, 3), union)),
+          required = Seq(clustered(key)), output = Seq(key))
+        val result = pushDown(parent)
+        assert(ValidateRequirements.validate(result))
+        result.children.head.asInstanceOf[GroupPartitionsExec]
+      }
+      // An unmarked child holding part of the keys is kept, in any order: the concatenation
+      // repeats the shared keys, so the grouping above the union regroups every leg.
+      val a = attr("id")
+      val b = attr("id")
+      val subset = leaf(a, KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2))))
+      val full = leaf(b, KeyedPartitioning(Seq(b),
+        Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
+      val union = UnionExec(Seq(subset, full))
+      val grouped = push(union, a)
+      assert(grouped.child.children === union.children)
+      assert(grouped.outputPartitioning ===
+        KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
+      // The order the subset leg declares need not match the target's.
+      val x = attr("id")
+      val y = attr("id")
+      val reversed = leaf(x, KeyedPartitioning(Seq(x), Seq(InternalRow(2), InternalRow(1))))
+      val forward = leaf(y, KeyedPartitioning(Seq(y),
+        Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
+      val reversedGrouped = push(UnionExec(Seq(reversed, forward)), x)
+      assert(reversedGrouped.child.children === Seq(reversed, forward),
+        s"the reversed subset leg keeps its layout:\n$reversedGrouped")
+      assert(reversedGrouped.outputPartitioning ===
+        KeyedPartitioning(Seq(x), Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
+      // A marked child has to declare the target's key list to be merged, so a partial one is laid
+      // out.
+      val c = attr("id")
+      val d = attr("id")
+      val marked = leaf(c, KeyedPartitioning(Seq(c), Seq(InternalRow(1), InternalRow(2)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
+      val fullAgain = leaf(d, KeyedPartitioning(Seq(d),
+        Seq(InternalRow(1), InternalRow(2), InternalRow(3))))
+      val markedGrouped = push(UnionExec(Seq(marked, fullAgain)), c)
+      assert(markedGrouped.child.children.head.isInstanceOf[ShuffleExchangeExec],
+        s"a marked leg must declare the target's list:\n$markedGrouped")
+      assert(markedGrouped.child.children(1).fastEquals(fullAgain))
+    }
+  }
+
+  test("SPARK-61785: a marked leg that lost its routing is laid out beside a marked target") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val lost = leaf(a, KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(ROUTING_LOST))))
+      val routed = leaf(b, KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(2)))
+        .withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING))))
+      val union = UnionExec(Seq(lost, routed))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      val grouped = pushDown(parent).children.head.asInstanceOf[GroupPartitionsExec]
+      // `UnionExec` merges marked legs only when both still route by hash, so the lost one is laid
+      // out rather than kept.
+      assert(grouped.child.children.head.isInstanceOf[ShuffleExchangeExec],
+        s"a leg that lost its routing cannot be merged beside a routed one:\n$grouped")
+      assert(grouped.child.children(1).fastEquals(routed))
+      assert(ValidateRequirements.validate(grouped))
+    }
+  }
+
+  test("SPARK-61785: a lost-routing leg is never a target, and is laid out") {
+    withKeyedLayouts {
+      def lost(key: Attribute): TestPartitioningPlan =
+        leaf(key, KeyedPartitioning(Seq(key), Seq(InternalRow(1), InternalRow(2)))
+          .withLayout(_.copy(unknownKeysOrigin = Some(ROUTING_LOST))))
+      // A domain every child reports with lost routing offers no target at all.
+      val a = attr("id")
+      val b = attr("id")
+      val onlyLost = UnionExec(Seq(lost(a), lost(b)))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), onlyLost)),
+        required = Seq(clustered(a)), output = Seq(a))
+      assert(pushDown(parent).fastEquals(parent))
+      // A lost leg is not kept either: laying it out routes its undeclared rows by hash again, so
+      // the union merges and the site is rewritten.
+      val c = attr("id")
+      val d = attr("id")
+      val mixed = UnionExec(Seq(
+        leaf(c, KeyedPartitioning(Seq(c), Seq(InternalRow(1), InternalRow(2)))),
+        lost(d),
+        leaf(attr("id"))))
+      val mixedParent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(c, 2), mixed)),
+        required = Seq(clustered(c)), output = Seq(c))
+      val rebuilt = pushDown(mixedParent).children.head.asInstanceOf[GroupPartitionsExec]
+      assert(rebuilt.child.children.head.fastEquals(mixed.children.head),
+        s"the unmarked leg keeps its layout:\n$rebuilt")
+      assert(rebuilt.child.children.drop(1).forall(_.isInstanceOf[ShuffleExchangeExec]),
+        s"the lost leg and the leg without a layout are laid out:\n$rebuilt")
+      assert(ValidateRequirements.validate(rebuilt))
+      // Even as the only marked leg, which the union would merge, it is laid out rather than kept.
+      val e = attr("id")
+      val f = attr("id")
+      val sole = UnionExec(Seq(
+        leaf(e, KeyedPartitioning(Seq(e), Seq(InternalRow(1), InternalRow(2)))), lost(f)))
+      val soleParent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(e, 2), sole)),
+        required = Seq(clustered(e)), output = Seq(e))
+      val soleRebuilt = pushDown(soleParent).children.head.asInstanceOf[GroupPartitionsExec]
+      assert(soleRebuilt.child.children(1).isInstanceOf[ShuffleExchangeExec],
+        s"a lost leg is laid out rather than kept:\n$soleRebuilt")
+      assert(ValidateRequirements.validate(soleRebuilt))
+    }
+  }
+
+  test("SPARK-61785: a keyed target follows the planner's shuffle-template admission") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      def parent(target: KeyedPartitioning): TestPartitioningPlan =
+        TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(a, 2), UnionExec(Seq(leaf(a, target), leaf(b))))),
+          required = Seq(clustered(a)), output = Seq(a))
+      def bucket(argument: Expression): KeyedPartitioning =
+        KeyedPartitioning(Seq(TransformExpression(BucketFunction, Seq(argument), Some(2))),
+          Seq(InternalRow(0), InternalRow(1)))
+      // A transform over a bare column is a template `EnsureRequirements` shuffles onto.
+      val plain = parent(bucket(a))
+      assert(pushDown(plain).children.head.isInstanceOf[GroupPartitionsExec])
+      // One over an expression is not: `createPartitioning` would lose what surrounds the key,
+      // so the rule declines instead of laying the other leg out on it.
+      val shifted = parent(bucket(Add(a, Literal(1))))
+      assert(pushDown(shifted).fastEquals(shifted))
+    }
+  }
+
+  test("SPARK-61785: a keyed target naming part of the cluster keys needs permission") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val v = attr("v")
+      val w = attr("v")
+      def side(key: Attribute, value: Attribute): TestPartitioningPlan =
+        TestPartitioningPlan(output = Seq(key, value),
+          outputPartitioning = KeyedPartitioning(Seq(key), Seq(InternalRow(1), InternalRow(2))))
+      val union = UnionExec(Seq(side(a, v), side(b, w)))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(ClusteredDistribution(Seq(a, v))), output = Seq(a, v))
+      withSQLConf(SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "false") {
+        assert(pushDown(parent).fastEquals(parent))
+      }
+      withSQLConf(SQLConf
+          .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED
+          .key -> "true") {
+        val result = pushDown(parent)
+        assert(result.children.head.isInstanceOf[GroupPartitionsExec])
+        assert(ValidateRequirements.validate(result))
+      }
+    }
+  }
+
+  test("SPARK-61785: keyed targets regroup null and binary keys") {
+    withKeyedLayouts {
+      def assertRegrouped(
+          key: AttributeReference,
+          sibling: AttributeReference,
+          keys: Seq[InternalRow]): Unit = {
+        val left = leaf(key, KeyedPartitioning(Seq(key), keys))
+        val right = leaf(sibling, KeyedPartitioning(Seq(sibling), keys.reverse))
+        val union = UnionExec(Seq(left, right))
+        val parent = TestPartitioningPlan(
+          children = Seq(ensureShuffle(hash(key, 2), union)),
+          required = Seq(ClusteredDistribution(Seq(key))), output = Seq(key))
+        val result = pushDown(parent)
+        val grouped = result.children.head.asInstanceOf[GroupPartitionsExec]
+        assert(grouped.child.children === union.children)
+        assert(grouped.outputPartitioning === KeyedPartitioning(Seq(key), keys))
+        assert(ValidateRequirements.validate(result))
+      }
+      assertRegrouped(attr("id"), attr("id"), Seq(InternalRow(null), InternalRow(1)))
+      assertRegrouped(AttributeReference("bin", BinaryType)(),
+        AttributeReference("bin", BinaryType)(),
+        Seq(InternalRow(Array[Byte](1)), InternalRow(Array[Byte](2))))
+    }
+  }
+
+  test("SPARK-61785: a recorded repartition origin rejects a keyed target") {
+    withKeyedLayouts {
+      val a = attr("id")
+      val b = attr("id")
+      val union = UnionExec(Seq(
+        leaf(a, KeyedPartitioning(Seq(a), Seq(InternalRow(1), InternalRow(2)))),
+        leaf(b, KeyedPartitioning(Seq(b), Seq(InternalRow(1), InternalRow(2))))))
+      val parent = TestPartitioningPlan(children = Seq(ensureShuffle(hash(a, 2), union)),
+        required = Seq(clustered(a)), output = Seq(a))
+      assert(pushDown(parent).children.head.isInstanceOf[GroupPartitionsExec])
+      PartitioningOrigin.record(union, hash(a, 2), REPARTITION_BY_COL)
+      assert(pushDown(parent).fastEquals(parent))
     }
   }
 }

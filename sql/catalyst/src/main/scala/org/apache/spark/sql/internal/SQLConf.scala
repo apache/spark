@@ -9001,21 +9001,20 @@ object SQLConf {
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED =
     buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.enabled")
       .internal()
-      .doc("When true, pushes an EnsureRequirements hash shuffle below a union during AQE " +
-        "query stage preparation. Eligible children already reporting the selected layout " +
-        "are retained; other children are retargeted or receive a new exchange. The target " +
-        "partition count must be at least the smaller of the replaced exchange's count and " +
-        "the effective initial shuffle count, including " +
-        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set, and at most a bounded " +
-        "multiple of the larger of the two. Requires " +
-        s"${UNION_OUTPUT_PARTITIONING.key} to be enabled. Removing the union's direct shuffle " +
-        "stage can reduce AQE skew handling and join conversion opportunities. Retaining a " +
-        "shuffled join's layout can make skew optimization or local reads violate ancestor " +
-        "requirements; AQE may reject the optimization or add a shuffle when skew optimization " +
-        "is forced. Join inputs and join branches are opt-in. Cost compensation applies only " +
-        "to SimpleCostEvaluator. Custom evaluators should account for one union exchange " +
-        "becoming multiple branch exchanges; otherwise AQE may reject a re-plan and its other " +
-        "runtime optimizations due to the increased exchange count.")
+      .doc("When true, pushes an EnsureRequirements shuffle below a union during AQE query " +
+        "stage preparation. The shuffle and the target are hash or V2 keyed layouts. Children " +
+        "already reporting the target keep their layouts; the others are retargeted or " +
+        "receive a new exchange. The target partition count must be at least the smaller of " +
+        "the replaced exchange's count and the effective initial shuffle count, and at most a " +
+        s"bounded multiple of the larger; the initial count includes " +
+        s"${COALESCE_PARTITIONS_INITIAL_PARTITION_NUM.key} when set. Requires " +
+        s"${UNION_OUTPUT_PARTITIONING.key}. Removing the union's exchange can reduce AQE skew " +
+        "handling and join conversion opportunities. Keeping a shuffled join child's layout " +
+        "can make skew optimization or local reads violate ancestor requirements; AQE then " +
+        "rejects the optimization or adds a shuffle when skew optimization is forced. Join " +
+        "inputs and join branches are opt-in. Only SimpleCostEvaluator compensates the added " +
+        "exchanges; custom evaluators should account for them, or AQE may reject the re-plan " +
+        "and its other runtime optimizations.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
@@ -9098,6 +9097,31 @@ object SQLConf {
       .intConf
       .checkValue(_ >= 0, "The maximum number of union children must be non-negative.")
       .createWithDefault(10)
+
+  val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED =
+    buildConf("spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled")
+      .internal()
+      .doc("When true, union shuffle push-down may use a V2 keyed layout as the union's " +
+        "output, whether the shuffle it replaces was keyed or hash. Children already reporting " +
+        "the picked domain keep their layouts, and an unmarked child reporting a subset of its " +
+        "keys keeps it too; a marked child has to declare the domain's list in the same order. " +
+        "The others are shuffled onto it, which creates keyed shuffles, and rows of a key the " +
+        "domain does not declare are routed by hash, which the layout records. The grouping " +
+        "above the rebuilt union then holds the full-key claim only. Set to false to restrict " +
+        s"the rule to hash layouts. Requires ${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} and " +
+        s"${V2_BUCKETING_ENABLED.key}, ${V2_BUCKETING_SHUFFLE_ENABLED.key} since a child may be " +
+        s"shuffled onto the domain, and " +
+        s"${V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key} to be disabled. A target " +
+        s"naming only part of the consumer's cluster keys further needs " +
+        s"${V2_BUCKETING_REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key} off and " +
+        "spark.sql.adaptive.pushDownShuffleThroughUnion.allowPartitionKeysSubsetOfClusterKeys." +
+        "enabled on. A source-reported keyed layout is kept only when the consumer's shuffle " +
+        s"group cannot coalesce, so ${COALESCE_PARTITIONS_ENABLED.key} must be off or " +
+        s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED.key} on.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
 
   val PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED =
     buildConf(

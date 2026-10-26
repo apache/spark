@@ -19,18 +19,20 @@ package org.apache.spark.sql.execution.adaptive
 
 import scala.annotation.tailrec
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, Expression, SessionWindow, SortOrder}
 import org.apache.spark.sql.catalyst.expressions.aggregate.{Partial => PartialAggregate}
 import org.apache.spark.sql.catalyst.optimizer.BuildLeft
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, HashPartitioning, HashShuffleSpec, Partitioning, PartitioningCollection}
+import org.apache.spark.sql.catalyst.plans.physical.{
+  ClusteredDistribution, HASH_ROUTING, HashPartitioning, HashShuffleSpec, KeyedPartitioning,
+  KeyedShuffleSpec, Partitioning, PartitioningCollection}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.execution.{
   FilterExec, ProjectExec, SortExec, SparkPlan, UnaryExecNode, UnionExec}
 import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
+import org.apache.spark.sql.execution.datasources.v2.GroupPartitionsExec
 import org.apache.spark.sql.execution.exchange.{ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, PartitioningOrigin, REPARTITION_BY_COL, REPARTITION_BY_NUM, ShuffleExchangeExec, ShuffleExchangeLike, ValidateRequirements}
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledJoin}
 import org.apache.spark.sql.execution.window.{Partial => PartialWindowGroupLimit, WindowGroupLimitExec}
@@ -65,18 +67,36 @@ import org.apache.spark.sql.internal.SQLConf
  * gate exists: the child is then shuffled before the reduction, which can send more data than the
  * one shuffle it replaces.
  *
- * Targets are hash layouts reported by the union's children, ranked by how many children offer
- * them when size estimates are unavailable; otherwise estimated bytes kept decide first. The
- * count must be between the smaller and the larger of the replaced exchange's count and the
- * effective initial shuffle partition count (`coalescePartitions.initialPartitionNum` when set);
- * the larger side is scaled by `maxTargetPartitionNumFactor`. A branch that is already a query
- * stage pins the target to the layout it reports, unless its stage wraps an unmarked user
+ * Targets are eligible hash or keyed layouts reported by the union's children, ranked by how many
+ * children offer them when size estimates are unavailable; otherwise estimated bytes kept decide
+ * first. The count must be between the smaller and the larger of the replaced exchange's count
+ * and the effective initial shuffle partition count (`coalescePartitions.initialPartitionNum`
+ * when set); the larger side is scaled by `maxTargetPartitionNumFactor`. A branch that is already
+ * a query stage pins the target to the layout it reports, unless its stage wraps an unmarked user
  * repartition: the rewrite could only stack on such a branch, and a re-plan must be able to
  * repeat that. At least one child keeps its layout; others are retargeted or shuffled without
  * changing child order.
  * `spark.sql.adaptive.pushDownShuffleThroughUnion.maxMovedBranches` limits moved children, and
  * `maxUnionChildren` limits all branches whose tails run within each consumer task.
- * The rebuilt child must satisfy its consumer's distribution and pair with fixed siblings.
+ * The rebuilt child must satisfy its consumer's distribution and pair with the siblings.
+ *
+ * A V2 keyed target additionally requires
+ * `spark.sql.adaptive.pushDownShuffleThroughUnion.allowV2Bucketing.enabled`, which the V2
+ * bucketing configs further gate, and `spark.sql.unionOutputPartitioning`, since the union has
+ * to report the keyed layout for the grouping above it to be built:
+ *
+ * {{{
+ *   SortMergeJoin                         SortMergeJoin
+ *    :- Exchange KeyedPartitioning     =>  :- GroupPartitions
+ *    :  +- Union                           :  +- Union
+ *    :     :- BatchScan (keyed)            :     :- BatchScan (keyed)
+ *    :     +- LocalTableScan               :     +- Exchange KeyedPartitioning
+ *    +- BatchScan (keyed)                  :        +- LocalTableScan
+ *                                          +- BatchScan (keyed)
+ * }}}
+ *
+ * The keyed child keeps its partitions and the other child is laid out on the same domain. The
+ * other side of the join pairs only when it declares that same key list.
  *
  * Removing the union's exchange can reduce AQE join conversion and skew handling opportunities.
  * Keeping a shuffled join child's layout can make skew join optimization or local shuffle reads
@@ -84,7 +104,8 @@ import org.apache.spark.sql.internal.SQLConf
  * another shuffle when skew optimization is forced. Join inputs and join branches are opt-in.
  * Allowing targets via
  * `spark.sql.adaptive.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled`
- * can prevent coalescing of the consumer's compatible shuffle group. Forced skew optimization
+ * can prevent coalescing of the consumer's compatible shuffle group. A keyed source reports its
+ * layout on a leaf, so keeping it needs that opt-in or coalescing off. Forced skew optimization
  * can restore a union exchange after moved branches have shuffled, shuffling them a second time.
  *
  * The query-wide subquery gate includes optimizer-injected runtime Bloom filter builds.
@@ -107,8 +128,6 @@ import org.apache.spark.sql.internal.SQLConf
  * while a marked one, possibly inserted for another site, still is.
  * Cost compensation belongs to SimpleCostEvaluator. Custom evaluators should account for the
  * one-to-many exchange rewrite when this rule is enabled, or they may reject the entire re-plan.
- *
- * TODO: support push down of a keyed layout.
  */
 case class PushDownShuffleExchangeThroughUnion(
     ensureRequirements: EnsureRequirements) extends Rule[SparkPlan] {
@@ -120,6 +139,10 @@ case class PushDownShuffleExchangeThroughUnion(
 
     val lookThrough =
       conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_LOOK_THROUGH_OPERATORS_ENABLED)
+    // A keyed source reports its layout on a leaf, so it is kept only with the coalescing opt-in
+    // or with coalescing off. The kept scan also leaves the union's coalesce group ineligible:
+    // `CoalesceShufflePartitions` admits only exchange stages, so AQE cannot coalesce the keyed
+    // layout away.
     val policy = LayoutPolicy(
       allowNonCoalescible = !conf.getConf(SQLConf.COALESCE_PARTITIONS_ENABLED) || conf.getConf(
         SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_NON_COALESCIBLE_BRANCHES_ENABLED),
@@ -131,6 +154,10 @@ case class PushDownShuffleExchangeThroughUnion(
         SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_MAX_TARGET_PARTITION_NUM_FACTOR),
       keepJoinBranches =
         conf.getConf(SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_KEEP_JOIN_BRANCHES_ENABLED),
+      allowV2Bucketing = conf.getConf(
+        SQLConf.PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_V2_BUCKETING_ENABLED) &&
+        conf.getConf(SQLConf.V2_BUCKETING_ENABLED) && conf.v2BucketingShuffleEnabled &&
+        !conf.v2BucketingPartiallyClusteredDistributionEnabled,
       allowSubsetTargets = conf.getConf(SQLConf
         .PUSH_DOWN_SHUFFLE_THROUGH_UNION_ALLOW_PARTITION_KEYS_SUBSET_OF_CLUSTER_KEYS_ENABLED))
     val allowJoinInputs =
@@ -240,56 +267,76 @@ case class PushDownShuffleExchangeThroughUnion(
       maxUnionChildren: Int,
       maxTargetPartitionNumFactor: Double,
       keepJoinBranches: Boolean,
+      allowV2Bucketing: Boolean,
       allowSubsetTargets: Boolean,
       preferRemovedLayout: Boolean = false)
 
-  /** Lazily discover and rank layouts once per site for both joint and fallback attempts. */
-  private class PreparedChild(val pushable: PushableChild, policy: LayoutPolicy) {
+  /** Lazily discover the reported layouts and rank the targets once per site for both attempts. */
+  private class PreparedChild(
+      val pushable: PushableChild,
+      required: ClusteredDistribution,
+      policy: LayoutPolicy) {
     /**
-     * Eligible child layouts in child order, expressed in the union's output attributes.
-     * Collections offer their hash members; a child offering nothing takes a shuffle.
-     * Equality follows UnionExec's comparison after prepareOutputPartitioning rebinding.
+     * The hash or keyed layouts each child reports, in child order, expressed in the union's output
+     * attributes. A collection offers its hash members; a keyed layout offers itself when it is
+     * grouped and its grouped form when it is not, the form `EnsureRequirements` plans. A child
+     * offering nothing takes a shuffle.
+     *
+     * A kept marked leg is still subject to the union's concatenation: beside another marked leg,
+     * it has to declare the same key list in the same order and still route by hash. One that
+     * fails those makes the candidate fail its final check, and the plan is left as it was.
      */
     lazy val layouts: Seq[Seq[Partitioning with Expression]] = {
       val union = pushable.union
       union.prepareOutputPartitioning().zip(union.children).map { case (partitioning, child) =>
-        if (keepableLayout(child, policy)) {
-          PartitioningCollection.flatten(partitioning).collect {
-            case hash: HashPartitioning => hash
-          }
-        } else {
-          Nil
+        partitioning match {
+          case keyed: KeyedPartitioning =>
+            if (policy.allowV2Bucketing && keepableLayout(child, policy)) {
+              Seq(if (keyed.isGrouped) keyed else keyed.toGrouped)
+            } else {
+              Nil
+            }
+          case other if keepableLayout(child, policy) =>
+            // A collection offers its hash members only. `UnionExec` reports a keyed layout only
+            // when every child has a single one, so a keyed member could not land as a target; a
+            // hash member still matches a hash target, and a child without one is laid out.
+            PartitioningCollection.flatten(other).collect {
+              case hash: HashPartitioning => hash
+            }
+          case _ => Nil
         }
       }
     }
 
-    lazy val targets: Seq[Partitioning with Expression] = {
+    lazy val targets: Seq[(Partitioning with Expression, Set[Int])] = {
       val minPartitions = math.min(removedLayout.numPartitions, conf.numShufflePartitions)
       val maxPartitions = math.ceil(
         math.max(removedLayout.numPartitions, conf.numShufflePartitions) *
           policy.maxTargetPartitionNumFactor).toInt
       val candidates = candidateTargets(
-        layouts, pushable.union.children, minPartitions, maxPartitions, stagedIndices)
+        layouts, pushable.union.children, required, minPartitions, maxPartitions, stagedIndices)
       val limited = if (policy.preferRemovedLayout) {
         // The whole-plan check failed. Retry on the layout of the exchange this rewrite removes:
         // every ancestor was planned against it. Keys that a look-through operator renames match
-        // nothing here, so that site stays unchanged.
-        candidates.filter(_.semanticEquals(removedLayout))
+        // nothing here, so that site stays unchanged. A keyed exchange `EnsureRequirements` creates
+        // carries HASH_ROUTING, so a keyed candidate matches it only when a child reports the same
+        // marked layout: same keys, same order.
+        candidates.filter { case (target, _) => target.semanticEquals(removedLayout) }
       } else {
         candidates
       }
-      limited.filter { target =>
-        layouts.count(child => !child.contains(target)) <= policy.maxMovedBranches
+      limited.filter { case (_, offeredBy) =>
+        layouts.length - offeredBy.size <= policy.maxMovedBranches
       }
     }
 
     /**
      * The layout of the exchange this rewrite removes. `findPushableShuffle` only admits a hash
-     * shuffle, and every ancestor was planned against this layout, so a failed whole-plan check
-     * can fall back to it.
+     * shuffle, or a keyed one when `policy.allowV2Bucketing` holds, and every ancestor was
+     * planned against this layout, so a failed whole-plan check can fall back to it.
      */
     lazy val removedLayout: Partitioning with Expression =
-      pushable.shuffle.outputPartitioning.asInstanceOf[HashPartitioning]
+      pushable.shuffle.outputPartitioning.asInstanceOf[Partitioning with Expression]
 
     /**
      * Indices of branches that are already shuffle query stages and pin the target: their
@@ -317,9 +364,10 @@ case class PushDownShuffleExchangeThroughUnion(
 
   /**
    * The shape this rule acts on below one of an operator's children: a pushable shuffle and the
-   * union it is moved past, with the operators in between looked through to reach it. Only a hash
-   * shuffle is pushable, since the layout that replaces it comes from the union's own children,
-   * and a union with more children than `maxUnionChildren` is not a site.
+   * union it is moved past, with the operators in between looked through to reach it. Hash
+   * shuffles and opted-in keyed shuffles are pushable, since the layout that replaces one comes
+   * from the union's own children, and a union with more children than `maxUnionChildren` is not a
+   * site.
    *
    * What the child owes its operator is not read here: this is asked of every child of every
    * operator, and `requiredChildDistribution` is not free of side effects: `WindowExecBase` logs
@@ -336,8 +384,10 @@ case class PushDownShuffleExchangeThroughUnion(
       // to the same requirement; one below it is an operator in between and needs the gate.
       case SortExec(_, false, child, _) if found.isEmpty || lookThrough =>
         findPushableShuffle(child, lookThrough, policy, found)
-      case shuffle @ ShuffleExchangeExec(_: HashPartitioning, child, ENSURE_REQUIREMENTS, _, _)
-          if found.isEmpty =>
+      case shuffle @ ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS, _, _)
+          if found.isEmpty &&
+            (partitioning.isInstanceOf[HashPartitioning] ||
+              (policy.allowV2Bucketing && partitioning.isInstanceOf[KeyedPartitioning])) =>
         findPushableShuffle(child, lookThrough, policy, Some(shuffle))
       // A union is a site only when the shuffle below it was found and it is eligible for one.
       // AttributeMap keeps the last duplicate exprId, while runtime binding uses the first;
@@ -376,8 +426,8 @@ case class PushDownShuffleExchangeThroughUnion(
 
     // Discover layouts and targets before walking the whole plan for shared exchanges, so a
     // site with no viable target is rejected without that walk.
-    val prepared = pushable.map { case (site, _) =>
-      site.map(child => new PreparedChild(child, policy))
+    val prepared = pushable.map { case (site, required) =>
+      site.map(child => new PreparedChild(child, required, policy))
     }
     if (!prepared.exists(_.exists(_.targets.nonEmpty))) {
       return (operator, true)
@@ -390,7 +440,9 @@ case class PushDownShuffleExchangeThroughUnion(
       (if (movable) child else None, required)
     }
 
-    val newChildren = new ArrayBuffer[SparkPlan](children.length)
+    // The plan at each child position as the pass runs. A rewritten child replaces its own entry;
+    // a child not reached yet keeps the one it came with.
+    val newChildren = new Array[SparkPlan](children.length)
     // Whether every target adopted by the attempt whose result is used is the layout of the
     // exchange this rewrite removes. The retry cannot help while this holds.
     var usedRemovedLayout = true
@@ -398,19 +450,14 @@ case class PushDownShuffleExchangeThroughUnion(
       // The joint attempt may have adopted another layout before failing on a sibling; only the
       // attempt whose children are used counts.
       usedRemovedLayout = true
-      newChildren.clear()
+      children.indices.foreach { position => newChildren(position) = children(position) }
       children.indices.forall { index =>
         val (pushableChild, required) = movableSites(index)
         val rebuilt = pushableChild.flatMap { child =>
           val fixed = children.indices.flatMap { position =>
             val (sibling, distribution) = movableSites(position)
             Option.when(position != index && (!joint || position < index || sibling.isEmpty)) {
-              val fixedChild = if (position < index) {
-                newChildren(position)
-              } else {
-                children(position)
-              }
-              (fixedChild, distribution)
+              (newChildren(position), distribution)
             }
           }
           rebuildChild(child, required, fixed, sharedExchanges, policy).map {
@@ -419,11 +466,12 @@ case class PushDownShuffleExchangeThroughUnion(
               candidate
           }
         }
-        if (joint && pushableChild.isDefined && rebuilt.isEmpty) {
-          false
-        } else {
-          newChildren += rebuilt.getOrElse(children(index))
-          true
+        rebuilt match {
+          case Some(candidate) =>
+            newChildren(index) = candidate
+            true
+          case None =>
+            !joint || pushableChild.isEmpty
         }
       }
     }
@@ -446,10 +494,10 @@ case class PushDownShuffleExchangeThroughUnion(
   }
 
   /**
-   * Rebuild on the best eligible union layout satisfying the consumer and pairing with fixed
-   * siblings. Subset keys require both the rule's permission and the co-partition policy, even
-   * when a single-input consumer accepts a coarser distribution. Returns the rebuilt child and
-   * whether its layout is the one the rewrite removes.
+   * Rebuild on the best eligible hash or keyed layout satisfying the consumer and pairing with the
+   * siblings, which this rewrite leaves as they are. Subset keys require both the rule's permission
+   * and the co-partition policy, even when a single-input consumer accepts a coarser distribution.
+   * Returns the rebuilt child, with whether its target is the layout the rewrite removes.
    */
   private def rebuildChild(
       prepared: PreparedChild,
@@ -458,14 +506,17 @@ case class PushDownShuffleExchangeThroughUnion(
       sharedExchanges: Set[SparkPlan],
       policy: LayoutPolicy): Option[(SparkPlan, Boolean)] = {
     val pushable = prepared.pushable
-    val layouts = prepared.layouts
 
     // `findPushableShuffle` already checked this chain, including local sorts.
-    def rebuild(plan: SparkPlan, target: Partitioning with Expression): Option[SparkPlan] =
+    def rebuild(
+        plan: SparkPlan,
+        target: Partitioning with Expression,
+        offeredBy: Set[Int]): Option[SparkPlan] =
       plan match {
-        case union: UnionExec => rebuildUnion(union, layouts, target, sharedExchanges)
+        case union: UnionExec =>
+          rebuildUnion(union, offeredBy, target, required, sharedExchanges)
         case operator: UnaryExecNode =>
-          rebuild(operator.child, target).map { child =>
+          rebuild(operator.child, target, offeredBy).map { child =>
             // A zero-move union can be structurally equal but must remain isolated for origin tags.
             operator.mapChildrenWithReferenceEquality(_ => child)
           }
@@ -475,21 +526,29 @@ case class PushDownShuffleExchangeThroughUnion(
       }
 
     prepared.targets.view
-      .flatMap { target =>
-        rebuild(pushable.shuffle.child, target).map(child => (target, child))
+      .flatMap { case (target, offeredBy) =>
+        rebuild(pushable.shuffle.child, target, offeredBy).map(child => (target, child))
       }
       .map { case (target, child) =>
         (target, PartitioningOrigin.inherit(pushable.shuffle, child))
       }
-      .find { case (_, child) =>
+      // Keep a rebuilt child only if it answers the required distribution as rebuilt and pairs with
+      // the siblings. A keyed target's admission as a shuffle template was settled with the
+      // candidates; what remains is the rule's own subset permission, which reads the rebuilt
+      // layout's specs.
+      .filter { case (target, child) =>
         val partitioning = child.outputPartitioning
         partitioning.satisfies(required) &&
           PartitioningCollection.specsForPairing(partitioning, required).exists { spec =>
-            spec.canCreatePartitioning && (policy.allowSubsetTargets || (spec match {
-              case hash: HashShuffleSpec =>
-                required.areAllClusterKeysMatched(hash.partitioning.expressions)
-              case _ => false
-            }))
+            // A keyed target was admitted as a template already; any other target asks its spec.
+            (target.isInstanceOf[KeyedPartitioning] || spec.canCreatePartitioning) &&
+              (policy.allowSubsetTargets || (spec match {
+                case hash: HashShuffleSpec =>
+                  required.areAllClusterKeysMatched(hash.partitioning.expressions)
+                case keyed: KeyedShuffleSpec =>
+                  required.allClusterKeysAmong(keyed.partitioning.expressions)
+                case _ => false
+              }))
           } &&
           ValidateRequirements.satisfiesForPairing(
             child +: fixed.map(_._1), required +: fixed.map(_._2))
@@ -497,7 +556,55 @@ case class PushDownShuffleExchangeThroughUnion(
       .map { case (target, child) =>
         (child, target.semanticEquals(prepared.removedLayout))
       }
+      .headOption
   }
+
+  /**
+   * Whether `actual` reports `target`'s domain: the same partition expressions and layout state,
+   * and the keys the question needs.
+   *
+   * A leg kept beside the target has to be mergeable with it, which depends on what it declares:
+   *
+   *  - A marked leg must declare the target's key list in the same order and still route by hash;
+   *    `UnionExec` merges marked legs only on one list it can hash against.
+   *  - A marked leg that lost its routing is laid out like any other child instead, which routes
+   *    its undeclared rows again. Keeping it would leave two marked legs that the union cannot
+   *    merge once another child is laid out, and the site would be dropped.
+   *  - An unmarked leg needs only its keys to be a subset of the target's, in any order. The
+   *    concatenation repeats the keys it shares with the target, so the rebuilt union is not
+   *    grouped and the grouping above it sorts and regroups every leg. A leg whose key order
+   *    differs therefore does not have to sit on the partitions the target names yet.
+   *
+   * The rebuilt union's own layout only has to hold the target's key set, since the grouping has
+   * settled the order the legs were merged in.
+   *
+   * The two are compared as they stand unless both are keyed, and for a keyed pair the unknown-keys
+   * state is allowed to differ: laying a child out on the domain routes its undeclared rows by
+   * hash, while the child the target came from declares every key it holds. The domain is the same
+   * either way.
+   *
+   * A pairing predicate is not asked here, since the question is whether two layouts stand for the
+   * same domain, not whether they line up.
+   *
+   * @param kept whether `actual` is a leg kept beside `target`, rather than the layout the rewrite
+   *             built from it
+   */
+  private def reportsDomain(
+      actual: Partitioning,
+      target: Partitioning,
+      kept: Boolean): Boolean =
+    (actual, target) match {
+      case (a: KeyedPartitioning, t: KeyedPartitioning) =>
+        a.layout.describesSameLayoutState(t.layout) && a.expressions == t.expressions && (
+          if (!kept) {
+            a.layout.describesSameKeySet(t.layout)
+          } else if (a.mayContainUnknownPartitionKeys) {
+            a.unknownKeysRouted && a.layout.describesSameKeys(t.layout)
+          } else {
+            a.layout.describesSubsetOfKeys(t.layout)
+          })
+      case _ => actual == target
+    }
 
   private case class CandidateBenefit(
       offeredBy: Set[Int],
@@ -506,33 +613,64 @@ case class PushDownShuffleExchangeThroughUnion(
 
   /**
    * Rank by estimated bytes kept when every child has a usable estimate. Missing or zero estimates
-   * trigger count-based ranking rather than treating unknown branches as smaller. Only targets
+   * trigger count-based ranking rather than treating unknown branches as smaller. Candidate targets
+   * come from the child layouts whose routing still holds: a layout that lost its routing is a
+   * result, and laying a shuffle out from one would claim routing for rows it does not place. A
+   * hash-routed one is a template the planner admits too (`unknownKeysRouted`). Only targets
    * within the partition count bounds are eligible. Targets that a staged child does not offer are
    * dropped, so no materialized branch is laid out twice. Partition count and first occurrence
    * break ties deterministically.
+   *
+   * Offers are the children that would keep their layouts (`reportsDomain`): one reporting the
+   * target, or a subset of its keys, keeps it, so it counts for both the staged pin and the
+   * count-based ranking. The set is returned with the target, since that is also how the callers
+   * ask how many children move and whether any of them is laid out at all.
+   *
+   * A keyed target also has to be a template `EnsureRequirements` would admit and one Spark can
+   * evaluate, which is `KeyedShuffleSpec(keyed, required).canCreatePartitioning` and
+   * `canEvaluatePartitioning`. The rebuilt union's layout is a result and cannot answer for the
+   * template, so the question is settled here. It compares the target, in the union's attributes,
+   * with `required`, in the consumer's; a project between the exchange and the union can rename
+   * the attribute the requirement names, and the target is then declined. That shape is
+   * unreachable: the logical optimizer pushes a deterministic project into the union's children.
    */
   private def candidateTargets(
       layouts: Seq[Seq[Partitioning with Expression]],
       children: Seq[SparkPlan],
+      required: ClusteredDistribution,
       minPartitions: Int,
       maxPartitions: Int,
-      stagedIndices: Set[Int]): Seq[Partitioning with Expression] = {
+      stagedIndices: Set[Int]): Seq[(Partitioning with Expression, Set[Int])] = {
     val sizes = children.map { child =>
       child.logicalLink.map(_.stats.sizeInBytes).filter { size =>
         size > 0 && size < conf.defaultSizeInBytes
       }
     }
     val useSizes = sizes.forall(_.isDefined)
-    val benefits = mutable.HashMap.empty[Partitioning with Expression, CandidateBenefit]
-    layouts.zip(sizes).zipWithIndex.foreach { case ((reported, size), index) =>
-      reported.filter { target =>
-        target.numPartitions >= minPartitions && target.numPartitions <= maxPartitions
-      }.distinct.foreach { target =>
-        val previous = benefits.getOrElse(
-          target, CandidateBenefit(Set.empty, BigInt(0), benefits.size))
-        benefits.update(target, previous.copy(
-          offeredBy = previous.offeredBy + index,
-          keptBytes = previous.keptBytes + size.getOrElse(BigInt(0))))
+    val benefits =
+      mutable.LinkedHashMap.empty[Partitioning with Expression, CandidateBenefit]
+    layouts.flatMap(_.filter {
+      case keyed: KeyedPartitioning => keyed.unknownKeysRouted
+      case _ => true
+    }).filter { target =>
+      target.numPartitions >= minPartitions && target.numPartitions <= maxPartitions
+    }.foreach { target =>
+      if (!benefits.contains(target)) {
+        val offeredBy = layouts.indices.filter { index =>
+          layouts(index).exists(reportsDomain(_, target, kept = true))
+        }.toSet
+        val admitted = target match {
+          case keyed: KeyedPartitioning =>
+            val targetSpec = KeyedShuffleSpec(keyed, required)
+            targetSpec.canEvaluatePartitioning && targetSpec.canCreatePartitioning
+          case _ => true
+        }
+        if (admitted) {
+          benefits.update(target, CandidateBenefit(
+            offeredBy = offeredBy,
+            keptBytes = offeredBy.iterator.map(index => sizes(index).getOrElse(BigInt(0))).sum,
+            firstOccurrence = benefits.size))
+        }
       }
     }
     benefits.toSeq
@@ -541,7 +679,7 @@ case class PushDownShuffleExchangeThroughUnion(
         val keptBytes = if (useSizes) { benefit.keptBytes } else { BigInt(0) }
         (-keptBytes, -benefit.offeredBy.size, -target.numPartitions, benefit.firstOccurrence)
       }
-      .map(_._1)
+      .map { case (target, benefit) => (target, benefit.offeredBy) }
   }
 
   /**
@@ -595,29 +733,45 @@ case class PushDownShuffleExchangeThroughUnion(
   }
 
   /**
-   * `union` rebuilt on `target`: eligible children are kept, unshared movable exchanges are
-   * retargeted, and other children get an exchange. `None` if the union does not report `target`,
-   * which is stricter than satisfying the consumer's distribution. Retargeting is limited to
-   * direct, unshared requirement or column-repartition exchanges. Column repartitions retain their
-   * keys in order; a key change or recorded-layout violation keeps the exchange and adds one above.
-   * Tag added exchanges as free and retargeted ones as counted for cost accounting; retargeting
-   * adds no shuffle.
+   * `union` rebuilt on `target`: the children `offeredBy` names are kept, unshared movable
+   * exchanges are retargeted, and other children get an exchange. `None` if the union does not
+   * report `target`, which is stricter than satisfying the consumer's distribution. Retargeting is
+   * limited to direct, unshared requirement exchanges; a column repartition is retargeted only when
+   * it is a hash layout naming the same keys, which a keyed target never is. Column repartitions
+   * retain their keys in order; a key change or recorded-layout violation keeps the exchange and
+   * adds one above. Tag added exchanges as free and retargeted ones as counted for cost
+   * accounting; retargeting adds no shuffle.
+   *
+   * A keyed target keeps the children whose layouts lie on the domain or on part of it, and lays
+   * the others out on it. Such a child may hold rows of a key the domain does not declare, so its
+   * layout records the hash routing that placed them; `UnionExec` concatenates the legs and the
+   * grouping above keeps that key in the group named for the declared key it reached.
    */
   private def rebuildUnion(
       union: UnionExec,
-      layouts: Seq[Seq[Partitioning with Expression]],
+      offeredBy: Set[Int],
       target: Partitioning with Expression,
+      required: ClusteredDistribution,
       sharedExchanges: Set[SparkPlan]): Option[SparkPlan] = {
     def addExchange(partitioning: Partitioning, child: SparkPlan): ShuffleExchangeExec = {
       val exchange = ShuffleExchangeExec(partitioning, child, ENSURE_REQUIREMENTS)
       PushDownShuffleExchangeThroughUnion.mark(exchange, PushedShuffle)
       exchange
     }
-    val newChildren = union.children.zip(layouts).map { case (child, reported) =>
-      if (reported.contains(target)) {
+    val newChildren = union.children.zipWithIndex.map { case (child, index) =>
+      if (offeredBy.contains(index)) {
         child
       } else {
-        val partitioning = rebind(target, union, child)
+        // `KeyGroupedPartitioner` routes rows of an undeclared key by their hash, which is the
+        // state the marker records. A target either declares every key it holds or still routes
+        // the undeclared ones by hash; `candidateTargets` leaves a lost-routing layout out.
+        val partitioning = rebind(target, union, child) match {
+          case keyed: KeyedPartitioning =>
+            assert(keyed.unknownKeysRouted,
+              s"a keyed target still routes its undeclared keys, got $keyed")
+            keyed.withLayout(_.copy(unknownKeysOrigin = Some(HASH_ROUTING)))
+          case other => other
+        }
         child match {
           case shuffle: ShuffleExchangeExec
               if (shuffle.shuffleOrigin == ENSURE_REQUIREMENTS ||
@@ -639,8 +793,22 @@ case class PushDownShuffleExchangeThroughUnion(
     // Origin inheritance can tag a zero-move candidate, so it must not reuse the input union.
     val rebuilt = union.copy(children = newChildren)
     rebuilt.copyTagsFrom(union)
-    Option.when(
-      PartitioningCollection.flatten(rebuilt.outputPartitioning).contains(target))(rebuilt)
+    val grouped = rebuilt.outputPartitioning match {
+      case keyed: KeyedPartitioning if !keyed.isGrouped =>
+        // Grouping merges the partitions that share a key. That loses granularity only for a
+        // collapsed layout, which the planner gates behind the V2 subset permission; ask the same
+        // question here. Every kept child shares the target's collapse state, so the concatenation
+        // gives the same answer as the target.
+        if (!keyed.mayGroupToSatisfy(required)) {
+          return None
+        }
+        GroupPartitionsExec(rebuilt)
+      case _ => rebuilt
+    }
+    // The last word on a candidate: the union has to report the target's key domain. The grouping
+    // above sorts the keys, so the order of the target is not part of that check.
+    Option.when(PartitioningCollection.flatten(grouped.outputPartitioning)
+      .exists(reportsDomain(_, target, kept = false)))(grouped)
   }
 
   private def samePartitionKeys(original: Partitioning, target: Partitioning): Boolean = {
