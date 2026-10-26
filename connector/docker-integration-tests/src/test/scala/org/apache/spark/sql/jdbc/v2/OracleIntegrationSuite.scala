@@ -29,6 +29,7 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STR
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
@@ -193,12 +194,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     // The lower-cased key must still override the wall-clock value pinned at loadTable.
     val ntzOptions = "'zonelessTimestampAsNTZ' = 'true', 'timestampntzaswallclock' = 'true'"
     withDefaultTimeZone(LA) {
-      val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
-        sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
-      }
+      val (df, frozenMax) =
+        withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+          (sql(s"SELECT time1 FROM $table WHERE name = 'amy'"),
+            sql(s"SELECT MAX(time1) FROM $table"))
+        }
       assert(df.schema.head.dataType === TimestampNTZType)
       withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
         checkAnswer(df, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
+        // Aggregate pushdown re-derives the scan schema; a mismatch would be cast back silently.
+        checkAggregateRemoved(frozenMax)
+        val pushedScan = frozenMax.queryExecution.optimizedPlan.collectFirst {
+          case s: DataSourceV2ScanRelation => s
+        }.get
+        assert(pushedScan.output.head.dataType === TimestampNTZType)
+        checkAnswer(frozenMax, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
         // Per-read options override the flag: the mapping at loadTable, the getter at the scan.
         val perRead = sql(s"SELECT time1 FROM $table WITH ($ntzOptions) WHERE name = 'amy'")
         assert(perRead.schema.head.dataType === TimestampNTZType)
