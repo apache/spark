@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.{BaseFixedWidthVector, BaseVariableWidthVector, BaseVariableWidthViewVector, BitVectorHelper, FieldVector, ValueVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BaseFixedWidthVector, BaseLargeVariableWidthVector, BaseVariableWidthVector, BaseVariableWidthViewVector, BitVectorHelper, FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{BaseRepeatedValueVector, ListVector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
@@ -51,7 +51,7 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
   // to -1, as `ArrowPythonUDTFRunner` does.
   protected def arrowMaxRecordsPerOutputBatch: Int = SQLConf.get.arrowMaxRecordsPerOutputBatch
 
-  protected def arrowMaxBytesPerOutputBatch: Int = SQLConf.get.arrowMaxBytesPerOutputBatch
+  protected def arrowMaxBytesPerOutputBatch: Int = SQLConf.get.arrowMaxBytesPerOutputBatch.toInt
 
   if (arrowMaxRecordsPerOutputBatch > 0 && arrowMaxBytesPerOutputBatch > 0) {
     throw new IllegalArgumentException(
@@ -303,8 +303,7 @@ class SliceBytesArrowOutputProcessorImpl(
     arrowMaxBytesPerOutputBatch: Int)
   extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
-  // The number of rows of the last slice output from the current batch, from which the search
-  // for the next slice starts.
+  // The number of rows from which the search for the next slice of the current batch starts.
   private var sliceRowCount = 0
 
   protected override def getRoot: VectorSchemaRoot = {
@@ -317,13 +316,17 @@ class SliceBytesArrowOutputProcessorImpl(
       sliceRowCount = (rowCount * SliceBytesArrowOutputProcessorImpl.stepRatio).toInt
     }
     // We iteratively shrink the slice by 10% until it fits. Each search starts from the number of
-    // rows of the last slice that fit, since every slice that does not start at row 0 copies its
-    // offset buffers, and restarting from all the remaining rows would copy them again and again.
+    // rows that would fit at the bytes per row of the last slice that fit, rather than from all
+    // the remaining rows, since a slice that does not start at row 0 usually copies its offset
+    // buffers, and restarting from all the remaining rows would copy them again and again.
     var numRows = math.min(sliceRowCount, rowCount - currentRowIdx)
     while (numRows > 0) {
       val rootSlice = root.slice(currentRowIdx, numRows)
-      if (batchBytes(rootSlice) <= arrowMaxBytesPerOutputBatch) {
-        sliceRowCount = numRows
+      val bytes = batchBytes(rootSlice)
+      if (bytes <= arrowMaxBytesPerOutputBatch) {
+        // Never below `numRows`, so the next slice can grow again after a run of large rows.
+        val estimate = numRows.toLong * arrowMaxBytesPerOutputBatch / math.max(bytes, 1L)
+        sliceRowCount = math.min(estimate, Int.MaxValue).toInt
         currentRowIdx += numRows
         return rootSlice
       }
@@ -331,14 +334,14 @@ class SliceBytesArrowOutputProcessorImpl(
       numRows = (numRows * SliceBytesArrowOutputProcessorImpl.stepRatio).toInt
     }
     // Even a single row is larger than the limit, so we output a batch with that one row.
-    // Normally, this should not happen, but it is possible if the data is very large.
-    sliceRowCount = 1
+    // Normally, this should not happen, but it is possible if the data is very large. The next
+    // search starts from where this one did, since the next rows may be much smaller.
     val rootSlice = root.slice(currentRowIdx, 1)
     currentRowIdx += 1
     rootSlice
   }
 
-  protected def batchBytes(root: VectorSchemaRoot): Long = {
+  private[python] def batchBytes(root: VectorSchemaRoot): Long = {
     root.getFieldVectors.asScala.map(SliceBytesArrowOutputProcessorImpl.bufferSize).sum
   }
 }
@@ -350,11 +353,14 @@ object SliceBytesArrowOutputProcessorImpl {
    * Returns the size in bytes of the buffers of `vector`, like `ValueVector.getBufferSize` but as
    * a Long. `getBufferSize` computes the size in int, so it wraps around for a vector over 2 GiB,
    * e.g. a struct vector, which adds up the sizes of its children, such as the one top-level
-   * struct vector that holds the output of mapInArrow, mapInPandas, applyInPandas and Python
-   * UDTFs. Other vectors, e.g. `NullVector` and the large variable-width ones, which cap their
-   * size at Int.MaxValue, fall back to `getBufferSize`.
+   * struct vector that holds the output of mapInArrow, mapInPandas and applyInPandas.
+   *
+   * Fixed-width and (large) variable-width vectors are measured in Long. A nested vector adds up
+   * its children in Long, but its own buffers come from its int `getBufferSize`, so they are
+   * still wrong when they alone exceed 2 GiB, e.g. the offsets of a list vector with more than
+   * 2^29 rows. Other vectors, e.g. the view vectors, fall back to `getBufferSize`.
    */
-  def bufferSize(vector: ValueVector): Long = vector match {
+  private[python] def bufferSize(vector: ValueVector): Long = vector match {
     case v: BaseFixedWidthVector if v.getTypeWidth > 0 && v.getValueCount > 0 =>
       BitVectorHelper.getValidityBufferSizeFromCount(v.getValueCount) +
         v.getValueCount.toLong * v.getTypeWidth
@@ -363,6 +369,11 @@ object SliceBytesArrowOutputProcessorImpl {
       BitVectorHelper.getValidityBufferSizeFromCount(v.getValueCount) +
         (v.getValueCount + 1L) * offsetWidth +
         v.getOffsetBuffer.getInt(v.getValueCount.toLong * offsetWidth)
+    case v: BaseLargeVariableWidthVector if v.getValueCount > 0 =>
+      val offsetWidth = BaseLargeVariableWidthVector.OFFSET_WIDTH
+      BitVectorHelper.getValidityBufferSizeFromCount(v.getValueCount) +
+        (v.getValueCount + 1L) * offsetWidth +
+        v.getOffsetBuffer.getLong(v.getValueCount.toLong * offsetWidth)
     case v: FieldVector if !v.getChildrenFromFields.isEmpty =>
       val children = v.getChildrenFromFields.asScala.toSeq
       // The size of the buffers of the nested vector itself, e.g. the validity and offsets. Its

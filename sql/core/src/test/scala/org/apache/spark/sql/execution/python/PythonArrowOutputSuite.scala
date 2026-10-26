@@ -22,7 +22,7 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.{BigIntVector, FieldVector, FixedSizeBinaryVector, NullVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BigIntVector, FieldVector, FixedSizeBinaryVector, LargeVarCharVector, NullVector, VarCharVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{ListVector, StructVector}
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
 import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
@@ -228,7 +228,7 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     : (ArrowStreamReader, Map[String, SQLMetric]) => ArrowOutputProcessor =
     (reader, metrics) => new SliceBytesArrowOutputProcessorImpl(reader, metrics, maxBytes)
 
-  test("slice by bytes: a batch whose size equals the limit is not sliced") {
+  test("SPARK-60395: slice by bytes: a batch whose size equals the limit is not sliced") {
     val batchSizes = Seq(50, 50)
     val batchBytes = readAll(batchSizes, new ArrowOutputProcessorImpl(_, _)).map(_._2)
     assert(batchBytes.distinct.size === 2)
@@ -243,13 +243,13 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     assert(sliced.forall(_._2 <= maxBytes - 1))
   }
 
-  test("slice by bytes: each search starts from the rows of the last slice that fit") {
+  test("SPARK-60395: slice by bytes: each search does not restart from all remaining rows") {
     val batchSizes = Seq(2000)
     val maxBytes = (readAll(batchSizes, new ArrowOutputProcessorImpl(_, _)).head._2 / 50).toInt
     var measured = 0
     val output = readAll(batchSizes, (reader, metrics) =>
       new SliceBytesArrowOutputProcessorImpl(reader, metrics, maxBytes) {
-        override protected def batchBytes(root: VectorSchemaRoot): Long = {
+        override private[python] def batchBytes(root: VectorSchemaRoot): Long = {
           measured += 1
           super.batchBytes(root)
         }
@@ -263,7 +263,38 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     assert(measured <= 40 + 2 * output.size, s"$measured measurements for ${output.size} slices")
   }
 
-  test("bufferSize matches getBufferSize of vectors below 2 GiB") {
+  /**
+   * Slices `batchSizes` by bytes, where a row whose `id` is i takes `rowBytes(i)` bytes, and
+   * returns the number of rows of every output batch.
+   */
+  private def sliceRowCounts(batchSizes: Seq[Int], maxBytes: Int)(rowBytes: Long => Long)
+    : Seq[Int] = {
+    val output = readAll(batchSizes, (reader, metrics) =>
+      new SliceBytesArrowOutputProcessorImpl(reader, metrics, maxBytes) {
+        override private[python] def batchBytes(root: VectorSchemaRoot): Long = {
+          val ids = root.getVector("id").asInstanceOf[BigIntVector]
+          (0 until root.getRowCount).map(i => rowBytes(ids.get(i))).sum
+        }
+      })
+    checkAllRowsOnceInOrder(batchSizes, output)
+    output.map(_._1.size)
+  }
+
+  test("SPARK-60395: slice by bytes: number of rows of each slice") {
+    // The first search goes 45, 40, 36, ..., 11, 9 rows, and later searches start from the rows
+    // that would fit at the bytes per row of the last slice, here 10, which fits exactly.
+    assert(sliceRowCounts(Seq(50), 1000)(_ => 100) === Seq(9, 10, 10, 10, 10, 1))
+    // Row 0 alone is larger than the limit, which does not keep the other slices at one row.
+    assert(sliceRowCounts(Seq(1000), 1000)(i => if (i == 0) 5000 else 10) ===
+      Seq(1, 94) ++ Seq.fill(9)(100) ++ Seq(5))
+    // Slices grow again after the large rows.
+    assert(sliceRowCounts(Seq(1000), 1000)(i => if (i < 10) 500 else 10) ===
+      Seq.fill(6)(2) ++ Seq.fill(9)(100) ++ Seq(88))
+    // Every row is larger than the limit.
+    assert(sliceRowCounts(Seq(3, 0, 2), 1000)(_ => 2000) === Seq(1, 1, 1, 0, 1, 1))
+  }
+
+  test("SPARK-60395: bufferSize matches getBufferSize of vectors below 2 GiB") {
     val nestedSchema = new StructType()
       .add("b", BooleanType)
       .add("d", DecimalType(20, 2))
@@ -300,7 +331,7 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     }
   }
 
-  test("bufferSize does not wrap around for a struct vector over 2 GiB") {
+  test("SPARK-60395: bufferSize does not wrap around for a struct vector over 2 GiB") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("struct", 0, Long.MaxValue)
     class TestStructVector extends StructVector(
         "st", allocator, FieldType.nullable(ArrowType.Struct.INSTANCE), null) {
@@ -324,7 +355,53 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     }
   }
 
-  test("maxBytesPerOutputBatch below Int.MinValue means no limit") {
+  test("SPARK-60395: bufferSize does not wrap around for flat vectors over 2 GiB") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("flat", 0, Long.MaxValue)
+    try {
+      // An int64 column of 2^28 rows, without allocating it.
+      val fixed = new FixedSizeBinaryVector("f", allocator, 8) {
+        override def getValueCount: Int = 1 << 28
+      }
+      try {
+        assert(SliceBytesArrowOutputProcessorImpl.bufferSize(fixed) === (1L << 31) + (1 << 25))
+      } finally {
+        fixed.close()
+      }
+
+      // Variable-width vectors of 3 values whose end offset is then set to a large value.
+      val varChar = new VarCharVector("v", allocator)
+      val largeVarChar = new LargeVarCharVector("l", allocator)
+      try {
+        varChar.allocateNew()
+        largeVarChar.allocateNew()
+        Seq("a", "bb", "ccc").zipWithIndex.foreach { case (str, i) =>
+          varChar.setSafe(i, str.getBytes("UTF-8"))
+          largeVarChar.setSafe(i, str.getBytes("UTF-8"))
+        }
+        Seq(varChar, largeVarChar).foreach { v =>
+          v.setValueCount(3)
+          assert(SliceBytesArrowOutputProcessorImpl.bufferSize(v) === v.getBufferSize)
+        }
+        varChar.getOffsetBuffer.setInt(3 * 4, Int.MaxValue - 10)
+        // `getBufferSize` wraps around to a negative size.
+        assert(varChar.getBufferSize < 0)
+        assert(SliceBytesArrowOutputProcessorImpl.bufferSize(varChar) ===
+          1 + 4 * 4 + (Int.MaxValue - 10L))
+        largeVarChar.getOffsetBuffer.setLong(3 * 8, 3L << 30)
+        // `getBufferSize` caps the size at Int.MaxValue.
+        assert(largeVarChar.getBufferSize === Int.MaxValue)
+        assert(SliceBytesArrowOutputProcessorImpl.bufferSize(largeVarChar) ===
+          1 + 4 * 8 + (3L << 30))
+      } finally {
+        varChar.close()
+        largeVarChar.close()
+      }
+    } finally {
+      allocator.close()
+    }
+  }
+
+  test("SPARK-60395: maxBytesPerOutputBatch below Int.MinValue means no limit") {
     val conf = new SQLConf
     Seq("-3g", "-4294967295", "-1", "0").foreach { value =>
       conf.setConfString(SQLConf.ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH.key, value)
