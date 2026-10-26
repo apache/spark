@@ -801,21 +801,35 @@ class InsertSuite extends QueryTest with TestHiveSingleton with BeforeAndAfter {
   }
 
   test("SPARK-60545: TIMESTAMP_NTZ type is unsupported when writing to a Hive serde directory") {
-    withTempDir { dir =>
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(
-            s"""
-               |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
-               |STORED AS TEXTFILE
-               |SELECT TIMESTAMP_NTZ'2026-01-01 00:00:00' AS c
-             """.stripMargin)
-        },
-        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
-        parameters = Map(
-          "columnName" -> "`c`",
-          "columnType" -> "\"TIMESTAMP_NTZ\"",
-          "format" -> "Hive"))
+    // Disable native data source conversion so that PARQUET and ORC also go through the Hive
+    // serde path (HiveFileFormat) like TEXTFILE.
+    withSQLConf(HiveUtils.CONVERT_METASTORE_INSERT_DIR.key -> "false") {
+      Seq("TEXTFILE", "PARQUET", "ORC").foreach { fileFormat =>
+        Seq(
+          "TIMESTAMP_NTZ'2026-01-01 00:00:00'" -> "TIMESTAMP_NTZ",
+          "ARRAY(TIMESTAMP_NTZ'2026-01-01 00:00:00')" -> "ARRAY<TIMESTAMP_NTZ>"
+        ).foreach { case (expr, columnType) =>
+          withTempDir { dir =>
+            // InsertIntoHiveDirCommand wraps the failure in a SparkException, so assert on the
+            // cause.
+            val e = intercept[SparkException] {
+              sql(
+                s"""
+                   |INSERT OVERWRITE LOCAL DIRECTORY '${dir.toURI.getPath}'
+                   |STORED AS $fileFormat
+                   |SELECT $expr AS c
+                 """.stripMargin)
+            }
+            checkError(
+              exception = e.getCause.asInstanceOf[AnalysisException],
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = Map(
+                "columnName" -> "`c`",
+                "columnType" -> s""""$columnType"""",
+                "format" -> "Hive"))
+          }
+        }
+      }
     }
   }
 

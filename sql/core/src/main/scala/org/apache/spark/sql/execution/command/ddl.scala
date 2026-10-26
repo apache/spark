@@ -1155,14 +1155,8 @@ object DDLUtils extends Logging {
       _.toLowerCase(Locale.ROOT) match {
         case HIVE_PROVIDER =>
           val serde = table.storage.serde
-          // Hive has no TIMESTAMP_NTZ type. Check the nested types too.
-          val timestampNTZColumn =
-            schema.find(_.dataType.existsRecursively(_.isInstanceOf[TimestampNTZType]))
           if (schema.exists(_.dataType.isInstanceOf[AnsiIntervalType])) {
             throw hiveTableWithAnsiIntervalsError(table.identifier)
-          } else if (timestampNTZColumn.isDefined) {
-            throw QueryCompilationErrors.dataTypeUnsupportedByDataSourceError(
-              "Hive", timestampNTZColumn.get)
           } else if (serde == HiveSerDe.sourceToSerDe("orc").get.serde) {
             checkDataColNames("orc", schema)
           } else if (serde == HiveSerDe.sourceToSerDe("parquet").get.serde ||
