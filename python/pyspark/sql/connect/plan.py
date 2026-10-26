@@ -2384,11 +2384,13 @@ class Checkpoint(LogicalPlan):
         local: bool,
         eager: bool,
         storage_level: Optional[StorageLevel] = None,
+        relation_id: Optional[str] = None,
     ) -> None:
         super().__init__(child)
         self._local = local
         self._eager = eager
         self._storage_level = storage_level
+        self._relation_id = relation_id
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
@@ -2400,6 +2402,8 @@ class Checkpoint(LogicalPlan):
         )
         if self._storage_level is not None:
             checkpoint_command.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
+        if self._relation_id is not None:
+            checkpoint_command.relation_id = self._relation_id
         cmd.checkpoint_command.CopyFrom(checkpoint_command)
         return cmd
 
