@@ -20,21 +20,20 @@ package org.apache.spark.sql.internal.connector
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BindReferences, Expression => CatalystExpression, Predicate => CatalystPredicate}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression => CatalystExpression}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
-import org.apache.spark.sql.connector.expressions.filter.{StorageFilter, StorageFilterNotAppliedException}
+import org.apache.spark.sql.connector.read.{StorageFilter, StorageFilterNotAppliedException}
 
 /**
  * A [[StorageFilter]] wrapping a Catalyst expression, so a scan can apply a predicate it does not
  * have to understand. It mirrors [[PartitionPredicateImpl]], which evaluates a partition key
  * rather than a data row.
  *
- * `attrs` is the layout of the row [[eval]] expects, in that order, and the expression is bound to
- * it. The binding is built on first use, so an instance created on the driver can be evaluated on
- * an executor.
+ * `attrs` is the layout of the row [[eval]] expects, in that order, and the predicate is bound to
+ * it. The predicate is built on first use, see [[StorageFilterPredicate]].
  */
 class StorageFilterImpl private (
-    private var catalystExpr: CatalystExpression,
+    private val predicate: StorageFilterPredicate,
     private val attrs: Seq[Attribute])
   extends StorageFilter with Logging {
 
@@ -43,22 +42,6 @@ class StorageFilterImpl private (
 
   // Whether this instance has logged a failure, so a task logs only its first.
   @transient private var loggedFailure = false
-
-  @transient private lazy val boundPredicate: InternalRow => Boolean = {
-    // The expression is released below, so a copy made after a first evaluation would have nothing
-    // to build from. That is named here rather than left to an NPE.
-    if (catalystExpr == null) {
-      throw SparkException.internalError(
-        s"$this was copied after an evaluation released the expression of its predicate")
-    }
-    val predicate = CatalystPredicate.create(BindReferences.bindReference(catalystExpr, attrs))
-    // A bloom's bytes sit in the expression as a binary literal, while a generated predicate holds
-    // the deserialized filter instead, so dropping the expression lets the task reclaim them. An
-    // interpreted predicate, the fallback, keeps the expression. Every task deserializes its own
-    // copy, and this is the field's only reader.
-    catalystExpr = null
-    predicate.eval
-  }
 
   /**
    * Wraps an error in [[StorageFilterNotAppliedException]], unless
@@ -75,9 +58,9 @@ class StorageFilterImpl private (
       throw SparkException.internalError(
         s"$this takes rows of $numReferences values, but got ${row.numFields}")
     }
-    val predicate = boundPredicate
+    val prepared = predicate.prepared
     try {
-      predicate(row)
+      prepared.eval(row)
     } catch {
       case e: Throwable =>
         StorageFilterErrors.rethrowIfMustPropagate(e, fromRead = false)
@@ -90,11 +73,15 @@ class StorageFilterImpl private (
     }
   }
 
-  @transient override lazy val references: Array[NamedReference] =
+  @transient private lazy val referenceArray: Array[NamedReference] =
     attrs.map(a => FieldReference.column(a.name)).toArray
 
+  // A copy per call, so a reader that reorders it cannot change the layout another reader of the
+  // task sees.
+  override def references(): Array[NamedReference] = referenceArray.clone()
+
   // Only the columns, since a runtime bloom's literal would print every byte of the bloom.
-  override def toString: String = s"StorageFilter(${references.mkString(", ")})"
+  override def toString: String = s"StorageFilter(${referenceArray.mkString(", ")})"
 }
 
 object StorageFilterImpl {
@@ -111,6 +98,6 @@ object StorageFilterImpl {
         s"A storage filter over ${catalystExpr.references.mkString("[", ", ", "]")} references " +
           s"attributes outside the scan output ${output.mkString("[", ", ", "]")}")
     }
-    new StorageFilterImpl(catalystExpr, referenced)
+    new StorageFilterImpl(StorageFilterPredicate(catalystExpr, referenced), referenced)
   }
 }

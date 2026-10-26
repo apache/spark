@@ -18,10 +18,10 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{And, BasePredicate, BloomFilterMightContain, BoundReference, Expression}
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
-import org.apache.spark.sql.internal.connector.StorageFilterErrors
+import org.apache.spark.sql.internal.connector.{StorageFilterErrors, StorageFilterPredicate}
 import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 
 /**
@@ -127,30 +127,12 @@ object StorageFilterMetrics {
  */
 class ParquetStorageFilter private (
     val keyColumnIndices: Array[Int],
-    private var boundExpression: Expression,
+    predicate: StorageFilterPredicate,
     val metrics: StorageFilterMetrics,
     val maxSplicedRowGroupBytes: Long) extends Serializable {
 
-  /**
-   * The predicate this filter evaluates, built on first use on the executor, since a generated one
-   * can be awkward to serialize.
-   */
-  @transient lazy val preparedPredicate: BasePredicate = {
-    // The expression is released below, so a driver-side evaluation would ship a copy with nothing
-    // to build from. That is named here rather than left to an NPE.
-    if (boundExpression == null) {
-      throw SparkException.internalError("a storage filter must only be evaluated on an " +
-        "executor, and this copy has released the expression it would build its predicate from")
-    }
-    val created = Predicate.create(boundExpression)
-    // A bloom's bytes sit in the expression as a binary literal, while a generated predicate holds
-    // the deserialized filter instead, so dropping the expression lets a columnar scan's task
-    // reclaim them. An interpreted predicate, the fallback, keeps the expression, so its bytes
-    // stay. Safe because every task attempt deserializes its own copy, and this is the field's only
-    // reader.
-    boundExpression = null
-    created
-  }
+  /** The predicate this filter evaluates, built on first use on the executor. */
+  def preparedPredicate: BasePredicate = predicate.prepared
 }
 
 object ParquetStorageFilter {
@@ -200,7 +182,8 @@ object ParquetStorageFilter {
       case b: BoundReference => BoundReference(indexMap(b.ordinal), b.dataType, b.nullable)
     }
 
-    new ParquetStorageFilter(originalOrdinals.toArray, remapped, metrics, maxSplicedRowGroupBytes)
+    new ParquetStorageFilter(originalOrdinals.toArray, new StorageFilterPredicate(remapped),
+      metrics, maxSplicedRowGroupBytes)
   }
 
   /**

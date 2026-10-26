@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.execution.datasources
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, BloomFilterMightContain, Expression, ExpressionSet, If, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, AttributeSet, Expression, ExpressionSet, GetStructField, If, Literal}
 import org.apache.spark.sql.execution.{ScalarSubquery => ExecScalarSubquery, WholeStageCodegenExec}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BinaryType, BooleanType}
+import org.apache.spark.sql.types.BooleanType
 
 /**
  * The rules file-source and DSv2 scans share for storage filters, see
@@ -90,14 +90,13 @@ object StorageFilterPlanning {
   }
 
   /**
-   * `filter` with each scalar subquery replaced by its result, for the readers. Each bloom filter
-   * becomes a literal of its own bytes. A subquery `MergeSubplans` merged returns the blooms of
-   * several filters in one struct, so a bloom read out of it would otherwise carry the whole
-   * struct.
+   * `filter` with each scalar subquery replaced by its result, for the readers. A field read out of
+   * a result becomes a literal of its own. A subquery `MergeSubplans` merged returns the results of
+   * several subqueries in one struct, such as the blooms of several filters, so a field read out of
+   * it would otherwise carry the whole struct.
    */
   def withSubqueryResults(filter: Expression): Expression = filter.transformUp {
     case s: ExecScalarSubquery => s.toLiteral
-    case m @ BloomFilterMightContain(bloom, _) if bloom.foldable && !bloom.isInstanceOf[Literal] =>
-      m.copy(bloomFilterExpression = Literal(bloom.eval(), BinaryType))
+    case g @ GetStructField(_: Literal, _, _) => Literal(g.eval(), g.dataType)
   }
 }

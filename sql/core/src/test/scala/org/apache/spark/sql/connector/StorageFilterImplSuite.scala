@@ -22,8 +22,7 @@ import org.apache.spark.serializer.JavaSerializer
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, Cast, Divide, EqualTo, EvalMode, Expression, GreaterThan, Literal, NumericEvalContext, Remainder, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotAppliedException
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, StorageFilterNotAppliedException}
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
 import org.apache.spark.sql.types.{BooleanType, DataType, DoubleType, LongType}
@@ -65,6 +64,14 @@ class StorageFilterImplSuite extends SparkFunSuite {
     assert(!filter.eval(InternalRow(1L, 10L)))
   }
 
+  test("a reader that reorders the references changes the layout of no other reader") {
+    val filter =
+      StorageFilterImpl(And(EqualTo(k, Literal(1L)), EqualTo(v, Literal(10L))), Seq(v, k))
+    val references = filter.references()
+    references.sortInPlaceBy(_.toString)
+    assert(filter.references().map(_.toString).toSeq == Seq("v", "k"))
+  }
+
   test("a row of another width than the references fails, rather than being misread") {
     // `evenKeys` reads `k` alone, so a row holding `v, k` would put `v` where `k` is read.
     val e = intercept[SparkException](evenKeys.eval(InternalRow(3L, 4L)))
@@ -101,8 +108,8 @@ class StorageFilterImplSuite extends SparkFunSuite {
     }
     val request = StorageFilterRequestImpl(evenKeys, appendsCheckedColumn = false)
     Seq(
-      () => factory.createReader(StorageFilterTestPartition(0, 1), request),
-      () => factory.createColumnarReader(StorageFilterTestPartition(0, 1), request)
+      () => factory.createReader(RangeInputPartition(0, 1), request),
+      () => factory.createColumnarReader(RangeInputPartition(0, 1), request)
     ).foreach { create =>
       val e = intercept[SparkUnsupportedOperationException](create())
       assert(e.getCondition == "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED",

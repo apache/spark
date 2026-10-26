@@ -137,10 +137,12 @@ class DataSourceV2Strategy(session: SparkSession) extends Strategy with Predicat
       relation: DataSourceV2ScanRelation,
       filters: Seq[Expression]): Seq[Expression] = {
     if (!session.sessionState.conf.v2StorageFilterPushdownEnabled) return Nil
-    if (relation.storageFilterAttrs.isEmpty) return Nil
     // A scan that took a pushed limit, offset, top-N or sample, or an aggregate or join, would have
     // its readers filter ahead of it.
     if (!relation.onlyRowWisePushdowns) return Nil
+    // Before the declared columns are matched, since most scans get no runtime bloom.
+    if (!filters.exists(_.isInstanceOf[BloomFilterMightContain])) return Nil
+    if (relation.storageFilterAttrs.isEmpty) return Nil
     // By name, since a variant-extraction scan's output has fresh exprIds. No data column shares
     // its name with a metadata column, see `metadataOutputWithOutConflicts`.
     val resolver = session.sessionState.conf.resolver

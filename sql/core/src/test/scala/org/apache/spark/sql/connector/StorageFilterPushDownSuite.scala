@@ -19,10 +19,10 @@ package org.apache.spark.sql.connector
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkException, SparkThrowable}
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, Divide, EvalMode, GetStructField, GreaterThan, If, Literal, NumericEvalContext, PredicateHelper, Rand, XxHash64}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, Divide, EvalMode, GetStructField, GreaterThan, If, LessThanOrEqual, Literal, NumericEvalContext, PredicateHelper, Rand, XxHash64}
 import org.apache.spark.sql.catalyst.plans.logical.ReturnAnswer
 import org.apache.spark.sql.execution.{BaseLimitExec, CoalesceExec, ExecSubqueryExpression, FilterExec, SampleExec, SparkPlan, TakeOrderedAndProjectExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -93,8 +93,7 @@ class StorageFilterPushDownSuite
   // The scan offered nothing, and the Filter evaluates the bloom on every row.
   private def assertNothingOffered(plan: SparkPlan): Unit = {
     val scan = scanOf(plan)
-    assert(scan.storageFilters.isEmpty && !scan.appendsCheckedColumn,
-      s"the scan must get no storage filter:\n$plan")
+    assert(scan.storageFilters.isEmpty, s"the scan must get no storage filter:\n$plan")
     assert(bloomsAbove(plan) == (1, 0), s"the Filter must keep the bloom as it is:\n$plan")
   }
 
@@ -183,24 +182,38 @@ class StorageFilterPushDownSuite
       }
     }
 
-    test(s"a $kind reader that leaves out the checked column it was asked for fails the task, " +
-        "from any row or batch") {
-      // A reader that gives the filter up returns every row, so it returns several batches.
-      Seq(Seq("dropChecked" -> "true"), Seq("dropChecked" -> "later", "giveUp" -> "true"))
-        .foreach { options =>
-          withBloomJoin() {
-            StorageFilterTestSource.reset()
-            val df = bloomJoin(v2Probe(options :+ ("columnar" -> columnar.toString): _*))
-            val e = intercept[SparkException](df.collect())
-            val missing =
-              Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null).collectFirst {
-                case t: SparkThrowable
-                    if t.getCondition == "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" => t
-              }
-            assert(missing.exists(_.getMessageParameters.get("class") ==
-              classOf[StorageFilterTestReaderFactory].getName), s"with $options got $e")
+    Seq(false, true).foreach { aqe =>
+      test(s"a $kind reader that leaves out the checked column it was asked for fails the task, " +
+          s"from any row or batch (AQE $aqe)") {
+        // A reader that gives the filter up returns every row, so it returns several batches.
+        Seq(Seq("dropChecked" -> "true"), Seq("dropChecked" -> "later", "giveUp" -> "true"))
+          .foreach { options =>
+            withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+              StorageFilterTestSource.reset()
+              val df = bloomJoin(v2Probe(options :+ ("columnar" -> columnar.toString): _*))
+              // `k`, `v` and the checked column.
+              checkError(
+                exception = intercept[SparkException](df.collect()),
+                condition = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
+                sqlState = Some("KD000"),
+                parameters = Map(
+                  "class" -> classOf[StorageFilterTestReaderFactory].getName,
+                  "expected" -> "3",
+                  "actual" -> "2"))
+            }
           }
-        }
+      }
+    }
+
+    test(s"a $kind reader may return more columns after the checked column") {
+      withBloomJoin() {
+        val plan = runBloomJoin("columnar" -> columnar.toString, "checkedLayout" -> "extra")
+        assert(bloomsAbove(plan) == (0, 1),
+          s"the Filter must skip the bloom on checked rows:\n$plan")
+        assert(rowsOutOfFilter(plan) == StorageFilterTestSource.rowsReturned.get(),
+          s"the Filter must keep every checked row; got ${rowsOutOfFilter(plan)} of " +
+            s"${StorageFilterTestSource.rowsReturned.get()}")
+      }
     }
 
     test(s"a $kind test reader gives a filter up when it throws, and returns its rows unchecked") {
@@ -210,7 +223,7 @@ class StorageFilterPushDownSuite
       val k = AttributeReference("k", LongType)()
       val inverse = Divide(Literal(1.0), Cast(k, DoubleType), NumericEvalContext(EvalMode.ANSI))
       val filter = StorageFilterImpl(GreaterThan(inverse, Literal(0.0)), Seq(k))
-      val partition = StorageFilterTestPartition(0, StorageFilterTestSource.numRows)
+      val partition = RangeInputPartition(0, StorageFilterTestSource.numRows)
       val schema = new StructType().add("k", LongType).add("v", LongType)
       val rows = mutable.ArrayBuffer.empty[(Long, Boolean)]
       if (columnar) {
@@ -235,6 +248,23 @@ class StorageFilterPushDownSuite
       }
       assert(rows == (0L until StorageFilterTestSource.numRows.toLong).map(_ -> false),
         s"expected every row, unchecked; got ${rows.take(5)} and ${rows.size} rows in all")
+    }
+  }
+
+  test("a columnar reader that returns the checked column ahead of the others fails the task") {
+    // The batch is as wide as asked for, but its last column is not a boolean. A row carries no
+    // types, so a row-based reader's mistake goes unnoticed.
+    withBloomJoin() {
+      StorageFilterTestSource.reset()
+      val df = bloomJoin(v2Probe("columnar" -> "true", "checkedLayout" -> "front"))
+      checkError(
+        exception = intercept[SparkException](df.collect()),
+        condition = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
+        sqlState = Some("KD000"),
+        parameters = Map(
+          "class" -> classOf[StorageFilterTestReaderFactory].getName,
+          "expected" -> "3",
+          "actual" -> "3"))
     }
   }
 
@@ -293,96 +323,132 @@ class StorageFilterPushDownSuite
     }
   }
 
-  test("a scan with a column named like the checked column gets the filter, and runtime " +
-      "filtering still resolves that column") {
-    // Runtime filtering resolves the declared filter attributes by name, which the checked column
-    // the scan appends would make ambiguous. Dynamic partition pruning on `k` would take the
-    // bloom's place.
-    withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-      val plan = runBloomJoin(
-        "columnar" -> "true", "valueName" -> checkedName, "runtimeFiltering" -> "v2")
-      val scan = scanOf(plan)
-      assert(scan.storageFilters.size == 1 && scan.appendsCheckedColumn,
-        s"the scan must get the bloom and the checked column:\n$plan")
-      assert(StorageFilterTestSource.runtimeFilterCalls.get() > 0,
-        "test setup: the bloom must reach runtime filtering")
-      val probeSide = collectFirst(plan) { case j: SortMergeJoinExec => j.left.output }
-      assert(probeSide.contains(scan.output.init),
-        s"the Project above the scan must keep the table's column; got $probeSide")
-    }
-  }
-
-  test("a bloom the scan fully evaluates through runtime filtering is not offered") {
-    // Dynamic partition pruning on `k` would take the bloom's place.
-    withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false") {
-      val plan = runBloomJoin("columnar" -> "true", "runtimeFiltering" -> "catalyst")
-      val scan = scanOf(plan)
-      assert(scan.runtimeFilters.exists(_.exists(_.isInstanceOf[BloomFilterMightContain])) &&
-        StorageFilterTestSource.runtimeFilterCalls.get() > 0,
-        s"test setup: the scan must take the bloom as a runtime filter:\n$plan")
-      assert(scan.storageFilters.isEmpty && !scan.appendsCheckedColumn,
-        s"the scan must get no storage filter:\n$plan")
-      assert(bloomsAbove(plan) == (0, 0), s"no Filter may keep the bloom:\n$plan")
-    }
-  }
-
-  test("a two-key join offers both blooms in one filter, each bloom with its own bytes") {
-    // `MergeSubplans` merges the two blooms' aggregates into one subquery returning both blooms.
+  test("a variant scan that reads only its key column and a metadata column is offered nothing") {
+    // The key is an extraction of the declared variant column, so that column is the scan's only
+    // data column, and the scan's output has fresh exprIds.
     withBloomJoin() {
-      withTable("bf_build2") {
-        spark.range(0, 30).selectExpr("id AS bk", "id * 10 AS bv", "id AS flag")
-          .write.format("parquet").saveAsTable("bf_build2")
-        StorageFilterTestSource.reset()
-        val probe = v2Probe("columnar" -> "true", "wide" -> "true", "declared" -> "k,v")
-          .where("w % 3 != 1")
-        val build = spark.table("bf_build2").where("flag = 5")
-        val df = probe.join(build, probe("k") === build("bk") && probe("v") === build("bv"))
-          .select(probe("k"), probe("v"), probe("w"))
-        val plan = checkJoin(df, Set(Seq(5L, 50L, 500L)))
-        val scan = scanOf(plan)
-        assert(scan.storageFilters.size == 2, s"both blooms must be on the scan:\n$plan")
-        assert(scan.storageFilters.forall(_.exists {
-          case GetStructField(_: ExecSubqueryExpression, _, _) => true
-          case _ => false
-        }), s"test setup: the blooms must come from one merged subquery:\n$plan")
-        assert(bloomsAbove(plan) == (0, 2), s"the Filter must skip both blooms:\n$plan")
-        val filter = collect(plan) {
-          case f: FilterExec if f.child.exists(_.isInstanceOf[BatchScanExec]) => f
-        }.head
-        assert(splitConjunctivePredicates(filter.condition).exists { c =>
-          c.references.map(_.name).toSet == Set("w") && !c.isInstanceOf[If]
-        }, s"the Filter must evaluate the conjunct over `w` on every row:\n$plan")
-        assert(StorageFilterTestSource.filterReferences == Set(Seq("k", "v")),
-          s"one filter over both keys; got ${StorageFilterTestSource.filterReferences}")
-        val bloomBytes = scan.storageFilters.map(_.collectFirst {
-          case m: BloomFilterMightContain =>
-            m.bloomFilterExpression.eval().asInstanceOf[Array[Byte]].length
-        }.get).sum
-        assert(StorageFilterTestSource.filterBytes.get() < bloomBytes * 3 / 2,
-          s"each bloom must ship once; the filter takes ${StorageFilterTestSource.filterBytes} " +
-            s"bytes for $bloomBytes bytes of blooms")
-        assert(StorageFilterTestSource.rowsEvaluated.get() == StorageFilterTestSource.numRows,
-          s"the reader must evaluate every row; got ${StorageFilterTestSource.rowsEvaluated.get()}")
-      }
+      val pos = StorageFilterTestSource.posName
+      val probe = v2Probe("columnar" -> "true", "variant" -> "true", "metadataColumn" -> "true",
+        "declared" -> "j").selectExpr("variant_get(j, '$.a', 'long') AS a", pos)
+      val build = spark.table("bf_build").where("bv = 5")
+      val df = probe.join(build, probe("a") === build("bk") * 10).select(probe("a"), probe(pos))
+      StorageFilterTestSource.reset()
+      assertNothingOffered(checkJoin(df, Set(Seq(50L, 5L))))
     }
   }
 
-  test("the readers of one task share the filter the task deserialized") {
-    // `coalesce(1)` reads both partitions in one task.
+  test("a scan that took a pushed variant extraction gets the bloom") {
+    // The extraction keeps the scan's rows.
     withBloomJoin() {
       StorageFilterTestSource.reset()
-      val probe = v2Probe("columnar" -> "true", "numPartitions" -> "2").coalesce(1)
+      val probe = v2Probe("columnar" -> "true", "variant" -> "true")
+        .selectExpr("k", "variant_get(j, '$.a', 'long') AS a")
       val plan = checkJoin(bloomJoin(probe), joinResult)
-      assert(collect(plan) { case c: CoalesceExec => c }.nonEmpty, s"test setup:\n$plan")
-      assert(scanOf(plan).storageFilters.size == 1, s"the bloom must be on the scan:\n$plan")
-      assert(StorageFilterTestSource.filteredReaders.get() == 2,
-        s"both readers must get the filter; got ${StorageFilterTestSource.filteredReaders.get()}")
-      assert(StorageFilterTestSource.filterIdentities.size == 1,
-        "both readers must get the same instance")
-      assert(StorageFilterTestSource.rowsEvaluated.get() == StorageFilterTestSource.numRows,
-        s"the readers must evaluate every row; got ${StorageFilterTestSource.rowsEvaluated.get()}")
+      val scan = scanOf(plan)
+      assert(scan.output.exists(_.dataType.isInstanceOf[StructType]),
+        s"test setup: the scan must read the extraction:\n$plan")
+      assert(scan.storageFilters.size == 1,
+        s"the bloom filter must be on the scan; got ${scan.storageFilters}\n$plan")
       assert(StorageFilterTestSource.rowsReturned.get() < StorageFilterTestSource.numRows,
-        "the readers must have dropped rows, otherwise the filter did nothing")
+        "the reader must have dropped rows, otherwise the filter did nothing")
+    }
+  }
+
+  for (aqe <- Seq(false, true)) {
+    test("a scan with a column named like the checked column gets the filter, and runtime " +
+        s"filtering still resolves that column (AQE $aqe)") {
+      // Runtime filtering resolves the declared filter attributes by name, which the checked column
+      // the scan appends would make ambiguous. Dynamic partition pruning on `k` would take the
+      // bloom's place.
+      withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val plan = runBloomJoin(
+          "columnar" -> "true", "valueName" -> checkedName, "runtimeFiltering" -> "v2")
+        val scan = scanOf(plan)
+        assert(scan.storageFilters.size == 1 && scan.appendsCheckedColumn,
+          s"the scan must get the bloom and the checked column:\n$plan")
+        assert(StorageFilterTestSource.runtimeFilterCalls.get() > 0,
+          "test setup: the bloom must reach runtime filtering")
+        val probeSide = collectFirst(plan) { case j: SortMergeJoinExec => j.left.output }
+        assert(probeSide.contains(scan.output.init),
+          s"the Project above the scan must keep the table's column; got $probeSide")
+      }
+    }
+
+    test(s"a bloom the scan fully evaluates through runtime filtering is not offered (AQE $aqe)") {
+      // Dynamic partition pruning on `k` would take the bloom's place.
+      withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        val plan = runBloomJoin("columnar" -> "true", "runtimeFiltering" -> "catalyst")
+        val scan = scanOf(plan)
+        assert(scan.runtimeFilters.exists(_.exists(_.isInstanceOf[BloomFilterMightContain])) &&
+          StorageFilterTestSource.runtimeFilterCalls.get() > 0,
+          s"test setup: the scan must take the bloom as a runtime filter:\n$plan")
+        assert(scan.storageFilters.isEmpty, s"the scan must get no storage filter:\n$plan")
+        assert(bloomsAbove(plan) == (0, 0), s"no Filter may keep the bloom:\n$plan")
+      }
+    }
+
+    test(s"a two-key join offers both blooms in one filter, each bloom with its own bytes " +
+        s"(AQE $aqe)") {
+      // `MergeSubplans` merges the two blooms' aggregates into one subquery returning both blooms.
+      withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        withTable("bf_build2") {
+          spark.range(0, 30).selectExpr("id AS bk", "id * 10 AS bv", "id AS flag")
+            .write.format("parquet").saveAsTable("bf_build2")
+          StorageFilterTestSource.reset()
+          val probe = v2Probe("columnar" -> "true", "wide" -> "true", "declared" -> "k,v")
+            .where("w % 3 != 1")
+          val build = spark.table("bf_build2").where("flag = 5")
+          val df = probe.join(build, probe("k") === build("bk") && probe("v") === build("bv"))
+            .select(probe("k"), probe("v"), probe("w"))
+          val plan = checkJoin(df, Set(Seq(5L, 50L, 500L)))
+          val scan = scanOf(plan)
+          assert(scan.storageFilters.size == 2, s"both blooms must be on the scan:\n$plan")
+          assert(scan.storageFilters.forall(_.exists {
+            case GetStructField(_: ExecSubqueryExpression, _, _) => true
+            case _ => false
+          }), s"test setup: the blooms must come from one merged subquery:\n$plan")
+          assert(bloomsAbove(plan) == (0, 2), s"the Filter must skip both blooms:\n$plan")
+          val filter = collect(plan) {
+            case f: FilterExec if f.child.exists(_.isInstanceOf[BatchScanExec]) => f
+          }.head
+          assert(splitConjunctivePredicates(filter.condition).exists { c =>
+            c.references.map(_.name).toSet == Set("w") && !c.isInstanceOf[If]
+          }, s"the Filter must evaluate the conjunct over `w` on every row:\n$plan")
+          assert(StorageFilterTestSource.filterReferences == Set(Seq("k", "v")),
+            s"one filter over both keys; got ${StorageFilterTestSource.filterReferences}")
+          val bloomBytes = scan.storageFilters.map(_.collectFirst {
+            case m: BloomFilterMightContain =>
+              m.bloomFilterExpression.eval().asInstanceOf[Array[Byte]].length
+          }.get).sum
+          assert(StorageFilterTestSource.filterBytes.get() < bloomBytes * 3 / 2,
+            s"each bloom must ship once; the filter takes ${StorageFilterTestSource.filterBytes} " +
+              s"bytes for $bloomBytes bytes of blooms")
+          assert(StorageFilterTestSource.rowsEvaluated.get() == StorageFilterTestSource.numRows,
+            "the reader must evaluate every row; got " +
+              StorageFilterTestSource.rowsEvaluated.get())
+        }
+      }
+    }
+
+    test(s"the readers of one task share the filter the task deserialized (AQE $aqe)") {
+      // `coalesce(1)` reads both partitions in one task.
+      withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+        StorageFilterTestSource.reset()
+        val probe = v2Probe("columnar" -> "true", "numPartitions" -> "2").coalesce(1)
+        val plan = checkJoin(bloomJoin(probe), joinResult)
+        assert(collect(plan) { case c: CoalesceExec => c }.nonEmpty, s"test setup:\n$plan")
+        assert(scanOf(plan).storageFilters.size == 1, s"the bloom must be on the scan:\n$plan")
+        assert(StorageFilterTestSource.filteredReaders.get() == 2,
+          s"both readers must get the filter; got ${StorageFilterTestSource.filteredReaders.get()}")
+        assert(StorageFilterTestSource.filterIdentities.size == 1,
+          "both readers must get the same instance")
+        assert(StorageFilterTestSource.rowsEvaluated.get() == StorageFilterTestSource.numRows,
+          "the readers must evaluate every row; got " + StorageFilterTestSource.rowsEvaluated.get())
+        assert(StorageFilterTestSource.rowsReturned.get() < StorageFilterTestSource.numRows,
+          "the readers must have dropped rows, otherwise the filter did nothing")
+      }
     }
   }
 
@@ -477,15 +543,18 @@ class StorageFilterPushDownSuite
     assert(offered == Seq(deterministic), s"got $offered")
   }
 
-  test("a bloom read out of a merged subquery's struct ships as a literal of its own") {
+  test("a field read out of a merged subquery's struct ships as a literal of its own") {
     val k = AttributeReference("k", LongType)()
     val blooms = Seq(Array[Byte](1, 2), Array[Byte](3))
-    val struct = Literal.create(InternalRow.fromSeq(blooms),
-      new StructType().add("b0", BinaryType).add("b1", BinaryType))
+    val struct = Literal.create(InternalRow.fromSeq(blooms :+ 7L),
+      new StructType().add("b0", BinaryType).add("b1", BinaryType).add("max", LongType))
     val shipped = StorageFilterPlanning.withSubqueryResults(
       BloomFilterMightContain(GetStructField(struct, 1), new XxHash64(Seq(k))))
     val bloom = shipped.asInstanceOf[BloomFilterMightContain].bloomFilterExpression
     assert(bloom.isInstanceOf[Literal] && bloom.dataType == BinaryType &&
       bloom.eval().asInstanceOf[Array[Byte]].toSeq == blooms(1).toSeq, s"got $bloom")
+    val bound =
+      StorageFilterPlanning.withSubqueryResults(LessThanOrEqual(k, GetStructField(struct, 2)))
+    assert(bound == LessThanOrEqual(k, Literal(7L)), s"got $bound")
   }
 }

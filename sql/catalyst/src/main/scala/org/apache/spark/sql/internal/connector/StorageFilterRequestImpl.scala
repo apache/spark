@@ -17,8 +17,7 @@
 
 package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.connector.expressions.filter.StorageFilter
-import org.apache.spark.sql.connector.read.StorageFilterRequest
+import org.apache.spark.sql.connector.read.{StorageFilter, StorageFilterRequest}
 
 /** The [[StorageFilterRequest]] Spark builds once per scan and sends with each of its tasks. */
 case class StorageFilterRequestImpl(filter: StorageFilter, appendsCheckedColumn: Boolean)

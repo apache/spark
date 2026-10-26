@@ -19,8 +19,6 @@ package org.apache.spark.sql.connector.read;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.expressions.filter.StorageFilter;
-import org.apache.spark.sql.connector.expressions.filter.StorageFilterNotAppliedException;
 
 /**
  * A mix-in interface for {@link Scan}. A data source implements it if its readers can evaluate a

@@ -20,7 +20,6 @@ package org.apache.spark.sql.connector.read;
 import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
-import org.apache.spark.sql.connector.expressions.filter.StorageFilter;
 
 /**
  * What Spark hands a reader of a {@link SupportsStorageFilters} scan, through
@@ -41,7 +40,8 @@ public interface StorageFilterRequest extends Serializable {
    * false on every other row the reader returns, such as a row read without the filter, or one
    * kept although the filter rejected it. Spark skips the filter's predicate above the scan on the
    * rows marked true. A reader asked for the column that returns a row or a batch without it fails
-   * the task.
+   * the task. The reader may return more columns after the checked column, which Spark does not
+   * read.
    * <p>
    * Spark asks for it only where whole-stage codegen is on and the scan's output still fits it with
    * the column. Without it, the reader may still apply the filter, and the plan above the scan

@@ -70,10 +70,9 @@ public interface Scan {
    * {@link Table} that creates this scan returns {@link TableCapability#BATCH_READ} support in its
    * {@link Table#capabilities()}.
    * <p>
-   * If the scan supports runtime filtering and implements {@link SupportsRuntimeFiltering}, or
-   * Spark offers it a storage filter through {@link SupportsStorageFilters}, this method may be
-   * called multiple times. Therefore, implementations can cache some state to avoid planning the
-   * job twice.
+   * Spark may call this method more than once for the same scan, for instance when it plans the
+   * scan again for runtime filtering or for a storage filter. Therefore, implementations can cache
+   * some state to avoid planning the job twice.
    *
    * @throws UnsupportedOperationException
    */

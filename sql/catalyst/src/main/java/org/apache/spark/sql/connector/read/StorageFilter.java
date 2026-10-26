@@ -15,16 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.connector.expressions.filter;
+package org.apache.spark.sql.connector.read;
 
 import java.io.Serializable;
 
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.connector.expressions.NamedReference;
-import org.apache.spark.sql.connector.read.Scan;
-import org.apache.spark.sql.connector.read.StorageFilterRequest;
-import org.apache.spark.sql.connector.read.SupportsStorageFilters;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 
 /**

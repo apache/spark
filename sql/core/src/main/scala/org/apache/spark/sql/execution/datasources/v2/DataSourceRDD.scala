@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, StorageFilterRequest}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
 class DataSourceRDDPartition(val index: Int, val inputPartition: Option[InputPartition])
@@ -142,10 +143,11 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  * @param storageFilterRequest What every reader gets when the scan was offered storage filters.
  *                             Serialized with the task, so each task has its own instance of the
  *                             filter.
- * @param checkedOutputWidth The width of the rows or batches a reader returns when the request asks
- *                           for the checked column. Each one is checked against it, since a reader
- *                           that leaves the column out would have the plan above the scan read past
- *                           its rows.
+ * @param checkedOutputWidth The number of columns the plan above the scan reads from each row or
+ *                           batch when the request asks for the checked column, the last of them.
+ *                           Each row or batch is checked to hold at least that many, since a
+ *                           reader that leaves the column out would have the plan above the scan
+ *                           read past its rows.
  */
 class DataSourceRDD(
     sc: SparkContext,
@@ -201,14 +203,14 @@ class DataSourceRDD(
           case None => partitionReaderFactory.createColumnarReader(inputPartition)
         }
         new PartitionIterator[ColumnarBatch](batchReader, _.numRows, taskState,
-          checkedOutputWidth.map(width => batch => checkWidth(width, batch.numCols())))
+          checkedOutputWidth.map(width => batch => checkBatch(width, batch)))
       } else {
         val rowReader = storageFilterRequest match {
           case Some(request) => partitionReaderFactory.createReader(inputPartition, request)
           case None => partitionReaderFactory.createReader(inputPartition)
         }
         new PartitionIterator[InternalRow](rowReader, _ => 1, taskState,
-          checkedOutputWidth.map(width => row => checkWidth(width, row.numFields)))
+          checkedOutputWidth.map(width => row => checkRow(width, row)))
       }
 
       // Track this iterator; early-stop close and final metrics-flush for iterators not yet
@@ -221,12 +223,21 @@ class DataSourceRDD(
     }
   }
 
-  private def checkWidth(expected: Int, actual: Int): Unit = {
-    if (actual != expected) {
-      throw QueryExecutionErrors.storageFilterCheckedColumnMissingError(
-        partitionReaderFactory.getClass.getName, expected, actual)
+  // The checked column is the last of `width` columns. A batch may hold more after it, which the
+  // plan above the scan does not read. A row carries no types, so only its width is checked.
+  private def checkBatch(width: Int, batch: ColumnarBatch): Unit = {
+    if (batch.numCols() < width || batch.column(width - 1).dataType() != BooleanType) {
+      throw checkedColumnMissing(width, batch.numCols())
     }
   }
+
+  private def checkRow(width: Int, row: InternalRow): Unit = {
+    if (row.numFields < width) throw checkedColumnMissing(width, row.numFields)
+  }
+
+  private def checkedColumnMissing(width: Int, actual: Int): Throwable =
+    QueryExecutionErrors.storageFilterCheckedColumnMissingError(
+      partitionReaderFactory.getClass.getName, width, actual)
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartition.toSeq.flatMap(_.preferredLocations())
@@ -237,7 +248,7 @@ private class PartitionIterator[T](
     private var reader: PartitionReader[T],
     rowCount: T => Int,
     taskState: TaskState,
-    check: Option[T => Unit] = None) extends Iterator[T] {
+    check: Option[T => Unit]) extends Iterator[T] {
   private var valuePrepared = false
   private var hasMoreInput = true
 
@@ -279,7 +290,10 @@ private class PartitionIterator[T](
     }
     valuePrepared = false
     val result = reader.get()
-    check.foreach(_(result))
+    check match {
+      case Some(c) => c(result)
+      case None =>
+    }
     taskState.updateMetrics(rowCount(result))
     result
   }
