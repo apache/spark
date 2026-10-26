@@ -130,31 +130,43 @@ class ShellScriptTestGoal:
         ...
     TypeError: Unsupported test stage: 'post_build'
 
-    The path may be a `str` or `Path`, and is normalized:
+    The path may be supplied as a `str` or `Path`, and is stored as a normalized `Path`:
 
-    >>> ShellScriptTestGoal(Path("./dev//example")) == ShellScriptTestGoal("dev/example")
+    >>> goal.path == Path("dev/example")
     True
+    >>> ShellScriptTestGoal(Path("dev/example")) == goal
+    True
+    >>> ShellScriptTestGoal("./dev//example") == goal
+    True
+    >>> len({goal, ShellScriptTestGoal("./dev//example"),
+    ...      ShellScriptTestGoal(Path("dev/example"))})
+    1
 
-    The path is a repository-relative script:
+    The path is a non-blank, repository-relative script:
 
     >>> ShellScriptTestGoal("/tmp/example")
     Traceback (most recent call last):
         ...
     ValueError: Shell script path must be relative to repo root: '/tmp/example'
+    >>> ShellScriptTestGoal("  ")
+    Traceback (most recent call last):
+        ...
+    ValueError: Shell script path must be relative to repo root: '  '
     """
 
-    path: str | Path
+    path: Path
     stage: TestStage = TestStage.PRE_BUILD
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.stage, TestStage):
-            raise TypeError(f"Unsupported test stage: {self.stage!r}")
+    def __init__(self, path: str | Path, stage: TestStage = TestStage.PRE_BUILD) -> None:
+        if not isinstance(stage, TestStage):
+            raise TypeError(f"Unsupported test stage: {stage!r}")
         # `Path` rejects non-path types and normalizes spellings like "./dev//x".
-        path = Path(self.path)
+        path = Path(path)
+        if not str(path).strip() or path == Path() or path.is_absolute() or ".." in path.parts:
+            raise ValueError(f"Shell script path must be relative to repo root: {str(path)!r}")
         # We have to call `object.__setattr__` because the class is frozen.
         object.__setattr__(self, "path", path)
-        if path == Path() or path.is_absolute() or ".." in path.parts:
-            raise ValueError(f"Shell script path must be relative to repo root: {str(path)!r}")
+        object.__setattr__(self, "stage", stage)
 
 
 @total_ordering
