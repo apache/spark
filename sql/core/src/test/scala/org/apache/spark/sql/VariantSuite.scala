@@ -27,7 +27,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.expressions.{CodegenObjectFactoryMode, ExpressionEvalHelper, Literal}
-import org.apache.spark.sql.catalyst.expressions.variant.{VariantExpressionEvalUtils, VariantGet}
+import org.apache.spark.sql.catalyst.expressions.variant.{VariantExplode, VariantExpressionEvalUtils, VariantGet}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.WholeStageCodegenExec
@@ -1226,6 +1226,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     )
   }
 
+  test("recursive variant_explode reuses its iterator") {
+    val input = VariantExpressionEvalUtils.parseJson(UTF8String.fromString("[1,2]"))
+    val output = VariantExplode.variantExplodeRecursive(input, isNull = false)
+    val iterator = output.iterator
+    assert(!iterator.isEmpty)
+    assert(output.iterator eq iterator)
+    assert(iterator.size == 2)
+  }
+
   test("variant_explode") {
     def check(input: String, expected: Seq[Row]): Unit = {
       withView("v") {
@@ -1333,6 +1342,28 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
         checkAnswer(
           sql(s"SELECT path FROM variant_explode(to_variant_object(map('a${vtab}b', 1)), true)"),
           Seq(Row("$['a\\" + "u000bb']")))
+
+        withView("variant_explode_round_trip") {
+          Seq(Map(
+            "a'\"b" -> Seq(1),
+            "a\\nb" -> Seq(2),
+            "a\b\f\n\r\tb" -> Seq(3),
+            s"a${vtab}b" -> Seq(4),
+            "" -> Seq(5),
+            "a.b" -> Seq(6))).toDF("input")
+            .selectExpr("to_variant_object(input) AS v")
+            .createOrReplaceTempView("variant_explode_round_trip")
+          Seq("variant_explode", "variant_explode_outer").foreach { function =>
+            checkAnswer(
+              sql(s"""
+                |SELECT to_json(value), to_json(variant_get(v, path, 'variant'))
+                |FROM variant_explode_round_trip, LATERAL $function(v, true)
+                |""".stripMargin),
+              (1 to 6).flatMap { value =>
+                Seq(Row(s"[$value]", s"[$value]"), Row(value.toString, value.toString))
+              })
+          }
+        }
 
         // scalastyle:off nonascii
         checkAnswer(

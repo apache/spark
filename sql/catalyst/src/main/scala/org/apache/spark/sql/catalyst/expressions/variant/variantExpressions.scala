@@ -1991,7 +1991,7 @@ case class VariantExplode(child: Expression, recursive: Expression)
     val method = if (isRecursive) "variantExplodeRecursive" else "variantExplode"
     val code = code"""
       ${childCode.code}
-      scala.collection.Iterable<InternalRow> ${ev.value} = $cls.$method(
+      scala.collection.IterableOnce<InternalRow> ${ev.value} = $cls.$method(
           ${childCode.value}, ${childCode.isNull});
     """
     ev.copy(code = code, isNull = FalseLiteral)
@@ -2105,28 +2105,24 @@ object VariantExplode {
 
   def variantExplodeRecursive(
       input: VariantVal,
-      isNull: Boolean): Iterable[InternalRow] = {
+      isNull: Boolean): Iterator[InternalRow] = {
     if (isNull) {
-      return Iterable.empty
+      return Iterator.empty
     }
 
-    new Iterable[InternalRow] {
-      override def iterator: Iterator[InternalRow] = {
-        val stack = new ArrayDeque[ExplodeEntry]()
-        pushChildren(new Variant(input.getValue, input.getMetadata), "$", stack)
-        new Iterator[InternalRow] {
-          override def hasNext: Boolean = !stack.isEmpty
+    val stack = new ArrayDeque[ExplodeEntry]()
+    pushChildren(new Variant(input.getValue, input.getMetadata), "$", stack)
+    new Iterator[InternalRow] {
+      override def hasNext: Boolean = !stack.isEmpty
 
-          override def next(): InternalRow = {
-            val entry = stack.pop()
-            pushChildren(entry.value, entry.path, stack)
-            InternalRow(
-              UTF8String.fromString(entry.path),
-              entry.pos,
-              entry.key,
-              new VariantVal(entry.value.getValue, entry.value.getMetadata))
-          }
-        }
+      override def next(): InternalRow = {
+        val entry = stack.pop()
+        pushChildren(entry.value, entry.path, stack)
+        InternalRow(
+          UTF8String.fromString(entry.path),
+          entry.pos,
+          entry.key,
+          new VariantVal(entry.value.getValue, entry.value.getMetadata))
       }
     }
   }
