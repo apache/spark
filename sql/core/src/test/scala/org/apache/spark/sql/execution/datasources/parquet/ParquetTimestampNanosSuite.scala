@@ -385,6 +385,69 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
+  test("SPARK-57838: Parquet INT64 nanos at the exact int64 epoch-nanos limits") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val min = "1677-09-21 00:12:43.145224192"
+        val max = "2262-04-11 23:47:16.854775807"
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.sql(
+            s"""SELECT * FROM VALUES
+               |  (TIMESTAMP_NTZ '$min', TIMESTAMP_LTZ '$min'),
+               |  (TIMESTAMP_NTZ '$max', TIMESTAMP_LTZ '$max')
+               |  AS t(ntz, ltz)""".stripMargin)
+          df.write.parquet(path)
+          def filterAt(ts: String): String =
+            s"ntz = TIMESTAMP_NTZ '$ts' AND ltz = TIMESTAMP_LTZ '$ts'"
+          withAllParquetReaders {
+            val read = spark.read.parquet(path)
+            checkAnswer(read, df.collect().toSeq)
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+              Seq(min, max).foreach { ts =>
+                checkAnswer(read.where(filterAt(ts)), df.where(filterAt(ts)).collect().toSeq)
+              }
+            }
+          }
+          // The filters on the limits are pushed down and encode them exactly: with record-level
+          // filtering, Parquet alone returns exactly the matching row.
+          withSQLConf(
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+            SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            Seq(min, max).foreach { ts =>
+              assert(stripSparkFilter(spark.read.parquet(path).where(filterAt(ts))).count() === 1)
+            }
+          }
+        }
+        // One nanosecond past either limit fails to write.
+        Seq(
+          "1677-09-21 00:12:43.145224191" -> "1677-09-21T00:12:43.145224191",
+          "2262-04-11 23:47:16.854775808" -> "2262-04-11T23:47:16.854775808").foreach {
+          case (ts, rendered) =>
+            Seq("TIMESTAMP_NTZ" -> rendered, "TIMESTAMP_LTZ" -> s"${rendered}Z").foreach {
+              case (typeName, renderedValue) =>
+                withTempPath { dir =>
+                  val e = intercept[SparkException] {
+                    spark.sql(s"SELECT $typeName '$ts' AS ts").write.parquet(dir.getCanonicalPath)
+                  }
+                  val cause = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+                    .collectFirst { case a: SparkArithmeticException => a }
+                  assert(cause.isDefined, s"Expected DATETIME_OVERFLOW, but got: ${e.getMessage}")
+                  checkError(
+                    exception = cause.get,
+                    condition = "DATETIME_OVERFLOW",
+                    parameters = Map("operation" ->
+                      (s"write the timestamp value $renderedValue as Parquet INT64 " +
+                        "epoch-nanoseconds (supported range: 1677-09-21T00:12:43.145224192Z to " +
+                        "2262-04-11T23:47:16.854775807Z)")))
+                }
+            }
+        }
+      }
+    }
+  }
+
   test("SPARK-57102: datetime rebase configs do not affect TIMESTAMP(NANOS) reads") {
     withNanosEnabled {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
@@ -433,7 +496,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     // scan reads more than the matching rows but fewer than all rows) and (b) the full query result
     // equals reading the same predicate with pushdown disabled. Record-level filtering is disabled
     // so ONLY row-group-level skipping is exercised; the non-vectorized reader is used so
-    // `stripSparkFilter` reflects exactly what Parquet returned.
+    // `stripSparkFilter` reflects exactly what Parquet returned. (a) holds only for precision 9.
     withNanosEnabled {
       Seq(7, 8, 9).foreach { p =>
         val frac = "000000123".take(p)
@@ -459,15 +522,20 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
 
             // Row-group-level skipping: with record filtering off, a stripped scan returns whole
             // surviving row groups. Fewer than all rows (skipping happened) but more than the one
-            // matching row (record filtering is off).
+            // matching row (record filtering is off). Below precision 9, the filter is not pushed
+            // down because the reader truncates the stored values to the read precision.
             withSQLConf(
               SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
               SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
               SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
               val df = spark.read.parquet(path).filter(predicate)
               val actual = stripSparkFilter(df).collect().length
-              assert(actual > 1 && actual < 1024,
-                s"Expected row-group skipping (p=$p, $kind) but scanned $actual of 1024 rows.")
+              if (p == 9) {
+                assert(actual > 1 && actual < 1024,
+                  s"Expected row-group skipping (p=$p, $kind) but scanned $actual of 1024 rows.")
+              } else {
+                assert(actual === 1024, s"Expected no row-group skipping (p=$p, $kind).")
+              }
             }
 
             // Results must be identical whether or not the filter is pushed to Parquet.
@@ -671,9 +739,7 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
     }
   }
 
-  // TODO(SPARK-60380): make pushdown respect the read precision, then expect the pushdown and
-  // no-pushdown results to match for every predicate.
-  test("filter pushdown under a lower-precision read schema compares raw nanoseconds") {
+  test("filter pushdown under a lower-precision read schema matches the no-pushdown results") {
     withNanosEnabled {
       withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
         withAllParquetReaders {
@@ -690,11 +756,12 @@ class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedS
                   spark.read.schema(s"ts $typ(7)").parquet(file.getCanonicalPath)
                     .filter(predicate).count()
                 }
-              // The pushed bound is compared with the raw value, so the row group is skipped.
+              // A predicate with a value is not pushed down below precision 9, so the row group
+              // that holds the matching row is not skipped.
               Seq(s"ts = $lit", s"ts <=> $lit", s"ts IN ($lit, $other)", s"ts <= $lit")
                 .foreach { predicate =>
                   assert(count(predicate, pushdown = false) === 1, predicate)
-                  assert(count(predicate, pushdown = true) === 0, predicate)
+                  assert(count(predicate, pushdown = true) === 1, predicate)
                 }
               Seq(s"ts < $lit", s"ts >= $lit", s"ts > $lit").foreach { predicate =>
                 assert(count(predicate, pushdown = true) ===

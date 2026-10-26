@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.util.control.NonFatal
 
 import org.apache.spark.SparkThrowable
+import org.apache.spark.internal.LogKeys.{DATA_SOURCE, TABLE_NAME}
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -49,6 +50,17 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     case write: WriteWithSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
+          if (relation.skipSchemaResolution && relation.autoSchemaEvolution) {
+            val dataSource = relation.table.properties().getOrDefault(
+              TableCatalog.PROP_PROVIDER, relation.table.getClass.getName)
+            logWarning(log"Applying schema evolution to ${MDC(DATA_SOURCE, dataSource)} table " +
+              log"${MDC(TABLE_NAME, relation.name)}, which reports both " +
+              log"AUTOMATIC_SCHEMA_EVOLUTION and ACCEPT_ANY_SCHEMA capabilities. While " +
+              log"AUTOMATIC_SCHEMA_EVOLUTION natively resolves and evolves the schema on a write " +
+              log"schema evolution request, ACCEPT_ANY_SCHEMA skips native write schema " +
+              log"resolution and alignment. This may cause the write to fail after the table " +
+              log"schema has been updated. Consider disabling ACCEPT_ANY_SCHEMA.")
+          }
           evolveSchema(catalog, ident, write.pendingSchemaChanges)
           val newTable = CatalogV2Util.loadTableForV2Write(
             catalog, ident, write.writePrivileges, relation.options)

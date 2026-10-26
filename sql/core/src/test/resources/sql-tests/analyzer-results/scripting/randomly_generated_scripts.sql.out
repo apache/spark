@@ -479,7 +479,7 @@ BEGIN
     END;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -888,7 +888,7 @@ BEGIN
     END FOR supplier_loop;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -994,7 +994,7 @@ BEGIN
     END L4;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -1285,7 +1285,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -1372,7 +1372,7 @@ BEGIN
     END;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -1661,7 +1661,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -2275,7 +2275,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -2351,7 +2351,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -2594,7 +2594,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -2672,7 +2672,7 @@ BEGIN
     END L2;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -2767,7 +2767,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -3210,7 +3210,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -3318,7 +3318,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -3552,7 +3552,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -3863,7 +3863,7 @@ BEGIN
     END;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -4147,7 +4147,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -4642,7 +4642,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -4911,7 +4911,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5015,7 +5015,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5154,7 +5154,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5439,7 +5439,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5472,7 +5472,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation <empty>
+LocalRelation [col1#x]
 
 
 -- !query
@@ -5529,7 +5529,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5644,7 +5644,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5749,7 +5749,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -5990,7 +5990,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -6476,7 +6476,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query
@@ -6700,7 +6700,7 @@ BEGIN
     END L0;
 END
 -- !query analysis
-LocalRelation [col1#x]
+LocalRelation <empty>
 
 
 -- !query

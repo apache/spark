@@ -1327,6 +1327,9 @@ object SimplifyCasts extends Rule[LogicalPlan] {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e
+      case (from: StructType, to: StructType)
+        if from.asNullable == to.asNullable &&
+          DataType.equalsIgnoreCompatibleNullability(from, to) => e
       case _ => c
       }
     case IsNotNull(Cast(e, dataType: NumericType, _, _)) if isWiderCast(e.dataType, dataType) =>
