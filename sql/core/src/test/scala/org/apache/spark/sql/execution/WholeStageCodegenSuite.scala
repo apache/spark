@@ -3156,6 +3156,47 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60393: an aggregate FILTER is checked before the common subexpressions of the " +
+    "update expressions") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `avg` uses `y + 1` in two update expressions, so it is a common subexpression. It
+      // overflows on the first row, which the FILTER rejects, so it must not be evaluated there,
+      // as with codegen off. `count(1)` has no FILTER and takes the shared common subexpressions.
+      val aggs = "avg(y + 1) FILTER (WHERE s = '1'), sum(y + 1) FILTER (WHERE s = '1'), count(1)"
+      val noKeys = s"SELECT $aggs FROM t"
+      val withKeys = s"SELECT b, $aggs FROM t GROUP BY b"
+      val hashMapConfs = Seq(
+        // The regular hash map only.
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false"),
+        // The row-based fast hash map.
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true"),
+        // The vectorized fast hash map.
+        Seq(
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true"),
+        // The sort aggregate.
+        Seq(
+          SQLConf.USE_HASH_AGG.key -> "false",
+          SQLConf.USE_OBJECT_HASH_AGG.key -> "false"))
+      for (codegen <- Seq(true, false); split <- Seq(true, false); confs <- hashMapConfs) {
+        // A small threshold splits the aggregate functions and the common subexpressions into
+        // functions of their own.
+        val splitConfs = if (split) Seq(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") else Nil
+        withSQLConf(confs ++ splitConfs ++ Seq(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString): _*) {
+          withClue(s"wholeStage=$codegen, split=$split, confs=$confs: ") {
+            val df = sql(noKeys)
+            assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]) ==
+              codegen)
+            checkAnswer(df, Row(1.0, 1L, 2L))
+            checkAnswer(sql(withKeys), Row(1, 1.0, 1L, 2L))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
     // A full outer join outputs its rows through a function of its own, and generates the code of
     // the operators above it, for the body of that function, before adding the function: here a
