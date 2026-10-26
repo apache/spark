@@ -3565,8 +3565,8 @@ class SubquerySuite extends SharedSparkSession
 
       // A carried NOT IN is collected as the Not over the IN, so the rewrite takes its null-aware
       // arm. Taking the positive-IN arm instead leaves NOT exists over a condition that ignores
-      // NULL comparisons: 5 NOT IN (NULL) is unknown, so the t4 row is excluded and the answer is
-      // empty, where the two-valued form returns every row of t1.
+      // NULL comparisons: 5 NOT IN (NULL) is unknown, so n4's (5, 100) row is excluded and the
+      // answer is empty, where the two-valued form returns every row of n1, that is 1 and 2.
       withTempView("n1", "n2", "n4", "n5") {
         Seq(1, 2).toDF("a").persist().createOrReplaceTempView("n1")
         Seq(5).toDF("c1").persist().createOrReplaceTempView("n2")
@@ -3659,6 +3659,79 @@ class SubquerySuite extends SharedSparkSession
       withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "true") {
         checkAnswer(
           sql(s"SELECT t1.a FROM t1 JOIN t6 ON t1.a = t6.b AND $exists"), Row(1) :: Nil)
+      }
+    }
+  }
+
+  test("SPARK-59351: a carried IN shared between a bare and a negated position") {
+    // Filter pushdown substitutes the alias, so the same IN instance is carried bare and under
+    // a Not. Routing the bare one must not replace the one inside the Not, or the null-aware
+    // existence join built for the Not is left unreferenced and NOT exists over a two-valued
+    // match returns the rows where the IN is unknown. Standard SQL keeps only a = 1.
+    withTempView("s1", "s2", "s3") {
+      Seq(Some(1), Some(-1), None).toDF("a").persist().createOrReplaceTempView("s1")
+      Seq(1).toDF("c1").persist().createOrReplaceTempView("s2")
+      Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("s3")
+      val query =
+        """SELECT s.a FROM (SELECT a, a IN (SELECT col1 FROM s3) AS b FROM s1) s
+          |WHERE s.a > 0 OR EXISTS (SELECT 1 FROM s2 WHERE s.a = s2.c1 OR s.b OR NOT s.b)"""
+          .stripMargin
+      Seq("true", "false").foreach { conf =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+          checkAnswer(sql(query), Row(1) :: Nil)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59351: a carried subquery referencing both inputs of its existence join") {
+    // The third-level IN takes its compared value c1 from the left input of the existence join
+    // built for the nested IN over t4, and its hoisted x = k reads the right one. Neither input
+    // can evaluate it, and left in place it is planned as an in-subquery filter that drops x = k.
+    withTempView("t1", "t2", "t4", "t5") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq((1, 9), (9, 1)).toDF("col1", "k").persist().createOrReplaceTempView("t4")
+      Seq(1, 9).toDF("x").persist().createOrReplaceTempView("t5")
+      val query =
+        """SELECT * FROM t1 WHERE EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR c1 IN (
+          |    SELECT col1 FROM t4
+          |    WHERE k = c1 OR c1 IN (SELECT x FROM t5 WHERE x = k)))""".stripMargin
+      Seq("true", "false").foreach { conf =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+          val e = intercept[AnalysisException](sql(query).collect())
+          assert(e.getCondition == "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY." +
+            "NESTED_SUBQUERY_REFERENCING_OUTER_AND_INNER_QUERY", conf)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59351: carried unknown-result rejection is limited to the subquery-plan route") {
+    // On the routes that predate this change the carried IN below was answered, and it is not
+    // rejected: its handling there is left to SPARK-59862. The columns are nullable but hold no
+    // NULL, so the two-valued and the three-valued answers agree and a rejection would be the
+    // only difference. The first query takes its compared value from the right input of the
+    // existence join built for the EXISTS, the second from the left one.
+    withTempView("t1", "t2", "t3") {
+      Seq(Some(1), Some(2), Some(3)).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(Some(1), Some(8), Some(9)).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq(Some(8)).toDF("col1").persist().createOrReplaceTempView("t3")
+      val rightInput =
+        """SELECT * FROM t1 WHERE a > 100 OR EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3)) <=> false))"""
+          .stripMargin
+      val leftInput =
+        """SELECT * FROM t1 WHERE a > 100 OR EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR ((a IN (SELECT col1 FROM t3)) <=> false))"""
+          .stripMargin
+      Seq("true", "false").foreach { conf =>
+        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+          Seq(rightInput, leftInput).foreach { query =>
+            checkAnswer(sql(query), Row(1) :: Row(2) :: Row(3) :: Nil)
+          }
+        }
       }
     }
   }
