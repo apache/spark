@@ -1993,6 +1993,32 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
       Some(new V2And(new Predicate("IS_NOT_NULL", Array(FieldReference("cint"))), otherPredicate)))
   }
 
+  test("SPARK-59317: translate a scalar subquery filter on a cast column below a disjunction") {
+    val other = GreaterThan($"cint".int, Literal(100))
+    val otherPredicate = new Predicate(">",
+      Array(FieldReference("cint"), LiteralValue(100, IntegerType)))
+    // a null result drops the row like a false one below a disjunction as well
+    testTranslateScalarSubqueryFilter(
+      Or(EqualTo(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)), other),
+      Some(new V2Or(new AlwaysFalse(), otherPredicate)))
+    testTranslateScalarSubqueryFilter(
+      Or(LessThan(Cast($"cint".int, LongType), Literal(Int.MaxValue + 1L)), other),
+      Some(new V2Or(new Predicate("IS_NOT_NULL", Array(FieldReference("cint"))), otherPredicate)))
+  }
+
+  test("SPARK-59317: translate a scalar subquery filter no row of the cast column can match") {
+    // no value of the list is in the column range
+    testTranslateScalarSubqueryFilter(
+      In(Cast($"cint".int, LongType),
+        Seq(Literal(Int.MaxValue + 1L), Literal(Int.MinValue - 1L))),
+      Some(new AlwaysFalse()))
+    // a date is never equal to a timestamp with a non-zero time part
+    val oneAm = Literal(3600L * 1000000L, TimestampType)
+    testTranslateScalarSubqueryFilter(
+      EqualTo(Cast($"cdate".date, TimestampType, Some("UTC")), oneAm),
+      Some(new AlwaysFalse()))
+  }
+
   test("SPARK-59317: translate a negated scalar subquery filter on a cast column") {
     // a filter drops the rows a comparison returns null for like the ones it returns false for,
     // which is what lets the equality above be translated to `AlwaysFalse`. A `Not` tells the two
