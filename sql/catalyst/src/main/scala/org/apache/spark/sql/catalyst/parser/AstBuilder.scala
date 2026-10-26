@@ -44,7 +44,7 @@ import org.apache.spark.sql.catalyst.parser.SqlBaseParser._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
-import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
+import org.apache.spark.sql.catalyst.trees.TreePattern.{PARAMETER, UNRESOLVED_IDENTIFIER}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, CollationFactory, DateTimeConstants, DateTimeUtils, EvaluateUnresolvedInlineTable, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{convertSpecialDate, convertSpecialTimestamp, convertSpecialTimestampNTZ, fractionalSecondsDigits, getZoneId, stringToDate, stringToTime, stringToTimestamp, stringToTimestampLTZNanos, stringToTimestampNTZNanos, stringToTimestampWithoutTimeZone}
@@ -7003,7 +7003,11 @@ class AstBuilder extends DataTypeAstBuilder
       CheckConstraint(
         child = child,
         condition = condition,
-        hasParameterMarker = child.containsPattern(PARAMETER))
+        keepPredicate = child.containsAnyPattern(PARAMETER, UNRESOLVED_IDENTIFIER) ||
+          child.exists {
+            case u: UnresolvedAttribute => u.nameParts.length > 1
+            case _ => false
+          })
     }
 
 

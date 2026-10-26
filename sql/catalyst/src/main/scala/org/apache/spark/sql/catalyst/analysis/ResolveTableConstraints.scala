@@ -48,7 +48,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
                 case c: Check =>
                   val unresolvedExpr = buildCatalystExpression(c)
                   val columnExtractors = mutable.Map[String, Expression]()
-                  buildColumnExtractors(unresolvedExpr, columnExtractors)
+                  buildColumnExtractors(unresolvedExpr, v2Write.query, columnExtractors)
                   CheckInvariant(unresolvedExpr, columnExtractors.toSeq, c.name, c.predicateSql)
               }.toSeq
             } else {
@@ -128,16 +128,22 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
 
   private def buildColumnExtractors(
       expr: Expression,
+      query: LogicalPlan,
       columnExtractors: mutable.Map[String, Expression]): Unit = {
     expr match {
       case u: UnresolvedExtractValue =>
         // When extracting a value from a Map or Array type, we display only the specific extracted
         // value rather than the entire Map or Array structure for clarity and readability.
         columnExtractors(u.sql) = u
+      // A name that is not a column of the write, such as `current_timestamp` without parentheses
+      // or a variable, is not a value of the row.
       case u: UnresolvedAttribute =>
-        columnExtractors(u.name) = u
+        val resolver = catalogManager.v1SessionCatalog.conf.resolver
+        if (query.resolve(u.nameParts, resolver).isDefined) {
+          columnExtractors(u.name) = u
+        }
       case other =>
-        other.children.foreach(buildColumnExtractors(_, columnExtractors))
+        other.children.foreach(buildColumnExtractors(_, query, columnExtractors))
     }
   }
 }

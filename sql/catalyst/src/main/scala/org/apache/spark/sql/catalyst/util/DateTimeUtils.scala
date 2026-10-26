@@ -866,13 +866,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
   }
 
   /**
-   * Whether `input` is a timestamp string with only a time part, which a cast to a timestamp with
-   * local time zone completes with the current date.
+   * Whether `input` is a valid timestamp string with only a time part, which a cast to a timestamp
+   * with local time zone completes with the current date.
    */
   private[sql] def isTimeOnlyTimestamp(input: UTF8String): Boolean = {
     try {
       val (segments, _, justTime) = parseTimestampString(input)
-      segments.nonEmpty && justTime
+      segments.nonEmpty && justTime && stringToTimestamp(input, ZoneOffset.UTC).isDefined
     } catch {
       case NonFatal(_) => false
     }

@@ -1113,7 +1113,8 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
     Seq("12:00:00", " 23:59:59.999999 ", "T12:00", "12:00:00 UTC").foreach { s =>
       assert(isTimeOnlyTimestamp(UTF8String.fromString(s)), s)
     }
-    Seq("2020-01-01 12:00:00", "2020-01-01", "now", "", "abc").foreach { s =>
+    Seq("2020-01-01 12:00:00", "2020-01-01", "now", "", "abc", "24:00:00", "23:59:60",
+      "12:60").foreach { s =>
       assert(!isTimeOnlyTimestamp(UTF8String.fromString(s)), s)
     }
   }

@@ -313,13 +313,37 @@ object SpecialDatetimeValues extends Rule[LogicalPlan] {
     expression.transformWithPruning(_.containsPattern(CAST))(specialDatetimeRewrite)
   }
 
+  /**
+   * Whether this rule replaces `cast` with a value that reads the current date, that is, the value
+   * of 'now', 'today', 'tomorrow' or 'yesterday' rather than of 'epoch'. Unlike the rule, this
+   * returns false when evaluating the string fails.
+   */
+  private[sql] def readsCurrentDate(cast: Cast): Boolean = cast match {
+    case FoldableStringCast(e, _) =>
+      try {
+        Option(e.eval()).exists(s => DateTimeUtils.isCurrentSpecialValue(s.toString))
+      } catch {
+        case NonFatal(_) => false
+      }
+    case _ => false
+  }
+
   private val specialDatetimeRewrite: PartialFunction[Expression, Expression] = {
-    case cast @ Cast(e, dt @ (DateType | TimestampType | TimestampNTZType), _, _)
-      if e.foldable && e.dataType.isInstanceOf[StringType] =>
+    case cast @ FoldableStringCast(e, dt) =>
       Option(e.eval())
         .flatMap(s => conv(dt)(s.toString, cast.zoneId))
         .map(Literal(_, dt))
         .getOrElse(cast)
+  }
+
+  /** A cast of a foldable string to a type in `conv`. */
+  private object FoldableStringCast {
+    def unapply(cast: Cast): Option[(Expression, DataType)] = cast match {
+      case Cast(child, dt, _, _)
+          if conv.contains(dt) && child.foldable && child.dataType.isInstanceOf[StringType] =>
+        Some((child, dt))
+      case _ => None
+    }
   }
 }
 

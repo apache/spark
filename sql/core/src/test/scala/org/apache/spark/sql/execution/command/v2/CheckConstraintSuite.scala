@@ -17,13 +17,17 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
-import org.apache.spark.sql.connector.catalog.Table
+import org.apache.spark.sql.connector.{StrLen, StrLenDefault, StrLenMagic}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table}
 import org.apache.spark.sql.connector.catalog.constraints.Check
+import org.apache.spark.sql.connector.catalog.functions.BoundFunction
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
 import org.apache.spark.sql.internal.SQLConf
 
@@ -186,26 +190,21 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
       ("DATE", "current_date()", "current_date()", "1"),
       ("DATE", "CAST('today' AS DATE)", "current_date()", "1")
     ).foreach { case (dataType, now, current, step) =>
-      Seq("true", "false").foreach { ansi =>
-        withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi) {
-          withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
-            sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
-            sql(s"ALTER TABLE $t ADD CONSTRAINT valid_time CHECK (created <= $now)")
-            val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
-            assert(check.predicateSql() == s"created <= $now")
-            assert(check.predicate() == null, now)
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, created $dataType) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT valid_time CHECK (created <= $now)")
+        val check = getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl"))
+        assert(check.predicateSql() == s"created <= $now")
+        assert(check.predicate() == null, now)
 
-            sql(s"INSERT INTO $t VALUES (1, $current)")
-            checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+        sql(s"INSERT INTO $t VALUES (1, $current)")
+        checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
 
-            val error = intercept[SparkRuntimeException] {
-              sql(s"INSERT INTO $t VALUES (2, $current + $step)")
-            }
-            assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
-            assert(error.getMessageParameters.get("constraintName") == "valid_time")
-            assert(error.getMessageParameters.get("expression") == s"created <= $now")
-          }
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (2, $current + $step)")
         }
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+        assert(error.getMessageParameters.get("constraintName") == "valid_time")
       }
     }
   }
@@ -232,6 +231,15 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           "expression" -> "nullif(tbl.id, 3) > 0",
           "values" -> " - id : -1"))
       checkAnswer(spark.table(t).select("id"), Seq(Row(3)))
+    }
+    // The same holds for a condition that also reads the current time: it keeps the predicate.
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id BIGINT, ts TIMESTAMP, tbl STRUCT<id: BIGINT>) $defaultUsing")
+      sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+        "(tbl.id > 0 AND ts <= current_timestamp() + INTERVAL 1 DAY)")
+      assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null)
+      sql(s"INSERT INTO $t VALUES (1, current_timestamp(), named_struct('id', -1L))")
+      checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
     }
   }
 
@@ -300,12 +308,137 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
 
           sql(s"USE $nonPartitionCatalog.ns2")
           sql(s"INSERT INTO $t VALUES (1, 'ns2')")
-          val error = intercept[SparkRuntimeException] {
-            sql(s"INSERT INTO $t VALUES (2, 'ns')")
-          }
-          assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION")
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql(s"INSERT INTO $t VALUES (2, 'ns')")
+            },
+            condition = "CHECK_CONSTRAINT_VIOLATION",
+            sqlState = "23001",
+            parameters = Map(
+              "constraintName" -> "valid_db",
+              "expression" -> "db = current_database()",
+              "values" -> " - db : ns"))
           checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
         }
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE resolving names in the session") {
+    // A write would resolve a variable, an IDENTIFIER clause or a function in its own session, so
+    // such a condition keeps the predicate built from the optimized plan. The name is gone by the
+    // time of the write, so the write fails if the constraint is stored without a predicate.
+    def checkKeepsPredicate(cond: String)(dropName: => Unit): Unit = {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          cond)
+        dropName
+        sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
+        checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+      }
+    }
+    withSessionVariable("days", "c") {
+      sql("DECLARE VARIABLE days INT DEFAULT 30")
+      checkKeepsPredicate("ts >= current_timestamp() - make_interval(0, 0, 0, days)") {
+        sql("DROP TEMPORARY VARIABLE days")
+      }
+      sql("DECLARE VARIABLE c STRING DEFAULT 'ts'")
+      checkKeepsPredicate("IDENTIFIER(c) <= current_timestamp() + INTERVAL 1 DAY") {
+        sql("DROP TEMPORARY VARIABLE c")
+      }
+    }
+    // Functions implementing `produceResult`, an `invoke` method and a static `invoke` method.
+    withNamespace(s"fun_$catalog.ns") {
+      sql(s"CREATE NAMESPACE fun_$catalog.ns")
+      val funCatalog = spark.sessionState.catalogManager.catalog(s"fun_$catalog")
+        .asInstanceOf[InMemoryCatalog]
+      val ident = Identifier.of(Array("ns"), "strlen")
+      Seq[BoundFunction](StrLenDefault, StrLenMagic, new JavaStrLenStaticMagic).foreach { f =>
+        funCatalog.createFunction(ident, StrLen(f))
+        checkKeepsPredicate(s"id < fun_$catalog.ns.strlen('abc') AND " +
+          "ts <= current_timestamp() + INTERVAL 1 DAY") {
+          funCatalog.dropFunction(ident)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE comparing a CHAR column") {
+    // ALTER TABLE pads 'OPEN' to the length of `status`, but a write that parses `predicateSql`
+    // does not, so the constraint keeps the predicate built from the optimized plan.
+    Seq(
+      ("status = 'OPEN' OR closed <= current_date()", "OPEN", true),
+      ("status <> 'CLOSED' OR closed <= current_date()", "CLOSED", false)
+    ).foreach { case (cond, status, accepted) =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, status CHAR(10), closed DATE) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        assert(getCheckConstraint(loadTable(nonPartitionCatalog, "ns", "tbl")).predicate() != null,
+          cond)
+        val insert = s"INSERT INTO $t VALUES (1, '$status', DATE'2999-01-01')"
+        if (accepted) {
+          sql(insert)
+          checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+        } else {
+          val error = intercept[SparkRuntimeException](sql(insert))
+          assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint added by ALTER TABLE with an error in a branch") {
+    // The optimizer keeps an expression that fails in a branch that may not run, and so does the
+    // check for the current date.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      Seq(
+        "coalesce(id, CAST(CAST(1/0 AS STRING) AS INT)) > 0",
+        "id < IF(false, hour(CAST(CAST(1/0 AS STRING) AS TIMESTAMP_LTZ(9))), 100)"
+      ).foreach { cond =>
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT, ts TIMESTAMP) $defaultUsing")
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+          sql(s"INSERT INTO $t VALUES (1, current_timestamp())")
+          checkAnswer(spark.table(t).select("id"), Seq(Row(1)))
+        }
+      }
+      Seq("INT", "DATE").foreach { to =>
+        withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+          sql(s"CREATE TABLE $t (id INT) $defaultUsing")
+          val error = intercept[AnalysisException] {
+            sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK " +
+              s"(rand() > 0 OR CAST(CAST(1/0 AS STRING) AS $to) IS NOT NULL)")
+          }
+          assert(error.getCondition == "NON_DETERMINISTIC_CHECK_CONSTRAINT", to)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60032: Check constraint violation lists only the columns it reads") {
+    // `current_user` without parentheses parses as a name, which a write that parses
+    // `predicateSql` resolves to the function, not to a column.
+    Seq(true, false).foreach { inCreate =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        if (inCreate) {
+          sql(s"CREATE TABLE $t (id INT, owner STRING, " +
+            s"CONSTRAINT c1 CHECK (owner = current_user)) $defaultUsing")
+        } else {
+          sql(s"CREATE TABLE $t (id INT, owner STRING) $defaultUsing")
+          sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (owner = current_user)")
+        }
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t VALUES (1, 'nobody')")
+          },
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> "c1",
+            "expression" -> "owner = current_user",
+            "values" -> " - owner : nobody"))
       }
     }
   }
