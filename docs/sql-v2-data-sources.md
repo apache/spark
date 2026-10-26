@@ -613,7 +613,9 @@ list, the order Spark applies them in, and the residual-filter contract are unde
 `i > <int literal>` and returns everything else for Spark to evaluate. Unlike the test, which
 asserts the shapes it expects, the following version checks them, because Spark can also push `i > j`
 as a `>` predicate; it also matches on the public `NamedReference` rather than the test's
-`FieldReference`. Replacing `predicates` on each call is right while `supportsIterativePushdown()`
+`FieldReference`. It accepts a threshold only from `-1` up, because the planner starts the first
+partition at the threshold plus one and the source's data is `0` to `9`; a lower threshold stays
+with Spark. Replacing `predicates` on each call is right while `supportsIterativePushdown()`
 returns `false` (the default); an iterative source accumulates them instead:
 
 {% highlight java %}
@@ -638,7 +640,8 @@ private static boolean isIGreaterThanInt(Predicate p) {
       && column.fieldNames().length == 1
       && column.fieldNames()[0].equals("i")
       && p.children()[1] instanceof Literal<?> value
-      && value.value() instanceof Integer;
+      && value.value() instanceof Integer bound
+      && bound >= -1;
 }
 
 @Override
