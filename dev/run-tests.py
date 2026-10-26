@@ -382,6 +382,16 @@ def run_python_packaging_tests():
 
 
 def run_shell_script_tests(test_modules, stage):
+    """
+    Run the selected shell script goals for the given stage.
+
+    All declared scripts must exist and be executable before the build:
+
+    >>> from sparktestsupport.shellutils import is_exe
+    >>> [str(g.path) for g in modules.root.shell_script_test_goals
+    ...  if not is_exe(os.path.join(SPARK_HOME, g.path))]
+    []
+    """
     shell_script_test_goals = determine_shell_script_test_goals(test_modules, stage)
 
     for test_goal in shell_script_test_goals:
