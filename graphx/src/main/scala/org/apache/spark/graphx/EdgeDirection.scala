@@ -30,6 +30,7 @@ class EdgeDirection private (private val name: String) extends Serializable {
     case EdgeDirection.Out => EdgeDirection.In
     case EdgeDirection.Either => EdgeDirection.Either
     case EdgeDirection.Both => EdgeDirection.Both
+    case _ => throw new IllegalArgumentException(s"Unknown edge direction: $this")
   }
 
   override def toString: String = "EdgeDirection." + name
