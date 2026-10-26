@@ -311,9 +311,10 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       plan: SparkPlan,
       candidates: Seq[SkewJoinCandidate]): SparkPlan = {
     var accepted = Seq.empty[SkewJoinCandidate]
-    candidates.foreach { candidate =>
-      val trial = applySkewJoins(plan, accepted :+ candidate)
-      if (requirementsSatisfied(trial)) {
+    candidates.zipWithIndex.foreach { case (candidate, index) =>
+      // With every earlier candidate kept, this trial is the plan the fast path rejected.
+      val rejectedAlready = index == candidates.length - 1 && accepted.length == index
+      if (!rejectedAlready && requirementsSatisfied(applySkewJoins(plan, accepted :+ candidate))) {
         accepted = accepted :+ candidate
       } else {
         logDebug(s"Skip splitting the skewed join " +
@@ -322,7 +323,11 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
       }
     }
     logDebug(s"Optimized ${accepted.length} of ${candidates.length} skewed joins")
-    stripSkewJoinChildWrappers(applySkewJoins(plan, accepted))
+    if (accepted.isEmpty) {
+      plan
+    } else {
+      stripSkewJoinChildWrappers(applySkewJoins(plan, accepted))
+    }
   }
 
   override def apply(plan: SparkPlan): SparkPlan = {
@@ -357,8 +362,8 @@ case class OptimizeSkewedJoin(ensureRequirements: EnsureRequirements)
   }
 }
 
-// A skewed join `OptimizeSkewedJoin` can split: the join node in the plan, its join type, and the
-// join it is replaced by, with the skewed side split.
+// A skewed join `OptimizeSkewedJoin` can split: the join node in the plan, and the join it is
+// replaced by, with the skewed side split.
 private case class SkewJoinCandidate(join: BaseJoinExec, replacement: SparkPlan)
 
 // After optimizing skew joins, we need to run EnsureRequirements again to add necessary shuffles

@@ -1958,7 +1958,8 @@ class AdaptiveQueryExecSuite
         // Turning the fallback off gives the plan back to the all-or-nothing path.
         withSQLConf(SQLConf.SKEW_JOIN_PER_JOIN_FALLBACK_ENABLED.key -> "false") {
           val (_, withoutFallback) = runAdaptiveAndVerifyResult(query)
-          assert(findTopLevelSortMergeJoin(withoutFallback).forall(!_.isSkewJoin))
+          val joins = findTopLevelSortMergeJoin(withoutFallback)
+          assert(joins.size == 2 && joins.forall(!_.isSkewJoin), withoutFallback.toString)
         }
       }
     }

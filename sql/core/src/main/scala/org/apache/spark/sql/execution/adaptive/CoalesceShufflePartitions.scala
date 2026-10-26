@@ -182,15 +182,14 @@ case class CoalesceShufflePartitions(session: SparkSession) extends AQEShuffleRe
 
   private def childrenNeedCompatiblePartitioning(p: SparkPlan): Boolean = p match {
     // TODO: match more plan nodes here.
-    // A UnionExec that reports a real outputPartitioning (i.e. it is not a plain union) has that
-    // partitioning relied on by downstream operators, so its children must remain co-partitioned
-    // -- coalesce them as a single group. When it reports UnknownPartitioning (config off, or
-    // children not compatibly partitioned), the children may still be coalesced independently.
-    // The stamped decision alone is not enough: a rule that runs after the stamp, such as
-    // `OptimizeSkewedJoin` splitting one branch, can take the layout away, and the union then
-    // concatenates whatever its children produce.
-    case u: UnionExec =>
-      !u.isPlainUnion && !u.outputPartitioning.isInstanceOf[UnknownPartitioning]
+    // A UnionExec that reports a concrete outputPartitioning has that partitioning relied on by
+    // downstream operators, so its children must remain co-partitioned -- coalesce them as a
+    // single group. When it reports UnknownPartitioning (a plain union, or children that are not
+    // compatibly partitioned), the children may still be coalesced independently. Ask what the
+    // union reports now rather than only the stamped decision: a rule that runs after the stamp,
+    // such as `OptimizeSkewedJoin` splitting one branch, can take the layout away, and the union
+    // then concatenates whatever its children produce.
+    case u: UnionExec => !u.outputPartitioning.isInstanceOf[UnknownPartitioning]
     case _: CartesianProductExec => false
     case _: BroadcastHashJoinExec => false
     case _: BroadcastNestedLoopJoinExec => false

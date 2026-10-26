@@ -1564,7 +1564,8 @@ object SQLConf {
       .internal()
       .doc("When true, a plan whose all-at-once skew join optimization breaks a requirement " +
         "keeps the splits the plan can still satisfy, instead of giving up the optimization for " +
-        "every join. When false, such a plan is left unchanged.")
+        "every join. When false, such a plan is left unchanged. Only takes effect when " +
+        "'spark.sql.adaptive.forceOptimizeSkewedJoin' is false.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
