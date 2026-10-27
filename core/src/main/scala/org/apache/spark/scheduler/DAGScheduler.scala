@@ -3517,10 +3517,12 @@ private[spark] class DAGScheduler(
       val id = updates.id
       try {
         // Find the corresponding accumulator on the driver and update it
-        val acc: AccumulatorV2[Any, Any] = AccumulatorContext.get(id) match {
-          case Some(accum) => accum.asInstanceOf[AccumulatorV2[Any, Any]]
-          case None =>
+        val acc: AccumulatorV2[Any, Any] = {
+          val accum = AccumulatorContext.getOrNull(id)
+          if (accum == null) {
             throw SparkCoreErrors.accessNonExistentAccumulatorError(id)
+          }
+          accum.asInstanceOf[AccumulatorV2[Any, Any]]
         }
         acc.merge(updates.asInstanceOf[AccumulatorV2[Any, Any]])
         if (acc.isInstanceOf[LastAttemptAccumulator[_, _, _]]) {
