@@ -319,7 +319,12 @@ for data locality.
 is serialized to executors and creates a
 [`PartitionReader`](api/java/org/apache/spark/sql/connector/read/PartitionReader.html) for each
 input partition. The reader iterates over rows (or `ColumnarBatch` instances for columnar sources)
-and is closed after consumption.
+and is closed after consumption. For a `SupportsStorageFilters` scan that Spark offered a storage
+filter, `createReader(partition, request)` or `createColumnarReader(partition, request)` creates the
+reader instead. The `StorageFilterRequest` carries the filter, and whether the reader appends a
+boolean column that is true only on the rows the filter was evaluated on and kept. When the filter
+throws `StorageFilterNotAppliedException`, the reader reads the rest of the unit without it. Scala
+does not check exceptions, so a reader written in Scala must catch it all the same.
 
 ### Scan Mix-ins
 
@@ -331,6 +336,7 @@ and is closed after consumption.
 | `SupportsReportOrdering` | Reports the sort order of the output, allowing Spark to skip redundant sorts |
 | `SupportsReportStatistics` | Reports table and column-level statistics for the cost-based optimizer |
 | `SupportsRuntimeV2Filtering` | Accepts additional filter values at execution time, used for dynamic partition pruning and to narrow [row-level DML](#row-level-operations) rewrites |
+| `SupportsStorageFilters` | Declares the columns its readers can evaluate a runtime bloom filter on, so they can skip reading the other columns of the rows it rejects. Off by default, see `spark.sql.sources.v2.storageFilterPushdown.enabled` |
 
 ## Write Path
 

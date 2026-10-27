@@ -884,19 +884,34 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * and anything added later -- leaves the scan not-mergeable by default, so those sites need no
    * change here.
    *
-   * The plain-scan non-reproducible pushdowns are:
-   *   - `pushedLimit`            -- pushed LIMIT
-   *   - `pushedOffset`           -- pushed OFFSET
-   *   - `pushedSample`           -- pushed table sample
-   *   - `sortOrders`             -- pushed sort order (top-N / ordering)
+   * The plain-scan non-reproducible pushdowns are those of [[hasRowSelectingPushdown]], each of
+   * which decides which rows the scan returns, so no merge can reproduce it either.
    *
    * Reproducible (re-applied by the merge), so NOT blocking: `output` (column pruning, via
    * `SupportsPushDownRequiredColumns`) and `pushedPredicates` / `pushedFilterExpressions`
    * (deterministic filters, re-pushed via `SupportsPushDownV2Filters`). A pushed aggregate, join or
    * variant never reaches here -- their build rules run first. When a new pushdown capability adds
-   * plain-scan state to [[ScanBuilderHolder]], list it above so it keeps the scan not-mergeable.
+   * plain-scan state to [[ScanBuilderHolder]], list it in [[hasRowSelectingPushdown]] when it
+   * decides which rows the scan returns, which keeps the scan not-mergeable too. List it here when
+   * a merge cannot reproduce it but it works on each row by itself.
    */
   private def hasBlockingPushdown(holder: ScanBuilderHolder): Boolean =
+    hasRowSelectingPushdown(holder)
+
+  /**
+   * Whether the scan took a pushed operation that decides which rows it returns, rather than one
+   * that works on each row by itself:
+   *   - `pushedLimit`            -- pushed LIMIT
+   *   - `pushedOffset`           -- pushed OFFSET
+   *   - `pushedSample`           -- pushed table sample
+   *   - `sortOrders`             -- pushed sort order (top-N / ordering)
+   *
+   * It decides the `onlyRowWisePushdowns` flag of the plain and the variant-extraction scans, see
+   * [[DataSourceV2ScanRelation.onlyRowWisePushdowns]], and blocks merging, see
+   * [[hasBlockingPushdown]]. A pushed aggregate or join never reaches those builds, and their scans
+   * keep the flag's default.
+   */
+  private def hasRowSelectingPushdown(holder: ScanBuilderHolder): Boolean =
     holder.pushedLimit.isDefined ||
       holder.pushedOffset.isDefined ||
       holder.pushedSample.isDefined ||
@@ -967,7 +982,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       // changes with variant extraction. When validConstraints is wired up, this needs revisiting.
       // Pushed variant extraction cannot be reproduced by rebuilding the scan, so this scan stays
       // not-mergeable (the default `mergeableScan = false`).
-      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput)
+      val scanRelation = DataSourceV2ScanRelation(holder.relation, wrappedScan, realOutput,
+        onlyRowWisePushdowns = !hasRowSelectingPushdown(holder))
 
       // Create projection to map real output to expected output (with transformed types)
       val outputProjection = realOutput.zip(holder.output).map { case (realAttr, expectedAttr) =>
@@ -1048,7 +1064,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
         inferredFilters = remappedInferredFilters,
         // The one site that grants mergeability: a plain scan carrying only reproducible pushdowns
         // (column pruning + deterministic filters) may be fused. See hasBlockingPushdown.
-        mergeableScan = !hasBlockingPushdown(sHolder))
+        mergeableScan = !hasBlockingPushdown(sHolder),
+        onlyRowWisePushdowns = !hasRowSelectingPushdown(sHolder))
 
       val inferredAdjustmentFilters =
         if (shouldAddPostPushdownAdjustmentFilters(scanRelation)) {

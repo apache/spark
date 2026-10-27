@@ -2397,6 +2397,18 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
+    "message" : [
+      "A reader of <class> was asked for the column that marks the rows a storage filter checked, right after the <numScanColumns> columns of the scan's read schema. That column is missing, not a boolean, or not the last one. The reader returned <numColumns> columns."
+    ],
+    "sqlState" : "KD000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create a reader that applies a storage filter."
+    ],
+    "sqlState" : "0A000"
+  },
   "DATA_SOURCE_STREAMING_WRITE_BUILD_NOT_SUPPORTED" : {
     "message" : [
       "<class> does not support streaming write."
@@ -7927,6 +7939,12 @@
       "'<optionName>' must be specified."
     ],
     "sqlState" : "42601"
+  },
+  "STORAGE_FILTER_NOT_APPLIED" : {
+    "message" : [
+      "A storage filter could not be evaluated. The data source's reader should have read the rows without it instead of failing."
+    ],
+    "sqlState" : "KD000"
   },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [
