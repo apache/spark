@@ -168,8 +168,9 @@ object StaticSQLConf {
       .doc("A comma-separated list of classes that implement " +
         "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
         "classes must have a no-args constructor. These extensions are applied ahead of the ones " +
-        "specified in spark.sql.extensions. An extension listed in both configs is applied once, " +
-        "from its position in spark.sql.extensions, and a warning is logged.")
+        "specified in spark.sql.extensions. When the same extension appears in both configs, " +
+        "the entry here is dropped with a warning; repeats within a single config are still " +
+        "applied as many times as listed.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
