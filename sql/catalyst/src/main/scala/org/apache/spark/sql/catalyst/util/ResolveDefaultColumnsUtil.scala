@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{AstBuilder, CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
@@ -324,6 +324,14 @@ object ResolveDefaultColumns extends QueryErrorsBase
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
   }
 
+  // Literal.sql always escapes strings, independently of the session's parser configuration.
+  // Override only that policy so other settings, such as the time zone, remain session-dependent.
+  private lazy val existenceDefaultParser = new CatalystSqlParser {
+    override val astBuilder: AstBuilder = new AstBuilder {
+      override protected def escapedStringLiterals: Boolean = false
+    }
+  }
+
   /**
    * Analyze EXISTS_DEFAULT value.  EXISTS_DEFAULT value was created from CURRENT_DEFAQULT
    * via [[analyze]] and thus this can skip most of those steps.
@@ -331,20 +339,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
   private def analyzeExistenceDefaultValue(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
-    // Literal.sql always escapes strings, independently of the session's parser configuration.
-    // Use a separate conf because readers can run with a shared or read-only SQLConf.
-    val parsedExpr = Try {
-      if (conf.escapedStringLiterals) {
-        val parserConf = new SQLConf
-        conf.getAllConfs.foreach { case (key, value) => parserConf.setConfString(key, value) }
-        parserConf.setConf(SQLConf.ESCAPED_STRING_LITERALS, false)
-        SQLConf.withExistingConf(parserConf) {
-          Literal.fromSQL(defaultSQL)
-        }
-      } else {
-        Literal.fromSQL(defaultSQL)
-      }
-    }
+    val parsedExpr = Try(Literal.fromSQL(defaultSQL, existenceDefaultParser))
     val resolvedExpr = parsedExpr match {
       case Success(literal) =>
         val expr = literal match {
