@@ -216,9 +216,15 @@ class ArrowElementwiseUDFHandlerTests(ElementwiseEvalTypeHandlerTestCase):
         def stop(x):
             raise StopIteration()
 
-        handler = self._handler(ArrowElementwiseUDFHandler, (stop, [0], {}, LongType()))
-        with self.assertRaises(PySparkRuntimeError):
-            list(handler.run(0, iter([self._batch()])))
+        for level in ("0", "4"):
+            with self.subTest(concurrency_level=level):
+                conf = {"spark.sql.execution.pythonUDF.arrow.concurrency.level": level}
+                handler = self._handler(
+                    ArrowElementwiseUDFHandler, (stop, [0], {}, LongType()), runner_conf=conf
+                )
+                with self.assertRaises(PySparkRuntimeError) as ctx:
+                    list(handler.run(0, iter([self._batch()])))
+                self.assertEqual(ctx.exception.getCondition(), "STOP_ITERATION_OCCURRED")
 
 
 class ScalarElementwiseUDFHandlerTestsMixin:
@@ -485,6 +491,15 @@ class ScalarIterElementwiseUDFHandlerTestsMixin:
                     0, iter([self._batch(), self._batch(a=[[]], b=[None], c=[[]])])
                 )
             )
+
+    def test_stop_iteration_in_udf_call_raises_runtime_error(self):
+        # A non-generator UDF that eagerly reads an empty input raises StopIteration from the
+        # call itself.
+        def eager(batches):
+            return iter([next(batches)])
+
+        with self.assertRaisesRegex(PySparkRuntimeError, "STOP_ITERATION_OCCURRED"):
+            list(self._iter_handler(eager).run(0, iter([])))
 
     def test_rejects_non_iterator_result(self):
         with self.assertRaisesRegex(PySparkTypeError, "UDF_RETURN_TYPE"):

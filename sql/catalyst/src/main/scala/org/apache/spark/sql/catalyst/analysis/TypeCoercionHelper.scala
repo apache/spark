@@ -71,6 +71,7 @@ import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
   AnyTimestampNanoType,
+  AnyTimestampNanoTypeExpression,
   AnyTimestampTypeExpression,
   ArrayType,
   BinaryType,
@@ -897,10 +898,10 @@ abstract class TypeCoercionHelper {
    */
   object DateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
@@ -931,9 +932,9 @@ abstract class TypeCoercionHelper {
    */
   object AnsiDateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)

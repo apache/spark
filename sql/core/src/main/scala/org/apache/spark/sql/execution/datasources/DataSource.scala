@@ -343,6 +343,11 @@ case class DataSource(
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
+        disallowWritingIntervals(schema, fileFormat.toString, forbidAnsiIntervals = false)
+        // Like batch writes, check empty schemas only when writing to a path, not to a table.
+        if (catalogTable.isEmpty) {
+          DataSource.validateSchema(fileFormat.toString, schema, conf)
+        }
         val path = makeQualified(new Path(caseInsensitiveOptions.getOrElse("path", {
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
         }))).toString

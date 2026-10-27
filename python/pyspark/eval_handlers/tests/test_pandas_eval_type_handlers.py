@@ -378,6 +378,17 @@ class PandasScalarIterUDFHandlerTests(PandasEvalTypeHandlerTestCase):
             list(handler.run(0, iter([self._batch(a=[1, 2]), self._batch(a=[3, 4])])))
         self.assertEqual(cm.exception.getCondition(), "INPUT_NOT_FULLY_CONSUMED")
 
+    def test_stop_iteration_in_udf_call_raises_runtime_error(self):
+        # A non-generator UDF that eagerly reads an empty input raises StopIteration from the
+        # call itself.
+        def eager(series_iter):
+            return iter([next(series_iter)])
+
+        handler = self._handler(eager)
+        with self.assertRaises(PySparkRuntimeError) as cm:
+            list(handler.run(0, iter([])))
+        self.assertEqual(cm.exception.getCondition(), "STOP_ITERATION_OCCURRED")
+
     def test_struct_return_takes_dataframe(self):
         # struct_in_pandas="dict" + df_for_struct=True: a struct return is a DataFrame.
         struct_type = StructType([StructField("x", LongType()), StructField("y", LongType())])

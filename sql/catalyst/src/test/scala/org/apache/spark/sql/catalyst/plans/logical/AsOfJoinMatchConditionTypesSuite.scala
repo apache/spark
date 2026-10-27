@@ -18,10 +18,113 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, CreateNamedStruct, Literal}
+import org.apache.spark.sql.catalyst.plans.GreaterThanOrEqualOp
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
-class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite {
+class AsOfJoinMatchConditionTypesSuite extends SparkFunSuite with SQLConfHelper {
+
+  test("mixed timestamp sort keys preserve precision and convert NTZ only when needed") {
+    val keyTypes: Seq[DataType => DataType] = Seq(
+      identity,
+      dt => StructType(Seq(StructField("ts", dt))),
+      dt => ArrayType(dt),
+      dt => StructType(Seq(
+        StructField("items", ArrayType(StructType(Seq(StructField("ts", dt))))))))
+    for {
+      (timeZone, convertNtz) <- Seq(
+        ("UTC", false), ("+05:30", false), ("America/Los_Angeles", true))
+      ltzType <- Seq(TimestampType, TimestampLTZNanosType(9))
+      (ntzType, convertedType) <- Seq(
+        (TimestampNTZType, TimestampType), (TimestampNTZNanosType(7), TimestampLTZNanosType(7)))
+      (leftType, rightType, rightTarget) <- Seq(
+        (ltzType, ntzType, convertedType), (ntzType, ltzType, ltzType))
+      keyType <- keyTypes
+    } {
+      val leftOperand = AttributeReference("l", keyType(leftType))()
+      val rightOperand = AttributeReference("r", keyType(rightType))()
+      val (condition, _, leftKeys, rightKeys) =
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> timeZone) {
+          AsOfJoin.materializeMatchComparison(
+            leftOperand = leftOperand,
+            rightOperand = rightOperand,
+            normalizedOp = GreaterThanOrEqualOp
+          )
+        }
+      assert(condition.children == Seq(leftOperand, rightOperand))
+      assert(leftKeys == Seq(leftOperand))
+      assert(rightKeys.map(_.dataType) == Seq(keyType(if (convertNtz) rightTarget else rightType)))
+      if (!convertNtz || TimestampFamily.isLtz(rightType)) {
+        assert(rightKeys == Seq(rightOperand))
+      }
+    }
+  }
+
+  test("mixed timestamp tuples keep separate sort keys") {
+    val metadata = new MetadataBuilder().putString("comment", "timestamp key").build()
+    for {
+      (leftType, rightType) <- Seq(
+        (TimestampType, TimestampNTZType), (TimestampNTZType, TimestampType))
+    } {
+      val leftTimestamp = AttributeReference(
+        name = "ts", dataType = leftType, metadata = metadata)()
+      val rightTimestamp = AttributeReference(
+        name = "ts", dataType = rightType, metadata = metadata)()
+      val leftNumber = AttributeReference("n", IntegerType)()
+      val rightNumber = AttributeReference("n", LongType)()
+      val (_, _, leftKeys, rightKeys) =
+        withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+          AsOfJoin.materializeMatchComparison(
+            leftOperand = CreateNamedStruct(Seq(
+              Literal("ts"), leftTimestamp, Literal("n"), leftNumber)),
+            rightOperand = CreateNamedStruct(Seq(
+              Literal("ts"), rightTimestamp, Literal("n"), rightNumber)),
+            normalizedOp = GreaterThanOrEqualOp
+          )
+        }
+      assert(leftKeys.length == 2)
+      assert(rightKeys.length == 2)
+      assert(leftKeys.head == leftTimestamp)
+      assert(rightKeys.head.dataType == TimestampType)
+      assert(leftKeys(1) == leftNumber)
+      assert(rightKeys(1) == rightNumber)
+    }
+  }
+
+  test("timestamp coercion preserves other composite field types and properties") {
+    val timestampField = StructField(
+      name = "ts",
+      dataType = TimestampNTZType,
+      nullable = false,
+      metadata = new MetadataBuilder().putString("comment", "timestamp key").build()
+    )
+    val rightFields = Seq(
+      timestampField,
+      StructField(name = "d", dataType = DecimalType(38, 30), nullable = false),
+      StructField(name = "n", dataType = IntegerType, nullable = false))
+    val leftFields = Seq(
+      StructField(name = "ts", dataType = TimestampType),
+      StructField(name = "d", dataType = DecimalType(38, 30)),
+      StructField(name = "n", dataType = LongType))
+    val leftType = ArrayType(StructType(leftFields), containsNull = true)
+    val rightType = ArrayType(StructType(rightFields), containsNull = false)
+    val expectedRight = ArrayType(
+      StructType(timestampField.copy(dataType = TimestampType) +: rightFields.tail),
+      containsNull = false)
+    val (_, _, leftKeys, rightKeys) =
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        AsOfJoin.materializeMatchComparison(
+          leftOperand = AttributeReference("l", leftType)(),
+          rightOperand = AttributeReference("r", rightType)(),
+          normalizedOp = GreaterThanOrEqualOp
+        )
+      }
+    assert(leftKeys.map(_.dataType) == Seq(leftType))
+    assert(rightKeys.map(_.dataType) == Seq(expectedRight))
+  }
 
   test("scalar types widen via TypeCoercion") {
     assert(MatchConditionTypes.areOperandsCompatible(IntegerType, LongType))
