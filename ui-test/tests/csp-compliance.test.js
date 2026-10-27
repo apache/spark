@@ -15,13 +15,16 @@
  * limitations under the License.
  */
 
-import { readFileSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { glob } from 'glob';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+// Per-test timeout for the repository-wide file scans below.
+const SCAN_TIMEOUT_MS = 60000;
 
 test('CSS files with data URI images do not violate CSP img-src policy', async function () {
   const cssFiles = await glob('**/*.css', {
@@ -30,27 +33,20 @@ test('CSS files with data URI images do not violate CSP img-src policy', async f
   });
 
   const dataUriPattern = /url\(['"]?data:image\//;
-  let hasDataUri = false;
-
-  for (const file of cssFiles) {
-    const filePath = join(__dirname, '../..', file);
-    const content = readFileSync(filePath, 'utf8');
-    
-    if (dataUriPattern.test(content)) {
-      hasDataUri = true;
-      break;
-    }
-  }
+  const contents = await Promise.all(
+    cssFiles.map((file) => readFile(join(__dirname, '../..', file), 'utf8'))
+  );
+  const hasDataUri = contents.some((content) => dataUriPattern.test(content));
 
   // If any CSS uses data URIs, verify our CSP policy allows them
   if (hasDataUri) {
     const httpSecurityFilterPath = join(__dirname, '../../core/src/main/scala/org/apache/spark/ui/HttpSecurityFilter.scala');
-    const httpSecurityFilter = readFileSync(httpSecurityFilterPath, 'utf8');
+    const httpSecurityFilter = await readFile(httpSecurityFilterPath, 'utf8');
 
     // Verify that CSP includes img-src with data: support
     expect(httpSecurityFilter).toMatch(/img-src\s+[^;]*data:/);
   }
-});
+}, SCAN_TIMEOUT_MS);
 
 test('All inline scripts use CSP nonce', async function () {
   const scalaFiles = await glob('**/*.scala', {
@@ -60,9 +56,8 @@ test('All inline scripts use CSP nonce', async function () {
 
   const violations = [];
 
-  for (const file of scalaFiles) {
-    const filePath = join(__dirname, '../..', file);
-    const content = readFileSync(filePath, 'utf8');
+  await Promise.all(scalaFiles.map(async (file) => {
+    const content = await readFile(join(__dirname, '../..', file), 'utf8');
 
     // Find inline script tags: <script ...>...</script> or <script .../>
     const scriptTagPattern = /<script\s+([^>]*)>/g;
@@ -85,7 +80,7 @@ test('All inline scripts use CSP nonce', async function () {
         });
       }
     }
-  }
+  }));
 
   if (violations.length > 0) {
     const message = violations.map(v => 
@@ -93,4 +88,4 @@ test('All inline scripts use CSP nonce', async function () {
     ).join('\n');
     throw new Error(`Found inline scripts without CSP nonce:\n${message}`);
   }
-});
+}, SCAN_TIMEOUT_MS);
