@@ -212,12 +212,13 @@ abstract class PercentileBase
       percentile: Double): Any = {
     val position = (accumulatedCounts.last._2 - 1) * percentile
     // A double position can land just below a whole number (e.g. 90 * 0.7), which flooring a
-    // nanosecond result would turn into a whole step.
+    // nanosecond result would turn into a whole step. A NaN percentage keeps the double position
+    // (the first value), as for other types.
     lazy val exactPosition = JBigDecimal.valueOf(accumulatedCounts.last._2 - 1)
       .multiply(JBigDecimal.valueOf(percentile))
 
     // We may need to do linear interpolation to get the exact percentile
-    val (lower, higher) = if (isNanos) {
+    val (lower, higher) = if (isNanos && !percentile.isNaN) {
       (exactPosition.setScale(0, RoundingMode.FLOOR).longValueExact(),
         exactPosition.setScale(0, RoundingMode.CEILING).longValueExact())
     } else {

@@ -222,6 +222,24 @@ class PercentileSuite extends SparkFunSuite {
       nanosTs(year / 10, 2))
   }
 
+  test("SPARK-60542: NaN percentage over nanosecond timestamps matches other types") {
+    // NaN passes the range check; as for other types, the first value in sort order is returned.
+    val child = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
+    val values = Seq(nanosTs(0, 100), nanosTs(0, 200), nanosTs(0, 300))
+    val nan = Literal(Double.NaN)
+    assert(evalNanos(new Percentile(child, nan), values) === values.head)
+    assert(evalNanos(new Percentile(child, nan, reverse = true), values) === values.last)
+    assert(evalNanos(new Percentile(child, CreateArray(Seq(Literal(0.5), nan))), values)
+      .asInstanceOf[ArrayData].toSeq[TimestampNanosVal](TimestampNTZNanosType(9)) ===
+      Seq(values(1), values.head))
+    assert(evalNanos(PercentileDisc(child, nan), values) === values.head)
+    assert(evalNanos(PercentileDisc(child, nan, legacyCalculation = true), values) === values.head)
+    val doubles = new Percentile(BoundReference(0, DoubleType, nullable = true), nan)
+    val buffer = doubles.createAggregationBuffer()
+    Seq(1.0, 2.0, 3.0).foreach(v => doubles.update(buffer, InternalRow(v)))
+    assert(doubles.eval(buffer) === 1.0)
+  }
+
   test("SPARK-60542: percentile_disc over nanosecond timestamps returns an input value") {
     val child = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
     val values = (1 to 4).map(nanosTs(1577880000123456L, _))

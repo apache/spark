@@ -885,6 +885,16 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(median9("2020-01-01T12:00:00.123456789"),
       Row(LocalDateTime.parse("2020-01-01T12:00:00.123456789")))
     checkAnswer(median9(), Row(null))
+    // A NaN percentage passes analysis and returns the first value, as for other types.
+    val first = LocalDateTime.parse("2020-01-01T12:00:00.000000100")
+    val df = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(Row(first), Row(first.plusNanos(100)))),
+      new StructType().add("c", TimestampNTZNanosType(9)))
+    checkAnswer(
+      df.selectExpr(
+        "percentile(c, CAST('NaN' AS DOUBLE))",
+        "percentile_cont(CAST('NaN' AS DOUBLE)) WITHIN GROUP (ORDER BY c)"),
+      Row(first, first))
   }
 
   test("SPARK-57816: date_format / to_char / to_varchar over nanosecond-precision timestamps") {
