@@ -22,7 +22,7 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkRuntimeException}
-import org.apache.spark.sql.{DataFrame, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, DataFrame, QueryTest, Row}
 import org.apache.spark.sql.catalyst.fwf.FixedWidthOptions
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.fwf.FixedWidthScan
@@ -419,6 +419,44 @@ class FixedWidthSuite extends QueryTest with SharedSparkSession {
       checkAnswer(
         spark.read.option("widths", "4,10,6").option("header", "true").fwf(path),
         Seq(Row(1, "Alice", 95.5), Row(2, "Bob", 88.0)))
+    }
+  }
+
+  test("unsupported fixed-width data types") {
+    val types = Seq(
+      GeometryType("ANY"),
+      GeographyType("ANY"),
+      VariantType,
+      YearMonthIntervalType(),
+      DayTimeIntervalType())
+    val v1Sources = SQLConf.get.getConf(SQLConf.USE_V1_SOURCE_LIST)
+    Seq(v1Sources, s"$v1Sources,fwf").foreach { sourceList =>
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> sourceList) {
+        types.foreach { dataType =>
+          withTempDir { dir =>
+            val path = writeFile(dir, "data.txt", Seq("x"))
+            val out = new File(dir, "out").getCanonicalPath
+            val schema = new StructType().add("g", dataType)
+            val parameters = Map(
+              "columnName" -> "`g`",
+              "columnType" -> ("\"" + dataType.sql + "\""),
+              "format" -> "FixedWidth")
+            checkError(
+              exception = intercept[AnalysisException] {
+                spark.read.schema(schema).format("fwf").option("widths", "1").load(path)
+              },
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = parameters)
+            val df = spark.createDataFrame(spark.sparkContext.emptyRDD[Row], schema)
+            checkError(
+              exception = intercept[AnalysisException] {
+                df.write.format("fwf").option("widths", "1").save(out)
+              },
+              condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+              parameters = parameters)
+          }
+        }
+      }
     }
   }
 

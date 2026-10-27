@@ -114,8 +114,14 @@ case class FixedWidthFileFormat() extends TextBasedFileFormat with DataSourceReg
   }
 
   override def supportDataType(dataType: DataType): Boolean = dataType match {
+    case _: GeometryType | _: GeographyType | _: VariantType => false
+
+    case _: AnsiIntervalType => false
+
     case _: AtomicType => true
+
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
+
     case _ => false
   }
 

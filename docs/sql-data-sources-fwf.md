@@ -61,7 +61,16 @@ Inferring column positions cannot be combined with a user-supplied `schema`. Pas
 row than in the sampled rows can be truncated; pass a larger `inferNrows`, or explicit
 `colspecs`/`widths`, if needed.
 
-Writing always requires explicit `colspecs` or `widths`.
+Writing always requires explicit `colspecs` or `widths`. A value longer than its field
+width is truncated to that width. A shorter value is padded on the right with spaces. Column
+names written with `header` set follow the same rule.
+
+## Data types
+
+Fixed-width columns are scalar values. Supported types are boolean, byte, short, int, long,
+float, double, decimal, string, binary, date, timestamp, and timestamp without time zone, plus a
+user-defined type whose SQL type is one of those. Nested types, variant, intervals, geometry,
+and geography are rejected when the schema is resolved.
 
 ## Data Source Option
 
@@ -170,5 +179,8 @@ Data source options of fixed-width files can be set via:
     <td>read/write</td>
   </tr>
 </table>
+
+Filter pushdown is enabled by default. Set `spark.sql.fwf.filterPushdown.enabled` to `false`
+to disable it.
 
 Other generic options can be found in <a href="https://spark.apache.org/docs/latest/sql-data-sources-generic-options.html">Generic File Source Options</a>.
