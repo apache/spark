@@ -91,12 +91,14 @@ object StorageFilterPlanning {
 
   /**
    * `filter` with each scalar subquery replaced by its result, for the readers. A field read out of
-   * a result becomes a literal of its own. A subquery `MergeSubplans` merged returns the results of
-   * several subqueries in one struct, such as the blooms of several filters, so a field read out of
-   * it would otherwise carry the whole struct.
+   * a result becomes a literal of its own, read straight from the result. A subquery
+   * `MergeSubplans` merged returns the results of several subqueries in one struct, such as the
+   * blooms of several filters. A literal of that struct would copy each of its fields, and a field
+   * read out of it would carry the whole struct.
    */
-  def withSubqueryResults(filter: Expression): Expression = filter.transformUp {
+  def withSubqueryResults(filter: Expression): Expression = filter.transformDown {
+    case g @ GetStructField(_: ExecScalarSubquery | _: Literal, _, _) =>
+      Literal(g.eval(), g.dataType)
     case s: ExecScalarSubquery => s.toLiteral
-    case g @ GetStructField(_: Literal, _, _) => Literal(g.eval(), g.dataType)
   }
 }

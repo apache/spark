@@ -18,21 +18,22 @@
 package org.apache.spark.sql.internal.connector
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, BasePredicate, BindReferences, Expression, Predicate}
+import org.apache.spark.sql.catalyst.expressions.{BasePredicate, Expression, Predicate}
 
 /**
  * The predicate of a storage filter, built on first use from `boundExpression`, since a generated
  * one can be awkward to serialize. The file-source Parquet reader and [[StorageFilterImpl]] share
- * it.
+ * it. `filterName` names the filter in an error.
  */
-class StorageFilterPredicate(private var boundExpression: Expression) extends Serializable {
+class StorageFilterPredicate(private var boundExpression: Expression, filterName: String)
+  extends Serializable {
 
   @transient lazy val prepared: BasePredicate = {
     // The expression is released below, so a copy made after a first evaluation would have nothing
     // to build from. That is named here rather than left to an NPE.
     if (boundExpression == null) {
-      throw SparkException.internalError("A storage filter was copied after an evaluation " +
-        "released the expression of its predicate")
+      throw SparkException.internalError(s"$filterName was copied after an evaluation released " +
+        "the expression of its predicate. Only a filter that was never evaluated can be copied.")
     }
     val created = Predicate.create(boundExpression)
     // A bloom's bytes sit in the expression as a binary literal, while a generated predicate holds
@@ -42,11 +43,4 @@ class StorageFilterPredicate(private var boundExpression: Expression) extends Se
     boundExpression = null
     created
   }
-}
-
-object StorageFilterPredicate {
-
-  /** The predicate of `expr` over rows of `attrs`, in that order. */
-  def apply(expr: Expression, attrs: Seq[Attribute]): StorageFilterPredicate =
-    new StorageFilterPredicate(BindReferences.bindReference(expr, attrs))
 }

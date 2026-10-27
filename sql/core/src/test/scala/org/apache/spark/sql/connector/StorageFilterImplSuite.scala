@@ -95,7 +95,7 @@ class StorageFilterImplSuite extends SparkFunSuite {
     val filter = positiveInverse
     assert(filter.eval(InternalRow(2L)))
     val e = intercept[StorageFilterNotAppliedException](filter.eval(InternalRow(0L)))
-    assert(e.getCondition == "STORAGE_FILTER_NOT_APPLIED", s"got ${e.getCondition}")
+    checkError(exception = e, condition = "STORAGE_FILTER_NOT_APPLIED", sqlState = Some("KD000"))
     assert(e.getCause.isInstanceOf[SparkArithmeticException], s"got ${e.getCause}")
     withBatchOf(1L, 0L) { batch =>
       intercept[StorageFilterNotAppliedException](filter.select(batch, new Array[Int](2)))
@@ -111,9 +111,11 @@ class StorageFilterImplSuite extends SparkFunSuite {
       () => factory.createReader(RangeInputPartition(0, 1), request),
       () => factory.createColumnarReader(RangeInputPartition(0, 1), request)
     ).foreach { create =>
-      val e = intercept[SparkUnsupportedOperationException](create())
-      assert(e.getCondition == "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED",
-        s"got ${e.getCondition}")
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException](create()),
+        condition = "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED",
+        sqlState = Some("0A000"),
+        parameters = Map("class" -> factory.getClass.getName))
     }
   }
 
@@ -159,6 +161,7 @@ class StorageFilterImplSuite extends SparkFunSuite {
     val copied = copy.deserialize[StorageFilterImpl](copy.serialize(filter))
     val e = intercept[SparkException](copied.eval(InternalRow(4L)))
     assert(e.getCondition == "INTERNAL_ERROR", s"got ${e.getCondition}")
+    assert(e.getMessage.contains("StorageFilter(k) was copied"), s"got ${e.getMessage}")
   }
 }
 

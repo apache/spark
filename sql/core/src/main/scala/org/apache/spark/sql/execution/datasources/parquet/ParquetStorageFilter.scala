@@ -182,8 +182,9 @@ object ParquetStorageFilter {
       case b: BoundReference => BoundReference(indexMap(b.ordinal), b.dataType, b.nullable)
     }
 
-    new ParquetStorageFilter(originalOrdinals.toArray, new StorageFilterPredicate(remapped),
-      metrics, maxSplicedRowGroupBytes)
+    val filterName = s"The storage filter over ${keyFields.map(_.name).mkString(", ")}"
+    new ParquetStorageFilter(originalOrdinals.toArray,
+      new StorageFilterPredicate(remapped, filterName), metrics, maxSplicedRowGroupBytes)
   }
 
   /**

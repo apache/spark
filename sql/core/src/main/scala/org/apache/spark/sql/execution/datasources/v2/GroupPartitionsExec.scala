@@ -124,10 +124,11 @@ case class GroupPartitionsExec(
    * where this check passes, and `UnknownPartitioning`, where re-deriving reports the same thing.
    *
    * The comparison is by reference for a child that reports the same object, which the columnar and
-   * codegen wrappers do. `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` rebuild a
-   * `BatchScanExec` whose runtime or storage filters hold a subquery, so there it compares the
-   * partition keys by value, and reads equal only while the connector returns the same input
-   * partitions for the same scan.
+   * codegen wrappers do. A rule that rewrites a subquery in the runtime or storage filters of a
+   * `BatchScanExec` after `EnsureRequirements` rebuilds it, so there it compares the partition keys
+   * by value, and reads equal only while the connector returns the same input partitions for the
+   * same scan. Such rules are `PlanAdaptiveDynamicPruningFilters` and `ReuseAdaptiveSubquery` with
+   * AQE, and `ReuseExchangeAndSubquery` without it.
    *
    * Asked on the read rather than in `withNewChildInternal` because canonicalization rebuilds this
    * node over a canonicalized child whose partitioning cannot be read at all: a canonicalized

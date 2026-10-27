@@ -20,7 +20,7 @@ package org.apache.spark.sql.internal.connector
 import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression => CatalystExpression}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, BasePredicate, BindReferences, Expression => CatalystExpression}
 import org.apache.spark.sql.connector.expressions.{FieldReference, NamedReference}
 import org.apache.spark.sql.connector.read.{StorageFilter, StorageFilterNotAppliedException}
 
@@ -29,16 +29,20 @@ import org.apache.spark.sql.connector.read.{StorageFilter, StorageFilterNotAppli
  * have to understand. It mirrors [[PartitionPredicateImpl]], which evaluates a partition key
  * rather than a data row.
  *
- * `attrs` is the layout of the row [[eval]] expects, in that order, and the predicate is bound to
- * it. The predicate is built on first use, see [[StorageFilterPredicate]].
+ * `referenceArray` is the layout of the row [[eval]] expects, in that order, and the predicate is
+ * bound to it. The predicate is built on first use, see [[StorageFilterPredicate]].
  */
 class StorageFilterImpl private (
     private val predicate: StorageFilterPredicate,
-    private val attrs: Seq[Attribute])
+    private val referenceArray: Array[NamedReference])
   extends StorageFilter with Logging {
 
   // The width of the row `eval` takes, read on every row.
-  private val numReferences = attrs.length
+  private val numReferences = referenceArray.length
+
+  // The built predicate, kept in a plain field, since resolving `predicate.prepared` on every row
+  // is a volatile read.
+  @transient private var prepared: BasePredicate = _
 
   // Whether this instance has logged a failure, so a task logs only its first.
   @transient private var loggedFailure = false
@@ -58,7 +62,7 @@ class StorageFilterImpl private (
       throw SparkException.internalError(
         s"$this takes rows of $numReferences values, but got ${row.numFields}")
     }
-    val prepared = predicate.prepared
+    if (prepared == null) prepared = predicate.prepared
     try {
       prepared.eval(row)
     } catch {
@@ -73,15 +77,11 @@ class StorageFilterImpl private (
     }
   }
 
-  @transient private lazy val referenceArray: Array[NamedReference] =
-    attrs.map(a => FieldReference.column(a.name)).toArray
-
   // A copy per call, so a reader that reorders it cannot change the layout another reader of the
   // task sees.
   override def references(): Array[NamedReference] = referenceArray.clone()
 
-  // Only the columns, since a runtime bloom's literal would print every byte of the bloom.
-  override def toString: String = s"StorageFilter(${referenceArray.mkString(", ")})"
+  override def toString: String = StorageFilterImpl.nameOf(referenceArray)
 }
 
 object StorageFilterImpl {
@@ -98,6 +98,14 @@ object StorageFilterImpl {
         s"A storage filter over ${catalystExpr.references.mkString("[", ", ", "]")} references " +
           s"attributes outside the scan output ${output.mkString("[", ", ", "]")}")
     }
-    new StorageFilterImpl(StorageFilterPredicate(catalystExpr, referenced), referenced)
+    val references = referenced.map(a => FieldReference.column(a.name)).toArray[NamedReference]
+    new StorageFilterImpl(
+      new StorageFilterPredicate(
+        BindReferences.bindReference(catalystExpr, referenced), nameOf(references)),
+      references)
   }
+
+  // Only the columns, since a runtime bloom's literal would print every byte of the bloom.
+  private def nameOf(references: Array[NamedReference]): String =
+    s"StorageFilter(${references.mkString(", ")})"
 }

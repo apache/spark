@@ -39,9 +39,8 @@ public interface StorageFilterRequest extends Serializable {
    * {@link Scan#readSchema()}. It is true only on a row the filter was evaluated on and kept. It is
    * false on every other row the reader returns, such as a row read without the filter, or one
    * kept although the filter rejected it. Spark skips the filter's predicate above the scan on the
-   * rows marked true. A reader asked for the column that returns a row or a batch without it fails
-   * the task. The reader may return more columns after the checked column, which Spark does not
-   * read.
+   * rows marked true. Spark fails the task when a reader asked for the column returns a row or a
+   * batch of another width, or a batch whose last column is not a boolean.
    * <p>
    * Spark asks for it only where whole-stage codegen is on and the scan's output still fits it with
    * the column. Without it, the reader may still apply the filter, and the plan above the scan

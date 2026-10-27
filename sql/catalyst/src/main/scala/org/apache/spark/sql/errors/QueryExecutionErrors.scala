@@ -757,14 +757,14 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
 
   def storageFilterCheckedColumnMissingError(
       factoryClass: String,
-      expected: Int,
-      actual: Int): Throwable = {
+      numScanColumns: Int,
+      numColumns: Int): Throwable = {
     new SparkException(
       errorClass = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
       messageParameters = Map(
         "class" -> factoryClass,
-        "expected" -> expected.toString,
-        "actual" -> actual.toString),
+        "numScanColumns" -> numScanColumns.toString,
+        "numColumns" -> numColumns.toString),
       cause = null)
   }
 

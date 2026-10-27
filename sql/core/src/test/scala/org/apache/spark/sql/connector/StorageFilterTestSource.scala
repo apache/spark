@@ -49,8 +49,8 @@ import org.apache.spark.util.Utils
  *    contract on purpose;
  *  - `dropChecked`: `true` never appends the checked column, and `later` appends it to the first
  *    row or batch only. Either breaks the contract on purpose;
- *  - `checkedLayout`: `front` returns the checked column ahead of the scan's columns, which breaks
- *    the contract on purpose. `extra` returns one more column after it;
+ *  - `checkedLayout`: `front` returns the checked column ahead of the scan's columns, in a columnar
+ *    read only. `extra` returns one more column after it. Either breaks the contract on purpose;
  *  - `declared`: the comma-separated storage-filter columns, `k` by default, a dot separating a
  *    nested field;
  *  - `valueName`: the name of the value column, `v` by default;
@@ -342,7 +342,7 @@ case class StorageFilterTestReaderFactory(
  * `filter` rejects, with the checked column last when `appendsChecked`. The filter's row holds
  * the values of its `references()`. `filter` is cleared when it cannot be applied.
  * `marksAllChecked` marks every row checked. `dropsCheckedLater` appends the checked column to
- * the first row only. `checkedLayout` places the checked column as the source's option says.
+ * the first row only. `checkedLayout` `extra` returns one more column after the checked column.
  */
 class StorageFilterTestReader(
     partition: RangeInputPartition,
@@ -353,6 +353,8 @@ class StorageFilterTestReader(
     dropsCheckedLater: Boolean = false,
     checkedLayout: String = "")
   extends PartitionReader[InternalRow] {
+
+  require(checkedLayout != "front", "the `front` layout is for columnar reads only")
 
   private val referenceNames = filter.map(StorageFilterTestSource.columnsOf).getOrElse(Nil)
   private var current: Long = partition.start - 1L
@@ -378,16 +380,9 @@ class StorageFilterTestReader(
         val values = schema.fields.map(StorageFilterTestSource.valueOf(_, key))
         val checked = filter.isDefined || marksAllChecked
         val withChecked = appendsChecked && !(dropsCheckedLater && returnedAny)
+        val extra = if (withChecked && checkedLayout == "extra") Seq(0L) else Nil
         row = new GenericInternalRow(
-          if (!withChecked) {
-            values
-          } else {
-            checkedLayout match {
-              case "front" => checked +: values
-              case "extra" => values :+ checked :+ 0L
-              case _ => values :+ checked
-            }
-          })
+          (if (withChecked) values :+ checked else values) ++ extra)
         returnedAny = true
         StorageFilterTestSource.rowsReturned.incrementAndGet()
         found = true

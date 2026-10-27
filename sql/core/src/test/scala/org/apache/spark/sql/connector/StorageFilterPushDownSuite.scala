@@ -23,8 +23,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, QueryTest}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, AttributeSet, BloomFilterMightContain, Cast, Divide, EvalMode, GetStructField, GreaterThan, If, LessThanOrEqual, Literal, NumericEvalContext, PredicateHelper, Rand, XxHash64}
-import org.apache.spark.sql.catalyst.plans.logical.ReturnAnswer
-import org.apache.spark.sql.execution.{BaseLimitExec, CoalesceExec, ExecSubqueryExpression, FilterExec, SampleExec, SparkPlan, TakeOrderedAndProjectExec}
+import org.apache.spark.sql.execution.{BaseLimitExec, CoalesceExec, ExecSubqueryExpression, FilterExec, QueryExecution, SampleExec, SparkPlan, TakeOrderedAndProjectExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{FileFormat, StorageFilterPlanning}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
@@ -105,6 +104,18 @@ class StorageFilterPushDownSuite
     assert(filters.size == 1, s"expected one Filter on the scan:\n$plan")
     filters.head.metrics("numOutputRows").value
   }
+
+  // Runs `df`, whose reader was asked for the checked column after `k` and `v`, and checks that the
+  // task fails on a row or batch of `numColumns` columns.
+  private def checkCheckedColumnMissing(df: DataFrame, numColumns: Int): Unit =
+    checkError(
+      exception = intercept[SparkException](df.collect()),
+      condition = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
+      sqlState = Some("KD000"),
+      parameters = Map(
+        "class" -> classOf[StorageFilterTestReaderFactory].getName,
+        "numScanColumns" -> "2",
+        "numColumns" -> numColumns.toString))
 
   // Runs `df`, checks that it returns `expected`, and returns its plan.
   private def checkJoin(df: DataFrame, expected: Set[Seq[Long]]): SparkPlan = {
@@ -191,28 +202,18 @@ class StorageFilterPushDownSuite
             withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
               StorageFilterTestSource.reset()
               val df = bloomJoin(v2Probe(options :+ ("columnar" -> columnar.toString): _*))
-              // `k`, `v` and the checked column.
-              checkError(
-                exception = intercept[SparkException](df.collect()),
-                condition = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
-                sqlState = Some("KD000"),
-                parameters = Map(
-                  "class" -> classOf[StorageFilterTestReaderFactory].getName,
-                  "expected" -> "3",
-                  "actual" -> "2"))
+              checkCheckedColumnMissing(df, numColumns = 2)
             }
           }
       }
     }
 
-    test(s"a $kind reader may return more columns after the checked column") {
+    test(s"a $kind reader that returns more columns after the checked column fails the task") {
+      // A width check cannot tell the checked column from a reader's own first extra column.
       withBloomJoin() {
-        val plan = runBloomJoin("columnar" -> columnar.toString, "checkedLayout" -> "extra")
-        assert(bloomsAbove(plan) == (0, 1),
-          s"the Filter must skip the bloom on checked rows:\n$plan")
-        assert(rowsOutOfFilter(plan) == StorageFilterTestSource.rowsReturned.get(),
-          s"the Filter must keep every checked row; got ${rowsOutOfFilter(plan)} of " +
-            s"${StorageFilterTestSource.rowsReturned.get()}")
+        StorageFilterTestSource.reset()
+        val df = bloomJoin(v2Probe("columnar" -> columnar.toString, "checkedLayout" -> "extra"))
+        checkCheckedColumnMissing(df, numColumns = 4)
       }
     }
 
@@ -257,14 +258,7 @@ class StorageFilterPushDownSuite
     withBloomJoin() {
       StorageFilterTestSource.reset()
       val df = bloomJoin(v2Probe("columnar" -> "true", "checkedLayout" -> "front"))
-      checkError(
-        exception = intercept[SparkException](df.collect()),
-        condition = "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING",
-        sqlState = Some("KD000"),
-        parameters = Map(
-          "class" -> classOf[StorageFilterTestReaderFactory].getName,
-          "expected" -> "3",
-          "actual" -> "3"))
+      checkCheckedColumnMissing(df, numColumns = 3)
     }
   }
 
@@ -512,10 +506,10 @@ class StorageFilterPushDownSuite
     withBloomJoin() {
       val optimized = bloomJoin(v2Probe("columnar" -> "true")).queryExecution.optimizedPlan
       def planned(mergeable: Boolean, rowWise: Boolean): BatchScanExec = scanOf(
-        spark.sessionState.planner.plan(ReturnAnswer(optimized.transform {
+        QueryExecution.createSparkPlan(spark.sessionState.planner, optimized.transform {
           case r: DataSourceV2ScanRelation =>
             r.copy(mergeableScan = mergeable, onlyRowWisePushdowns = rowWise)
-        })).next())
+        }))
       assert(planned(mergeable = false, rowWise = true).storageFilters.size == 1,
         "a scan with only row-wise pushdowns must get the bloom")
       assert(planned(mergeable = true, rowWise = false).storageFilters.isEmpty,

@@ -143,11 +143,10 @@ private class TaskState(customMetrics: Map[String, SQLMetric]) {
  * @param storageFilterRequest What every reader gets when the scan was offered storage filters.
  *                             Serialized with the task, so each task has its own instance of the
  *                             filter.
- * @param checkedOutputWidth The number of columns the plan above the scan reads from each row or
- *                           batch when the request asks for the checked column, the last of them.
- *                           Each row or batch is checked to hold at least that many, since a
- *                           reader that leaves the column out would have the plan above the scan
- *                           read past its rows.
+ * @param checkedOutputWidth The width of the rows or batches a reader returns when the request asks
+ *                           for the checked column, which is their last column. Each row and batch
+ *                           is checked against it, since the plan above the scan reads the column
+ *                           by position.
  */
 class DataSourceRDD(
     sc: SparkContext,
@@ -223,21 +222,21 @@ class DataSourceRDD(
     }
   }
 
-  // The checked column is the last of `width` columns. A batch may hold more after it, which the
-  // plan above the scan does not read. A row carries no types, so only its width is checked.
+  // The checked column is the last of `width` columns. A row carries no types, so only its width is
+  // checked.
   private def checkBatch(width: Int, batch: ColumnarBatch): Unit = {
-    if (batch.numCols() < width || batch.column(width - 1).dataType() != BooleanType) {
+    if (batch.numCols() != width || batch.column(width - 1).dataType() != BooleanType) {
       throw checkedColumnMissing(width, batch.numCols())
     }
   }
 
   private def checkRow(width: Int, row: InternalRow): Unit = {
-    if (row.numFields < width) throw checkedColumnMissing(width, row.numFields)
+    if (row.numFields != width) throw checkedColumnMissing(width, row.numFields)
   }
 
-  private def checkedColumnMissing(width: Int, actual: Int): Throwable =
+  private def checkedColumnMissing(width: Int, numColumns: Int): Throwable =
     QueryExecutionErrors.storageFilterCheckedColumnMissingError(
-      partitionReaderFactory.getClass.getName, width, actual)
+      partitionReaderFactory.getClass.getName, numScanColumns = width - 1, numColumns)
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
     castPartition(split).inputPartition.toSeq.flatMap(_.preferredLocations())

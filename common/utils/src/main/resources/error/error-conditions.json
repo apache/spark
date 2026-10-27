@@ -2399,7 +2399,7 @@
   },
   "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
     "message" : [
-      "A reader of <class> was asked for the column that marks the rows a storage filter checked, at position <expected>. That column is missing or not a boolean. The reader returned <actual> columns."
+      "A reader of <class> was asked for the column that marks the rows a storage filter checked, right after the <numScanColumns> columns of the scan's read schema. That column is missing, not a boolean, or not the last one. The reader returned <numColumns> columns."
     ],
     "sqlState" : "KD000"
   },

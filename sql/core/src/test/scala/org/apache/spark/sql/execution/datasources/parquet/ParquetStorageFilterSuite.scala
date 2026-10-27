@@ -1096,6 +1096,9 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
           assert(shipped < bloomBytes * 3 / 2,
             s"each bloom must ship once; the RDD takes $shipped bytes for $bloomBytes bytes of " +
               "blooms")
+          // The bound above holds without any bloom too. The metrics say the reader used them.
+          val excluded = rowsExcludedByStorageFilters(plan)
+          assert(excluded > 0, s"the reader must have excluded rows; the metrics say $excluded")
         }
       }
     }
