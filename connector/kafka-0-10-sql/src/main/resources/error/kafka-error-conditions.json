@@ -117,6 +117,24 @@
     },
     "sqlState" : "22000"
   },
+  "KAFKA_INVALID_BATCH_OFFSET" : {
+    "message" : [
+      "<offsetName>"
+    ],
+    "subClass" : {
+      "GLOBAL" : {
+        "message" : [
+          "can't be <offsetValue> for batch queries on Kafka"
+        ]
+      },
+      "TOPIC_OR_PARTITION" : {
+        "message" : [
+          "for <topicOrPartition> can't be <offsetValue> for batch queries on Kafka"
+        ]
+      }
+    },
+    "sqlState" : "22023"
+  },
   "RESOLVED_START_OFFSET_GREATER_THAN_END_OFFSET" : {
     "message" : [
       "The resolved start offset <startOffset> is greater than the resolved end offset <endOffset> for topic <topic> partition <partition>.",

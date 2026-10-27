@@ -374,13 +374,16 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       STARTING_OFFSETS_OPTION_KEY, EarliestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit => // good to go
       case LatestOffsetRangeLimit =>
-        throw new IllegalArgumentException("starting offset can't be latest " +
-          "for batch queries on Kafka")
+        throw KafkaExceptions.invalidBatchOffset(
+          offsetName = "startingOffsets",
+          offsetValue = "latest")
       case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
         (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
           case (name, off) if off == KafkaOffsetRangeLimit.LATEST =>
-            throw new IllegalArgumentException(s"startingOffsets for $name can't " +
-              "be latest for batch queries on Kafka")
+            throw KafkaExceptions.invalidBatchOffsetForTopicOrPartition(
+              offsetName = "startingOffsets",
+              offsetValue = "latest",
+              topicPartition = name)
           case _ => // ignore
         }
       case _: SpecificTimestampRangeLimit => // good to go
@@ -391,14 +394,17 @@ private[kafka010] class KafkaSourceProvider extends DataSourceRegister
       params, ENDING_TIMESTAMP_OPTION_KEY, ENDING_OFFSETS_BY_TIMESTAMP_OPTION_KEY,
       ENDING_OFFSETS_OPTION_KEY, LatestOffsetRangeLimit) match {
       case EarliestOffsetRangeLimit =>
-        throw new IllegalArgumentException("ending offset can't be earliest " +
-          "for batch queries on Kafka")
+        throw KafkaExceptions.invalidBatchOffset(
+          offsetName = "endingOffsets",
+          offsetValue = "earliest")
       case LatestOffsetRangeLimit => // good to go
       case SpecificOffsetRangeLimit(partitionOffsets, topicOffsets) =>
         (partitionOffsets.map { case (tp, off) => tp.toString -> off } ++ topicOffsets).foreach {
           case (name, off) if off == KafkaOffsetRangeLimit.EARLIEST =>
-            throw new IllegalArgumentException(s"ending offset for $name can't be " +
-              "earliest for batch queries on Kafka")
+            throw KafkaExceptions.invalidBatchOffsetForTopicOrPartition(
+              offsetName = "endingOffsets",
+              offsetValue = "earliest",
+              topicPartition = name)
           case _ => // ignore
         }
       case _: SpecificTimestampRangeLimit => // good to go
