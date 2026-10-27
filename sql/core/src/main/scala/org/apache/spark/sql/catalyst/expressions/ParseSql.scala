@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{FunctionRegistry, FunctionRegistryBase, TypeCheckResult}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.parser.ParseSqlResult
+import org.apache.spark.sql.catalyst.parser.{ParseSqlMode, ParseSqlResult}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, DataType, StringType}
@@ -28,22 +29,28 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Parses a SQL batch string and returns a compact JSON array describing its
- * unresolved statements (source position, identifier/code, lineage references,
- * select-list names, parameters). A statement that does not parse is represented
- * by a STANDARD-format error object at its position in the array.
+ * statements (source position, identifier/code, lineage references,
+ * select-list names, parameters). `PARSE` mode is unresolved. `ANALYZE`
+ * mode also types the select list and fully qualifies resolved relations
+ * and routines. A statement that does not parse is represented by a
+ * STANDARD-format error object at its position in the array.
  *
  * Behind [[SQLConf.PARSE_SQL_ENABLED]] while the JSON contract is still
  * evolving. Designed for batch evaluation over DataFrames of SQL text.
- * User-facing parse errors become JSON; unexpected internal failures propagate.
+ * User-facing parse / analyze errors become JSON; unexpected internal
+ * failures propagate. `ANALYZE` needs an active Spark session (catalog).
  */
 // scalastyle:off line.size.limit
 // scalastyle:off nonascii
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt) - Splits `sqlStmt` into SQL statements, parses each with
+  usage = """_FUNC_(sqlStmt[, mode]) - Splits `sqlStmt` into SQL statements, parses each with
     the stock Spark SQL parser, and returns a JSON array describing them (1-based
     UTF-16 code-unit `start` and UTF-16 code-unit `length`, parse success, Table 39
     statement identifier/code, target and source table references for lineage,
     select-list column names, and parameter markers).
+    `mode` is `PARSE` (default) or `ANALYZE` (case-insensitive). `PARSE` is unresolved.
+    `ANALYZE` also types selected columns and fully qualifies resolved relations and
+    routines, and reports analysis failures as JSON without aborting the batch.
     Statement length excludes surrounding whitespace and the terminating semicolon.
     Session parser extensions are not applied.
     Requires spark.sql.function.parseSql.enabled=true. On syntax / parse error returns JSON
@@ -54,6 +61,8 @@ import org.apache.spark.unsafe.types.UTF8String
     Arguments:
       * sqlStmt - A SQL batch string to split and parse.
         An expression that evaluates to a string.
+      * mode - Optional `PARSE` or `ANALYZE` (case-insensitive). Defaults to `PARSE`.
+        An expression that evaluates to a string.
   """,
   examples = """
     Examples:
@@ -63,17 +72,25 @@ import org.apache.spark.unsafe.types.UTF8String
        13
       > SELECT get_json_object(_FUNC_('SELEC'), '$[0].error.errorClass');
        PARSE_SYNTAX_ERROR
+      > SELECT get_json_object(_FUNC_('SELECT 1 AS a', 'ANALYZE'), '$[0].select_list[0].type');
+       INT
   """,
   group = "misc_funcs",
   since = "4.4.0")
 // scalastyle:on nonascii
 // scalastyle:on line.size.limit
-case class ParseSql(child: Expression)
-  extends UnaryExpression
+case class ParseSql(sqlStmt: Expression, mode: Expression)
+  extends BinaryExpression
   with ImplicitCastInputTypes
   with CodegenFallback {
 
+  def this(sqlStmt: Expression) = this(sqlStmt, Literal("PARSE"))
+
   override def prettyName: String = "parse_sql"
+
+  override def left: Expression = sqlStmt
+
+  override def right: Expression = mode
 
   override def nullable: Boolean = true
 
@@ -82,7 +99,10 @@ case class ParseSql(child: Expression)
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq(StringTypeWithCollation(supportsTrimCollation = true))
+    Seq.fill(2)(StringTypeWithCollation(supportsTrimCollation = true))
+
+  // ANALYZE reads the session catalog, so results are not context-independent.
+  override def contextIndependentFoldable: Boolean = false
 
   override def checkInputDataTypes(): TypeCheckResult = {
     if (!SQLConf.get.parseSqlEnabled) {
@@ -93,19 +113,40 @@ case class ParseSql(child: Expression)
           "configKey" -> SQLConf.PARSE_SQL_ENABLED.key,
           "configValue" -> "true"))
     }
-    super.checkInputDataTypes()
+    val typeCheck = super.checkInputDataTypes()
+    if (!typeCheck.isSuccess) {
+      typeCheck
+    } else {
+      if (mode.foldable) {
+        val value = mode.eval()
+        if (value != null) {
+          val modeStr = value.asInstanceOf[UTF8String].toString
+          if (ParseSqlMode.parse(modeStr).isEmpty) {
+            throw QueryCompilationErrors.invalidParseSqlMode(mode)
+          }
+        }
+      }
+      TypeCheckResult.TypeCheckSuccess
+    }
   }
 
-  override def nullSafeEval(input: Any): Any = {
-    val sql = input.asInstanceOf[UTF8String].toString
-    UTF8String.fromString(ParseSqlResult.fromSql(sql))
+  override def nullSafeEval(sqlInput: Any, modeInput: Any): Any = {
+    val sqlText = sqlInput.asInstanceOf[UTF8String].toString
+    val modeStr = modeInput.asInstanceOf[UTF8String].toString
+    val parsedMode = ParseSqlMode.parse(modeStr).getOrElse {
+      throw QueryExecutionErrors.invalidParseSqlMode(modeStr)
+    }
+    UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode))
   }
 
-  override protected def withNewChildInternal(newChild: Expression): ParseSql =
-    copy(child = newChild)
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): ParseSql =
+    copy(sqlStmt = newLeft, mode = newRight)
 }
 
 object ParseSql {
+  def apply(sqlStmt: Expression): ParseSql = new ParseSql(sqlStmt, Literal("PARSE"))
+
   /** Register the builtin with a session function registry and the global builtin set. */
   def register(registry: FunctionRegistry): Unit = {
     val (info, builder) = FunctionRegistryBase.build[ParseSql]("parse_sql", Some("4.4.0"))
