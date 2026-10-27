@@ -3699,6 +3699,118 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
         assert(collectShuffles(df.queryExecution.executedPlan).size == 1,
           "the nested join should be shuffled onto nc6's layout")
         checkAnswer(df, Seq(0L, 1L, 2L, 3L, 6L).map(i => Row(i, i, i)))
+
+        // An outer join reports a single partitioning rather than a collection.
+        val outerDf = sql(
+          """
+            |SELECT /*+ MERGE(nb4, nb12, nc6) */ nb12.id, nb4.id, nc6.id
+            |FROM testcat.ns.nb12 LEFT JOIN testcat.ns.nb4 ON nb12.id = nb4.id
+            |JOIN testcat.ns.nc6 ON nb12.id = nc6.id
+            |""".stripMargin)
+        assert(collectShuffles(outerDf.queryExecution.executedPlan).size == 1,
+          "the outer join below should be shuffled onto nc6's layout")
+        checkAnswer(outerDf, Seq(0L, 1L, 2L, 3L, 6L).map(i => Row(i, i, i)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ does not reshuffle a nested join above a shuffle") {
+    val idCols = Array(Column.create("id", LongType))
+    Seq("l12" -> 12, "l4" -> 4, "c12" -> 12, "d12" -> 12).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        // The second join shuffles the nested one onto c12's layout. The reduced l12 below that
+        // shuffle no longer decides the layout the third join sees.
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(l12, l4, c12, d12) */ l12.id, l4.id, c12.id, d12.id
+            |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
+            |JOIN testcat.ns.c12 ON l12.id = c12.id
+            |JOIN testcat.ns.d12 ON l12.id = d12.id
+            |""".stripMargin)
+        // collectShuffles would count that shuffle once for each join above it.
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+          "only the nested join should be shuffled, once")
+        checkAnswer(df, (0L until 24L).map(i => Row(i, i, i, i)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ sees a reduced scan through a broadcast join's build key") {
+    val idCols = Array(Column.create("id", LongType))
+    Seq("l12" -> 12, "l4" -> 4, "l3" -> 3).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+    createTable("lx", idCols, Array.empty)
+    sql("INSERT INTO testcat.ns.lx SELECT id FROM range(24)")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        // The broadcast join also reports the reduced l12's partitioning on lx.id.
+        val df = sql(
+          """
+            |SELECT /*+ MERGE(l12, l4), BROADCAST(lx), MERGE(l3) */ l12.id, lx.id, l3.id
+            |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
+            |JOIN testcat.ns.lx ON l12.id = lx.id
+            |JOIN testcat.ns.l3 ON lx.id = l3.id
+            |""".stripMargin)
+        checkAnswer(df, (0L until 24L).map(i => Row(i, i, i)))
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ survives EnsureRequirements re-running for a skewed join") {
+    val idCols = Array(Column.create("id", LongType))
+    Seq("b4" -> 4, "b12" -> 12, "b6" -> 6).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+
+    withTempView("skewData1", "skewData2") {
+      spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 3 as key1", "id as value1")
+        .createOrReplaceTempView("skewData1")
+      spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 1 as key2", "id as value2")
+        .createOrReplaceTempView("skewData2")
+      val skewQuery = "SELECT key1 AS k, count(*) AS c " +
+        "FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1"
+      val expected = sql(skewQuery).collect().toSeq ++ (0L until 24L).map(i => Row(i, 1L))
+
+      // With forced skew join optimization, OptimizeSkewedJoin re-applies EnsureRequirements to
+      // the whole plan, including the nested SPJ in the other branch that is already planned.
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          s"""
+             |$skewQuery
+             |UNION ALL
+             |SELECT /*+ MERGE(b4, b12, b6) */ b4.id AS k, 1L AS c
+             |FROM testcat.ns.b4 JOIN testcat.ns.b12 ON b4.id = b12.id
+             |JOIN testcat.ns.b6 ON b4.id = b6.id
+             |""".stripMargin)
+        checkAnswer(df, expected)
       }
     }
   }
