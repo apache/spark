@@ -252,6 +252,38 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(filtered.queryExecution.executedPlan.toString.contains("InMemoryTableScan"))
   }
 
+  test("SPARK-58482: Arrow cache pruning retains NaN values") {
+    withSQLConf(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10",
+        SQLConf.IN_MEMORY_TABLE_SCAN_STATISTICS_ENABLED.key -> "true") {
+      val data = sparkContext.parallelize((1 to 20).map { id =>
+        if (id <= 10) {
+          (id, 0.0f, 0.0d)
+        } else {
+          (id, Float.NaN, Double.NaN)
+        }
+      }, 1).toDF("id", "floatValue", "doubleValue").cache()
+
+      def checkPruning(filtered: org.apache.spark.sql.DataFrame): Unit = {
+        val selected = filtered.select("id")
+        checkAnswer(selected, (11 to 20).map(Row(_)))
+
+        val scan = selected.queryExecution.executedPlan.collectFirst {
+          case in: InMemoryTableScanExec => in
+        }.get
+        assert(scan.readBatches.value === 1)
+      }
+
+      try {
+        data.count()
+        checkPruning(data.filter($"floatValue" > 5.0f))
+        checkPruning(data.filter($"doubleValue" > 5.0d))
+      } finally {
+        data.unpersist(blocking = true)
+      }
+    }
+  }
+
   test("caching with column projection") {
     val df = (1 to 100).map(i => (i, i * 2, i * 3, s"str$i")).toDF("a", "b", "c", "d")
     df.cache()

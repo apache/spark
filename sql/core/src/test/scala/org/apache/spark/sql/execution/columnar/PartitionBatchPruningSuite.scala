@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.columnar
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData._
@@ -106,6 +108,40 @@ class PartitionBatchPruningSuite extends SharedSparkSession with AdaptiveSparkPl
   checkBatchPruning("SELECT key FROM pruningData WHERE 11 >= key", 1, 2)(1 to 11)
   checkBatchPruning("SELECT key FROM pruningData WHERE 88 < key", 1, 2)(89 to 100)
   checkBatchPruning("SELECT key FROM pruningData WHERE 89 <= key", 1, 2)(89 to 100)
+
+  test("SPARK-58482: floating-point NaN bounds preserve range pruning") {
+    val data = sparkContext.parallelize((1 to 20).map { id =>
+      if (id <= 10) {
+        (id, 0.0f, 0.0d)
+      } else {
+        (id, Float.NaN, Double.NaN)
+      }
+    }, 1).toDF("id", "floatValue", "doubleValue").cache()
+
+    def checkPruning(filtered: org.apache.spark.sql.DataFrame): Unit = {
+      val selected = filtered.select("id")
+      checkAnswer(selected, (11 to 20).map(Row(_)))
+
+      val scan = collect(selected.queryExecution.executedPlan) {
+        case in: InMemoryTableScanExec => in
+      }.head
+      assert(scan.readPartitions.value === 1)
+      assert(scan.readBatches.value === 1)
+    }
+
+    try {
+      data.count()
+      checkPruning(data.filter($"floatValue" > 5.0f))
+      checkPruning(data.filter($"floatValue" >= 2.0f))
+      checkPruning(data.filter(lit(5.0f) < $"floatValue"))
+      checkPruning(data.filter($"doubleValue" > 5.0d))
+      checkPruning(data.filter($"doubleValue" >= 2.0d))
+      checkPruning(data.filter(lit(5.0d) < $"doubleValue"))
+    } finally {
+      data.unpersist(blocking = true)
+    }
+  }
+
   // Do not filter on array type
   checkBatchPruning("SELECT _1 FROM pruningArrayData WHERE _1 = array(1)", 5, 10)(Seq(Array(1)))
   checkBatchPruning("SELECT _1 FROM pruningArrayData WHERE _1 <= array(1)", 5, 10)(Seq(Array(1)))

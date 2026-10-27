@@ -222,6 +222,7 @@ private[columnar] final class FloatColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: Float): Unit = {
+    // Cache pruning evaluates Catalyst comparisons, where NaN sorts after finite values.
     if (count == nullCount) {
       upper = value
       lower = value
@@ -251,6 +252,7 @@ private[columnar] final class DoubleColumnStats extends ColumnStats {
   }
 
   def gatherValueStats(value: Double): Unit = {
+    // Cache pruning evaluates Catalyst comparisons, where NaN sorts after finite values.
     if (count == nullCount) {
       upper = value
       lower = value
