@@ -2619,6 +2619,61 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("SPARK-60580: listing entries without a log source from an older version") {
+    val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val clock = new ManualClock(0)
+    val provider = new FsHistoryProvider(
+      createTestConf().set(MAX_LOG_AGE_S.key, s"${maxAge}ms"), clock)
+
+    val log = newLogFile("app1", None, inProgress = false)
+    writeFile(log, None,
+      SparkListenerApplicationStart("app1", Some("app1-id"), 1L, "test", None),
+      SparkListenerApplicationEnd(2L))
+    log.setLastModified(0L)
+    updateAndCheck(provider) { list =>
+      list.size should be (1)
+    }
+
+    // A listing entry written before SPARK-55793 (Spark 4.1 and earlier) has no
+    // logSourceName / logSourceFullPath. The wrapper's String fields are read back as null
+    // and the ApplicationAttemptInfo Options as None. The store serializer omits null and None
+    // fields (NON_ABSENT), so writing them stores the same JSON as such an entry.
+    val app = provider.listing.read(classOf[ApplicationInfoWrapper], "app1-id")
+    val oldAttempts = app.attempts.map { a =>
+      new AttemptInfoWrapper(
+        a.info.copy(logSourceName = None, logSourceFullPath = None),
+        a.logPath, a.fileSize, a.lastIndex, a.adminAcls, a.viewAcls,
+        a.adminAclsGroups, a.viewAclsGroups, null, null)
+    }
+    provider.listing.write(new ApplicationInfoWrapper(app.info, oldAttempts))
+    assert(provider.getAttempt("app1-id", None).logSourceFullPath === null)
+
+    // The event log can be downloaded.
+    val bytes = new ByteArrayOutputStream()
+    val zipOut = new ZipOutputStream(bytes)
+    provider.writeEventLogs("app1-id", None, zipOut)
+    zipOut.close()
+    val zipIn = new ZipInputStream(new ByteArrayInputStream(bytes.toByteArray))
+    try {
+      zipIn.getNextEntry.getName should be (log.getName)
+    } finally {
+      zipIn.close()
+    }
+
+    // The UI can be loaded.
+    provider.getAppUI("app1-id", None) should not be None
+
+    // The cleaner deletes the expired log and its listing entry.
+    clock.setTime(maxAge + 1)
+    provider.cleanLogs()
+    assert(!log.exists())
+    intercept[NoSuchElementException] {
+      provider.listing.read(classOf[ApplicationInfoWrapper], "app1-id")
+    }
+
+    provider.stop()
+  }
+
   test("SPARK-55864: directory removed while SHS is running") {
     val dir2 = Utils.createTempDir(namePrefix = "logDir2")
     try {
