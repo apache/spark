@@ -1235,6 +1235,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case _ => // Analysis successful!
         }
+
+        NanosTimestampSubtractionCheck.checkOperator(operator)
     }
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))

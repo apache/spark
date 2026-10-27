@@ -96,6 +96,7 @@ object TreePattern extends Enumeration  {
   val SESSION_WINDOW: Value = Value
   val SQL_FUNCTION_EXPRESSION: Value = Value
   val SQL_SCALAR_FUNCTION: Value = Value
+  val SUBTRACT_TIMESTAMPS: Value = Value
   val SUM: Value = Value
   val TEMP_RESOLVED_COLUMN: Value = Value
   val TIME_WINDOW: Value = Value

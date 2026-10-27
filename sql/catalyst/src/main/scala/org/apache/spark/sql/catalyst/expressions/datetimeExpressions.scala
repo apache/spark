@@ -4946,9 +4946,9 @@ object Extract {
  *   - Otherwise the expression returns `DayTimeIntervalType` with the difference in microseconds
  *     between given timestamps.
  *
- * Both microsecond and nanosecond-precision timestamp types are accepted as operands. Because the
- * difference is reported on the microsecond grid in either mode, a nanosecond operand contributes
- * only its `epochMicros`; the sub-microsecond remainder is truncated.
+ * Nanosecond-precision operands are only used by the as-of join ordering distance;
+ * `NanosTimestampSubtractionCheck` rejects them anywhere else, since the interval result has
+ * microsecond precision. A nanosecond operand contributes only its `epochMicros`.
  */
 case class SubtractTimestamps(
     left: Expression,
@@ -4963,16 +4963,15 @@ case class SubtractTimestamps(
   def this(endTimestamp: Expression, startTimestamp: Expression) =
     this(endTimestamp, startTimestamp, SQLConf.get.legacyIntervalEnabled)
 
-  // Nanosecond-precision timestamps are accepted alongside the microsecond types. The difference is
-  // always reported on the microsecond grid (both result types -- DayTimeIntervalType and, in
-  // legacy mode, CalendarIntervalType -- carry microsecond resolution), so each operand contributes
-  // only its epochMicros; the sub-microsecond remainder is truncated.
+  // Nanosecond operands are accepted for the as-of join distance (see the class doc).
   override def inputTypes: Seq[AbstractDataType] =
     Seq(
       TypeCollection(AnyTimestampType, AnyTimestampNanoType),
       TypeCollection(AnyTimestampType, AnyTimestampNanoType))
   override def dataType: DataType =
     if (legacyInterval) CalendarIntervalType else DayTimeIntervalType()
+
+  override def nodePatternsInternal(): Seq[TreePattern] = Seq(SUBTRACT_TIMESTAMPS)
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))

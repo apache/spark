@@ -1358,6 +1358,38 @@ abstract class TimestampNanosFunctionsSuiteBase extends SharedSparkSession {
     checkAnswer(
       df.select(toStr(col("c").cast(TimestampNTZType))), Row("2020-01-01T12:00:00.123456"))
   }
+
+  test("subtraction with a nanosecond-precision timestamp operand is rejected") {
+    Seq[(DataType, DataType, Any, Any)](
+      (TimestampNTZNanosType(9), TimestampNTZType,
+        LocalDateTime.parse("2020-01-02T03:04:05.123456789"),
+        LocalDateTime.parse("2020-01-01T03:04:05")),
+      (TimestampLTZNanosType(9), TimestampType,
+        Instant.parse("2020-01-02T03:04:05.123456789Z"),
+        Instant.parse("2020-01-01T03:04:05Z"))).foreach { case (nanosType, microType, n, m) =>
+      val df = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(n, m, java.sql.Date.valueOf("2020-01-01")))),
+        new StructType().add("n", nanosType).add("m", microType).add("d", DateType))
+      Seq("false", "true").foreach { legacyInterval =>
+        withSQLConf(SQLConf.LEGACY_INTERVAL_ENABLED.key -> legacyInterval) {
+          checkError(
+            exception = intercept[AnalysisException](df.selectExpr("n - n")),
+            condition = "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+            parameters = Map("sqlExpr" -> "\"(n - n)\""),
+            context = ExpectedContext(fragment = "n - n", start = 0, stop = 4))
+          Seq(col("n") - col("m"), col("m") - col("n"), col("n") - col("d"), col("d") - col("n"))
+            .foreach { c =>
+              val e = intercept[AnalysisException](df.select(c))
+              assert(e.getCondition == "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION")
+            }
+        }
+      }
+      // Casting to the micro type still subtracts, at microsecond precision.
+      checkAnswer(
+        df.select(col("n").cast(microType) - col("m")),
+        Row(java.time.Duration.ofDays(1).plusNanos(123456000)))
+    }
+  }
 }
 
 // Runs the nanosecond timestamp function tests with ANSI mode enabled explicitly.
