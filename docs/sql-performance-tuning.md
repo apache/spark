@@ -203,31 +203,41 @@ in `number of pass-through output rows`. They are not timed: `time in aggregatio
 aggregation up to the point where pass-through starts, and preparing the aggregated map for output,
 which in a task that has spilled also writes the map to disk and merges it with the spilled data.
 
-The ratio is evaluated periodically, every `minRows` rows, over the rows and keys of the current
-map epoch, against `minCompaction`. It is evaluated again right before the aggregation map would
-spill, against the larger of `minCompaction` and `minCompactionToSpill`. Keeping the aggregation
-at that point means aggregating the rest of the input through spills, which pays off only if that
-input keeps repeating keys, so this evaluation measures the recent rows: those processed since the
-periodic evaluation before last, against the keys they added. When keys repeat across the input,
-more of the recent rows find their key already in the map as it fills, so their ratio climbs above
-the epoch's; when each key's rows arrive together, the two ratios match. If the ratio is below the
-threshold, the map is not spilled and the rest of the input is passed through. In a task that has
-already spilled, the frozen map is still written out and merged with the spilled data at the end,
-but no later epoch spills. Because pass-through cannot be reversed, the evaluation before a spill
-also waits until the current map has processed `minRows` rows, so a map that fills sooner spills as
-usual instead of committing the task on a small sample.
+The ratio is evaluated periodically, every `minRows` rows, over the rows and keys of the current map
+epoch, against `minCompaction`. It is evaluated again right before the aggregation map would spill,
+against the larger of `minCompaction` and `minCompactionToSpill`. Keeping the aggregation at that
+point means aggregating the rest of the input through spills, which pays off only if that input
+keeps repeating keys, so this evaluation measures the recent rows, at least `minRows` and fewer than
+twice that many: those processed since the periodic evaluation before last, against the keys they
+added. When keys repeat across the input, more of the recent rows find their key already in the map
+as it fills, so their ratio climbs above the epoch's; when each key's rows arrive together, the two
+ratios match. The recent rows still only show how often keys repeat within the map: with keys spread
+evenly over the task, their ratio reflects how much of the task's distinct keys the map holds rather
+than how often each key repeats, so at the default threshold the aggregation is kept only when the
+map holds about half of the task's keys or more. Before the current map's second periodic
+evaluation, or with `minRows` set to `0`, the evaluation measures the whole map epoch instead, whose
+ratio is lower because an epoch's early rows add most of its keys, so it passes through more
+readily. If the ratio is below the threshold, the map is not spilled and the rest of the input is
+passed through. In a task that has already spilled, the frozen map is still written out and merged
+with the spilled data at the end, but no later epoch spills. Because pass-through cannot be
+reversed, the evaluation before a spill also waits until the current map has processed `minRows`
+rows, so a map that fills sooner spills as usual instead of committing the task on a small sample.
 
-Once triggered, pass-through is not reversed for the rest of the task, so a skewed prefix biases
-the outcome in either direction. A favorable prefix can mask a later distinct-heavy tail, keeping
-the aggregation on until a spill restarts the accounting; conversely, a distinct-heavy prefix can
-trip the pass-through early and keep it tripped even where the rest of the input would aggregate
-well. To catch the former without waiting for a spill, raise `minCompaction` so the cumulative
-ratio trips the threshold on a weaker late turn (a higher threshold also bypasses more readily on
-other inputs). To avoid committing the task to pass-through on the latter, raise `minRows` so the
-evaluations start later, or, when the task commits at the evaluation before a spill, lower
-`minCompactionToSpill`. Raising `minRows` helps there only past the number of rows the map takes to
-fill. Pass-through also streams the later rows of keys the frozen map holds, so with a few hot keys
-each of them reaches the final aggregation row by row, on the one reducer that key hashes to.
+Once triggered, pass-through is not reversed for the rest of the task, so a skewed prefix biases the
+outcome in either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the
+aggregation on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip
+the pass-through early and keep it tripped even where the rest of the input would aggregate well. To
+catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
+the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
+To avoid committing the task to pass-through on the latter, raise `minRows` so the evaluations start
+later, or, when the task commits at the evaluation before a spill, lower `minCompactionToSpill`.
+Raising `minRows` helps there only past the number of rows the map takes to fill, and also widens
+the sample of recent rows that the evaluation before a spill measures. Lowering
+`minCompactionToSpill` also keeps aggregating keys that repeat across a task whose map holds well
+under half of them; whether that pays off depends on how the cost of spilling the rest of the input
+compares with shuffling it. Pass-through also streams the later rows of keys the frozen map holds,
+so with a few hot keys each of them reaches the final aggregation row by row, on the one reducer
+that key hashes to.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -247,11 +257,14 @@ each of them reaches the final aggregation row by row, on the one reducer that k
     <td>
       The number of rows between periodic compaction-ratio evaluations. The ratio is also evaluated
       when the aggregation map is about to spill, but only once the current map has processed at
-      least this many rows. Setting this to <code>0</code> disables the periodic evaluation, leaving
-      only the evaluation when the map is about to spill. A larger value also delays the
-      evaluations, so when one of them trips pass-through the frozen map tends to hold more rows;
-      the frozen map stays resident until its output is drained, so a larger value raises that
-      transient memory peak.
+      least this many rows, and over the rows since the periodic evaluation before last, so this
+      also sets how many recent rows that evaluation measures: at least this many and fewer than
+      twice that, or the whole map epoch when the map fills before its second periodic evaluation.
+      Setting this to <code>0</code> disables the periodic evaluation, leaving only the evaluation
+      when the map is about to spill, which then measures the whole map epoch. A larger value also
+      delays the evaluations, so when one of them trips pass-through the frozen map tends to hold
+      more rows; the frozen map stays resident until its output is drained, so a larger value raises
+      that transient memory peak.
     </td>
     <td>4.4.0</td>
   </tr>
@@ -272,12 +285,14 @@ each of them reaches the final aggregation row by row, on the one reducer that k
     <td>2.0</td>
     <td>
       The minimum compaction ratio required to keep the partial aggregation when its map is about to
-      spill, measured over the rows processed since the periodic evaluation before last. Keeping the
-      aggregation then means aggregating the rest of the input through spills, which pays off only
-      if that input keeps repeating keys. When the ratio is below the larger of this value and
-      <code>minCompaction</code>, the map is not spilled and the rest of the input is passed
-      through. The evaluation runs only once the current map has processed <code>minRows</code>
-      rows.
+      spill, measured over the rows processed since the periodic evaluation before last, or over the
+      whole map epoch before its second periodic evaluation. Keeping the aggregation then means
+      aggregating the rest of the input through spills, which pays off only if that input keeps
+      repeating keys. With keys spread evenly over the task, the default keeps aggregating only when
+      the map holds about half of the task's keys or more. When the ratio is below the larger of
+      this value and <code>minCompaction</code>, the map is not spilled and the rest of the input is
+      passed through. The evaluation runs only once the current map has processed
+      <code>minRows</code> rows.
     </td>
     <td>4.4.0</td>
   </tr>

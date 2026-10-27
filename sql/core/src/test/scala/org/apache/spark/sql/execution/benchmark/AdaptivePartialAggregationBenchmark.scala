@@ -28,7 +28,7 @@ import org.apache.spark.sql.internal.SQLConf
  * remaining rows through as single-row partial buffers instead of maintaining (and possibly
  * spilling) a large aggregation map.
  *
- * Each scenario runs the query across the full matrix of whole-stage codegen on/off and the
+ * The first scenarios run the query across the full matrix of whole-stage codegen on/off and the
  * feature disabled (`adaptive = F`, the pre-change baseline) vs enabled (`adaptive = T`), over a
  * {high, low}-cardinality x {no-spill, on-spill} grid:
  *   - high-cardinality, no spill: the periodic check bypasses, which should win.
@@ -38,6 +38,11 @@ import org.apache.spark.sql.internal.SQLConf
  *     which should win.
  *   - low-cardinality, forced regular-map spill: the compaction ratio is far above the threshold,
  *     so the spill check keeps aggregating and both runs spill identically (no regression).
+ *
+ * The spill-check scenarios read four partitions, so an `Exchange` separates the Partial from the
+ * Final, force the map to fill every few hundred thousand rows, and compare the feature disabled
+ * with `minCompactionToSpill` at 1.05 and at its default, 2.0, over inputs whose keys arrive
+ * together, recur across the task, or concentrate on a few hot keys.
  *
  * To run this benchmark:
  * {{{
@@ -144,23 +149,31 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
     //     through at the first fill avoids spilling every epoch;
     //   - keys recur uniformly across the task (10 rows per key), so the final merge collapses
     //     them and keeping the aggregation shuffles a tenth of the rows;
+    //   - the same over twice the rows and keys, with the fast map off, so the map fills when it
+    //     holds 40% of a task's keys: the recent rows compact by about 1.5 and the default passes
+    //     the rest through, although each key repeats about 10 times;
     //   - 10 hot keys hold 30% of the rows and the rest are unique, so passing through avoids the
     //     spills but sends every hot-key row to the reducer of its key.
     // `minCompactionToSpill = 1.05` judges the spill check by `minCompaction`; the default, 2.0,
     // demands that the recent rows compact by 2.0.
+    case class SpillCheckCase(name: String, key: String, fillRows: Int,
+        numRows: Long = 8L << 20, twoLevelMap: Boolean = true)
     val spillCheckCases = Seq(
-      ("keys arrive together", "cast(id * 2 / 3 as bigint)", 300000),
-      ("keys recur", "pmod(xxhash64(id), 200000)", 220000),
-      ("hot keys", "if(id % 100 < 30, id % 10, id + 1000)", 300000))
-    spillCheckCases.foreach { case (name, key, fillRows) =>
+      SpillCheckCase("keys arrive together", "cast(id * 2 / 3 as bigint)", 300000),
+      SpillCheckCase("keys recur", "pmod(xxhash64(id), 200000)", 220000),
+      SpillCheckCase("keys recur, map holds 40% of them", "pmod(xxhash64(id), 400000)", 204320,
+        numRows = 16L << 20, twoLevelMap = false),
+      SpillCheckCase("hot keys", "if(id % 100 < 30, id % 10, id + 1000)", 300000))
+    spillCheckCases.foreach { case SpillCheckCase(name, key, fillRows, numRows, twoLevelMap) =>
       runBenchmark(s"spill check with an Exchange, $name") {
-        val N = 8L << 20
+        val N = numRows
         val benchmark = new Benchmark(s"adaptive partial agg, spill check, $name", N,
           output = output)
         val query = () => spark.range(0, N, 1, 4).selectExpr(s"$key as k", "id as v")
           .groupBy("k").agg("v" -> "sum")
         val spillConf = Seq(
           SQLConf.SHUFFLE_PARTITIONS.key -> "8",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
           "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"65536, $fillRows")
         for {
           wholeStage <- Seq(true, false)

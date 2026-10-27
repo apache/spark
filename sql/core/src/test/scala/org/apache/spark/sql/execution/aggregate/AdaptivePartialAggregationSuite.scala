@@ -1310,7 +1310,9 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // input is passed through. With the two-level map on the codegen path, the fast map absorbs
     // keys 0-3, so each forced spill waits for the next row that needs the regular map, and the
     // third epoch starts at id 84 instead. The exact count also pins that the check row restarts
-    // with the epoch.
+    // with the epoch. `minCompactionToSpill` is pinned to 1.5 so the count does not rest on a tie:
+    // in the two-level codegen cell, the window when id 84 finds the map full holds 8 rows over 4
+    // keys, exactly the default 2.0.
     for {
       wholeStage <- Seq(true, false)
       twoLevelMap <- Seq(true, false)
@@ -1322,6 +1324,7 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
           SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
           SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "8",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key -> "1.5",
           "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"$fastCap, 40") ++
           fixedPlanConfs): _*) {
         val df = () => spark.range(0, 400, 1, 1)
@@ -1379,10 +1382,11 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
     // map fills at 50 aggregated rows, i.e. a compaction ratio of exactly 1.25: demanding 1.25 the
     // aggregation is kept (`50 < 40 * 1.25` is false), demanding 1.3 it is bypassed. The spill
     // check demands the larger of `minCompaction` and `minCompactionToSpill`, so either one can
-    // set the boundary.
+    // set the boundary, from either side.
     Seq(
       (1.0, 1.25, false),
       (1.0, 1.3, true),
+      (1.25, 1.0, false),
       (1.3, 1.0, true)
     ).foreach { case (minCompaction, minCompactionToSpill, shouldBypass) =>
       val passedThroughPerCodegen = Seq(true, false).map { wholeStage =>
@@ -1415,6 +1419,42 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           s"expected bypass=$shouldBypass at the ratio boundary")
         assert(passedThroughPerCodegen.map(_ > 0).distinct.length == 1,
           "codegen and interpreted paths must reach the same decision at the boundary")
+      }
+    }
+  }
+
+  test("the spill check judges the recent rows at their exact ratio boundary") {
+    // With `minRows = 10`, ids 0-9 add 9 keys and ids 10-29 add 10 more, two rows each, so when
+    // the forced fallback fills the map at 30 rows, the rows since the check before last (at 10
+    // rows) are 20 rows over 10 keys, a ratio of exactly 2.0, while the whole epoch compacts by
+    // only 30 / 19. Demanding 2.0 the aggregation is kept (`20 < 10 * 2.0` is false) and the map
+    // spills; demanding 2.1 the last 10 rows are passed through. A check over the whole epoch
+    // would pass them through at both.
+    for {
+      (minCompactionToSpill, passedThrough) <- Seq(2.0 -> 0, 2.1 -> 10)
+      wholeStage <- Seq(true, false)
+    } {
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "10",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key ->
+            minCompactionToSpill.toString,
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 30") ++
+          fixedPlanConfs): _*) {
+        val df = () => spark.range(0, 40, 1, 1)
+          .select(when($"id" < 9, $"id").when($"id" === 9, 0L)
+            .otherwise(($"id" - 10) / 2 + 9).cast("long").cast("string") as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s")
+        withClue(s"minCompactionToSpill=$minCompactionToSpill wholeStage=$wholeStage") {
+          val c = runAndReadCounters(df)
+          assert(c.passedThrough == passedThrough)
+          assert((c.tasksFallBacked > 0) == (passedThrough == 0),
+            "the map spills exactly when the spill check keeps aggregating")
+        }
       }
     }
   }

@@ -259,12 +259,12 @@ case class HashAggregateExec(
   // keeps both sides of the ratio on the same epoch. Once the fast map fills it stops accepting
   // keys, so the difference settles at zero and the ratio is the regular map's alone.
   private var adaptiveFastKeysAtSpillTerm: String = _
-  // The epoch's processed rows and keys at its last periodic check, and at the check before that,
-  // where the window of recent rows that the spill check judges starts (see
-  // `adaptiveIneffective`).
-  private var adaptiveCheckRowsTerm: String = _
+  // The epoch's key count at its last periodic check, and at the check before that, where the
+  // window of recent rows that the spill check judges starts (see `adaptiveIneffective`). The
+  // checks run at multiples of `minRows`, and the next check row advances only past a check that
+  // keeps aggregating, so the window starts `2 * minRows` rows before the next check row, or at
+  // the epoch start before the second check.
   private var adaptiveCheckKeysTerm: String = _
-  private var adaptiveWindowRowsTerm: String = _
   private var adaptiveWindowKeysTerm: String = _
   // The name of the generated output function, promoted to a field so `doConsumeWithKeys` can emit
   // pass-through rows directly from within the build loop.
@@ -588,9 +588,7 @@ case class HashAggregateExec(
         ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "adaptiveMapSetupDone")
       adaptiveFastKeysAtSpillTerm =
         ctx.addMutableState(CodeGenerator.JAVA_INT, "adaptiveFastKeysAtSpill")
-      adaptiveCheckRowsTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveCheckRows")
       adaptiveCheckKeysTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveCheckKeys")
-      adaptiveWindowRowsTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveWindowRows")
       adaptiveWindowKeysTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveWindowKeys")
       adaptivePendingRowsTerm = ctx.addMutableState(
         "java.util.LinkedList<UnsafeRow[]>", "adaptivePendingRows",
@@ -1078,13 +1076,12 @@ case class HashAggregateExec(
              |$processedRowsTerm = 0L;
              |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
              |$snapshotFastKeys
-             |$adaptiveCheckRowsTerm = 0L;
              |$adaptiveCheckKeysTerm = 0L;
-             |$adaptiveWindowRowsTerm = 0L;
              |$adaptiveWindowKeysTerm = 0L;
            """.stripMargin
+        val windowRows = s"Math.max(0L, $adaptiveNextCheckRowTerm - ${2 * adaptiveMinRows}L)"
         val recentIneffective = adaptiveIneffective(
-          s"($processedRowsTerm - $adaptiveWindowRowsTerm)",
+          s"($processedRowsTerm - $windowRows)",
           s"($adaptiveEpochKeys - $adaptiveWindowKeysTerm)",
           adaptiveMinCompactionToSpill)
         // The spill check needs at least one processed row even when `minRows = 0`.
@@ -1185,9 +1182,7 @@ case class HashAggregateExec(
            |        $adaptivePassThroughTerm = true;
            |      } else {
            |        $adaptiveNextCheckRowTerm += ${adaptiveMinRows}L;
-           |        $adaptiveWindowRowsTerm = $adaptiveCheckRowsTerm;
            |        $adaptiveWindowKeysTerm = $adaptiveCheckKeysTerm;
-           |        $adaptiveCheckRowsTerm = $processedRowsTerm;
            |        $adaptiveCheckKeysTerm = $adaptiveEpochKeys;
            |      }
            |    }

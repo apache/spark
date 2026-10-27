@@ -230,12 +230,14 @@ class TungstenAggregationIterator(
       // The spill check waits for `minRows` rows of the current epoch, and for at least one row
       // when `minRows = 0`.
       val spillCheckMinRows = math.max(minRows, 1L)
-      // The epoch's processed rows and keys at its last periodic check, and at the check before
-      // that, where the window of recent rows that the spill check judges starts.
-      var checkRows = 0L
+      // The epoch's key count at its last periodic check, and at the check before that, where the
+      // window of recent rows that the spill check judges starts. The checks run at multiples of
+      // `minRows`, and `nextCheckRow` advances only past a check that keeps aggregating, so the
+      // window starts `2 * minRows` rows before `nextCheckRow`, or at the epoch start before the
+      // second check.
       var checkKeys = 0L
-      var windowRows = 0L
       var windowKeys = 0L
+      def windowRows: Long = math.max(0L, nextCheckRow - 2 * minRows)
       // Whether `rows` processed rows fail to collapse into `keys` keys by at least `threshold`.
       // There is no fast map on this path, so the map's keys are all the operator holds.
       def ineffective(rows: Long, keys: Long, threshold: Double): Boolean =
@@ -270,9 +272,7 @@ class TungstenAggregationIterator(
             // epoch alone decides whether the remaining rows are passed through.
             processedRows = 0L
             nextCheckRow = minRows
-            checkRows = 0L
             checkKeys = 0L
-            windowRows = 0L
             windowKeys = 0L
             buffer = hashMap.getAggregationBufferFromUnsafeRow(groupingKey)
             if (buffer == null) {
@@ -292,9 +292,7 @@ class TungstenAggregationIterator(
               passThrough = true
             } else {
               nextCheckRow += minRows
-              windowRows = checkRows
               windowKeys = checkKeys
-              checkRows = processedRows
               checkKeys = hashMap.getNumKeys()
             }
           }

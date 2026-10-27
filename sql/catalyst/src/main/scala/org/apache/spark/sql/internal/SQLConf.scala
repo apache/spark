@@ -4672,8 +4672,12 @@ object SQLConf {
       .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
         s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The ratio is also " +
         "evaluated when the aggregation map is about to spill, but only once the current map " +
-        "has processed at least this many rows. Setting this to 0 disables the periodic " +
-        "evaluation, leaving only the evaluation when the map is about to spill.")
+        "has processed at least this many rows, and over the rows since the periodic " +
+        "evaluation before last, so this also sets how many recent rows that evaluation " +
+        "measures: at least this many and fewer than twice that, or the whole map epoch when " +
+        "the map fills before its second periodic evaluation. Setting this to 0 disables the " +
+        "periodic evaluation, leaving only the evaluation when the map is about to spill, " +
+        "which then measures all rows and keys of the current map epoch.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -4704,9 +4708,12 @@ object SQLConf {
         s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Keeping the aggregation then means " +
         "aggregating the rest of the input through spills, which pays off only if that input " +
         "keeps repeating keys, so this evaluation measures the recent rows: those processed " +
-        "since the periodic evaluation before last, against the keys they added. When keys " +
-        "repeat across the input, that ratio climbs as the map fills. When it is below the " +
-        "larger of this value and " +
+        "since the periodic evaluation before last, against the keys they added, or the whole " +
+        "map epoch before the map's second periodic evaluation. When keys repeat across the " +
+        "input, that ratio climbs as the map fills; with keys spread evenly over the task it " +
+        "reflects how much of the task's distinct keys the map holds rather than how often " +
+        "each key repeats, so at the default the aggregation is kept only when the map holds " +
+        "about half of them or more. When the ratio is below the larger of this value and " +
         s"'${ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key}', the map is not spilled and the " +
         "rest of the input is passed through. Like the periodic evaluation, it only runs once " +
         "the current map has processed " +
