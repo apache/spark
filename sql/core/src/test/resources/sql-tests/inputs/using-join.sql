@@ -105,3 +105,10 @@ SELECT nt2.* FROM (nt1 left outer join nt2 using (k)) join nt2 x on x.v2 = 1;
 
 -- Same, with the hidden nt2.k in the join condition
 SELECT nt2.k, x.k FROM (nt1 left outer join nt2 using (k)) join nt2 x on nt2.k = x.k;
+
+-- A top-level join without a SELECT, with the hidden nt2.k in the join condition
+FROM nt1 JOIN nt2 USING (k) JOIN nt2 x ON nt2.k = x.k;
+
+-- The same join with a correlated scalar subquery in the condition, which a Join cannot host
+FROM nt1 JOIN nt2 USING (k) JOIN nt2 x
+  ON nt2.k = x.k AND x.v2 = (SELECT max(y.v2) FROM nt2 y WHERE y.k = x.k);

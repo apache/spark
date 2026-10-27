@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.catalyst.analysis.resolver
 
-import java.util.HashSet
+import java.util.{HashMap, HashSet}
 
 import org.apache.spark.sql.catalyst.analysis.NaturalAndUsingJoinResolution
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, ExprId, NamedExpression}
@@ -259,6 +259,12 @@ class JoinResolver(
       rightNameScope = rightNameScope
     )
 
+    val conditionReferencedAttributes = if (partiallyResolvedJoin.condition.isDefined) {
+      expressionResolver.getLastReferencedAttributes
+    } else {
+      new HashMap[ExprId, Attribute]
+    }
+
     val newOutput = Join.computeOutput(
       joinType = partiallyResolvedJoin.joinType,
       leftOutput = leftNameScope.output,
@@ -275,12 +281,45 @@ class JoinResolver(
       hiddenOutput = Some(newHiddenOutput)
     )
 
-    val resolvedJoin = partiallyResolvedJoin.copy(condition = resolvedCondition)
+    val resolvedJoin = retainTopLevelJoinOutput(
+      unresolvedJoin = unresolvedJoin,
+      resolvedJoin = partiallyResolvedJoin.copy(condition = resolvedCondition),
+      conditionReferencedAttributes = conditionReferencedAttributes
+    )
 
     cteRegistry.currentScope.tryPutWithCTE(
       unresolvedOperator = unresolvedJoin,
       resolvedOperator = resolvedJoin
     )
+  }
+
+  /**
+   * Wraps a top-level [[Join]] in a [[Project]] with the join's output when its condition
+   * references a column found only in the hidden output, such as the hidden key of a USING join
+   * below, which is added to a child's output. For example:
+   *
+   * {{{
+   * FROM nt1 JOIN nt2 USING (k) JOIN nt2 x ON nt2.k = x.k
+   *
+   * Project [k#1, v1#2, v2#3, k#5, v2#6]
+   * +- Join Inner, (k#4 = k#5)
+   *    :- Project [k#1, v1#2, v2#3, k#4]
+   *    :  +- Join Inner, (k#1 = k#4)
+   *    +- ...
+   * }}}
+   */
+  private def retainTopLevelJoinOutput(
+      unresolvedJoin: Join,
+      resolvedJoin: Join,
+      conditionReferencedAttributes: HashMap[ExprId, Attribute]): LogicalPlan = {
+    def referencesHiddenOutput: Boolean =
+      scopes.current.resolveMissingAttributesByHiddenOutput(conditionReferencedAttributes).nonEmpty
+    if (unresolvedJoin.containsTag(ResolverTag.TOP_LEVEL_OPERATOR) && referencesHiddenOutput) {
+      operatorResolutionContextStack.current.baseOperator = Some(resolvedJoin)
+      Project(scopes.current.output, resolvedJoin)
+    } else {
+      resolvedJoin
+    }
   }
 
   /**

@@ -911,3 +911,52 @@ Project [k#x, k#x]
                +- Project [k#x, v2#x]
                   +- SubqueryAlias nt2
                      +- LocalRelation [k#x, v2#x]
+
+
+-- !query
+FROM nt1 JOIN nt2 USING (k) JOIN nt2 x ON nt2.k = x.k
+-- !query analysis
+Project [k#x, v1#x, v2#x, k#x, v2#x]
++- Join Inner, (k#x = k#x)
+   :- Project [k#x, v1#x, v2#x, k#x]
+   :  +- Join Inner, (k#x = k#x)
+   :     :- SubqueryAlias nt1
+   :     :  +- View (`nt1`, [k#x, v1#x])
+   :     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]
+   :     :        +- Project [k#x, v1#x]
+   :     :           +- SubqueryAlias nt1
+   :     :              +- LocalRelation [k#x, v1#x]
+   :     +- SubqueryAlias nt2
+   :        +- View (`nt2`, [k#x, v2#x])
+   :           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+   :              +- Project [k#x, v2#x]
+   :                 +- SubqueryAlias nt2
+   :                    +- LocalRelation [k#x, v2#x]
+   +- SubqueryAlias x
+      +- SubqueryAlias nt2
+         +- View (`nt2`, [k#x, v2#x])
+            +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]
+               +- Project [k#x, v2#x]
+                  +- SubqueryAlias nt2
+                     +- LocalRelation [k#x, v2#x]
+
+
+-- !query
+FROM nt1 JOIN nt2 USING (k) JOIN nt2 x
+  ON nt2.k = x.k AND x.v2 = (SELECT max(y.v2) FROM nt2 y WHERE y.k = x.k)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "treeNode" : "Join Inner, ((k#x = k#x) AND (v2#x = scalar-subquery#x [k#x]))\n:  +- Aggregate [max(v2#x) AS max(v2)#x]\n:     +- Filter (k#x = outer(k#x))\n:        +- SubqueryAlias y\n:           +- SubqueryAlias nt2\n:              +- View (`nt2`, [k#x, v2#x])\n:                 +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]\n:                    +- Project [k#x, v2#x]\n:                       +- SubqueryAlias nt2\n:                          +- LocalRelation [k#x, v2#x]\n:- Project [k#x, v1#x, v2#x, k#x]\n:  +- Join Inner, (k#x = k#x)\n:     :- SubqueryAlias nt1\n:     :  +- View (`nt1`, [k#x, v1#x])\n:     :     +- Project [cast(k#x as string) AS k#x, cast(v1#x as int) AS v1#x]\n:     :        +- Project [k#x, v1#x]\n:     :           +- SubqueryAlias nt1\n:     :              +- LocalRelation [k#x, v1#x]\n:     +- SubqueryAlias nt2\n:        +- View (`nt2`, [k#x, v2#x])\n:           +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]\n:              +- Project [k#x, v2#x]\n:                 +- SubqueryAlias nt2\n:                    +- LocalRelation [k#x, v2#x]\n+- SubqueryAlias x\n   +- SubqueryAlias nt2\n      +- View (`nt2`, [k#x, v2#x])\n         +- Project [cast(k#x as string) AS k#x, cast(v2#x as int) AS v2#x]\n            +- Project [k#x, v2#x]\n               +- SubqueryAlias nt2\n                  +- LocalRelation [k#x, v2#x]\n"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 112,
+    "fragment" : "JOIN nt2 x\n  ON nt2.k = x.k AND x.v2 = (SELECT max(y.v2) FROM nt2 y WHERE y.k = x.k)"
+  } ]
+}
