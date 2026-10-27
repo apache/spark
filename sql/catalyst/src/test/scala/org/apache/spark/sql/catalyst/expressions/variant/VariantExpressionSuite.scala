@@ -1391,7 +1391,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       "1.2300" -> "1.23",
       """{"a":1,"b":2}""" -> """{"a":1,"b":2}""",
       """{"b":2,"a":1}""" -> """{"a":1,"b":2}""",
+      // scalastyle:off nonascii
       "{\"\u00e9\":1,\"e\":2}" -> "{\"e\":2,\"\u00e9\":1}",
+      // scalastyle:on nonascii
       """{"b":[{"d":2.00,"c":1.0},null],"a":[3.00,2,1]}""" ->
         """{"a":[3,2,1],"b":[{"c":1,"d":2},null]}""")
 

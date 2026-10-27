@@ -173,6 +173,28 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
+  test("isCanonical rejects a metadata last offset past the available string bytes") {
+    val value = obj(Seq(0 -> integer(1)))
+    val validMetadata = dictionary("ab")
+    assert(VariantBuilder.isCanonical(new Variant(value, validMetadata)))
+
+    Seq(1, 2).foreach { missingBytes =>
+      val truncatedMetadata = validMetadata.dropRight(missingBytes)
+      assert(!VariantBuilder.isCanonical(new Variant(value, truncatedMetadata)))
+    }
+  }
+
+  test("isCanonical rejects decreasing or out-of-bounds dictionary offsets") {
+    val value = obj(Seq(0 -> integer(1), 1 -> integer(2), 2 -> integer(3)))
+    assert(VariantBuilder.isCanonical(new Variant(value, dictionary("a", "b", "c"))))
+
+    val decreasingOffsets = bytes(VERSION, 3, 0, 2, 1, 3) ++ utf8("abc")
+    val outOfBoundsOffset = bytes(VERSION, 3, 0, 4, 2, 3) ++ utf8("abc")
+    Seq(decreasingOffsets, outOfBoundsOffset).foreach { invalidMetadata =>
+      assert(!VariantBuilder.isCanonical(new Variant(value, invalidMetadata)))
+    }
+  }
+
   test("getMetadataKey rejects a dictionary size whose string start overflows an int") {
     val forged = Array(metadataHeader(4)) ++ littleEndian(BigInt(Int.MaxValue - 1), 4) ++
       littleEndian(BigInt(0), 4) ++ littleEndian(BigInt(1), 4) ++ utf8("a")
@@ -214,6 +236,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.canonicalize(repeatedId) }
   }
 
+  // scalastyle:off nonascii
   test("dictionary and fields use unsigned UTF-8 rather than UTF-16 ordering") {
     val bmpKey = utf8("\ue000")
     val supplementaryKey = utf8("\ud800\udc00")
@@ -232,6 +255,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       obj(Seq(0 -> integer(1), 1 -> integer(2), 2 -> integer(3))),
       dictionary("cafe", "caf\u00e9", "\u4f60"))
   }
+  // scalastyle:on nonascii
 
   test("all independent metadata ID offset and count widths converge") {
     val fields = Seq(0 -> trueValue, 1 -> integer(258, INT2, 2), 2 -> nullValue)
@@ -433,6 +457,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     }
   }
 
+  // scalastyle:off nonascii
   test("strings choose headers by UTF-8 byte length and preserve valid bytes") {
     Seq("", "a", "a" * 63, "a" * 64, "\u00e9" * 31 + "a", "\u00e9" * 32,
       "\ud800\udc00", "prefix\u0000suffix", "caf\u00e9", "\u20ac",
@@ -486,6 +511,7 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.canonicalize(duplicate) }
     checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.doCanonicalize(duplicate) }
   }
+  // scalastyle:on nonascii
 
   test("nested objects arrays and views retain only keys used by the selected value") {
     val parent = VariantBuilder.parseJson(
@@ -559,8 +585,10 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
   }
 
   test("ordinary appendVariant preserves existing dictionary entries and field write order") {
+    // scalastyle:off nonascii
     val bmpKey = utf8("\ue000")
     val supplementaryKey = utf8("\ud800\udc00")
+    // scalastyle:on nonascii
     val firstScalar = integer(1, INT8, 8)
     val secondScalar = integer(2, INT8, 8)
     val sourceValue = obj(Seq(0 -> firstScalar, 1 -> secondScalar))
@@ -656,6 +684,54 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
     assertBytes(actual.metadata, expected.metadata, s"$label metadata")
   }
 
+  private def randomizeBinaryEncoding(input: Variant, rand: Random): Variant = {
+    def randomWidth(maxValue: Int): Int = {
+      val minimumWidth = (1 to 4).find(width => maxValue.toLong < (1L << (8 * width))).get
+      minimumWidth + rand.nextInt(5 - minimumWidth)
+    }
+
+    val numKeys = getMetadataNumKeys(input.metadata, getMetadataOffsetSize(input.metadata))
+    val sourceKeys = (0 until numKeys).map(index => getMetadataKey(input.metadata, index))
+    val unusedKeys = Seq.tabulate(rand.nextInt(4))(index => s"unused_$index")
+    val keys = rand.shuffle((sourceKeys ++ unusedKeys).distinct)
+    val keyIds = keys.zipWithIndex.toMap
+
+    def encode(current: Variant): Array[Byte] = current.getType match {
+      case Type.OBJECT =>
+        val fields = (0 until current.objectSize()).map { index =>
+          val field = current.getFieldAtIndex(index)
+          keyIds(field.key) -> encode(field.value)
+        }
+        obj(fields,
+          idSize = randomWidth(fields.map(_._1).maxOption.getOrElse(0)),
+          offsetSize = randomWidth(fields.map(_._2.length).sum),
+          largeSize = fields.size > U8_MAX || rand.nextBoolean(),
+          physicalOrder = rand.shuffle(fields.indices.toVector))
+      case Type.ARRAY =>
+        val elements = (0 until current.arraySize()).map { index =>
+          encode(current.getElementAtIndex(index))
+        }
+        array(elements, randomWidth(elements.map(_.length).sum),
+          largeSize = elements.size > U8_MAX || rand.nextBoolean())
+      case Type.LONG =>
+        val number = current.getLong
+        val encodings = Seq(INT1 -> 1, INT2 -> 2, INT4 -> 4, INT8 -> 8).filter {
+          case (_, width) => BigInt(number).bitLength < 8 * width
+        }
+        val (typeInfo, width) = encodings(rand.nextInt(encodings.size))
+        integer(number, typeInfo, width)
+      case Type.STRING =>
+        val payload = utf8(current.getString)
+        string(payload, longEncoding = payload.length > MAX_SHORT_STR_SIZE || rand.nextBoolean())
+      case _ => current.getValue
+    }
+
+    val value = encode(input)
+    val keyBytes = keys.map(utf8)
+    val offsetSize = randomWidth(math.max(keys.size, keyBytes.map(_.length).sum))
+    new Variant(value, metadata(keyBytes, offsetSize))
+  }
+
   test("fuzz: equivalent random encodings canonicalize to the same bytes") {
     import VariantCanonicalizeSuite.{generate, render}
     (0 until 300).foreach { iteration =>
@@ -680,6 +756,24 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       }
     }
   }
+
+  test("fuzz: binary widths dictionaries and payload layouts canonicalize to the same bytes") {
+    import VariantCanonicalizeSuite.{generate, render}
+    (0 until 300).foreach { iteration =>
+      val seed = 0xB1A4EEL + iteration
+      val rand = new Random(seed)
+      val tree = generate(rand, 2 + rand.nextInt(4))
+      val source = VariantBuilder.parseJson(render(tree, rand), false)
+      val canonical = VariantBuilder.canonicalize(source)
+      (0 until 3).foreach { encodingIndex =>
+        withClue(s"seed=$seed encoding=$encodingIndex: ") {
+          val input = randomizeBinaryEncoding(source, rand)
+          assert(isValidVariant(input.value, input.metadata))
+          check(input, canonical.value, canonical.metadata)
+        }
+      }
+    }
+  }
 }
 
 // Random values for the fuzz test. Each value is rendered to JSON twice, with object fields
@@ -690,9 +784,11 @@ object VariantCanonicalizeSuite {
   private case class FuzzArray(elements: Seq[FuzzValue]) extends FuzzValue
   private case class FuzzScalar(spellings: Seq[String]) extends FuzzValue
 
+  // scalastyle:off nonascii
   private val fuzzKeys = Seq("", "a", "b", "z", "key", "\u00e9", "\ue000", "\ud800\udc00")
   private val fuzzStrings =
     Seq("", "x", "hello", "y" * 70, "\u00e9t\u00e9", "\ud800\udc00" * 20)
+  // scalastyle:on nonascii
 
   private def generate(rand: Random, depth: Int): FuzzValue = {
     if (depth <= 0) {

@@ -222,7 +222,7 @@ public class VariantBuilder {
   // non-canonical encoding, including invalid UTF-8 in keys or strings. Malformed bytes also
   // return false so that the rebuild decides whether they fail, but an unreadable header may
   // still throw. Returning false does not establish validity.
-  public static boolean isCanonical(Variant v) {
+  static boolean isCanonical(Variant v) {
     if (v.pos != 0) {
       return false;
     }
@@ -629,6 +629,7 @@ public class VariantBuilder {
               keys[fieldIndex] = getMetadataKey(metadata, keyId);
               newIds[fieldIndex] = addKey(keys[fieldIndex]);
             }
+            // Write values in key order; finishWritingObject only sorts the header entries.
             // `buildCanonicalized` adds the keys in sorted order, so new IDs follow key order.
             Arrays.sort(fieldOrder, (left, right) -> Integer.compare(newIds[left], newIds[right]));
           }
