@@ -6999,4 +6999,76 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase with 
     }
   }
 
+  test("SPARK-58988: v2 bucketed table with subset join keys joining v1 table") {
+    // The v2 table is partitioned by an extra identity key `dt` plus `bucket(16, c1)`, while the
+    // join is only on `c1`. allowJoinKeysSubsetOfPartitionKeys lets the join key `c1` be a subset
+    // of the partition keys `[dt, bucket(16, c1)]`, so EnsureRequirements projects the keyed side
+    // to `[bucket(16, c1)]`. v2BucketingShuffleEnabled then re-shuffles only the v1 side using that
+    // projected KeyedPartitioning. The v2 side's keys are sorted by GroupPartitionsExec, while the
+    // keys re-used for the v1 side kept their first-occurrence order from createShuffleSpec.
+    val cols = Array(
+      Column.create("c1", LongType),
+      Column.create("c2", StringType),
+      Column.create("dt", StringType))
+    val partitions = Array(identity("dt"), bucket(16, "c1"))
+
+    createTable("iceberg_t2", cols, partitions)
+    sql("INSERT INTO testcat.ns.iceberg_t2 VALUES (2, 'cc', '2020'), (1, 'aa', '2021')")
+
+    withTable("t1") {
+      sql("CREATE TABLE t1 (c1 BIGINT, c2 STRING) USING parquet")
+      sql("INSERT INTO t1 VALUES (1, 'aa'), (2, 'cc')")
+
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        val df = sql("SELECT * FROM testcat.ns.iceberg_t2 t0 JOIN t1 ON t0.c1 = t1.c1")
+        val plan = df.queryExecution.executedPlan
+        // Only the v1 side is re-shuffled; the v2 side is regrouped onto the join key instead.
+        assert(collectShuffles(plan).length == 1)
+        assert(collectGroupPartitions(plan).length == 1)
+        checkAnswer(df, Seq(
+          Row(1L, "aa", "2021", 1L, "aa"),
+          Row(2L, "cc", "2020", 2L, "cc")))
+      }
+    }
+  }
+
+
+  test("SPARK-58988: one-side shuffle onto subset join keys whose projected keys are unsorted") {
+    // `sa` is partitioned by (store, dept) and joined on dept only. Projected onto dept, its keys
+    // come out as 20, 10. `sb` is re-shuffled onto that projected spec, and `ShuffleExchangeExec`
+    // routes it by the sorted keys. With AQE, the join is planned again over the materialized
+    // shuffle, and the `GroupPartitionsExec` planned there reads its partitions in the declared
+    // order. Both joins returned wrong rows with AQE on before the declared keys were sorted.
+    val cols = Array(
+      Column.create("store", IntegerType),
+      Column.create("dept", IntegerType),
+      Column.create("data", StringType))
+    createTable("sa", cols, Array(identity("store"), identity("dept")))
+    sql("INSERT INTO testcat.ns.sa VALUES (1, 20, 'a1'), (2, 10, 'a2')")
+    createTable("sb", cols, Array.empty)
+    sql("INSERT INTO testcat.ns.sb VALUES (0, 10, 'b10'), (0, 20, 'b20')")
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+          SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+          SQLConf.V2_BUCKETING_ALLOW_JOIN_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true",
+          SQLConf.REQUIRE_ALL_CLUSTER_KEYS_FOR_CO_PARTITION.key -> "false") {
+        Seq("JOIN", "LEFT JOIN").foreach { joinType =>
+          // Selecting `sa.store` keeps `sa`'s keyed partitioning from being pruned away.
+          val df = sql(
+            s"""
+               |SELECT /*+ MERGE(sa, sb) */ sa.dept, sa.data, sb.data, sa.store
+               |FROM testcat.ns.sa $joinType testcat.ns.sb ON sa.dept = sb.dept
+               |""".stripMargin)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).length == 1,
+            s"only sb should be shuffled for $joinType")
+          checkAnswer(df, Seq(Row(10, "a2", "b10", 2), Row(20, "a1", "b20", 1)))
+        }
+      }
+    }
+  }
 }
