@@ -356,36 +356,30 @@ class AsyncProgressTrackingMicroBatchExecution(
   }
 
   override protected def runActivatedStream(sparkSessionForStream: SparkSession): Unit = {
-    val executionError = try {
+    var executionError: Throwable = null
+    try {
       super.runActivatedStream(sparkSessionForStream)
-      None
     } catch {
       case e: Throwable =>
-        Some(getAsyncOperationFailure(
+        executionError = getAsyncOperationFailure(
           thrownError = e,
           isInterruption = StreamExecution.isInterruptionException(
             e, sparkSession.sparkContext),
           interruptingError = Option(interruptingAsyncError.get()),
-          notifierError = errorNotifier.getError()).getOrElse(e))
-    }
-    val commitError = try {
-      queryExecutionThread.runUninterruptibly {
-        stopAsyncWrites()
-        commitAllSources()
+          notifierError = errorNotifier.getError()).getOrElse(e)
+        throw executionError
+    } finally {
+      try {
+        queryExecutionThread.runUninterruptibly {
+          stopAsyncWrites()
+          commitAllSources()
+        }
+      } catch {
+        case commitError: Throwable if executionError != null &&
+            !isInterruptedByStop(executionError, sparkSession.sparkContext) =>
+          executionError.addSuppressed(commitError)
       }
-      None
-    } catch {
-      case e: Throwable => Some(e)
     }
-    val isStoppedByUser = state.get == TERMINATED &&
-      executionError.exists(StreamExecution.isInterruptionException(_, sparkSession.sparkContext))
-    val error = (executionError, commitError) match {
-      case (Some(e), Some(commitFailure)) if !isStoppedByUser =>
-        e.addSuppressed(commitFailure)
-        Some(e)
-      case _ => commitError.orElse(executionError)
-    }
-    error.foreach(e => throw e)
   }
 
   // need to look at the number of files on disk

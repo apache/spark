@@ -554,7 +554,7 @@ abstract class StreamExecution(
     }
   }
 
-  private def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
+  protected def isInterruptedByStop(e: Throwable, sc: SparkContext): Boolean = {
     if (state.get == TERMINATED) {
       StreamExecution.isInterruptionException(e, sc)
     } else {
