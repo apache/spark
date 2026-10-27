@@ -8198,6 +8198,12 @@
     },
     "sqlState" : "42601"
   },
+  "TABLE_DATABASE_NOT_SPECIFIED" : {
+    "message" : [
+      "Table <identifier> did not specify database."
+    ],
+    "sqlState" : "42601"
+  },
   "TABLE_LOCATION_URI_NOT_SPECIFIED" : {
     "message" : [
       "Table <identifier> did not specify locationUri."
@@ -10428,11 +10434,6 @@
   "_LEGACY_ERROR_TEMP_1072" : {
     "message" : [
       "Only the tables/views belong to the same database can be retrieved. Querying tables/views are <qualifiedTableNames>."
-    ]
-  },
-  "_LEGACY_ERROR_TEMP_1080" : {
-    "message" : [
-      "Table <identifier> did not specify database."
     ]
   },
   "_LEGACY_ERROR_TEMP_1082" : {
