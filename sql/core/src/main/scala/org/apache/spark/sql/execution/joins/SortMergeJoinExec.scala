@@ -458,6 +458,56 @@ case class SortMergeJoinExec(
   }
 
   /**
+   * Like [[createStreamedVars]] but stores extracted column values in class-level mutable fields
+   * instead of local variables. This allows the extraction code to be split across helper methods
+   * via [[CodegenContext.splitExpressions]], avoiding the HotSpot 8K JIT limit on wide schemas.
+   *
+   * Returns (exprCodes, extractionCode) where exprCodes reference the class fields and
+   * extractionCode is the (possibly split) code that populates them from `streamedRow`.
+   * No separate variable declarations are needed since the fields are class members.
+   */
+  private def createStreamedVarsAsFields(
+      ctx: CodegenContext,
+      streamedRow: String): (Seq[ExprCode], String) = {
+    ctx.INPUT_ROW = streamedRow
+    val varsAndCode = streamedPlan.output.zipWithIndex.map { case (a, i) =>
+      val valueCode = CodeGenerator.getValue(streamedRow, a.dataType, i.toString)
+      val javaType = CodeGenerator.javaType(a.dataType)
+      val defaultValue = CodeGenerator.defaultValue(a.dataType)
+      val value = ctx.addMutableState(javaType, "streamVar",
+        v => s"$v = $defaultValue;", forceInline = true)
+      if (a.nullable) {
+        val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "streamVarIsNull",
+          v => s"$v = false;", forceInline = true)
+        val extractCode =
+          s"""
+             |$isNull = $streamedRow.isNullAt($i);
+             |$value = $isNull ? $defaultValue : ($valueCode);
+           """.stripMargin
+        val exprCode = ExprCode(
+          code"",
+          JavaCode.isNullVariable(isNull),
+          JavaCode.variable(value, a.dataType))
+        (exprCode, extractCode)
+      } else {
+        val extractCode = s"$value = $valueCode;"
+        val exprCode = ExprCode(code"", FalseLiteral, JavaCode.variable(value, a.dataType))
+        (exprCode, extractCode)
+      }
+    }
+
+    val (exprCodes, extractionSnippets) = varsAndCode.unzip
+    // streamedRow is already a class-level mutable state field (from genScanner), so the
+    // extraction code can reference it directly -- no need to pass it as a parameter.
+    val splitCode = ctx.splitExpressions(
+      expressions = extractionSnippets,
+      funcName = "extractStreamVars",
+      arguments = Seq.empty)
+
+    (exprCodes, splitCode)
+  }
+
+  /**
    * Splits variables based on whether it's used by condition or not, returns the code to create
    * these variables before the condition and after the condition.
    *
@@ -498,10 +548,15 @@ case class SortMergeJoinExec(
     val (findNextJoinRowsFuncName, streamedRow, matches) = genScanner(ctx)
 
     // Create variables for row from both sides.
-    val (streamedVars, streamedVarDecl) = createStreamedVars(ctx, streamedRow)
+    // Use field-based storage for both sides so extraction code can be split into helper
+    // methods by splitExpressions, keeping processNext() under the 8K JIT limit.
+    val (streamedVars, streamedExtract) = createStreamedVarsAsFields(ctx, streamedRow)
     val bufferedRow = ctx.freshName("bufferedRow")
     val setDefaultValue = joinType == LeftOuter || joinType == RightOuter
-    val bufferedVars = genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue)
+    // Use field-based storage for buffered-side vars so the extraction code can be split
+    // into helper methods by splitExpressions, keeping processNext() under the 8K JIT limit.
+    val (bufferedVars, bufferedExtract) =
+      genOneSideJoinVarsAsFields(ctx, bufferedRow, bufferedPlan, setDefaultValue)
 
     // Create variable name for Existence join.
     val existsVar = joinType match {
@@ -550,20 +605,26 @@ case class SortMergeJoinExec(
     val (streamedBeforeLoop, condCheck, loadStreamed) = if (conditionForCodegen.isDefined) {
       // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")
+      // With field-based streamed vars, extraction is handled by streamedExtract (pre-split
+      // into helper methods). splitVarsByCondition returns empty strings since .code is empty.
       val (streamedBefore, streamedAfter) = splitVarsByCondition(streamedOutput, streamedVars)
       val (bufferedBefore, bufferedAfter) = splitVarsByCondition(bufferedOutput, bufferedVars)
       // Generate code for condition
       ctx.currentVars = streamedVars ++ bufferedVars
       val cond = BindReferences.bindReference(
         conditionForCodegen.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
-      // Evaluate the columns those used by condition before loop
+      // Evaluate streamed-side columns before loop using field-based extraction.
       val before = joinType match {
         case LeftAnti =>
           // No need to initialize `loaded` variable for Left Anti join.
-          streamedBefore.trim
+          s"""
+             |$streamedExtract
+             |$streamedBefore
+           """.stripMargin.trim
         case _ =>
           s"""
              |boolean $loaded = false;
+             |$streamedExtract
              |$streamedBefore
          """.stripMargin
       }
@@ -591,6 +652,7 @@ case class SortMergeJoinExec(
 
       val checking =
         s"""
+           |$bufferedExtract
            |$bufferedBefore
            |if ($bufferedRow != null) {
            |  ${cond.code}
@@ -603,14 +665,13 @@ case class SortMergeJoinExec(
          """.stripMargin
       (before, checking.trim, streamedAfter.trim)
     } else {
-      (evaluateVariables(streamedVars), "", "")
+      (streamedExtract, bufferedExtract, "")
     }
 
     val existsVarDecl = existsVar.map(v => s"boolean $v = false;").getOrElse("")
 
     val beforeLoopWithoutGuard =
       s"""
-         |${streamedVarDecl.mkString("\n")}
          |${streamedBeforeLoop.trim}
          |$streamedOnlyPre
          |$existsVarDecl

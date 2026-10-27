@@ -116,4 +116,78 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       }
     }
   }
+
+  /**
+   * Like [[genOneSideJoinVars]] but stores extracted column values in class-level mutable fields
+   * instead of local variables. This allows the extraction code to be split across helper methods
+   * via [[CodegenContext.splitExpressions]], avoiding the HotSpot 8K JIT limit on wide schemas.
+   *
+   * Returns (exprCodes, extractionCode) where exprCodes reference the class fields and
+   * extractionCode is the (possibly split) code that populates them from `row`.
+   */
+  protected def genOneSideJoinVarsAsFields(
+      ctx: CodegenContext,
+      row: String,
+      plan: SparkPlan,
+      setDefaultValue: Boolean): (Seq[ExprCode], String) = {
+    ctx.currentVars = null
+    ctx.INPUT_ROW = row
+    val javaType = CodeGenerator.javaType _
+    val defaultValue: org.apache.spark.sql.types.DataType => String =
+      dt => CodeGenerator.defaultValue(dt)
+
+    val varsAndCode = plan.output.toIndexedSeq.zipWithIndex.map { case (a, i) =>
+      val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+      val value = ctx.addMutableState(javaType(a.dataType), "joinVar",
+        v => s"$v = ${defaultValue(a.dataType)};", forceInline = true)
+      // Outer joins (setDefaultValue=true) need an isNull field even for non-nullable columns,
+      // because the column becomes nullable when there is no match on the other side.
+      val needsIsNull = a.nullable || setDefaultValue
+      if (needsIsNull) {
+        val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "joinVarIsNull",
+          v => s"$v = true;", forceInline = true)
+        val extractCode = if (setDefaultValue) {
+          s"""
+             |$isNull = true;
+             |$value = ${defaultValue(a.dataType)};
+             |if ($row != null) {
+             |  ${ev.code}
+             |  $isNull = ${ev.isNull};
+             |  $value = ${ev.value};
+             |}
+           """.stripMargin
+        } else {
+          s"""
+             |${ev.code}
+             |$isNull = ${ev.isNull};
+             |$value = ${ev.value};
+           """.stripMargin
+        }
+        val exprCode = ExprCode(
+          code"",
+          JavaCode.isNullVariable(isNull),
+          JavaCode.variable(value, a.dataType))
+        (exprCode, extractCode)
+      } else {
+        val extractCode =
+          s"""
+             |${ev.code}
+             |$value = ${ev.value};
+           """.stripMargin
+        val exprCode = ExprCode(code"", FalseLiteral, JavaCode.variable(value, a.dataType))
+        (exprCode, extractCode)
+      }
+    }
+
+    val (exprCodes, extractionSnippets) = varsAndCode.unzip
+
+    // Use splitExpressions to batch extraction code into helper methods when the total
+    // exceeds the JIT threshold. The row parameter makes it accessible inside each method.
+    val splitCode = ctx.splitExpressions(
+      expressions = extractionSnippets,
+      funcName = "extractJoinVars",
+      arguments = Seq(("InternalRow", row)))
+
+    (exprCodes, splitCode)
+  }
 }
