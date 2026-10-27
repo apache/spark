@@ -100,7 +100,10 @@ trait DataSourceV2ScanExecBase
    * and runs a `distinct` over them, and both `outputPartitioning` and `filteredPartitions` ask
    * for it.
    */
-  @transient protected lazy val reportedKeyedPartitioning: Option[KeyedPartitioning] = {
+  @transient protected lazy val reportedKeyedPartitioning: Option[KeyedPartitioning] =
+    computeReportedKeyedPartitioning()
+
+  protected def computeReportedKeyedPartitioning(): Option[KeyedPartitioning] = {
     keyGroupedPartitioning match {
       case Some(exprs) if conf.v2BucketingEnabled && KeyedPartitioning.supportsExpressions(exprs) &&
           inputPartitions.nonEmpty && inputPartitions.forall(_.isInstanceOf[HasPartitionKey]) =>
@@ -117,7 +120,9 @@ trait DataSourceV2ScanExecBase
 
   // A `lazy val` because the planner asks a node for its partitioning many times, and each ask
   // would otherwise re-project the reported keys.
-  @transient override lazy val outputPartitioning: physical.Partitioning =
+  @transient override lazy val outputPartitioning: physical.Partitioning = scanOutputPartitioning
+
+  protected def scanOutputPartitioning: physical.Partitioning =
     reportedKeyedPartitioning match {
       case Some(partitioning) =>
         // A partition key may reference a column that was pruned out of the scan output (see

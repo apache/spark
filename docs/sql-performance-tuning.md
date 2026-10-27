@@ -622,6 +622,60 @@ You can control the details of how AQE works by providing your own cost evaluato
     </tr>
   </table>
 
+## DataSource V2 Scan Task Sizing
+
+DataSource V2 batch scans normally execute one task per connector input partition.
+`spark.sql.sources.v2.scanPartitionPacking.enabled` opts into packing adjacent inputs inside
+eligible scans, independently of whether the connector reports keyed partitioning.
+Packing applies when no consumer uses the scan's partitioning or ordering, including scans below
+exchanges and eligible collect, write and broadcast-join inputs. It runs before partial aggregation.
+Storage-partitioned joins and other consumers of keyed layouts keep their existing grouping.
+An explicit coalesce, union, window or unrecognized operator prevents packing through that operator;
+an exchange below it can still isolate an eligible scan.
+
+When every input reports a non-negative `HasPartitionStatistics.sizeInBytes()`, Spark packs by
+estimated bytes plus an opening cost per input. The suggested minimum count helps retain
+parallelism for small scans. An oversized input remains a separate task: packing cannot divide
+connector inputs. Reported sizes are estimates, so this is not a bound on runtime memory or CPU.
+If any input lacks valid size statistics, Spark leaves the inputs unchanged unless an explicit
+`maxPartitionNum` supplies a count fallback. That fallback balances input counts, not bytes.
+It never overrides the byte limit when all sizes are available.
+
+Packing discards the scan's keyed partitioning and ordering claims. Required local sorts remain
+in the plan. It can reduce useful parallelism and limit AQE skew-join splitting because AQE cannot
+subdivide one map-to-reducer block. The default is off; connectors that already size their inputs
+can retain their existing policy. A standalone scan packed when creating a checkpoint or cache
+also loses these physical properties. Future queries may then need shuffles or sorts that they
+previously avoided. Leave packing disabled when planning such materialization if its keyed
+partitioning or ordering is needed by later queries.
+
+<table class="spark-config">
+  <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
+  <tr>
+    <td><code>spark.sql.sources.v2.scanPartitionPacking.enabled</code></td>
+    <td>false</td><td>Enable packing inside eligible batch V2 scans.</td><td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.v2.scanPartitionPacking.maxPartitionBytes</code></td>
+    <td>128MB</td><td>Maximum estimated bytes per packed task, including opening costs.
+    An individual oversized input remains separate.</td><td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.v2.scanPartitionPacking.openCostInBytes</code></td>
+    <td>4MB</td><td>Estimated opening cost per input, expressed as scanned bytes.</td><td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.v2.scanPartitionPacking.minPartitionNum</code></td>
+    <td>(none)</td><td>Suggested minimum size-packed count. Defaults to
+    <code>spark.sql.leafNodeDefaultParallelism</code>; the count is not guaranteed.</td><td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.sources.v2.scanPartitionPacking.maxPartitionNum</code></td>
+    <td>(none)</td><td>Explicit count cap used only when sizes are missing or invalid.
+    It cannot bound task bytes.</td><td>4.4.0</td>
+  </tr>
+</table>
+
 ## Storage Partition Join
 
 Storage Partition Join (SPJ) is an optimization technique in Spark SQL that makes use of the existing storage layout to avoid the shuffle phase.
@@ -639,29 +693,6 @@ The following SQL properties enable Storage Partition Join in different join que
         When true, try to eliminate shuffle by using the partitioning reported by a compatible V2 data source.
       </td>
       <td>3.3.0</td>
-    </tr>
-    <tr>
-      <td><code>spark.sql.sources.v2.bucketing.coalesceScanPartitions.enabled</code></td>
-      <td>false</td>
-      <td>
-        When enabled, apply a narrow coalesce immediately before a required shuffle to reduce
-        tasks in a keyed V2 scan pipeline to the number of distinct full reported partition keys.
-        At least one reported partition key must survive scan column pruning.
-        This compatibility option can reduce per-task overhead for small splits, but has no
-        byte-size limit and can reduce useful parallelism for large inputs or skewed keys.
-        Fewer map outputs can also limit AQE skew-join splitting, because a single
-        map-to-reducer block cannot be subdivided.
-        Splits are not grouped by key; coalesced output does not retain keyed partitioning or
-        ordering. The rule follows projections, filters, batch aggregates and local sorts;
-        it stops at joins (including broadcast joins), unions, exchanges, scan partition grouping,
-        existing coalesces, grouping-set expansion, generators such as <code>explode</code>,
-        and Python UDF evaluation.
-        It does not apply before user-requested repartition exchanges.
-        This setting is not required for storage-partitioned joins, which already apply grouping
-        when needed to satisfy their distribution. Requires
-        <code>spark.sql.sources.v2.bucketing.enabled</code> to be true.
-      </td>
-      <td>4.4.0</td>
     </tr>
     <tr>
       <td><code>spark.sql.sources.v2.bucketing.pushPartValues.enabled</code></td>

@@ -18,14 +18,18 @@
 package org.apache.spark.sql.connector
 
 import java.nio.file.Files
+import java.util.OptionalLong
+import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.SparkConf
+import scala.concurrent.duration._
+
+import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.expressions.{FieldReference, SortDirection, SortOrder}
 import org.apache.spark.sql.connector.expressions.Expressions.{identity, sort}
-import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning}
+import org.apache.spark.sql.connector.read.{HasPartitionKey, HasPartitionStatistics, InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder, SupportsReportOrdering, SupportsReportPartitioning}
 import org.apache.spark.sql.connector.read.partitioning.{KeyGroupedPartitioning, Partitioning}
 import org.apache.spark.sql.execution.{CoalesceExec, SortExec}
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec, ValidateRequirements}
@@ -35,11 +39,15 @@ import org.apache.spark.sql.types.{IntegerType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
-class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
-  private val enabled = SQLConf.V2_BUCKETING_COALESCE_SCAN_PARTITIONS_ENABLED.key
+class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
+  private val enabled = SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED.key
 
   override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.AUTO_BROADCASTJOIN_THRESHOLD, -1L)
+    .set(SQLConf.V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES, 0L)
+    .set(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES, 300L)
+    .set(SQLConf.V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM, 1)
+    .set(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM, 2)
 
   after {
     catalog.clearTables()
@@ -70,7 +78,7 @@ class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase 
           checkAnswer(df, answers)
           checkAnswer(df, answers)
           val plan = df.queryExecution.executedPlan
-          assert(collect(plan) { case c: CoalesceExec => c.numPartitions } === Seq(3))
+          assert(collectScans(plan).head.inputRDD.getNumPartitions === 2)
           assert(collect(plan) { case s: ShuffleExchangeExec => s }.size === 1)
           assert(collectScans(plan).head.supportsColumnar)
           assert(ValidateRequirements.validate(stripAQEPlan(plan)))
@@ -81,7 +89,78 @@ class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase 
     }
   }
 
-  test("SPARK-60265: local SORT BY retains the source's reported ordering") {
+  test("SPARK-60265: real unkeyed readers honor byte bounds and the missing-size fallback") {
+    withTempView("sized") {
+      def read(sizes: String): Unit = {
+        spark.read.format(classOf[SizedPackingRowSource].getName).option("sizes", sizes).load()
+          .createOrReplaceTempView("sized")
+      }
+      withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES.key -> "100") {
+        read("30,40,200,20,30,90")
+        val df = sql("SELECT * FROM sized")
+        val expected = (0 until 6).flatMap(i => (0 to i).map(j => Row(i, j)))
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        val counts = plan.execute().mapPartitions(rows => Iterator.single(rows.size)).collect()
+        assert(counts.toSeq === Seq(3, 3, 9, 6))
+        val scan = collectScans(plan).head
+        assert(scan.partitionPacking.isDefined)
+        val hosts = scan.inputRDD.partitions.map { partition =>
+          scan.inputRDD.preferredLocations(partition).head
+        }
+        assert(hosts.toSeq === Seq("worker-a", "worker-b", "worker-a", "worker-b"))
+
+        read("?,20,-1,40,?")
+        withSQLConf(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM.key -> "3") {
+          val capped = sql("SELECT * FROM sized")
+          checkAnswer(capped, (0 until 5).flatMap(i => (0 to i).map(j => Row(i, j))))
+          val sizes = capped.queryExecution.executedPlan.execute()
+            .mapPartitions(rows => Iterator.single(rows.size)).collect()
+          assert(sizes.toSeq === Seq(1, 5, 9))
+        }
+        val conf = spark.sessionState.conf
+        val cap = conf.getConf(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM)
+        conf.unsetConf(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM.key)
+        try {
+          val unchanged = sql("SELECT * FROM sized")
+          checkAnswer(unchanged, (0 until 5).flatMap(i => (0 to i).map(j => Row(i, j))))
+          assert(collectScans(unchanged.queryExecution.executedPlan).head.partitionPacking.isEmpty)
+        } finally {
+          cap.foreach { value =>
+            conf.setConfString(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM.key,
+              value.toString)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60265: packed columnar readers close on early stop and task failure") {
+    withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = spark.read.format(classOf[CoalescingColumnarScanSource].getName).load()
+      val scan = collectScans(df.queryExecution.executedPlan).head
+      assert(scan.partitionPacking.isDefined)
+      CoalescingColumnarReaderFactory.opened.set(0)
+      CoalescingColumnarReaderFactory.closed.set(0)
+      assert(scan.inputRDD.mapPartitions(_.take(1)).count() === 2)
+      assert(CoalescingColumnarReaderFactory.opened.get() === 2)
+      assert(CoalescingColumnarReaderFactory.closed.get() === 2)
+      intercept[SparkException] {
+        scan.inputRDD.mapPartitions { rows =>
+          if (rows.hasNext) throw new IllegalStateException("intentional reader failure")
+          rows
+        }.count()
+      }
+      assert(CoalescingColumnarReaderFactory.opened.get() > 2)
+      eventually(timeout(10.seconds), interval(10.milliseconds)) {
+        assert(CoalescingColumnarReaderFactory.closed.get() ===
+          CoalescingColumnarReaderFactory.opened.get())
+      }
+    }
+  }
+
+  test("SPARK-60265: reported ordering continues to eliminate a redundant local SORT BY") {
     createTable(items, itemsColumns, Array(identity("id")), Array(
       sort(FieldReference("id"), SortDirection.ASCENDING),
       sort(FieldReference("name"), SortDirection.ASCENDING)))
@@ -105,6 +184,74 @@ class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase 
     }
   }
 
+  test("SPARK-60265: a necessary local sort remains correct over packed inputs") {
+    populate()
+    withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+      val df = sql(s"SELECT id, name FROM testcat.ns.$items SORT BY name DESC, id DESC")
+      checkAnswer(df, for (id <- 1 to 2; name <- Seq("cc", "bb", "aa")) yield Row(id, name))
+      val plan = df.queryExecution.executedPlan
+      assert(collectScans(plan).head.partitionPacking.isDefined)
+      assert(collect(plan) { case s: SortExec => s }.size === 1)
+      assert(ValidateRequirements.validate(plan))
+      val ordered = plan.execute().mapPartitions { rows =>
+        val values = rows.map(row => (row.getUTF8String(1).toString, row.getLong(0))).toVector
+        Iterator.single(values == values.sorted.reverse)
+      }.collect()
+      assert(ordered.forall(value => value))
+    }
+  }
+
+  test("SPARK-60265: a broadcast streamed layout needed by an aggregate stays unchanged") {
+    populate()
+    createTable(purchases, purchasesColumns, Array.empty)
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 42.0, NULL), (2, 10.0, NULL)")
+    for (adaptive <- Seq(false, true)) {
+      val counts = Seq(false, true).map { packing =>
+        withSQLConf(enabled -> packing.toString,
+            SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+          val df = sql(s"SELECT /*+ BROADCAST(p) */ i.id, count(*), max(p.price) " +
+            s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id " +
+            "GROUP BY i.id")
+          checkAnswer(df, Seq(Row(1, 3L, 42.0f), Row(2, 3L, 10.0f)))
+          val plan = df.queryExecution.executedPlan
+          val scan = collectScans(plan).find(_.table.name().endsWith(items)).get
+          assert(scan.partitionPacking.isEmpty)
+          assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+          collect(plan) { case s: ShuffleExchangeExec => s }.size
+        }
+      }
+      assert(counts.distinct.size === 1)
+    }
+  }
+
+  test("SPARK-60265: compatible two-sided SPJ keeps keyed groups and complete join alignment") {
+    populate()
+    createTable(purchases, purchasesColumns, Array(identity("item_id")))
+    sql(s"INSERT INTO testcat.ns.$purchases VALUES " +
+      "(1, 42.0, NULL), (1, 43.0, NULL), (2, 10.0, NULL), (2, 11.0, NULL)")
+    for (adaptive <- Seq(false, true)) {
+      withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        val df = sql(s"SELECT /*+ MERGE(i, p) */ i.id, i.name, p.price " +
+          s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id")
+        val expected = for (id <- 1 to 2; name <- Seq("aa", "bb", "cc");
+            price <- (if (id == 1) Seq(42.0f, 43.0f) else Seq(10.0f, 11.0f))) yield {
+          Row(id, name, price)
+        }
+        checkAnswer(df, expected)
+        val plan = df.queryExecution.executedPlan
+        assert(collectShuffles(plan).isEmpty)
+        assert(collectScans(plan).forall(_.partitionPacking.isEmpty))
+        val groups = collectGroupPartitions(plan)
+        assert(groups.size === 2)
+        val taskRows = groups.map { group =>
+          group.execute().mapPartitions(rows => Iterator.single(rows.size)).collect().toSeq
+        }.toSet
+        assert(taskRows === Set(Seq(3, 3), Seq(2, 2)))
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+      }
+    }
+  }
+
   test("SPARK-60265: range exchanges retain complete global ordering") {
     populate()
     for (adaptive <- Seq(false, true)) {
@@ -113,27 +260,27 @@ class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase 
         assert(df.collect().toSeq === Seq(Row(1, "aa"), Row(2, "aa"), Row(1, "bb"),
           Row(2, "bb"), Row(1, "cc"), Row(2, "cc")))
         val plan = df.queryExecution.executedPlan
-        assert(collect(plan) { case c: CoalesceExec => c.numPartitions } === Seq(2))
+        assert(collectScans(plan).head.inputRDD.getNumPartitions === 2)
         assert(collect(plan) { case s: ShuffleExchangeExec => s }.size === 1)
         assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
     }
   }
 
-  test("SPARK-60265: collect, write, broadcast and union do not acquire scan coalescing") {
+  test("SPARK-60265: collect, write and broadcast pack scans; union stays conservative") {
     populate()
     createTable(purchases, purchasesColumns, Array.empty)
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 42.0, NULL), (2, 10.0, NULL)")
     withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val input = spark.table(s"testcat.ns.$items")
       assert(input.collect().length === 6)
-      assert(collect(input.queryExecution.executedPlan) { case c: CoalesceExec => c }.isEmpty)
+      assert(collectScans(input.queryExecution.executedPlan).head.partitionPacking.isDefined)
       val broadcast = sql(s"SELECT /*+ BROADCAST(p) */ i.id, i.name, p.price " +
         s"FROM testcat.ns.$items i JOIN testcat.ns.$purchases p ON i.id = p.item_id")
       checkAnswer(broadcast, for (id <- 1 to 2; name <- Seq("aa", "bb", "cc")) yield {
         Row(id, name, if (id == 1) 42.0f else 10.0f)
       })
-      assert(collect(broadcast.queryExecution.executedPlan) { case c: CoalesceExec => c }.isEmpty)
+      assert(collectScans(broadcast.queryExecution.executedPlan).head.partitionPacking.isDefined)
       val union = input.union(input).groupBy("name").count()
       checkAnswer(union, Seq(Row("aa", 4L), Row("bb", 4L), Row("cc", 4L)))
       assert(collect(union.queryExecution.executedPlan) { case c: CoalesceExec => c }.isEmpty)
@@ -142,7 +289,7 @@ class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase 
         checkAnswer(spark.read.parquet(dir.getCanonicalPath), input)
         val files = Files.list(dir.toPath)
         try {
-          assert(files.filter(_.getFileName.toString.startsWith("part-")).count() === 6)
+          assert(files.filter(_.getFileName.toString.startsWith("part-")).count() === 2)
         } finally {
           files.close()
         }
@@ -183,13 +330,13 @@ class CoalesceV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase 
         checkAnswer(df, expected ++ expected)
         val plan = df.queryExecution.executedPlan
         assert(collect(plan) { case r: ReusedExchangeExec => r }.nonEmpty)
-        assert(collect(plan) { case c: CoalesceExec => c.numPartitions }.toSet === Set(2))
+        assert(collectScans(plan).exists(_.partitionPacking.isDefined))
       }
     }
   }
 }
 
-trait CoalesceV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuiteBase {
+trait PackV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuiteBase {
   test("SPARK-60265: adaptive runtime filtering retains coalescing and pruned input slots") {
     createTable(items, itemsColumns, Array(identity("id")))
     createTable(purchases, purchasesColumns, Array.empty)
@@ -199,7 +346,10 @@ trait CoalesceV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningS
     sql(s"INSERT INTO testcat.ns.$items VALUES $values")
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 42.0, NULL), (2, 10.0, NULL)")
     for (adaptive <- Seq(false, true); price <- Seq(40, 100)) {
-      withSQLConf(SQLConf.V2_BUCKETING_COALESCE_SCAN_PARTITIONS_ENABLED.key -> "true",
+      withSQLConf(SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED.key -> "true",
+          SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES.key -> "2400",
+          SQLConf.V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES.key -> "0",
+          SQLConf.V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM.key -> "1",
           SQLConf.V2_BUCKETING_ENABLED.key -> "true",
           SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false",
           SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
@@ -220,14 +370,12 @@ trait CoalesceV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningS
         assert(scan.runtimeFilters.nonEmpty)
         assert(scan.filteredPartitions.size === 48)
         assert(scan.filteredPartitions.count(_.isEmpty) === (if (price == 40) 24 else 48))
-        val c = collect(plan) {
-          case c: CoalesceExec if collectScans(c).exists(_.table.name().endsWith(items)) => c
-        }.head
-        assert(c.numPartitions === 2)
-        val rowsPerTask = c.execute().mapPartitions(rows => Iterator.single(rows.size)).collect()
-        assert(rowsPerTask.length === 2)
+        assert(scan.partitionPacking.isDefined)
+        val rowsPerTask = scan.inputRDD.mapPartitions(rows => Iterator.single(rows.size)).collect()
+        assert(rowsPerTask.length === 1)
         assert(rowsPerTask.sum === (if (price == 40) 24 else 0))
-        assert(c.outputOrdering.isEmpty)
+        assert(scan.outputOrdering.isEmpty)
+        assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
     }
   }
@@ -270,6 +418,8 @@ case class CoalescingColumnarInputPartition(i: Int, k: Int, values: Array[Int])
 }
 
 object CoalescingColumnarReaderFactory extends PartitionReaderFactory {
+  val opened = new AtomicInteger()
+  val closed = new AtomicInteger()
   override def supportColumnarReads(partition: InputPartition): Boolean = true
 
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] =
@@ -277,6 +427,7 @@ object CoalescingColumnarReaderFactory extends PartitionReaderFactory {
 
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     val input = partition.asInstanceOf[CoalescingColumnarInputPartition]
+    opened.incrementAndGet()
     new PartitionReader[ColumnarBatch] {
       private val vectors = Array.fill(3)(new OnHeapColumnVector(2, IntegerType))
       private val batch = new ColumnarBatch(Array(vectors(0), vectors(1), vectors(2)))
@@ -296,7 +447,51 @@ object CoalescingColumnarReaderFactory extends PartitionReaderFactory {
       }
 
       override def get(): ColumnarBatch = batch
-      override def close(): Unit = batch.close()
+      override def close(): Unit = {
+        batch.close()
+        closed.incrementAndGet()
+      }
+    }
+  }
+}
+
+/** Row source with independently reported split sizes, including missing and invalid values. */
+class SizedPackingRowSource extends TestingV2Source {
+  override def getTable(options: CaseInsensitiveStringMap): Table = new SimpleBatchTable {
+    override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
+      new SimpleScanBuilder {
+        override def planInputPartitions(): Array[InputPartition] = {
+          SizedPackingRowReaderFactory.planned.incrementAndGet()
+          options.get("sizes").split(",").zipWithIndex.map { case (size, index) =>
+            SizedPackingRowInput(index, if (size == "?") None else Some(size.toLong))
+          }
+        }
+        override def createReaderFactory(): PartitionReaderFactory = {
+          SizedPackingRowReaderFactory.factories.incrementAndGet()
+          SizedPackingRowReaderFactory
+        }
+      }
+  }
+}
+
+case class SizedPackingRowInput(index: Int, bytes: Option[Long]) extends HasPartitionStatistics {
+  override def preferredLocations(): Array[String] = Array("worker-a", "worker-b")
+  override def sizeInBytes(): OptionalLong = bytes.map(OptionalLong.of)
+    .getOrElse(OptionalLong.empty())
+  override def numRows(): OptionalLong = OptionalLong.of(index + 1)
+  override def filesCount(): OptionalLong = OptionalLong.empty()
+}
+
+object SizedPackingRowReaderFactory extends PartitionReaderFactory {
+  val planned = new AtomicInteger()
+  val factories = new AtomicInteger()
+  override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
+    val input = partition.asInstanceOf[SizedPackingRowInput]
+    new PartitionReader[InternalRow] {
+      private var rowIndex = -1
+      override def next(): Boolean = { rowIndex += 1; rowIndex <= input.index }
+      override def get(): InternalRow = InternalRow(input.index, rowIndex)
+      override def close(): Unit = {}
     }
   }
 }

@@ -1461,6 +1461,6 @@ case class EnsureRequirements(
     } else {
       newPlan
     }
-    CoalesceV2ScanPartitions(finalPlan)
+    PackV2ScanPartitions(finalPlan, requiredDistribution)
   }
 }
