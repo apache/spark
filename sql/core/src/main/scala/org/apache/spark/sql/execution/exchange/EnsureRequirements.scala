@@ -23,6 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.internal.{LogKeys}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -32,7 +33,7 @@ import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.ShuffleQueryStageExec
 import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.joins.{
-  ShuffledHashJoinExec, SortMergeJoinExec, StoragePartitionJoinParams}
+  BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec, StoragePartitionJoinParams}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -148,7 +149,8 @@ case class EnsureRequirements(
             // spec can't be used to shuffle other children.
             case (idx, s: KeyGroupedShuffleSpec) =>
               canPushDownSPJParamsToScan(children(idx)) &&
-                !isBuiltFromReducedScan(children(idx), s)
+                !isBuiltFromReducedScan(children(idx), s) &&
+                !hasReducedScanOutsideJoin(children(idx))
             // A nested join reports a collection, and any of its members can end up as the best
             // member the other side is shuffled onto.
             case (idx, s: ShuffleSpecCollection) =>
@@ -842,18 +844,35 @@ case class EnsureRequirements(
    */
   private def isBuiltFromReducedScan(plan: SparkPlan, spec: KeyGroupedShuffleSpec): Boolean = {
     // A `Project` between the joins can rename the column under the transform, so map the spec's
-    // columns back through the aliases below `plan` before comparing them with the scan's.
+    // columns back through the aliases below `plan` before comparing them with the scan's. A
+    // broadcast hash join also reports the streamed side's partitioning on its build keys, so map
+    // those back to the streamed keys too.
+    val broadcastKeys = plan.flatMap {
+      case j: BroadcastHashJoinExec =>
+        val (buildKeys, streamedKeys) = j.buildSide match {
+          case BuildLeft => (j.leftKeys, j.rightKeys)
+          case BuildRight => (j.rightKeys, j.leftKeys)
+        }
+        buildKeys.zip(streamedKeys).collect { case (b: Attribute, s: Attribute) => b -> s }
+      case _ => Nil
+    }
     val aliases = AttributeMap(plan.flatMap(_.expressions).flatMap(_.collect {
       case a @ Alias(child: Attribute, _) => a.toAttribute -> child
-    }))
+    }) ++ broadcastKeys)
     def unalias(e: Expression): Expression = e.transformUp {
       case a: Attribute if aliases.contains(a) => unalias(aliases(a))
     }
     val specExpressions = spec.partitioning.expressions.map(unalias)
+    // An exchange re-partitions its input, so a scan below it no longer decides the layout above.
+    def existsAbove(p: SparkPlan)(f: PartialFunction[SparkPlan, Boolean]): Boolean = p match {
+      case _: ShuffleExchangeLike | _: BroadcastExchangeLike => false
+      case _ => f.applyOrElse(p, (_: SparkPlan) => false) || p.children.exists(existsAbove(_)(f))
+    }
     // Only a nested join can hand a reduced scan's layout to a later join. Looking below a join
-    // also keeps a re-run of this rule over an already planned join from matching its own scans.
-    plan.exists {
-      case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) => join.exists {
+    // also keeps a re-run of this rule over an already planned join from matching the scans
+    // directly below it. `hasReducedScanOutsideJoin` covers scans with no join above them.
+    existsAbove(plan) {
+      case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) => existsAbove(join) {
         case scan: BatchScanExec =>
           (reportedLayout(scan.spjParams), scan.spjParams.reducers) match {
             case (Some(layout), Some(reducers)) =>
@@ -866,6 +885,15 @@ case class EnsureRequirements(
       }
       case _ => false
     }
+  }
+
+  // A scan that carries reducers without a join above it in `plan` got them from an earlier run
+  // of this rule, so it reports its own transform over reduced values.
+  private def hasReducedScanOutsideJoin(plan: SparkPlan): Boolean = plan match {
+    case _: SortMergeJoinExec | _: ShuffledHashJoinExec => false
+    case _: ShuffleExchangeLike | _: BroadcastExchangeLike => false
+    case scan: BatchScanExec => scan.spjParams.reducers.exists(_.exists(_.isDefined))
+    case other => other.children.exists(hasReducedScanOutsideJoin)
   }
 
   /**
