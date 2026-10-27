@@ -74,11 +74,11 @@ jobs:
               return false;
             };
 
-            // List all check-runs for a commit. per_page=100 (not the default 30) is needed
-            // because a SHA can accumulate more check-runs than one page
-            // (CI matrix, external checks, duplicate Build checks from reopened PRs), which
-            // could otherwise push the target Build check off the first page and leave the PR
-            // stuck in 'queued' forever.
+            // List all check-runs for a commit. github.paginate follows every page, so the Build
+            // check is found even when a SHA accumulates many check-runs (CI matrix, external
+            // checks, duplicate Build checks from reopened PRs); missing it would leave the PR
+            // stuck in 'queued' forever. per_page=100 (not the default 30) only reduces the
+            // number of requests.
             const listCheckRuns = (ref) => github.paginate(
               'GET /repos/{owner}/{repo}/commits/{ref}/check-runs',
               {
