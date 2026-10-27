@@ -150,8 +150,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
-    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised in
-    # user code fails the task instead of silently ending the loop that calls the UDF.
+    # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised by
+    # the UDF call fails with STOP_ITERATION_OCCURRED instead of PEP 479's generic RuntimeError.
     _fail_on_stopiteration: ClassVar[bool] = True
 
     def __init__(
@@ -207,14 +207,20 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         if self._iter_based:
 
             def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                # Call f eagerly, as the unprofiled path does, so fail_on_stopiteration sees a
+                # StopIteration raised by the call; profile each next() lazily.
                 iterator = iter(f(*args, **kwargs))
-                while True:
-                    try:
-                        with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
-                            item = next(iterator)
-                        yield item
-                    except StopIteration:
-                        break
+
+                def profiled() -> Iterator[Any]:
+                    while True:
+                        try:
+                            with WorkerPerfProfiler(accumulator, accumulator_v2, result_id):
+                                item = next(iterator)
+                            yield item
+                        except StopIteration:
+                            break
+
+                return profiled()
 
         else:
 
@@ -248,18 +254,22 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         if self._iter_based:
 
             def profiling_func(*args: Any, **kwargs: Any) -> Any:
+                # Call f eagerly, as in the perf profiler.
                 g = f(*args, **kwargs)
                 iterator = iter(g)
 
-                while True:
-                    try:
-                        with WorkerMemoryProfiler(
-                            accumulator, accumulator_v2, result_id, g.gi_code
-                        ):
-                            item = next(iterator)
-                        yield item
-                    except StopIteration:
-                        break
+                def profiled() -> Iterator[Any]:
+                    while True:
+                        try:
+                            with WorkerMemoryProfiler(
+                                accumulator, accumulator_v2, result_id, g.gi_code
+                            ):
+                                item = next(iterator)
+                            yield item
+                        except StopIteration:
+                            break
+
+                return profiled()
 
         else:
 
