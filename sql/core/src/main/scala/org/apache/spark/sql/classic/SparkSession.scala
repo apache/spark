@@ -1267,8 +1267,20 @@ object SparkSession extends SparkSessionCompanion with Logging {
   private def applyExtensions(
       sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
-    val extensionConfClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
-      .getOrElse(Seq.empty)
+    val extensionConfClassNames = {
+      val defaultClassNames =
+        sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST)
+          .getOrElse(Seq.empty)
+      val userClassNames = sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS)
+        .getOrElse(Seq.empty)
+      // Last-win: drop operator defaults also listed by the user, then apply defaults first.
+      defaultClassNames.distinct.filter(userClassNames.contains(_)).foreach { className =>
+        logWarning(log"Extension ${MDC(CLASS_NAME, className)} is listed in both " +
+          log"spark.sql.extensions.defaultList and spark.sql.extensions; dropping it from " +
+          log"spark.sql.extensions.defaultList.")
+      }
+      defaultClassNames.filterNot(userClassNames.contains(_)) ++ userClassNames
+    }
     extensionConfClassNames.foreach { extensionConfClassName =>
       try {
         val extensionConfClass = Utils.classForName(extensionConfClassName)

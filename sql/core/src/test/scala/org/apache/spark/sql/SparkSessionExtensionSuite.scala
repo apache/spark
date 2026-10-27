@@ -50,8 +50,8 @@ import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.COLUMN_BATCH_SIZE
-import org.apache.spark.sql.internal.StaticSQLConf.DEFAULT_EXTENSIONS_LIST
 import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS
+import org.apache.spark.sql.internal.StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST
 import org.apache.spark.sql.types.{DataType, Decimal, IntegerType, LongType, Metadata, StructType}
 import org.apache.spark.sql.vectorized.{ColumnarArray, ColumnarBatch, ColumnarMap, ColumnVector}
 import org.apache.spark.unsafe.types.UTF8String
@@ -517,7 +517,7 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   test("SPARK-60483: use the operator default list ahead of user extensions") {
     val session = SparkSession.builder()
       .master("local[1]")
-      .config(DEFAULT_EXTENSIONS_LIST, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
       .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions2].getCanonicalName)
       .getOrCreate()
     try {
@@ -535,7 +535,7 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   test("SPARK-60483: use the operator default list when user extensions are unset") {
     val session = SparkSession.builder()
       .master("local[1]")
-      .config(DEFAULT_EXTENSIONS_LIST, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
       .getOrCreate()
     try {
       assert(session.sessionState.analyzer.extendedResolutionRules.contains(MyRule(session)))
@@ -545,16 +545,16 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
-  test("SPARK-60483: keep an extension listed by both the operator and the user") {
-    // Applied twice, matching the existing contract for duplicated user extensions.
+  test("SPARK-60483: an extension listed by both the operator and the user is applied once") {
+    // De-duplicated across the two lists (last-win); repeats within a single list stay allowed.
     val session = SparkSession.builder()
       .master("local[1]")
-      .config(DEFAULT_EXTENSIONS_LIST, classOf[MyExtensions].getCanonicalName)
+      .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
       .config(SPARK_SESSION_EXTENSIONS.key, classOf[MyExtensions].getCanonicalName)
       .getOrCreate()
     try {
       assert(session.sessionState.analyzer.extendedResolutionRules.count(_ === MyRule(session)) ===
-        2)
+        1)
     } finally {
       stop(session)
     }

@@ -163,17 +163,30 @@ object StaticSQLConf {
       .booleanConf
       .createWithDefault(false)
 
-  private[spark] val DEFAULT_EXTENSIONS_LIST = "spark.sql.extensions.defaultList"
+  private[spark] val SPARK_SESSION_EXTENSIONS_DEFAULT_LIST =
+    buildStaticConf("spark.sql.extensions.defaultList")
+      .doc("A comma-separated list of classes that implement " +
+        "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
+        "classes must have a no-args constructor. These extensions are applied ahead of the ones " +
+        "specified in spark.sql.extensions. An extension listed in both configs is applied once, " +
+        "from its position in spark.sql.extensions, and a warning is logged.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .toSequence
+      .createOptional
 
   val SPARK_SESSION_EXTENSIONS = buildStaticConf("spark.sql.extensions")
-    .withPrepended(DEFAULT_EXTENSIONS_LIST, separator = ",")
     .doc("A comma-separated list of classes that implement " +
       "Function1[SparkSessionExtensions, Unit] used to configure Spark Session extensions. The " +
       "classes must have a no-args constructor. If multiple extensions are specified, they are " +
       "applied in the specified order. For the case of rules and planner strategies, they are " +
       "applied in the specified order. For the case of parsers, the last parser is used and each " +
       "parser can delegate to its predecessor. For the case of function name conflicts, the last " +
-      "registered function name is used.")
+      "registered function name is used. Extensions listed in " +
+      "spark.sql.extensions.defaultList are applied ahead of this list. Note that " +
+      "spark.conf.get(\"spark.sql.extensions\") / SET spark.sql.extensions shows only the value " +
+      "of this key, not the combined list.")
     .version("2.2.0")
     .stringConf
     .toSequence
