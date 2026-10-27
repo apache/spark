@@ -2775,6 +2775,132 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       Row(2, 2, 2, 2, 2, 10000d, 9000d, 10000d, 10000d, 9000d, 0d, 2, 0d)))
   }
 
+  test("scan with aggregate push-down: filtered aggregates") {
+    withTable("h2.test.filtered_agg") {
+      sql(
+        """
+          |CREATE TABLE h2.test.filtered_agg AS
+          |SELECT * FROM VALUES
+          |  (1, 10, true), (1, null, true), (1, 20, false), (1, 30, null),
+          |  (2, 40, false), (2, null, null), (3, null, true)
+          |AS t(dept, amount, paid)
+        """.stripMargin)
+      withTempView("v") {
+        spark.read.option("pushDownAggregate", "false")
+          .table("h2.test.filtered_agg").createTempView("v")
+        val aggregates =
+          """
+            |SUM(amount) FILTER (WHERE paid),
+            |SUM(amount) FILTER (WHERE NOT paid),
+            |COUNT(*) FILTER (WHERE paid), COUNT(amount) FILTER (WHERE paid),
+            |MIN(amount) FILTER (WHERE paid), MAX(amount) FILTER (WHERE paid),
+            |AVG(amount) FILTER (WHERE paid), COUNT(*), SUM(amount),
+            |COUNT(NULL) FILTER (WHERE paid),
+            |COUNT(*) FILTER (WHERE amount > 15 AND paid IS NOT NULL)
+          """.stripMargin
+        val df = sql(s"SELECT $aggregates FROM h2.test.filtered_agg")
+        checkAggregateRemoved(df)
+        checkPushedInfo(df,
+          "SUM(CASE WHEN paid = true THEN amount END)",
+          "COUNT(CASE WHEN paid = true THEN 1 END)",
+          "PushedFilters: []")
+        checkAnswer(df, Seq(Row(10L, 60L, 3L, 1L, 10, 10, 10d, 7L, 100L, 0L, 2L)))
+        checkAnswer(df, sql(s"SELECT $aggregates FROM v"))
+
+        val grouped = sql(s"SELECT dept, $aggregates FROM h2.test.filtered_agg GROUP BY dept")
+        checkAggregateRemoved(grouped)
+        checkAnswer(grouped, Seq(
+          Row(1, 10L, 20L, 2L, 1L, 10, 10, 10d, 4L, 60L, 0L, 1L),
+          Row(2, null, 40L, 0L, 0L, null, null, null, 2L, 40L, 0L, 1L),
+          Row(3, null, null, 1L, 0L, null, null, null, 1L, null, 0L, 0L)))
+        checkAnswer(grouped, sql(s"SELECT dept, $aggregates FROM v GROUP BY dept"))
+
+        val aliased = sql(
+          """
+            |SELECT SUM(a) FILTER (WHERE p), COUNT(*) FILTER (WHERE NOT p)
+            |FROM (SELECT amount AS a, paid AS p FROM h2.test.filtered_agg)
+          """.stripMargin)
+        checkAggregateRemoved(aliased)
+        checkAnswer(aliased, Seq(Row(10L, 2L)))
+      }
+    }
+  }
+
+  test("scan with aggregate push-down: filtered aggregates on empty input") {
+    val aggregates =
+      """
+        |SUM(id) FILTER (WHERE id > 0), AVG(id) FILTER (WHERE id > 0),
+        |MIN(id) FILTER (WHERE id > 0), MAX(id) FILTER (WHERE id > 0),
+        |COUNT(*) FILTER (WHERE id > 0), COUNT(id) FILTER (WHERE id > 0)
+      """.stripMargin
+    val df = sql(s"SELECT $aggregates FROM h2.test.empty_table")
+    checkAggregateRemoved(df)
+    checkAnswer(df, Seq(Row(null, null, null, null, 0L, 0L)))
+    val grouped = sql(s"SELECT name, $aggregates FROM h2.test.empty_table GROUP BY name")
+    checkAggregateRemoved(grouped)
+    checkAnswer(grouped, Seq.empty)
+  }
+
+  test("scan with aggregate push-down: filtered aggregate argument evaluation") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val df = sql(
+        """
+          |SELECT SUM(10D / (id - 1)) FILTER (WHERE id > 1),
+          |COUNT(10D / (id - 1)) FILTER (WHERE id > 1)
+          |FROM h2.test.people
+        """.stripMargin)
+      checkAggregateRemoved(df)
+      checkAnswer(df, Seq(Row(10d, 1L)))
+    }
+  }
+
+  test("scan with aggregate push-down: unsupported filtered aggregates") {
+    Seq(
+      "SELECT SUM(salary) FILTER (WHERE name RLIKE '^a'), COUNT(*) " +
+        "FROM h2.test.employee" -> Row(22000d, 5L),
+      "SELECT SUM(salary) FILTER (WHERE overlay(name, 'x', 1, 1) = 'xmy'), COUNT(*) " +
+        "FROM h2.test.employee" -> Row(10000d, 5L),
+      "SELECT COUNT(DISTINCT salary) FILTER (WHERE dept = 1) " +
+        "FROM h2.test.employee" -> Row(2L)).foreach { case (query, expected) =>
+      val df = sql(query)
+      checkAggregateRemoved(df, removed = false)
+      val scans = df.queryExecution.optimizedPlan.collect {
+        case relation: DataSourceV2ScanRelation => relation.scan
+      }
+      assert(scans.size == 1)
+      assert(scans.head.asInstanceOf[V1ScanWrapper].pushedDownOperators.aggregation.isEmpty)
+      checkAnswer(df, Seq(expected))
+    }
+  }
+
+  test("scan with aggregate push-down: filtered aggregates require complete push-down") {
+    withTempView("v", "ref") {
+      spark.read.option("partitionColumn", "dept").option("lowerBound", "0")
+        .option("upperBound", "2").option("numPartitions", "2")
+        .table("h2.test.employee").createTempView("v")
+      spark.read.option("pushDownAggregate", "false")
+        .table("h2.test.employee").createTempView("ref")
+      val aggregates = Seq(
+        "SUM(salary) FILTER (WHERE dept = 1), COUNT(*) FILTER (WHERE dept = 2), " +
+          "MIN(salary) FILTER (WHERE dept = 1), MAX(salary) FILTER (WHERE dept = 2)",
+        "AVG(salary) FILTER (WHERE dept = 1), AVG(salary)")
+      for {
+        aggregate <- aggregates
+        (groupBy, complete) <- Seq("" -> false, "GROUP BY name" -> false, "GROUP BY dept" -> true)
+      } {
+        val df = sql(s"SELECT $aggregate FROM v $groupBy")
+        checkAggregateRemoved(df, removed = complete)
+        val scans = df.queryExecution.optimizedPlan.collect {
+          case relation: DataSourceV2ScanRelation => relation.scan
+        }
+        assert(scans.size == 1)
+        assert(scans.head.asInstanceOf[V1ScanWrapper]
+          .pushedDownOperators.aggregation.isDefined == complete)
+        checkAnswer(df, sql(s"SELECT $aggregate FROM ref $groupBy"))
+      }
+    }
+  }
+
   test("scan with aggregate push-down: aggregate function with binary arithmetic") {
     Seq(false, true).foreach { ansiMode =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiMode.toString) {
