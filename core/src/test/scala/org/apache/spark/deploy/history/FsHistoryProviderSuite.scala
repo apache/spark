@@ -1483,6 +1483,43 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     }
   }
 
+  test("SPARK-60581: log cleaner with both the max age and the maximum number of log files") {
+    val maxAge = TimeUnit.SECONDS.toMillis(10)
+    val clock = new ManualClock(maxAge)
+    val conf = createTestConf()
+      .set(CLEANER_ENABLED, true)
+      .set(MAX_LOG_AGE_S.key, s"${maxAge}ms")
+      .set(MAX_LOG_NUM, 2)
+    val provider = new FsHistoryProvider(conf, clock)
+
+    def newCompletedLogFile(appId: String, lastModified: Long): File = {
+      val log = newLogFile(appId, None, inProgress = false)
+      writeFile(log, None,
+        SparkListenerApplicationStart(appId, Some(appId), 1L, "test", None),
+        SparkListenerApplicationEnd(2L))
+      log.setLastModified(lastModified)
+      log
+    }
+    val log1 = newCompletedLogFile("app1", 1000L)
+    val log2 = newCompletedLogFile("app2", 5000L)
+    val log3 = newCompletedLogFile("app3", 6000L)
+
+    // Load all logs while they are within the max age, before the cleaner runs.
+    provider.checkForLogs()
+    provider.getListing().size should be (3)
+
+    // Only app1 exceeds the max age. Removing it leaves exactly the maximum number of logs,
+    // so the max number policy should not remove anything more.
+    clock.setTime(maxAge + 2000L)
+    updateAndCheck(provider) { list =>
+      list.map(_.id) should contain theSameElementsAs Seq("app2", "app3")
+    }
+    assert(!log1.exists())
+    assert(log2.exists())
+    assert(log3.exists())
+    assert(provider.listing.count(classOf[LogInfo]) === 2)
+  }
+
   test("backwards compatibility with LogInfo from Spark 2.4") {
     case class LogInfoV24(
          logPath: String,
