@@ -615,7 +615,8 @@ asserts the shapes it expects, the following version checks them, because Spark 
 as a `>` predicate; it also matches on the public `NamedReference` rather than the test's
 `FieldReference`. It accepts a threshold only from `-1` up, because the planner starts the first
 partition at the threshold plus one and the source's data is `0` to `9`; a lower threshold stays
-with Spark. Replacing `predicates` on each call is right while `supportsIterativePushdown()`
+with Spark. The planner enforces one lower bound, so the example accepts the first matching
+predicate and returns any others to Spark. Replacing `predicates` on each call is right while `supportsIterativePushdown()`
 returns `false` (the default); an iterative source accumulates them instead:
 
 {% highlight java %}
@@ -624,7 +625,7 @@ public Predicate[] pushPredicates(Predicate[] predicates) {
   List<Predicate> supported = new ArrayList<>();
   List<Predicate> unsupported = new ArrayList<>();
   for (Predicate p : predicates) {
-    if (isIGreaterThanInt(p)) {
+    if (supported.isEmpty() && isIGreaterThanInt(p)) {
       supported.add(p);
     } else {
       unsupported.add(p);
@@ -672,9 +673,11 @@ such as `SupportsTruncate`; see
 [`TableCapability`](api/java/org/apache/spark/sql/connector/catalog/TableCapability.html) for the
 others. Spark checks the capability set during analysis, before calling any builder, so a missing
 value fails the query even when the mix-in is implemented. `JavaSimpleWritableDataSource` declares
-`BATCH_READ`, `BATCH_WRITE` and `TRUNCATE`. A `TableProvider` supports only the `append` and
-`overwrite` save modes; the default, `errorifexists`, and `ignore` fail with
-`UNSUPPORTED_DATA_SOURCE_SAVE_MODE`.
+`BATCH_READ`, `BATCH_WRITE` and `TRUNCATE`. A `TableProvider` like this one, which does not
+implement `SupportsCatalogOptions`, supports only the `append` and `overwrite` save modes; the
+default, `errorifexists`, and `ignore` fail with `UNSUPPORTED_DATA_SOURCE_SAVE_MODE`. A provider
+that implements `SupportsCatalogOptions` takes its catalog and identifier from the write options,
+and Spark runs those two modes as `CREATE TABLE ... AS SELECT` in that catalog.
 
 The write then follows the protocol under [BatchWrite](#batchwrite). A file-based connector
 typically has each `DataWriter` write its task's output to a staging location, and
