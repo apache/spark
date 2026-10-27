@@ -17,7 +17,8 @@
 
 package org.apache.spark.sql.catalyst.util
 
-import scala.collection.mutable
+import java.util.IdentityHashMap
+
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -376,32 +377,67 @@ object ResolveDefaultColumns extends QueryErrorsBase
           val checked = output.transform {
             case attr: AttributeReference if attr.exprId == input.exprId => expr
           }
-          Cast(checked, coerced.dataType, Some(conf.sessionLocalTimeZone))
+          DeferredDefaultValue(Cast(checked, coerced.dataType, Some(conf.sessionLocalTimeZone)))
         }
       }
     }.getOrElse(coerced)
   }
 
   private def normalizeCurrentTimeDefault(expression: Expression): Expression = {
-    val clocks = mutable.HashMap.empty[ExprId, Expression]
-    def mask(clock: Expression): Expression = {
-      val placeholder = AttributeReference("current_time", clock.dataType, clock.nullable)()
-      clocks(placeholder.exprId) = clock
-      placeholder
+    val dependencies = new IdentityHashMap[Expression, java.lang.Boolean]
+    def normalize(expr: Expression, isConditionalBranch: Boolean): Expression = {
+      if (isTimeToTimestampCast(expr)) {
+        expr
+      } else if (containsDeferredClock(expr, dependencies)) {
+        // Keep clock-dependent nodes evaluable: type-defining arguments such as struct names
+        // can be evaluated when their parent's datatype is requested during analysis.
+        val inBranch = isConditionalBranch || expr.isInstanceOf[ConditionalExpression]
+        expr.mapChildren(normalize(_, inBranch))
+      } else {
+        ConstantFolding.constantFolding(
+          SpecialDatetimeValues.applyForExpression(expr), isConditionalBranch)
+      }
     }
-    val masked = expression.transformWithPruning(
-      _.containsAnyPattern(CURRENT_LIKE, CAST_TO_TIMESTAMP)) {
-      case clock: LeafExpression if clock.containsPattern(CURRENT_LIKE) => mask(clock)
-      case cast: Cast if Cast.isTimeToTimestampNTZ(cast.child.dataType, cast.dataType) ||
-          Cast.isTimeToTimestampLTZ(cast.child.dataType, cast.dataType) => mask(cast)
+    normalize(expression, isConditionalBranch = false)
+  }
+
+  private def isTimeToTimestampCast(expression: Expression): Boolean = expression match {
+    case cast: Cast =>
+      Cast.isTimeToTimestampNTZ(cast.child.dataType, cast.dataType) ||
+        Cast.isTimeToTimestampLTZ(cast.child.dataType, cast.dataType)
+    case _ => false
+  }
+
+  private def containsDeferredClock(
+      expression: Expression,
+      dependencies: IdentityHashMap[Expression, java.lang.Boolean] =
+        new IdentityHashMap[Expression, java.lang.Boolean]): Boolean = {
+    if (expression.containsPattern(CURRENT_LIKE)) {
+      true
+    } else if (!expression.containsPattern(CAST_TO_TIMESTAMP)) {
+      false
+    } else {
+      val cached = dependencies.get(expression)
+      if (cached != null) {
+        cached.booleanValue()
+      } else {
+        val result = isTimeToTimestampCast(expression) ||
+          expression.children.exists(containsDeferredClock(_, dependencies))
+        dependencies.put(expression, result)
+        result
+      }
     }
-    // Runtime replacements and context binding are already done. Protect clock-dependent ancestors
-    // while normalizing independent subtrees, retaining conditional folding's error handling.
-    val normalized = ConstantFolding.constantFolding(
-      SpecialDatetimeValues.applyForExpression(masked))
-    normalized.transform {
-      case attr: AttributeReference if clocks.contains(attr.exprId) => clocks(attr.exprId)
-    }
+  }
+
+  // Eager validation established that this default is statement-constant. Its generated nested
+  // checks may be nonfoldable, but the complete checked value can be materialized after clock
+  // binding and special datetime rewrites, before it reaches individual input rows.
+  private case class DeferredDefaultValue(child: Expression) extends TaggingExpression {
+    override def foldable: Boolean = !containsDeferredClock(child)
+    override def sql: String = child.sql
+
+    override protected def withNewChildInternal(newChild: Expression): DeferredDefaultValue =
+      copy(child = newChild)
   }
 
   /**

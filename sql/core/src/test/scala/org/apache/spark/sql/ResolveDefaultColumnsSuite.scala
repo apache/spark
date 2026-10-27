@@ -22,7 +22,7 @@ import java.time.Instant
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, CurrentTime, EqualTo, Literal}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceCurrentLike, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, Reso
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ByteType, DateType, DoubleType, IntegerType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DateType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -149,6 +149,99 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
+  test("current-time defaults retain unary clocks until snapshot binding") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      val field = StructField("value", BooleanType)
+        .withCurrentDefaultValue("current_time(9) = current_time(9)")
+      val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      assert(default.collect { case _: CurrentTime => 1 }.size == 2)
+      val instant = Instant.parse("2000-01-01T12:34:56.123456789Z")
+      assert(ComputeCurrentTime.applyForExpression(default, instant).eval() == true)
+    }
+  }
+
+  test("current-time defaults compare repeated current_time calls in INSERT") {
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t(i INT, b BOOLEAN DEFAULT " +
+          "(current_time(9) = current_time(9))) USING parquet")
+        sql("INSERT INTO t VALUES (1, DEFAULT), (2, DEFAULT)")
+        sql("INSERT INTO t (i) VALUES (3), (4)")
+        checkAnswer(sql("SELECT * FROM t"), (1 to 4).map(i => Row(i, true)))
+      }
+    }
+  }
+
+  test("current-time defaults support clock-dependent struct field names") {
+    val dataType = StructType(Seq(StructField("a", IntegerType, nullable = false)))
+    val defaultSQL = "named_struct(IF(current_date() IS NOT NULL, 'a', 'a'), 1)"
+    val field = StructField("s", dataType).withCurrentDefaultValue(defaultSQL)
+    withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI",
+        "spark.sql.catalog.current_time_defaults" -> classOf[InMemoryTableCatalog].getName) {
+      val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      assert(default.dataType == dataType)
+      val instant = Instant.parse("2000-01-01T12:34:56.123456Z")
+      val value = ComputeCurrentTime.applyForExpression(default, instant)
+        .eval().asInstanceOf[InternalRow]
+      assert(value.getInt(0) == 1)
+
+      val tableName = "current_time_defaults.named_struct"
+      withTable(tableName) {
+        val catalog = spark.sessionState.catalogManager.catalog("current_time_defaults")
+          .asInstanceOf[InMemoryTableCatalog]
+        val columns = Array(
+          Column.create("i", IntegerType),
+          Column.create("s", dataType, true, null,
+            new ColumnDefaultValue(defaultSQL, null), "{}"))
+        catalog.createTable(Identifier.of(Array.empty, "named_struct"),
+          new TableInfo.Builder().withColumns(columns).build())
+        sql(s"INSERT INTO $tableName SELECT 1, DEFAULT")
+        sql(s"INSERT INTO $tableName (i) SELECT 2")
+        checkAnswer(spark.table(tableName), Seq(Row(1, Row(1)), Row(2, Row(1))))
+      }
+    }
+  }
+
+  test("current-time defaults materialize checked constant arrays") {
+    val dataType = ArrayType(TimestampType, containsNull = false)
+    val defaultSQL = "array_repeat(CAST(IF(current_date() > DATE'1900-01-01', " +
+      "'epoch', CAST(NULL AS STRING)) AS TIMESTAMP), 1000)"
+    withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        "spark.sql.catalog.current_time_defaults" -> classOf[InMemoryTableCatalog].getName) {
+      val tableName = "current_time_defaults.arrays"
+      withTable(tableName) {
+        val catalog = spark.sessionState.catalogManager.catalog("current_time_defaults")
+          .asInstanceOf[InMemoryTableCatalog]
+        val columns = Array(
+          Column.create("i", LongType),
+          Column.create("a", dataType, true, null,
+            new ColumnDefaultValue(defaultSQL, null), "{}"))
+        catalog.createTable(Identifier.of(Array.empty, "arrays"),
+          new TableInfo.Builder().withColumns(columns).build())
+        sql(s"INSERT INTO $tableName SELECT id, DEFAULT FROM range(3)")
+        sql(s"INSERT INTO $tableName (i) SELECT id FROM range(3, 6)")
+        assert(spark.table(tableName).schema("a").dataType == dataType)
+        checkAnswer(
+          sql(s"SELECT i, size(a), array_distinct(a) = " +
+            s"array(TIMESTAMP'1970-01-01 00:00:00') FROM $tableName"),
+          (0L until 6L).map(i => Row(i, 1000, true)))
+      }
+
+      val field = StructField("a", dataType).withCurrentDefaultValue(defaultSQL)
+      val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      val projection = Project(Seq(Alias(default, "a")()), spark.range(6).queryExecution.analyzed)
+      spark.sessionState.analyzer.checkAnalysis(projection)
+      val optimized = spark.sessionState.optimizer.execute(projection).asInstanceOf[Project]
+      val materialized = optimized.projectList.head.asInstanceOf[Alias].child
+      assert(materialized.isInstanceOf[Literal], optimized.treeString)
+      assert(!materialized.exists(_.isInstanceOf[ArrayTransform]))
+      assert(materialized.dataType == dataType)
+    }
+  }
+
   test("current-time defaults preserve nested NOT NULL fields") {
     val instant = Instant.parse("2000-01-01T12:34:56.123456Z")
     val dataType = StructType(Seq(
@@ -192,6 +285,14 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           .eval().asInstanceOf[InternalRow]
         assert(value.getLong(0) == 0L)
         assert(value.getLong(1) == DateTimeUtils.instantToMicros(instant))
+
+        if (defaultSQL == defaults.last) {
+          val past = Instant.parse("1800-01-01T12:34:56.123456Z")
+          val nullDefault = SpecialDatetimeValues.applyForExpression(
+            ComputeCurrentTime.applyForExpression(default, past))
+          assert(intercept[SparkRuntimeException](nullDefault.eval()).getCondition ==
+            "NOT_NULL_ASSERT_VIOLATION")
+        }
 
         if (storeAssignmentPolicy == "ANSI") {
           withTable(tableName) {
