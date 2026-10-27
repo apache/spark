@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayRepeat, ArrayTransform, AttributeReference, CurrentTime, EqualTo, Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayRepeat, ArrayTransform, AttributeReference, CurrentTime, EqualTo, Expression, Literal, Sha2, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceCurrentLike, SpecialDatetimeValues}
@@ -149,6 +149,59 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
         sql("SELECT i, d1 = d2 AND d1 = explicit_ts FROM t"),
         (1 to 8).map(i => Row(i, true)))
     }
+  }
+
+  gridTest("current-time defaults materialize omitted VALUES defaults once")(Seq(1, 4)) {
+    rowCount =>
+      val defaultSQL = "sha2(repeat(CAST(current_timestamp() AS STRING), 1000), 256)"
+      val tableName = "local_values_defaults"
+      // The shared session disables local conversion to preserve execution coverage.
+      withSQLConf(
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI",
+          SQLConf.OPTIMIZER_EXCLUDED_RULES.key -> "",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withTable(tableName) {
+          sql(s"CREATE TABLE $tableName(col1 INT, h STRING DEFAULT ($defaultSQL), " +
+            "col2 TIMESTAMP) USING parquet")
+
+          val values = (1 to rowCount).map(i => s"($i, current_timestamp())").mkString(", ")
+          val parsed = spark.sessionState.sqlParser.parsePlan(
+            s"INSERT INTO $tableName BY NAME VALUES $values")
+          val analyzed = spark.sessionState.analyzer.execute(parsed)
+          spark.sessionState.analyzer.checkAnalysis(analyzed)
+          val counter = new AtomicInteger()
+          case class CountedLocalDefault(child: Expression)
+              extends UnaryExpression with CodegenFallback {
+            override def dataType: DataType = child.dataType
+            override def eval(input: InternalRow): Any = {
+              counter.incrementAndGet()
+              child.eval(input)
+            }
+            override protected def withNewChildInternal(
+                newChild: Expression): CountedLocalDefault = copy(child = newChild)
+          }
+          var instrumented = 0
+          val counted = analyzed.transformUp {
+            case project: Project =>
+              project.copy(projectList = project.projectList.map {
+                case alias: Alias if alias.name == "h" &&
+                    alias.child.exists(_.isInstanceOf[Sha2]) =>
+                  instrumented += 1
+                  alias.withNewChildren(Seq(CountedLocalDefault(alias.child))).asInstanceOf[Alias]
+                case other => other
+              })
+          }
+          assert(instrumented == 1, analyzed.treeString)
+          counter.set(0)
+          classic.Dataset.ofRows(spark, counted).collect()
+
+          checkAnswer(
+            sql(s"SELECT col1, h = sha2(repeat(CAST(col2 AS STRING), 1000), 256) " +
+              s"FROM $tableName"),
+            (1 to rowCount).map(i => Row(i, true)))
+          assert(counter.get() == 1)
+        }
+      }
   }
 
   namedGridTest("current-time defaults preserve short-circuit guards")(Map(
