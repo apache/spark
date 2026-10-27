@@ -105,9 +105,11 @@ public enum TableCatalogCapability {
    *   <li>{@link StagingTableCatalog#stageReplace(Identifier, TableInfo)}</li>
    *   <li>{@link StagingTableCatalog#stageCreateOrReplace(Identifier, TableInfo)}</li>
    * </ul>
-   * Their default implementations drop the request, so a catalog that reports this capability must
-   * override each one it can be reached through. A {@link StagingTableCatalog} needs all four,
-   * because a {@code CREATE TABLE} without {@code AS SELECT} is not staged and arrives at
+   * Their default implementations reject a request with an unchecked
+   * {@code UNSUPPORTED_FEATURE.TABLE_OPERATION} error, because the {@code Column[]} overloads they
+   * forward to cannot carry it, so a catalog that reports this capability must override each one it
+   * can be reached through. A {@link StagingTableCatalog} needs all four, because a
+   * {@code CREATE TABLE} without {@code AS SELECT} is not staged and arrives at
    * {@code createTable}. For a {@link TransactionalCatalogPlugin}, a
    * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} that Spark runs in a
    * transaction is checked against and created through
@@ -115,28 +117,23 @@ public enum TableCatalogCapability {
    * staged only if that catalog is a {@link StagingTableCatalog}. Spark does not run every such
    * statement in a transaction, for example one that names its table with a non-literal
    * {@code IDENTIFIER} or one run by {@code EXECUTE IMMEDIATE}; the plugin itself is then checked
-   * and called. The plugin and the catalog of its transaction should
-   * therefore report this capability alike, and each override the overloads above that it can be
-   * reached through, including {@code stageCreate} for a staging plugin.
+   * and called. The plugin and the catalog of its transaction should therefore report this
+   * capability alike, and each override the overloads above that it can be reached through,
+   * including {@code stageCreate} for a staging plugin.
    * <p>
-   * A catalog may reject a request it cannot honor from these overloads. A catalog that is not a
-   * {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or {@code CREATE OR REPLACE TABLE}
-   * in {@code createTable} only after Spark has dropped the existing table, so a catalog that has
-   * to reject a replacement without losing the table should implement
-   * {@link StagingTableCatalog}.
+   * A catalog may reject a request it cannot honor from these overloads, and the defaults do. A
+   * catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or
+   * {@code CREATE OR REPLACE TABLE} in {@code createTable} only after Spark has dropped the
+   * existing table, so a catalog that has to reject a replacement without losing the table should
+   * implement {@link StagingTableCatalog}.
    * <p>
-   * {@link DelegatingCatalogExtension} does not forward this capability from its delegate: its
-   * {@code createTable(Identifier, TableInfo)} rejects a requested layout instead of passing it on,
-   * because the {@code Column[]} overload it would call cannot carry it. A subclass that overrides
-   * the {@link TableInfo} overloads may report it again.
-   * <p>
-   * The built-in session catalog does not support this capability. It rejects a request passed to
-   * {@code createTable(Identifier, TableInfo)} with {@code UNSUPPORTED_FEATURE.TABLE_OPERATION},
-   * but its other {@code createTable} overloads, which {@link DelegatingCatalogExtension} calls,
-   * cannot carry the request and drop it without an error. A {@link CatalogExtension} that reports
-   * this capability therefore has to reject the request itself for a table that it passes to the
-   * built-in session catalog through those overloads. As above, it can do so before a
-   * {@code REPLACE TABLE} drops the existing table only if it is a {@link StagingTableCatalog}.
+   * The built-in session catalog does not support this capability, so a direct caller of its
+   * {@code TableInfo} overloads gets the rejection of the default above.
+   * {@link DelegatingCatalogExtension} does not forward the capability from its delegate. The
+   * {@code Column[]} overloads of the built-in session catalog, which
+   * {@link DelegatingCatalogExtension} calls, cannot carry the request and drop it without an
+   * error, so a {@link CatalogExtension} that reports this capability has to reject the request
+   * itself for a table that it passes to the built-in session catalog through them.
    * <p>
    * Without this capability, Spark rejects such a statement before anything is created or dropped,
    * normally with {@code UNSUPPORTED_FEATURE.TABLE_OPERATION}. An analysis error about the

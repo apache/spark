@@ -20,19 +20,21 @@ package org.apache.spark.sql.catalyst.util
 import java.math.BigDecimal
 import java.nio.ByteBuffer
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, LocalTime, Period}
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.SQLHelper
-import org.apache.spark.sql.connector.catalog.WriteDistributionMode
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryTableCatalog, TableInfo, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{Cast, Expression, Expressions, Extract, FieldReference, GeneralScalarExpression, GetArrayItem, IdentityTransform, NamedReference, NullOrdering, SortDirection, SortOrder, Transform, UserDefinedScalarFunc, VariantGet}
 import org.apache.spark.sql.connector.expressions.LogicalExpressions.{apply => transform, literal, sort}
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelper {
   import WriteDistributionAndOrdering._
@@ -67,6 +69,26 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
 
   private def key(e: Expression): SortOrder =
     sort(e, SortDirection.ASCENDING, NullOrdering.NULLS_FIRST)
+
+  // Runs `body` on a thread with a small (256 KiB) stack so that a recursive rendering overflows
+  // deterministically, and returns whatever it threw (or null if nothing did). The wait is
+  // bounded because SparkFunSuite's per-test timeout cannot interrupt a thread blocked in `join`,
+  // so a rendering that never finishes would otherwise hang the whole suite. Such a thread keeps
+  // running after the test fails.
+  private def runOnSmallStack(body: => Unit): Throwable = {
+    @volatile var thrown: Throwable = null
+    val runnable = new Runnable {
+      override def run(): Unit = {
+        try body catch { case t: Throwable => thrown = t }
+      }
+    }
+    val t = new Thread(null, runnable, "write-ordering-deep-key", 256 * 1024)
+    t.setDaemon(true)
+    t.start()
+    t.join(TimeUnit.MINUTES.toMillis(1))
+    assert(!t.isAlive, "the rendering did not finish")
+    thrown
+  }
 
   private val schema = StructType.fromDDL(
     "id INT, `order` INT, `order-id` INT, s STRUCT<x: INT>, a ARRAY<STRUCT<x: INT>>")
@@ -217,12 +239,68 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
       (WriteDistributionMode.HASH, keys, Seq.empty[Transform]),
       (WriteDistributionMode.HASH, Seq.empty, Seq(Expressions.apply("cluster_by", id))),
       (WriteDistributionMode.RANGE, Seq.empty, Seq.empty[Transform]),
-      (null, keys, Seq.empty[Transform])
+      (null, keys, Seq.empty[Transform]),
+      (null, Seq.empty, Seq.empty[Transform])
     ).foreach { case (mode, ordering, partitioning) =>
       val anyClauses = (_: String) => Some((mode, ordering))
       assert(writeClausesSQL(mode, ordering, partitioning, schema, anyClauses).isEmpty,
         s"for $mode")
     }
+  }
+
+  test("a pair with no clause form is decided before anything is rendered") {
+    val calls = new AtomicInteger(0)
+    val keys = Seq(key(new UnrenderableTransform(() => new IllegalStateException(), calls)))
+    assert(writeClausesSQL(WriteDistributionMode.HASH, keys, Seq.empty, schema, replay).isEmpty)
+    assert(calls.get === 0)
+  }
+
+  test("a clause that quoting cannot change is replayed once") {
+    val replays = new AtomicInteger(0)
+    val countingReplay = (_: String) => {
+      replays.incrementAndGet()
+      None
+    }
+    assert(
+      writeClausesSQL(WriteDistributionMode.NONE, Seq.empty, Seq.empty, schema, countingReplay)
+        .isEmpty)
+    assert(replays.get === 1)
+  }
+
+  test("rejectRequested rejects a request with a mode or an ordering and nothing else") {
+    val catalog = new InMemoryTableCatalog
+    catalog.initialize("cat", CaseInsensitiveStringMap.empty())
+    val ident = Identifier.of(Array("ns"), "t")
+    def info(
+        mode: WriteDistributionMode,
+        ordering: Array[SortOrder]): TableInfo = {
+      new TableInfo.Builder()
+        .withColumns(Array(Column.create("id", IntegerType)))
+        .withWriteDistributionMode(mode)
+        .withWriteOrdering(ordering)
+        .build()
+    }
+
+    rejectRequested(catalog, ident, info(null, Array.empty))
+    Seq(
+      info(WriteDistributionMode.NONE, Array.empty),
+      info(null, Array(key(id)))
+    ).foreach { requested =>
+      checkError(
+        exception = intercept[SparkUnsupportedOperationException] {
+          rejectRequested(catalog, ident, requested)
+        },
+        condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+        sqlState = "0A000",
+        parameters = Map("tableName" -> "`cat`.`ns`.`t`", "operation" -> CLAUSES))
+    }
+  }
+
+  test("a rendering that fails is not tried again with other quoting") {
+    val calls = new AtomicInteger(0)
+    val keys = Seq(key(new UnrenderableTransform(() => new IllegalStateException(), calls)))
+    assert(writeClausesSQL(WriteDistributionMode.RANGE, keys, Seq.empty, schema, replay).isEmpty)
+    assert(calls.get === 1)
   }
 
   test("a nanosecond TIMESTAMP_LTZ renders in UTC with an explicit offset") {
@@ -330,25 +408,9 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
     assert(callsFor(10) === callsFor(1))
   }
 
-  // Runs `f` on a thread with a small (256 KiB) stack so that a recursive rendering overflows
-  // deterministically, and returns whatever it threw (or null if nothing did). The test thread
-  // waits in `join`, which SparkFunSuite's per-test timeout can interrupt.
-  private def runOnSmallStack(f: => Unit): Throwable = {
-    @volatile var thrown: Throwable = null
-    val runnable = new Runnable {
-      override def run(): Unit = {
-        try f catch { case t: Throwable => thrown = t }
-      }
-    }
-    val t = new Thread(null, runnable, "write-ordering-deep-key", 256 * 1024)
-    t.setDaemon(true)
-    t.start()
-    t.join()
-    thrown
-  }
-
-  // Without the entry-point handling this test never finishes, so the test above is the one that
-  // fails with a message. This one checks the result for a key that really overflows the stack.
+  // Without the entry-point handling this test fails only after the bounded wait, so the test
+  // above is the one that fails at once. This one checks the result for a key that really
+  // overflows the stack.
   test("a key that contains itself overflows the stack and is described by its class") {
     val children = new Array[Expression](1)
     val selfContaining = new GeneralScalarExpression("ABS", children)

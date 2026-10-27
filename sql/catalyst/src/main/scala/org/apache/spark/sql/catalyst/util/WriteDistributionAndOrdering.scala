@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.util
 
 import java.time.ZoneOffset
 
-import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
@@ -28,7 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.CreateTable
-import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog, TableCatalogCapability, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog, TableCatalogCapability, TableInfo, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, GetArrayItem, IdentityTransform, Literal, NamedReference, SortOrder, Transform, VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
@@ -45,9 +44,8 @@ object WriteDistributionAndOrdering {
 
   // Runs a call into a connector's expression or literal at one node of a key. `NonFatal` does not
   // cover a `LinkageError`, from a connector class whose dependency is missing, and it should not
-  // fail DESCRIBE or SHOW CREATE TABLE. A `StackOverflowError` is left to `attempt` at the entry
-  // points: caught at every node of a key deeper than the stack, the fallback would render each
-  // subtree again at every level and never finish.
+  // fail DESCRIBE or SHOW CREATE TABLE. A `StackOverflowError` is deliberately not caught here; see
+  // `attempt`.
   private def attemptNode[T](body: => T): Try[T] = {
     try Success(body) catch {
       case NonFatal(e) => Failure(e)
@@ -55,12 +53,12 @@ object WriteDistributionAndOrdering {
     }
   }
 
-  // Runs a whole rendering at an entry point, where a `StackOverflowError` from a key nested
-  // deeper than the stack is caught once, after the stack has unwound.
+  // Runs a whole rendering at an entry point. A `StackOverflowError` from a key nested deeper than
+  // the stack is caught here once, after the stack has unwound; caught at every node, the fallback
+  // would render each subtree again at every level and never finish.
   private def attempt[T](body: => T): Try[T] = {
-    try Success(body) catch {
-      case NonFatal(e) => Failure(e)
-      case e @ (_: LinkageError | _: StackOverflowError) => Failure(e)
+    try attemptNode(body) catch {
+      case e: StackOverflowError => Failure(e)
     }
   }
 
@@ -92,17 +90,19 @@ object WriteDistributionAndOrdering {
   }
 
   /**
-   * The `UNSUPPORTED_FEATURE.TABLE_OPERATION` error for a requested write distribution and
-   * ordering that `catalog` cannot carry, as an unchecked exception that a Java override of
-   * `createTable` can throw.
+   * Throws the `UNSUPPORTED_FEATURE.TABLE_OPERATION` error when `tableInfo` requests a write
+   * distribution or ordering, for the `TableInfo` defaults of `TableCatalog` and
+   * `StagingTableCatalog`, whose `Column[]` overloads cannot carry it. The error is unchecked,
+   * since the Java defaults cannot throw an `AnalysisException`.
    */
-  def unsupportedClausesException(
-      catalog: CatalogPlugin,
-      ident: Identifier): SparkUnsupportedOperationException = {
-    val error = QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, CLAUSES)
-      .asInstanceOf[SparkThrowable]
-    new SparkUnsupportedOperationException(
-      error.getCondition, error.getMessageParameters.asScala.toMap)
+  def rejectRequested(catalog: CatalogPlugin, ident: Identifier, tableInfo: TableInfo): Unit = {
+    if (isRequested(
+        tableInfo.writeDistributionMode(), tableInfo.writeOrdering().toImmutableArraySeq)) {
+      val error = QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, CLAUSES)
+        .asInstanceOf[SparkThrowable]
+      throw new SparkUnsupportedOperationException(
+        error.getCondition, error.getMessageParameters)
+    }
   }
 
   /** True when `catalog` accepts a create-time write distribution and ordering. */
@@ -132,11 +132,15 @@ object WriteDistributionAndOrdering {
    * Renders a requested sort key as SQL, for DESCRIBE. When a connector expression in it fails to
    * render, the sort order is rendered with its own `describe`, and when that fails too, with
    * whichever of the class name of its key, its direction and its null ordering can be read, or
-   * with its own class name when none can.
+   * with its own class name when none can. A null element is rendered as `null`.
    */
   def describeSortOrder(sortOrder: SortOrder): String = {
-    attempt(sortOrderToSQL(sortOrder, quoteIfNeeded)).orElse(attempt(sortOrder.describe))
-      .getOrElse(describeUnrenderable(sortOrder))
+    if (sortOrder == null) {
+      "null"
+    } else {
+      attempt(sortOrderToSQL(sortOrder, quoteIfNeeded)).orElse(attempt(sortOrder.describe))
+        .getOrElse(describeUnrenderable(sortOrder))
+    }
   }
 
   private def describeUnrenderable(sortOrder: SortOrder): String = {
@@ -144,7 +148,7 @@ object WriteDistributionAndOrdering {
       attempt(sortOrder.expression().getClass.getName),
       attempt(sortOrder.direction().toString),
       attempt(sortOrder.nullOrdering().toString)).flatMap(_.toOption)
-    if (parts.nonEmpty) parts.mkString(" ") else Option(sortOrder).fold("null")(_.getClass.getName)
+    if (parts.nonEmpty) parts.mkString(" ") else sortOrder.getClass.getName
   }
 
   /**
@@ -154,7 +158,8 @@ object WriteDistributionAndOrdering {
    * the ordering fails to render, or when `replay`, such as [[replayWith]], does not give back the
    * same pair with every referenced column in `schema`. Names are quoted only where needed, and on
    * a second try all of them, which a name that is a reserved keyword under
-   * `spark.sql.ansi.enforceReservedKeywords` needs.
+   * `spark.sql.ansi.enforceReservedKeywords` needs. The clause form is decided before anything is
+   * rendered, and a rendering that fails ends the search, since quoting does not change it.
    */
   def writeClausesSQL(
       writeDistributionMode: WriteDistributionMode,
@@ -162,30 +167,33 @@ object WriteDistributionAndOrdering {
       partitioning: Seq[Transform],
       schema: StructType,
       replay: String => Option[(WriteDistributionMode, Seq[SortOrder])]): Option[String] = {
-    lazy val partitioned = hasPartitioning(partitioning)
-    Seq[String => String](quoteIfNeeded, quoteIdentifier).iterator.flatMap { quote =>
-      attempt {
-        val orderBy = if (writeOrdering.nonEmpty) {
-          Some(writeOrdering.map(sortOrderToSQL(_, quote)).mkString("ORDERED BY (", ", ", ")"))
-        } else {
-          None
-        }
-        (writeDistributionMode, orderBy) match {
-          case (WriteDistributionMode.HASH, Some(o)) if partitioned =>
-            Some(s"DISTRIBUTED BY PARTITION $o")
-          case (WriteDistributionMode.HASH, None) if partitioned =>
-            Some("DISTRIBUTED BY PARTITION")
-          case (WriteDistributionMode.RANGE, Some(o)) => Some(o)
-          case (WriteDistributionMode.NONE, Some(o)) => Some(s"LOCALLY $o")
-          case (WriteDistributionMode.NONE, None) => Some("UNORDERED")
-          case _ => None
-        }
-      }.toOption.flatten
-    }.find { clauses =>
+    val clauseOf: Option[String => String] = (writeDistributionMode, writeOrdering.nonEmpty) match {
+      case (WriteDistributionMode.HASH, true) if hasPartitioning(partitioning) =>
+        Some(orderBy => s"DISTRIBUTED BY PARTITION $orderBy")
+      case (WriteDistributionMode.HASH, false) if hasPartitioning(partitioning) =>
+        Some(_ => "DISTRIBUTED BY PARTITION")
+      case (WriteDistributionMode.RANGE, true) => Some(orderBy => orderBy)
+      case (WriteDistributionMode.NONE, true) => Some(orderBy => s"LOCALLY $orderBy")
+      case (WriteDistributionMode.NONE, false) => Some(_ => "UNORDERED")
+      case _ => None
+    }
+    def render(clause: String => String, quote: String => String): Option[String] = attempt {
+      val orderBy = writeOrdering.map(sortOrderToSQL(_, quote)).mkString("ORDERED BY (", ", ", ")")
+      clause(orderBy)
+    }.toOption
+    def replaysAsSamePair(clauses: String): Boolean = {
       attempt(replay(clauses).exists { case (mode, ordering) =>
         mode == writeDistributionMode && sameSortOrders(ordering, writeOrdering) &&
           unknownReferences(schema, ordering).isEmpty
       }).getOrElse(false)
+    }
+    clauseOf.flatMap { clause =>
+      render(clause, quoteIfNeeded).flatMap { first =>
+        Some(first).filter(replaysAsSamePair).orElse {
+          render(clause, quoteIdentifier)
+            .filter(second => second != first && replaysAsSamePair(second))
+        }
+      }
     }
   }
 

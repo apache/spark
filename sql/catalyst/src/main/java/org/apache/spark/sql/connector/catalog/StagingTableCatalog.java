@@ -26,6 +26,7 @@ import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.connector.write.BatchWrite;
 import org.apache.spark.sql.connector.write.Write;
 import org.apache.spark.sql.connector.write.WriterCommitMessage;
@@ -103,11 +104,14 @@ public interface StagingTableCatalog extends TableCatalog {
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
    *         forwarding the catalog-declared table-state options and required privileges.
    * @throws TableAlreadyExistsException If a table or view already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform is not supported, or
+   *         if the table info requests a write distribution or ordering; see
+   *         {@link TableCatalogCapability}
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default StagedTable stageCreate(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return stageCreate(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -168,12 +172,15 @@ public interface StagingTableCatalog extends TableCatalog {
    *         creation for this table. Spark will call
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
    *         forwarding the catalog-declared table-state options and required privileges.
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform is not supported, or
+   *         if the table info requests a write distribution or ordering; see
+   *         {@link TableCatalogCapability}
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @throws NoSuchTableException If the table does not exist
    */
   default StagedTable stageReplace(Identifier ident, TableInfo tableInfo)
       throws NoSuchNamespaceException, NoSuchTableException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return stageReplace(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -233,11 +240,14 @@ public interface StagingTableCatalog extends TableCatalog {
    *         creation for this table. Spark will call
    *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} later,
    *         forwarding the catalog-declared table-state options and required privileges.
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform is not supported, or
+   *         if the table info requests a write distribution or ordering; see
+   *         {@link TableCatalogCapability}
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    */
   default StagedTable stageCreateOrReplace(Identifier ident, TableInfo tableInfo)
       throws NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return stageCreateOrReplace(ident,
         tableInfo.columns(),
         tableInfo.partitions(),

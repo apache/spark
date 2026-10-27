@@ -154,18 +154,14 @@ case class ShowCreateTableExec(
       builder: StringBuilder): Unit = {
     val table = resolvedTable.table
     if (WriteDistributionAndOrdering.supportsWriteDistributionAndOrdering(resolvedTable.catalog)) {
-      val writeDistributionMode = table.writeDistributionMode()
-      val writeOrdering = WriteDistributionAndOrdering.writeOrderingOf(table)
-      if (WriteDistributionAndOrdering.isRequested(writeDistributionMode, writeOrdering)) {
-        WriteDistributionAndOrdering.writeClausesSQL(
-          writeDistributionMode,
-          writeOrdering,
-          partitioning.toImmutableArraySeq,
-          schema,
-          WriteDistributionAndOrdering.replayWith(session.sessionState.sqlParser)
-        ).filter(_ => !createsV1Table(resolvedTable.catalog, provider))
-          .foreach(clauses => builder ++= s"$clauses\n")
-      }
+      WriteDistributionAndOrdering.writeClausesSQL(
+        table.writeDistributionMode(),
+        WriteDistributionAndOrdering.writeOrderingOf(table),
+        partitioning.toImmutableArraySeq,
+        schema,
+        WriteDistributionAndOrdering.replayWith(session.sessionState.sqlParser)
+      ).filter(_ => !createsV1Table(resolvedTable.catalog, provider))
+        .foreach(clauses => builder ++= s"$clauses\n")
     }
   }
 

@@ -24,14 +24,14 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkThrowable
+import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.analysis.{NoSuchTableException, TableAlreadyExistsException}
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{CreateTable, CreateTableAsSelect, LogicalPlan, ReplaceTable, ReplaceTableAsSelect, V2CreateTablePlan}
 import org.apache.spark.sql.catalyst.plans.physical.{HashPartitioning, RangePartitioning}
 import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering
-import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, Table, TableCatalogCapability, TableInfo, Txn, TxnTableCatalog, WriteDistributionMode}
+import org.apache.spark.sql.connector.catalog.{Column, DelegatingCatalogExtension, DelegatingTable, Identifier, InMemoryRowLevelOperationTableCatalog, InMemoryTable, InMemoryTableCatalog, StagedTable, StagingInMemoryTableCatalog, StagingTableCatalog, Table, TableCatalog, TableCatalogCapability, TableInfo, Txn, TxnTableCatalog, WriteDistributionMode}
 import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAME
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 import org.apache.spark.sql.connector.catalog.WriteDistributionMode.{HASH, NONE, RANGE}
@@ -89,12 +89,17 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
   private def checkRejected(stmt: String, tableName: String): Unit = {
     checkError(
-      exception = intercept[Exception](sql(stmt)).asInstanceOf[SparkThrowable],
+      exception = intercept[SparkUnsupportedOperationException](sql(stmt)),
       condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
       sqlState = "0A000",
       parameters = Map(
         "tableName" -> tableName,
         "operation" -> WriteDistributionAndOrdering.CLAUSES))
+  }
+
+  private def assertCreatedInTransaction(catalog: RecordingTransactionalTableCatalog): Unit = {
+    assert(catalog.observedTransactions.size === 1)
+    assert(catalog.lastTransaction.catalog.txnTables.contains(Identifier.of(Array.empty, "t")))
   }
 
   private def checkUnsupported(stmt: String, tableName: String, operation: String): Unit = {
@@ -545,7 +550,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
       val catalog = spark.sessionState.catalogManager.catalog("txncat")
         .asInstanceOf[RecordingTransactionalTableCatalog]
-      assert(catalog.observedTransactions.size === 1)
+      assertCreatedInTransaction(catalog)
       assert(calls("txncat") ===
         Seq(WriteSpecCall("createTable", "t", RANGE, Seq("id ASC NULLS FIRST"))))
     }
@@ -559,6 +564,36 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
         "`txncat`.`t`",
         "CREATE TABLE AS SELECT")
       assert(calls("txncat").isEmpty)
+    }
+  }
+
+  test("a transactional catalog gets REPLACE TABLE AS SELECT through the catalog of its " +
+    "transaction") {
+    val catalogClass = classOf[RecordingTransactionalTableCatalog].getName
+    withSQLConf("spark.sql.catalog.txncat" -> catalogClass) {
+      sql("CREATE TABLE txncat.t (id INT) USING foo")
+      sql("REPLACE TABLE txncat.t USING foo ORDERED BY id AS SELECT 1 AS id")
+
+      val catalog = spark.sessionState.catalogManager.catalog("txncat")
+        .asInstanceOf[RecordingTransactionalTableCatalog]
+      assertCreatedInTransaction(catalog)
+      assert(calls("txncat") === Seq(
+        WriteSpecCall("createTable", "t", null, Seq.empty),
+        WriteSpecCall("createTable", "t", RANGE, Seq("id ASC NULLS FIRST"))))
+    }
+  }
+
+  test("a transactional catalog is checked through the catalog of its transaction for REPLACE " +
+    "TABLE AS SELECT") {
+    val catalogClass = classOf[TxnCatalogWithoutCapability].getName
+    withSQLConf("spark.sql.catalog.txncat" -> catalogClass) {
+      sql("CREATE TABLE txncat.t (id INT) USING foo")
+      checkUnsupported(
+        "REPLACE TABLE txncat.t USING foo ORDERED BY id AS SELECT 1 AS id",
+        "`txncat`.`t`",
+        "REPLACE TABLE AS SELECT")
+      assert(calls("txncat").size === 1)
+      checkAnswer(sql("SELECT * FROM txncat.t"), Seq.empty)
     }
   }
 
@@ -636,6 +671,34 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           s"$create USING $provider ORDERED BY id AS SELECT 1 AS id"
         ).foreach(checkRejected(_, "`spark_catalog`.`default`.`t`"))
       }
+    }
+  }
+
+  test("the TableInfo defaults reject a request instead of ignoring it") {
+    withSQLConf("spark.sql.catalog.defaultcat" -> classOf[DefaultsOnlyStagingCatalog].getName) {
+      sql("CREATE TABLE defaultcat.t (id INT) USING foo")
+      Seq(
+        ("CREATE TABLE defaultcat.u (id INT) USING foo ORDERED BY id", "u"),
+        ("CREATE TABLE defaultcat.u (id INT) USING foo UNORDERED", "u"),
+        ("CREATE TABLE defaultcat.u (id INT, c INT) USING foo PARTITIONED BY (c) " +
+          "DISTRIBUTED BY PARTITION", "u"),
+        ("CREATE TABLE defaultcat.u USING foo ORDERED BY id AS SELECT 1 AS id", "u"),
+        ("REPLACE TABLE defaultcat.t USING foo ORDERED BY id AS SELECT 2 AS id", "t"),
+        ("CREATE OR REPLACE TABLE defaultcat.u (id INT) USING foo ORDERED BY id", "u"),
+        ("CREATE OR REPLACE TABLE defaultcat.t USING foo UNORDERED AS SELECT 2 AS id", "t")
+      ).foreach { case (stmt, table) => checkRejected(stmt, s"`defaultcat`.`$table`") }
+
+      assert(sql("SHOW TABLES IN defaultcat").count() === 1)
+      checkAnswer(sql("SELECT * FROM defaultcat.t"), Seq.empty)
+    }
+  }
+
+  test("a catalog that leaves createTable to the default loses a replaced table") {
+    withSQLConf("spark.sql.catalog.defaultcat" -> classOf[DefaultsOnlyCatalog].getName) {
+      sql("CREATE TABLE defaultcat.t (id INT) USING foo")
+      checkRejected("REPLACE TABLE defaultcat.t (id INT) USING foo ORDERED BY id",
+        "`defaultcat`.`t`")
+      assert(sql("SHOW TABLES IN defaultcat").count() === 0)
     }
   }
 
@@ -1212,6 +1275,39 @@ class RecordingStagingInMemoryTableCatalog
     record("stageCreateOrReplace", ident, tableInfo)
     super.stageCreateOrReplace(ident, tableInfo)
   }
+}
+
+/**
+ * A staging catalog that supports the clauses and routes each `TableInfo` overload to the interface
+ * default. The mixins repeat what it already is, so that `super[X]` can name them.
+ */
+class DefaultsOnlyStagingCatalog
+  extends StagingInMemoryTableCatalog with StagingTableCatalog with TableCatalog {
+
+  override def capabilities: util.Set[TableCatalogCapability] =
+    WriteSpecCapability.add(super.capabilities)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table =
+    super[TableCatalog].createTable(ident, tableInfo)
+
+  override def stageCreate(ident: Identifier, tableInfo: TableInfo): StagedTable =
+    super[StagingTableCatalog].stageCreate(ident, tableInfo)
+
+  override def stageReplace(ident: Identifier, tableInfo: TableInfo): StagedTable =
+    super[StagingTableCatalog].stageReplace(ident, tableInfo)
+
+  override def stageCreateOrReplace(ident: Identifier, tableInfo: TableInfo): StagedTable =
+    super[StagingTableCatalog].stageCreateOrReplace(ident, tableInfo)
+}
+
+/** The same for a catalog that is not a `StagingTableCatalog`. */
+class DefaultsOnlyCatalog extends InMemoryTableCatalog with TableCatalog {
+
+  override def capabilities: util.Set[TableCatalogCapability] =
+    WriteSpecCapability.add(super.capabilities)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table =
+    super[TableCatalog].createTable(ident, tableInfo)
 }
 
 /**

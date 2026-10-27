@@ -23,6 +23,7 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
@@ -375,12 +376,16 @@ public interface TableCatalog extends CatalogPlugin {
    *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform is not supported, or
+   *         if the table info requests a write distribution or ordering; see
+   *         {@link TableCatalogCapability}. For a {@code REPLACE TABLE} this comes after Spark has
+   *         dropped the table, because only a {@link StagingTableCatalog} is asked first.
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @since 4.1.0
    */
   default Table createTable(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 

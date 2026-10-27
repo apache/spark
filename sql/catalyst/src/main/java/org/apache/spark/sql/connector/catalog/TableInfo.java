@@ -107,7 +107,7 @@ public class TableInfo {
    * Spark passes the request only to the {@code TableInfo} overloads of
    * {@link TableCatalog#createTable(Identifier, TableInfo)} and of the {@link StagingTableCatalog}
    * methods {@code stageCreate}, {@code stageReplace} and {@code stageCreateOrReplace}. Their
-   * default implementations drop it, so a catalog that reports the capability must override each
+   * default implementations reject it, so a catalog that reports the capability must override each
    * one it can be reached through. For a {@link TransactionalCatalogPlugin}, a
    * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} that Spark runs in a
    * transaction reaches the catalog of its
