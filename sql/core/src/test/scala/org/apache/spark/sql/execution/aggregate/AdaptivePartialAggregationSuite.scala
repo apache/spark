@@ -1424,12 +1424,14 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
   }
 
   test("the spill check judges the recent rows at their exact ratio boundary") {
-    // With `minRows = 10`, ids 0-9 add 9 keys and ids 10-29 add 10 more, two rows each, so when
-    // the forced fallback fills the map at 30 rows, the rows since the check before last (at 10
-    // rows) are 20 rows over 10 keys, a ratio of exactly 2.0, while the whole epoch compacts by
-    // only 30 / 19. Demanding 2.0 the aggregation is kept (`20 < 10 * 2.0` is false) and the map
-    // spills; demanding 2.1 the last 10 rows are passed through. A check over the whole epoch
-    // would pass them through at both.
+    // With `minRows = 10`, ids 0-9 add 5 keys, two rows each, ids 10-19 add 10 more, one each, and
+    // ids 20-29 add 5 more, two rows each, so the periodic checks at 10, 20 and 30 rows see 2.0,
+    // 1.33 and 1.5 and keep aggregating. The check at 30 rows runs on id 29, so when id 30 finds
+    // the map full, the rows since the check before last are ids 20-29: 10 rows over 5 keys, a
+    // ratio of exactly 2.0. Demanding 2.0 the aggregation is kept (`10 < 5 * 2.0` is false) and
+    // the map spills; demanding 2.1 the last 10 rows are passed through. A window starting one
+    // check earlier (20 rows over 15 keys) or the whole epoch (30 rows over 20 keys) would pass
+    // them through at both.
     for {
       (minCompactionToSpill, passedThrough) <- Seq(2.0 -> 0, 2.1 -> 10)
       wholeStage <- Seq(true, false)
@@ -1445,11 +1447,81 @@ class AdaptivePartialAggregationSuite extends QueryTest with SharedSparkSession
           "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 30") ++
           fixedPlanConfs): _*) {
         val df = () => spark.range(0, 40, 1, 1)
-          .select(when($"id" < 9, $"id").when($"id" === 9, 0L)
-            .otherwise(($"id" - 10) / 2 + 9).cast("long").cast("string") as "k", $"id" as "v")
+          .select(when($"id" < 10, $"id" / 2).when($"id" < 20, $"id" - 5)
+            .when($"id" < 30, ($"id" - 20) / 2 + 15).otherwise(($"id" - 30) / 2 + 20)
+            .cast("long").cast("string") as "k", $"id" as "v")
           .groupBy($"k")
           .agg(sum($"v") as "s")
         withClue(s"minCompactionToSpill=$minCompactionToSpill wholeStage=$wholeStage") {
+          val c = runAndReadCounters(df)
+          assert(c.passedThrough == passedThrough)
+          assert((c.tasksFallBacked > 0) == (passedThrough == 0),
+            "the map spills exactly when the spill check keeps aggregating")
+        }
+      }
+    }
+  }
+
+  test("the spill check of a new map epoch does not count the previous epoch's keys") {
+    // With `minRows = 10`, the forced fallback fills every epoch at 19 rows, after one periodic
+    // check, so the spill check judges the whole epoch. The first epoch, ids 0-18 over 5 keys,
+    // compacts by 3.8 and spills. The second, ids 19-37, has 8 keys at its check at 10 rows and
+    // 12 at the fill, so it compacts by 19 / 12 and the last 12 rows are passed through. Keeping
+    // the key count of the first epoch's check as the start of the second epoch's window would
+    // judge 19 rows over 7 keys and keep aggregating.
+    Seq(true, false).foreach { wholeStage =>
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "10",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key -> "2.0",
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "1, 19") ++
+          fixedPlanConfs): _*) {
+        val df = () => spark.range(0, 50, 1, 1)
+          .select(when($"id" < 19, $"id" % 5).when($"id" < 29, ($"id" - 19) % 8 + 100)
+            .when($"id" < 38, ($"id" - 29) % 4 + 108).otherwise(0L)
+            .cast("string") as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s")
+        withClue(s"wholeStage=$wholeStage") {
+          val c = runAndReadCounters(df)
+          assert(c.passedThrough == 12)
+          assert(c.tasksFallBacked > 0, "the first epoch should spill")
+        }
+      }
+    }
+  }
+
+  test("the spill check's window counts the keys of both maps") {
+    // With the two-level map on the codegen path and a 16-key fast map, ids 0-9 add 10 keys and
+    // ids 10-19 add 5 more, two rows each, all held by the fast map, and id 20 fills it. Id 21
+    // needs the regular map, which the forced fallback reports full after 20 rows, so the spill
+    // check judges the rows since the check before last, at 10 rows: ids 10-20, 11 rows over 6
+    // keys, a ratio of 1.83. Demanding 1.5 the aggregation is kept and the map spills; demanding
+    // 1.9 the last 9 rows are passed through. Leaving the fast map's keys out of the window's
+    // start would judge 11 rows over 16 keys and pass them through at both, while counting them
+    // twice would keep aggregating at both. `minCompaction = 1.0` keeps the periodic check at 10
+    // rows, 10 rows over 10 keys, aggregating.
+    Seq(1.5 -> 0, 1.9 -> 9).foreach { case (minCompactionToSpill, passedThrough) =>
+      withSQLConf(
+        (Seq(
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key -> "true",
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true",
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key -> "10",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key -> "1.0",
+          SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key ->
+            minCompactionToSpill.toString,
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> "16, 20") ++
+          fixedPlanConfs): _*) {
+        val df = () => spark.range(0, 30, 1, 1)
+          .select(when($"id" < 10, $"id").when($"id" < 20, ($"id" - 10) / 2 + 10)
+            .when($"id" === 20, 15L).otherwise($"id" + 16).cast("long") as "k", $"id" as "v")
+          .groupBy($"k")
+          .agg(sum($"v") as "s")
+        withClue(s"minCompactionToSpill=$minCompactionToSpill") {
           val c = runAndReadCounters(df)
           assert(c.passedThrough == passedThrough)
           assert((c.tasksFallBacked > 0) == (passedThrough == 0),

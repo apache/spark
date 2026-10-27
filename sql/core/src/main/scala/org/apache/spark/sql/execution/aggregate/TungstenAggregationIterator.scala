@@ -198,7 +198,7 @@ class TungstenAggregationIterator(
   //     before last) against the higher `minCompactionToSpill`. Keeping the aggregation then
   //     means aggregating the rest of the input through spills, which pays off only if that input
   //     keeps repeating keys; when keys repeat across the input, the ratio of the recent rows
-  //     climbs above the epoch's as the map fills. If the check passes, the map does not spill
+  //     climbs above the epoch's as the map fills. Below the threshold, the map does not spill
   //     and the row that could not be inserted becomes the first pass-through row. Pass-through
   //     cannot be undone within the task, so like the periodic check this waits until the current
   //     epoch has processed `minRows` rows; a map that fills sooner spills as usual.

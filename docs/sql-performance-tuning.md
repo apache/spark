@@ -237,7 +237,9 @@ the sample of recent rows that the evaluation before a spill measures. Lowering
 under half of them; whether that pays off depends on how the cost of spilling the rest of the input
 compares with shuffling it. Pass-through also streams the later rows of keys the frozen map holds,
 so with a few hot keys each of them reaches the final aggregation row by row, on the one reducer
-that key hashes to.
+that key hashes to. When one or two keys, such as a NULL or default value, hold a large share of the
+rows over many distinct ones, that reducer can receive a large share of all rows; setting
+`minCompactionToSpill` to `minCompaction` or below keeps such inputs aggregating through spills.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
