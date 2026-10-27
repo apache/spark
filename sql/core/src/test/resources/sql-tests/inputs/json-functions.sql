@@ -386,6 +386,14 @@ select '[''a'', ''b'']' IS JSON;
 -- trailing content after a well-formed value is rejected
 select '1 2' IS JSON;
 select '{} []' IS JSON;
+-- other parser extensions are rejected: comments, unquoted names, NaN/Infinity, leading zeros
+select '/* c */ {}' IS JSON, '{a:1}' IS JSON, 'NaN' IS JSON, 'Infinity' IS JSON, '01' IS JSON;
+-- whitespace-only input is not a JSON value
+select '   ' IS JSON;
+-- duplicate field names are accepted
+select '{"a":1,"a":2}' IS JSON OBJECT;
+-- input beyond the parser limits raises an error, like parse_json
+select concat(repeat('[', 1001), repeat(']', 1001)) IS JSON;
 -- input that is not valid UTF-8 is rejected (lone continuation byte, encoded surrogate)
 select cast(X'228022' AS STRING) IS JSON;
 select cast(X'22EDA08022' AS STRING) IS JSON;
@@ -397,6 +405,13 @@ select '[{"a":["\\uDC00"]}]' IS JSON ARRAY;
 select '"\\uD835\\uDC00"' IS JSON;
 -- shift operators after the ARRAY qualifier
 select '[1]' IS JSON ARRAY, 8 >> 1, 8 >>> 1;
+-- collated, trim-collated, and VARCHAR operands behave like STRING
+select '{"a":1}' COLLATE UTF8_LCASE IS JSON OBJECT, '[1] ' COLLATE UTF8_LCASE_RTRIM IS JSON ARRAY;
+select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY;
+-- an untyped NULL operand yields NULL
+select NULL IS JSON, NULL IS NOT JSON;
+-- a non-string operand is rejected
+select 1 IS JSON;
 -- keywords usable as identifiers (non-reserved)
 select 1 AS OBJECT;
 select 1 AS SCALAR;

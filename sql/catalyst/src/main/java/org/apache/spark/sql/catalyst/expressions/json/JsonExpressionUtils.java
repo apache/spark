@@ -24,9 +24,12 @@ import java.util.List;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonToken;
+import com.fasterxml.jackson.core.StreamReadConstraints;
+import com.fasterxml.jackson.core.exc.StreamConstraintsException;
 
 import org.apache.spark.sql.catalyst.json.CreateJacksonParser;
 import org.apache.spark.sql.catalyst.util.GenericArrayData;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.unsafe.types.UTF8String;
 
 public class JsonExpressionUtils {
@@ -138,7 +141,10 @@ public class JsonExpressionUtils {
    * read exactly once here, so a non-deterministic input is evaluated a single time (unlike a
    * plan that references the child in more than one place). NULL handling (NULL input yields a
    * NULL result) is left to the calling expression; this method is only invoked for non-null
-   * input and always returns a definite true/false.
+   * input. Malformed input yields false, but input that exceeds one of Jackson's default
+   * {@code StreamReadConstraints} (nesting depth, number length, string length, or field name
+   * length) cannot be classified and raises IS_JSON_INPUT_LIMIT_EXCEEDED, at the same limits
+   * where {@code parse_json} fails.
    */
   public static boolean isJson(UTF8String json, int shape) {
     // The parser decodes the bytes through a UTF-8 reader that silently replaces malformed
@@ -194,15 +200,45 @@ public class JsonExpressionUtils {
       // Reject trailing content after the first value, e.g. `1 2` or `{} []`, so only a single
       // well-formed JSON value is accepted.
       return jsonParser.nextToken() == null;
+    } catch (StreamConstraintsException e) {
+      throw QueryExecutionErrors.isJsonInputLimitExceededError(describeLimit(e), json, e);
     } catch (IOException e) {
       return false;
     }
   }
 
+  // Describes the parser limit that `e` reports, for IS_JSON_INPUT_LIMIT_EXCEEDED. Jackson does
+  // not expose which limit was exceeded, so this matches the message prefixes used by
+  // StreamReadConstraints, and lists every limit if the message is not recognized.
+  private static String describeLimit(StreamConstraintsException e) {
+    StreamReadConstraints limits = STRICT_JSON_FACTORY.streamReadConstraints();
+    String message = String.valueOf(e.getMessage());
+    if (message.startsWith("Document nesting depth")) {
+      return "the nesting depth of objects and arrays exceeds the maximum of " +
+          limits.getMaxNestingDepth();
+    } else if (message.startsWith("Number value length")) {
+      return "a number is longer than the maximum of " + limits.getMaxNumberLength() +
+          " characters";
+    } else if (message.startsWith("String value length")) {
+      return "a string value is longer than the maximum of " + limits.getMaxStringLength() +
+          " characters";
+    } else if (message.startsWith("Name length")) {
+      return "a field name is longer than the maximum of " + limits.getMaxNameLength() +
+          " characters";
+    } else {
+      return String.format(
+          "the limits are a nesting depth of %d and lengths of %d characters for numbers, " +
+              "%d for string values, and %d for field names",
+          limits.getMaxNestingDepth(), limits.getMaxNumberLength(), limits.getMaxStringLength(),
+          limits.getMaxNameLength());
+    }
+  }
+
   // Returns whether `str` contains an unpaired UTF-16 surrogate code unit. Jackson accepts an
-  // escaped lone surrogate (e.g. a high surrogate escape with no low surrogate after it), but
-  // RFC 8259 section 7 requires JSON string contents to be well-formed Unicode. This mirrors the
-  // strict check in VariantBuilder.checkValidUnicodeString.
+  // escaped lone surrogate (e.g. a high surrogate escape with no low surrogate after it), and so
+  // does the RFC 8259 grammar (section 8.2), but such a string is not well-formed Unicode.
+  // Rejecting it is a deliberate rule stricter than RFC 8259, matching I-JSON (RFC 7493
+  // section 2.1) and the strict check in VariantBuilder.checkValidUnicodeString.
   private static boolean hasUnpairedSurrogate(String str) {
     int len = str.length();
     for (int i = 0; i < len; ++i) {
