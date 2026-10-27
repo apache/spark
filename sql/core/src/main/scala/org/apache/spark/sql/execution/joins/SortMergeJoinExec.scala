@@ -458,6 +458,50 @@ case class SortMergeJoinExec(
   }
 
   /**
+   * Like [[createStreamedVars]] but stores extracted column values in class-level mutable fields
+   * instead of local variables. This allows the extraction code to be split across helper methods
+   * via [[CodegenContext.splitExpressions]], avoiding the HotSpot 8K JIT limit on wide schemas.
+   *
+   * Returns (exprCodes, perColumnExtraction) where exprCodes reference the class fields
+   * (marked as globals so all codegen policies read them in place) and perColumnExtraction
+   * is one extraction snippet per output column — the caller partitions these by condition
+   * references and calls splitExpressions on each group.
+   * No separate variable declarations are needed since the fields are class members.
+   */
+  private def createStreamedVarsAsFields(
+      ctx: CodegenContext,
+      streamedRow: String): (Seq[ExprCode], Seq[String]) = {
+    ctx.INPUT_ROW = streamedRow
+    val varsAndCode = streamedPlan.output.zipWithIndex.map { case (a, i) =>
+      val valueCode = CodeGenerator.getValue(streamedRow, a.dataType, i.toString)
+      val javaType = CodeGenerator.javaType(a.dataType)
+      val defaultValue = CodeGenerator.defaultValue(a.dataType)
+      val value = ctx.addMutableState(javaType, "streamVar",
+        v => s"$v = $defaultValue;", forceInline = true)
+      if (a.nullable) {
+        val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "streamVarIsNull",
+          v => s"$v = false;", forceInline = true)
+        val extractCode =
+          s"""
+             |$isNull = $streamedRow.isNullAt($i);
+             |$value = $isNull ? $defaultValue : ($valueCode);
+           """.stripMargin
+        val exprCode = ExprCode(
+          EmptyBlock,
+          JavaCode.isNullGlobal(isNull),
+          JavaCode.global(value, a.dataType))
+        (exprCode, extractCode)
+      } else {
+        val extractCode = s"$value = $valueCode;"
+        val exprCode = ExprCode(EmptyBlock, FalseLiteral, JavaCode.global(value, a.dataType))
+        (exprCode, extractCode)
+      }
+    }
+
+    varsAndCode.unzip
+  }
+
+  /**
    * Splits variables based on whether it's used by condition or not, returns the code to create
    * these variables before the condition and after the condition.
    *
@@ -497,11 +541,33 @@ case class SortMergeJoinExec(
 
     val (findNextJoinRowsFuncName, streamedRow, matches) = genScanner(ctx)
 
-    // Create variables for row from both sides.
-    val (streamedVars, streamedVarDecl) = createStreamedVars(ctx, streamedRow)
     val bufferedRow = ctx.freshName("bufferedRow")
     val setDefaultValue = joinType == LeftOuter || joinType == RightOuter
-    val bufferedVars = genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue)
+
+    // Decide whether to use field-based extraction based on estimated extraction code size.
+    // Each column generates ~80 source chars of extraction code (nullable check + getValue).
+    // The streamed side extracts once per row, the buffered side once per matched pair.
+    // When the total extraction code would push processNext() toward the JVM's 8K JIT limit
+    // (DEFAULT_JVM_HUGE_METHOD_LIMIT), we use field-based extraction so splitExpressions
+    // can move it into helper methods. The 8K limit is in bytecode bytes; source chars are
+    // a conservative proxy (bytecode is typically 1.0-1.3x source length for generated code).
+    val estimatedExtractionChars =
+      (streamedPlan.output.length + bufferedPlan.output.length) * 80
+    val useFieldBasedExtraction =
+      estimatedExtractionChars > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT
+
+    // Create variables for both sides.
+    val (streamedVars, streamedSnippets, bufferedVars, bufferedSnippets, streamedDecls) =
+      if (useFieldBasedExtraction) {
+        val (sVars, sSnippets) = createStreamedVarsAsFields(ctx, streamedRow)
+        val (bVars, bSnippets) =
+          genOneSideJoinVarsAsFields(ctx, bufferedRow, bufferedPlan, setDefaultValue)
+        (sVars, sSnippets, bVars, bSnippets, Seq.empty[String])
+      } else {
+        val (sVars, sDecls) = createStreamedVars(ctx, streamedRow)
+        val bVars = genOneSideJoinVars(ctx, bufferedRow, bufferedPlan, setDefaultValue)
+        (sVars, Seq.empty[String], bVars, Seq.empty[String], sDecls)
+      }
 
     // Create variable name for Existence join.
     val existsVar = joinType match {
@@ -548,69 +614,152 @@ case class SortMergeJoinExec(
     val conditionForCodegen = if (streamedOnlyGuard.isDefined) restCondition else condition
 
     val (streamedBeforeLoop, condCheck, loadStreamed) = if (conditionForCodegen.isDefined) {
-      // Split the code of creating variables based on whether it's used by condition or not.
       val loaded = ctx.freshName("loaded")
-      val (streamedBefore, streamedAfter) = splitVarsByCondition(streamedOutput, streamedVars)
-      val (bufferedBefore, bufferedAfter) = splitVarsByCondition(bufferedOutput, bufferedVars)
-      // Generate code for condition
-      ctx.currentVars = streamedVars ++ bufferedVars
-      val cond = BindReferences.bindReference(
-        conditionForCodegen.get, streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
-      // Evaluate the columns those used by condition before loop
-      val before = joinType match {
-        case LeftAnti =>
-          // No need to initialize `loaded` variable for Left Anti join.
-          streamedBefore.trim
-        case _ =>
-          s"""
-             |boolean $loaded = false;
-             |$streamedBefore
-         """.stripMargin
-      }
+      // Use the FULL condition's references (including streamedOnlyCondition) to determine
+      // which columns to extract before the condition check. streamedOnlyPre reads columns
+      // from streamedOnlyCondition before the match loop, so those must be extracted early.
+      val condExprRefs = condition.get.references
 
-      val loadStreamedAfterCondition = joinType match {
-        case LeftAnti =>
-          // No need to evaluate columns not used by condition from streamed side, as for Left Anti
-          // join, streamed row with match is not outputted.
-          ""
-        case _ =>
+      if (useFieldBasedExtraction) {
+        // Field-based path: partition per-column snippets by condition references.
+        val (sCondSnippets, sRestSnippets) =
+          streamedOutput.zip(streamedSnippets).partition { case (a, _) =>
+            condExprRefs.contains(a)
+          }
+        val (bCondSnippets, bRestSnippets) =
+          bufferedOutput.zip(bufferedSnippets).partition { case (a, _) =>
+            condExprRefs.contains(a)
+          }
+
+        val sCondExtract = ctx.splitExpressions(
+          sCondSnippets.map(_._2), "extractStreamCondVars", Seq.empty)
+        val sRestExtract = ctx.splitExpressions(
+          sRestSnippets.map(_._2), "extractStreamRestVars", Seq.empty)
+        val bCondExtract = ctx.splitExpressions(
+          bCondSnippets.map(_._2), "extractJoinCondVars",
+          Seq(("InternalRow", bufferedRow)))
+        val bRestExtract = ctx.splitExpressions(
+          bRestSnippets.map(_._2), "extractJoinRestVars",
+          Seq(("InternalRow", bufferedRow)))
+
+        ctx.currentVars = streamedVars ++ bufferedVars
+        val cond = BindReferences.bindReference(
+          conditionForCodegen.get,
+          streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
+
+        val before = joinType match {
+          case LeftAnti =>
+            s"$sCondExtract".trim
+          case _ =>
+            s"""
+               |boolean $loaded = false;
+               |$sCondExtract
+             """.stripMargin
+        }
+
+        val loadStreamedAfterCond = joinType match {
+          case LeftAnti => ""
+          case _ =>
+            s"""
+               |if (!$loaded) {
+               |  $loaded = true;
+               |  $sRestExtract
+               |}
+             """.stripMargin
+        }
+        val loadBufferedAfterCond = joinType match {
+          case LeftExistence(_) => ""
+          case _ => bRestExtract
+        }
+
+        val checking =
           s"""
-             |if (!$loaded) {
-             |  $loaded = true;
-             |  $streamedAfter
+             |$bCondExtract
+             |if ($bufferedRow != null) {
+             |  ${cond.code}
+             |  if (${cond.isNull} || !${cond.value}) {
+             |    continue;
+             |  }
              |}
-         """.stripMargin
-      }
+             |$loadStreamedAfterCond
+             |$loadBufferedAfterCond
+           """.stripMargin
+        (before, checking.trim,
+          if (joinType == LeftAnti) "" else sRestExtract.trim)
+      } else {
+        // Local variable path: use splitVarsByCondition (original approach).
+        val (streamedBefore, streamedAfter) =
+          splitVarsByCondition(streamedOutput, streamedVars)
+        val (bufferedBefore, bufferedAfter) =
+          splitVarsByCondition(bufferedOutput, bufferedVars)
+        ctx.currentVars = streamedVars ++ bufferedVars
+        val cond = BindReferences.bindReference(
+          conditionForCodegen.get,
+          streamedPlan.output ++ bufferedPlan.output).genCode(ctx)
 
-      val loadBufferedAfterCondition = joinType match {
-        case LeftExistence(_) =>
-          // No need to evaluate columns not used by condition from buffered side
-          ""
-        case _ => bufferedAfter
-      }
+        val streamedVarDecl = streamedDecls.mkString("\n")
+        val before = joinType match {
+          case LeftAnti =>
+            s"""
+               |$streamedVarDecl
+               |$streamedBefore
+             """.stripMargin.trim
+          case _ =>
+            s"""
+               |boolean $loaded = false;
+               |$streamedVarDecl
+               |$streamedBefore
+             """.stripMargin
+        }
 
-      val checking =
-        s"""
-           |$bufferedBefore
-           |if ($bufferedRow != null) {
-           |  ${cond.code}
-           |  if (${cond.isNull} || !${cond.value}) {
-           |    continue;
-           |  }
-           |}
-           |$loadStreamedAfterCondition
-           |$loadBufferedAfterCondition
-         """.stripMargin
-      (before, checking.trim, streamedAfter.trim)
+        val loadStreamedAfterCond = joinType match {
+          case LeftAnti => ""
+          case _ =>
+            s"""
+               |if (!$loaded) {
+               |  $loaded = true;
+               |  $streamedAfter
+               |}
+             """.stripMargin
+        }
+        val loadBufferedAfterCond = joinType match {
+          case LeftExistence(_) => ""
+          case _ => bufferedAfter
+        }
+
+        val checking =
+          s"""
+             |$bufferedBefore
+             |if ($bufferedRow != null) {
+             |  ${cond.code}
+             |  if (${cond.isNull} || !${cond.value}) {
+             |    continue;
+             |  }
+             |}
+             |$loadStreamedAfterCond
+             |$loadBufferedAfterCond
+           """.stripMargin
+        (before, checking.trim, streamedAfter.trim)
+      }
     } else {
-      (evaluateVariables(streamedVars), "", "")
+      if (useFieldBasedExtraction) {
+        val sAllExtract = ctx.splitExpressions(
+          streamedSnippets, "extractStreamVars", Seq.empty)
+        val bAllExtract = ctx.splitExpressions(
+          bufferedSnippets, "extractJoinVars", Seq(("InternalRow", bufferedRow)))
+        (sAllExtract, bAllExtract, "")
+      } else {
+        val streamedVarDecl = streamedDecls.mkString("\n")
+        val streamedEval = evaluateVariables(streamedVars)
+        val bufferedEval = evaluateVariables(bufferedVars)
+        (s"$streamedVarDecl\n$streamedEval", bufferedEval, "")
+      }
     }
 
     val existsVarDecl = existsVar.map(v => s"boolean $v = false;").getOrElse("")
 
     val beforeLoopWithoutGuard =
       s"""
-         |${streamedVarDecl.mkString("\n")}
          |${streamedBeforeLoop.trim}
          |$streamedOnlyPre
          |$existsVarDecl

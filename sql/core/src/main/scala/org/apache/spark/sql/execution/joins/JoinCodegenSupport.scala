@@ -116,4 +116,69 @@ trait JoinCodegenSupport extends CodegenSupport with BaseJoinExec {
       }
     }
   }
+
+  /**
+   * Like [[genOneSideJoinVars]] but stores extracted column values in class-level mutable fields
+   * instead of local variables. This allows the extraction code to be split across helper methods
+   * via [[CodegenContext.splitExpressions]], avoiding the HotSpot 8K JIT limit on wide schemas.
+   *
+   * Returns (exprCodes, perColumnExtraction) where exprCodes reference the class fields
+   * (marked as globals so all codegen policies read them in place) and perColumnExtraction
+   * is one extraction snippet per output column — the caller partitions these by condition
+   * references and calls splitExpressions on each group.
+   */
+  protected def genOneSideJoinVarsAsFields(
+      ctx: CodegenContext,
+      row: String,
+      plan: SparkPlan,
+      setDefaultValue: Boolean): (Seq[ExprCode], Seq[String]) = {
+    ctx.currentVars = null
+    ctx.INPUT_ROW = row
+    val javaType = CodeGenerator.javaType _
+    val defaultValue: org.apache.spark.sql.types.DataType => String =
+      dt => CodeGenerator.defaultValue(dt)
+
+    val varsAndCode = plan.output.toIndexedSeq.zipWithIndex.map { case (a, i) =>
+      val ev = BoundReference(i, a.dataType, a.nullable).genCode(ctx)
+      val value = ctx.addMutableState(javaType(a.dataType), "joinVar",
+        v => s"$v = ${defaultValue(a.dataType)};", forceInline = true)
+      val needsIsNull = a.nullable || setDefaultValue
+      if (needsIsNull) {
+        val isNull = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "joinVarIsNull",
+          v => s"$v = true;", forceInline = true)
+        val extractCode = if (setDefaultValue) {
+          s"""
+             |$isNull = true;
+             |$value = ${defaultValue(a.dataType)};
+             |if ($row != null) {
+             |  ${ev.code}
+             |  $isNull = ${ev.isNull};
+             |  $value = ${ev.value};
+             |}
+           """.stripMargin
+        } else {
+          s"""
+             |${ev.code}
+             |$isNull = ${ev.isNull};
+             |$value = ${ev.value};
+           """.stripMargin
+        }
+        val exprCode = ExprCode(
+          EmptyBlock,
+          JavaCode.isNullGlobal(isNull),
+          JavaCode.global(value, a.dataType))
+        (exprCode, extractCode)
+      } else {
+        val extractCode =
+          s"""
+             |${ev.code}
+             |$value = ${ev.value};
+           """.stripMargin
+        val exprCode = ExprCode(EmptyBlock, FalseLiteral, JavaCode.global(value, a.dataType))
+        (exprCode, extractCode)
+      }
+    }
+
+    varsAndCode.unzip
+  }
 }
