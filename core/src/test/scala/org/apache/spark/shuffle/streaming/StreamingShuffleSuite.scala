@@ -1380,7 +1380,6 @@ class StreamingShuffleSuite
   // that markTaskFailed/markTaskCompleted are both called from the task thread.
   test("background markTaskFailed races with task thread markTaskCompleted") {
     val readerContext = createTaskContext(sparkConf, partitionId = 0)
-    TaskContext.setTaskContext(readerContext)
 
     // Latches to force the interleaving.
     val failureListenerEntered = new CountDownLatch(1)
@@ -1417,16 +1416,22 @@ class StreamingShuffleSuite
 
     // Stands in for the task thread: it calls markTaskCompleted while the invocation is held,
     // and waits until the background thread hands the invocation over to it.
+    @volatile var taskThreadError: Throwable = null
     val taskThread = new Thread(() => {
       TaskContext.setTaskContext(readerContext)
-      readerContext.markTaskCompleted(Some(error))
+      try {
+        readerContext.markTaskCompleted(Some(error))
+      } catch {
+        case t: Throwable => taskThreadError = t
+      }
     })
     taskThread.setDaemon(true)
     taskThread.start()
     try {
       eventually(Timeout(1.minute)) {
-        assert(taskThread.getState == Thread.State.TIMED_WAITING)
+        assert(!taskThread.isAlive || taskThread.getState == Thread.State.TIMED_WAITING)
       }
+      assert(taskThread.isAlive, "markTaskCompleted returned instead of waiting")
       // The completion listener does not run while the failure listener blocks.
       assert(completionListenerThread == null)
     } finally {
@@ -1439,9 +1444,8 @@ class StreamingShuffleSuite
     assert(!bgThread.isAlive)
 
     // The completion listener ran on the thread that called markTaskCompleted.
+    assert(taskThreadError == null)
     assert(completionListenerThread eq taskThread)
-
-    TaskContext.unset()
   }
 
   // With the ErrorNotifier, the reader's cleanupResources runs on the task thread because
