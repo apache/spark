@@ -335,3 +335,114 @@ select json_object('a' VALUE '{"b":1}');
 select json_object('a' VALUE 1 RETURNING INT);
 -- JSON_OBJECT error: malformed FORMAT JSON value
 select json_object('a' VALUE '{bad' FORMAT JSON);
+
+-- IS [NOT] JSON
+-- basic well-formedness
+select '{"a":1}' IS JSON;
+select '[1,2]' IS JSON;
+select '42' IS JSON;
+select '"hello"' IS JSON;
+select 'not json' IS JSON;
+select '' IS JSON;
+-- IS NOT JSON
+select '{"a":1}' IS NOT JSON;
+select 'bad' IS NOT JSON;
+-- NULL propagates
+select cast(null as string) IS JSON;
+select cast(null as string) IS NOT JSON;
+-- shape qualifiers
+select '{"a":1}' IS JSON OBJECT;
+select '[1,2]' IS JSON OBJECT;
+select '[1,2]' IS JSON ARRAY;
+select '{"a":1}' IS JSON ARRAY;
+-- IS JSON VALUE: any valid JSON value (including objects and arrays)
+select '42' IS JSON VALUE;
+select '"hello"' IS JSON VALUE;
+select '{"a":1}' IS JSON VALUE;
+select '[1,2]' IS JSON VALUE;
+select 'bad' IS JSON VALUE;
+-- IS JSON SCALAR: only primitives (string, number, boolean, null -- not object/array)
+select '42' IS JSON SCALAR;
+select '"hello"' IS JSON SCALAR;
+select 'true' IS JSON SCALAR;
+select 'false' IS JSON SCALAR;
+select '[1]' IS JSON SCALAR;
+select '{"a":1}' IS JSON SCALAR;
+-- IS NOT JSON with shape qualifiers
+select '{"a":1}' IS NOT JSON OBJECT;
+select '[1,2]' IS NOT JSON ARRAY;
+select '{"a":1}' IS NOT JSON VALUE;
+select 'bad' IS NOT JSON VALUE;
+select '{"a":1}' IS NOT JSON SCALAR;
+select '42' IS NOT JSON SCALAR;
+-- JSON null literal is valid JSON and counts as a scalar
+select 'null' IS JSON;
+select 'null' IS JSON SCALAR;
+select 'null' IS JSON VALUE;
+select 'null' IS JSON OBJECT;
+-- strict ANSI parsing: Hive-style leniency (single quotes) is rejected
+select '{''a'':1}' IS JSON;
+select '[''a'', ''b'']' IS JSON;
+-- trailing content after a well-formed value is rejected
+select '1 2' IS JSON;
+select '{} []' IS JSON;
+-- other parser extensions are rejected: comments, unquoted names, NaN/Infinity, leading zeros
+select '/* c */ {}' IS JSON, '{a:1}' IS JSON, 'NaN' IS JSON, 'Infinity' IS JSON, '01' IS JSON;
+-- whitespace-only input is not a JSON value
+select '   ' IS JSON;
+-- duplicate field names are accepted
+select '{"a":1,"a":2}' IS JSON OBJECT;
+-- input beyond the parser limits raises an error, like parse_json
+select concat(repeat('[', 1001), repeat(']', 1001)) IS JSON;
+-- input that is not valid UTF-8 is rejected (lone continuation byte, encoded surrogate)
+select cast(X'228022' AS STRING) IS JSON;
+select cast(X'22EDA08022' AS STRING) IS JSON;
+-- unpaired surrogate escapes are rejected in values and field names, also when nested
+select '"\\uD835"' IS JSON;
+select '"\\uDC00"' IS JSON SCALAR;
+select '{"\\uD835":1}' IS JSON OBJECT;
+select '[{"a":["\\uDC00"]}]' IS JSON ARRAY;
+select '"\\uD835\\uDC00"' IS JSON;
+-- shift operators after the ARRAY qualifier
+select '[1]' IS JSON ARRAY, 8 >> 1, 8 >>> 1;
+-- collated, trim-collated, and VARCHAR operands behave like STRING
+select '{"a":1}' COLLATE UTF8_LCASE IS JSON OBJECT, '[1] ' COLLATE UTF8_LCASE_RTRIM IS JSON ARRAY;
+select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY;
+-- an untyped NULL operand yields NULL
+select NULL IS JSON, NULL IS NOT JSON;
+-- a non-string operand is rejected
+select 1 IS JSON;
+-- keywords usable as identifiers (non-reserved)
+select 1 AS OBJECT;
+select 1 AS SCALAR;
+
+-- IS JSON with a table: filtering rows by JSON shape
+-- includes 'null' (JSON null literal) as a scalar, and a SQL NULL row
+CREATE TEMPORARY VIEW events(id, payload) AS
+  SELECT * FROM VALUES
+    (1, '{"event":"click","user":42}'),
+    (2, '[1, 2, 3]'),
+    (3, '"hello"'),
+    (4, '99'),
+    (5, 'null'),
+    (6, 'not-json'),
+    (7, NULL);
+
+-- NULL propagation in WHERE: SQL-NULL rows absent from IS JSON and IS NOT JSON results
+SELECT id, payload FROM events WHERE payload IS JSON ORDER BY id;
+SELECT id, payload FROM events WHERE payload IS NOT JSON ORDER BY id;
+
+-- IS NOT JSON OBJECT vs IS NOT JSON: contrast (array/scalar/invalid all pass the former)
+SELECT id, payload FROM events WHERE payload IS NOT JSON OBJECT ORDER BY id;
+
+-- CASE covers all four shapes in one pass; 'null' JSON literal classifies as scalar
+SELECT id,
+       CASE
+         WHEN payload IS JSON OBJECT THEN 'object'
+         WHEN payload IS JSON ARRAY  THEN 'array'
+         WHEN payload IS JSON SCALAR THEN 'scalar'
+         ELSE 'invalid or null'
+       END AS kind
+FROM events ORDER BY id;
+
+DROP VIEW events;

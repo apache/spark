@@ -5827,6 +5827,12 @@
     ],
     "sqlState" : "2200N"
   },
+  "IS_JSON_INPUT_LIMIT_EXCEEDED" : {
+    "message" : [
+      "Cannot evaluate the IS JSON predicate because the input exceeds a JSON parser limit: <reason>. The input starts with: <inputPrefix>."
+    ],
+    "sqlState" : "54000"
+  },
   "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR" : {
     "message" : [
       "JDBC external engine syntax error. The error was caused by the query <jdbcQuery>. External engine SQLSTATE: <externalEngineSqlState>. <externalEngineError>."

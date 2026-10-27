@@ -1715,6 +1715,23 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = cause)
   }
 
+  // Returns the concrete `SparkRuntimeException` (not `Throwable`) so the Java implementation of
+  // IS JSON can `throw` it without a checked-exception declaration. Only a prefix of the input is
+  // echoed, so a long input cannot blow up the message.
+  def isJsonInputLimitExceededError(
+      reason: String, input: UTF8String, cause: Throwable): SparkRuntimeException = {
+    val maxPrefixChars = 128
+    val inputPrefix = if (input.numChars() > maxPrefixChars) {
+      input.substring(0, maxPrefixChars).toString + "..."
+    } else {
+      input.toString
+    }
+    new SparkRuntimeException(
+      errorClass = "IS_JSON_INPUT_LIMIT_EXCEEDED",
+      messageParameters = Map("reason" -> reason, "inputPrefix" -> toSQLValue(inputPrefix)),
+      cause = cause)
+  }
+
   def jsonExistsOnError(functionName: String, path: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "JSON_EXISTS_ON_ERROR",
