@@ -25,9 +25,8 @@ import org.apache.spark.sql.types.AnyTimestampNanoType
 /**
  * Rejects subtraction with a nanosecond-precision timestamp operand. The interval result only has
  * microsecond precision, and adding fractional-seconds precision to it later would change the
- * result type. The as-of join ordering distance is internal, so its type never reaches users; it
- * still compares only `epochMicros`, so the non-sort-merge rewrite may tie or misrank right rows
- * whose keys differ from the left key only below a microsecond.
+ * result type. The as-of join ordering distance is internal, so its type never reaches users, and
+ * `RewriteAsOfJoin` ranks nanosecond keys by exact epoch nanoseconds instead.
  */
 object NanosTimestampSubtractionCheck extends (LogicalPlan => Unit) {
   def apply(plan: LogicalPlan): Unit = plan.foreachUp(checkOperator)
@@ -35,7 +34,8 @@ object NanosTimestampSubtractionCheck extends (LogicalPlan => Unit) {
   def checkOperator(operator: LogicalPlan): Unit = operator match {
     case j: AsOfJoin =>
       j.expressions.filterNot(_ eq j.orderExpression).foreach(checkExpression)
-      checkAsOfDistance(j.orderExpression)
+      // The SQL path never evaluates the distance, and its operands are also in `asOfCondition`.
+      if (!j.requiresSortMergeAsOfJoin) checkAsOfDistance(j.orderExpression)
     case o => o.expressions.foreach(checkExpression)
   }
 

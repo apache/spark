@@ -795,6 +795,50 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT ?' USING TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 118,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1, INTERVAL '1' DAY) AS t(a, iv) PIVOT (count(a) FOR iv IN (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 165,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
+  } ]
+}
+
+
+-- !query
 SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111')
 -- !query schema
 struct<(unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111')):decimal(22,0)>
@@ -803,11 +847,55 @@ struct<(unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(T
 
 
 -- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789') - unix_nanos(CAST(DATE '2020-01-01' AS TIMESTAMP_NTZ(9)))
+-- !query schema
+struct<(unix_nanos(TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789') - unix_nanos(CAST(DATE '2020-01-01' AS TIMESTAMP_NTZ(9)))):decimal(22,0)>
+-- !query output
+86400000000789
+
+
+-- !query
 SELECT CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ)
 -- !query schema
 struct<(CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ)):interval day to second>
 -- !query output
 1 00:00:00.123456000
+
+
+-- !query
+SET spark.sql.join.asofJoin.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.join.asofJoin.enabled	true
+
+
+-- !query
+SELECT l.v, r.v FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000002', 1) AS l(ts, v)
+  ASOF JOIN VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000001100', 10), (TIMESTAMP_NTZ '2020-01-01 00:00:00.000001800', 20) AS r(ts, v)
+  MATCH_CONDITION (l.ts >= r.ts)
+-- !query schema
+struct<v:int,v:int>
+-- !query output
+1	20
+
+
+-- !query
+SELECT l.v, r.v FROM VALUES (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000002', 1) AS l(id, ts, v)
+  ASOF JOIN VALUES (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000001100', 10), (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000001800', 20) AS r(id, ts, v)
+  MATCH_CONDITION ((l.id, l.ts) >= (r.id, r.ts))
+-- !query schema
+struct<v:int,v:int>
+-- !query output
+1	20
+
+
+-- !query
+SET spark.sql.join.asofJoin.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.join.asofJoin.enabled	false
 
 
 -- !query

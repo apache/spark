@@ -159,16 +159,30 @@ SELECT TIMESTAMP_NTZ '1960-01-31 03:04:05.123456789' + INTERVAL '1' MONTH;
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + make_interval(0, 1, 0, 2, 0, 0, 0);
 
 -- Subtraction with a TIMESTAMP_NTZ(p) operand is rejected: the interval result only has
--- microsecond precision. This holds in a filter, a subquery and a folded VALUES row too.
+-- microsecond precision. This holds in a filter, a subquery, and the folded VALUES rows,
+-- EXECUTE IMMEDIATE arguments and PIVOT values too.
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111';
 SELECT ('2020-01-02 03:04:05.1234567' :: timestamp_ntz(7)) - ('2020-01-01 03:04:05.000000009' :: timestamp_ntz(9));
 SELECT TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789' - DATE '2020-01-01';
 SELECT 1 WHERE TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05' > INTERVAL '0' SECOND;
 SELECT (SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05');
 SELECT d FROM VALUES (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05') AS t(d);
+EXECUTE IMMEDIATE 'SELECT ?' USING TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05';
+SELECT * FROM VALUES (1, INTERVAL '1' DAY) AS t(a, iv) PIVOT (count(a) FOR iv IN (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'));
 -- The elapsed time in nanoseconds, and subtraction at microsecond precision after a cast.
 SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111');
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789') - unix_nanos(CAST(DATE '2020-01-01' AS TIMESTAMP_NTZ(9)));
 SELECT CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ);
+-- A SQL as-of join over mixed micro/nanos keys is accepted, with a scalar or a tuple condition:
+-- its ordering distance is never evaluated.
+SET spark.sql.join.asofJoin.enabled=true;
+SELECT l.v, r.v FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000002', 1) AS l(ts, v)
+  ASOF JOIN VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000001100', 10), (TIMESTAMP_NTZ '2020-01-01 00:00:00.000001800', 20) AS r(ts, v)
+  MATCH_CONDITION (l.ts >= r.ts);
+SELECT l.v, r.v FROM VALUES (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000002', 1) AS l(id, ts, v)
+  ASOF JOIN VALUES (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000001100', 10), (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000001800', 20) AS r(id, ts, v)
+  MATCH_CONDITION ((l.id, l.ts) >= (r.id, r.ts));
+SET spark.sql.join.asofJoin.enabled=false;
 
 -- SPARK-57818: convert_timezone over nanosecond-precision TIMESTAMP_NTZ. The sub-microsecond
 -- remainder is carried through unchanged; only the whole-microsecond part shifts with the zone

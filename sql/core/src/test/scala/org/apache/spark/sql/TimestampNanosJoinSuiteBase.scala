@@ -414,24 +414,36 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
       def asOf(l: Column, r: Column, joinExprs: Column, direction: String): classic.DataFrame =
         left.joinAsOf(right, l, r, joinExprs, joinType = "inner", tolerance = null,
           allowExactMatches = true, direction = direction)
+      // (left key, right rows, expected right value for backward / forward / nearest). The last two
+      // need the exact distance: their candidates differ from the left key below a microsecond.
+      val cases = Seq(
+        ("00:00:01.000000500", Seq("00:00:00.000000100" -> 10, "00:00:03.000000200" -> 20),
+          (10, 20, 10)),
+        ("00:00:00.000001900", Seq("00:00:00.000001100" -> 1, "00:00:00.000001800" -> 2,
+          "00:00:00.000002300" -> 3, "00:00:00.000002900" -> 4), (2, 3, 2)),
+        ("00:00:00.000000999", Seq("00:00:00.000000000" -> 1, "00:00:00.000001001" -> 2),
+          (1, 2, 2)))
       Seq("false", "true").foreach { singlePass =>
         withSQLConf(
             SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass,
             SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
             SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
             SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
-          Seq("false", "true").foreach { sortMerge =>
-            withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
-              Seq("backward" -> 10, "forward" -> 20, "nearest" -> 10).foreach {
-                case (direction, expected) =>
-                  // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
-                  QueryTest.checkAnswer(
-                    df = asOf(left("k"), right("k"), null, direction)
-                      .select(left("v"), right("v")),
-                    expectedAnswer = Seq(Row(1, expected)),
-                    checkToRDD = false)
-              }
-            }
+          for {
+            sortMerge <- Seq("false", "true")
+            (leftKey, rightRows, (backward, forward, nearest)) <- cases
+            (direction, expected) <-
+              Seq("backward" -> backward, "forward" -> forward, "nearest" -> nearest)
+          } withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
+            val l = df(s"2020-01-01T$leftKey" -> 0)
+            val r = df(rightRows.map { case (k, v) => s"2020-01-01T$k" -> v }: _*)
+            // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
+            QueryTest.checkAnswer(
+              df = l.joinAsOf(r, l("k"), r("k"), usingColumns = Seq.empty, joinType = "inner",
+                tolerance = null, allowExactMatches = true, direction = direction)
+                .select(r("v")),
+              expectedAnswer = Seq(Row(expected)),
+              checkToRDD = false)
           }
           // A nanosecond subtraction in an as-of key or in the join condition is still rejected.
           Seq(

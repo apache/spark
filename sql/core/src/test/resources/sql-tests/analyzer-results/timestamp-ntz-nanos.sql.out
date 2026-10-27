@@ -710,6 +710,46 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+EXECUTE IMMEDIATE 'SELECT ?' USING TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 36,
+    "stopIndex" : 118,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM VALUES (1, INTERVAL '1' DAY) AS t(a, iv) PIVOT (count(a) FOR iv IN (TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'))
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "sqlExpr" : "\"(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05')\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 83,
+    "stopIndex" : 165,
+    "fragment" : "TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' - TIMESTAMP_NTZ '2020-01-01 03:04:05'"
+  } ]
+}
+
+
+-- !query
 SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111')
 -- !query analysis
 Project [(unix_nanos(2020-01-02 03:04:05.123456789) - unix_nanos(2020-01-01 03:04:05.000000111)) AS (unix_nanos(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789') - unix_nanos(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111'))#x]
@@ -717,10 +757,54 @@ Project [(unix_nanos(2020-01-02 03:04:05.123456789) - unix_nanos(2020-01-01 03:0
 
 
 -- !query
+SELECT unix_nanos(TIMESTAMP_NTZ '2020-01-02 00:00:00.000000789') - unix_nanos(CAST(DATE '2020-01-01' AS TIMESTAMP_NTZ(9)))
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 SELECT CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ)
 -- !query analysis
 Project [(cast(2020-01-02 03:04:05.123456789 as timestamp_ntz) - cast(2020-01-01 03:04:05.000000111 as timestamp_ntz)) AS (CAST(TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' AS TIMESTAMP_NTZ) - CAST(TIMESTAMP_NTZ '2020-01-01 03:04:05.000000111' AS TIMESTAMP_NTZ))#x]
 +- OneRowRelation
+
+
+-- !query
+SET spark.sql.join.asofJoin.enabled=true
+-- !query analysis
+SetCommand (spark.sql.join.asofJoin.enabled,Some(true))
+
+
+-- !query
+SELECT l.v, r.v FROM VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000002', 1) AS l(ts, v)
+  ASOF JOIN VALUES (TIMESTAMP_NTZ '2020-01-01 00:00:00.000001100', 10), (TIMESTAMP_NTZ '2020-01-01 00:00:00.000001800', 20) AS r(ts, v)
+  MATCH_CONDITION (l.ts >= r.ts)
+-- !query analysis
+Project [v#x, v#x]
++- AsOfJoin (cast(ts#x as timestamp_ntz(9)) >= ts#x), Inner
+   :- SubqueryAlias l
+   :  +- LocalRelation [ts#x, v#x]
+   +- SubqueryAlias r
+      +- LocalRelation [ts#x, v#x]
+
+
+-- !query
+SELECT l.v, r.v FROM VALUES (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000002', 1) AS l(id, ts, v)
+  ASOF JOIN VALUES (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000001100', 10), (1, TIMESTAMP_NTZ '2020-01-01 00:00:00.000001800', 20) AS r(id, ts, v)
+  MATCH_CONDITION ((l.id, l.ts) >= (r.id, r.ts))
+-- !query analysis
+Project [v#x, v#x]
++- AsOfJoin (cast(named_struct(id, id#x, ts, ts#x) as struct<id:int,ts:timestamp_ntz(9)>) >= named_struct(id, id#x, ts, ts#x)), Inner
+   :- SubqueryAlias l
+   :  +- LocalRelation [id#x, ts#x, v#x]
+   +- SubqueryAlias r
+      +- LocalRelation [id#x, ts#x, v#x]
+
+
+-- !query
+SET spark.sql.join.asofJoin.enabled=false
+-- !query analysis
+SetCommand (spark.sql.join.asofJoin.enabled,Some(false))
 
 
 -- !query
