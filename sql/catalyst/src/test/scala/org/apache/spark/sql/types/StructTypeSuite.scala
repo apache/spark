@@ -1214,6 +1214,38 @@ class StructTypeSuite extends SparkFunSuite with SQLHelper {
     validateConvertedDefaults("c5", IntegerType, "1 + 1", "2")
   }
 
+  for (escapedStringLiterals <- Seq(false, true)) {
+    test(s"existence default strings preserve escaped literals ($escapedStringLiterals)") {
+      withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> escapedStringLiterals.toString) {
+        for {
+          dataType <- Seq(StringType, StringType("UTF8_LCASE"))
+          value <- Seq("a\\b", "a'b", "a\\nb", "a\nb", "", "plain", null)
+        } {
+          withClue(s"dataType=$dataType, value=$value: ") {
+            val literal = Literal.create(value, dataType)
+            val column = ColumnDefinition("s", dataType, true, None,
+              Some(DefaultValueExpression(literal, literal.sql)))
+            val schema = DataType.fromJson(StructType(Seq(column.toV1Column)).json)
+              .asInstanceOf[StructType]
+            assert(ResolveDefaultColumns.existenceDefaultValues(schema).toSeq ==
+              Seq(literal.value))
+            assert(SQLConf.get.escapedStringLiterals == escapedStringLiterals)
+          }
+        }
+      }
+    }
+  }
+
+  test("unresolved existence defaults retain the session's string literal parsing") {
+    withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> "true") {
+      val field = StructField("s", StringType)
+        .withExistenceDefaultValue("""concat('a', '\n')""")
+      assert(ResolveDefaultColumns.existenceDefaultValues(StructType(Seq(field))).toSeq ==
+        Seq(UTF8String.fromString("a\\n")))
+      assert(SQLConf.get.escapedStringLiterals)
+    }
+  }
+
   test("SPARK-51119: Add fallback to process unresolved EXISTS_DEFAULT") {
     val source = StructType(
       Array(

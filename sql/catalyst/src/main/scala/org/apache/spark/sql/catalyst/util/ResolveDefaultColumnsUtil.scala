@@ -331,8 +331,21 @@ object ResolveDefaultColumns extends QueryErrorsBase
   private def analyzeExistenceDefaultValue(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
-    // Parse the expression.
-    val resolvedExpr = Try(Literal.fromSQL(defaultSQL)) match {
+    // Literal.sql always escapes strings, independently of the session's parser configuration.
+    // Use a separate conf because readers can run with a shared or read-only SQLConf.
+    val parsedExpr = Try {
+      if (conf.escapedStringLiterals) {
+        val parserConf = new SQLConf
+        conf.getAllConfs.foreach { case (key, value) => parserConf.setConfString(key, value) }
+        parserConf.setConf(SQLConf.ESCAPED_STRING_LITERALS, false)
+        SQLConf.withExistingConf(parserConf) {
+          Literal.fromSQL(defaultSQL)
+        }
+      } else {
+        Literal.fromSQL(defaultSQL)
+      }
+    }
+    val resolvedExpr = parsedExpr match {
       case Success(literal) =>
         val expr = literal match {
           // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
@@ -351,6 +364,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
         expr match {
           case _: ExprLiteral => expr
           case c: Cast if c.resolved => expr
+          case c @ Collate(_: ExprLiteral, _: UnresolvedCollation) =>
+            // Resolve the collation without reparsing the canonical string in the session conf.
+            analyze(field.name, field.dataType, c, defaultSQL, "")
           case _ =>
             fallbackResolveExistenceDefaultValue(field)
         }
