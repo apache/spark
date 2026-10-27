@@ -305,20 +305,39 @@ class SliceBytesArrowOutputProcessorImpl(
 
   // The number of rows from which the search for the next slice of the current batch starts.
   private var sliceRowCount = 0
+  // Whether the last output batch is one row larger than the limit.
+  private var lastRowTooLarge = false
 
   protected override def getRoot: VectorSchemaRoot = {
     if (currentRowIdx == 0) {
-      // Output the whole root if it fits, which happens only if no row of it has been output yet.
-      if (batchBytes(root) <= arrowMaxBytesPerOutputBatch) {
+      lastRowTooLarge = false
+      // Output the whole root if it fits, which happens only if no row of it has been output yet,
+      // or if Arrow cannot slice it.
+      val rootBytes = batchBytes(root)
+      if (rootBytes <= arrowMaxBytesPerOutputBatch || !canSlice(root)) {
         currentRowIdx = rowCount
         return root
       }
-      sliceRowCount = (rowCount * SliceBytesArrowOutputProcessorImpl.stepRatio).toInt
+      // The first search starts from the rows that would fit at the bytes per row of the root.
+      val estimate = math.max(rowCount.toLong * arrowMaxBytesPerOutputBatch / rootBytes, 1L)
+      sliceRowCount = math.min(
+        estimate, (rowCount * SliceBytesArrowOutputProcessorImpl.stepRatio).toLong).toInt
     }
-    // We iteratively shrink the slice by 10% until it fits. Each search starts from the number of
-    // rows that would fit at the bytes per row of the last slice that fit, rather than from all
-    // the remaining rows, since a slice that does not start at row 0 usually copies its offset
-    // buffers, and restarting from all the remaining rows would copy them again and again.
+    if (lastRowTooLarge) {
+      // Probe the row after a row larger than the limit alone, and output it if it is larger than
+      // the limit too, so that a run of such rows does not search from `sliceRowCount` every row.
+      val rootSlice = root.slice(currentRowIdx, 1)
+      if (batchBytes(rootSlice) > arrowMaxBytesPerOutputBatch) {
+        currentRowIdx += 1
+        return rootSlice
+      }
+      rootSlice.close()
+      lastRowTooLarge = false
+    }
+    // We iteratively shrink the slice by 10% until it fits. Each later search starts from the
+    // number of rows that would fit at the bytes per row of the last slice that fit, rather than
+    // from all the remaining rows, since a slice usually copies its offset buffers, and restarting
+    // from all the remaining rows would copy them again and again.
     var numRows = math.min(sliceRowCount, rowCount - currentRowIdx)
     while (numRows > 0) {
       val rootSlice = root.slice(currentRowIdx, numRows)
@@ -330,30 +349,43 @@ class SliceBytesArrowOutputProcessorImpl(
         currentRowIdx += numRows
         return rootSlice
       }
+      if (numRows == 1) {
+        // Even a single row is larger than the limit, so we output a batch with that one row.
+        // Normally, this should not happen, but it is possible if the data is very large. The
+        // next search starts from where this one did, since the next rows may be much smaller.
+        lastRowTooLarge = true
+        currentRowIdx += 1
+        return rootSlice
+      }
       rootSlice.close()
       numRows = (numRows * SliceBytesArrowOutputProcessorImpl.stepRatio).toInt
     }
-    // Even a single row is larger than the limit, so we output a batch with that one row.
-    // Normally, this should not happen, but it is possible if the data is very large. The next
-    // search starts from where this one did, since the next rows may be much smaller.
+    // A batch of one row that is larger than the limit, where the search does not run.
     val rootSlice = root.slice(currentRowIdx, 1)
     currentRowIdx += 1
     rootSlice
   }
 
-  private[python] def batchBytes(root: VectorSchemaRoot): Long = {
-    root.getFieldVectors.asScala.map(SliceBytesArrowOutputProcessorImpl.bufferSize).sum
-  }
+  private[python] def batchBytes(root: VectorSchemaRoot): Long =
+    SliceBytesArrowOutputProcessorImpl.batchBytes(root)
+
+  private[python] def canSlice(root: VectorSchemaRoot): Boolean =
+    root.getFieldVectors.asScala.forall(SliceBytesArrowOutputProcessorImpl.canSlice)
 }
 
 object SliceBytesArrowOutputProcessorImpl {
   private val stepRatio = 0.9
 
+  /** Returns the size in bytes of the buffers of `root`, as the sum of [[bufferSize]]. */
+  private[python] def batchBytes(root: VectorSchemaRoot): Long =
+    root.getFieldVectors.asScala.map(bufferSize).sum
+
   /**
    * Returns the size in bytes of the buffers of `vector`, like `ValueVector.getBufferSize` but as
    * a Long. `getBufferSize` computes the size in int, so it wraps around for a vector over 2 GiB,
    * e.g. a struct vector, which adds up the sizes of its children, such as the one top-level
-   * struct vector that holds the output of mapInArrow, mapInPandas and applyInPandas.
+   * struct vector that holds the output of mapInArrow, mapInPandas and applyInPandas. A large
+   * variable-width vector computes it in Long but caps it at Int.MaxValue instead.
    *
    * Fixed-width and (large) variable-width vectors are measured in Long. A nested vector adds up
    * its children in Long, but its own buffers come from its int `getBufferSize`, so they are
@@ -382,6 +414,27 @@ object SliceBytesArrowOutputProcessorImpl {
       val ownBytes = v.getBufferSize - children.map(_.getBufferSize).sum
       ownBytes + children.map(bufferSize).sum
     case v => v.getBufferSize
+  }
+
+  /**
+   * Returns whether `VectorSchemaRoot.slice` can slice `vector` and its children. Arrow computes
+   * some byte positions of a slice in int, so it throws, and leaks the vectors sliced so far, for
+   * a fixed-width vector over 2 GiB, a view vector with more than 2^27 rows, or a list vector with
+   * more than 2^29 rows. A batch that holds one is output whole instead.
+   */
+  private[python] def canSlice(vector: ValueVector): Boolean = {
+    val fits = vector match {
+      case v: BaseFixedWidthVector => v.getValueCount.toLong * v.getTypeWidth <= Int.MaxValue
+      case v: BaseVariableWidthViewVector =>
+        v.getValueCount.toLong * BaseVariableWidthViewVector.ELEMENT_SIZE <= Int.MaxValue
+      case v: ListVector =>
+        (v.getValueCount + 1L) * BaseRepeatedValueVector.OFFSET_WIDTH <= Int.MaxValue
+      case _ => true
+    }
+    fits && (vector match {
+      case v: FieldVector => v.getChildrenFromFields.asScala.forall(canSlice)
+      case _ => true
+    })
   }
 }
 
