@@ -93,22 +93,22 @@ class ElementwiseEvalTypeHandlerTestCase(PySparkBaseTestCase):
             ["a", "b", "c"],
         )
 
-    def _handler(self, handler_cls, *udfs, nesting=None, input_type=None, runner_conf=None):
+    def _handler(self, handler_cls, *udf_descs, nesting=None, input_type=None, runner_conf=None):
         """Build ``handler_cls`` from ``(func, args_offsets, kwargs_offsets, return_type)``
         tuples, with ``nesting`` as the per-UDF ``elementwise_nesting``."""
         eval_conf = {"input_type": (input_type or self._INPUT_TYPE).json()}
         if nesting is not None:
             eval_conf["elementwise_nesting"] = ",".join(map(str, nesting))
         return handler_cls(
-            udfs=[
+            udf_descs=[
                 UDF(
-                    raw_func=func,
+                    funcs=[func],
                     args_offsets=args_offsets,
                     kwargs_offsets=kwargs_offsets,
                     return_type=return_type,
                     result_id=0,
                 )
-                for func, args_offsets, kwargs_offsets, return_type in udfs
+                for func, args_offsets, kwargs_offsets, return_type in udf_descs
             ],
             runner_conf=RunnerConf(runner_conf or {"spark.sql.session.timeZone": "UTC"}),
             eval_conf=EvalConf(eval_conf),

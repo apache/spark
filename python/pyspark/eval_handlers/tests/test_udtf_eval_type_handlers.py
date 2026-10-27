@@ -162,7 +162,9 @@ class TableUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
 
     def _handler(self, udtf_cls, args=(0,), kwargs=None, return_type=None):
         udtf = self._udtf_record(udtf_cls, return_type or self._ROW_RETURN_TYPE, args, kwargs)
-        return TableUDTFHandler(udfs=[udtf], runner_conf=RunnerConf({}), eval_conf=EvalConf({}))
+        return TableUDTFHandler(
+            udf_descs=[udtf], runner_conf=RunnerConf({}), eval_conf=EvalConf({})
+        )
 
     def _run(self, handler, *rows):
         # Each input row is a list of argument values; each output is the tuple of rows one
@@ -271,7 +273,9 @@ class ArrowUDTFHandlerTests(UDTFEvalTypeHandlerTestCase):
     ):
         conf = {} if table_arg_offsets is None else {"table_arg_offsets": table_arg_offsets}
         udtf = self._udtf_record(udtf_cls, self._RETURN_TYPE, args, kwargs, partition_child_indexes)
-        return ArrowUDTFHandler(udfs=[udtf], runner_conf=RunnerConf({}), eval_conf=EvalConf(conf))
+        return ArrowUDTFHandler(
+            udf_descs=[udtf], runner_conf=RunnerConf({}), eval_conf=EvalConf(conf)
+        )
 
     def test_serializer(self):
         self.assertIsInstance(self._handler(_RecordingUDTF).serializer, ArrowStreamSerializer)
@@ -439,7 +443,7 @@ class ArrowTableUDTFHandlerTestsMixin:
     def _handler(self, udtf_cls, args=(0,), kwargs=None, return_type=None):
         udtf = self._udtf_record(udtf_cls, return_type or self._ROW_RETURN_TYPE, args, kwargs)
         return self.handler_cls(
-            udfs=[udtf],
+            udf_descs=[udtf],
             runner_conf=RunnerConf({}),
             eval_conf=EvalConf({"input_type": self._ROW_INPUT_TYPE.json()}),
         )
@@ -563,8 +567,10 @@ class UDTFHandlerInitTests(UDTFEvalTypeHandlerTestCase):
 
         handler = self._new(TableUDTFHandler, Udtf)
         self.assertIsInstance(handler._udtf, Udtf)
-        udtf = handler._udfs[0]
+        udtf = handler._udf_descs[0]
         self.assertIsInstance(udtf, UDTF)
+        self.assertIs(handler._udtf_desc, udtf)
+        self.assertFalse(hasattr(handler, "_udf_desc"))
         self.assertEqual(udtf.args_offsets, [0])
         self.assertEqual(udtf.kwargs_offsets, {})
         self.assertEqual(udtf.return_type, self._RETURN_TYPE)
