@@ -19,8 +19,8 @@ from typing import Iterator, Optional
 import pyarrow as pa
 
 import pyspark.sql
-from pyspark.sql.types import StructType, StructField, BinaryType
 from pyspark.sql.pandas.types import to_arrow_schema
+from pyspark.sql.types import BinaryType, StructField, StructType
 
 
 def _get_arrow_array_partition_stream(df: pyspark.sql.DataFrame) -> Iterator[pa.RecordBatch]:

@@ -83,6 +83,10 @@ class VectorizedHashMapGenerator(
        |    buckets = new int[numBuckets];
        |    java.util.Arrays.fill(buckets, -1);
        |  }
+       |
+       |  public int getNumKeys() {
+       |    return numRows;
+       |  }
      """.stripMargin
   }
 

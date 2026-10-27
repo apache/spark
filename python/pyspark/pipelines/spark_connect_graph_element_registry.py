@@ -15,26 +15,26 @@
 # limitations under the License.
 #
 from pathlib import Path
+from typing import Any, List, Optional, cast
 
+import pyspark.sql.connect.proto as pb2
 from pyspark.errors import PySparkTypeError
-from pyspark.sql import SparkSession, Column
-from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
-from pyspark.pipelines.output import (
-    Output,
-    MaterializedView,
-    Table,
-    Sink,
-    StreamingTable,
-    TemporaryView,
-)
+from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 from pyspark.pipelines.flow import AutoCdcFlow, Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
+from pyspark.pipelines.output import (
+    MaterializedView,
+    Output,
+    Sink,
+    StreamingTable,
+    Table,
+    TemporaryView,
+)
 from pyspark.pipelines.source_code_location import SourceCodeLocation
+from pyspark.sql import Column, SparkSession
+from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
 from pyspark.sql.connect.types import pyspark_types_to_proto_types
 from pyspark.sql.types import StructType
-from typing import Any, List, Optional, cast
-import pyspark.sql.connect.proto as pb2
-from pyspark.pipelines.add_pipeline_analysis_context import add_pipeline_analysis_context
 
 
 class SparkConnectGraphElementRegistry(GraphElementRegistry):
@@ -150,6 +150,11 @@ class SparkConnectGraphElementRegistry(GraphElementRegistry):
             except_column_list=to_plans(flow.except_column_list),
             track_history_column_list=to_plans(flow.track_history_column_list),
             track_history_except_column_list=to_plans(flow.track_history_except_column_list),
+            ignore_null_updates=flow.ignore_null_updates,
+            ignore_null_updates_column_list=to_plans(flow.ignore_null_updates_column_list),
+            ignore_null_updates_except_column_list=to_plans(
+                flow.ignore_null_updates_except_column_list
+            ),
         )
         if flow.stored_as_scd_type is not None:
             scd_type_by_value = {

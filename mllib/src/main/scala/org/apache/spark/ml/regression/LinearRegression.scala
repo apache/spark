@@ -742,7 +742,7 @@ class LinearRegressionModel private[ml] (
   private[regression] def findSummaryModelAndPredictionCol(): (LinearRegressionModel, String) = {
     $(predictionCol) match {
       case "" =>
-        val predictionColName = "prediction_" + java.util.UUID.randomUUID.toString
+        val predictionColName = Identifiable.randomUID("prediction")
         (copy(ParamMap.empty).setPredictionCol(predictionColName), predictionColName)
       case p => (this, p)
     }
@@ -1160,4 +1160,3 @@ class LinearRegressionSummary private[regression] (
     }
   }
 }
-

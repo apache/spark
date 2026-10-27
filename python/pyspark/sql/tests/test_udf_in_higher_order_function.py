@@ -152,6 +152,36 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: times_ten(-plus_one(x))).alias("r")),
             df.select(sf.transform("values", lambda x: (-(x + 1)) * 10).alias("r")),
         )
+        # Reads the index and the inner result, but not the element itself.
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x, i: times_ten(plus_one(x) + i)).alias("r")),
+            df.select(sf.transform("values", lambda x, i: ((x + 1) + i) * 10).alias("r")),
+        )
+
+    def test_nested_udf_two_levels_inside_composite_argument(self):
+        # `f(g(h(x)) + 1)`: the composite argument of `f` holds the lifted call `g(h(x))`, which
+        # itself holds the lifted call `h(x)`. `g(h(x))` must be substituted whole; a raw `g` left
+        # behind could not be lifted again over a nondeterministic `h` and failed at runtime.
+        import random
+
+        df = self.spark.createDataFrame([([1, 2, 3],)], "values array<int>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        times_ten = udf(lambda x: x * 10, IntegerType())
+        # Nondeterministic, but returns its input unchanged so the expected result is known.
+        same = udf(lambda x: x + 0 * random.randint(0, 1), IntegerType()).asNondeterministic()
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda x: times_ten(plus_one(plus_one(x)) + 1)).alias("r")
+            ),
+            df.select(sf.transform("values", lambda x: ((x + 2) + 1) * 10).alias("r")),
+        )
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda x: times_ten(plus_one(same(x)) + 1)).alias("r")
+            ),
+            df.select(sf.transform("values", lambda x: ((x + 1) + 1) * 10).alias("r")),
+        )
 
     def test_udf_with_outer_column_argument(self):
         # A non-element argument must be broadcast to every element of its row.
@@ -249,6 +279,38 @@ class UDFInHigherOrderFunctionTestsMixin:
             ),
             [([3, 2, 1],), ([],), (None,)],
         )
+
+    def test_array_sort_with_nondeterministic_udf_key(self):
+        # A per-element key is computed once per element, even by a nondeterministic UDF, so that
+        # an element has the same key on either side of a comparison. With a draw per call, the
+        # comparator would be inconsistent and the sort could fail with "Comparison method
+        # violates its general contract!".
+        import random
+
+        # Nondeterministic, but returns its input negated so the expected order is known.
+        negate = udf(lambda x: -x + 0 * random.randint(0, 1), IntegerType()).asNondeterministic()
+        keep = udf(lambda x: x, IntegerType())
+        df = self.spark.createDataFrame([([3, 1, 2],)], "values array<int>")
+        assertDataFrameEqual(
+            df.select(
+                sf.array_sort("values", lambda a, b: keep(negate(a)) - keep(negate(b))).alias("r")
+            ),
+            [([3, 2, 1],)],
+        )
+
+        # A random key: any order is valid, but the sort must succeed and keep every element.
+        key = udf(lambda x: random.randint(0, 1_000_000), IntegerType()).asNondeterministic()
+        values = list(range(1000))
+        df = self.spark.createDataFrame([(values,)], "values array<int>")
+        row = df.select(
+            sf.array_sort(
+                "values",
+                lambda a, b: sf.when(key(a) < key(b), sf.lit(-1))
+                .when(key(a) > key(b), sf.lit(1))
+                .otherwise(sf.lit(0)),
+            ).alias("r")
+        ).collect()[0]
+        self.assertEqual(sorted(row["r"]), values)
 
     def test_array_sort_pairwise_comparator(self):
         # One UDF call receiving both elements has no per-element key, so the UDF is precomputed
@@ -354,6 +416,32 @@ class UDFInHigherOrderFunctionTestsMixin:
         # If the two calls were deduplicated, every element would be exactly 0.
         self.assertTrue(any(v != 0 for v in row["r"]), row["r"])
 
+    def test_deterministic_udf_over_nondeterministic_udf_calls_are_distinct(self):
+        # `keep` is deterministic, but each `keep(draw(x))` wraps its own independent draw, so the
+        # two sides must not be collapsed into one call compared with itself. The same holds when
+        # the calls are re-lifted out of a nested lambda.
+        import uuid
+
+        draw = udf(lambda x: uuid.uuid4().hex, StringType()).asNondeterministic()
+        keep = udf(lambda s: s, StringType())
+
+        df = self.spark.createDataFrame([([1, 2, 3],)], "values array<int>")
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: keep(draw(x)) == keep(draw(x))).alias("r")),
+            [([False, False, False],)],
+        )
+
+        nested = self.spark.createDataFrame([([[1, 2], [3]],)], "values array<array<int>>")
+        assertDataFrameEqual(
+            nested.select(
+                sf.transform(
+                    "values",
+                    lambda a: sf.transform(a, lambda x: keep(draw(x)) == keep(draw(x))),
+                ).alias("r")
+            ),
+            [([[False, False], [False]],)],
+        )
+
     def test_fused_transforms_with_different_lengths(self):
         # SPARK-27052: two transforms over arrays of different per-row lengths and null layouts get
         # fused by ExtractPythonUDFs into one element-wise batch. Each UDF must be re-nested by its
@@ -423,23 +511,218 @@ class UDFInHigherOrderFunctionTestsMixin:
             df.select(sf.transform("values", lambda x: plus_one(x)).alias("r")).count(), 0
         )
 
-    def test_udf_inside_nested_higher_order_function_fails(self):
-        # The inner array is the outer lambda's variable, not a real column, so a UDF in the inner
-        # lambda cannot be lifted onto an array outside the lambda. This must fail analysis. (A UDF
-        # over the outer element is fine; see test_udf_outside_inner_higher_order_function.)
-        df = self.spark.createDataFrame([([[1, 2], [3]],)], "values array<array<int>>")
+    def test_udf_inside_nested_lambda(self):
+        # A UDF in a *nested* lambda is lifted onto the fully flattened leaves and the nested
+        # structure is rebuilt around the result: `transform(matrix, row -> transform(row, x ->
+        # f(x)))` applies `f` to every leaf. The UDF runs once over all leaves (a depth-2 lift), and
+        # the result is compared against the equivalent native expression.
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3]],), ([[], [4, 5]],), (None,), ([None, [6]],)],
+            "values array<array<int>>",
+        )
         plus_one = udf(lambda x: x + 1, IntegerType())
         is_even = udf(lambda x: x % 2 == 0, "boolean")
 
-        nested = [
-            sf.transform("values", lambda inner: sf.transform(inner, lambda x: plus_one(x))),
-            # A `filter` inside a `transform`, with the UDF in the inner predicate.
-            sf.transform("values", lambda inner: sf.filter(inner, lambda x: is_even(x))),
-        ]
-        for expr in nested:
-            with self.assertRaises(AnalysisException) as ctx:
-                df.select(expr).collect()
-            self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+        # transform inside transform.
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda row: sf.transform(row, lambda x: plus_one(x))).alias(
+                    "r"
+                )
+            ),
+            df.select(
+                sf.transform("values", lambda row: sf.transform(row, lambda x: x + 1)).alias("r")
+            ),
+        )
+        # filter inside transform: the inner result length differs from the input, but the UDF still
+        # runs over every leaf before the (JVM) filtering.
+        assertDataFrameEqual(
+            df.select(
+                sf.transform("values", lambda row: sf.filter(row, lambda x: is_even(x))).alias("r")
+            ),
+            df.select(
+                sf.transform("values", lambda row: sf.filter(row, lambda x: x % 2 == 0)).alias("r")
+            ),
+        )
+
+    def test_udf_inside_nested_lambda_capturing_outer_variable(self):
+        # The inner UDF reads both the inner element and the *enclosing* lambda's variable
+        # (`sf.size(row)`, where `row` is the outer element), so its argument depends on two nesting
+        # levels; the lift aligns both onto the leaves. Compared against the equivalent native
+        # expression, over null outer rows, null inner arrays, and empty inner arrays.
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3, 4]],), (None,), ([[]],), ([None, [5]],)],
+            "values array<array<int>>",
+        )
+        add = udf(lambda a, b: a + b, IntegerType())
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "values", lambda row: sf.transform(row, lambda x: add(x, sf.size(row)))
+                ).alias("r")
+            ),
+            df.select(
+                sf.transform(
+                    "values", lambda row: sf.transform(row, lambda x: x + sf.size(row))
+                ).alias("r")
+            ),
+        )
+
+    def test_udf_inside_three_level_nested_lambda(self):
+        # Three levels of nesting: `f` is lifted to a depth-3 element-wise UDF, so the worker
+        # flattens three array levels to the leaves and re-nests three levels.
+        df = self.spark.createDataFrame(
+            [([[[1, 2], [3]], [[4]]],), (None,), ([[[], None]],)],
+            "values array<array<array<int>>>",
+        )
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "values",
+                    lambda a: sf.transform(a, lambda b: sf.transform(b, lambda x: plus_one(x))),
+                ).alias("r")
+            ),
+            df.select(
+                sf.transform(
+                    "values",
+                    lambda a: sf.transform(a, lambda b: sf.transform(b, lambda x: x + 1)),
+                ).alias("r")
+            ),
+        )
+
+    def test_vectorized_udf_inside_nested_lambda(self):
+        # All four vectorized flavors lifted out of a nested lambda (depth 2): the worker flattens
+        # two array levels to the leaves, runs the native-batch function once, and re-nests two
+        # levels. Includes null outer rows, null inner arrays, and empty inner arrays.
+        from typing import Iterator
+
+        import pandas as pd
+        import pyarrow as pa
+
+        from pyspark.sql.functions import arrow_udf, pandas_udf
+
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3]],), ([[], [4, 5]],), (None,), ([None, [6]],)],
+            "values array<array<int>>",
+        )
+
+        @pandas_udf(IntegerType())
+        def plus_one_pandas(s: pd.Series) -> pd.Series:
+            return s + 1
+
+        @arrow_udf(IntegerType())
+        def plus_one_arrow(a: pa.Array) -> pa.Array:
+            return pa.compute.add(a, 1)
+
+        @pandas_udf(IntegerType())
+        def plus_one_pandas_iter(it: Iterator[pd.Series]) -> Iterator[pd.Series]:
+            for s in it:
+                yield s + 1
+
+        @arrow_udf(IntegerType())
+        def plus_one_arrow_iter(it: Iterator[pa.Array]) -> Iterator[pa.Array]:
+            for a in it:
+                yield pa.compute.add(a, 1)
+
+        native = df.select(
+            sf.transform("values", lambda row: sf.transform(row, lambda x: x + 1)).alias("r")
+        )
+        for f in (plus_one_pandas, plus_one_arrow, plus_one_pandas_iter, plus_one_arrow_iter):
+            assertDataFrameEqual(
+                df.select(
+                    sf.transform("values", lambda row: sf.transform(row, lambda x: f(x))).alias("r")
+                ),
+                native,
+            )
+
+    def test_udf_in_nested_lambda_over_udf_result(self):
+        # SPARK-60509: in `transform(docs, d -> transform(tokenize(d), t -> normalize(t)))`,
+        # `tokenize(d)` is the inner function's argument, so it lifts one array level deep over
+        # `docs`, while `normalize` lifts two levels deep over `tokenize`'s result. The two must
+        # not be chained into one worker function, which would flatten `docs` two levels.
+        # Compared against the equivalent native expression for the row-at-a-time, pandas and
+        # Arrow flavors.
+        import pandas as pd
+        import pyarrow as pa
+        import pyarrow.compute as pc
+
+        from pyspark.sql.functions import arrow_udf, pandas_udf
+
+        df = self.spark.createDataFrame(
+            [(["Hello World", "Foo"],), ([],), (None,), ([None, "A b"],)], "docs array<string>"
+        )
+
+        @pandas_udf(ArrayType(StringType()))
+        def tokenize_pandas(s: pd.Series) -> pd.Series:
+            return s.str.split(" ")
+
+        @pandas_udf(StringType())
+        def normalize_pandas(s: pd.Series) -> pd.Series:
+            return s.str.lower()
+
+        @arrow_udf(ArrayType(StringType()))
+        def tokenize_arrow(a: pa.Array) -> pa.Array:
+            return pc.split_pattern(a, " ")
+
+        @arrow_udf(StringType())
+        def normalize_arrow(a: pa.Array) -> pa.Array:
+            return pc.utf8_lower(a)
+
+        native = df.select(
+            sf.transform(
+                "docs", lambda d: sf.transform(sf.split(d, " "), lambda t: sf.lower(t))
+            ).alias("r")
+        )
+        for tokenize, normalize in (
+            (
+                udf(lambda d: None if d is None else d.split(" "), ArrayType(StringType())),
+                udf(lambda t: t.lower(), StringType()),
+            ),
+            (tokenize_pandas, normalize_pandas),
+            (tokenize_arrow, normalize_arrow),
+        ):
+            assertDataFrameEqual(
+                df.select(
+                    sf.transform(
+                        "docs", lambda d: sf.transform(tokenize(d), lambda t: normalize(t))
+                    ).alias("r")
+                ),
+                native,
+            )
+
+    def test_udf_in_nested_lambda_over_udf_result_of_array_element(self):
+        # SPARK-60509: as above, but the outer element is itself an array. A chained call would
+        # pass the leaves to `repeat` instead of each row; `a + a` also runs on an int, so the
+        # query would silently return wrong values rather than fail.
+        df = self.spark.createDataFrame(
+            [([[1, 2], [3]],), ([[], None],), (None,)], "values array<array<int>>"
+        )
+        repeat = udf(lambda a: None if a is None else a + a, ArrayType(IntegerType()))
+        plus_one = udf(lambda y: y + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.select(
+                sf.transform(
+                    "values", lambda row: sf.transform(repeat(row), lambda y: plus_one(y))
+                ).alias("r")
+            ),
+            [([[2, 3, 2, 3], [4, 4]],), ([[], None],), (None,)],
+        )
+
+    def test_nested_lambda_with_nondeterministic_inner_argument_fails(self):
+        # The inner iterated argument is nondeterministic, so the rewrite - which references it more
+        # than once - would evaluate it independently and misalign the results. It must keep failing
+        # analysis at the nest root, even though the UDF itself is liftable.
+        df = self.spark.createDataFrame([([[1, 2], [3]],)], "values array<array<int>>")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+        with self.assertRaises(AnalysisException) as ctx:
+            df.select(
+                sf.transform(
+                    "values", lambda row: sf.transform(sf.shuffle(row), lambda x: plus_one(x))
+                )
+            ).collect()
+        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
     def test_udf_outside_inner_higher_order_function(self):
         # The UDF applies to the outer array's element (itself an array), which *is* a real
@@ -486,15 +769,17 @@ class UDFInHigherOrderFunctionTestsMixin:
                 [([2, 3, 4],)],
             )
 
-    def test_kwargs_call_still_fails(self):
-        # A UDF called with a keyword argument carries a NamedArgumentExpression, which the lift
-        # cannot preserve, so it must keep failing analysis rather than being rewritten.
-        df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
+    def test_kwargs_call(self):
+        # A UDF called with a keyword argument is lifted too: the NamedArgumentExpression stays a
+        # direct child of the lifted UDF (only its value becomes an aligned array), so the runner
+        # still derives the kwargs mapping. add(x, y=10) = x + 10.
+        df = self.spark.createDataFrame([([1, 2],), (None,)], "values array<int>")
         add = udf(lambda x, y: x + y, IntegerType())
 
-        with self.assertRaises(AnalysisException) as ctx:
-            df.select(sf.transform("values", lambda x: add(x, y=sf.lit(1)))).collect()
-        self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
+        assertDataFrameEqual(
+            df.select(sf.transform("values", lambda x: add(x, y=sf.lit(10))).alias("r")),
+            [([11, 12],), (None,)],
+        )
 
     def test_zero_argument_udf_still_fails(self):
         # A zero-argument UDF has no argument to carry the iterated array's shape, so the rewrite
@@ -522,6 +807,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         # return type. Each must round-trip through the element-wise wrapper correctly.
         import datetime
         from decimal import Decimal
+
         from pyspark.sql.types import (
             DecimalType,
             StructField,
@@ -590,6 +876,59 @@ class UDFInHigherOrderFunctionTestsMixin:
         # (1+1)+(2+1) + (3+1) = 9
         assertDataFrameEqual(grouped, [(9,)])
 
+    def test_udf_in_lambda_over_aggregate_result(self):
+        # Once lifted out of the lambda, the UDF reads the aggregate's result, so it must be
+        # evaluated above the aggregate. Below it, neither an aggregate function nor the grouped
+        # value of a grouping key exists, and the query failed at runtime.
+        df = self.spark.createDataFrame([(1, 1), (1, 2), (2, 3)], "k int, v int")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        assertDataFrameEqual(
+            df.groupBy("k").agg(
+                sf.sort_array(sf.transform(sf.collect_list("v"), lambda x: plus_one(x))).alias("r")
+            ),
+            [(1, [2, 3]), (2, [4])],
+        )
+        assertDataFrameEqual(
+            df.groupBy("k").agg(
+                sf.transform(sf.array(sf.sum("v")), lambda x: plus_one(x)).alias("r")
+            ),
+            [(1, [4]), (2, [4])],
+        )
+
+        arrays = self.spark.createDataFrame([([1, 2],), ([1, 2],), ([3],)], "values array<int>")
+        assertDataFrameEqual(
+            arrays.groupBy("values").agg(sf.transform("values", lambda x: plus_one(x)).alias("r")),
+            [([1, 2], [2, 3]), ([3], [4])],
+        )
+
+    def test_udf_in_lambda_in_outer_join_condition(self):
+        # A left outer join keeps a predicate over only its left side in the join condition. Once
+        # lifted, the UDF reads only the left side and is evaluated there, like a plain UDF.
+        left = self.spark.createDataFrame([(1, [1, 2]), (2, [3])], "k int, values array<int>")
+        right = self.spark.createDataFrame([(1, "a"), (2, "b")], "k int, v string")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        joined = left.join(
+            right,
+            (left.k == right.k) & sf.exists(left["values"], lambda x: plus_one(x) > 3),
+            "left_outer",
+        ).select(left.k, right.v)
+        assertDataFrameEqual(joined, [(1, None), (2, "b")])
+
+    def test_udf_in_lambda_in_inner_join_condition(self):
+        # The predicate reads both sides, so it stays in the join condition. Once lifted, the UDF
+        # reads only the left side and is evaluated there, as a plain one-side UDF is.
+        left = self.spark.createDataFrame([(1, [1, 2]), (2, [3])], "k int, values array<int>")
+        right = self.spark.createDataFrame([(1, 3), (2, 3), (2, 5)], "k int, t int")
+        plus_one = udf(lambda x: x + 1, IntegerType())
+
+        joined = left.join(
+            right,
+            (left.k == right.k) & sf.exists(left["values"], lambda x: plus_one(x) > right.t),
+        ).select(left.k, right.t)
+        assertDataFrameEqual(joined, [(2, 3)])
+
     def test_mixed_with_plain_python_udf(self):
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
@@ -618,22 +957,17 @@ class UDFInHigherOrderFunctionTestsMixin:
                 df.select(sf.transform("values", lambda x: plus_one(x))).collect()
             self.assertIn("LAMBDA_FUNCTION_WITH_PYTHON_UDF", str(ctx.exception))
 
-    def test_udf_in_aggregate_still_fails(self):
-        # The fold is sequential: the values the UDF sees are outputs of earlier steps rather than
-        # elements of a collection (folding [1,2,3] with `acc*2 + x` calls it on 0, 1, 4), and
-        # computing the final accumulator alternates Python and JVM work once per element, which no
-        # single UDF call can do. Restating the fold as an iteration over the whole column would
-        # work but is an operator-level change, so a UDF anywhere in `aggregate` / `reduce` -
-        # `merge` or `finish` - must fail rather than mislead.
+    def test_udf_in_aggregate_fails(self):
+        # `aggregate` / `reduce` is a sequential fold: the values a UDF sees are outputs of earlier
+        # steps, not elements of a collection, so it cannot be applied once to the whole array. A
+        # UDF anywhere in `aggregate` / `reduce` - `merge` or `finish` - must fail analysis.
         df = self.spark.createDataFrame([([1, 2],)], "values array<int>")
         plus_one = udf(lambda x: x + 1, IntegerType())
         double_it = udf(lambda acc: acc * 2, IntegerType())
 
         aggregates = [
-            # A UDF in `merge`, on the element and on the accumulator.
             sf.aggregate("values", sf.lit(0), lambda acc, x: acc + plus_one(x)),
             sf.aggregate("values", sf.lit(0), lambda acc, x: plus_one(acc) + x),
-            # A UDF in `finish`.
             sf.aggregate("values", sf.lit(0), lambda acc, x: acc + x, lambda acc: double_it(acc)),
             # `reduce` is an alias of `aggregate`, so it is rejected the same way.
             sf.reduce("values", sf.lit(0), lambda acc, x: acc + plus_one(x)),
@@ -647,6 +981,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         # A vectorized scalar pandas UDF is lifted and applied over the flattened elements, so it
         # still receives a pandas Series (its native contract) once per batch, not per element.
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -671,6 +1006,7 @@ class UDFInHigherOrderFunctionTestsMixin:
         # A vectorized scalar Arrow UDF is lifted the same way; it takes and returns a pyarrow
         # Array over the flattened elements.
         import pyarrow as pa
+
         from pyspark.sql.functions import arrow_udf
 
         df = self.spark.createDataFrame(
@@ -695,7 +1031,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # iterator of Series. The worker feeds it the flattened elements and re-groups the streamed
         # results back into arrays positionally, so output batch boundaries need not match input.
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -715,7 +1053,9 @@ class UDFInHigherOrderFunctionTestsMixin:
     def test_scalar_arrow_iter_udf_in_lambda(self):
         # A scalar iterator Arrow UDF, lifted the same way as the pandas iterator variant.
         from typing import Iterator
+
         import pyarrow as pa
+
         from pyspark.sql.functions import arrow_udf
 
         df = self.spark.createDataFrame(
@@ -737,7 +1077,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # element (int) and an outer column (string) that the rewrite repeats into an aligned
         # array. Each argument must be flattened with its own element type, not the first's.
         from typing import Iterator, Tuple
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -763,7 +1105,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # native Spark expression computing the same instants (so a timezone bug common to both UDF
         # paths would still be caught, while going through identical driver-collection semantics).
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
         from pyspark.sql.types import TimestampType
 
@@ -804,9 +1148,11 @@ class UDFInHigherOrderFunctionTestsMixin:
         # (empty / null) output row each, or the positional JVM join drops them silently. Cover both
         # the pandas and Arrow iterator flavors.
         from typing import Iterator
+
         import pandas as pd
         import pyarrow as pa
-        from pyspark.sql.functions import pandas_udf, arrow_udf
+
+        from pyspark.sql.functions import arrow_udf, pandas_udf
 
         # Single partition so the whole batch is empty/null arrays.
         df = self.spark.createDataFrame(
@@ -841,7 +1187,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # the equivalent non-iterator pandas UDF (identical driver-collection semantics), so the
         # check proves the schema fix without depending on absolute timezone offsets.
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
         from pyspark.sql.types import TimestampType
 
@@ -877,8 +1225,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # A vectorized pandas UDF returning a struct element (a pandas.DataFrame per batch) inside a
         # lambda. Covers the struct-DataFrame result path of the element-wise pandas branch.
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
-        from pyspark.sql.types import StructType, StructField
+        from pyspark.sql.types import StructField, StructType
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
         ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])
@@ -900,7 +1249,9 @@ class UDFInHigherOrderFunctionTestsMixin:
         # Nested calls f(g(x)) inside a lambda: g is lifted first, then f consumes g's array result.
         # Cover both the non-iterator and iterator vectorized flavors.
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
 
         df = self.spark.createDataFrame(
@@ -942,9 +1293,11 @@ class UDFInHigherOrderFunctionTestsMixin:
         # inside a lambda. Covers the struct-DataFrame result path of the iterator element-wise
         # branch (Iterator[pd.DataFrame] contract).
         from typing import Iterator
+
         import pandas as pd
+
         from pyspark.sql.functions import pandas_udf
-        from pyspark.sql.types import StructType, StructField
+        from pyspark.sql.types import StructField, StructType
 
         df = self.spark.createDataFrame([([1, 2, 3],), ([],), (None,)], "values array<int>")
         ret = StructType([StructField("v", IntegerType()), StructField("neg", IntegerType())])

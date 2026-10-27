@@ -15,26 +15,26 @@
 # limitations under the License.
 #
 
-import itertools
 import inspect
 import io
+import itertools
 import json
 import os
 import tempfile
 from contextlib import redirect_stdout
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 import pyspark
-from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
-from pyspark.pandas.namespace import _get_index_map, read_delta
-from pyspark.pandas.utils import spark_column_equals
 from pyspark.pandas.missing.general_functions import MissingPandasLikeGeneralFunctions
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
+from pyspark.pandas.namespace import _get_index_map, read_delta
 from pyspark.pandas.testing import assert_frame_equal
+from pyspark.pandas.utils import spark_column_equals
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class NamespaceTestsMixin:

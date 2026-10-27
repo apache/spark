@@ -348,16 +348,22 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     getContentAndCode("foobar")._1 should be (HttpServletResponse.SC_NOT_FOUND)
   }
 
+  test("SPARK-59010: hold status is not available through the history server") {
+    val holdStatus = getContentAndCode("applications/local-1422981780767/holdstatus")
+    holdStatus._1 should be (HttpServletResponse.SC_SERVICE_UNAVAILABLE)
+    holdStatus._3 should be (Some("Hold status not available through the history server."))
+  }
+
   test("automatically retrieve uiRoot from request through Knox") {
     assert(sys.props.get("spark.ui.proxyBase").isEmpty,
       "spark.ui.proxyBase is defined but it should not for this UT")
     assert(sys.env.get("APPLICATION_WEB_PROXY_BASE").isEmpty,
       "APPLICATION_WEB_PROXY_BASE is defined but it should not for this UT")
-    val page = new HistoryPage(server)
+    val pages = Seq(new HistoryPage(server), new LogPage(new SparkConf(false)))
     val requestThroughKnox = mock[HttpServletRequest]
     val knoxBaseUrl = "/gateway/default/sparkhistoryui"
     when(requestThroughKnox.getHeader("X-Forwarded-Context")).thenReturn(knoxBaseUrl)
-    val responseThroughKnox = page.render(requestThroughKnox)
+    val responseThroughKnox = pages.flatMap(_.render(requestThroughKnox))
 
     val urlsThroughKnox = responseThroughKnox \\ "@href" map (_.toString)
     val siteRelativeLinksThroughKnox = urlsThroughKnox filter (_.startsWith("/"))
@@ -366,7 +372,7 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
     }
 
     val directRequest = mock[HttpServletRequest]
-    val directResponse = page.render(directRequest)
+    val directResponse = pages.flatMap(_.render(directRequest))
 
     val directUrls = directResponse \\ "@href" map (_.toString)
     val directSiteRelativeLinks = directUrls filter (_.startsWith("/"))
@@ -377,12 +383,12 @@ abstract class HistoryServerSuite extends SparkFunSuite with BeforeAndAfter with
 
   test("static relative links are prefixed with uiRoot (spark.ui.proxyBase)") {
     val uiRoot = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).getOrElse("/testwebproxybase")
-    val page = new HistoryPage(server)
+    val pages = Seq(new HistoryPage(server), new LogPage(new SparkConf(false)))
     val request = mock[HttpServletRequest]
 
     // when
     System.setProperty("spark.ui.proxyBase", uiRoot)
-    val response = page.render(request)
+    val response = pages.flatMap(_.render(request))
 
     // then
     val urls = response \\ "@href" map (_.toString)

@@ -19,7 +19,8 @@ from typing import Any, Union
 
 from pandas.api.types import CategoricalDtype, is_list_like
 
-from pyspark.pandas._typing import Dtype, IndexOpsLike
+from pyspark.pandas._typing import Dtype, IndexOpsLike, SeriesOrIndex
+from pyspark.pandas.base import IndexOpsMixin
 from pyspark.pandas.data_type_ops.base import (
     DataTypeOps,
     _as_bool_type,
@@ -28,11 +29,9 @@ from pyspark.pandas.data_type_ops.base import (
     _as_string_type,
     _sanitize_list_like,
 )
-from pyspark.pandas._typing import SeriesOrIndex
 from pyspark.pandas.typedef import pandas_on_spark_type
 from pyspark.sql.types import BooleanType, StringType
 from pyspark.sql.utils import pyspark_column_op
-from pyspark.pandas.base import IndexOpsMixin
 
 
 class NullOps(DataTypeOps):

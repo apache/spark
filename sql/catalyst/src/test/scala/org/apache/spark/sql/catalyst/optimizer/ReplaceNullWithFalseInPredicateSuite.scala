@@ -452,6 +452,49 @@ class ReplaceNullWithFalseInPredicateSuite extends PlanTest {
     }
   }
 
+  test("rewrite match-all LIKE pattern to IsNotNull in predicate positions") {
+    val rel = LocalRelation($"s".string, $"i".int)
+    val right = LocalRelation($"d".int)
+
+    // A pattern of only `%` matches every non-null value, so in a predicate it is IsNotNull.
+    Seq("%", "%%", "%%%").foreach { p =>
+      comparePlans(
+        Optimize.execute(rel.where($"s".like(p)).analyze),
+        rel.where($"s".isNotNull).analyze)
+    }
+
+    // Through null-preserving operators (And/Or) and in a join condition.
+    comparePlans(
+      Optimize.execute(rel.where(($"i" > 1) && $"s".like("%")).analyze),
+      rel.where(($"i" > 1) && $"s".isNotNull).analyze)
+    comparePlans(
+      Optimize.execute(rel.where(($"i" > 1) || $"s".like("%")).analyze),
+      rel.where(($"i" > 1) || $"s".isNotNull).analyze)
+    comparePlans(
+      Optimize.execute(rel.join(right, Inner, Some($"s".like("%"))).analyze),
+      rel.join(right, Inner, Some($"s".isNotNull)).analyze)
+  }
+
+  test("do not rewrite LIKE when not a match-all pattern or not a predicate position") {
+    val rel = LocalRelation($"s".string, $"i".int)
+
+    // Not match-all: a prefix, the empty pattern, and `%` escaped to a literal.
+    Seq(rel.where($"s".like("a%")),
+        rel.where($"s".like("")),
+        rel.where($"s".like("%%", '%'))).foreach { p =>
+      val analyzed = p.analyze
+      comparePlans(Optimize.execute(analyzed), analyzed)
+    }
+
+    // `Not` flips null semantics, so the match-all LIKE under it must be left intact.
+    val notPlan = rel.where(Not($"s".like("%"))).analyze
+    comparePlans(Optimize.execute(notPlan), notPlan)
+
+    // A projection is not a null-rejecting position: null vs false would be observable.
+    val projPlan = rel.select($"s".like("%").as("f")).analyze
+    comparePlans(Optimize.execute(projPlan), projPlan)
+  }
+
   private def testFilter(originalCond: Expression, expectedCond: Expression): Unit = {
     test((rel, exp) => rel.where(exp), originalCond, expectedCond)
   }

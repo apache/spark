@@ -138,73 +138,43 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithInvalidDurationSeconds() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "not-a-number");
-
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
-    assertThrows(IllegalArgumentException.class, () -> provider.init(conf));
+    assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "not-a-number");
   }
 
   @Test
   public void testInitWithZeroDurationSecondsThrowsIllegalArgumentException() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "0");
-
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> provider.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_DURATION_SECONDS));
+    IllegalArgumentException ex = assertInitThrowsForConfig(
+        AwsStsCredentialProvider.CONF_DURATION_SECONDS, "0");
     assertTrue(ex.getMessage().contains("900"));
     assertTrue(ex.getMessage().contains("43200"));
   }
 
   @Test
   public void testInitWithNegativeDurationSecondsThrowsIllegalArgumentException() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "-100");
-
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> provider.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_DURATION_SECONDS));
+    IllegalArgumentException ex = assertInitThrowsForConfig(
+        AwsStsCredentialProvider.CONF_DURATION_SECONDS, "-100");
     assertTrue(ex.getMessage().contains("900"));
   }
 
   @Test
   public void testInitWithDurationBelowMinimumThrowsIllegalArgumentException() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "899");
-
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> provider.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_DURATION_SECONDS));
+    IllegalArgumentException ex = assertInitThrowsForConfig(
+        AwsStsCredentialProvider.CONF_DURATION_SECONDS, "899");
     assertTrue(ex.getMessage().contains("900"));
     assertTrue(ex.getMessage().contains("43200"));
   }
 
   @Test
   public void testInitWithDurationAboveMaximumThrowsIllegalArgumentException() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "43201");
-
-    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> provider.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_DURATION_SECONDS));
+    IllegalArgumentException ex = assertInitThrowsForConfig(
+        AwsStsCredentialProvider.CONF_DURATION_SECONDS, "43201");
     assertTrue(ex.getMessage().contains("900"));
     assertTrue(ex.getMessage().contains("43200"));
   }
 
   @Test
   public void testInitWithMinimumValidDurationSucceeds() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
     conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "900");
 
     provider = new AwsStsCredentialProvider();
@@ -216,8 +186,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithMaximumValidDurationSucceeds() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
     conf.put(AwsStsCredentialProvider.CONF_DURATION_SECONDS, "43200");
 
     provider = new AwsStsCredentialProvider();
@@ -229,8 +198,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testReInitializationThrowsIllegalStateException() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
 
     provider = new AwsStsCredentialProvider();
     provider.init(conf);
@@ -242,8 +210,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithEndpointAndRegionResolvesCorrectly() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "http://localhost:9000");
     conf.put(AwsStsCredentialProvider.CONF_REGION, "us-west-2");
 
@@ -259,8 +226,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithEndpointNoRegionUsesDefault() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "http://localhost:9000");
 
     provider = new AwsStsCredentialProvider();
@@ -274,8 +240,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithNeitherEndpointNorRegion() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
 
     provider = new AwsStsCredentialProvider();
     provider.init(conf);
@@ -288,8 +253,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithMalformedEndpointThrowsIllegalArgumentException() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
     conf.put(AwsStsCredentialProvider.CONF_STS_ENDPOINT, "not a valid uri^[]");
 
     AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
@@ -674,49 +638,27 @@ public class AwsStsCredentialProviderSuite {
   }
 
   @Test
-  public void testSanitizeSessionNameTruncatesLongPrincipal() {
-    // 70-char principal should be truncated to 64
-    String longPrincipal = "a".repeat(70);
-    String result = AwsStsCredentialProvider.sanitizeSessionName(longPrincipal);
-    assertEquals(64, result.length());
-    assertEquals("a".repeat(64), result);
-  }
+  public void testSanitizeSessionName() {
+    // {input, expected}
+    String[][] cases = {
+        // truncates to 64
+        {"a".repeat(70), "a".repeat(64)},
+        // replaces invalid chars
+        {"user name!#$%", "user-name----"},
+        // preserves valid chars
+        {"user_+=,.@-test", "user_+=,.@-test"},
+        // falls back for short result
+        {"x", "spark-oidc"},
+        // falls back when all invalid
+        {"!", "spark-oidc"},
+        // replaces backslash
+        {"DOMAIN\\user", "DOMAIN-user"},
+    };
 
-  @Test
-  public void testSanitizeSessionNameReplacesInvalidChars() {
-    // Spaces, special chars should be replaced with '-'
-    String result = AwsStsCredentialProvider.sanitizeSessionName("user name!#$%");
-    assertEquals("user-name----", result);
-    // Valid chars preserved
-    assertTrue(result.matches("[a-zA-Z0-9_+=,.@\\-]+"));
-  }
-
-  @Test
-  public void testSanitizeSessionNamePreservesValidChars() {
-    String validName = "user_+=,.@-test";
-    String result = AwsStsCredentialProvider.sanitizeSessionName(validName);
-    assertEquals(validName, result);
-  }
-
-  @Test
-  public void testSanitizeSessionNameFallsBackForShortResult() {
-    // Single char after sanitization -> falls back to default
-    String result = AwsStsCredentialProvider.sanitizeSessionName("x");
-    assertEquals("spark-oidc", result);
-  }
-
-  @Test
-  public void testSanitizeSessionNameFallsBackWhenAllInvalid() {
-    // All invalid chars replaced by '-', single char result
-    String result = AwsStsCredentialProvider.sanitizeSessionName("!");
-    assertEquals("spark-oidc", result);
-  }
-
-  @Test
-  public void testSanitizeSessionNameReplacesBackslash() {
-    // Regression: backslash must be replaced (invalid in STS session names)
-    String result = AwsStsCredentialProvider.sanitizeSessionName("DOMAIN\\user");
-    assertEquals("DOMAIN-user", result);
+    for (String[] c : cases) {
+      assertEquals(c[1], AwsStsCredentialProvider.sanitizeSessionName(c[0]),
+          "input: " + c[0]);
+    }
   }
 
   // ========== close() ==========
@@ -784,8 +726,7 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithValidCustomSessionName() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    Map<String, String> conf = confWithRoleArn();
     conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "valid_session+=,.@-name");
 
     provider = new AwsStsCredentialProvider();
@@ -796,88 +737,44 @@ public class AwsStsCredentialProviderSuite {
 
   @Test
   public void testInitWithInvalidSessionNameContainingSpace() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "bad session");
-
-    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> p.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME),
-        "Error must name the config key");
+    IllegalArgumentException ex = assertInitThrowsForConfig(
+        AwsStsCredentialProvider.CONF_SESSION_NAME, "bad session");
     assertTrue(ex.getMessage().contains("bad session"),
         "Error must echo the bad value");
   }
 
   @Test
   public void testInitWithInvalidSessionNameContainingQuestionMark() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "bad?name");
-
-    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> p.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+    assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_SESSION_NAME, "bad?name");
   }
 
   @Test
   public void testInitWithSessionNameTooShort() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "x");
-
-    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> p.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+    IllegalArgumentException ex = assertInitThrowsForConfig(
+        AwsStsCredentialProvider.CONF_SESSION_NAME, "x");
     assertTrue(ex.getMessage().contains("x"));
   }
 
   @Test
   public void testInitWithSessionNameTooLong() {
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "a".repeat(65));
-
-    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> p.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+    assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_SESSION_NAME, "a".repeat(65));
   }
 
   // ========== Session name: non-ASCII rejection (regression) ==========
 
   @Test
   public void testInitRejectsSessionNameWithAccentedChar() {
-    // "caf" + (char) 0xE9 produces "cafe" with accented 'e' -- valid under \w but
-    // NOT valid in STS session names. This test would PASS (incorrectly) under the
-    // buggy \w pattern and must FAIL (correctly) under the explicit ASCII pattern.
-    // NOTE: (char) 0xNN construction avoids unicode escapes banned by Spark
-    // checkstyle (AvoidEscapedUnicodeCharacters) while keeping source bytes ASCII.
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "caf" + (char) 0xE9);
-
-    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> p.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+    // U+00E9 (accented e) is valid under \w but NOT valid in STS session names.
+    // This test would PASS (incorrectly) under the buggy \w pattern and must
+    // FAIL (correctly) under the explicit ASCII pattern.
+    assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_SESSION_NAME, "café");
   }
 
   @Test
   public void testInitRejectsSessionNameWithCjkChar() {
-    // CJK ideograph U+4E16 ('world' in Chinese) -- valid under \w but NOT valid
-    // in STS session names. Regression test for the ASCII-only fix.
-    // NOTE: (char) 0xNN construction avoids unicode escapes banned by checkstyle.
-    Map<String, String> conf = new HashMap<>();
-    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
-    conf.put(AwsStsCredentialProvider.CONF_SESSION_NAME, "session" + (char) 0x4E16);
-
-    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
-    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
-        () -> p.init(conf));
-    assertTrue(ex.getMessage().contains(AwsStsCredentialProvider.CONF_SESSION_NAME));
+    // U+4E16 (CJK ideograph) is valid under \w but NOT valid in STS session names.
+    // Regression test for the ASCII-only fix.
+    assertInitThrowsForConfig(AwsStsCredentialProvider.CONF_SESSION_NAME, "session世");
   }
 
   // ========== close() idempotency ==========
@@ -986,6 +883,28 @@ public class AwsStsCredentialProviderSuite {
 
   // ========== Helpers ==========
 
+  /** Creates a config map with {@link #TEST_ROLE_ARN} pre-set. */
+  private Map<String, String> confWithRoleArn() {
+    Map<String, String> conf = new HashMap<>();
+    conf.put(AwsStsCredentialProvider.CONF_ROLE_ARN, TEST_ROLE_ARN);
+    return conf;
+  }
+
+  /**
+   * Asserts that {@code init()} throws {@link IllegalArgumentException} whose message
+   * contains the given config key. Returns the exception for additional assertions.
+   */
+  private IllegalArgumentException assertInitThrowsForConfig(String key, String value) {
+    Map<String, String> conf = confWithRoleArn();
+    conf.put(key, value);
+    AwsStsCredentialProvider p = new AwsStsCredentialProvider();
+    IllegalArgumentException ex = assertThrows(IllegalArgumentException.class,
+        () -> p.init(conf));
+    assertTrue(ex.getMessage().contains(key),
+        "Error message must contain the config key '" + key + "' but was: " + ex.getMessage());
+    return ex;
+  }
+
   private StsClient createMockStsClient(String accessKeyId, String secretAccessKey,
       String sessionToken, Instant expiration) {
     StsClient mockSts = mock(StsClient.class);
@@ -1001,5 +920,34 @@ public class AwsStsCredentialProviderSuite {
     when(mockSts.assumeRoleWithWebIdentity(any(AssumeRoleWithWebIdentityRequest.class)))
         .thenReturn(response);
     return mockSts;
+  }
+
+  // ========== additionalSparkProperties() ==========
+
+  @Test
+  public void testAdditionalSparkPropertiesReturnsS3aProviderMapping() {
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    Map<String, String> props = provider.additionalSparkProperties();
+    assertEquals(1, props.size());
+    assertEquals(
+        "org.apache.spark.security.aws.SparkOidcAwsCredentialsProvider",
+        props.get("spark.hadoop.fs.s3a.aws.credentials.provider"));
+  }
+
+  @Test
+  public void testAdditionalSparkPropertiesKeyIncludesSparkHadoopPrefix() {
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    Map<String, String> props = provider.additionalSparkProperties();
+    props.keySet().forEach(key ->
+        assertTrue(key.startsWith("spark.hadoop."),
+            "Key must include spark.hadoop. prefix: " + key));
+  }
+
+  @Test
+  public void testAdditionalSparkPropertiesIsUnmodifiable() {
+    AwsStsCredentialProvider provider = new AwsStsCredentialProvider();
+    Map<String, String> props = provider.additionalSparkProperties();
+    assertThrows(UnsupportedOperationException.class,
+        () -> props.put("foo", "bar"));
   }
 }

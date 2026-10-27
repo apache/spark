@@ -391,6 +391,7 @@ object OptimizeIn extends Rule[LogicalPlan] {
  * 2. Eliminates / extracts common factors.
  * 3. Merge same expressions
  * 4. Removes `Not` operator.
+ * 5. Simplifies contained integral ranges.
  */
 object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -424,6 +425,11 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
 
     case a And b if a.semanticEquals(b) => a
     case a Or b if a.semanticEquals(b) => a
+
+    case a And b if integralRangeImplies(a, b) => a
+    case a And b if integralRangeImplies(b, a) => b
+    case a Or b if integralRangeImplies(a, b) => b
+    case a Or b if integralRangeImplies(b, a) => a
 
     // The following optimizations are applicable only when the operands are not nullable,
     // since the three-value logic of AND and OR are different in NULL handling.
@@ -563,6 +569,72 @@ object BooleanSimplification extends Rule[LogicalPlan] with PredicateHelper {
     case Not(IsNotNull(e)) => IsNull(e)
 
     case _ => not
+  }
+
+  private case class IntegralRange(
+      attribute: AttributeReference,
+      bound: Long,
+      isLowerBound: Boolean,
+      inclusive: Boolean)
+
+  private object IntegralComparison {
+    def unapply(expression: Expression): Option[IntegralRange] = {
+      def range(
+          attribute: AttributeReference,
+          literal: Literal,
+          isLowerBound: Boolean,
+          inclusive: Boolean): Option[IntegralRange] = {
+        if (attribute.dataType.isInstanceOf[IntegralType] &&
+            literal.dataType == attribute.dataType && literal.value != null) {
+          Some(IntegralRange(attribute, literal.value.asInstanceOf[Number].longValue(),
+            isLowerBound, inclusive))
+        } else {
+          None
+        }
+      }
+
+      // ConstantFolding precedes BooleanSimplification in the operator optimization batches,
+      // so foldable bounds such as 2 + 2 can be matched as literals.
+      expression match {
+        case GreaterThan(a: AttributeReference, l: Literal) => range(a, l, true, false)
+        case GreaterThanOrEqual(a: AttributeReference, l: Literal) => range(a, l, true, true)
+        case LessThan(a: AttributeReference, l: Literal) => range(a, l, false, false)
+        case LessThanOrEqual(a: AttributeReference, l: Literal) => range(a, l, false, true)
+        case GreaterThan(l: Literal, a: AttributeReference) => range(a, l, false, false)
+        case GreaterThanOrEqual(l: Literal, a: AttributeReference) => range(a, l, false, true)
+        case LessThan(l: Literal, a: AttributeReference) => range(a, l, true, false)
+        case LessThanOrEqual(l: Literal, a: AttributeReference) => range(a, l, true, true)
+        case _ => None
+      }
+    }
+  }
+
+  // For comparisons on the same attribute, containment also preserves UNKNOWN: both
+  // comparisons return NULL together. Keep arbitrary expressions out of these rules so
+  // removing a comparison cannot suppress an exception or a nondeterministic evaluation.
+  private def integralRangeImplies(left: Expression, right: Expression): Boolean = {
+    (left, right) match {
+      case (IntegralComparison(l), IntegralComparison(r))
+          if l.attribute.semanticEquals(r.attribute) && l.isLowerBound == r.isLowerBound =>
+        val order = java.lang.Long.compare(l.bound, r.bound)
+        if (order == 0) {
+          !l.inclusive || r.inclusive
+        } else if (l.isLowerBound) {
+          order > 0
+        } else {
+          order < 0
+        }
+
+      case (And(l @ IntegralComparison(_), r @ IntegralComparison(_)),
+          target @ IntegralComparison(_)) =>
+        integralRangeImplies(l, target) || integralRangeImplies(r, target)
+
+      case (source @ IntegralComparison(_),
+          Or(l @ IntegralComparison(_), r @ IntegralComparison(_))) =>
+        integralRangeImplies(source, l) || integralRangeImplies(source, r)
+
+      case _ => false
+    }
   }
 }
 
@@ -804,43 +876,128 @@ object SupportedBinaryExpr {
  * pattern.
  */
 object LikeSimplification extends Rule[LogicalPlan] with PredicateHelper {
-  // if guards below protect from escapes on trailing %.
-  // Cases like "something\%" are not optimized, but this does not affect correctness.
-  // Consecutive wildcard characters are equivalent to a single wildcard character.
+  // These regexes classify a pattern that has no escape character (`%`/`_` are the only
+  // wildcards). Patterns that do contain the escape character are decoded by `decodeLikePattern`
+  // first. Consecutive wildcard characters are equivalent to a single wildcard character.
   private val startsWith = "([^_%]+)%+".r
   private val endsWith = "%+([^_%]+)".r
   private val startsAndEndsWith = "([^_%]+)%+([^_%]+)".r
   private val contains = "%+([^_%]+)%+".r
   private val equalTo = "([^_%]*)".r
 
+  private def startsWithExpr(input: Expression, prefix: String): Expression =
+    StartsWith(input, Literal.create(prefix, input.dataType))
+
+  private def endsWithExpr(input: Expression, postfix: String): Expression =
+    EndsWith(input, Literal.create(postfix, input.dataType))
+
+  private def containsExpr(input: Expression, infix: String): Expression =
+    Contains(input, Literal.create(infix, input.dataType))
+
+  private def equalToExpr(input: Expression, str: String): Expression =
+    EqualTo(input, Literal.create(str, input.dataType))
+
+  // 'a%a' is basically 'a%' && '%a', but a length guard is required to stop 'a' matching 'a%a'.
+  // When the collation matches raw bytes (supportsBinaryEquality), StartsWith/EndsWith pin the
+  // literal bytes of the prefix and suffix, so a byte-length guard (OctetLength, O(1) via the
+  // stored numBytes) accepts exactly the same inputs as the code-point guard and is cheaper.
+  // Otherwise the anchors are collation-aware (LIKE reaches this only for UTF8_LCASE) and can
+  // match a code point whose UTF-8 length differs from the pattern's -- a single multibyte code
+  // point could then satisfy both anchors and clear the byte guard -- so the code-point (Length)
+  // guard must be kept for correctness.
+  // The replacement reads the input three times, so it is made only for a deterministic input;
+  // a nondeterministic one could give each read a different value.
+  private def startsAndEndsWithExpr(
+      input: Expression, prefix: String, postfix: String): Expression = {
+    val lengthGuard = input.dataType match {
+      case st: StringType if st.supportsBinaryEquality =>
+        GreaterThanOrEqual(OctetLength(input),
+          Literal.create(UTF8String.fromString(prefix).numBytes
+            + UTF8String.fromString(postfix).numBytes))
+      case _ =>
+        GreaterThanOrEqual(Length(input),
+          Literal.create(prefix.codePointCount(0, prefix.length)
+            + postfix.codePointCount(0, postfix.length)))
+    }
+    And(lengthGuard, And(startsWithExpr(input, prefix), endsWithExpr(input, postfix)))
+  }
+
+  // A decoded LIKE pattern token: a maximal run of literal characters, or a `%` wildcard
+  // (consecutive `%` collapse into one).
+  private sealed trait LikeToken
+  private case class LikeLiteral(str: String) extends LikeToken
+  private case object LikeWildcard extends LikeToken
+
+  // Decodes a `pattern` that contains the escape character into literal/wildcard tokens, or None
+  // if it cannot be simplified: an invalid escape (the escape char not followed by `%`, `_`, or
+  // the escape char) or a trailing escape char -- both make LIKE throw at runtime, so the rule
+  // must leave them alone -- or an unescaped `_` wildcard, which this rule does not handle.
+  private def decodeLikePattern(pattern: String, escapeChar: Char): Option[Seq[LikeToken]] = {
+    val tokens = ArrayBuffer.empty[LikeToken]
+    val literal = new StringBuilder
+    def flushLiteral(): Unit = if (literal.length > 0) {
+      tokens += LikeLiteral(literal.toString)
+      literal.setLength(0)
+    }
+    var i = 0
+    while (i < pattern.length) {
+      val c = pattern.charAt(i)
+      if (c == escapeChar) {
+        if (i + 1 >= pattern.length) {
+          return None // trailing escape character
+        }
+        val next = pattern.charAt(i + 1)
+        if (next == '%' || next == '_' || next == escapeChar) {
+          literal.append(next)
+          i += 2
+        } else {
+          return None // invalid escape sequence
+        }
+      } else if (c == '%') {
+        flushLiteral()
+        if (tokens.isEmpty || tokens.last != LikeWildcard) {
+          tokens += LikeWildcard
+        }
+        i += 1
+      } else if (c == '_') {
+        return None // unescaped single-character wildcard, not handled here
+      } else {
+        literal.append(c)
+        i += 1
+      }
+    }
+    flushLiteral()
+    Some(tokens.toSeq)
+  }
+
   private def simplifyLike(
       input: Expression, pattern: String, escapeChar: Char = '\\'): Option[Expression] = {
-    if (pattern.contains(escapeChar)) {
-      // There are three different situations when pattern containing escapeChar:
-      // 1. pattern contains invalid escape sequence, e.g. 'm\aca'
-      // 2. pattern contains escaped wildcard character, e.g. 'ma\%ca'
-      // 3. pattern contains escaped escape character, e.g. 'ma\\ca'
-      // Although there are patterns can be optimized if we handle the escape first, we just
-      // skip this rule if pattern contains any escapeChar for simplicity.
+    if (!pattern.contains(escapeChar)) {
+      // Fast path: no escape character, so `%`/`_` are the only wildcards.
+      pattern match {
+        case startsWith(prefix) => Some(startsWithExpr(input, prefix))
+        case endsWith(postfix) => Some(endsWithExpr(input, postfix))
+        case startsAndEndsWith(prefix, postfix) if input.deterministic =>
+          Some(startsAndEndsWithExpr(input, prefix, postfix))
+        case contains(infix) => Some(containsExpr(input, infix))
+        case equalTo(str) => Some(equalToExpr(input, str))
+        case _ => None
+      }
+    } else if (escapeChar == '%' || escapeChar == '_') {
+      // Pathological: the escape character is itself a wildcard character, so `%`/`_` no longer
+      // act as wildcards and the shape detection does not apply. Skip, as before.
       None
     } else {
-      pattern match {
-        case startsWith(prefix) =>
-          Some(StartsWith(input, Literal.create(prefix, input.dataType)))
-        case endsWith(postfix) =>
-          Some(EndsWith(input, Literal.create(postfix, input.dataType)))
-        // 'a%a' pattern is basically same with 'a%' && '%a'.
-        // However, the additional `Length` condition is required to prevent 'a' match 'a%a'.
-        case startsAndEndsWith(prefix, postfix) =>
-          Some(And(GreaterThanOrEqual(Length(input),
-            Literal.create(prefix.codePointCount(0, prefix.length)
-              + postfix.codePointCount(0, postfix.length))),
-          And(StartsWith(input, Literal.create(prefix, input.dataType)),
-            EndsWith(input, Literal.create(postfix, input.dataType)))))
-        case contains(infix) =>
-          Some(Contains(input, Literal.create(infix, input.dataType)))
-        case equalTo(str) =>
-          Some(EqualTo(input, Literal.create(str, input.dataType)))
+      // The pattern uses escape sequences: decode them, then classify the decoded shape. The
+      // decoded literals are exact, so the resulting predicate accepts the same rows as the LIKE.
+      decodeLikePattern(pattern, escapeChar).flatMap {
+        case Seq(LikeLiteral(str)) => Some(equalToExpr(input, str))
+        case Seq(LikeLiteral(prefix), LikeWildcard) => Some(startsWithExpr(input, prefix))
+        case Seq(LikeWildcard, LikeLiteral(postfix)) => Some(endsWithExpr(input, postfix))
+        case Seq(LikeLiteral(prefix), LikeWildcard, LikeLiteral(postfix)) if input.deterministic =>
+          Some(startsAndEndsWithExpr(input, prefix, postfix))
+        case Seq(LikeWildcard, LikeLiteral(infix), LikeWildcard) =>
+          Some(containsExpr(input, infix))
         case _ => None
       }
     }
@@ -1158,6 +1315,8 @@ object FoldablePropagation extends Rule[LogicalPlan] {
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformAllExpressionsWithPruning(
     _.containsPattern(CAST), ruleId) {
+    // Annotated STRING (flag off) is not unconstrained STRING. Dropping CAST(... AS STRING)
+    // would hide the type change. First-class CHAR/VARCHAR already fail e.dataType == StringType.
     case c @ Cast(e: NamedExpression, StringType, _, _)
       if e.dataType == StringType && e.metadata.contains(CHAR_VARCHAR_TYPE_STRING_METADATA_KEY) => c
     case Cast(e, dataType, _, _) if e.dataType == dataType => e
@@ -1168,6 +1327,9 @@ object SimplifyCasts extends Rule[LogicalPlan] {
       case (ArrayType(from, false), ArrayType(to, true)) if from == to => e
       case (MapType(fromKey, fromValue, false), MapType(toKey, toValue, true))
         if fromKey == toKey && fromValue == toValue => e
+      case (from: StructType, to: StructType)
+        if from.asNullable == to.asNullable &&
+          DataType.equalsIgnoreCompatibleNullability(from, to) => e
       case _ => c
       }
     case IsNotNull(Cast(e, dataType: NumericType, _, _)) if isWiderCast(e.dataType, dataType) =>
@@ -1182,8 +1344,13 @@ object SimplifyCasts extends Rule[LogicalPlan] {
 
 
 /**
- * Removes the inner case conversion expressions that are unnecessary because
- * the inner conversion is overwritten by the outer one.
+ * Removes redundant same-case conversion expressions (e.g. UPPER(UPPER(x)) or LOWER(LOWER(x)))
+ * that are unnecessary because the case conversion operation is idempotent.
+ *
+ * Note: Cross-case conversions (UPPER(LOWER(x)) or LOWER(UPPER(x))) are NOT simplified
+ * because they are not semantics-preserving for some Unicode characters
+ * (e.g. U+0131 LATIN SMALL LETTER DOTLESS I, where LOWER(UPPER(U+0131)) yields 'i'
+ * while LOWER(U+0131) leaves the character unchanged).
  */
 object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
@@ -1191,8 +1358,6 @@ object SimplifyCaseConversionExpressions extends Rule[LogicalPlan] {
     case q: LogicalPlan => q.transformExpressionsUpWithPruning(
       _.containsPattern(UPPER_OR_LOWER), ruleId) {
       case Upper(Upper(child)) => Upper(child)
-      case Upper(Lower(child)) => Upper(child)
-      case Lower(Upper(child)) => Lower(child)
       case Lower(Lower(child)) => Lower(child)
     }
   }

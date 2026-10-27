@@ -218,6 +218,13 @@ abstract class JdbcDialect extends Serializable with Logging {
   }
 
   /**
+   * Whether TimestampNTZType values are read and written as zoneless `LocalDateTime` rather than
+   * through `java.sql.Timestamp`. Snapshotted into `JDBCOptions` when the options are built.
+   */
+  @Since("4.4.0")
+  def timestampNTZAsWallClock: Boolean = false
+
+  /**
    * Returns a factory for creating connections to the given JDBC URL.
    * In general, creating a connection has nothing to do with JDBC partition id.
    * But sometimes it is needed, such as a database with multiple shard nodes.
@@ -587,7 +594,7 @@ abstract class JdbcDialect extends Serializable with Logging {
   def schemasExists(conn: Connection, options: JDBCOptions, schema: String): Boolean = {
     val rs = conn.getMetaData.getSchemas(null, schema)
     while (rs.next()) {
-      if (rs.getString(1) == schema) return true;
+      if (rs.getString(1) == schema) return true
     }
     false
   }

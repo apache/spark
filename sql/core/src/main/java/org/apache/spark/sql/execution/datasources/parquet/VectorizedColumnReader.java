@@ -32,6 +32,7 @@ import org.apache.parquet.column.Encoding;
 import org.apache.parquet.column.page.*;
 import org.apache.parquet.column.values.RequiresPreviousReader;
 import org.apache.parquet.column.values.ValuesReader;
+import org.apache.parquet.io.ParquetDecodingException;
 import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DateLogicalTypeAnnotation;
 import org.apache.parquet.schema.LogicalTypeAnnotation.DecimalLogicalTypeAnnotation;
@@ -96,6 +97,12 @@ public class VectorizedColumnReader {
    */
   private long pageFirstRowIndex;
 
+  /**
+   * The data page the values are being decoded from, for error messages. Only its description is
+   * kept: for codecs that decompress lazily, the page holds the decompressor stream.
+   */
+  private String currentPage;
+
   private final PageReader pageReader;
   private final ColumnDescriptor descriptor;
   private final LogicalTypeAnnotation logicalTypeAnnotation;
@@ -125,20 +132,33 @@ public class VectorizedColumnReader {
       int96RebaseMode,
       int96RebaseTz);
 
-    DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
-    if (dictionaryPage != null) {
-      try {
-        this.dictionary = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
-        this.isCurrentPageDictionaryEncoded = true;
-      } catch (IOException e) {
-        throw new IOException("could not decode the dictionary for " + descriptor, e);
+    Dictionary dict = null;
+    try {
+      // This decompresses the page eagerly for some codecs, e.g. ZSTD.
+      DictionaryPage dictionaryPage = pageReader.readDictionaryPage();
+      if (dictionaryPage != null) {
+        dict = dictionaryPage.getEncoding().initDictionary(descriptor, dictionaryPage);
       }
-    } else {
-      this.dictionary = null;
-      this.isCurrentPageDictionaryEncoded = false;
+    } catch (IOException e) {
+      throw new IOException("could not decode the dictionary for " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not decode the dictionary for " + descriptor + ": " + e.getMessage(), e);
+    } catch (IndexOutOfBoundsException | NegativeArraySizeException |
+        UnsupportedOperationException e) {
+      // Reading the dictionary page decompresses it, for some codecs only when initDictionary
+      // reads its bytes, and initDictionary parses it. A corrupted page or page header makes
+      // them throw these: an IndexOutOfBoundsException when a BINARY dictionary ends within the
+      // length of an entry, a NegativeArraySizeException for a negative size, and an
+      // UnsupportedOperationException for an encoding that has no dictionary. An entry that
+      // claims more bytes than the page has is not detected here (SPARK-60316).
+      throw new ParquetDecodingException(
+        "could not decode the dictionary for " + descriptor + ": " + e, e);
     }
+    this.dictionary = dict;
+    this.isCurrentPageDictionaryEncoded = dict != null;
     if (pageReader.getTotalValueCount() == 0) {
-      throw new IOException("totalValueCount == 0");
+      throw new IOException("totalValueCount == 0 in col " + descriptor);
     }
     assert "LEGACY".equals(datetimeRebaseMode) || "EXCEPTION".equals(datetimeRebaseMode) ||
       "CORRECTED".equals(datetimeRebaseMode);
@@ -233,85 +253,111 @@ public class VectorizedColumnReader {
       if (readState.valuesToReadInPage == 0) {
         int pageValueCount = readPage();
         if (pageValueCount < 0) {
+          if (readState.maxRepetitionLevel == 0) {
+            // A column without repeated values has a value, possibly null, for every row. So
+            // running out of pages with rows left to read means the column chunk holds fewer
+            // values than expected or another reader of the column took its pages, and returning
+            // would leave the rest of the vector unwritten.
+            throw new ParquetDecodingException(String.format(
+              "Column %s ran out of pages with %d of the %d rows of the batch left to read",
+              descriptor, readState.rowsToReadInBatch, total));
+          }
           // we've read all the pages; this could happen when we're reading a repeated list and we
           // don't know where the list will end until we've seen all the pages.
           break;
         }
         readState.resetForNewPage(pageValueCount, pageFirstRowIndex);
       }
-      PrimitiveType.PrimitiveTypeName typeName =
-          descriptor.getPrimitiveType().getPrimitiveTypeName();
-      if (isCurrentPageDictionaryEncoded) {
-        // Save starting offset in case we need to decode dictionary IDs.
-        int startOffset = readState.valueOffset;
-        // Save starting row index so we can check if we need to eagerly decode dict ids later
-        long startRowId = readState.rowId;
+      // A corrupted page makes the readers below throw a ParquetDecodingException without the
+      // column. Only that is wrapped, so that other exceptions, e.g. SparkUpgradeException,
+      // keep their types.
+      try {
+        PrimitiveType.PrimitiveTypeName typeName =
+            descriptor.getPrimitiveType().getPrimitiveTypeName();
+        if (isCurrentPageDictionaryEncoded) {
+          // Save starting offset in case we need to decode dictionary IDs.
+          int startOffset = readState.valueOffset;
+          // Save starting row index so we can check if we need to eagerly decode dict ids later
+          long startRowId = readState.rowId;
 
-        // Read and decode dictionary ids.
-        if (readState.maxRepetitionLevel == 0) {
-          defColumn.readIntegers(readState, dictionaryIds, column, definitionLevels,
-            (VectorizedValuesReader) dataColumn);
+          // Read and decode dictionary ids.
+          if (readState.maxRepetitionLevel == 0) {
+            defColumn.readIntegers(readState, dictionaryIds, column, definitionLevels,
+              (VectorizedValuesReader) dataColumn);
+          } else {
+            repColumn.readIntegersRepeated(readState, repetitionLevels, defColumn, definitionLevels,
+              dictionaryIds, column, (VectorizedValuesReader) dataColumn);
+          }
+
+          // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
+          // the values to add microseconds precision.
+          if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
+              isLazyDecodingSupported(typeName, column.dataType()))) {
+            // Column vector supports lazy decoding of dictionary values so just set the dictionary.
+            // We can't do this if startRowId is not the first row index in the page AND the column
+            // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
+            // added).
+            PrimitiveType primitiveType = descriptor.getPrimitiveType();
+
+            // We need to make sure that we initialize the right type for the dictionary otherwise
+            // WritableColumnVector will throw an exception when trying to decode to an Int when the
+            // dictionary is in fact initialized as Long
+            LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
+            boolean castLongToInt =
+              typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
+              annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
+              primitiveType.getPrimitiveTypeName() == INT64;
+
+            // We require a long value, but we need to use dictionary to decode the original
+            // signed int first
+            boolean isUnsignedInt32 = updaterFactory.isUnsignedIntTypeMatched(32);
+
+            // We require a decimal value, but we need to use dictionary to decode the original
+            // signed long first
+            boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
+
+            boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
+            column.setDictionary(new ParquetDictionary(dictionary, needTransform));
+          } else {
+            updater.decodeDictionaryIds(readState.valueOffset - startOffset, startOffset, column,
+              dictionaryIds, dictionary);
+          }
         } else {
-          repColumn.readIntegersRepeated(readState, repetitionLevels, defColumn, definitionLevels,
-            dictionaryIds, column, (VectorizedValuesReader) dataColumn);
+          if (column.hasDictionary() && readState.valueOffset != 0) {
+            // This batch already has dictionary encoded values but this new page is not. The batch
+            // does not support a mix of dictionary and not so we will decode the dictionary.
+            updater.decodeDictionaryIds(readState.valueOffset, 0, column, dictionaryIds,
+              dictionary);
+          }
+          column.setDictionary(null);
+          VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
+          if (readState.maxRepetitionLevel == 0) {
+            defColumn.readBatch(readState, column, definitionLevels, valuesReader, updater);
+          } else {
+            repColumn.readBatchRepeated(readState, repetitionLevels, defColumn, definitionLevels,
+              column, valuesReader, updater);
+          }
         }
-
-        // TIMESTAMP_MILLIS encoded as INT64 can't be lazily decoded as we need to post process
-        // the values to add microseconds precision.
-        if (column.hasDictionary() || (startRowId == pageFirstRowIndex &&
-            isLazyDecodingSupported(typeName, column.dataType()))) {
-          // Column vector supports lazy decoding of dictionary values so just set the dictionary.
-          // We can't do this if startRowId is not the first row index in the page AND the column
-          // doesn't have a dictionary (i.e. some non-dictionary encoded values have already been
-          // added).
-          PrimitiveType primitiveType = descriptor.getPrimitiveType();
-
-          // We need to make sure that we initialize the right type for the dictionary otherwise
-          // WritableColumnVector will throw an exception when trying to decode to an Int when the
-          // dictionary is in fact initialized as Long
-          LogicalTypeAnnotation typeAnnotation = primitiveType.getLogicalTypeAnnotation();
-          boolean castLongToInt =
-            typeAnnotation instanceof DecimalLogicalTypeAnnotation annotation &&
-            annotation.getPrecision() <= Decimal.MAX_INT_DIGITS() &&
-            primitiveType.getPrimitiveTypeName() == INT64;
-
-          // We require a long value, but we need to use dictionary to decode the original
-          // signed int first
-          boolean isUnsignedInt32 = updaterFactory.isUnsignedIntTypeMatched(32);
-
-          // We require a decimal value, but we need to use dictionary to decode the original
-          // signed long first
-          boolean isUnsignedInt64 = updaterFactory.isUnsignedIntTypeMatched(64);
-
-          boolean needTransform = castLongToInt || isUnsignedInt32 || isUnsignedInt64;
-          column.setDictionary(new ParquetDictionary(dictionary, needTransform));
-        } else {
-          updater.decodeDictionaryIds(readState.valueOffset - startOffset, startOffset, column,
-            dictionaryIds, dictionary);
-        }
-      } else {
-        if (column.hasDictionary() && readState.valueOffset != 0) {
-          // This batch already has dictionary encoded values but this new page is not. The batch
-          // does not support a mix of dictionary and not so we will decode the dictionary.
-          updater.decodeDictionaryIds(readState.valueOffset, 0, column, dictionaryIds, dictionary);
-        }
-        column.setDictionary(null);
-        VectorizedValuesReader valuesReader = (VectorizedValuesReader) dataColumn;
-        if (readState.maxRepetitionLevel == 0) {
-          defColumn.readBatch(readState, column, definitionLevels, valuesReader, updater);
-        } else {
-          repColumn.readBatchRepeated(readState, repetitionLevels, defColumn, definitionLevels,
-            column, valuesReader, updater);
-        }
+      } catch (ParquetDecodingException e) {
+        throw new ParquetDecodingException("could not decode page " + currentPage + " in col " +
+          descriptor + ": " + e.getMessage(), e);
       }
     }
   }
 
   private int readPage() {
-    DataPage page = pageReader.readPage();
+    DataPage page;
+    try {
+      // This decompresses the page eagerly for some codecs, e.g. ZSTD.
+      page = pageReader.readPage();
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read the next page in col " + descriptor + ": " + e.getMessage(), e);
+    }
     if (page == null) {
       return -1;
     }
+    this.currentPage = page.toString();
     this.pageFirstRowIndex = page.getFirstRowIndex().orElse(0L);
 
     return page.accept(new DataPage.Visitor<Integer>() {
@@ -343,9 +389,7 @@ public class VectorizedColumnReader {
     if (dataEncoding.usesDictionary()) {
       this.dataColumn = null;
       if (dictionary == null) {
-        throw new IOException(
-            "could not read page in col " + descriptor +
-                " as the dictionary was missing for encoding " + dataEncoding);
+        throw new IOException("the dictionary was missing for encoding " + dataEncoding);
       }
       @SuppressWarnings("deprecation")
       Encoding plainDict = Encoding.PLAIN_DICTIONARY; // var to allow warning suppression
@@ -360,11 +404,9 @@ public class VectorizedColumnReader {
       this.isCurrentPageDictionaryEncoded = false;
     }
 
-    try {
-      dataColumn.initFromPage(pageValueCount, in);
-    } catch (IOException e) {
-      throw new IOException("could not read page in col " + descriptor, e);
-    }
+    // readPageV1 and readPageV2 add the page and the column to an IOException or a
+    // ParquetDecodingException thrown here.
+    dataColumn.initFromPage(pageValueCount, in);
     // for PARQUET-246 (See VectorizedDeltaByteArrayReader.setPreviousValues)
     if (CorruptDeltaByteArrays.requiresSequentialReads(writerVersion, dataEncoding) &&
         previousReader instanceof RequiresPreviousReader) {
@@ -389,7 +431,8 @@ public class VectorizedColumnReader {
           default -> throw new SparkUnsupportedOperationException(
             "_LEGACY_ERROR_TEMP_3190", Map.of("typeName", typeName.toString()));
         };
-        yield new VectorizedByteStreamSplitValuesReader(typeWidth);
+        yield new VectorizedByteStreamSplitValuesReader(
+          typeWidth, this.descriptor.getMaxDefinitionLevel() == 0);
       }
       case RLE -> {
         PrimitiveType.PrimitiveTypeName typeName =
@@ -433,6 +476,9 @@ public class VectorizedColumnReader {
       return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 
@@ -453,6 +499,9 @@ public class VectorizedColumnReader {
       return pageValueCount;
     } catch (IOException e) {
       throw new IOException("could not read page " + page + " in col " + descriptor, e);
+    } catch (ParquetDecodingException e) {
+      throw new ParquetDecodingException(
+        "could not read page " + page + " in col " + descriptor + ": " + e.getMessage(), e);
     }
   }
 }

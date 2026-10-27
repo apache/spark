@@ -555,7 +555,8 @@ private[serializer] object KryoSerializer {
     classOf[SparkConf],
     classOf[TaskCommitMessage],
     classOf[SerializedLambda],
-    classOf[BitSet]
+    classOf[BitSet],
+    classOf[java.util.HashMap[_, _]]
   )
 
   private val toRegisterSerializer = Map[Class[_], KryoClassSerializer[_]](
@@ -643,6 +644,11 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.ml.linalg.SparseVector",
       "org.apache.spark.ml.linalg.Vector",
       "org.apache.spark.ml.stat.distribution.MultivariateGaussian",
+      "[Lorg.apache.spark.ml.tree.Node;",
+      "org.apache.spark.ml.tree.InternalNode",
+      "org.apache.spark.ml.tree.LeafNode",
+      "org.apache.spark.ml.tree.ContinuousSplit",
+      "org.apache.spark.ml.tree.CategoricalSplit",
       "org.apache.spark.ml.tree.impl.TreePoint",
       "org.apache.spark.mllib.clustering.VectorWithNorm",
       "org.apache.spark.mllib.linalg.DenseMatrix",
@@ -652,7 +658,9 @@ private[serializer] object KryoSerializer {
       "org.apache.spark.mllib.linalg.SparseVector",
       "org.apache.spark.mllib.linalg.Vector",
       "org.apache.spark.mllib.regression.LabeledPoint",
-      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian"
+      "org.apache.spark.mllib.stat.distribution.MultivariateGaussian",
+      "org.apache.spark.mllib.tree.impurity.GiniCalculator",
+      "org.apache.spark.mllib.tree.impurity.EntropyCalculator"
     ).flatMap { name =>
       try {
         Some[Class[_]](Utils.classForName(name))

@@ -19,7 +19,7 @@ package org.apache.spark.sql.hive.execution
 
 import java.io.File
 import java.net.URI
-import java.time.LocalDateTime
+import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
@@ -626,6 +626,76 @@ class HiveDDLSuite
           |""".stripMargin)
       sql("MSCK REPAIR TABLE t")
       checkAnswer(spark.table("t"), Row(LocalDateTime.of(2018, 11, 17, 13, 33, 33), "APACHE"))
+    }
+  }
+
+  test("SPARK-60492: Keep Hive incompatible partition columns in alterTable and renameTable") {
+    Seq(
+      ("TIMESTAMP_NTZ", "TIMESTAMP_NTZ '2018-11-17 13:33:33'",
+        LocalDateTime.of(2018, 11, 17, 13, 33, 33)),
+      ("TIME", "TIME '12:34:56'", LocalTime.of(12, 34, 56))
+    ).foreach { case (dataType, literal, value) =>
+      def checkTable(partitionColumnNames: Seq[String], expected: Row): Unit = {
+        val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+        assert(table.properties.get("k").contains("v"))
+        assert(table.partitionColumnNames == partitionColumnNames)
+        checkAnswer(spark.table("t2"), expected)
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, pt $dataType) USING PARQUET PARTITIONED BY (pt)")
+        // This stores the data columns in Hive metastore as they are Hive compatible.
+        sql("ALTER TABLE t ADD COLUMNS (c STRING)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, 'a', $literal")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("pt"), Row(1, "a", value))
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, P1 STRING, P2 $dataType) USING PARQUET " +
+          "PARTITIONED BY (P1, P2)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, 'a', $literal")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("P1", "P2"), Row(1, "a", value))
+      }
+      withTable("t", "t2") {
+        sql(s"CREATE TABLE t (i INT, P1 STRING, P2 $dataType) USING PARQUET " +
+          "PARTITIONED BY (P2, P1)")
+        sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+        sql(s"INSERT INTO t SELECT 1, $literal, 'a'")
+        sql("MSCK REPAIR TABLE t")
+        sql("ALTER TABLE t RENAME TO t2")
+        checkTable(Seq("P2", "P1"), Row(1, value, "a"))
+      }
+    }
+  }
+
+  test("SPARK-60492: alterTable and renameTable of a partitioned table created by Spark 2.0") {
+    // Spark 2.0 or prior stores the partition columns of a data source table only in the table
+    // properties, not in Hive metastore.
+    withTable("t", "t2") {
+      val schema = new StructType().add("i", "int").add("p", "int")
+      hiveClient.createTable(CatalogTable(
+        identifier = TableIdentifier("t", Some("default")),
+        tableType = CatalogTableType.MANAGED,
+        storage = CatalogStorageFormat.empty.copy(properties = Map(
+          "path" -> spark.sessionState.catalog.defaultTablePath(TableIdentifier("t")).toString)),
+        schema = HiveExternalCatalog.EMPTY_DATA_SCHEMA,
+        provider = Some("json"),
+        properties = Map(
+          "spark.sql.sources.provider" -> "json",
+          "spark.sql.sources.schema.numParts" -> "1",
+          "spark.sql.sources.schema.part.0" -> schema.json,
+          "spark.sql.sources.schema.numPartCols" -> "1",
+          "spark.sql.sources.schema.partCol.0" -> "p")), ignoreIfExists = false)
+      sql("ALTER TABLE t SET TBLPROPERTIES ('k' = 'v')")
+      sql("ALTER TABLE t RENAME TO t2")
+      val table = spark.sessionState.catalog.getTableMetadata(TableIdentifier("t2"))
+      assert(table.properties.get("k").contains("v"))
+      assert(table.schema == schema)
+      assert(table.partitionColumnNames == Seq("p"))
     }
   }
 
@@ -3295,6 +3365,90 @@ class HiveDDLSuite
     }
   }
 
+  test("SPARK-60545: Disallow TIMESTAMP_NTZ columns when the provider is Hive") {
+    val tbl = "tbl_with_timestamp_ntz"
+    def checkUnsupported(columnType: String)(createTable: => Unit): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](createTable),
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+      assert(!spark.catalog.tableExists(tbl))
+    }
+    withTable(tbl, "src") {
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl (c TIMESTAMP) STORED AS PARQUET")
+        }
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl STORED AS ORC AS SELECT TIMESTAMP'2026-01-01 00:00:00' AS c")
+        }
+      }
+      Seq(
+        "TIMESTAMP_NTZ",
+        "STRUCT<a: TIMESTAMP_NTZ>",
+        "ARRAY<TIMESTAMP_NTZ>",
+        "MAP<STRING, TIMESTAMP_NTZ>").foreach { dataType =>
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (c $dataType) STORED AS TEXTFILE")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (pt INT, c $dataType) USING HIVE PARTITIONED BY (pt)")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl STORED AS PARQUET AS SELECT CAST(NULL AS $dataType) AS c")
+        }
+        checkUnsupported(dataType) {
+          sql(s"SELECT CAST(NULL AS $dataType) AS c").write.format("hive").saveAsTable(tbl)
+        }
+        sql(s"CREATE TABLE src (c $dataType) USING PARQUET")
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl LIKE src STORED AS ORC")
+        }
+        sql("DROP TABLE src")
+      }
+    }
+  }
+
+  test("SPARK-60545: CREATE TABLE IF NOT EXISTS with TIMESTAMP_NTZ columns is a no-op for " +
+      "an existing Hive serde table") {
+    val tbl = "tbl_with_timestamp_ntz"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c TIMESTAMP) STORED AS PARQUET")
+      sql(s"INSERT INTO $tbl VALUES (TIMESTAMP'2026-01-01 00:00:00')")
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        sql(s"CREATE TABLE IF NOT EXISTS $tbl (c TIMESTAMP) STORED AS PARQUET")
+        sql(s"CREATE TABLE IF NOT EXISTS $tbl STORED AS PARQUET " +
+          "AS SELECT TIMESTAMP'2026-01-01 00:00:00' AS c")
+      }
+      sql(s"CREATE TABLE IF NOT EXISTS $tbl (c TIMESTAMP_NTZ) STORED AS PARQUET")
+      assert(spark.table(tbl).schema === new StructType().add("c", TimestampType))
+      assert(spark.table(tbl).count() === 1)
+    }
+  }
+
+  test("SPARK-60545: saveAsTable with mode Overwrite keeps the existing table when the new " +
+      "Hive serde table has a TIMESTAMP_NTZ column") {
+    val tbl = "tbl_with_timestamp_ntz"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (c INT) STORED AS PARQUET")
+      sql(s"INSERT INTO $tbl VALUES (1)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql("SELECT TIMESTAMP_NTZ'2026-01-01 00:00:00' AS c")
+            .write.format("hive").mode(SaveMode.Overwrite).saveAsTable(tbl)
+        },
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`c`",
+          "columnType" -> "\"TIMESTAMP_NTZ\"",
+          "format" -> "Hive"))
+      checkAnswer(spark.table(tbl), Row(1))
+    }
+  }
+
   test("SPARK-37046: Alter view should preserve column case with view definition change") {
     withView("v") {
       // Changing view definition should preserve column case
@@ -3380,6 +3534,76 @@ class HiveDDLSuite
           "tableName" -> "spark_catalog.default.t",
           "partitionColumnName" -> "col")
       )
+    }
+  }
+
+  test("SPARK-60493: Disallow Hive incompatible partition column types in Hive serde tables") {
+    val tbl = "tbl_with_incompatible_partition"
+    def checkUnsupported(columnType: String)(createTable: => Unit): Unit = {
+      checkError(
+        exception = intercept[AnalysisException](createTable),
+        condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+        parameters = Map(
+          "columnName" -> "`pt`",
+          "columnType" -> s""""$columnType"""",
+          "format" -> "Hive"))
+      assert(!spark.catalog.tableExists(tbl))
+    }
+    withTable(tbl, "src") {
+      Seq(
+        "TIMESTAMP_NTZ",
+        "INTERVAL YEAR",
+        "INTERVAL DAY TO SECOND",
+        "TIMESTAMP_NTZ(9)",
+        "TIMESTAMP_LTZ(9)",
+        "TIME(6)").foreach { dataType =>
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (i INT) PARTITIONED BY (pt $dataType) STORED AS PARQUET")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl (i INT, pt $dataType) USING HIVE PARTITIONED BY (pt)")
+        }
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl PARTITIONED BY (pt) STORED AS TEXTFILE " +
+            s"AS SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+        }
+        checkUnsupported(dataType) {
+          sql(s"SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+            .write.format("hive").partitionBy("pt").saveAsTable(tbl)
+        }
+        sql(s"CREATE TABLE src (i INT, pt $dataType) USING PARQUET PARTITIONED BY (pt)")
+        checkUnsupported(dataType) {
+          sql(s"CREATE TABLE $tbl LIKE src STORED AS ORC")
+        }
+        sql("DROP TABLE src")
+      }
+      withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+        checkUnsupported("TIMESTAMP_NTZ") {
+          sql(s"CREATE TABLE $tbl (i INT) PARTITIONED BY (pt TIMESTAMP) STORED AS AVRO")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60493: saveAsTable with mode Overwrite keeps the existing table when the new " +
+      "Hive serde table has a Hive incompatible partition column type") {
+    val tbl = "tbl_with_incompatible_partition"
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (i INT, pt INT) USING HIVE PARTITIONED BY (pt)")
+      sql(s"INSERT INTO $tbl PARTITION (pt = 2) VALUES (1)")
+      Seq("TIMESTAMP_NTZ", "INTERVAL YEAR", "TIMESTAMP_NTZ(9)", "TIME(6)").foreach { dataType =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(s"SELECT 1 AS i, CAST(NULL AS $dataType) AS pt")
+              .write.format("hive").mode(SaveMode.Overwrite).partitionBy("pt").saveAsTable(tbl)
+          },
+          condition = "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+          parameters = Map(
+            "columnName" -> "`pt`",
+            "columnType" -> s""""$dataType"""",
+            "format" -> "Hive"))
+        checkAnswer(spark.table(tbl), Row(1, 2))
+      }
     }
   }
 
@@ -3477,6 +3701,34 @@ class HiveDDLSuite
           assert(!spark.sessionState.catalog.tableExists(TableIdentifier("nanos_view")))
         }
       }
+    }
+  }
+
+  test("SPARK-56822: DESCRIBE TABLE and SHOW CREATE TABLE render nanos columns with the flag on") {
+    withTable("nanos_basic_render", "nanos_basic_render_rt") {
+      // The preview flag is on by default in tests (via Utils.isTesting), so this exercises the
+      // normal happy path: create a table with nanos columns and introspect it with the flag on.
+      // SPARK-57835 covers the flag-off read-through path; this covers the basic flag-on case.
+      sql(
+        """CREATE TABLE nanos_basic_render (id INT, ntz TIMESTAMP_NTZ(9), ltz TIMESTAMP_LTZ(7))
+          |USING parquet""".stripMargin)
+
+      // DESCRIBE TABLE renders each column's type name (lowercase, with precision).
+      val describeRows = sql("DESCRIBE TABLE nanos_basic_render").collect()
+        .map(r => r.getString(0) -> r.getString(1)).toMap
+      assert(describeRows("ntz") === "timestamp_ntz(9)")
+      assert(describeRows("ltz") === "timestamp_ltz(7)")
+
+      // SHOW CREATE TABLE renders the parseable, uppercased DDL type for each column.
+      val showCreate = sql("SHOW CREATE TABLE nanos_basic_render").head().getString(0)
+      assert(showCreate.contains("TIMESTAMP_NTZ(9)"))
+      assert(showCreate.contains("TIMESTAMP_LTZ(7)"))
+
+      // Round-trip: the emitted DDL re-parses and re-creates an identical nanos schema.
+      sql(showCreate.replace("nanos_basic_render", "nanos_basic_render_rt"))
+      val rtSchema = spark.table("nanos_basic_render_rt").schema
+      assert(rtSchema("ntz").dataType === TimestampNTZNanosType(9))
+      assert(rtSchema("ltz").dataType === TimestampLTZNanosType(7))
     }
   }
 }

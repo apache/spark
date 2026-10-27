@@ -330,6 +330,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     assert(cast("abcdef", FloatType).nullable)
   }
 
+  test("SPARK-60118: cast string of zero with a large exponent to decimal") {
+    Seq("0e38", "0e39", "-0E+100", "0e2147483647").foreach { s =>
+      checkEvaluation(cast(s, DecimalType(10, 2)), Decimal("0.00"))
+    }
+  }
+
   test("cast from timestamp") {
     val millis = 15 * 1000 + 3
     val seconds = millis * 1000 + 3
@@ -1484,14 +1490,6 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
-  // Floors a sub-microsecond nanos component (0..999) to the given timestamp precision in [7, 9],
-  // mirroring the production truncation rule used by the cross-precision cast.
-  private def floorNanosToPrecision(nanosWithinMicro: Int, precision: Int): Int = precision match {
-    case 7 => (nanosWithinMicro / 100) * 100
-    case 8 => (nanosWithinMicro / 10) * 10
-    case 9 => nanosWithinMicro
-  }
-
   test("SPARK-57490: cast between timestamp_ntz nanos types of different precision") {
     // Same physical (epochMicros, nanosWithinMicro) pair; only the sub-microsecond part is
     // re-floored to the target precision. epochMicros never changes and no time zone is involved.
@@ -1506,8 +1504,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       // The source value is already valid at p1 (its sub-micro digits are floored to p1); casting
       // to p2 re-floors to p2, so the net effect is flooring to min(p1, p2). Widening (p2 >= p1)
       // is lossless, narrowing (p2 < p1) drops the extra sub-microsecond digits.
-      val srcNanos = floorNanosToPrecision(789, p1)
-      val expectedNanos = floorNanosToPrecision(srcNanos, p2)
+      val srcNanos = nanoOfSecTruncator(p1)(789)
+      val expectedNanos = nanoOfSecTruncator(p2)(srcNanos)
       checkEvaluation(
         cast(Literal.create(nanosVal(micros, srcNanos), TimestampNTZNanosType(p1)),
           TimestampNTZNanosType(p2)),
@@ -1534,8 +1532,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       p1 <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
       p2 <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
     } {
-      val srcNanos = floorNanosToPrecision(789, p1)
-      val expectedNanos = floorNanosToPrecision(srcNanos, p2)
+      val srcNanos = nanoOfSecTruncator(p1)(789)
+      val expectedNanos = nanoOfSecTruncator(p2)(srcNanos)
       checkEvaluation(
         cast(Literal.create(nanosVal(micros, srcNanos), TimestampLTZNanosType(p1)),
           TimestampLTZNanosType(p2), UTC_OPT),
@@ -1569,8 +1567,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         } {
           // The source already floors to p; the cross-family cast then floors to q, i.e. to
           // min(p, q). Only the wall-clock epoch-micros part shifts with the zone.
-          val srcNanos = floorNanosToPrecision(789, p)
-          val expectedNanos = floorNanosToPrecision(srcNanos, q)
+          val srcNanos = nanoOfSecTruncator(p)(789)
+          val expectedNanos = nanoOfSecTruncator(q)(srcNanos)
           checkEvaluation(
             cast(Literal.create(nanosVal(srcMicros, srcNanos), TimestampLTZNanosType(p)),
               TimestampNTZNanosType(q), zid),
@@ -1604,8 +1602,8 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
           p <- TimestampLTZNanosType.MIN_PRECISION to TimestampLTZNanosType.MAX_PRECISION
           q <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
         } {
-          val srcNanos = floorNanosToPrecision(789, q)
-          val expectedNanos = floorNanosToPrecision(srcNanos, p)
+          val srcNanos = nanoOfSecTruncator(q)(789)
+          val expectedNanos = nanoOfSecTruncator(p)(srcNanos)
           checkEvaluation(
             cast(Literal.create(nanosVal(srcMicros, srcNanos), TimestampNTZNanosType(q)),
               TimestampLTZNanosType(p), zid),
@@ -1630,7 +1628,7 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
       foreachNanosPrecision { p =>
         val src = nanosVal(
           instantToNanosVal(timestampLTZ(2020, 7, 1, 6, 15, 30, 123456789)).epochMicros,
-          floorNanosToPrecision(789, p))
+          nanoOfSecTruncator(p)(789))
         checkEvaluation(
           cast(
             cast(Literal.create(src, TimestampLTZNanosType(p)), TimestampNTZNanosType(p), zid),
@@ -1668,17 +1666,17 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         q <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION
       } {
         // NTZ(q) -> LTZ(p): the epoch-micros part resolves DST exactly like the micro cast.
-        val ntzToLtzSrc = floorNanosToPrecision(789, q)
+        val ntzToLtzSrc = nanoOfSecTruncator(q)(789)
         checkEvaluation(
           cast(Literal.create(nanosVal(ntzMicros, ntzToLtzSrc), TimestampNTZNanosType(q)),
             TimestampLTZNanosType(p), la),
-          nanosVal(microLtz, floorNanosToPrecision(ntzToLtzSrc, p)))
+          nanosVal(microLtz, nanoOfSecTruncator(p)(ntzToLtzSrc)))
         // LTZ(p) -> NTZ(q): rendering the resolved instant matches the micro cast too.
-        val ltzToNtzSrc = floorNanosToPrecision(789, p)
+        val ltzToNtzSrc = nanoOfSecTruncator(p)(789)
         checkEvaluation(
           cast(Literal.create(nanosVal(microLtz, ltzToNtzSrc), TimestampLTZNanosType(p)),
             TimestampNTZNanosType(q), la),
-          nanosVal(microNtz, floorNanosToPrecision(ltzToNtzSrc, q)))
+          nanosVal(microNtz, nanoOfSecTruncator(q)(ltzToNtzSrc)))
       }
     }
   }
@@ -1709,12 +1707,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         // TIMESTAMP_NTZ(p) -> TIMESTAMP (LTZ(6)): drops the sub-microsecond digits before the zone
         // reinterpretation. A non-zero nanosWithinMicro on the source proves the truncation.
         checkEvaluation(
-          cast(Literal.create(nanosVal(ntzMicros, floorNanosToPrecision(789, p)),
+          cast(Literal.create(nanosVal(ntzMicros, nanoOfSecTruncator(p)(789)),
             TimestampNTZNanosType(p)), TimestampType, zid),
           convertTz(ntzMicros, zone, UTC))
         // TIMESTAMP_LTZ(p) -> TIMESTAMP_NTZ (NTZ(6)): drops the sub-microsecond digits likewise.
         checkEvaluation(
-          cast(Literal.create(nanosVal(ltzMicros, floorNanosToPrecision(789, p)),
+          cast(Literal.create(nanosVal(ltzMicros, nanoOfSecTruncator(p)(789)),
             TimestampLTZNanosType(p)), TimestampNTZType, zid),
           convertTz(ltzMicros, UTC, zone))
         // Null input in all four directions.
@@ -1727,6 +1725,32 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(
           cast(Literal.create(null, TimestampLTZNanosType(p)), TimestampNTZType, zid), null)
       }
+    }
+  }
+
+  test("SPARK-57838: cast nanosecond timestamps at the range boundaries") {
+    // The calendar range, the int64 epoch-nanosecond limits of Parquet/Avro and the
+    // epoch-microsecond (Long) limits. Years beyond 9999 are accepted, as for the micro types.
+    Seq(
+      "0001-01-01 00:00:00" -> nanosVal(-62135596800000000L, 0),
+      "9999-12-31 23:59:59.999999999" -> nanosVal(253402300799999999L, 999),
+      "+10000-01-01 00:00:00.000000001" -> nanosVal(253402300800000000L, 1),
+      "1677-09-21 00:12:43.145224192" -> nanosVal(-9223372036854776L, 192),
+      "2262-04-11 23:47:16.854775807" -> nanosVal(9223372036854775L, 807),
+      "-290308-12-21 19:59:05.224192" -> nanosVal(Long.MinValue, 0),
+      "+294247-01-10 04:00:54.775807999" -> nanosVal(Long.MaxValue, 999)).foreach {
+      case (str, v) =>
+        checkEvaluation(cast(Literal(str), TimestampNTZNanosType(9)), v)
+        checkEvaluation(cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), UTC_OPT), v)
+        checkEvaluation(cast(Literal.create(v, TimestampNTZNanosType(9)), StringType), str)
+        checkEvaluation(
+          cast(Literal.create(v, TimestampLTZNanosType(9)), StringType, UTC_OPT), str)
+        // To and from the micro type keeps the epoch-microseconds part.
+        checkEvaluation(
+          cast(Literal.create(v, TimestampNTZNanosType(9)), TimestampNTZType), v.epochMicros)
+        checkEvaluation(
+          cast(Literal.create(v.epochMicros, TimestampNTZType), TimestampNTZNanosType(9)),
+          nanosVal(v.epochMicros, 0))
     }
   }
 
@@ -2150,6 +2174,12 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
               IntervalUtils.supportedFormat(("day-time", dataType.startField, dataType.endField))
                 .map(format => s"`$format`").mkString(", ")))
       }
+  }
+
+  test("SPARK-60119: cast string with a huge negative exponent to decimal") {
+    Seq("1e-2147483647", "-1e-2147483647", "1e-100000000", "0e-2147483647").foreach { str =>
+      checkEvaluation(cast(str, DecimalType(10, 2)), Decimal("0.00"))
+    }
   }
 
   test("cast ANSI intervals to/from decimals") {
@@ -2666,6 +2696,59 @@ abstract class CastSuiteBase extends SparkFunSuite with ExpressionEvalHelper {
     // Pairs that involve neither a TIME source nor a TIMESTAMP_LTZ target are false.
     assert(!Cast.isTimeToTimestampLTZ(DateType, TimestampType))
     assert(!Cast.isTimeToTimestampLTZ(TimestampType, TimestampType))
+  }
+
+  test("SPARK-60179: needsTimeZone covers complex types collapsing to a string") {
+    // An LTZ leaf is rendered in the session time zone at any nesting depth.
+    Seq(
+      ArrayType(TimestampType),
+      MapType(IntegerType, TimestampType),
+      MapType(TimestampType, IntegerType),
+      new StructType().add("t", TimestampType),
+      new StructType().add("i", IntegerType).add("t", TimestampLTZNanosType(9)),
+      ArrayType(ArrayType(TimestampType)),
+      ArrayType(new StructType().add("t", TimestampType)),
+      new PythonUserDefinedType(ArrayType(TimestampType), "pyClass", "serializedClass"))
+      .foreach { from =>
+      assert(Cast.needsTimeZone(from, StringType), s"$from -> STRING")
+      // One level further out, the ARRAY/ARRAY case recurses into the pair above.
+      assert(Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
+        s"ARRAY<$from> -> ARRAY<STRING>")
+    }
+    // TIMESTAMP_NTZ, DATE and TIME render on a fixed grid, and a nested VARIANT renders at UTC.
+    Seq(
+      ArrayType(TimestampNTZType),
+      MapType(IntegerType, DateType),
+      new StructType().add("t", TimestampNTZNanosType(9)).add("d", DateType),
+      ArrayType(ArrayType(TimeType(TimeType.MAX_PRECISION))),
+      ArrayType(VariantType),
+      MapType(IntegerType, VariantType),
+      new StructType().add("v", VariantType),
+      new PythonUserDefinedType(ArrayType(TimestampNTZType), "pyClass", "serializedClass"))
+      .foreach { from =>
+      assert(!Cast.needsTimeZone(from, StringType), s"$from -> STRING")
+      assert(!Cast.needsTimeZone(ArrayType(from), ArrayType(StringType)),
+        s"ARRAY<$from> -> ARRAY<STRING>")
+    }
+    // A top-level VARIANT still reads the zone, element-wise casts included.
+    assert(Cast.needsTimeZone(VariantType, StringType))
+    assert(Cast.needsTimeZone(ArrayType(VariantType), ArrayType(StringType)))
+  }
+
+  test("SPARK-60179: a complex-to-string cast needs a time zone to be resolved") {
+    val arrayOfTimestamp = Literal.create(Seq(0L), ArrayType(TimestampType))
+    // Without a time zone the cast cannot be evaluated: the leaf formatter reads `zoneId`.
+    assert(!Cast(arrayOfTimestamp, StringType).resolved)
+    assert(Cast(arrayOfTimestamp, StringType, UTC_OPT).resolved)
+    // `canonicalized` may no longer drop the zone, so two zones are not semantically equal.
+    assert(!Cast(arrayOfTimestamp, StringType, UTC_OPT)
+      .semanticEquals(Cast(arrayOfTimestamp, StringType, Option(LA.getId))))
+    checkEvaluation(Cast(arrayOfTimestamp, StringType, UTC_OPT), "[1970-01-01 00:00:00]")
+    checkEvaluation(
+      Cast(arrayOfTimestamp, StringType, Option(LA.getId)), "[1969-12-31 16:00:00]")
+    // The NTZ control renders on a fixed grid and stays resolvable without a zone.
+    val arrayOfTimestampNTZ = Literal.create(Seq(0L), ArrayType(TimestampNTZType))
+    assert(Cast(arrayOfTimestampNTZ, StringType).resolved)
   }
 
   test("cast timestamp_ntz to time") {

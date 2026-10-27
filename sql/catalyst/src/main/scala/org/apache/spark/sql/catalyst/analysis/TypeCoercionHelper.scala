@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   ImplicitCastInputTypes,
   In,
   InSubquery,
+  JsonTuple,
   Least,
   ListQuery,
   Literal,
@@ -52,6 +53,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   SpecialFrameBoundary,
   SpecifiedWindowFrame,
   SubtractTimestamps,
+  TimeBucket,
   TimestampAddInterval,
   WindowSpecDefinition
 }
@@ -60,10 +62,16 @@ import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.internal.types.{AbstractArrayType, StringTypeWithCollation}
+import org.apache.spark.sql.internal.types.{
+  AbstractArrayType,
+  AbstractStringType,
+  StringTypeWithCollation
+}
 import org.apache.spark.sql.types.{
   AbstractDataType,
   AnyDataType,
+  AnyTimestampNanoType,
+  AnyTimestampNanoTypeExpression,
   AnyTimestampTypeExpression,
   ArrayType,
   BinaryType,
@@ -80,6 +88,7 @@ import org.apache.spark.sql.types.{
   IntegralType,
   MapType,
   NullType,
+  StringHelper,
   StringType,
   StringTypeExpression,
   StructType,
@@ -89,7 +98,8 @@ import org.apache.spark.sql.types.{
   TimestampNTZType,
   TimestampType,
   TimestampTypeExpression,
-  TimeType
+  TimeType,
+  TypeCollection
 }
 
 abstract class TypeCoercionHelper {
@@ -132,6 +142,103 @@ abstract class TypeCoercionHelper {
    * If the expression has an incompatible type that cannot be implicitly cast, return None.
    */
   def implicitCast(e: Expression, expectedType: AbstractDataType): Option[Expression]
+
+  /**
+   * Where a plain string is expected, promote CHAR(n)/VARCHAR(n) to unbounded STRING the same way
+   * SHORT promotes to INT, and return the promoted type.
+   *
+   * CharType and VarcharType extend StringType, so an expectation such as
+   * `StringTypeWithCollation` accepts them as-is and the implicit cast rules leave the length
+   * constraint in place. Expressions that then require all their string inputs to share a single
+   * type (`overlay`, `string_agg`, ...) cannot unify CHAR(n) with STRING, and RuntimeReplaceable
+   * ones (`right`) build literals from the constrained type that no longer match their other
+   * branches.
+   *
+   * The expectation must actually mention a string type (or an array of strings). Promoting at an
+   * `AnyDataType` site would strip the length from pass-through expressions such as `max`, `lag`,
+   * and `element_at`, which are required to preserve CHAR/VARCHAR.
+   */
+  protected def charVarcharToPlainString(
+      inType: DataType,
+      expectedType: AbstractDataType): Option[DataType] = {
+    if (!conf.charVarcharStandardSemantics) {
+      return None
+    }
+    inType match {
+      case st: StringType if !StringHelper.isPlainString(st) =>
+        val plain = StringHelper.plainStringType(st)
+        if (expectsStringType(expectedType) && expectedType.acceptsType(plain)) {
+          Some(plain)
+        } else {
+          None
+        }
+      case ArrayType(et, containsNull) =>
+        arrayElementExpectation(expectedType).flatMap { elemExpected =>
+          charVarcharToPlainString(et, elemExpected).map(ArrayType(_, containsNull))
+        }
+      case _ => None
+    }
+  }
+
+  private def expectsStringType(expectedType: AbstractDataType): Boolean = expectedType match {
+    case _: StringType => true
+    case _: AbstractStringType => true
+    case TypeCollection(types) => types.exists(expectsStringType)
+    case _ => false
+  }
+
+  private def arrayElementExpectation(expectedType: AbstractDataType): Option[AbstractDataType] =
+    expectedType match {
+      case AbstractArrayType(elem) => Some(elem)
+      case ArrayType(elem, _) => Some(elem)
+      case TypeCollection(types) => types.view.flatMap(arrayElementExpectation).headOption
+      case _ => None
+    }
+
+  /**
+   * Concat/Elt stringify non-binary inputs. CHAR/VARCHAR go through
+   * [[charVarcharToPlainString]] so a collated constrained type promotes to unbounded STRING
+   * with the same collation. Non-strings still target the default UTF8_BINARY StringType.
+   */
+  protected def implicitCastToString(e: Expression): Expression = {
+    charVarcharToPlainString(e.dataType, StringTypeWithCollation(supportsTrimCollation = true))
+      .map(dt => if (dt == e.dataType) e else Cast(e, dt))
+      .getOrElse(implicitCast(e, StringType).getOrElse(e))
+  }
+
+  /**
+   * Whether an implicit cast of `from` to `to` narrows a nanosecond-precision timestamp, also
+   * inside an array, map or struct: a lower-precision timestamp drops sub-microsecond digits and
+   * TIME drops the date part.
+   */
+  protected def isNanosNarrowing(from: DataType, to: DataType): Boolean =
+    existsNanosPair(from, to) { (nanos, t) =>
+      t.isInstanceOf[TimeType] || TimestampFamily.fractionalPrecision(nanos).exists(fp =>
+        TimestampFamily.fractionalPrecision(t).exists(_ < fp))
+    }
+
+  /**
+   * Picks the implicit cast target for a [[TypeCollection]] from the castable member types, in
+   * member order. A nanosecond-precision timestamp, also nested, skips DATE, which drops the time
+   * of day.
+   */
+  protected def pickTypeCollectionCast(
+      inType: DataType,
+      castable: Seq[DataType]): Option[DataType] = {
+    castable.find(dt => !existsNanosPair(inType, dt)((_, t) => t == DateType))
+  }
+
+  /** Whether `p` holds for some nanos timestamp in `from` and its counterpart in `to`. */
+  private def existsNanosPair(from: DataType, to: DataType)(
+      p: (DataType, DataType) => Boolean): Boolean = (from, to) match {
+    case (_: AnyTimestampNanoType, _) => p(from, to)
+    case (ArrayType(f, _), ArrayType(t, _)) => existsNanosPair(f, t)(p)
+    case (MapType(fk, fv, _), MapType(tk, tv, _)) =>
+      existsNanosPair(fk, tk)(p) || existsNanosPair(fv, tv)(p)
+    case (StructType(ff), StructType(tf)) =>
+      ff.zip(tf).exists { case (f, t) => existsNanosPair(f.dataType, t.dataType)(p) }
+    case _ => false
+  }
 
   /**
    * Whether casting `from` as `to` is valid.
@@ -377,9 +484,13 @@ abstract class TypeCoercionHelper {
           i
         }
 
-      case i @ In(a, b) if b.exists(_.dataType != a.dataType) =>
+      case i @ In(_, _) if !haveSameType(i.children.map(_.dataType)) =>
         findWiderCommonType(i.children.map(_.dataType)) match {
-          case Some(finalDataType) => i.withNewChildren(i.children.map(Cast(_, finalDataType)))
+          // Only cast the children that are not already of the common type. A redundant Cast
+          // would hide an attribute from rules that match on it, such as the CHAR type padding
+          // in ApplyCharTypePadding.
+          case Some(finalDataType) =>
+            i.withNewChildren(i.children.map(castIfNotSameType(_, finalDataType)))
           case None => i
         }
 
@@ -512,9 +623,7 @@ abstract class TypeCoercionHelper {
       case c @ Concat(children)
           if conf.concatBinaryAsString ||
           !children.map(_.dataType).forall(_ == BinaryType) =>
-        val newChildren = c.children.map { e =>
-          implicitCast(e, StringType).getOrElse(e)
-        }
+        val newChildren = c.children.map(implicitCastToString)
         c.copy(children = newChildren)
       case other => other
     }
@@ -562,9 +671,7 @@ abstract class TypeCoercionHelper {
         val newInputs =
           if (conf.eltOutputAsString ||
             !children.tail.map(_.dataType).forall(_ == BinaryType)) {
-            children.tail.map { e =>
-              implicitCast(e, StringType).getOrElse(e)
-            }
+            children.tail.map(implicitCastToString)
           } else {
             children.tail
           }
@@ -625,21 +732,28 @@ abstract class TypeCoercionHelper {
    */
   object ImplicitTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case b @ BinaryOperator(left, right)
-          if canHandleTypeCoercion(left.dataType, right.dataType) =>
-        findTightestCommonType(left.dataType, right.dataType)
-          .map { commonType =>
-            if (b.inputType.acceptsType(commonType)) {
-              // If the expression accepts the tightest common type, cast to that.
-              val newLeft = if (left.dataType == commonType) left else Cast(left, commonType)
-              val newRight = if (right.dataType == commonType) right else Cast(right, commonType)
-              b.withNewChildren(Seq(newLeft, newRight))
-            } else {
-              // Otherwise, don't do anything with the expression.
-              b
-            }
-          }
-          .getOrElse(b) // If there is no applicable conversion, leave expression unchanged.
+      case b: BinaryOperator if canHandleTypeCoercion(b.left.dataType, b.right.dataType) =>
+        findTightestCommonType(b.left.dataType, b.right.dataType) match {
+          case Some(commonType) if b.inputType.acceptsType(commonType) =>
+            // If the expression accepts the tightest common type, cast to that.
+            val newLeft = if (b.left.dataType == commonType) b.left else Cast(b.left, commonType)
+            val newRight =
+              if (b.right.dataType == commonType) b.right else Cast(b.right, commonType)
+            b.withNewChildren(Seq(newLeft, newRight))
+          case _ =>
+            // If there is no applicable conversion, leave the expression unchanged.
+            b
+        }
+
+      case t: TimeBucket =>
+        val children = t.children.zip(t.inputTypes).zipWithIndex.map {
+          case ((in, _), index) if index > 0 && in.dataType.isInstanceOf[TimeType] =>
+            // TIME-to-timestamp depends on CURRENT_DATE, so require an explicit cast.
+            in
+          case ((in, expected), _) =>
+            implicitCast(in, expected).getOrElse(in)
+        }
+        t.withNewChildren(children)
 
       case e: ImplicitCastInputTypes if e.inputTypes.nonEmpty =>
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
@@ -649,16 +763,35 @@ abstract class TypeCoercionHelper {
         }
         e.withNewChildren(children)
 
+      // JsonTuple validates its own input types and rejects non-string children with
+      // NON_STRING_TYPE, so it only takes the CHAR/VARCHAR promotion here. Do not fold this into
+      // the ExpectsInputTypes arm below: that would also apply the NullType rewrite and turn
+      // json_tuple(json, null) from an analysis error into a typed STRING null.
+      case j: JsonTuple =>
+        val expected = StringTypeWithCollation(supportsTrimCollation = true)
+        val children = j.children.map { child =>
+          charVarcharToPlainString(child.dataType, expected)
+            .map(dt => if (dt == child.dataType) child else Cast(child, dt))
+            .getOrElse(child)
+        }
+        j.withNewChildren(children)
+
       case e: ExpectsInputTypes if e.inputTypes.nonEmpty =>
         // Convert NullType into some specific target type for ExpectsInputTypes that don't do
-        // general implicit casting.
+        // general implicit casting. Also promote CHAR/VARCHAR to STRING here because these
+        // expressions skip ImplicitCastInputTypes.
         val children: Seq[Expression] = e.children.zip(e.inputTypes).map {
           case (in, expected) =>
-            if (in.dataType == NullType && !expected.acceptsType(NullType)) {
-              Literal.create(null, expected.defaultConcreteType)
-            } else {
-              in
-            }
+            val promotedType = charVarcharToPlainString(in.dataType, expected)
+            promotedType
+              .map(dt => if (dt == in.dataType) in else Cast(in, dt))
+              .getOrElse {
+                if (in.dataType == NullType && !expected.acceptsType(NullType)) {
+                  Literal.create(null, expected.defaultConcreteType)
+                } else {
+                  in
+                }
+              }
         }
         e.withNewChildren(children)
 
@@ -765,10 +898,10 @@ abstract class TypeCoercionHelper {
    */
   object DateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateAdd(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
       case d @ DateSub(StringTypeExpression(), _) => d.copy(startDate = Cast(d.startDate, DateType))
 
@@ -799,9 +932,9 @@ abstract class TypeCoercionHelper {
    */
   object AnsiDateTimeOperationsTypeCoercion {
     def apply(expression: Expression): Expression = expression match {
-      case d @ DateAdd(AnyTimestampTypeExpression(), _) =>
+      case d @ DateAdd(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
-      case d @ DateSub(AnyTimestampTypeExpression(), _) =>
+      case d @ DateSub(AnyTimestampTypeExpression() | AnyTimestampNanoTypeExpression(), _) =>
         d.copy(startDate = Cast(d.startDate, DateType))
 
       case s @ SubtractTimestamps(DateTypeExpression(), r, _, _)

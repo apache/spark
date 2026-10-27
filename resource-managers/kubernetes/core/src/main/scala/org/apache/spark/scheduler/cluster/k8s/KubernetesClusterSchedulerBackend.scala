@@ -111,15 +111,18 @@ private[spark] class KubernetesClusterSchedulerBackend(
     super.start()
     // Must be called before setting the executors
     podAllocator.start(applicationId(), this)
+    // SPARK-38794: Create the executor ConfigMap before requesting executors. Executor
+    // allocation is asynchronous (background thread pool), so requesting executors first
+    // can race with ConfigMap creation, causing transient "configmap ... not found" mounts.
+    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
+      setUpExecutorConfigMap(podAllocator.driverPod)
+    }
     val defaultProfile = scheduler.sc.resourceProfileManager.defaultResourceProfile
     val initExecs = Map(defaultProfile -> initialExecutors)
     podAllocator.setTotalExpectedExecutors(initExecs)
     lifecycleManager.start(this)
     watchEvents.start(applicationId())
     pollEvents.start(applicationId())
-    if (!conf.get(KUBERNETES_EXECUTOR_DISABLE_CONFIGMAP)) {
-      setUpExecutorConfigMap(podAllocator.driverPod)
-    }
   }
 
   override def stop(): Unit = {
@@ -190,6 +193,25 @@ private[spark] class KubernetesClusterSchedulerBackend(
       resourceProfileToTotalExecs: Map[ResourceProfile, Int]): Future[Boolean] = {
     podAllocator.setTotalExpectedExecutors(resourceProfileToTotalExecs)
     Future.successful(true)
+  }
+
+  // The Deployment/StatefulSet allocators (and unknown custom ones) scale their controller
+  // down on a zero requirement, which deletes running executor pods after the termination
+  // grace period instead of letting them finish their tasks, so holding is supported only
+  // with the direct allocator.
+  private[spark] override def supportsExecutorHold: Boolean = {
+    conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) == "direct"
+  }
+
+  // A hold drains every executor, including the recovery-mode ones that replaced an
+  // OOM-terminated executor, so a resumed application starts over with normal executors
+  // instead of staying in the recovery mode the OOM turned on.
+  private[spark] override def setExecutorsHeld(held: Boolean): Unit = {
+    super.setExecutorsHeld(held)
+    podAllocator match {
+      case allocator: ExecutorPodsAllocator if !held => allocator.unsetRecoveryMode()
+      case _ => // no-op
+    }
   }
 
   override def sufficientResourcesRegistered(): Boolean = {

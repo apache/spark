@@ -36,7 +36,7 @@ import org.apache.spark.annotation.DeveloperApi;
  * Implementations must be thread-safe: {@code resolve()} may be called concurrently from
  * multiple threads after {@code init()} completes.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
 @DeveloperApi
 public interface CredentialProvider extends AutoCloseable {
@@ -58,7 +58,7 @@ public interface CredentialProvider extends AutoCloseable {
    *
    * @param conf Spark configuration properties scoped to {@code spark.security.oidc.*}
    *     keys (must not be null)
-   * @since 4.3.0
+   * @since 4.4.0
    */
   void init(Map<String, String> conf);
 
@@ -69,7 +69,7 @@ public interface CredentialProvider extends AutoCloseable {
    * set must be non-empty and stable across calls.
    *
    * @return a non-empty set of supported scheme names
-   * @since 4.3.0
+   * @since 4.4.0
    */
   Set<String> supportedSchemes();
 
@@ -85,7 +85,7 @@ public interface CredentialProvider extends AutoCloseable {
    * @param target the target URI for which credentials are requested (must not be null)
    * @return a short-lived service credential for the target
    * @throws CredentialResolutionException if the credential exchange fails
-   * @since 4.3.0
+   * @since 4.4.0
    */
   ServiceCredential resolve(UserContext user, URI target) throws CredentialResolutionException;
 
@@ -96,10 +96,64 @@ public interface CredentialProvider extends AutoCloseable {
    * The default is 15 minutes.
    *
    * @return the suggested credential TTL (never null)
-   * @since 4.3.0
+   * @since 4.4.0
    */
   default Duration suggestedTtl() {
     return Duration.ofMinutes(15);
+  }
+
+  /**
+   * Returns additional Spark configuration properties that should be set when this
+   * provider is selected for use.
+   * <p>
+   * This declares static wiring that a job needs whenever this provider is selected (for
+   * example, the Hadoop credentials provider class for a particular filesystem scheme). It must
+   * return a constant, self-contained value: it must not depend on {@link #init(Map)} having run,
+   * on {@link #resolve(UserContext, URI)}, or on any network I/O. The credential management layer
+   * calls it at provider <em>selection</em> time, which may be before {@code init()} and before
+   * any credential has been resolved; implementations must therefore not require initialized
+   * state here.
+   * <p>
+   * The credential management layer applies these entries to {@code SparkConf} only if the
+   * user has not already set them explicitly. Application happens on both the driver and the
+   * executors, before the components that consume the configuration are initialized:
+   * <ul>
+   *   <li>On the driver, they are applied early in {@code SparkContext} initialization, before
+   *       the driver's Hadoop {@code Configuration} and other components derived from the
+   *       configuration are materialized, so driver-side access uses them too.</li>
+   *   <li>On the executors, they are delivered as part of the executor configuration before
+   *       the executor environment is built.</li>
+   * </ul>
+   * This lets provider modules declare wiring without requiring core to have vendor-specific
+   * knowledge. The properties are applied once, at selection time; they are not re-applied on
+   * subsequent credential renewals (they are static wiring, unlike the rotating credentials).
+   * <p>
+   * A provider is "selected" for a scheme when it is chosen by the loader's binding policy:
+   * either it is named explicitly via {@code spark.security.oidc.provider.<scheme>}, or it is
+   * the sole candidate registered for the scheme. When multiple candidates exist for a scheme
+   * and none is explicitly configured, no provider is selected for that scheme and these
+   * properties are not applied (the ambiguity must be resolved via explicit configuration).
+   * <p>
+   * The properties declared here are applied for a <em>selected</em> provider, independent of
+   * whether a credential has been (or will be) resolved for it. This is intentional: the wiring
+   * is what a job needs in order to use the provider, and it is applied before resolution so it
+   * is effective on the driver. A provider selected here whose {@code resolve()} later fails will
+   * still have contributed its wiring; this matches the executor side, where the same properties
+   * are delivered regardless of per-scheme resolution outcome.
+   * <p>
+   * Keys must use the {@code spark.} prefix to be effective (SparkConf convention).
+   * Keys with the {@code spark.hadoop.} prefix reach the Hadoop {@code Configuration} (on both
+   * driver and executors) with the prefix stripped. Other {@code spark.*} keys are applied as
+   * Spark configuration.
+   * <p>
+   * The default implementation returns an empty map (no additional properties).
+   *
+   * @return an unmodifiable map of property key-value pairs (never null).
+   *         Keys and values within the map must not be {@code null}.
+   * @since 4.4.0
+   */
+  default Map<String, String> additionalSparkProperties() {
+    return Map.of();
   }
 
   /**
@@ -109,17 +163,17 @@ public interface CredentialProvider extends AutoCloseable {
    * is a no-op; providers that allocate long-lived resources in {@link #init(Map)} should
    * override this method to clean them up.
    * <p>
-   * {@code close()} may be invoked while another thread is still executing
-   * {@link #resolve(UserContext, URI)}: shutdown interrupts the renewal thread but does
-   * not wait for in-flight calls to complete. Implementations must tolerate a concurrent
-   * or subsequent {@code resolve()} failing after resources have been released, and
-   * {@code close()} itself must not block indefinitely.
+   * Shutdown interrupts the renewal thread and waits a bounded time for in-flight calls to
+   * complete. If the wait times out or the shutdown thread is interrupted, {@code close()} may
+   * be invoked while another thread is still executing {@link #resolve(UserContext, URI)}.
+   * Implementations must tolerate a concurrent or subsequent {@code resolve()} failing after
+   * resources have been released, and {@code close()} itself must not block indefinitely.
    * <p>
    * Implementations that do not throw checked exceptions may narrow the {@code throws}
    * clause in their override (e.g., declare {@code close()} with no {@code throws} or
    * with a more specific exception type).
    *
-   * @since 4.3.0
+   * @since 4.4.0
    */
   @Override
   default void close() throws Exception {}

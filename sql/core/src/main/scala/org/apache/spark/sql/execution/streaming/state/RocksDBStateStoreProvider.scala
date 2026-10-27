@@ -47,7 +47,8 @@ private[sql] class RocksDBStateStoreProvider
       lastVersion: Long,
       private[RocksDBStateStoreProvider] val stamp: Long,
       private[RocksDBStateStoreProvider] var readOnly: Boolean,
-      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean) extends StateStore {
+      private[RocksDBStateStoreProvider] var forceSnapshotOnCommit: Boolean)
+    extends StateStore with SupportsReusableIterator {
 
     private sealed trait OPERATION
     private case object UPDATE extends OPERATION
@@ -487,6 +488,49 @@ private[sql] class RocksDBStateStoreProvider
         }
 
         new StateStoreIterator(iter, rocksDbIter.closeIfNeeded)
+      }
+    }
+
+    private def wrapReusableIterator(
+        rocksDbIter: RocksDBIterator,
+        keyEncoder: RocksDBKeyStateEncoder): ReusableIterator[ByteArrayPair] = {
+      new ReusableIterator[ByteArrayPair] {
+        override def refreshAndSeekToPrefix(prefixRow: UnsafeRow): Unit = {
+          rocksDbIter.refresh()
+          val encoded = keyEncoder match {
+            case rangeKeyScanStateEncoder: RangeKeyScanStateEncoder =>
+              rangeKeyScanStateEncoder.encodePrefixKey(prefixRow)
+            case _ =>
+              throw new StateStoreUnsupportedOperationException(
+                "refreshAndSeekToPrefix", keyEncoder.getClass.getName)
+          }
+          rocksDbIter.seek(encoded)
+        }
+
+        override def hasNext: Boolean = rocksDbIter.hasNext
+
+        override def next(): ByteArrayPair = rocksDbIter.next()
+
+        override def close(): Unit = rocksDbIter.close()
+      }
+    }
+
+    override def reusableIterator(colFamilyName: String): ReusableIterator[UnsafeRowPair] = {
+      validateAndTransitionState(UPDATE)
+      verifyColFamilyOperations("iterator", colFamilyName)
+
+      val kvEncoder = keyValueEncoderMap.get(colFamilyName)
+      val rowPair = new UnsafeRowPair()
+      wrapReusableIterator(rocksDB.reusableIterator(colFamilyName), kvEncoder._1).map { kv =>
+        rowPair.withRows(
+          kvEncoder._1.decodeKey(kv.key),
+          kvEncoder._2.decodeValue(kv.value))
+        if (!isValidated && rowPair.value != null && !useColumnFamilies) {
+          StateStoreProvider.validateStateRowFormat(
+            rowPair.key, keySchema, rowPair.value, valueSchema, stateStoreId, storeConf)
+          isValidated = true
+        }
+        rowPair
       }
     }
 
@@ -1623,7 +1667,18 @@ class RocksDBStateStoreChangeDataReader(
 
   override protected val changelogSuffix: String = "changelog"
 
+  // A list put/merge writes all of its values in a single record. These hold the values of that
+  // record which are not returned yet, so that each value is returned as its own change row.
+  private var pendingValues: Iterator[UnsafeRow] = Iterator.empty
+  private var pendingKeyRow: UnsafeRow = _
+  private var pendingBatchId: Long = _
+
   override def getNext(): (RecordType.Value, UnsafeRow, UnsafeRow, Long) = {
+    if (pendingValues.hasNext) {
+      // Values after the first one are appended to the list.
+      return (RecordType.MERGE_RECORD, pendingKeyRow, pendingValues.next(), pendingBatchId)
+    }
+
     var currRecord: (RecordType.Value, Array[Byte], Array[Byte]) = null
     val currEncoder: (RocksDBKeyStateEncoder, RocksDBValueStateEncoder, Short) =
       keyValueEncoderMap.get(colFamilyNameOpt
@@ -1697,11 +1752,19 @@ class RocksDBStateStoreChangeDataReader(
     }
 
     val keyRow = currEncoder._1.decodeKey(currRecord._2)
+    val batchId = currentChangelogVersion - 1
     if (currRecord._3 == null) {
-      (currRecord._1, keyRow, null, currentChangelogVersion - 1)
+      (currRecord._1, keyRow, null, batchId)
+    } else if (currEncoder._2.supportsMultipleValuesPerKey) {
+      val values = currEncoder._2.decodeValues(currRecord._3)
+      val firstValue = values.next()
+      pendingValues = values
+      pendingKeyRow = keyRow
+      pendingBatchId = batchId
+      (currRecord._1, keyRow, firstValue, batchId)
     } else {
       val valueRow = currEncoder._2.decodeValue(currRecord._3)
-      (currRecord._1, keyRow, valueRow, currentChangelogVersion - 1)
+      (currRecord._1, keyRow, valueRow, batchId)
     }
   }
 }

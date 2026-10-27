@@ -31,9 +31,8 @@ import re
 import subprocess
 import sys
 import traceback
-from urllib.request import urlopen
-from urllib.request import Request
 from urllib.error import HTTPError
+from urllib.request import Request, urlopen
 
 try:
     import jira.client

@@ -16,6 +16,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
+import datetime
+import decimal
+import pstats
 from typing import (
     Any,
     Callable,
@@ -27,15 +30,12 @@ from typing import (
     TypeVar,
     Union,
 )
+
 from typing_extensions import Literal, Protocol
 
-import datetime
-import decimal
-import pstats
-
+import pyspark.sql.types
 from pyspark._typing import PrimitiveType
 from pyspark.profiler import CodeMapDict
-import pyspark.sql.types
 from pyspark.sql.column import Column
 from pyspark.sql.tvf_argument import TableValuedFunctionArgument
 

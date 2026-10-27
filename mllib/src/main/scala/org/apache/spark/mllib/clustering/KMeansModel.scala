@@ -43,7 +43,7 @@ class KMeansModel (@Since("1.0.0") val clusterCenters: Array[Vector],
   private[spark] val numIter: Int)
   extends Saveable with Serializable with PMMLExportable {
 
-  @transient private lazy val distanceMeasureInstance: DistanceMeasure =
+  private val distanceMeasureInstance: DistanceMeasure =
     DistanceMeasure.decodeFromString(distanceMeasure)
 
   @transient private lazy val clusterCentersWithNorm =

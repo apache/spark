@@ -238,6 +238,8 @@
     ./python/packaging/client/setup.py, and ./python/packaging/connect/setup.py too.
     -->
     <arrow.version>19.0.0</arrow.version>
+    <!-- For in-process Python UDFs; also read by the PySpark CI image and named by the guide -->
+    <jep.version>4.3.2</jep.version>
     <ammonite.version>3.0.8</ammonite.version>
     <jjwt.version>0.13.0</jjwt.version>
 
@@ -1419,9 +1421,15 @@
       </dependency>
       <dependency>
         <groupId>net.snowflake</groupId>
-        <artifactId>snowflake-jdbc</artifactId>
+        <artifactId>snowflake-jdbc-thin</artifactId>
         <version>${snowflake.jdbc.version}</version>
         <scope>test</scope>
+        <exclusions>
+          <exclusion>
+            <groupId>*</groupId>
+            <artifactId>*</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.teradata.jdbc</groupId>
@@ -2577,6 +2585,31 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>black.ninia</groupId>
+        <artifactId>jep</artifactId>
+        <version>${jep.version}</version>
+        <scope>provided</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.arrow</groupId>
+        <artifactId>arrow-c-data</artifactId>
+        <version>${arrow.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
+            <artifactId>netty-common</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
         <groupId>org.apache.arrow</groupId>
         <artifactId>arrow-compression</artifactId>
         <version>${arrow.version}</version>
@@ -3528,6 +3561,17 @@
       <id>credential-aws</id>
       <modules>
         <module>connector/credential-aws</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>oidc-e2e</id>
+      <modules>
+        <!-- The integration-tests module depends on the credential-aws module, so
+             include it here too. This lets -Poidc-e2e be used on its own (without also
+             passing -Pcredential-aws) without failing dependency resolution. -->
+        <module>connector/credential-aws</module>
+        <module>connector/credential-aws-integration-tests</module>
       </modules>
     </profile>
 

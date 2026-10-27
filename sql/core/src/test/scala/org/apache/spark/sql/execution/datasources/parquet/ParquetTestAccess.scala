@@ -37,6 +37,7 @@ import org.apache.spark.util.SparkClassUtils
  * Currently bridges:
  *   - `ParquetReadState` (constructor + `resetForNewBatch` + `resetForNewPage`)
  *   - `VectorizedRleValuesReader.readBatch` (5-arg overload not exposed publicly)
+ *   - `VectorizedRleValuesReader.readBatchRepeated` (takes the package-private state)
  *   - `ParquetVectorUpdaterFactory` (constructor)
  *   - `VectorizedDeltaByteArrayReader` (no-arg constructor)
  *   - `VectorizedDeltaLengthByteArrayReader` (no-arg constructor)
@@ -79,6 +80,15 @@ object ParquetTestAccess {
       .getOrElse(throw new NoSuchMethodException(
         "VectorizedRleValuesReader.readBatch/5"))
 
+  private val readBatchRepeatedMethod: Method =
+    classOf[VectorizedRleValuesReader].getMethods
+      .find(m =>
+        m.getName == "readBatchRepeated"
+          && m.getParameterCount == 7
+          && m.getParameterTypes()(0) == stateCls)
+      .getOrElse(throw new NoSuchMethodException(
+        "VectorizedRleValuesReader.readBatchRepeated/7"))
+
   def newState(
       descriptor: ColumnDescriptor,
       isRequired: Boolean,
@@ -116,6 +126,20 @@ object ParquetTestAccess {
     try {
       readBatchMethod.invoke(
         reader, state, values, defLevels, valueReader, updater)
+    } catch { case e: ReflectiveOperationException => throw rethrow(e) }
+
+  def readBatchRepeated(
+      reader: VectorizedRleValuesReader,
+      state: AnyRef,
+      repLevels: WritableColumnVector,
+      defLevelsReader: VectorizedRleValuesReader,
+      defLevels: WritableColumnVector,
+      values: WritableColumnVector,
+      valueReader: VectorizedValuesReader,
+      updater: ParquetVectorUpdater): Unit =
+    try {
+      readBatchRepeatedMethod.invoke(
+        reader, state, repLevels, defLevelsReader, defLevels, values, valueReader, updater)
     } catch { case e: ReflectiveOperationException => throw rethrow(e) }
 
   // -------- ParquetVectorUpdaterFactory --------

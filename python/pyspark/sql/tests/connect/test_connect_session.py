@@ -20,26 +20,27 @@ import unittest
 import uuid
 from typing import Optional
 
-from pyspark.util import is_remote_only
 from pyspark.errors import PySparkException
 from pyspark.sql import SparkSession as PySparkSession
 from pyspark.testing.connectutils import (
-    should_test_connect,
     ReusedConnectTestCase,
     connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.utils import timeout
+from pyspark.util import is_remote_only
 
 if should_test_connect:
     import grpc
-    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
-    from pyspark.sql.connect.client import ChannelBuilder, DefaultChannelBuilder
+
     from pyspark.errors.exceptions.connect import (
         AnalysisException,
         SparkConnectException,
         SparkConnectGrpcException,
         SparkUpgradeException,
     )
+    from pyspark.sql.connect.client import ChannelBuilder, DefaultChannelBuilder
+    from pyspark.sql.connect.session import SparkSession as RemoteSparkSession
 
     class CustomChannelBuilder(DefaultChannelBuilder):
         @property

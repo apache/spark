@@ -29,6 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.jdbc.JdbcDialects
 import org.apache.spark.sql.types.TimestampNTZType
 import org.apache.spark.util.Utils
 
@@ -265,10 +266,17 @@ class JDBCOptions(
       .map(_.toBoolean)
       .getOrElse(false)
 
+  val timestampNTZAsWallClock: Boolean =
+    parameters
+      .get(JDBC_TIMESTAMP_NTZ_WALL_CLOCK)
+      .map(_.toBoolean)
+      .getOrElse(JdbcDialects.get(url).timestampNTZAsWallClock)
+
   val hint = parameters.get(JDBC_HINT_STRING).map(value => {
     require(value.matches("(?s)^/\\*\\+ .* \\*/$"),
       s"Invalid value `$value` for option `$JDBC_HINT_STRING`." +
-        s" It should start with `/*+ ` and end with ` */`.")
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`.")
       s"$value "
     }).getOrElse("")
 
@@ -378,4 +386,5 @@ object JDBCOptions {
   val JDBC_PREFER_TIMESTAMP_NTZ = newOption("preferTimestampNTZ")
   val JDBC_PREFER_TIMESTAMP_NANOS = newOption("preferTimestampNanos")
   val JDBC_HINT_STRING = newOption("hint")
+  val JDBC_TIMESTAMP_NTZ_WALL_CLOCK = newOption("__timestampNTZAsWallClock")
 }

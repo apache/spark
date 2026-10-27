@@ -290,7 +290,8 @@ case class Mask(
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
-  override def dataType: DataType = input.dataType
+  override def dataType: DataType =
+    input.dataType
 
   /**
    * Returns a Seq of the children of this node. Children should not change. Immutability required

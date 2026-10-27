@@ -47,7 +47,7 @@ object UpCastResolution extends SQLConfHelper {
 
     case UpCast(child, target: AtomicType, _)
         if conf.getConf(SQLConf.LEGACY_LOOSE_UPCAST) &&
-        child.dataType == StringType =>
+        child.dataType.isInstanceOf[StringType] =>
       Cast(child, target.asNullable)
 
     case unresolvedUpCast @ UpCast(child, _, walkedTypePath)

@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources
 
+import java.util.concurrent.atomic.AtomicBoolean
+
+import org.apache.spark.internal.LogKeys
 import org.apache.spark.sql.catalyst.analysis.ApplyCharTypePaddingHelper
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -36,12 +39,28 @@ import org.apache.spark.sql.internal.SQLConf
  */
 object ApplyCharTypePadding extends Rule[LogicalPlan] {
 
+  private val readSidePaddingOverrideWarned = new AtomicBoolean(false)
+
+  private def warnReadSidePaddingOverride(): Unit = {
+    if (readSidePaddingOverrideWarned.compareAndSet(false, true)) {
+      logWarning(log"${MDC(LogKeys.CONFIG, SQLConf.READ_SIDE_CHAR_PADDING.key)} is disabled but " +
+        log"${MDC(LogKeys.CONFIG2, SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)} is enabled; " +
+        log"read-side CHAR/VARCHAR checks are still applied because standard semantics require " +
+        log"a read to observe the value a write would have produced.")
+    }
+  }
+
   override def apply(plan: LogicalPlan): LogicalPlan = {
-    if (conf.charVarcharAsString) {
+    // standardSemantics takes precedence over legacy charVarcharAsString.
+    if (conf.charVarcharAsString && !conf.charVarcharStandardSemantics) {
       return plan
     }
 
-    if (conf.readSideCharPadding) {
+    if (conf.charVarcharStandardSemantics && !conf.readSideCharPadding) {
+      warnReadSidePaddingOverride()
+    }
+
+    if (conf.readSideCharPadding || conf.charVarcharStandardSemantics) {
       val newPlan = plan.resolveOperatorsUpWithNewOutput {
         case r: LogicalRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>

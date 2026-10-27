@@ -15,9 +15,9 @@
 # limitations under the License.
 #
 
-import time
-import threading
 import queue as Queue
+import threading
+import time
 from typing import Any, Callable, List, Tuple
 
 from pyspark import SparkConf, SparkContext

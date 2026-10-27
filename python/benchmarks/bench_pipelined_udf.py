@@ -24,7 +24,6 @@ SparkSession to measure the JVM-Python socket I/O pipeline overlap.
 """
 
 import pandas as pd
-
 from pyspark import SparkConf
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col, pandas_udf

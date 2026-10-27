@@ -16,16 +16,16 @@
 #
 # type: ignore
 
-from contextlib import closing
-import time
 import socket
 import socketserver
-from struct import pack, unpack
 import sys
 import threading
+import time
 import traceback
-from typing import Generator
 import warnings
+from contextlib import closing
+from struct import pack, unpack
+from typing import Generator
 
 # Use b'\x00' as separator instead of b'\n', because the bytes are encoded in utf-8
 _SERVER_POLL_INTERVAL = 0.1

@@ -42,6 +42,7 @@ import org.apache.spark.ml.util.Instrumentation.instrumented
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql._
+import org.apache.spark.sql.functions.{get => fget, _}
 import org.apache.spark.storage.StorageLevel
 
 /** Params for linear SVM Classifier. */
@@ -377,8 +378,29 @@ class LinearSVCModel private[classification] (
   @Since("2.2.0")
   def setThreshold(value: Double): this.type = set(threshold, value)
 
-  private val margin: Vector => Double = (features) => {
-    BLAS.dot(features, coefficients) + intercept
+  override protected def predictRawColumn(features: Column): Column = {
+    val localCoefficients = coefficients
+    val localIntercept = intercept
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
+      Vectors.dense(-margin, margin)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    val localThreshold = getThreshold
+    val rawScore = fget(unwrap_udt(rawPrediction).getField("values"), lit(1))
+    when(rawScore > localThreshold && !isnan(rawScore), 1.0).otherwise(0.0)
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localCoefficients = coefficients
+    val localIntercept = intercept
+    val localThreshold = getThreshold
+    udf((features: Vector) => {
+      val margin = BLAS.dot(features, localCoefficients) + localIntercept
+      if (margin > localThreshold) 1.0 else 0.0
+    }).apply(features)
   }
 
   /**
@@ -403,13 +425,14 @@ class LinearSVCModel private[classification] (
   }
 
   override def predict(features: Vector): Double = {
-    if (margin(features) > $(threshold)) 1.0 else 0.0
+    val margin = BLAS.dot(features, coefficients) + intercept
+    if (margin > $(threshold)) 1.0 else 0.0
   }
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    val m = margin(features)
-    Vectors.dense(-m, m)
+    val margin = BLAS.dot(features, coefficients) + intercept
+    Vectors.dense(-margin, margin)
   }
 
   override protected def raw2prediction(rawPrediction: Vector): Double = {

@@ -19,19 +19,19 @@ package org.apache.spark.security;
 
 import java.util.Optional;
 
-import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.annotation.Private;
 
 /**
- * :: DeveloperApi ::
+ * :: Private ::
  * Reads an OIDC identity token and produces a {@link UserContext}.
  * <p>
  * Implementation should be stateless with respect to Spark configuration;
  * configuration is passed at construction time.
  * Implementations must be thread-safe because {@link #load()} may be called concurrently.
  *
- * @since 4.3.0
+ * @since 4.4.0
  */
-@DeveloperApi
+@Private
 public interface TokenIngestor {
 
   /**

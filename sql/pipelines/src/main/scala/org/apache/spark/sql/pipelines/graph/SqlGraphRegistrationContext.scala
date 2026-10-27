@@ -24,7 +24,7 @@ import org.apache.spark.sql.Column
 import org.apache.spark.sql.catalyst.{QueryPlanningTracker, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AutoCdcInto, CreateFlowCommand, CreateMaterializedViewAsSelect, CreateStreamingTable, CreateStreamingTableAsSelect, CreateStreamingTableAutoCdc, CreateView, InsertIntoStatement, LogicalPlan, UnresolvedInsert}
 import org.apache.spark.sql.catalyst.util.StringUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.execution.command.{CreateViewCommand, SetCatalogCommand, SetCommand, SetNamespaceCommand}
@@ -277,9 +277,13 @@ class SqlGraphRegistrationContext(
    *
    * `STORED AS SCD TYPE <n>` selects [[ScdType]] (defaulting to [[ScdType.Type1]] when absent).
    * `TRACK HISTORY ON ...` populates the SCD2-only [[ChangeArgs.trackHistorySelection]] and is
-   * rejected under SCD1. [[includeColumns]]/[[excludeColumns]] and the two track-history lists are
-   * each mutually exclusive at the grammar level; the guards here are defensive.
+   * rejected under SCD1. `IGNORE NULL UPDATES [ON ...]` populates
+   * [[ChangeArgs.ignoreNullSelection]], where the bare clause is "all columns"
+   * ([[ColumnSelection.ExcludeColumns]] of an empty list) and an absent clause is [[None]].
+   * [[includeColumns]]/[[excludeColumns]], the two track-history lists, and the two ignore-null
+   * lists are each mutually exclusive at the grammar level; the guards here are defensive.
    */
+  // scalastyle:off argcount
   private def buildChangeArgs(
       keys: Seq[UnresolvedAttribute],
       sequenceByExpr: Expression,
@@ -289,6 +293,9 @@ class SqlGraphRegistrationContext(
       storedAsScdType: Int,
       trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
       trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+      ignoreNullUpdates: Boolean,
+      ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+      ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]],
       queryOrigin: QueryOrigin): ChangeArgs = {
     val columnSelection: Option[ColumnSelection] = (includeColumns, excludeColumns) match {
       case (Some(_), Some(_)) =>
@@ -341,15 +348,40 @@ class SqlGraphRegistrationContext(
           None
       }
 
+    // IGNORE NULL UPDATES. Unlike the selections above, "all columns" is distinct from "absent":
+    // the bare clause (no subset) ignores nulls on every column, encoded as an empty ExcludeColumns
+    // selection, while an absent clause leaves ignore-null updates off (None).
+    val ignoreNullSelection: Option[ColumnSelection] =
+      if (!ignoreNullUpdates) {
+        None
+      } else {
+        (ignoreNullUpdatesColumns, ignoreNullUpdatesExceptColumns) match {
+          case (Some(_), Some(_)) =>
+            throw SqlGraphElementRegistrationException(
+              msg = "AUTO CDC cannot specify both IGNORE NULL UPDATES ON and " +
+                "IGNORE NULL UPDATES ON * EXCEPT.",
+              queryOrigin = queryOrigin
+            )
+          case (Some(included), None) =>
+            Option(ColumnSelection.IncludeColumns(included.map(toUnqualifiedColumnName)))
+          case (None, Some(excluded)) =>
+            Option(ColumnSelection.ExcludeColumns(excluded.map(toUnqualifiedColumnName)))
+          case (None, None) =>
+            Option(ColumnSelection.ExcludeColumns(Seq.empty))
+        }
+      }
+
     ChangeArgs(
       keys = keys.map(toUnqualifiedColumnName),
       sequencing = Column(sequenceByExpr),
       storedAsScdType = scdType,
       deleteCondition = deleteCondition.map(Column(_)),
       columnSelection = columnSelection,
-      trackHistorySelection = trackHistorySelection
+      trackHistorySelection = trackHistorySelection,
+      ignoreNullSelection = ignoreNullSelection
     )
   }
+  // scalastyle:on argcount
 
   private def toUnqualifiedColumnName(attr: UnresolvedAttribute): UnqualifiedColumnName =
     UnqualifiedColumnName(attr.nameParts)
@@ -419,6 +451,9 @@ class SqlGraphRegistrationContext(
             storedAsScdType = cst.storedAsScdType,
             trackHistoryColumns = cst.trackHistoryColumns,
             trackHistoryExceptColumns = cst.trackHistoryExceptColumns,
+            ignoreNullUpdates = cst.ignoreNullUpdates,
+            ignoreNullUpdatesColumns = cst.ignoreNullUpdatesColumns,
+            ignoreNullUpdatesExceptColumns = cst.ignoreNullUpdatesExceptColumns,
             queryOrigin = queryOrigin
           )
         )
@@ -590,30 +625,9 @@ class SqlGraphRegistrationContext(
 
       cf.flowOperation match {
         case i: InsertIntoStatement =>
-          validateInsertIntoFlow(i, queryOrigin)
-          val flowTargetDatasetName = i.table match {
-            case u: UnresolvedRelation =>
-              IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
-            case _ =>
-              throw SqlGraphElementRegistrationException(
-                msg = "Unable to resolve target dataset name for INSERT INTO flow",
-                queryOrigin = queryOrigin
-              )
-          }
-          graphRegistrationContext.registerFlow(
-            UntypedFlow(
-              identifier = flowIdentifier,
-              destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
-              func = FlowAnalysis.createFlowFunctionFromLogicalPlan(i.query),
-              sqlConf = context.getSqlConf,
-              once = false,
-              queryContext = QueryContext(
-                currentCatalog = context.getCurrentCatalogOpt,
-                currentDatabase = context.getCurrentDatabaseOpt
-              ),
-              origin = queryOrigin
-            )
-          )
+          handleInsert(i, flowIdentifier, queryOrigin)
+        case i: UnresolvedInsert =>
+          handleInsert(i.toInsertIntoStatement(i.table), flowIdentifier, queryOrigin)
         case a: AutoCdcInto =>
           val flowTargetDatasetName = IdentifierHelper.toTableIdentifier(a.targetTable)
           graphRegistrationContext.registerFlow(
@@ -636,6 +650,9 @@ class SqlGraphRegistrationContext(
                 storedAsScdType = a.storedAsScdType,
                 trackHistoryColumns = a.trackHistoryColumns,
                 trackHistoryExceptColumns = a.trackHistoryExceptColumns,
+                ignoreNullUpdates = a.ignoreNullUpdates,
+                ignoreNullUpdatesColumns = a.ignoreNullUpdatesColumns,
+                ignoreNullUpdatesExceptColumns = a.ignoreNullUpdatesExceptColumns,
                 queryOrigin = queryOrigin
               )
             )
@@ -646,6 +663,36 @@ class SqlGraphRegistrationContext(
             queryOrigin = queryOrigin
           )
       }
+    }
+
+    private def handleInsert(
+        insert: InsertIntoStatement,
+        flowIdentifier: TableIdentifier,
+        queryOrigin: QueryOrigin): Unit = {
+      validateInsertIntoFlow(insert, queryOrigin)
+      val flowTargetDatasetName = insert.table match {
+        case u: UnresolvedRelation =>
+          IdentifierHelper.toTableIdentifier(u.multipartIdentifier)
+        case _ =>
+          throw SqlGraphElementRegistrationException(
+            msg = "Unable to resolve target dataset name for INSERT INTO flow",
+            queryOrigin = queryOrigin
+          )
+      }
+      graphRegistrationContext.registerFlow(
+        UntypedFlow(
+          identifier = flowIdentifier,
+          destinationIdentifier = qualifyDestinationIdentifier(flowTargetDatasetName),
+          func = FlowAnalysis.createFlowFunctionFromLogicalPlan(insert.query),
+          sqlConf = context.getSqlConf,
+          once = false,
+          queryContext = QueryContext(
+            currentCatalog = context.getCurrentCatalogOpt,
+            currentDatabase = context.getCurrentDatabaseOpt
+          ),
+          origin = queryOrigin
+        )
+      )
     }
 
     /** Qualifies a raw flow target dataset identifier against the current catalog/database. */

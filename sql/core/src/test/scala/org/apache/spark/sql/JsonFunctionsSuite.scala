@@ -1022,6 +1022,33 @@ class JsonFunctionsSuite extends SharedSparkSession {
         stop = 22
       )
     )
+
+  }
+
+  test("SPARK-59801: JSON functions with non-foldable options") {
+    val df = Seq((Tuple1(1), """{"a":1}""", "true")).toDF("a", "json", "option")
+    val nonFoldableQueries = Seq(
+      "from_json" ->
+        "from_json(json, 'a INT', map('primitivesAsString', option))",
+      "to_json" -> "to_json(a, map('pretty', option))",
+      "schema_of_json" ->
+        """schema_of_json('{"a":1}', map('primitivesAsString', option))""")
+
+    nonFoldableQueries.foreach { case (functionName, query) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = Map(
+          "funcName" -> s"`$functionName`",
+          "paramName" -> "`options`",
+          "paramType" -> "\"MAP<STRING, STRING>\""),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
   }
 
   test("SPARK-19967 Support from_json in SQL") {
@@ -1594,6 +1621,7 @@ class JsonFunctionsSuite extends SharedSparkSession {
     // Map "c2" has "k2" key that is a string, not an integer.
     val df = Seq("""{"c1": {"k1": 1, "k2": "A", "k3": 3}, "c2": "abc"}""").toDF("c0")
 
+    // SPARK-60229: draining the failed map keeps sibling c2 in both partial-results modes.
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "true") {
       checkAnswer(
         df.select(from_json($"c0", st)),
@@ -1604,8 +1632,56 @@ class JsonFunctionsSuite extends SharedSparkSession {
     withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
       checkAnswer(
         df.select(from_json($"c0", st)),
-        Row(Row(null, null))
+        Row(Row(null, "abc"))
       )
+    }
+  }
+
+  test("SPARK-60229: nested VARIANT failure does not steal sibling fields") {
+    withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> "false") {
+      def assertDuplicateKey(query: String): Unit = {
+        val exception = intercept[SparkException] {
+          sql(query).collect()
+        }
+        val cause = Iterator.iterate[Throwable](exception)(_.getCause)
+          .takeWhile(_ != null)
+          .collectFirst {
+            case e: SparkRuntimeException if e.getCondition == "VARIANT_DUPLICATE_KEY" => e
+          }
+          .getOrElse(fail("expected VARIANT_DUPLICATE_KEY cause", exception))
+        checkError(
+          exception = cause,
+          condition = "VARIANT_DUPLICATE_KEY",
+          parameters = Map("key" -> "k"))
+      }
+
+      val expected = Row(Row(null, 5))
+      // VARIANT struct field: duplicate key is inside nested object `a`, below `v`.
+      val structJson = """{"s":{"v":{"a":{"k":1,"k":2}},"b":7},"b":5}"""
+      val structSchema = "s STRUCT<v: VARIANT, b: INT>, b INT"
+      checkAnswer(sql(s"SELECT from_json('$structJson', '$structSchema')"), expected)
+      assertDuplicateKey(
+        s"SELECT from_json('$structJson', '$structSchema', map('mode', 'FAILFAST'))")
+
+      // VARIANT map value: same nested failure, drained through the map's END_OBJECT.
+      val mapJson = """{"s":{"x":{"a":{"k":1,"k":2}},"y":1},"b":5}"""
+      val mapSchema = "s MAP<STRING, VARIANT>, b INT"
+      checkAnswer(sql(s"SELECT from_json('$mapJson', '$mapSchema')"), expected)
+      assertDuplicateKey(
+        s"SELECT from_json('$mapJson', '$mapSchema', map('mode', 'FAILFAST'))")
+
+      // VARIANT array value: duplicate key is inside an object nested in that array.
+      val variantArrJson = """{"s":{"v":[{"a":{"k":1,"k":2}}],"b":7},"b":5}"""
+      checkAnswer(sql(s"SELECT from_json('$variantArrJson', '$structSchema')"), expected)
+      assertDuplicateKey(
+        s"SELECT from_json('$variantArrJson', '$structSchema', map('mode', 'FAILFAST'))")
+
+      // ARRAY<VARIANT> element: nested object failure must not steal sibling `b`.
+      val arrJson = """{"arr":[{"a":{"k":1,"k":2}}],"b":5}"""
+      val arrSchema = "arr ARRAY<VARIANT>, b INT"
+      checkAnswer(sql(s"SELECT from_json('$arrJson', '$arrSchema')"), expected)
+      assertDuplicateKey(
+        s"SELECT from_json('$arrJson', '$arrSchema', map('mode', 'FAILFAST'))")
     }
   }
 
@@ -1798,6 +1874,37 @@ class JsonFunctionsSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-58707: json pruning keeps the corrupt record column populated") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // `b` is a type mismatch rather than a structural malformation, so it only fails when the
+        // parser is asked for it. Pruning the schema down to the corrupt record column alone left
+        // the parser nothing to convert, so the record was reported as clean.
+        val df = Seq("""{"a": 1, "b": "bad"}""").toDS()
+          .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as p")
+          .selectExpr("p._corrupt_record")
+
+        checkAnswer(df, Row("""{"a": 1, "b": "bad"}"""))
+      }
+    }
+  }
+
+  test("SPARK-58707: named_struct keeps the corrupt record column populated") {
+    Seq("true", "false").foreach { enabled =>
+      withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
+        // The two from_json calls are written inline so that CollapseProject does not keep them
+        // behind an alias, which would stop the rule from firing at all.
+        val fromJson = "from_json(value, 'a int, b int, _corrupt_record string')"
+        val df = Seq("""{"a": 1, "b": "bad"}""").toDS()
+          .selectExpr(
+            s"named_struct('a', $fromJson.a, '_corrupt_record', $fromJson._corrupt_record) as s")
+          .selectExpr("s.a", "s._corrupt_record")
+
+        checkAnswer(df, Row(1, """{"a": 1, "b": "bad"}"""))
+      }
+    }
+  }
+
   test("SPARK-33907: json pruning optimization with corrupt record field") {
     Seq("true", "false").foreach { enabled =>
       withSQLConf(SQLConf.JSON_EXPRESSION_OPTIMIZATION.key -> enabled) {
@@ -1806,6 +1913,9 @@ class JsonFunctionsSuite extends SharedSparkSession {
           .add("b", IntegerType)
         val badRec = """{"a" 1, "b": 11}"""
 
+        // Since SPARK-58707 the rule no longer prunes to the corrupt record column, so both
+        // iterations run the same plan. The record here is structurally malformed, which fails at
+        // tokenization whatever schema is requested, so the answer never depended on the pruning.
         val df = Seq(badRec, """{"a": 2, "b": 12}""").toDS()
           .selectExpr("from_json(value, 'a int, b int, _corrupt_record string') as parsed")
           .selectExpr("parsed._corrupt_record")

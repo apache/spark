@@ -264,6 +264,102 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(projected.queryExecution.executedPlan.toString.contains("InMemoryTableScan"))
   }
 
+  test("column projection prunes columns on load for every projection shape") {
+    // The read path reads only the selected columns' buffers out of the cached bytes. Exercise a
+    // spread of projection shapes -- reordering, single column at each position, complex columns
+    // mixed with primitives, and duplicate selection -- under both the row and vectorized read
+    // paths, so the buffer-span arithmetic (which must skip the exact node/buffer runs of
+    // unselected columns, including the child buffers of complex columns) is covered end to end.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val df = (1 to 50).map { i =>
+          (i, s"str$i", Seq(i, i + 1), (i.toLong, s"n$i"))
+        }.toDF("a", "b", "arr", "st")
+        df.cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 50).map { i =>
+            Row.fromSeq(cols.map {
+              case "a" => i
+              case "b" => s"str$i"
+              case "arr" => Seq(i, i + 1)
+              case "st" => Row(i.toLong, s"n$i")
+            })
+          }
+          // Selecting a complex column after skipping a var-width one exercises skipping the
+          // multi-buffer runs (offset + data) of the unselected string.
+          checkAnswer(df.select("arr"), expected(Seq("arr")))
+          checkAnswer(df.select("st"), expected(Seq("st")))
+          checkAnswer(df.select("b"), expected(Seq("b")))
+          // Reordered projection: the loaded root must be in output (columnIndices) order.
+          checkAnswer(df.select("st", "a"), expected(Seq("st", "a")))
+          checkAnswer(df.select("arr", "b", "a"), expected(Seq("arr", "b", "a")))
+          // Duplicate selection maps two output columns to one cached column.
+          checkAnswer(df.select("a", "a"), (1 to 50).map(i => Row(i, i)))
+          // Full projection (no pruning) still round-trips.
+          checkAnswer(df.select("a", "b", "arr", "st"), expected(Seq("a", "b", "arr", "st")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
+  test("column projection prunes deeply nested columns on load") {
+    // The buffer-span arithmetic must skip (and, when selected, copy) a column's ENTIRE buffer
+    // subtree, at arbitrary nesting depth. Exercise array<struct>, struct<struct<struct>>, and
+    // map<int, array<int>>, each selected while pruning neighbours whose own subtrees have varying
+    // buffer counts, under both read paths, so an off-by-one in the recursive span would surface
+    // as wrong values in a following column.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("arrOfStruct", ArrayType(new StructType().add("x", LongType).add("y", StringType)))
+          .add("s", StringType)
+          .add("deepStruct", new StructType()
+            .add("l1", new StructType()
+              .add("l2", new StructType().add("v", LongType).add("t", StringType))))
+          .add("mapOfArray", MapType(IntegerType, ArrayType(IntegerType)))
+        val rows = (1 to 30).map { i =>
+          Row(i, Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i")), s"s$i",
+            Row(Row(Row(i.toLong * 10, s"deep$i"))), Map(i -> Seq(i, i + 1, i + 2)))
+        }
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(rows, 1), schema).cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 30).map { i =>
+            Row.fromSeq(cols.map {
+              case "id" => i
+              case "arrOfStruct" => Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i"))
+              case "s" => s"s$i"
+              case "deepStruct" => Row(Row(Row(i.toLong * 10, s"deep$i")))
+              case "mapOfArray" => Map(i -> Seq(i, i + 1, i + 2))
+            })
+          }
+          // Each nested column selected alone: its whole subtree must be copied, nothing else.
+          checkAnswer(df.select("arrOfStruct"), expected(Seq("arrOfStruct")))
+          checkAnswer(df.select("deepStruct"), expected(Seq("deepStruct")))
+          checkAnswer(df.select("mapOfArray"), expected(Seq("mapOfArray")))
+          // A primitive after a pruned deep column: the skip must span the whole deep subtree.
+          checkAnswer(df.select("id", "s"), expected(Seq("id", "s")))
+          // Reordered mix of nested and primitive columns, pruning others in between.
+          checkAnswer(
+            df.select("mapOfArray", "id", "deepStruct"),
+            expected(Seq("mapOfArray", "id", "deepStruct")))
+          checkAnswer(
+            df.select("deepStruct", "arrOfStruct"),
+            expected(Seq("deepStruct", "arrOfStruct")))
+          // Full projection round-trips.
+          checkAnswer(
+            df.select("id", "arrOfStruct", "s", "deepStruct", "mapOfArray"),
+            expected(Seq("id", "arrOfStruct", "s", "deepStruct", "mapOfArray")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
   test("caching with multiple batches") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
       val df = (1 to 50).map(i => (i, s"str$i")).toDF("a", "b")
@@ -1163,6 +1259,107 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     spark.createDataFrame(
       spark.sparkContext.parallelize(values.map(v => Row(v)), 1),
       StructType(Seq(StructField("v", dt, nullable = true))))
+
+  // Helper: the InMemoryRelation behind a cached DataFrame, after populating the cache. The
+  // DataFrame's queryExecution is memoized, so this must run before anything else forces it.
+  private def cachedRelation(df: org.apache.spark.sql.DataFrame): InMemoryRelation = {
+    df.cache()
+    df.count()
+    df.queryExecution.executedPlan.collectFirst {
+      case scan: InMemoryTableScanExec => scan.relation
+    }.get
+  }
+
+  // Helper: (Arrow vector class, Spark type, row count, null count) per cached batch of a
+  // single-column relation, read back through the serializer's own columnar path. The Spark type
+  // is the one ArrowColumnVector recovers from the read-side Arrow field via
+  // ArrowUtils.fromArrowField, so a type whose fractional-second precision lives in that field's
+  // metadata is reported as it comes back rather than as it went in.
+  private def cachedVectors(relation: InMemoryRelation): Array[(String, DataType, Int, Int)] = {
+    val attrs = relation.output
+    relation.cacheBuilder.serializer
+      .convertCachedBatchToColumnarBatch(
+        relation.cacheBuilder.cachedColumnBuffers, attrs, attrs, spark.sessionState.conf)
+      .mapPartitions { batches =>
+        batches.map { batch =>
+          val column = batch.column(0).asInstanceOf[ArrowColumnVector]
+          (column.getValueVector.getClass.getSimpleName, column.dataType(), batch.numRows(),
+            column.numNulls())
+        }
+      }
+      .collect()
+  }
+
+  private val nullPatterns: Seq[(String, Int => Boolean)] = Seq(
+    ("every 31st row null", i => i % 31 == 0),
+    ("no nulls", _ => false),
+    ("all nulls", _ => true))
+
+  test("SPARK-59571: TIME keeps its precision and its nulls through the cache, at every " +
+      "precision") {
+    // Every precision of TIME is written to the same TimeNanoVector, so the precision rides in
+    // the Arrow field metadata rather than in the value. The cache read path rebuilds its Arrow
+    // schema from the cache schema and wraps each vector in an ArrowColumnVector, whose type is
+    // recovered from that field, so the column's type on the way out pins the tag-and-recover
+    // path: dropping the precision key on either side falls back to TimeType(6). The values are
+    // truncated to the declared precision so a precision loss could not hide behind a value the
+    // type would round anyway.
+    val rows = 1000
+    val nanosPerDay = 86400000000000L
+    val precisions = TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+    for (precision <- precisions; (pattern, isNull) <- nullPatterns) {
+      val unit = math.pow(10, 9 - precision).toLong
+      def timeAt(i: Int): LocalTime = {
+        val nanos = ((i.toLong * nanosPerDay) / rows + i.toLong * 1234567L) % nanosPerDay
+        LocalTime.ofNanoOfDay(nanos / unit * unit)
+      }
+      // The fixture has to reach the digits the precision admits, or the case would pass for a
+      // kernel that dropped them: at every precision above zero some value's last admitted digit
+      // is non-zero, and no value carries a digit the precision does not admit. Checked on the
+      // values the generator makes, before the null pattern hides some of them.
+      val generated = (0 until rows).map(i => timeAt(i).toNanoOfDay)
+      assert(generated.forall(_ % unit == 0), s"TIME($precision): fixture below the unit")
+      assert(precision == 0 || generated.exists(n => (n / unit) % 10 != 0),
+        s"TIME($precision): fixture never uses the last digit the precision admits")
+      val values = (0 until rows).map(i => if (isNull(i)) null else timeAt(i))
+      val df = singlePartDf(values, TimeType(precision))
+      val relation = cachedRelation(df)
+      checkAnswer(df, values.map(Row(_)))
+      val vectors = cachedVectors(relation)
+      assert(vectors.map(_._1).toSet === Set("TimeNanoVector"), s"TIME($precision), $pattern")
+      assert(vectors.map(_._2).toSet === Set[DataType](TimeType(precision)),
+        s"TIME($precision), $pattern: the precision must survive the read-side Arrow field")
+      assert(vectors.map(_._3).sum === rows, s"TIME($precision), $pattern")
+      assert(vectors.map(_._4).sum === (0 until rows).count(isNull),
+        s"TIME($precision), $pattern: null count")
+      df.unpersist()
+    }
+  }
+
+  test("SPARK-59571: day-time intervals of both signs keep their microseconds through the " +
+      "cache") {
+    val rows = 1000
+    for ((pattern, isNull) <- nullPatterns) {
+      // Whole microseconds, negative for the first half of the rows and positive for the rest.
+      // The step is 7_001_001 microseconds, not a whole number of milliseconds, so a lane that
+      // came back rounded to the millisecond would fail rather than compare equal.
+      def intervalAt(i: Int): Duration = Duration.ofNanos((i.toLong - rows / 2) * 7001001000L)
+      val generated = (0 until rows).map(i => intervalAt(i).toNanos)
+      assert(generated.forall(_ % 1000 == 0), "fixture below the microsecond")
+      assert(generated.count(_ % 1000000 != 0) > rows / 2,
+        "fixture does not exercise sub-millisecond microseconds")
+      val values = (0 until rows).map(i => if (isNull(i)) null else intervalAt(i))
+      val df = singlePartDf(values, DayTimeIntervalType())
+      val relation = cachedRelation(df)
+      checkAnswer(df, values.map(Row(_)))
+      val vectors = cachedVectors(relation)
+      assert(vectors.map(_._1).toSet === Set("DurationVector"), pattern)
+      assert(vectors.map(_._2).toSet === Set[DataType](DayTimeIntervalType()), pattern)
+      assert(vectors.map(_._3).sum === rows, pattern)
+      assert(vectors.map(_._4).sum === (0 until rows).count(isNull), s"$pattern: null count")
+      df.unpersist()
+    }
+  }
 
   test("createColumnStats returns the correct ColumnStats subclass for each supported type") {
     // Direct unit test: verify the stats class dispatched for each Spark type, which determines

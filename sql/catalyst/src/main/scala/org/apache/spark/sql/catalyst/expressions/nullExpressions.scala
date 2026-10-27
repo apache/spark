@@ -19,11 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
 import org.apache.spark.sql.catalyst.expressions.codegen.Block._
+import org.apache.spark.sql.catalyst.trees.BinaryLike
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COALESCE, NULL_CHECK, TreePattern}
 import org.apache.spark.sql.catalyst.util.TypeUtils
+import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr, toSQLType}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -175,22 +178,6 @@ case class Coalesce(children: Seq[Expression])
     copy(children = newChildren)
 }
 
-private case class TypedNullLiteral(child: Expression)
-    extends UnaryExpression with RuntimeReplaceable {
-  override def nullable: Boolean = true
-
-  override def dataType: DataType = child.dataType
-
-  override def toString: String = "null"
-
-  override def sql: String = "NULL"
-
-  override lazy val replacement: Expression = Literal.create(null, child.dataType)
-
-  override protected def withNewChildInternal(newChild: Expression): TypedNullLiteral =
-    copy(child = newChild)
-}
-
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2) - Returns null if `expr1` equals to `expr2`, or `expr1` otherwise.",
   arguments = """
@@ -214,10 +201,10 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
     this(left, right,
       if (!SQLConf.get.getConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR)) {
         With(left) { case Seq(ref) =>
-          If(EqualTo(ref, right), TypedNullLiteral(ref), ref)
+          NullIfResult(EqualTo(ref, right), ref)
         }
       } else {
-        If(EqualTo(left, right), TypedNullLiteral(left), left)
+        NullIfResult(EqualTo(left, right), left)
       }
     )
   }
@@ -226,6 +213,53 @@ case class NullIf(left: Expression, right: Expression, replacement: Expression)
 
   override protected def withNewChildInternal(newChild: Expression): NullIf = {
     copy(replacement = newChild)
+  }
+}
+
+/**
+ * Carries [[NullIf]]'s predicate and result value through analysis before expanding them into an
+ * `If`. The null branch takes its type from the analyzed result value.
+ */
+private case class NullIfResult(predicate: Expression, value: Expression)
+    extends RuntimeReplaceable with BinaryLike[Expression] with ConditionalExpression {
+  override def left: Expression = predicate
+
+  override def right: Expression = value
+
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = value.dataType
+
+  override lazy val replacement: Expression =
+    If(predicate, Literal.create(null, value.dataType), value)
+
+  override def alwaysEvaluatedInputs: Seq[Expression] = predicate :: Nil
+
+  override def withNewAlwaysEvaluatedInputs(
+      alwaysEvaluatedInputs: Seq[Expression]): NullIfResult = {
+    copy(predicate = alwaysEvaluatedInputs.head)
+  }
+
+  override def branchGroups: Seq[Seq[Expression]] = Nil
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (predicate.dataType == BooleanType) {
+      TypeCheckResult.TypeCheckSuccess
+    } else {
+      DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_INPUT_TYPE",
+        messageParameters = Map(
+          "paramIndex" -> ordinalNumber(0),
+          "requiredType" -> toSQLType(BooleanType),
+          "inputSql" -> toSQLExpr(predicate),
+          "inputType" -> toSQLType(predicate.dataType)))
+    }
+  }
+
+  override protected def withNewChildrenInternal(
+      newPredicate: Expression,
+      newValue: Expression): NullIfResult = {
+    copy(predicate = newPredicate, value = newValue)
   }
 }
 

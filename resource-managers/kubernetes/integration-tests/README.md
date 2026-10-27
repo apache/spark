@@ -413,13 +413,13 @@ The suite is tagged with `YuniKornTag` which is excluded by default via
 
 ## Requirements
 
-- Apache YuniKorn 1.8.0.
+- Apache YuniKorn 1.9.0.
 
 ## Installation
 
     helm repo add yunikorn https://apache.github.io/yunikorn-release
     helm repo update
-    helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.8.0 \
+    helm install yunikorn yunikorn/yunikorn --namespace yunikorn --version 1.9.0 \
         --create-namespace --set embedAdmissionController=false
 
 ## Run tests

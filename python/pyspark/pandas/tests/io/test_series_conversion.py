@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 
-import unittest
 import sys
+import unittest
 
 import pandas as pd
 

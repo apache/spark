@@ -271,7 +271,8 @@ function postprocessForAdditionalMetrics() {
     });
 
   var checkboxNode = $("#stageId-and-taskId-checkbox");
-  checkboxNode.click(function() {
+  // This runs on every (re)render, so replace the click handler instead of adding another one.
+  checkboxNode.off("click.planViz").on("click.planViz", function() {
     onClickAdditionalMetricsCheckbox($(this), true);
   });
   var isChecked = window.localStorage.getItem("stageId-and-taskId-checked") === "true";
@@ -500,13 +501,17 @@ function updateDetailsPanel(nodeId, nodeDetails) {
   var searchBox = document.getElementById("metric-search");
   if (searchBox) {
     searchBox.addEventListener("input", function () {
-      var query = this.value.toLowerCase();
-      bodyEl.querySelectorAll("table tbody tr").forEach(function (row) {
-        var metricName = row.cells[0] ? row.cells[0].textContent.toLowerCase() : "";
-        row.style.display = metricName.indexOf(query) >= 0 ? "" : "none";
-      });
+      filterMetricRows(bodyEl, this.value);
     });
   }
+}
+
+function filterMetricRows(container, query) {
+  var q = query.toLowerCase();
+  container.querySelectorAll("table.sortable > tbody > tr").forEach(function (row) {
+    var metricName = row.cells[0] ? row.cells[0].textContent.toLowerCase() : "";
+    row.style.display = metricName.indexOf(q) >= 0 ? "" : "none";
+  });
 }
 
 function htmlEscape(str) {
@@ -607,7 +612,7 @@ document.getElementById("plan-viz-download-btn").addEventListener("click", async
     const svg = planVizContainer().select("svg").node().cloneNode(true);
     let css = "";
     try {
-      css = await fetch("/static/sql/spark-sql-viz.css").then((resp) => resp.text());
+      css = await fetch(uiRoot + "/static/sql/spark-sql-viz.css").then((resp) => resp.text());
     } catch (e) {
       console.error("Failed to fetch CSS for SVG download", e);
     }

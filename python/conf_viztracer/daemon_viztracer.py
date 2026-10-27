@@ -18,10 +18,9 @@
 import os
 import sys
 
+import pyspark.worker
 import viztracer
 from viztracer.main import main
-
-import pyspark.worker
 
 
 def viztracer_wrapper(func):

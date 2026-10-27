@@ -62,12 +62,12 @@ import unittest
 
 from pyspark.loose_version import LooseVersion
 from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
     have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
+    have_pandas,
+    have_pyarrow,
     numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
 )
 
 # Import the shared base (which defines no test_* methods), not a concrete test class,
@@ -239,7 +239,7 @@ class PyArrowArrayToPandasZeroCopyTests(_PyArrowToPandasTestBase):
     asks pandas to keep pointing at the Arrow buffers instead of materializing them
     into NumPy -- avoiding the copy is the point of that backend.  Its own golden file
     records the result, so the two can be read side by side.  PySpark takes this path
-    in ``ArrowArrayToPandasConversion.convert_numpy``
+    in ``ArrowToPandasConversion._convert_array_numpy``
     (``python/pyspark/sql/conversion.py``).
     """
 
@@ -479,14 +479,14 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
     large value silently changes.  ``integer_object_nulls=True`` keeps ``object``
     dtype (Python ``int`` and ``None``) instead, preserving the values.
 
-    PySpark passes it in ``ArrowArrayToPandasConversion.convert_legacy``
+    PySpark passes it in ``ArrowToPandasConversion._convert_array_legacy``
     (``python/pyspark/sql/conversion.py``), bundled with ``date_as_object`` and
     ``coerce_temporal_nanoseconds``, then narrows the object Series to a nullable
     extension dtype (``Int8Dtype`` .. ``Int64Dtype``) -- the only bridge from Arrow to
     those dtypes that avoids ``float64``.
 
     Three output columns are recorded per source array: the argument off, on, and the
-    full ``pandas_options`` dict ``convert_legacy`` passes.  The last is not a
+    full ``pandas_options`` dict ``_convert_array_legacy`` passes.  The last is not a
     duplicate of the second -- ``coerce_temporal_nanoseconds`` shifts the temporal
     rows to ``ns`` -- and pinning the call as Spark makes it also catches PyArrow
     changing the ``date_as_object=True`` default it relies on.
@@ -528,7 +528,7 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
 
         # Nested types whose null is an integer ELEMENT, not a missing sub-list: the
         # shared rows only cover the latter, which this argument does not affect.
-        # These are also the types convert_legacy still serves.
+        # These are also the types _convert_array_legacy still serves.
         sources["list<int64>:null-element"] = pa.array([[1, None], [2, 3]], pa.list_(pa.int64()))
         sources["list<int64>:null-element-extreme"] = pa.array(
             [[2**63 - 1, None]], pa.list_(pa.int64())
@@ -561,7 +561,7 @@ class PyArrowArrayToPandasIntegerObjectNullsTests(_PyArrowToPandasTestBase):
     COL_INTEGER_OBJECT_NULLS_OFF = "integer_object_nulls=False"
     # Output column for the argument on: the result stays object dtype.
     COL_INTEGER_OBJECT_NULLS_ON = "integer_object_nulls=True"
-    # Output column for all three arguments as convert_legacy passes them together.
+    # Output column for all three arguments as _convert_array_legacy passes them together.
     COL_SPARK_PANDAS_OPTIONS = "spark pandas_options"
 
     # Kept as one dict so the column cannot drift from the call site it mirrors.

@@ -2164,7 +2164,7 @@ class TaskSetManagerSuite
     // if the time threshold has not been exceeded, no speculative run should be triggered
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
 
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1000)
@@ -2177,7 +2177,7 @@ class TaskSetManagerSuite
     } else {
       // If the feature flag is turned off, or the stage contains too many tasks
       assert(!manager.checkSpeculatableTasks(0))
-      assert(sched.speculativeTasks.size == 0)
+      assert(sched.speculativeTasks.isEmpty)
     }
   }
 
@@ -2353,7 +2353,7 @@ class TaskSetManagerSuite
     }
     clock.advance(1000*60*60)
     assert(!manager.checkSpeculatableTasks(0))
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
     // Now the task should have been running for 60 minutes and 1 second
     clock.advance(1000)
     assert(manager.checkSpeculatableTasks(0))
@@ -2459,7 +2459,7 @@ class TaskSetManagerSuite
     clock.advance(1000)
     manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
     // The task is not considered as speculative task due to minimum threshold interval of 3s
-    assert(sched.speculativeTasks.size == 0)
+    assert(sched.speculativeTasks.isEmpty)
     clock.advance(2000)
     manager.checkSpeculatableTasks(sched.MIN_TIME_TO_SPECULATION)
     // After 3s have elapsed now the task is marked as speculative task
@@ -3093,45 +3093,71 @@ class TaskSetManagerSuite
       "a pipelined task set must count executor loss and abort")
   }
 
-  test("pipelined task set does NOT abort on a benign TaskKilled (losing duplicate attempt)") {
-    // A pipelined set with 2 tasks. One task gets a duplicate attempt; when one wins, the loser is
-    // killed with TaskKilled. That benign kill must NOT count as a failure and must NOT abort the
-    // group (the task actually succeeded). Regression for the speculative-loser abort bug.
-    sc = new SparkContext("local", "test")
-    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
-    val tasks = Array.tabulate[Task[_]](2)(i => new FakeTask(0, i, Nil))
-    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
-    val clock = new ManualClock
-    clock.advance(1)
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+  // A kill or a denied commit is not counted for a regular task set, so its task is retried. A
+  // pipelined member's peers have already exchanged part of the attempt's stream, so a retry in the
+  // same stage attempt could deliver rows twice or wait for a stream that is gone. The first such
+  // failure must fail the group, like any other failure.
+  Seq[(String, TaskFailedReason)](
+    ("a kill", TaskKilled("manual kill")),
+    ("a denied commit", TaskCommitDenied(jobID = 0, partitionID = 0, attemptNumber = 0))
+  ).foreach { case (name, reason) =>
+    test(s"pipelined task set aborts on $name of a running task, without a retry") {
+      assert(!reason.countTowardsTaskFailures)
+      sc = new SparkContext("local", "test")
+      sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+      val taskSet = pipelinedTaskSet()
+      val clock = new ManualClock
+      clock.advance(1)
+      val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
 
-    // Launch task index 0 and fail it with a benign TaskKilled (as if a duplicate attempt won).
-    val offer = manager.resourceOffer("exec1", "host1", ANY)._1
-    assert(offer.isDefined && offer.get.index === 0)
-    manager.handleFailedTask(offer.get.taskId, TaskState.KILLED,
-      TaskKilled("another attempt succeeded"))
-    // The group must NOT be aborted: TaskKilled is benign even for a pipelined set.
-    assert(!sched.taskSetsFailed.contains(taskSet.id),
-      "a benign TaskKilled must not abort a pipelined group")
+      val task = manager.resourceOffer("exec1", "host1", ANY)._1.get
+      // The executor reports both reasons with the KILLED state.
+      manager.handleFailedTask(task.taskId, TaskState.KILLED, reason)
+      assert(sched.taskSetsFailed === Seq(taskSet.id))
+      assert(manager.isZombie)
+      clock.advance(1)
+      assert(manager.resourceOffer("exec1", "host1", ANY)._1.isEmpty,
+        "the failed task must not be offered again")
+    }
   }
 
-  test("pipelined task set does NOT abort on TaskCommitDenied (speculation commit race)") {
+  test("pipelined task set ignores failure reports that arrive after it is aborted or suspended") {
+    // When a member fails, the group abort kills the group's other tasks, and so does a job
+    // cancellation. A set aborted by its own failure is already a zombie, and killAllTaskAttempts
+    // suspends a set before it reports the kills. Those kills, and a repeated report for a
+    // finished attempt, must neither abort the set again nor relaunch a task.
     sc = new SparkContext("local", "test")
     sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
-    val tasks = Array.tabulate[Task[_]](2)(i => new FakeTask(0, i, Nil))
-    val taskSet = new TaskSet(tasks, stageId = 0, stageAttemptId = 0, priority = 0, null,
-      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
     val clock = new ManualClock
     clock.advance(1)
-    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    def twoTaskManager(stageId: Int): TaskSetManager = {
+      val tasks = Array.tabulate[Task[_]](2)(i => new FakeTask(stageId, i, Nil))
+      val taskSet = new TaskSet(tasks, stageId, stageAttemptId = 0, priority = 0, null,
+        ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
+      new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+    }
 
-    val offer = manager.resourceOffer("exec1", "host1", ANY)._1
-    assert(offer.isDefined)
-    manager.handleFailedTask(offer.get.taskId, TaskState.FINISHED,
-      TaskCommitDenied(jobID = 0, partitionID = 0, attemptNumber = 0))
-    assert(!sched.taskSetsFailed.contains(taskSet.id),
-      "TaskCommitDenied must not abort a pipelined group")
+    val aborted = twoTaskManager(stageId = 0)
+    val failed = aborted.resourceOffer("exec1", "host1", ANY)._1.get
+    val killed = aborted.resourceOffer("exec1", "host1", ANY)._1.get
+    aborted.handleFailedTask(failed.taskId, TaskState.FINISHED, TaskResultLost)
+    assert(sched.taskSetsFailed === Seq(aborted.taskSet.id))
+    aborted.handleFailedTask(killed.taskId, TaskState.KILLED, TaskKilled("Stage cancelled"))
+    aborted.handleFailedTask(failed.taskId, TaskState.FINISHED, TaskResultLost)
+
+    val suspended = twoTaskManager(stageId = 1)
+    val running = Seq.fill(2)(suspended.resourceOffer("exec1", "host1", ANY)._1.get)
+    suspended.suspend()
+    suspended.handleFailedTask(running(0).taskId, TaskState.KILLED, TaskKilled("Stage cancelled"))
+    suspended.handleFailedTask(running(1).taskId, TaskState.KILLED,
+      TaskCommitDenied(jobID = 0, partitionID = 1, attemptNumber = 0))
+
+    assert(sched.taskSetsFailed === Seq(aborted.taskSet.id))
+    clock.advance(1)
+    Seq(aborted, suspended).foreach { manager =>
+      assert(manager.isZombie)
+      assert(manager.resourceOffer("exec1", "host1", ANY)._1.isEmpty)
+    }
   }
 
   test("pipelined task set does NOT single-resubmit a completed map task on executor " +
@@ -3242,6 +3268,71 @@ class TaskSetManagerSuite
         assert(sched.taskSetsFailed.contains(taskSet.id),
           "must abort after MAX_TASK_FAILURES counted failures")
       }
+    }
+  }
+
+  test("non-pipelined task set still retries a task after a kill or a denied commit") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(1)
+    val clock = new ManualClock
+    clock.advance(1)
+    // With the pipelined limit of one failure, any counted failure would abort the set.
+    val manager = new TaskSetManager(sched, taskSet, maxTaskFailures = 1, clock = clock)
+
+    Seq(TaskKilled("manual kill"), TaskCommitDenied(jobID = 0, partitionID = 0, attemptNumber = 0))
+      .foreach { reason =>
+        val offer = manager.resourceOffer("exec1", "host1", ANY)._1
+        assert(offer.isDefined, s"the task must be offered again before $reason")
+        manager.handleFailedTask(offer.get.taskId, TaskState.KILLED, reason)
+      }
+    assert(sched.taskSetsFailed.isEmpty)
+    assert(!manager.isZombie)
+    assert(manager.resourceOffer("exec1", "host1", ANY)._1.isDefined)
+  }
+
+  test("resourceOffer attaches current userCredentials to TaskDescription") {
+    sc = new SparkContext("local", "test")
+    sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
+    val taskSet = FakeTask.createTaskSet(3)
+    val clock = new ManualClock()
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock = clock)
+
+    try {
+      // Initially no credentials in SparkEnv store
+      assert(SparkEnv.get.userCredentials.get() == null)
+      val taskOpt1 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt1.isDefined)
+      assert(taskOpt1.get.userCredentials.isEmpty,
+        "TaskDescription should have None when credential store is empty")
+
+      // Set credentials to version 1
+      val v1Bytes = Array[Byte](10, 20, 30, 40, 50)
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, 1L, v1Bytes)
+
+      // Offer another task from the same set -- should carry v1
+      val taskOpt2 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt2.isDefined)
+      assert(taskOpt2.get.userCredentials.isDefined,
+        "TaskDescription should carry credentials after store is populated")
+      assert(taskOpt2.get.userCredentials.get._1 === 1L,
+        "TaskDescription should carry version 1")
+      assert(taskOpt2.get.userCredentials.get._2 === v1Bytes,
+        "TaskDescription should carry the v1 credential bytes")
+
+      // Update store to version 2
+      val v2Bytes = Array[Byte](50, 60, 70, 80, 90)
+      VersionedCredentials.updateIfNewer(SparkEnv.get.userCredentials, 2L, v2Bytes)
+
+      // Offer another task -- should carry v2
+      val taskOpt3 = manager.resourceOffer("exec1", "host1", TaskLocality.ANY)._1
+      assert(taskOpt3.isDefined)
+      assert(taskOpt3.get.userCredentials.get._1 === 2L,
+        "After renewal, TaskDescription should carry version 2")
+      assert(taskOpt3.get.userCredentials.get._2 === v2Bytes,
+        "TaskDescription should carry the v2 credential bytes")
+    } finally {
+      SparkEnv.get.userCredentials.set(null)
     }
   }
 

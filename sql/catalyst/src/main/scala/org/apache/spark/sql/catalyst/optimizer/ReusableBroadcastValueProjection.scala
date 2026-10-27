@@ -39,7 +39,8 @@ private[sql] object ReusableBroadcastValueProjection extends PredicateHelper {
       case _ => false
     } && (expression match {
       case attribute: Attribute =>
-        UnsafeRow.isFixedLength(attribute.dataType) || attribute.dataType == StringType
+        UnsafeRow.isFixedLength(attribute.dataType) ||
+          attribute.dataType.isInstanceOf[StringType]
       case _: Literal => true
       case DateAdd(startDate, days: Literal) =>
         isSafeValueExpression(startDate) && isSafeValueExpression(days)
@@ -47,7 +48,7 @@ private[sql] object ReusableBroadcastValueProjection extends PredicateHelper {
           (cast.dataType == TimestampType || cast.dataType == TimestampNTZType) =>
         isSafeValueExpression(cast.child)
       case DateFormatClass(timestamp, format: Literal, Some(_))
-          if format.dataType == StringType && format.value != null =>
+          if format.dataType.isInstanceOf[StringType] && format.value != null =>
         isSafeValueExpression(timestamp)
       case _ => false
     })

@@ -74,7 +74,7 @@ private[scheduler] case class JobGroupCancelled(
 private[scheduler] case class JobTagCancelled(
     tagName: String,
     reason: Option[String],
-    cancelledJobs: Option[Promise[Seq[ActiveJob]]]) extends DAGSchedulerEvent
+    cancelledJobs: Option[Promise[Seq[CancelledJobInfo]]]) extends DAGSchedulerEvent
 
 private[scheduler] case class AllJobsCancelled(reason: Option[String] = None)
   extends DAGSchedulerEvent
@@ -94,6 +94,10 @@ private[scheduler] case class CompletionEvent(
     accumUpdates: Seq[AccumulatorV2[_, _]],
     metricPeaks: Array[Long],
     taskInfo: TaskInfo)
+  extends DAGSchedulerEvent
+
+/** A lightweight reference to a released completion still owned by the pipelined scheduler. */
+private[scheduler] case class PipelinedTaskCompletionReplay(stageId: Int, replayId: Long)
   extends DAGSchedulerEvent
 
 private[scheduler] case class ExecutorAdded(execId: String, host: String) extends DAGSchedulerEvent

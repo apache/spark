@@ -1,0 +1,255 @@
+================================================================================================
+one CASE WHEN of 2 branches
+================================================================================================
+
+largest method of the stages: 280 bytes split as needed, 280 bytes split always, 280 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 2 branches:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      49             51           3         40.7          24.6       1.0X
+not split                                            42             45           3         47.4          21.1       1.2X
+not split again                                      38             42           6         53.2          18.8       1.3X
+split as needed again                                36             38           3         55.4          18.1       1.4X
+split always                                         37             42           5         54.0          18.5       1.3X
+whole stage codegen off                              66             68           3         30.5          32.8       0.7X
+
+
+================================================================================================
+one CASE WHEN of 4 branches
+================================================================================================
+
+largest method of the stages: 411 bytes split as needed, 280 bytes split always, 411 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 4 branches:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      41             44           4         48.7          20.5       1.0X
+not split                                            40             43           2         49.5          20.2       1.0X
+not split again                                      40             44           5         49.4          20.2       1.0X
+split as needed again                                41             43           3         49.2          20.3       1.0X
+split always                                         41             42           1         48.6          20.6       1.0X
+whole stage codegen off                              68             71           3         29.3          34.1       0.6X
+
+
+================================================================================================
+one CASE WHEN of 8 branches
+================================================================================================
+
+largest method of the stages: 785 bytes split as needed, 280 bytes split always, 785 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 8 branches:              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      42             43           0         47.2          21.2       1.0X
+not split                                            41             43           2         48.2          20.7       1.0X
+not split again                                      43             45           3         46.7          21.4       1.0X
+split as needed again                                42             45           3         47.9          20.9       1.0X
+split always                                         42             44           4         47.6          21.0       1.0X
+whole stage codegen off                              72             74           1         27.7          36.1       0.6X
+
+
+================================================================================================
+one CASE WHEN of 16 branches
+================================================================================================
+
+largest method of the stages: 1537 bytes split as needed, 280 bytes split always, 1537 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 16 branches:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      46             48           1         43.4          23.1       1.0X
+not split                                            44             45           1         45.7          21.9       1.1X
+not split again                                      44             47           3         45.8          21.8       1.1X
+split as needed again                                42             43           1         47.1          21.2       1.1X
+split always                                         43             44           1         46.6          21.5       1.1X
+whole stage codegen off                              89             92           3         22.5          44.5       0.5X
+
+
+================================================================================================
+one CASE WHEN of 32 branches
+================================================================================================
+
+largest method of the stages: 3041 bytes split as needed, 280 bytes split always, 3041 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 32 branches:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      57             58           1         35.2          28.4       1.0X
+not split                                            55             56           1         36.3          27.5       1.0X
+not split again                                      56             59           3         35.6          28.1       1.0X
+split as needed again                                56             61           5         35.4          28.2       1.0X
+split always                                         55             57           3         36.3          27.5       1.0X
+whole stage codegen off                             111            113           2         18.0          55.4       0.5X
+
+
+================================================================================================
+one CASE WHEN of 64 branches
+================================================================================================
+
+largest method of the stages: 6049 bytes split as needed, 280 bytes split always, 6049 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 64 branches:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      63             66           4         31.5          31.7       1.0X
+not split                                            64             67           4         31.1          32.2       1.0X
+not split again                                      63             65           2         31.8          31.5       1.0X
+split as needed again                                62             64           2         32.1          31.1       1.0X
+split always                                         64             67           3         31.2          32.1       1.0X
+whole stage codegen off                             152            153           1         13.1          76.1       0.4X
+
+
+================================================================================================
+one CASE WHEN of 96 branches
+================================================================================================
+
+largest method of the stages: 280 bytes split as needed, 280 bytes split always, 9057 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 96 branches:             Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      82             85           3         24.2          41.2       1.0X
+not split                                          2394           2402           7          0.8        1196.9       0.0X
+not split again                                    2387           2394           4          0.8        1193.7       0.0X
+split as needed again                                82             84           2         24.5          40.8       1.0X
+split always                                         75             79           6         26.5          37.7       1.1X
+whole stage codegen off                             200            205           4         10.0         100.2       0.4X
+
+
+================================================================================================
+one CASE WHEN of 128 branches
+================================================================================================
+
+largest method of the stages: 280 bytes split as needed, 280 bytes split always, 12137 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 128 branches:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                      97            100           3         20.5          48.7       1.0X
+not split                                          3072           3099          18          0.7        1536.1       0.0X
+not split again                                    3108           3119           9          0.6        1554.1       0.0X
+split as needed again                                93             95           2         21.4          46.7       1.0X
+split always                                         85             86           1         23.4          42.7       1.1X
+whole stage codegen off                             272            276           4          7.4         135.8       0.4X
+
+
+================================================================================================
+one CASE WHEN of 300 branches
+================================================================================================
+
+largest method of the stages: 280 bytes split as needed, 280 bytes split always, 32605 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+one CASE WHEN of 300 branches:            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+split as needed                                     162            164           2         12.4          80.8       1.0X
+not split                                          7043           7063          21          0.3        3521.3       0.0X
+not split again                                    7062           7146          57          0.3        3531.2       0.0X
+split as needed again                               161            164           4         12.4          80.7       1.0X
+split always                                        143            144           2         14.0          71.3       1.1X
+whole stage codegen off                             709            712           3          2.8         354.7       0.2X
+
+
+================================================================================================
+four CASE WHENs of 64 branches in one projection
+================================================================================================
+
+largest method of the stages: 532 bytes split as needed, 532 bytes split always, 25014 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+four CASE WHENs of 64 branches in one projection:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+split as needed                                             181            185           6         11.1          90.3       1.0X
+not split                                                  6100           6113          11          0.3        3050.0       0.0X
+not split again                                            6072           6094          18          0.3        3035.9       0.0X
+split as needed again                                       181            183           2         11.1          90.3       1.0X
+split always                                                164            166           2         12.2          81.9       1.1X
+whole stage codegen off                                     567            571           3          3.5         283.5       0.3X
+
+
+================================================================================================
+four CASE WHENs of 300 branches in one projection
+================================================================================================
+
+largest method of the stages: 488 bytes split as needed, 488 bytes split always, a stage past 64KB, which falls back, not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+four CASE WHENs of 300 branches in one projection:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+split as needed                                              589            627          72          3.4         294.7       1.0X
+not split                                                   3457           3485          25          0.6        1728.6       0.2X
+not split again                                             3458           3463           5          0.6        1729.1       0.2X
+split as needed again                                        587            590           3          3.4         293.6       1.0X
+split always                                                 505            509           2          4.0         252.5       1.2X
+whole stage codegen off                                     3451           3461          10          0.6        1725.3       0.2X
+
+
+================================================================================================
+string CASE WHEN of 64 branches, ELSE a column read once
+================================================================================================
+
+largest method of the stages: 4098 bytes split as needed, 384 bytes split always, 4098 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+string CASE WHEN of 64 branches, ELSE a column read once:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------------------
+split as needed                                                     104            112           8         19.2          52.0       1.0X
+not split                                                           101            109           6         19.7          50.6       1.0X
+not split again                                                      97            103           4         20.6          48.6       1.1X
+split as needed again                                                97            100           7         20.7          48.3       1.1X
+split always                                                         98            105           7         20.4          49.1       1.1X
+whole stage codegen off                                             234            237           5          8.6         116.8       0.4X
+
+
+================================================================================================
+string CASE WHEN of 300 branches, ELSE a column read once
+================================================================================================
+
+largest method of the stages: 305 bytes split as needed, 305 bytes split always, 20727 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+string CASE WHEN of 300 branches, ELSE a column read once:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------
+split as needed                                                      180            183           4         11.1          89.8       1.0X
+not split                                                           7950           8012          42          0.3        3974.8       0.0X
+not split again                                                     7915           7940          18          0.3        3957.3       0.0X
+split as needed again                                                177            180           3         11.3          88.4       1.0X
+split always                                                         164            166           2         12.2          82.2       1.1X
+whole stage codegen off                                              720            724           3          2.8         360.1       0.2X
+
+
+================================================================================================
+a CASE WHEN of 64 branches in a keyed aggregate
+================================================================================================
+
+largest method of the stages: 6185 bytes split as needed, 282 bytes split always, 6185 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+a CASE WHEN of 64 branches in a keyed aggregate:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------
+split as needed                                             94             98           4         21.2          47.1       1.0X
+not split                                                   92             97           4         21.8          45.9       1.0X
+not split again                                             92             97           4         21.8          45.8       1.0X
+split as needed again                                       89             92           4         22.5          44.5       1.1X
+split always                                                89             93           3         22.4          44.6       1.1X
+whole stage codegen off                                    380            386           5          5.3         190.1       0.2X
+
+
+================================================================================================
+a CASE WHEN of 300 branches in a keyed aggregate
+================================================================================================
+
+largest method of the stages: 280 bytes split as needed, 280 bytes split always, 32884 bytes not split
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1022-azure
+INTEL(R) XEON(R) PLATINUM 8573C
+a CASE WHEN of 300 branches in a keyed aggregate:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+split as needed                                             191            197           7         10.5          95.5       1.0X
+not split                                                  6987           6996           9          0.3        3493.5       0.0X
+not split again                                            6971           6994          22          0.3        3485.6       0.0X
+split as needed again                                       191            195           3         10.5          95.5       1.0X
+split always                                                167            171           4         12.0          83.3       1.1X
+whole stage codegen off                                    2165           2188          14          0.9        1082.5       0.1X
+
+

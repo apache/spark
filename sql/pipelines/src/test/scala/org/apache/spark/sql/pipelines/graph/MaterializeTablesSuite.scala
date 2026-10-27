@@ -1275,16 +1275,10 @@ abstract class MaterializeTablesSuite extends BaseCoreExecutionTest {
 
         val graph = ctx.resolveToDataflowGraph()
         val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
-        val (targetIdentifier, inferred) = inferredSchemas.head
-        val lowestIdentifierFlowValueField =
-          graph.resolvedFlowsTo(targetIdentifier)
-            .sortBy(_.identifier.unquotedString)
-            .head
-            .schema
-            .fieldNames(1)
-        // The two spellings must fold into a single column, and the lowest flow identifier
-        // supplies the surviving spelling.
-        assert(inferred.fieldNames.toSeq === Seq("id", lowestIdentifierFlowValueField))
+        val (_, inferred) = inferredSchemas.head
+        // The two spellings fold into a single column, and the lowest flow identifier supplies the
+        // surviving spelling: `f1` sorts before `f2`, so `value` wins.
+        assert(inferred.fieldNames.toSeq === Seq("id", "value"))
       }
     }
   }

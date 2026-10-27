@@ -44,4 +44,16 @@ class RDDOperationGraphSuite extends SparkFunSuite with PrivateMethodTester {
     val _makeDotNode = PrivateMethod[String](Symbol("makeDotNode"))
     RDDOperationGraph.invokePrivate(_makeDotNode(node))
   }
+
+  test("RDD names are HTML-escaped in html-type dagre labels") {
+    // RDD names come from application code and these labels are rendered as HTML.
+    val name = "RDD <b>name</b> & more"
+    val node = new RDDOperationNode(1, name, false, false, "callsite",
+      DeterministicLevel.DETERMINATE)
+    val _makeDotNode = PrivateMethod[String](Symbol("makeDotNode"))
+    val dotNode = RDDOperationGraph.invokePrivate(_makeDotNode(node))
+    assert(dotNode.contains("&lt;b&gt;name&lt;/b&gt; &amp; more"))
+    // The intentional <br> separator between name and callsite must be preserved.
+    assert(dotNode.contains("<br>callsite"))
+  }
 }

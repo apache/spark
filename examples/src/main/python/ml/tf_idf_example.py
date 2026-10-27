@@ -16,7 +16,8 @@
 #
 
 # $example on$
-from pyspark.ml.feature import HashingTF, IDF, Tokenizer
+from pyspark.ml.feature import IDF, HashingTF, Tokenizer
+
 # $example off$
 from pyspark.sql import SparkSession
 

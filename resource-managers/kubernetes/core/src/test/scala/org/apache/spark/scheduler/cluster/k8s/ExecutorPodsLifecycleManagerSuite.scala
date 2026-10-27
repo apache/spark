@@ -168,6 +168,22 @@ class ExecutorPodsLifecycleManagerSuite extends SparkFunSuite with BeforeAndAfte
     verify(namedExecutorPods(failedPod.getMetadata.getName), times(1)).delete()
   }
 
+  test("SPARK-59008: Pod deleted between the two get calls doesn't throw NPE.") {
+    val failedPod = failedExecutorWithoutDeletion(1)
+    val mockPodResource = mock(classOf[PodResource])
+    namedExecutorPods.put("spark-executor-1", mockPodResource)
+    // The pod is present on the first lookup and gone right after, as when the API server
+    // removes it concurrently with the driver's deletion attempt. Re-reading it would NPE.
+    when(mockPodResource.get()).thenReturn(failedPod, null.asInstanceOf[Pod])
+    snapshotsStore.updatePod(failedPod)
+    snapshotsStore.notifySubscribers()
+
+    val msg = exitReasonMessage(1, failedPod, 1)
+    val expectedLossReason = ExecutorExited(1, exitCausedByApp = true, msg)
+    verify(schedulerBackend, times(1)).doRemoveExecutor("1", expectedLossReason)
+    verify(namedExecutorPods(failedPod.getMetadata.getName), times(1)).delete()
+  }
+
   test("When the scheduler backend lists executor ids that aren't present in the cluster," +
     " remove those executors from Spark.") {
       when(schedulerBackend.getExecutorsWithRegistrationTs()).thenReturn(Map("1" -> 7L))

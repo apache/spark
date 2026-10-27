@@ -607,8 +607,8 @@ object VirtualColumn {
 }
 
 /**
- * The internal representation of the MetadataAttribute,
- * it sets `__metadata_col` to `true` in AttributeReference metadata
+ * The internal representation of the MetadataAttribute. It stores the metadata column's logical
+ * name under `__metadata_col` in AttributeReference metadata.
  * - apply() will create a metadata attribute reference
  * - unapply() will check if an attribute reference is the metadata attribute reference
  */
@@ -682,8 +682,9 @@ object MetadataStructFieldWithLogicalName {
 }
 
 /**
- * The internal representation of the FileSourceMetadataAttribute, it sets `__metadata_col`
- * and `__file_source_metadata_col` to `true` in AttributeReference's metadata.
+ * The internal representation of the FileSourceMetadataAttribute. It stores the metadata column's
+ * logical name under `__metadata_col` and sets `__file_source_metadata_col` to `true` in
+ * AttributeReference metadata.
  * This is a super type of [[FileSourceConstantMetadataAttribute]] and
  * [[FileSourceGeneratedMetadataAttribute]].
  *

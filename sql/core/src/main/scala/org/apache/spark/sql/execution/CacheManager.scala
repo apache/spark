@@ -17,18 +17,19 @@
 
 package org.apache.spark.sql.execution
 
+import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
 import org.apache.hadoop.fs.{FileSystem, Path}
 
+import org.apache.spark.SparkException
 import org.apache.spark.internal.{Logging, MessageWithContext}
 import org.apache.spark.internal.LogKeys._
-import org.apache.spark.sql.catalyst.analysis.EliminateSubqueryAliases
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.expressions.{Attribute, SubqueryExpression}
 import org.apache.spark.sql.catalyst.optimizer.EliminateResolvedHint
-import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, View}
+import org.apache.spark.sql.catalyst.plans.logical.{Command, LogicalPlan, ResolvedHint, SubqueryAlias, View}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.catalyst.util.sideBySide
 import org.apache.spark.sql.classic.{Dataset, SparkSession}
@@ -39,9 +40,16 @@ import org.apache.spark.sql.connector.catalog.transactions.Transaction
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.columnar.InMemoryRelation
 import org.apache.spark.sql.execution.command.CommandUtils
-import org.apache.spark.sql.execution.datasources.{FileIndex, HadoopFsRelation, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.datasources.{
+  FileIndex,
+  HadoopFsRelation,
+  LogicalRelation,
+  LogicalRelationWithTable}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, ChangelogTable, DataSourceV2Relation, ExtractV2CatalogAndIdentifier, ExtractV2Table, FileTable, V2TableRefreshUtil}
+import org.apache.spark.sql.execution.python.InProcessPythonUDFBuilder
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.sources.BaseRelation
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.storage.StorageLevel.MEMORY_AND_DISK
 
@@ -232,19 +240,12 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       name: Seq[String],
       cascade: Boolean,
       blocking: Boolean = false): Unit = {
+    val resolver = spark.sessionState.conf.resolver
     uncacheByCondition(
       spark,
-      isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel = true),
+      isMatchedTableOrView(_, name, resolver, includeTimeTravel = true),
       cascade,
       blocking)
-  }
-
-  private def isMatchedTableOrView(
-      plan: LogicalPlan,
-      name: Seq[String],
-      conf: SQLConf,
-      includeTimeTravel: Boolean): Boolean = {
-    isMatchedTableOrView(plan, name, conf.resolver, includeTimeTravel)
   }
 
   private def isMatchedTableOrView(
@@ -253,9 +254,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       resolver: Resolver,
       includeTimeTravel: Boolean): Boolean = {
 
-    EliminateSubqueryAliases(plan) match {
-      case LogicalRelationWithTable(_, Some(catalogTable)) =>
-        isSameName(name, catalogTable.identifier.nameParts, resolver)
+    stripRootSubqueryAliases(plan) match {
+      case LogicalRelationWithTable(relation, Some(catalogTable)) =>
+        isSameName(name, catalogTable.identifier.nameParts, resolver) &&
+          (includeTimeTravel || !isTimeTravelRelation(relation))
 
       case DataSourceV2Relation(_, _, Some(catalog), Some(v2Ident), _, timeTravelSpec) =>
         val nameInCache = v2Ident.toQualifiedNameParts(catalog)
@@ -269,6 +271,25 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
 
       case _ => false
     }
+  }
+
+  /**
+   * Strips the chain of [[SubqueryAlias]] nodes at the root of the given plan. Callers that only
+   * inspect the root node use this instead of `EliminateSubqueryAliases`, which rewrites the whole
+   * tree. That matters because [[isMatchedTableOrView]] is evaluated on every node of every cached
+   * plan, where a full rewrite per node makes cache lookups by name quadratic in plan size.
+   * Inside those `exists` traversals the strip is redundant, since the alias's child is visited
+   * anyway; it is needed only where the predicate is applied to an entry's root.
+   */
+  @tailrec
+  private def stripRootSubqueryAliases(plan: LogicalPlan): LogicalPlan = plan match {
+    case SubqueryAlias(_, child) => stripRootSubqueryAliases(child)
+    case other => other
+  }
+
+  private def isTimeTravelRelation(relation: BaseRelation): Boolean = relation match {
+    case hadoopFsRelation: HadoopFsRelation => hadoopFsRelation.location.isTimeTravel
+    case _ => false
   }
 
   private def isSameName(
@@ -354,8 +375,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       spark: SparkSession,
       name: Seq[String],
       includeTimeTravel: Boolean = true): Unit = {
+    val resolver = spark.sessionState.conf.resolver
     def shouldInvalidate(entry: CachedData): Boolean = {
-      entry.plan.exists(isMatchedTableOrView(_, name, spark.sessionState.conf, includeTimeTravel))
+      entry.plan.exists(isMatchedTableOrView(_, name, resolver, includeTimeTravel))
     }
     recacheByCondition(spark, shouldInvalidate)
   }
@@ -390,14 +412,26 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def tryRebuildCacheEntry(spark: SparkSession, cd: CachedData): Option[CachedData] = {
     val sessionWithConfigsOff = getOrCloneSessionWithConfigsOff(spark)
     sessionWithConfigsOff.withActive {
-      tryRefreshPlan(sessionWithConfigsOff, cd.plan).map { refreshedPlan =>
-        val qe = QueryExecution.create(
-          sessionWithConfigsOff,
-          refreshedPlan,
-          refreshPhaseEnabled = false)
-        val newKey = qe.normalized
-        val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
-        cd.copy(plan = newKey, cachedRepresentation = newCache)
+      tryRefreshPlan(sessionWithConfigsOff, cd.plan).flatMap { refreshedPlan =>
+        try {
+          val qe = QueryExecution.create(
+            sessionWithConfigsOff,
+            refreshedPlan,
+            refreshPhaseEnabled = false)
+          val newKey = qe.normalized
+          val newCache = InMemoryRelation(cd.cachedRepresentation.cacheBuilder, qe)
+          Some(cd.copy(plan = newKey, cachedRepresentation = newCache))
+        } catch {
+          // Re-caching follows the command that invalidated the entry, e.g. a committed write,
+          // and plans the entry in that command's session. In-process Python UDFs check that
+          // session's configuration while planning; if it rejects them, drop the entry rather
+          // than fail a command whose work is done. Other failures still propagate.
+          case e: SparkException
+              if InProcessPythonUDFBuilder.isUnsupportedSessionConfiguration(e) =>
+            logWarning(log"Removed cache entry ${MDC(DATAFRAME_CACHE_ENTRY, cd)} because it " +
+              log"cannot be re-planned in the session that invalidated it", e)
+            None
+        }
       }
     }
   }
@@ -417,8 +451,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    */
   private def tryRefreshPlan(spark: SparkSession, plan: LogicalPlan): Option[LogicalPlan] = {
     try {
-      EliminateSubqueryAliases(plan) match {
-        case r @ ExtractV2CatalogAndIdentifier(catalog, ident) if r.timeTravelSpec.isEmpty =>
+      stripRootSubqueryAliases(plan) match {
+        case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
+            if r.timeTravelSpec.isEmpty && !r.table.isInstanceOf[ChangelogTable] =>
           val table = CatalogV2Util.getTable(catalog, ident, options = r.options)
           if (r.table.id == table.id) {
             Some(DataSourceV2Relation.create(table, Some(catalog), Some(ident), r.options))
@@ -436,24 +471,35 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   private[sql] def lookupCachedTable(
-      name: Seq[String],
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap,
       resolver: Resolver): Option[LogicalPlan] = {
+    val name = ident.toQualifiedNameParts(catalog)
     val cachedRelations = findCachedRelations(name, resolver)
-    cachedRelations match {
-      case cachedRelation +: _ =>
-        CacheManager.logCacheOperation(
-          log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
-        Some(cachedRelation)
-      case _ =>
-        None
+    // Changelog loads have their own context and state options, so they cannot supply an
+    // ordinary table's metadata even when the catalog and identifier match.
+    val cachedRelation = cachedRelations.collectFirst {
+      case r: DataSourceV2Relation
+          if !r.table.isInstanceOf[ChangelogTable] &&
+            r.catalog.contains(catalog) && r.identifier.contains(ident) &&
+            tableId.forall(_ == r.table.id) &&
+            CatalogV2Util.extractTableStateOptions(catalog, r.options) == stateOptions =>
+        r
     }
+    cachedRelation.foreach { _ =>
+      CacheManager.logCacheOperation(
+        log"Relation cache hit for table ${MDC(TABLE_NAME, name.quoted)}")
+    }
+    cachedRelation
   }
 
   private def findCachedRelations(
       name: Seq[String],
       resolver: Resolver): Seq[LogicalPlan] = {
     cachedData.flatMap { cd =>
-      val plan = EliminateSubqueryAliases(cd.plan)
+      val plan = stripRootSubqueryAliases(cd.plan)
       plan match {
         case r @ ExtractV2CatalogAndIdentifier(catalog, ident)
             if isSameName(name, catalog, ident, resolver) && r.timeTravelSpec.isEmpty =>
@@ -573,8 +619,24 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * `HadoopFsRelation` node(s) as part of its logical plan.
    */
   def recacheByPath(spark: SparkSession, resourcePath: Path, fs: FileSystem): Unit = {
+    recacheByPath(spark, resourcePath, fs, includeTimeTravel = true)
+  }
+
+  /**
+   * Tries to re-cache matching entries whose logical plans contain a file-backed relation under
+   * `resourcePath`. If `includeTimeTravel` is false, immutable time-travel relations are ignored
+   * when deciding whether an entry must be re-cached; another matching live relation in the same
+   * plan can still trigger re-caching.
+   */
+  def recacheByPath(
+      spark: SparkSession,
+      resourcePath: Path,
+      fs: FileSystem,
+      includeTimeTravel: Boolean): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
-    recacheByCondition(spark, _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath)))
+    recacheByCondition(
+      spark,
+      _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)))
   }
 
   /**
@@ -583,33 +645,45 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
    * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
    * false.
    */
-  private def lookupAndRefresh(plan: LogicalPlan, fs: FileSystem, qualifiedPath: Path): Boolean = {
+  private def lookupAndRefresh(
+      plan: LogicalPlan,
+      fs: FileSystem,
+      qualifiedPath: Path,
+      includeTimeTravel: Boolean): Boolean = {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
-          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath)
+          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath, includeTimeTravel)
         case _ => false
       }
 
-      case ExtractV2Table(fileTable: FileTable) =>
-        refreshFileIndexIfNecessary(fileTable.fileIndex, fs, qualifiedPath)
+      case relation @ ExtractV2Table(fileTable: FileTable)
+          if includeTimeTravel || relation.timeTravelSpec.isEmpty =>
+        refreshFileIndexIfNecessary(
+          fileTable.fileIndex,
+          fs,
+          qualifiedPath,
+          includeTimeTravel)
 
       case _ => false
     }
   }
 
   /**
-   * Refresh the given [[FileIndex]] if any of its root paths is a subdirectory
-   * of the `qualifiedPath`.
-   * @return whether the [[FileIndex]] is refreshed.
+   * Refresh the given [[FileIndex]] if one of its root paths is a subdirectory of
+   * `qualifiedPath` and either `includeTimeTravel` is true or the index is not an immutable
+   * time-travel snapshot.
+   * @return whether the [[FileIndex]] was refreshed.
    */
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,
       fs: FileSystem,
-      qualifiedPath: Path): Boolean = {
-    val needToRefresh = fileIndex.rootPaths
-      .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
-      .exists(isSubDir(qualifiedPath, _))
+      qualifiedPath: Path,
+      includeTimeTravel: Boolean): Boolean = {
+    val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
+      fileIndex.rootPaths
+        .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
+        .exists(isSubDir(qualifiedPath, _))
     if (needToRefresh) fileIndex.refresh()
     needToRefresh
   }
@@ -638,7 +712,10 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
     // Bucketed scan only has one time overhead but can have multi-times benefits in cache,
     // so we always do bucketed scan in a cached plan.
-    var disableConfigs = Seq(SQLConf.AUTO_BUCKETED_SCAN_ENABLED)
+    // Cache hits bypass shuffle readers. Materialize caches with regular shuffles so a
+    // partially evicted cache can recompute only its missing partitions safely.
+    var disableConfigs = Seq(
+      SQLConf.AUTO_BUCKETED_SCAN_ENABLED, SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED)
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
       // extra shuffle
