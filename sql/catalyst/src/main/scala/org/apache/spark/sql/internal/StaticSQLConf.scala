@@ -159,7 +159,7 @@ object StaticSQLConf {
         "identities (any recognized type other than NONE/NOSASL), unless this option is " +
         "set to true to acknowledge the limitation. Spark 5.0 is expected to refuse to " +
         "start on that configuration unless this option is set.")
-      .version("4.3.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
