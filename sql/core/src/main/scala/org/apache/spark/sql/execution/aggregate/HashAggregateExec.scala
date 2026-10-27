@@ -140,7 +140,8 @@ case class HashAggregateExec(
             numPassthroughRows,
             adaptivePartialAggEnabled,
             adaptiveMinRows,
-            adaptiveMinCompaction)
+            adaptiveMinCompaction,
+            adaptiveMinCompactionToSpill)
         if (!hasInput && groupingExpressions.isEmpty) {
           numOutputRows += 1
           Iterator.single[UnsafeRow](aggregationIterator.outputForEmptyGroupingKeyWithoutInput())
@@ -208,10 +209,15 @@ case class HashAggregateExec(
       requiredChildDistributionExpressions.isEmpty
   }
 
-  // The number of rows between two compaction-ratio evaluations, and the ratio below which the
-  // partial aggregation is considered ineffective. Only read when the feature applies.
+  // The number of rows between two compaction-ratio evaluations, and the ratios below which the
+  // partial aggregation is considered ineffective: at the periodic check, and when the map is
+  // about to spill. Keeping the aggregation past that point means aggregating the rest of the
+  // input through spills, so the spill check never demands less compaction than the periodic one.
+  // Only read when the feature applies.
   private val adaptiveMinRows: Long = conf.adaptivePartialAggregationMinRows
   private val adaptiveMinCompaction: Double = conf.adaptivePartialAggregationMinCompaction
+  private val adaptiveMinCompactionToSpill: Double =
+    math.max(adaptiveMinCompaction, conf.adaptivePartialAggregationMinCompactionToSpill)
 
   // The name for Fast HashMap
   private var fastHashMapTerm: String = _
@@ -253,6 +259,13 @@ case class HashAggregateExec(
   // keeps both sides of the ratio on the same epoch. Once the fast map fills it stops accepting
   // keys, so the difference settles at zero and the ratio is the regular map's alone.
   private var adaptiveFastKeysAtSpillTerm: String = _
+  // The epoch's processed rows and keys at its last periodic check, and at the check before that,
+  // where the window of recent rows that the spill check judges starts (see
+  // `adaptiveIneffective`).
+  private var adaptiveCheckRowsTerm: String = _
+  private var adaptiveCheckKeysTerm: String = _
+  private var adaptiveWindowRowsTerm: String = _
+  private var adaptiveWindowKeysTerm: String = _
   // The name of the generated output function, promoted to a field so `doConsumeWithKeys` can emit
   // pass-through rows directly from within the build loop.
   private var outputFunc: String = _
@@ -575,6 +588,10 @@ case class HashAggregateExec(
         ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "adaptiveMapSetupDone")
       adaptiveFastKeysAtSpillTerm =
         ctx.addMutableState(CodeGenerator.JAVA_INT, "adaptiveFastKeysAtSpill")
+      adaptiveCheckRowsTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveCheckRows")
+      adaptiveCheckKeysTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveCheckKeys")
+      adaptiveWindowRowsTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveWindowRows")
+      adaptiveWindowKeysTerm = ctx.addMutableState(CodeGenerator.JAVA_LONG, "adaptiveWindowKeys")
       adaptivePendingRowsTerm = ctx.addMutableState(
         "java.util.LinkedList<UnsafeRow[]>", "adaptivePendingRows",
         v => s"$v = new java.util.LinkedList<UnsafeRow[]>();", forceInline = true)
@@ -980,25 +997,31 @@ case class HashAggregateExec(
       case _ => ("true", "", "")
     }
 
-    // The compaction ratio is measured at the operator level: all processed rows against the keys
-    // held by both maps, so two-level-map routing does not change the decision. The same predicate
-    // decides both check points -- periodically every `minRows` rows, and right before the map
-    // would spill (in which case the spill is skipped entirely). Pass-through cannot be undone
-    // within the task, so the spill check, like the periodic one, waits until the current epoch
-    // has processed `minRows` rows; a map that fills sooner spills as usual. `minRows = 0`
-    // disables the periodic check: the row count is only ever compared after being incremented
-    // past 0, so it never matches and only the spill check remains, without a row floor.
-    val adaptiveIneffective = if (adaptivePartialAggEnabled) {
-      val totalKeys = if (isFastHashMapEnabled) {
-        s"($fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
-          s"$hashMapTerm.getNumKeys())"
-      } else {
-        s"$hashMapTerm.getNumKeys()"
-      }
-      s"$processedRowsTerm < (double) $totalKeys * ${adaptiveMinCompaction}D"
+    // The compaction ratio is measured at the operator level: processed rows against the keys
+    // held by both maps, so two-level-map routing does not change the decision. It is evaluated at
+    // two check points:
+    //   - periodically, every `minRows` rows, over the whole epoch against `minCompaction`;
+    //   - right before the map would spill, over the recent rows against the higher
+    //     `minCompactionToSpill`, in which case the map does not spill and the rest of the input
+    //     is passed through. Keeping the aggregation then means aggregating the rest of the input
+    //     through spills, which pays off only if that input keeps repeating keys. The recent rows,
+    //     those since the periodic check before last, measure that: when keys repeat across the
+    //     input, more of them find their key already in the map as it fills, so their ratio
+    //     climbs above the epoch's; when each key's rows arrive together, the two ratios match.
+    // Pass-through cannot be undone within the task, so the spill check, like the periodic one,
+    // waits until the current epoch has processed `minRows` rows; a map that fills sooner spills
+    // as usual. `minRows = 0` disables the periodic check: the row count is only ever compared
+    // after being incremented past 0, so it never matches and only the spill check remains,
+    // without a row floor and over the whole epoch.
+    def adaptiveEpochKeys: String = if (isFastHashMapEnabled) {
+      s"((long) $fastHashMapTerm.getNumKeys() - $adaptiveFastKeysAtSpillTerm + " +
+        s"$hashMapTerm.getNumKeys())"
     } else {
-      ""
+      s"((long) $hashMapTerm.getNumKeys())"
     }
+    // Whether `rows` processed rows fail to collapse into `keys` keys by at least `threshold`.
+    def adaptiveIneffective(rows: String, keys: String, threshold: Double): String =
+      s"$rows < (double) $keys * ${threshold}D"
 
     val findOrInsertRegularHashMap: String = {
       // Assumes the grouping key projection (`unsafeRowKeyCode.code`) has already run for this row,
@@ -1055,7 +1078,15 @@ case class HashAggregateExec(
              |$processedRowsTerm = 0L;
              |$adaptiveNextCheckRowTerm = ${adaptiveMinRows}L;
              |$snapshotFastKeys
+             |$adaptiveCheckRowsTerm = 0L;
+             |$adaptiveCheckKeysTerm = 0L;
+             |$adaptiveWindowRowsTerm = 0L;
+             |$adaptiveWindowKeysTerm = 0L;
            """.stripMargin
+        val recentIneffective = adaptiveIneffective(
+          s"($processedRowsTerm - $adaptiveWindowRowsTerm)",
+          s"($adaptiveEpochKeys - $adaptiveWindowKeysTerm)",
+          adaptiveMinCompactionToSpill)
         // The spill check needs at least one processed row even when `minRows = 0`.
         val spillCheckMinRows = math.max(adaptiveMinRows, 1L)
         s"""
@@ -1064,7 +1095,7 @@ case class HashAggregateExec(
            |if (!$adaptivePassThroughTerm) {
            |  $probeRegularMap
            |  if ($unsafeRowBuffer == null) {
-           |    if ($processedRowsTerm >= ${spillCheckMinRows}L && $adaptiveIneffective) {
+           |    if ($processedRowsTerm >= ${spillCheckMinRows}L && $recentIneffective) {
            |      $adaptivePassThroughTerm = true;
            |    } else {
            |      $spillAndRestartEpoch
@@ -1138,6 +1169,8 @@ case class HashAggregateExec(
         } else {
           s"($unsafeRowBuffer != null)"
         }
+        val epochIneffective =
+          adaptiveIneffective(processedRowsTerm, adaptiveEpochKeys, adaptiveMinCompaction)
         // The grouping key was already projected in `findOrInsertRegularHashMap`
         // (`unsafeRowKeyCode.code`), so `unsafeRowKeyCode.value` holds this row's key. Only build
         // the single-row partial buffer here: reset the reusable buffer to the initial aggregation
@@ -1148,10 +1181,14 @@ case class HashAggregateExec(
            |  if (!$adaptivePassThroughTerm) {
            |    $processedRowsTerm += 1;
            |    if ($processedRowsTerm == $adaptiveNextCheckRowTerm) {
-           |      if ($adaptiveIneffective) {
+           |      if ($epochIneffective) {
            |        $adaptivePassThroughTerm = true;
            |      } else {
            |        $adaptiveNextCheckRowTerm += ${adaptiveMinRows}L;
+           |        $adaptiveWindowRowsTerm = $adaptiveCheckRowsTerm;
+           |        $adaptiveWindowKeysTerm = $adaptiveCheckKeysTerm;
+           |        $adaptiveCheckRowsTerm = $processedRowsTerm;
+           |        $adaptiveCheckKeysTerm = $adaptiveEpochKeys;
            |      }
            |    }
            |  }

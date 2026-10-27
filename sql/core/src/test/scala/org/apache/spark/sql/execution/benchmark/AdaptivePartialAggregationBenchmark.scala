@@ -135,6 +135,55 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
         extraConf = spillCheckConf)
       benchmark.run()
     }
+
+    // Inputs that compact by about 1.5 within each map epoch, read from four partitions so an
+    // `Exchange` separates the Partial from the Final, and with a map forced to fill every few
+    // hundred thousand rows. Whether keeping the aggregation through the spills pays off depends
+    // on whether the rest of the input keeps repeating keys:
+    //   - each key's rows arrive together, so later epochs share no keys and passing the rest
+    //     through at the first fill avoids spilling every epoch;
+    //   - keys recur uniformly across the task (10 rows per key), so the final merge collapses
+    //     them and keeping the aggregation shuffles a tenth of the rows;
+    //   - 10 hot keys hold 30% of the rows and the rest are unique, so passing through avoids the
+    //     spills but sends every hot-key row to the reducer of its key.
+    // `minCompactionToSpill = 1.05` judges the spill check by `minCompaction`; the default, 2.0,
+    // demands that the recent rows compact by 2.0.
+    val spillCheckCases = Seq(
+      ("keys arrive together", "cast(id * 2 / 3 as bigint)", 300000),
+      ("keys recur", "pmod(xxhash64(id), 200000)", 220000),
+      ("hot keys", "if(id % 100 < 30, id % 10, id + 1000)", 300000))
+    spillCheckCases.foreach { case (name, key, fillRows) =>
+      runBenchmark(s"spill check with an Exchange, $name") {
+        val N = 8L << 20
+        val benchmark = new Benchmark(s"adaptive partial agg, spill check, $name", N,
+          output = output)
+        val query = () => spark.range(0, N, 1, 4).selectExpr(s"$key as k", "id as v")
+          .groupBy("k").agg("v" -> "sum")
+        val spillConf = Seq(
+          SQLConf.SHUFFLE_PARTITIONS.key -> "8",
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"65536, $fillRows")
+        for {
+          wholeStage <- Seq(true, false)
+          minCompactionToSpill <- Seq(None, Some("1.05"), Some("2.0"))
+        } {
+          val label = minCompactionToSpill.map(v => s"minCompactionToSpill = $v")
+            .getOrElse("adaptive = F")
+          benchmark.addCase(s"codegen = $wholeStage, $label") { _ =>
+            withSQLConf(
+              (Seq(
+                SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> wholeStage.toString,
+                SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key ->
+                  minCompactionToSpill.isDefined.toString) ++
+                minCompactionToSpill.map(
+                  SQLConf.ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL.key -> _) ++
+                fixedPlanConfs ++ spillConf): _*) {
+              query().noop()
+            }
+          }
+        }
+        benchmark.run()
+      }
+    }
   }
 
   private def distinctKeyedDf(N: Long): DataFrame =

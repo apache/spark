@@ -198,24 +198,36 @@ for the final aggregation to merge. Once pass-through is active the map is froze
 always comes before the passed-through rows: rows that collide with the frozen map are held in a
 queue behind it and flushed only after it drains, so a duplicate of a key already in the map still
 merges after that key's accumulated rows, keeping an order-sensitive aggregate such as
-`first`/`last` consistent with a run that never bypasses. The ratio is evaluated periodically, and
-again right before the aggregation map would spill, in which case the spill is skipped entirely.
-Because pass-through cannot be reversed, the evaluation before a spill also waits until the current
-map has processed `minRows` rows, so a map that fills sooner spills as usual instead of committing
-the task on a small sample. The SQL UI counts the passed-through rows in
-`number of pass-through output rows`. They are not timed: `time in aggregation build` covers the
+`first`/`last` consistent with a run that never bypasses. The SQL UI counts the passed-through rows
+in `number of pass-through output rows`. They are not timed: `time in aggregation build` covers the
 aggregation up to the point where pass-through starts, and preparing the aggregated map for output,
 which in a task that has spilled also writes the map to disk and merges it with the spilled data.
 
-Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
-pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in
-either direction. A favorable prefix can mask a later distinct-heavy tail, keeping the aggregation
-on until a spill restarts the accounting; conversely, a distinct-heavy prefix can trip the
-pass-through early and keep it tripped even where the rest of the input would aggregate well. To
-catch the former without waiting for a spill, raise `minCompaction` so the cumulative ratio trips
-the threshold on a weaker late turn (a higher threshold also bypasses more readily on other inputs).
-To avoid committing the task to pass-through on the latter, raise `minRows` so the evaluations
-start later.
+The ratio is evaluated periodically, every `minRows` rows, over the rows and keys of the current
+map epoch, against `minCompaction`. It is evaluated again right before the aggregation map would
+spill, against the larger of `minCompaction` and `minCompactionToSpill`. Keeping the aggregation
+at that point means aggregating the rest of the input through spills, which pays off only if that
+input keeps repeating keys, so this evaluation measures the recent rows: those processed since the
+periodic evaluation before last, against the keys they added. When keys repeat across the input,
+more of the recent rows find their key already in the map as it fills, so their ratio climbs above
+the epoch's; when each key's rows arrive together, the two ratios match. If the ratio is below the
+threshold, the map is not spilled and the rest of the input is passed through. In a task that has
+already spilled, the frozen map is still written out and merged with the spilled data at the end,
+but no later epoch spills. Because pass-through cannot be reversed, the evaluation before a spill
+also waits until the current map has processed `minRows` rows, so a map that fills sooner spills as
+usual instead of committing the task on a small sample.
+
+Once triggered, pass-through is not reversed for the rest of the task, so a skewed prefix biases
+the outcome in either direction. A favorable prefix can mask a later distinct-heavy tail, keeping
+the aggregation on until a spill restarts the accounting; conversely, a distinct-heavy prefix can
+trip the pass-through early and keep it tripped even where the rest of the input would aggregate
+well. To catch the former without waiting for a spill, raise `minCompaction` so the cumulative
+ratio trips the threshold on a weaker late turn (a higher threshold also bypasses more readily on
+other inputs). To avoid committing the task to pass-through on the latter, raise `minRows` so the
+evaluations start later, or, when the task commits at the evaluation before a spill, lower
+`minCompactionToSpill`. Raising `minRows` helps there only past the number of rows the map takes to
+fill. Pass-through also streams the later rows of keys the frozen map holds, so with a few hot keys
+each of them reaches the final aggregation row by row, on the one reducer that key hashes to.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>
@@ -247,10 +259,25 @@ start later.
     <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompaction</code></td>
     <td>1.05</td>
     <td>
-      The minimum compaction ratio required to keep the partial aggregation. A ratio of 10 means the
-      partial aggregation collapses ten rows into one key; when an evaluation finds the ratio below
-      this value the partial aggregation is bypassed for the rest of the input. A larger value
-      bypasses more aggressively.
+      The minimum compaction ratio required to keep the partial aggregation at the periodic
+      evaluation. A ratio of 10 means the partial aggregation collapses ten rows into one key; when
+      the periodic evaluation finds the ratio below this value the partial aggregation is bypassed
+      for the rest of the input. A larger value bypasses more aggressively. The evaluation before a
+      spill demands at least this value too.
+    </td>
+    <td>4.4.0</td>
+  </tr>
+  <tr>
+    <td><code>spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill</code></td>
+    <td>2.0</td>
+    <td>
+      The minimum compaction ratio required to keep the partial aggregation when its map is about to
+      spill, measured over the rows processed since the periodic evaluation before last. Keeping the
+      aggregation then means aggregating the rest of the input through spills, which pays off only
+      if that input keeps repeating keys. When the ratio is below the larger of this value and
+      <code>minCompaction</code>, the map is not spilled and the rest of the input is passed
+      through. The evaluation runs only once the current map has processed <code>minRows</code>
+      rows.
     </td>
     <td>4.4.0</td>
   </tr>
