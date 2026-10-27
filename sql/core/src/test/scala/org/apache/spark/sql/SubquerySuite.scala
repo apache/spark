@@ -2549,11 +2549,12 @@ class SubquerySuite extends SharedSparkSession
           "dec" -> "CAST(5 AS DECIMAL(10, 2))").foreach { case (column, literal) =>
           checkFileSourceScan(
             s"SELECT * FROM t1 WHERE $column IN ($literal, (SELECT max($column) FROM t2))", 1)
-          // Otherwise, the two scalar subqueries are merged into one.
+          val twoSubqueries = s"SELECT * FROM t1 WHERE $column IN " +
+            s"((SELECT min($column) FROM t2), (SELECT max($column) FROM t2))"
+          // `MergeSubplans` merges the two subqueries into one, unless subquery reuse is off.
+          checkFileSourceScan(twoSubqueries, 2)
           withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
-            checkFileSourceScan(
-              s"SELECT * FROM t1 WHERE $column IN " +
-                s"((SELECT min($column) FROM t2), (SELECT max($column) FROM t2))", 2)
+            checkFileSourceScan(twoSubqueries, 2)
           }
         }
 
