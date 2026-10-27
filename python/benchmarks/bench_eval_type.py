@@ -540,6 +540,7 @@ class _ArrowBatchedBenchMixin:
         "identity_udf": (lambda x: x, None, [0]),
         "stringify_udf": (lambda x: str(x), StringType(), [0]),
         "nullcheck_udf": (lambda x: x is not None, BooleanType(), [0]),
+        "concat3_udf": (lambda a, b, c: f"{a}{b}{c}", StringType(), [0, 1, 2]),
     }
     params = [list(_scenario_configs), list(_udfs)]
     param_names = ["scenario", "udf"]
