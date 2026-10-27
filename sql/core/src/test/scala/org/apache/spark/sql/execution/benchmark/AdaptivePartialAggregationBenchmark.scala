@@ -149,34 +149,38 @@ object AdaptivePartialAggregationBenchmark extends SqlBasedBenchmark {
     //     through at the first fill avoids spilling every epoch;
     //   - keys recur uniformly across the task (10 rows per key), so the final merge collapses
     //     them and keeping the aggregation shuffles a tenth of the rows;
-    //   - the same over twice the rows and keys, with the fast map off, so the map fills when it
-    //     holds 40% of a task's keys: the recent rows compact by about 1.5 and the default passes
-    //     the rest through, although each key repeats about 10 times;
+    //   - the same over twice the rows and keys, so the maps fill when they hold 40% of a task's
+    //     keys: the recent rows compact by about 1.5 and the default passes the rest through,
+    //     although each key repeats about 10 times. It runs with the fast map off, and with it on,
+    //     where the fast map's keys never spill. The interpreted path has no fast map, so the
+    //     latter runs with codegen only;
     //   - 10 hot keys hold 30% of the rows and the rest are unique, so passing through avoids the
     //     spills but sends every hot-key row to the reducer of its key.
     // `minCompactionToSpill = 1.05` judges the spill check by `minCompaction`; the default, 2.0,
     // demands that the recent rows compact by 2.0.
     case class SpillCheckCase(name: String, key: String, fillRows: Int,
-        numRows: Long = 8L << 20, twoLevelMap: Boolean = true)
+        numRows: Long = 8L << 20, twoLevelMap: Boolean = true, codegenOnly: Boolean = false)
     val spillCheckCases = Seq(
       SpillCheckCase("keys arrive together", "cast(id * 2 / 3 as bigint)", 300000),
       SpillCheckCase("keys recur", "pmod(xxhash64(id), 200000)", 220000),
-      SpillCheckCase("keys recur, map holds 40% of them", "pmod(xxhash64(id), 400000)", 204320,
-        numRows = 16L << 20, twoLevelMap = false),
+      SpillCheckCase("keys recur, map holds 40% of them, fast map off",
+        "pmod(xxhash64(id), 400000)", 204330, numRows = 16L << 20, twoLevelMap = false),
+      SpillCheckCase("keys recur, maps hold 40% of them, fast map on",
+        "pmod(xxhash64(id), 400000)", 204330, numRows = 16L << 20, codegenOnly = true),
       SpillCheckCase("hot keys", "if(id % 100 < 30, id % 10, id + 1000)", 300000))
-    spillCheckCases.foreach { case SpillCheckCase(name, key, fillRows, numRows, twoLevelMap) =>
-      runBenchmark(s"spill check with an Exchange, $name") {
-        val N = numRows
-        val benchmark = new Benchmark(s"adaptive partial agg, spill check, $name", N,
+    spillCheckCases.foreach { c =>
+      runBenchmark(s"spill check with an Exchange, ${c.name}") {
+        val N = c.numRows
+        val benchmark = new Benchmark(s"adaptive partial agg, spill check, ${c.name}", N,
           output = output)
-        val query = () => spark.range(0, N, 1, 4).selectExpr(s"$key as k", "id as v")
+        val query = () => spark.range(0, N, 1, 4).selectExpr(s"${c.key} as k", "id as v")
           .groupBy("k").agg("v" -> "sum")
         val spillConf = Seq(
           SQLConf.SHUFFLE_PARTITIONS.key -> "8",
-          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> twoLevelMap.toString,
-          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"65536, $fillRows")
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> c.twoLevelMap.toString,
+          "spark.sql.TungstenAggregate.testFallbackStartsAt" -> s"65536, ${c.fillRows}")
         for {
-          wholeStage <- Seq(true, false)
+          wholeStage <- if (c.codegenOnly) Seq(true) else Seq(true, false)
           minCompactionToSpill <- Seq(None, Some("1.05"), Some("2.0"))
         } {
           val label = minCompactionToSpill.map(v => s"minCompactionToSpill = $v")
