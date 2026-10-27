@@ -468,9 +468,14 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       Using.resource(getConnection()) { conn =>
         conn.prepareStatement(
           s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 BYTE))").executeUpdate()
+        // Insert via JDBC. A Spark INSERT would pad the 2-byte character to
+        // CHAR width in characters (5 bytes) and Oracle would raise ORA-12899.
+        // scalastyle:off nonascii
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1, 'ä'), (2, 'äb'), (3, 'Y')").executeUpdate()
+        // scalastyle:on nonascii
       }
       // scalastyle:off nonascii
-      sql(s"INSERT INTO $table VALUES (1, 'ä'), (2, 'äb'), (3, 'Y')")
       val eq = sql(s"SELECT id FROM $table WHERE flag = 'ä'")
       checkFilterPushed(eq)
       assert(eq.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(1))
