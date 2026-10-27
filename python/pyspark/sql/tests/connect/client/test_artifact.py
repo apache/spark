@@ -24,10 +24,17 @@ import zlib
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import assert_true, lit, udf
-from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
+from pyspark.testing.connectutils import (
+    ReusedConnectTestCase,
+    connect_requirement_message,
+    should_test_connect,
+)
 from pyspark.util import is_remote_only
 
 if should_test_connect:
+    import grpc
+
+    import pyspark.sql.connect.proto as proto
     from pyspark.errors import SparkRuntimeException
     from pyspark.sql.connect.client import DefaultChannelBuilder
     from pyspark.sql.connect.client.artifact import ArtifactManager
@@ -453,6 +460,64 @@ class ArtifactTests(ArtifactTestsMixin, ReusedConnectTestCase):
                 self.artifact_manager.add_artifacts(
                     os.path.join(d, "not_existing"), file=True, pyfile=False, archive=False
                 )
+
+
+@unittest.skipIf(not should_test_connect, connect_requirement_message)
+class ArtifactObservedSessionIdTests(unittest.TestCase):
+    class _RecordingStub:
+        def __init__(self):
+            self.requests = []
+
+        def ArtifactStatus(self, request, metadata=None, timeout=None):
+            self.requests.append(request)
+            return proto.ArtifactStatusesResponse()
+
+    def test_requests_carry_observed_server_session_id(self):
+        observed = [None]
+        manager = ArtifactManager(
+            None,
+            "session",
+            grpc.insecure_channel("localhost:1"),
+            [],
+            observed_server_session_id=lambda: observed[0],
+        )
+        stub = self._RecordingStub()
+        manager._stub = stub
+        field = "client_observed_server_side_session_id"
+        with tempfile.TemporaryDirectory(prefix="observed_session_id") as d:
+            small = os.path.join(d, "small.jar")
+            large = os.path.join(d, "large.jar")
+            with open(small, "wb") as f:
+                f.write(b"small")
+            with open(large, "wb") as f:
+                f.write(b"x" * (ArtifactManager.CHUNK_SIZE * 2 + 1))
+
+            def create_requests():
+                return [
+                    req
+                    for path in (small, large)
+                    for req in manager._create_requests(
+                        path, pyfile=False, archive=False, file=False
+                    )
+                ]
+
+            # Before the client has observed a server-side session id, none is sent.
+            manager.is_cached_artifact("abc")
+            manager.get_cached_artifacts(["abc"])
+            self.assertTrue(all(not r.HasField(field) for r in create_requests()))
+            self.assertTrue(all(not r.HasField(field) for r in stub.requests))
+
+            observed[0] = "observed"
+            stub.requests.clear()
+            manager.is_cached_artifact("abc")
+            manager.get_cached_artifacts(["abc"])
+            requests = create_requests()
+            self.assertTrue(any(r.HasField("batch") for r in requests))
+            self.assertTrue(any(r.HasField("begin_chunk") for r in requests))
+            self.assertTrue(any(r.HasField("chunk") for r in requests))
+            self.assertEqual(len(stub.requests), 2)
+            for r in requests + stub.requests:
+                self.assertEqual(getattr(r, field), "observed")
 
 
 if __name__ == "__main__":

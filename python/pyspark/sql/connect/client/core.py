@@ -958,6 +958,7 @@ class SparkConnectClient(object):
             artifact_manager_metadata,
             add_artifacts_timeout=self._rpc_deadlines.add_artifacts,
             artifact_status_timeout=self._rpc_deadlines.artifact_status,
+            observed_server_session_id=lambda: self._server_session_id,
         )
         self._use_reattachable_execute = use_reattachable_execute
         self._allow_arrow_batch_chunking = allow_arrow_batch_chunking

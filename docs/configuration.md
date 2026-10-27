@@ -3874,6 +3874,14 @@ Command types in proto.</td>
   <td>The interval at which the progress of a query is reported to the client. If the value is set to a negative value the progress reports will be disabled.</td>
   <td>4.0.0</td>
 </tr>
+<tr>
+  <td><code>spark.connect.session.allowReconnectAfterClose</code></td>
+  <td>
+    false
+  </td>
+  <td>When true, the session id can be reused after this session is closed, for example on inactivity expiry. The id stays reserved, and requests fail with <code>INVALID_HANDLE.SESSION_CLOSED</code>, until the close finishes. After that, a client that used the closed session gets <code>INVALID_HANDLE.SESSION_CHANGED</code> if it sends its observed server-side session id, as the built-in Python and Scala clients do. Such a client must create a new SparkSession with the same session id. A client that does not send it silently gets a new session. The new session is empty: server-side state such as registered UDFs, temporary views, temporary functions and the current catalog is gone and must be rebuilt, for example by rerunning notebook paragraphs. The new session starts with default configurations, so it must set this configuration again to keep this behavior. Do not stop or release the old SparkSession once another client may have created a new session with the same session id, because releasing a session does not check the server-side session id and would close the new session. Only set this when the client can rebuild its session state. This is a session configuration, set by the client on its session.</td>
+  <td>4.4.0</td>
+</tr>
 </table>
 
 ### Security
