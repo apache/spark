@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, ReplaceCurrentLike, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
@@ -375,9 +376,11 @@ object ResolveDefaultColumns extends QueryErrorsBase
             "", Seq(target), LocalRelation(input), byName = false, nullCheckConf)
             .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
           val checked = output.transform {
-            case attr: AttributeReference if attr.exprId == input.exprId => expr
+            case attr: AttributeReference if attr.exprId == input.exprId =>
+              BoundReference(0, input.dataType, input.nullable)
           }
-          DeferredDefaultValue(Cast(checked, coerced.dataType, Some(conf.sessionLocalTimeZone)))
+          DeferredDefaultValue(
+            expr, Cast(checked, coerced.dataType, Some(conf.sessionLocalTimeZone)))
         }
       }
     }.getOrElse(coerced)
@@ -385,20 +388,25 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   private def normalizeCurrentTimeDefault(expression: Expression): Expression = {
     val dependencies = new IdentityHashMap[Expression, java.lang.Boolean]
-    def normalize(expr: Expression, isConditionalBranch: Boolean): Expression = {
+    def normalize(expr: Expression): Expression = {
       if (isTimeToTimestampCast(expr)) {
         expr
       } else if (containsDeferredClock(expr, dependencies)) {
         // Keep clock-dependent nodes evaluable: type-defining arguments such as struct names
         // can be evaluated when their parent's datatype is requested during analysis.
-        val inBranch = isConditionalBranch || expr.isInstanceOf[ConditionalExpression]
-        expr.mapChildren(normalize(_, inBranch))
+        expr.mapChildren(normalize)
       } else {
-        ConstantFolding.constantFolding(
-          SpecialDatetimeValues.applyForExpression(expr), isConditionalBranch)
+        // The original whole expression passed eager validation. A detached subtree may be
+        // skipped by a boolean, null, or conditional guard, so these rewrites are speculative.
+        try {
+          ConstantFolding.constantFolding(
+            SpecialDatetimeValues.applyForExpression(expr), isConditionalBranch = true)
+        } catch {
+          case NonFatal(_) => expr
+        }
       }
     }
-    normalize(expression, isConditionalBranch = false)
+    normalize(expression)
   }
 
   private def isTimeToTimestampCast(expression: Expression): Boolean = expression match {
@@ -431,13 +439,20 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   // Eager validation established that this default is statement-constant. Its generated nested
   // checks may be nonfoldable, but the complete checked value can be materialized after clock
-  // binding and special datetime rewrites, before it reaches individual input rows.
-  private case class DeferredDefaultValue(child: Expression) extends TaggingExpression {
-    override def foldable: Boolean = !containsDeferredClock(child)
-    override def sql: String = child.sql
+  // binding and special datetime rewrites, before it reaches individual input rows. Evaluate the
+  // source once so each generated field check reads the same value rather than reconstructing it.
+  private case class DeferredDefaultValue(left: Expression, right: Expression)
+      extends BinaryExpression with CodegenFallback {
+    override def dataType: DataType = right.dataType
+    override def nullable: Boolean = right.nullable
+    override def foldable: Boolean = !children.exists(containsDeferredClock(_))
+    override def sql: String = left.sql
 
-    override protected def withNewChildInternal(newChild: Expression): DeferredDefaultValue =
-      copy(child = newChild)
+    override def eval(input: InternalRow): Any = right.eval(InternalRow(left.eval(input)))
+
+    override protected def withNewChildrenInternal(
+        newLeft: Expression,
+        newRight: Expression): DeferredDefaultValue = copy(left = newLeft, right = newRight)
   }
 
   /**

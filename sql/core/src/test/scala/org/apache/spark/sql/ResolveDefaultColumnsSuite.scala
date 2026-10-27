@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import java.time.Instant
+import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.SparkRuntimeException
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayTransform, AttributeReference, CurrentTime, EqualTo, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayRepeat, ArrayTransform, AttributeReference, CurrentTime, EqualTo, Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceCurrentLike, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
@@ -30,7 +32,7 @@ import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, Reso
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DateType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -149,6 +151,47 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
     }
   }
 
+  namedGridTest("current-time defaults preserve short-circuit guards")(Map(
+    "true-left OR" -> (BooleanType,
+      "current_date() IS NOT NULL OR 1 / 0 > 0"),
+    "false-left AND" -> (BooleanType,
+      "current_date() IS NULL AND 1 / 0 > 0"),
+    "null-left comparison" -> (BooleanType,
+      "IF(current_date() IS NOT NULL, CAST(NULL AS INT), 1) = 1 / 0"),
+    "special datetime cast" -> (TimestampType,
+      "CAST(IF(current_date() IS NOT NULL, 'epoch', " +
+        "CAST(CAST(CAST(1 / 0 AS STRING) AS TIMESTAMP) AS STRING)) AS TIMESTAMP)"))) {
+    case (dataType, defaultSQL) =>
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "true",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
+        assert(ResolveDefaultColumns.analyze(field, "INSERT").dataType == dataType)
+        val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+        val reference = sql(s"SELECT $defaultSQL").queryExecution.analyzed
+          .asInstanceOf[Project].projectList.head
+        val instant = Instant.parse("2000-01-01T12:34:56.123456Z")
+        val actual = SpecialDatetimeValues.applyForExpression(
+          ComputeCurrentTime.applyForExpression(default, instant)).eval()
+        val expected = SpecialDatetimeValues.applyForExpression(
+          ComputeCurrentTime.applyForExpression(reference, instant)).eval()
+        assert(actual == expected)
+      }
+  }
+
+  test("current-time defaults reject evaluated invalid operands") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val field = StructField("value", BooleanType)
+        .withCurrentDefaultValue("current_date() IS NULL OR 1 / 0 > 0")
+      val resolvers = Seq(
+        () => ResolveDefaultColumns.analyze(field, "INSERT"),
+        () => ResolveDefaultColumns.getDefaultValueExprOrNullLit(field))
+      resolvers.foreach { resolve =>
+        assert(intercept[SparkArithmeticException](resolve()).getCondition == "DIVIDE_BY_ZERO")
+      }
+    }
+  }
+
   test("current-time defaults retain unary clocks until snapshot binding") {
     withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "true") {
       val field = StructField("value", BooleanType)
@@ -240,6 +283,70 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       assert(!materialized.exists(_.isInstanceOf[ArrayTransform]))
       assert(materialized.dataType == dataType)
     }
+
+    for {
+      ansiEnabled <- Seq(true, false)
+      storeAssignmentPolicy <- Seq("ANSI", "LEGACY")
+    } {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> storeAssignmentPolicy,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val field = StructField("a", dataType).withCurrentDefaultValue(defaultSQL)
+        val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+        val past = Instant.parse("1800-01-01T12:34:56.123456Z")
+        val nullDefault = SpecialDatetimeValues.applyForExpression(
+          ComputeCurrentTime.applyForExpression(default, past))
+        assert(intercept[SparkRuntimeException](nullDefault.eval()).getCondition ==
+          "NOT_NULL_ASSERT_VIOLATION")
+      }
+    }
+  }
+
+  gridTest("current-time defaults construct checked structs once")(
+      for (width <- Seq(2, 16); arraySize <- Seq(8, 1000)) yield (width, arraySize)) {
+    case (width, arraySize) =>
+      withSQLConf(
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI",
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val dataType = StructType(Seq(
+          StructField("required", TimestampType, nullable = false),
+          StructField("payload", ArrayType(TimestampType, containsNull = false),
+            nullable = false)) ++
+          (2 until width).map(i => StructField(s"f$i", IntegerType, nullable = false)))
+        val fields = Seq(
+          "'required', CAST(IF(current_date() > DATE'1900-01-01', " +
+            "'epoch', CAST(NULL AS STRING)) AS TIMESTAMP)",
+          s"'payload', array_repeat(current_timestamp(), $arraySize)") ++
+          (2 until width).map(i => s"'f$i', $i")
+        val defaultSQL = s"named_struct(${fields.mkString(", ")})"
+        val field = StructField("s", dataType).withCurrentDefaultValue(defaultSQL)
+        val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+        val counter = new AtomicInteger()
+        case class CountedDefault(child: Expression)
+            extends UnaryExpression with CodegenFallback {
+          override def nullable: Boolean = child.nullable
+          override def dataType: DataType = child.dataType
+          override def eval(input: InternalRow): Any = {
+            counter.incrementAndGet()
+            child.eval(input)
+          }
+          override protected def withNewChildInternal(newChild: Expression): CountedDefault =
+            copy(child = newChild)
+        }
+        val counted = default.transformUp {
+          case array: ArrayRepeat => CountedDefault(array)
+        }
+        val instant = Instant.parse("2000-01-01T12:34:56.123456Z")
+        val timedDefault = SpecialDatetimeValues.applyForExpression(
+          ComputeCurrentTime.applyForExpression(counted, instant))
+        counter.set(0)
+        val value = timedDefault.eval().asInstanceOf[InternalRow]
+        assert(counter.get() == 1)
+        assert(value.getLong(0) == 0L)
+        assert(value.getArray(1).numElements() == arraySize)
+        assert(timedDefault.dataType == dataType)
+      }
   }
 
   test("current-time defaults preserve nested NOT NULL fields") {
@@ -305,12 +412,18 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
               Column.create("explicit_ts", TimestampType))
             catalog.createTable(Identifier.of(Array.empty, "t"),
               new TableInfo.Builder().withColumns(columns).build())
-            sql(s"INSERT INTO $tableName SELECT 1, DEFAULT, current_timestamp()")
-            sql(s"INSERT INTO $tableName (i, explicit_ts) SELECT 2, current_timestamp()")
+            sql(s"INSERT INTO $tableName VALUES (1, DEFAULT, current_timestamp()), " +
+              "(2, DEFAULT, current_timestamp())")
+            sql(s"INSERT INTO $tableName (i, explicit_ts) VALUES " +
+              "(3, current_timestamp()), (4, current_timestamp())")
+            sql(s"INSERT INTO $tableName " +
+              "SELECT CAST(id AS INT), DEFAULT, current_timestamp() FROM range(5, 7)")
+            sql(s"INSERT INTO $tableName (i, explicit_ts) " +
+              "SELECT CAST(id AS INT), current_timestamp() FROM range(7, 9)")
             checkAnswer(
               sql(s"SELECT i, s.a = TIMESTAMP'1970-01-01 00:00:00', " +
                 s"s.b = explicit_ts FROM $tableName"),
-              Seq(Row(1, true, true), Row(2, true, true)))
+              (1 to 8).map(i => Row(i, true, true)))
           }
         }
       }
