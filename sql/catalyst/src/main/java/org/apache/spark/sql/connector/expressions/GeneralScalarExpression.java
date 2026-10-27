@@ -439,7 +439,8 @@ import org.apache.spark.sql.internal.connector.ExpressionWithToString;
  *        <code>IN</code> against a string of length <code>len</code>.
  *        A source may compile it as the raw value only if it compares that
  *        value with a <code>len</code>-character string using blank-padded
- *        (PAD SPACE) semantics.</li>
+ *        (PAD SPACE) semantics, and its stored values never exceed
+ *        <code>len</code> characters.</li>
  *    <li>Since version: 4.4.0</li>
  *   </ul>
  *  </li>

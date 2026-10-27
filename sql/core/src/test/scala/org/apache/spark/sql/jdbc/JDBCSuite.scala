@@ -27,6 +27,7 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -48,6 +49,7 @@ import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, Project
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScanBuilder
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
@@ -1656,6 +1658,8 @@ class JDBCSuite extends SharedSparkSession {
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
       Some(ArrayType(CharType(64))))
+    assert(Postgres.getCatalystType(java.sql.Types.CHAR, "char", 1, md) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.CHAR, "bpchar", 5, md) === None)
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -2386,6 +2390,41 @@ class JDBCSuite extends SharedSparkSession {
 
     val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     assert(oracle.compileExpression(rpadEq).isEmpty)
+
+    val y = LiteralValue(UTF8String.fromString("Y    "), StringType)
+    val n = LiteralValue(UTF8String.fromString("N    "), StringType)
+    val inSmall = new Predicate("IN", Array[V2Expression](pad, y, n))
+    assert(oracle.compileExpression(inSmall).get === """"flag" IN ('Y    ', 'N    ')""")
+    val notIn = new Predicate("NOT", Array[V2Expression](inSmall))
+    assert(oracle.compileExpression(notIn).get === """NOT ("flag" IN ('Y    ', 'N    '))""")
+
+    val many = (1 to 1001).map { i =>
+      LiteralValue(UTF8String.fromString(f"$i%05d"), StringType)
+    }
+    val inLarge = new Predicate("IN", (pad +: many).toArray[V2Expression])
+    val largeSql = oracle.compileExpression(inLarge).get
+    assert(largeSql.startsWith("(") && largeSql.endsWith(")"))
+    assert(largeSql.contains(" OR "))
+    assert(" IN \\(".r.findAllMatchIn(largeSql).length === 2)
+    many.foreach { lit =>
+      assert(largeSql.contains(lit.value.toString))
+    }
+
+    val leftoverEq = new Predicate("=",
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val isNull = new Predicate("IS_NULL", Array[V2Expression](FieldReference("flag")))
+    val options = new JDBCOptions("jdbc:derby:memory:db", "t", Map.empty[String, String])
+    val builder = JDBCScanBuilder(spark, new StructType().add("flag", StringType), options)
+    val logAppender = new LogAppender("compile V2")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      val leftover = builder.pushPredicates(Array(leftoverEq, isNull))
+      assert(leftover.exists(_.name() == "="))
+      assert(!leftover.exists(_.name() == "IS_NULL"))
+      assert(builder.pushedPredicates().exists(_.name() == "IS_NULL"))
+    }
+    assert(!logAppender.loggingEvents.exists { ev =>
+      ev.getMessage.getFormattedMessage.contains("Error occurs while compiling V2 expression")
+    })
   }
 
   test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {

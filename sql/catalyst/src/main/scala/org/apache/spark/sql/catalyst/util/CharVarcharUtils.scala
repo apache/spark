@@ -45,8 +45,10 @@ object CharVarcharUtils extends Logging with SparkCharVarcharUtils {
   /**
    * V2 function name for CHAR read-side padding. Distinct from SQL `RPAD` so connectors that
    * already allowlist `RPAD` for explicit `rpad()` do not inherit CHAR-scan rewrite. Emitted
-   * only for = / <=> / <> / IN against a string of the CHAR length. JDBC may compile it as
-   * the column when CHAR storage is already padded.
+   * only for equality, null-safe equality, inequality, or IN against a string of the CHAR
+   * length. JDBC may compile it as the column only when the remote compares CHAR
+   * blank-padded (see `JdbcDialect.isSupportedFunction`) and stored values never exceed
+   * that length.
    */
   private[sql] val V2_CHAR_READ_SIDE_PADDING = "CHAR_READ_SIDE_PADDING"
 

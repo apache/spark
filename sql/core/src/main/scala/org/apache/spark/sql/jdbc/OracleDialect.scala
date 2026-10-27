@@ -121,6 +121,29 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
+    override def visitIn(v: String, list: java.util.List[String]): String = {
+      if (list.size() <= 1000) {
+        super.visitIn(v, list)
+      } else {
+        val chunks = new java.util.ArrayList[String]()
+        var i = 0
+        while (i < list.size()) {
+          val end = Math.min(i + 1000, list.size())
+          val ins = new java.lang.StringBuilder(v).append(" IN (")
+          var j = i
+          while (j < end) {
+            if (j > i) ins.append(", ")
+            ins.append(list.get(j))
+            j += 1
+          }
+          ins.append(")")
+          chunks.add(ins.toString)
+          i = end
+        }
+        chunks.toArray.mkString("(", " OR ", ")")
+      }
+    }
+
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
         case (lit: Literal[_], _) if lit.dataType == BinaryType =>

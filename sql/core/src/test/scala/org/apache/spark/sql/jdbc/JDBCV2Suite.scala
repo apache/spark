@@ -2066,6 +2066,13 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       checkFiltersRemoved(nseq)
       checkAnswer(nseq, Seq(Row(1)))
 
+      val neq = sql(s"SELECT id FROM $table WHERE flag <> 'Y'")
+      checkFiltersRemoved(neq)
+      checkPushedInfo(neq,
+        "PushedFilters: [flag IS NOT NULL, " +
+          "NOT ((CHAR_READ_SIDE_PADDING(flag, 5, ' ')) = 'Y    ')]")
+      checkAnswer(neq, Seq(Row(2), Row(3), Row(5)))
+
       val longLit = sql(s"SELECT id FROM $table WHERE flag = 'YYYYYY'")
       checkFiltersRemoved(longLit, removed = false)
       checkAnswer(longLit, Seq.empty)

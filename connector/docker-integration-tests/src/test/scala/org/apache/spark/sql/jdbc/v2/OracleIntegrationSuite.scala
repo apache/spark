@@ -460,4 +460,27 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       assert(nullRows(0).getDecimal(0).intValueExact() === 2)
     }
   }
+
+  test("SPARK-60479: CHAR(n BYTE) multibyte equality is pushed") {
+    val tableName = caseConvert("char_byte")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 BYTE))").executeUpdate()
+      }
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'ä'), (2, 'äb'), (3, 'Y')")
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'ä'")
+      checkFilterPushed(eq)
+      assert(eq.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(1))
+      val eqAb = sql(s"SELECT id FROM $table WHERE flag = 'äb'")
+      checkFilterPushed(eqAb)
+      assert(eqAb.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(2))
+      // scalastyle:on nonascii
+      val eqY = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eqY)
+      assert(eqY.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(3))
+    }
+  }
 }

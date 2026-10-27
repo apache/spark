@@ -80,6 +80,9 @@ private case class PostgresDialect()
         // timetz represents time with time zone, currently it maps to Types.TIME.
         // We need to change to Types.TIME_WITH_TIMEZONE if the upstream changes.
         Some(TimestampType)
+      case Types.CHAR if "char".equalsIgnoreCase(typeName) =>
+        // PostgreSQL internal "char" (single byte) compares exactly, not PAD SPACE.
+        Some(StringType)
       case Types.CHAR if "bpchar".equalsIgnoreCase(typeName) && size == Int.MaxValue =>
         // bpchar with unspecified length same as text in postgres with blank-trimmed
         Some(StringType)
@@ -118,7 +121,8 @@ private case class PostgresDialect()
     case "float8" => Some(DoubleType)
     case "varchar" => Some(VarcharType(precision))
     case "bpchar" if precision == Int.MaxValue => Some(StringType)
-    case "char" | "bpchar" => Some(CharType(precision))
+    case "char" => Some(StringType)
+    case "bpchar" => Some(CharType(precision))
     case "text" | "cidr" | "inet" | "json" | "jsonb" | "uuid" |
          "xml" | "tsvector" | "tsquery" | "macaddr" | "macaddr8" | "txid_snapshot" | "point" |
          "line" | "lseg" | "box" | "path" | "polygon" | "circle" | "pg_lsn" | "varbit" |

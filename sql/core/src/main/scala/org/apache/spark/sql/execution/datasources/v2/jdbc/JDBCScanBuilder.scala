@@ -22,7 +22,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
-import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
@@ -66,11 +67,25 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
+  private def containsUnsupportedCharPad(pred: Predicate): Boolean = {
+    if (dialect.isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
+      false
+    } else {
+      def walk(e: Expression): Boolean = e match {
+        case g: GeneralScalarExpression
+            if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => true
+        case _ => Option(e.children()).exists(_.exists(walk))
+      }
+      walk(pred)
+    }
+  }
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
+      val (unsupportedCharPad, rest) = predicates.partition(containsUnsupportedCharPad)
+      val (pushed, unSupported) = rest.partition(dialect.compileExpression(_).isDefined)
       this.pushedPredicate = pushed
-      unSupported
+      unSupported ++ unsupportedCharPad
     } else {
       predicates
     }
