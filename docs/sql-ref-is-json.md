@@ -22,7 +22,8 @@ license: |
 ### Description
 
 The `IS JSON` predicate tests whether a string is a well-formed JSON text, optionally of a specific
-top-level type. It implements the ANSI SQL:2016 feature T801 and is available since Spark 4.4.0.
+top-level type. It implements the `IS JSON` predicate of the ANSI SQL:2016 feature T821 (Basic
+SQL/JSON query operators) and is available since Spark 4.4.0.
 
 ### Syntax
 
@@ -76,10 +77,26 @@ whitespace. Unlike the lenient parsing used by functions such as `from_json` and
 * unescaped control characters (for example, a raw newline) inside a string;
 * input that is not valid UTF-8;
 * string values or field names that contain an unpaired UTF-16 surrogate escape, such as
-  `"\uD835"`.
+  `"\uD835"`. The RFC 8259 grammar allows such escapes, but they do not denote well-formed
+  Unicode text; rejecting them is a deliberate rule stricter than RFC 8259, matching I-JSON
+  (RFC 7493).
 
 The `WITH UNIQUE KEYS` and `WITHOUT UNIQUE KEYS` qualifiers of the SQL standard are not supported.
 Objects with duplicate field names are accepted.
+
+### Limits
+
+Checking the input is subject to the following limits, which match those of `parse_json`:
+
+* nesting depth of objects and arrays: 1000;
+* length of a number: 1000 characters;
+* length of a string value: 20,000,000 characters;
+* length of a field name: 50,000 characters.
+
+If checking the input requires going beyond one of these limits, the predicate does not return
+`true` or `false`; instead the query fails with an `IS_JSON_INPUT_LIMIT_EXCEEDED` error, as
+`parse_json` also fails on such input. The error names the limit that was exceeded and shows the
+beginning of the input.
 
 ### Examples
 

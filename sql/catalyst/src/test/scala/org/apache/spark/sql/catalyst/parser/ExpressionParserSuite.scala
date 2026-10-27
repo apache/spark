@@ -312,8 +312,22 @@ class ExpressionParserSuite extends AnalysisTest {
     // whitespace or comments separate the keyword from '<'.
     assertEqual("cast(a as array<array<int>>) = b >> 1",
       Cast($"a", ArrayType(ArrayType(IntegerType))) === ShiftRight($"b", 1))
-    assertEqual("cast(a as map /* c */ <int, array -- c\n <int>>) = b >> 1",
-      Cast($"a", MapType(IntegerType, ArrayType(IntegerType))) === ShiftRight($"b", 1))
+    // Each comment form precedes every type keyword, so the closers only split if skipping that
+    // comment form works: a single counted keyword would be enough to keep `>>` apart.
+    Seq("/* c */", "/* a /* b */ c */", "-- c\n", "-- c\r\n", "-- c\r", "-- c \\\n c\n")
+      .foreach { c =>
+        assertEqual(s"cast(a as array $c<array $c<int>>) = b >> 1",
+          Cast($"a", ArrayType(ArrayType(IntegerType))) === ShiftRight($"b", 1))
+        assertEqual(s"cast(a as array $c<array $c<array $c<int>>>) = b >>> 1",
+          Cast($"a", ArrayType(ArrayType(ArrayType(IntegerType)))) ===
+            ShiftRightUnsigned($"b", 1))
+        assertEqual(s"cast(a as map $c<int, map $c<int, int>>) = b >> 1",
+          Cast($"a", MapType(IntegerType, MapType(IntegerType, IntegerType))) ===
+            ShiftRight($"b", 1))
+        assertEqual(s"cast(a as struct $c<x: map $c<int, array $c<int>>>) = b >>> 1",
+          Cast($"a", new StructType().add("x", MapType(IntegerType, ArrayType(IntegerType)))) ===
+            ShiftRightUnsigned($"b", 1))
+      }
   }
 
   test("binary arithmetic expressions") {
