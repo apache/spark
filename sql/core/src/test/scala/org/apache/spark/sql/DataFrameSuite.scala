@@ -2905,6 +2905,29 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60602: a throwable filter condition is not evaluated ahead of its order") {
+    val f = udf((i: Long) => i)
+    val g = udf((i: Long) => i)
+    // `assert_true(g > 5)` only holds for the ids the first conjunct (`f + g > 10`) keeps, so the
+    // `AND` short-circuit must keep it away from the other rows however the filter is pushed.
+    def splitQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g")
+      .where($"f" + $"g" > 10 && assert_true($"g" > 5).isNull)
+    // The same with the throwable conjunct referencing no projected UDF at all.
+    def cheapQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" > 5 && assert_true($"id" > 5).isNull)
+    for (codegen <- Seq(true, false); split <- Seq(true, false); avoid <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        checkAnswer(splitQuery(), (6L until 10L).map(i => Row(i, i, i)))
+        checkAnswer(cheapQuery(), (6L until 10L).map(i => Row(i, i)))
+      }
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))

@@ -599,6 +599,77 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60602: a throwable condition is not split off ahead of the conditions before it") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where($"f" =!= $"g" && ($"g" || raiseError))
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // On cost alone (g || raiseError) would go lowest, raising on rows (f != g) filters out.
+    // It stays in the top filter instead, which leaves nothing worth splitting.
+    comparePlans(optimized, originalQuery)
+  }
+
+  test("SPARK-60602: a throwable condition does not keep later conditions from being split off") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where(($"g" || raiseError) && $"f")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Filtering on f first only leaves the throwable condition fewer rows to raise on.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .where($"f")
+      .select($"a", $"f", $"e".rlike("other") as "g", $"b")
+      .where($"g" || raiseError)
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60602: a cheap throwable condition is not pushed ahead of an expensive one") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    Seq(true, false).foreach { split =>
+      withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        val originalQuery = testStringRelation
+          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .where($"f" && ($"a" > 5 || raiseError) && $"b" > 1)
+          .analyze
+
+        val optimized = Optimize.execute(originalQuery)
+
+        // Only the non-throwable cheap condition moves below the expensive one.
+        val correctAnswer = testStringRelation
+          .where($"b" > 1)
+          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .where($"f" && ($"a" > 5 || raiseError))
+          .analyze
+
+        comparePlans(optimized, correctAnswer)
+
+        // Written ahead of every expensive condition, it is pushed as usual.
+        val throwableFirst = testStringRelation
+          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .where(($"a" > 5 || raiseError) && $"f")
+          .analyze
+
+        val throwableFirstAnswer = testStringRelation
+          .where($"a" > 5 || raiseError)
+          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .where($"f")
+          .analyze
+
+        comparePlans(Optimize.execute(throwableFirst), throwableFirstAnswer)
+      }
+    }
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation
