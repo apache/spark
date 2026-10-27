@@ -376,15 +376,15 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // as-is: reparse re-derives implicit FORMAT JSON.
     val spliced = JsonArray(
       Seq(inner), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    // Both levels carry a default `RETURNING STRING`: a bare nested splice reparses as a routable
+    // Both levels render the default `ABSENT ON NULL`: a bare nested splice reparses as a routable
     // (shadowable) clause-free call, so each level needs the clause to stay bound to the built-in.
-    assert(spliced.sql == "JSON_ARRAY(JSON_ARRAY(1 RETURNING STRING) RETURNING STRING)")
+    assert(spliced.sql == "JSON_ARRAY(JSON_ARRAY(1 ABSENT ON NULL) ABSENT ON NULL)")
     // But a constructor inlined into a quoted (formatJson = false) position must be wrapped so
     // reparse keeps it quoted -- otherwise ["[1]"] would round-trip to [[1]].
     val quoted = JsonArray(
       Seq(inner), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(quoted.sql ==
-      "JSON_ARRAY(CAST(JSON_ARRAY(1 RETURNING STRING) AS STRING) RETURNING STRING)")
+      "JSON_ARRAY(CAST(JSON_ARRAY(1 ABSENT ON NULL) AS STRING) ABSENT ON NULL)")
   }
 
   test("SPARK-59243: SQL of a spliced aliased child drops the alias") {
@@ -393,17 +393,17 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val aliased = JsonArray(
       Seq(Alias(inner, "x")()), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent,
       StringType)
-    assert(aliased.sql == "JSON_ARRAY(JSON_ARRAY(1 RETURNING STRING) RETURNING STRING)")
+    assert(aliased.sql == "JSON_ARRAY(JSON_ARRAY(1 ABSENT ON NULL) ABSENT ON NULL)")
     checkAnswer(sql(s"SELECT ${aliased.sql}"), Row("[[1]]"))
     val literal = JsonArray(
       Seq(Alias(Literal("[1]"), "x")()), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent,
       StringType)
-    assert(literal.sql == "JSON_ARRAY('[1]' FORMAT JSON)")
+    assert(literal.sql == "JSON_ARRAY('[1]' FORMAT JSON ABSENT ON NULL)")
     val collated = JsonArray(
       Seq(Collate(Alias(inner, "x")(), ResolvedCollation("UTF8_LCASE"))), Seq(true), Seq(false),
       JsonConstructorNullBehavior.Absent, StringType)
     assert(collated.sql ==
-      "JSON_ARRAY(collate(JSON_ARRAY(1 RETURNING STRING), UTF8_LCASE) FORMAT JSON)")
+      "JSON_ARRAY(collate(JSON_ARRAY(1 ABSENT ON NULL), UTF8_LCASE) FORMAT JSON ABSENT ON NULL)")
     // The column name drops the alias too; a user cast still quotes and keeps it.
     val df = spark.range(1).select(call_function("json_array", expr("json_array(1)").as("x")))
     assert(df.columns.toSeq == Seq("JSON_ARRAY(JSON_ARRAY(1))"))
@@ -415,7 +415,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
 
   test("emitted SQL reparses and evaluates with raw-vs-quoted semantics preserved") {
     // The .sql renderings above are round-trip contracts: reparsing and evaluating the actual
-    // emitted SQL -- including any default RETURNING STRING clauses it carries -- must reproduce
+    // emitted SQL -- including any default `ABSENT ON NULL` clauses it carries -- must reproduce
     // the original splicing. A bare nested constructor stays spliced; a cast-neutralized one stays
     // quoted.
     val inner = JsonArray(
@@ -429,7 +429,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // An explicit FORMAT JSON string literal round-trips through the emitted SQL too.
     val splicedLiteral = JsonArray(
       Seq(Literal("[1,2]")), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent, StringType)
-    assert(splicedLiteral.sql == "JSON_ARRAY('[1,2]' FORMAT JSON)")
+    assert(splicedLiteral.sql == "JSON_ARRAY('[1,2]' FORMAT JSON ABSENT ON NULL)")
     checkAnswer(sql(s"SELECT ${splicedLiteral.sql}"), Row("[[1,2]]"))
   }
 
@@ -457,14 +457,14 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val splicedKeep = JsonArray(
       Seq(keep), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(splicedKeep.sql ==
-      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING) RETURNING STRING)""")
+      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING) ABSENT ON NULL)""")
     // A KEEP QUOTES JSON_QUERY inlined into a quoted position must be neutralized with a cast so
     // reparse keeps it quoted rather than re-deriving implicit FORMAT JSON.
     val quotedKeep = JsonArray(
       Seq(keep), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(quotedKeep.sql ==
       """JSON_ARRAY(CAST(JSON_QUERY('{"a":{"x":1}}', """ +
-        """'$.a' RETURNING STRING) AS STRING) RETURNING STRING)""")
+        """'$.a' RETURNING STRING) AS STRING) ABSENT ON NULL)""")
     // OMIT QUOTES emits an ordinary string, so it is not implicit: in a quoted position it renders
     // as-is, and in a spliced position it must render an explicit FORMAT JSON (it does not
     // round-trip implicitly).
@@ -472,15 +472,14 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     val quotedOmit = JsonArray(
       Seq(omit), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(quotedOmit.sql ==
-      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) RETURNING STRING)""")
+      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) ABSENT ON NULL)""")
     val splicedOmit = JsonArray(
       Seq(omit), Seq(true), Seq(true), JsonConstructorNullBehavior.Absent, StringType)
     assert(
       splicedOmit.sql ==
-        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON)""")
-    // Each emitted rendering must reparse and evaluate the same as its clause-free equivalent, so
-    // any default RETURNING STRING it carries is semantically inert (splicedOmit, whose spliced
-    // element forces the direct grammar branch, carries none).
+        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' OMIT QUOTES) FORMAT JSON ABSENT ON NULL)""")
+    // Each emitted rendering must reparse and evaluate the same as its clause-free equivalent; the
+    // default `ABSENT ON NULL` it carries is semantically inert.
     checkAnswer(sql(s"SELECT ${splicedKeep.sql}"),
       sql("""SELECT JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a'))""").collect().toSeq)
     checkAnswer(sql(s"SELECT ${quotedKeep.sql}"),
@@ -505,13 +504,13 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Seq(query), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(
       spliced.sql ==
-        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', """ +
-          """'$.a' RETURNING STRING COLLATE UTF8_BINARY) RETURNING STRING)""")
+        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' """ +
+          """RETURNING STRING COLLATE UTF8_BINARY) ABSENT ON NULL)""")
     // Reparsing and evaluating the emitted SQL reproduces the raw splice.
     checkAnswer(sql(s"SELECT ${spliced.sql}"), Row("""[{"x":1}]"""))
   }
 
-  test("SQL renders an explicit collated RETURNING and omits only the default") {
+  test("SQL renders an explicit collated RETURNING and omits only the default RETURNING") {
     val collated = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false),
       JsonConstructorNullBehavior.Absent, StringType("UTF8_LCASE"))
@@ -519,9 +518,24 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // The omitted default is the companion StringType (by reference) and renders no RETURNING.
     val default = JsonArray(
       Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    // A clause-free built-in renders the default `RETURNING STRING` so its canonical SQL stays
+    // A clause-free built-in renders the default `ABSENT ON NULL` so its canonical SQL stays
     // bound to the built-in on reparse.
-    assert(default.sql == "JSON_ARRAY(1 RETURNING STRING)")
+    assert(default.sql == "JSON_ARRAY(1 ABSENT ON NULL)")
+  }
+
+  test("SPARK-59728: canonical SQL always renders the ON NULL clause, matching JSON_OBJECT") {
+    // Both the default `ABSENT ON NULL` and the non-default `NULL ON NULL` render under canonical
+    // `sql`, mirroring JSON_OBJECT's clause.
+    val absent = JsonArray(
+      Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    assert(absent.sql == "JSON_ARRAY(1 ABSENT ON NULL)")
+    val keepNull = JsonArray(
+      Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Null, StringType)
+    assert(keepNull.sql == "JSON_ARRAY(1 NULL ON NULL)")
+    // A zero-element array renders the clause alone, with no stray leading space (`trim`).
+    val empty = JsonArray(
+      Seq.empty, Seq.empty, Seq.empty, JsonConstructorNullBehavior.Absent, StringType)
+    assert(empty.sql == "JSON_ARRAY(ABSENT ON NULL)")
   }
 
   test("a constant JSON_ARRAY is foldable unless it has an explicit FORMAT JSON") {
@@ -646,8 +660,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       try {
         sql("CREATE TEMPORARY FUNCTION json_array(a INT) RETURNS STRING RETURN 'shadowed'")
         sql("SET PATH = system.session, system.builtin")
-        // A built-in JSON_ARRAY whose only clause is the default RETURNING STRING: the clause makes
-        // it the built-in even under the shadow, but its canonical `sql` would drop the default.
+        // A built-in JSON_ARRAY extracted via an explicit clause so it stays the built-in even
+        // under the shadow; its canonical `sql` then renders the default `ABSENT ON NULL` clause.
         val jsonArray = sql("SELECT json_array(1 RETURNING STRING)")
           .queryExecution.analyzed.expressions
           .flatMap(_.collect { case ja: JsonArray => ja }).head
@@ -672,8 +686,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       try {
         sql("CREATE TEMPORARY FUNCTION json_array() RETURNS STRING RETURN 'shadowed'")
         sql("SET PATH = system.session, system.builtin")
-        // A zero-arg built-in JSON_ARRAY renders the distinct clause-only `JSON_ARRAY( RETURNING
-        // STRING)`: it has no values, so the default clause is its sole marker on reparse.
+        // A zero-arg built-in JSON_ARRAY renders the distinct clause-only `JSON_ARRAY(ABSENT ON
+        // NULL)`: it has no values, so the default clause is its sole marker on reparse.
         val jsonArray = sql("SELECT json_array(RETURNING STRING)")
           .queryExecution.analyzed.expressions
           .flatMap(_.collect { case ja: JsonArray => ja }).head
@@ -692,12 +706,14 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
 
   test("SPARK-59685: a default JSON_ARRAY keeps a clean auto-generated column name") {
     val name = sql("SELECT json_array(1)").schema.head.name
-    assert(!name.contains("RETURNING"), s"column name leaked the ownership clause: $name")
+    // The pretty (display) form omits the ownership clause the canonical `sql` appends.
+    assert(!name.contains("RETURNING") && !name.contains("ABSENT ON NULL"),
+      s"column name leaked the ownership clause: $name")
   }
 
   test("SPARK-59685: a nested JSON constructor keeps a clean auto-generated column name") {
     // Children are rendered in place for display names, so a nested constructor neither leaks the
-    // round-trip RETURNING clause nor gains a synthetic FORMAT JSON that the outer would emit if
+    // round-trip ownership clause nor gains a synthetic FORMAT JSON that the outer would emit if
     // the child were flattened to a plain attribute first.
     val splicedArray = sql("SELECT json_array(json_array(1, 2), 3)").schema.head.name
     assert(splicedArray === "JSON_ARRAY(JSON_ARRAY(1, 2), 3)", s"unexpected name: $splicedArray")
