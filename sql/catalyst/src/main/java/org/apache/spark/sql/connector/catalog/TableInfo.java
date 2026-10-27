@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
@@ -24,7 +25,8 @@ import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * Metadata describing a data-source table: its columns, properties, partitioning and constraints.
+ * Metadata describing a data-source table: its columns, stored and display-only properties,
+ * partitioning and constraints.
  * Spark realizes a {@code TableInfo} into a {@link Table} via {@link DelegatingTable}; a catalog
  * that has its own {@link Table} object returns that instead. Views are described by the sibling
  * {@link View}, which -- unlike a table -- is itself a {@link Relation} because Spark never builds
@@ -34,6 +36,7 @@ public class TableInfo {
 
   private final Column[] columns;
   private final Map<String, String> properties;
+  private final Map<String, String> displayProperties;
   private final Transform[] partitions;
   private final Constraint[] constraints;
 
@@ -43,6 +46,7 @@ public class TableInfo {
   protected TableInfo(Builder builder) {
     this.columns = builder.columns;
     this.properties = builder.properties;
+    this.displayProperties = builder.displayProperties;
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
   }
@@ -59,6 +63,22 @@ public class TableInfo {
     return properties;
   }
 
+  /**
+   * Returns the additional display-only properties described by {@link Table#displayProperties()}.
+   *
+   * <p>These properties describe metadata returned by a catalog. Spark leaves them empty when
+   * calling {@link TableCatalog#createTable(Identifier, TableInfo)},
+   * {@link TableCatalog#createTableLike(Identifier, TableInfo, Table)},
+   * {@link StagingTableCatalog#stageCreate(Identifier, TableInfo)},
+   * {@link StagingTableCatalog#stageReplace(Identifier, TableInfo)}, and
+   * {@link StagingTableCatalog#stageCreateOrReplace(Identifier, TableInfo)}.
+   *
+   * @since 4.4.0
+   */
+  public Map<String, String> displayProperties() {
+    return displayProperties;
+  }
+
   public Transform[] partitions() {
     return partitions;
   }
@@ -66,11 +86,24 @@ public class TableInfo {
   public Constraint[] constraints() { return constraints; }
 
   public static class Builder extends RelationBuilder<Builder> {
+    protected Map<String, String> displayProperties = new HashMap<>();
     protected Transform[] partitions = new Transform[0];
     protected Constraint[] constraints = new Constraint[0];
 
     @Override
     protected Builder self() { return this; }
+
+    /**
+     * Sets additional display-only properties.
+     *
+     * @param displayProperties a non-null map with non-null keys and values
+     * @see TableInfo#displayProperties()
+     * @since 4.4.0
+     */
+    public Builder withDisplayProperties(Map<String, String> displayProperties) {
+      this.displayProperties = new HashMap<>(displayProperties);
+      return this;
+    }
 
     public Builder withPartitions(Transform[] partitions) {
       this.partitions = partitions;

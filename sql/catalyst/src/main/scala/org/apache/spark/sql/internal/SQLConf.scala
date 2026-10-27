@@ -1815,6 +1815,19 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED =
+    buildConf("spark.sql.inlineTable.nonFoldableExpressions.enabled")
+      .internal()
+      .doc("When true, VALUES lists (inline tables) may contain expressions that are not " +
+        "constant-foldable, such as nondeterministic functions, Scala/Java UDFs, and " +
+        "uncorrelated scalar subqueries. Such an inline table is evaluated on executors when " +
+        "the query runs instead of being folded into a local relation during analysis. When " +
+        "false, these expressions are rejected during analysis.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val ESCAPED_STRING_LITERALS = buildConf("spark.sql.parser.escapedStringLiterals")
     .internal()
     .doc("When true, string literals (including regex patterns) remain escaped in our SQL " +
@@ -2038,7 +2051,12 @@ object SQLConf {
         s"the key values are native memory outside ${MEMORY_OFFHEAP_SIZE.key}, so they come " +
         s"out of ${EXECUTOR_MEMORY_OVERHEAD.key}. Past the limit the reader drops the buffered " +
         "key values and reads the key columns again for the surviving rows. If the row ranges " +
-        "alone pass it, the reader reads the row group with no filter applied.")
+        "alone pass it, the reader reads the row group with no filter applied. The buffer is " +
+        "also counted against the task's execution memory, except key values held in off-heap " +
+        "column vectors, and a reservation the memory manager denies is handled the same way. " +
+        "The scan's metrics count the row groups each of these happens to, by cause. While it " +
+        "holds a buffer, the task is one of those sharing on-heap execution memory, as with any " +
+        "operator that reserves it.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .bytesConf(ByteUnit.BYTE)
@@ -2061,9 +2079,10 @@ object SQLConf {
         "as in the files pyarrow's write_table writes by default, or with that conf set to " +
         "false, the reader can only skip whole row groups, and it reads the key columns twice in " +
         "the others. With a page index, it can be slower when the matching rows are spread " +
-        "across most pages. The matching key values of a row group are buffered while it is " +
-        s"read, up to ${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}, " +
-        "outside Spark's memory manager.")
+        "across most pages. The matching key values and row ranges of a row group are buffered " +
+        "while it is read, up to " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_MAX_SPLICED_ROW_GROUP_BYTES.key}, and counted " +
+        "against the task's execution memory, except key values held in off-heap column vectors.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -2790,6 +2809,19 @@ object SQLConf {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(true)
+
+  val V2_STORAGE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.sources.v2.storageFilterPushdown.enabled")
+      .doc("If true, a runtime bloom filter from join runtime filtering is offered to a data " +
+        "source V2 scan that implements SupportsStorageFilters and declares the filter's " +
+        "columns. Its readers may apply it while they read, to skip reading the other columns " +
+        "of the rows it rejects. The filter also stays in the post-scan filter, so the answer " +
+        "does not change. " +
+        s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} is the V1 Parquet file source's own conf.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
 
   val CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING =
     buildConf("spark.sql.optimizer.canChangeCachedPlanOutputPartitioning")
@@ -4651,9 +4683,10 @@ object SQLConf {
   val ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS =
     buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minRows")
       .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
-        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Setting this to 0 " +
-        "disables the periodic evaluation. The ratio may still be evaluated when the aggregation " +
-        "map is about to spill.")
+        s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The ratio is also " +
+        "evaluated when the aggregation map is about to spill, but only once the current map " +
+        "has processed at least this many rows. Setting this to 0 disables the periodic " +
+        "evaluation, leaving only the evaluation when the map is about to spill.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -5529,7 +5562,9 @@ object SQLConf {
         "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
         "the number of records is limited when sending it to the downstream operator. This is " +
         "used to avoid large batches being sent to the downstream operator including " +
-        "the columnar-based operator implemented by third-party libraries.")
+        "the columnar-based operator implemented by third-party libraries. " +
+        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that take " +
+        "columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .intConf
@@ -5545,7 +5580,8 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record.")
+        "Spark will create a batch with one record. applyInPandasWithState, Arrow Python " +
+        "UDTFs and Arrow Python UDFs that take columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -7483,6 +7519,17 @@ object SQLConf {
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
       .createWithDefault(true)
+
+  val LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL =
+    buildConf("spark.sql.legacy.variantPathBackslashAsLiteral")
+      .internal()
+      .doc("When true, backslashes in quoted Variant path keys are treated as literal " +
+        "characters, restoring the behavior before Spark 4.4. When false, quoted keys decode " +
+        "recognized JSONPath escape sequences.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
 
   val VARIANT_ALLOW_READING_SHREDDED =
     buildConf("spark.sql.variant.allowReadingShredded")
@@ -9834,6 +9881,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def v2BucketingPreserveOrderingOnCoalesceEnabled: Boolean =
     getConf(SQLConf.V2_BUCKETING_PRESERVE_ORDERING_ON_COALESCE_ENABLED)
+
+  def v2StorageFilterPushdownEnabled: Boolean = getConf(V2_STORAGE_FILTER_PUSHDOWN_ENABLED)
 
   def dataFrameSelfJoinAutoResolveAmbiguity: Boolean =
     getConf(DATAFRAME_SELF_JOIN_AUTO_RESOLVE_AMBIGUITY)

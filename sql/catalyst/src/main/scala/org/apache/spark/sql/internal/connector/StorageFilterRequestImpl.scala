@@ -15,18 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.internal.connector
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.read.{StorageFilter, StorageFilterRequest}
 
-/** Extracts a V1 command identifier, rejecting namespaces that cannot be represented in V1. */
-object ResolvedV1CommandIdentifier {
-  def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-    case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-      Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
-    case _ => None
-  }
-}
+/** The [[StorageFilterRequest]] Spark builds once per scan and sends with each of its tasks. */
+case class StorageFilterRequestImpl(filter: StorageFilter, appendsCheckedColumn: Boolean)
+  extends StorageFilterRequest
