@@ -51,7 +51,7 @@ private[v1] class SqlResource extends BaseAppResource {
         sqlStore.executionsList(offset, length)
       }
       execs.map { exec =>
-        val graph = sqlStore.planGraph(exec.executionId)
+        val graph = if (details) sqlStore.planGraph(exec.executionId) else null
         prepareExecutionData(exec, graph, details, planDescription, ui.store)
       }
     }
@@ -69,8 +69,8 @@ private[v1] class SqlResource extends BaseAppResource {
       sqlStore
         .execution(execId)
         .map { exec =>
-          prepareExecutionData(exec, sqlStore.planGraph(execId), details, planDescription,
-            ui.store)
+          val graph = if (details) sqlStore.planGraph(execId) else null
+          prepareExecutionData(exec, graph, details, planDescription, ui.store)
         }
         .getOrElse(throw new NotFoundException("unknown query execution id: " + execId))
     }
@@ -109,12 +109,8 @@ private[v1] class SqlResource extends BaseAppResource {
         .filter(_.nonEmpty)
       val needsFilter = searchValue.isDefined || statusFilter.isDefined
 
-      // Always load all execs once. We need the full set to (a) identify orphan
-      // sub-executions whose root is filtered out and (b) count root rows for
-      // `recordsTotal`. `sqlStore.executionsList()` is already a full
-      // materialization, so there is no separate "KVStore-pagination" path being
-      // disabled here.
-      val allExecs = sqlStore.executionsList()
+      // Grouping and arbitrary search need all summaries, but never the plans or metric payloads.
+      val allExecs = sqlStore.executionSummariesList()
 
       val filteredExecs = if (needsFilter) {
         allExecs.filter { exec =>

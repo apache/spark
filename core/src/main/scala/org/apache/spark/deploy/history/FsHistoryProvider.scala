@@ -1597,7 +1597,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
         reader.compressionCodec)
       var store: HybridStore = null
       try {
-        store = new HybridStore()
+        store = new HybridStore(KVUtils.createInMemoryStore(conf))
         rebuildAppStore(store, reader, attempt.info.lastUpdated.getTime())
         hybridStore = store
       } catch {
@@ -1697,7 +1697,7 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     var store: KVStore = null
     while (store == null) {
       try {
-        val s = new InMemoryStore()
+        val s = KVUtils.createInMemoryStore(conf)
         val (logFs, logPath) = resolveLogPath(attempt.logPath, attempt.logSourceFullPath)
         val reader = EventLogFileReader(logFs, logPath,
           attempt.lastIndex)

@@ -19,13 +19,16 @@ package org.apache.spark.deploy.history
 
 import java.io.File
 import java.util.NoSuchElementException
-import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkConf, SparkFunSuite}
+import org.apache.spark.internal.config.Status.COMPACT_UI_STORE_ENABLED
+import org.apache.spark.status.KVUtils
 import org.apache.spark.status.KVUtils._
 import org.apache.spark.tags.ExtendedLevelDBTest
 import org.apache.spark.util.Utils
@@ -35,6 +38,8 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
 
   var db: KVStore = _
   var dbpath: File = _
+
+  protected def memoryStore: KVStore = new InMemoryStore()
 
   after {
     if (db != null) {
@@ -155,7 +160,7 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
   }
 
   private def createHybridStore(): HybridStore = {
-    val store = new HybridStore()
+    val store = new HybridStore(memoryStore)
     store.setDiskStore(db)
     store
   }
@@ -165,7 +170,8 @@ abstract class HybridStoreSuite extends SparkFunSuite with BeforeAndAfter with T
   }
 
   private def switchHybridStore(store: HybridStore): Unit = {
-    assert(store.getStore().isInstanceOf[InMemoryStore])
+    assert(store.getStore().isInstanceOf[InMemoryStore] ||
+      store.getStore().isInstanceOf[CompactInMemoryStore])
     val listener = new SwitchListener()
     store.switchToDiskStore(listener, "test", None)
     failAfter(2.seconds) {
@@ -219,6 +225,55 @@ class RocksDBHybridStoreSuite extends HybridStoreSuite {
     dbpath = File.createTempFile("test.", ".rdb")
     dbpath.delete()
     db = new RocksDB(dbpath, new KVStoreScalaSerializer())
+  }
+}
+
+class CompactRocksDBHybridStoreSuite extends RocksDBHybridStoreSuite {
+  override protected def memoryStore: KVStore =
+    KVUtils.createInMemoryStore(new SparkConf(false).set(COMPACT_UI_STORE_ENABLED, true))
+
+  test("compact handoff bounds decoded records before each disk batch") {
+    withTempDir { directory =>
+      val outstanding = new AtomicInteger()
+      val peak = new AtomicInteger()
+      val memory = new CompactInMemoryStore(new KVStoreScalaSerializer {
+        override def deserialize[T](bytes: Array[Byte], klass: Class[T]): T = {
+          val pending = outstanding.incrementAndGet()
+          peak.accumulateAndGet(pending, (left: Int, right: Int) => math.max(left, right))
+          super.deserialize(bytes, klass)
+        }
+      })
+      val disk = new RocksDB(new File(directory, "store"), new KVStoreScalaSerializer {
+        override def serialize(value: Object): Array[Byte] = {
+          if (value.isInstanceOf[CustomType1]) {
+            outstanding.decrementAndGet()
+          }
+          super.serialize(value)
+        }
+      })
+      Utils.tryWithResource(new HybridStore(memory)) { hybrid =>
+        hybrid.setDiskStore(disk)
+        for (i <- 0 until 2050) {
+          hybrid.write(new CustomType1(s"key$i", s"id$i", s"name$i", i, s"child$i"))
+        }
+        val completed = new LinkedBlockingQueue[Either[Exception, Unit]]()
+        val listener = new HybridStore.SwitchToDiskStoreListener {
+          override def onSwitchToDiskStoreSuccess(): Unit = completed.put(Right(()))
+          override def onSwitchToDiskStoreFail(error: Exception): Unit = completed.put(Left(error))
+        }
+        hybrid.switchToDiskStore(listener, "bounded-handoff", None)
+        val result = completed.poll(30, TimeUnit.SECONDS)
+        assert(result != null, "Timed out waiting for the compact store handoff")
+        result match {
+          case Left(error) => throw error
+          case Right(_) =>
+        }
+        assert(disk.count(classOf[CustomType1]) == 2050)
+        assert(peak.get() == 1024)
+        assert(outstanding.get() == 0)
+        assert(disk.read(classOf[CustomType1], "key2049").num == 2049)
+      }
+    }
   }
 }
 

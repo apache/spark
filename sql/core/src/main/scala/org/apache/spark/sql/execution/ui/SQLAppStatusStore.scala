@@ -26,9 +26,9 @@ import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize
 
 import org.apache.spark.JobExecutionStatus
-import org.apache.spark.status.KVUtils
+import org.apache.spark.status.{ElementTrackingStore, KVUtils}
 import org.apache.spark.status.KVUtils.KVIndexParam
-import org.apache.spark.util.kvstore.{KVIndex, KVStore}
+import org.apache.spark.util.kvstore.{CompactInMemoryStore, KVIndex, KVStore}
 
 /**
  * Provides a view of a KVStore with methods that make it easy to query SQL-specific state. There's
@@ -38,24 +38,71 @@ class SQLAppStatusStore(
     store: KVStore,
     val listener: Option[SQLAppStatusListener] = None) {
 
+  private val compact = store match {
+    case tracking: ElementTrackingStore => tracking.usingCompactStore
+    case _: CompactInMemoryStore => true
+    case _ => false
+  }
+
+  private val transactionLock = store match {
+    case tracking: ElementTrackingStore => tracking.transactionLock
+    case _ => store
+  }
+
   def executionsList(): Seq[SQLExecutionUIData] = {
-    KVUtils.viewToSeq(store.view(classOf[SQLExecutionUIData]))
+    if (compact) {
+      executionSummariesList().flatMap(e => execution(e.executionId))
+    } else {
+      KVUtils.viewToSeq(store.view(classOf[SQLExecutionUIData]))
+    }
   }
 
   def executionsList(offset: Int, length: Int): Seq[SQLExecutionUIData] = {
-    KVUtils.viewToSeq(store.view(classOf[SQLExecutionUIData]).skip(offset).max(length))
+    if (compact) {
+      KVUtils.viewToSeq(store.view(classOf[SQLExecutionSummary]).skip(offset).max(length))
+        .flatMap(e => execution(e.executionId))
+    } else {
+      KVUtils.viewToSeq(store.view(classOf[SQLExecutionUIData]).skip(offset).max(length))
+    }
+  }
+
+  /** List views do not need to decode plans, configuration maps or metric payloads. */
+  private[spark] def executionSummariesList(): Seq[SQLExecutionUIData] = {
+    if (compact) {
+      KVUtils.viewToSeq(store.view(classOf[SQLExecutionSummary])).map(_.info)
+    } else {
+      executionsList()
+    }
+  }
+
+  private[ui] def subExecutionSummaries(executionId: Long): Seq[SQLExecutionUIData] = {
+    val executions = if (compact) {
+      KVUtils.viewToSeq(store.view(classOf[SQLExecutionSummary]).index("rootExecutionId")
+        .first(executionId).last(executionId)).map(_.info)
+    } else {
+      executionSummariesList().filter(_.rootExecutionId == executionId)
+    }
+    executions.filter(_.executionId != executionId)
   }
 
   def execution(executionId: Long): Option[SQLExecutionUIData] = {
     try {
-      Some(store.read(classOf[SQLExecutionUIData], executionId))
+      val data = if (compact) transactionLock.synchronized {
+        val summary = store.read(classOf[SQLExecutionSummary], executionId).info
+        val details = store.read(classOf[SQLExecutionDetails], executionId).info
+        CompactSQLExecutionData.combine(summary, details)
+      } else {
+        store.read(classOf[SQLExecutionUIData], executionId)
+      }
+      Some(data)
     } catch {
       case _: NoSuchElementException => None
     }
   }
 
   def executionsCount(): Long = {
-    store.count(classOf[SQLExecutionUIData])
+    if (compact) store.count(classOf[SQLExecutionSummary])
+    else store.count(classOf[SQLExecutionUIData])
   }
 
   def planGraphCount(): Long = {
@@ -64,7 +111,11 @@ class SQLAppStatusStore(
 
   def executionMetrics(executionId: Long): Map[Long, String] = {
     def metricsFromStore(): Option[Map[Long, String]] = {
-      val exec = store.read(classOf[SQLExecutionUIData], executionId)
+      val exec = if (compact) {
+        store.read(classOf[SQLExecutionDetails], executionId).info
+      } else {
+        store.read(classOf[SQLExecutionUIData], executionId)
+      }
       Option(exec.metricValues)
     }
 
