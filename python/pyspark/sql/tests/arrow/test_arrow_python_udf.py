@@ -26,7 +26,7 @@ from pyspark.errors import AnalysisException, PySparkNotImplementedError, Python
 from pyspark.loose_version import LooseVersion
 from pyspark.serializers import read_int
 from pyspark.sql import Row
-from pyspark.sql.functions import col, udf
+from pyspark.sql.functions import col, pandas_udf, udf
 from pyspark.sql.pandas.serializers import ArrowStreamSerializer, SpecialLengths
 from pyspark.sql.tests.test_udf import BaseUDFTestsMixin
 from pyspark.sql.types import (
@@ -660,19 +660,113 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
         timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
 
         with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
-            with self.sql_conf({timing_conf: "true"}):
-                result = self.spark.range(2, numPartitions=1).select(add_one("id"))
-                plan = result._jdf.queryExecution().executedPlan()
-                while plan.nodeName() != "ArrowEvalPython":
-                    self.assertEqual(plan.children().size(), 1)
-                    plan = plan.children().apply(0)
-                metrics = plan.metrics()
-                self.assertTrue(metrics.contains("pythonNumTimingReports"))
+            for enabled in (True, False):
+                with self.subTest(enabled=enabled):
+                    with self.sql_conf({timing_conf: str(enabled).lower()}):
+                        result = self.spark.range(2, numPartitions=1).select(add_one("id"))
+                        plan = result._jdf.queryExecution().executedPlan()
+                        while plan.nodeName() != "ArrowEvalPython":
+                            self.assertEqual(plan.children().size(), 1)
+                            plan = plan.children().apply(0)
+                        metrics = plan.metrics()
+                        self.assertEqual(metrics.contains("pythonNumTimingReports"), enabled)
+                    with self.sql_conf({timing_conf: str(not enabled).lower()}):
+                        self.assertEqual([row[0] for row in result.collect()], [1, 2])
+                    if enabled:
+                        self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+                        self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
 
-            self.assertEqual(self.spark.conf.get(timing_conf), "false")
-            self.assertEqual([row[0] for row in result.collect()], [1, 2])
-            self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
-            self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
+    def test_phase_metrics_disabled_for_unsupported_handlers(self):
+        phase_names = (
+            "pythonDataReadTime",
+            "pythonInputPreparationTime",
+            "pythonUDFExecutionTime",
+            "pythonOutputPreparationTime",
+            "pythonDataWriteTime",
+            "pythonNumTimingReports",
+            "pythonNumTimedBatches",
+        )
+
+        def check_untimed():
+            from pyspark.worker_metrics import WorkerMetrics
+
+            assert set(phase_names).isdisjoint(WorkerMetrics().to_dict())
+
+        def scalar(value):
+            check_untimed()
+            return value
+
+        def mapping(dfs):
+            for df in dfs:
+                check_untimed()
+                yield df
+
+        def cogroup(left, right):
+            check_untimed()
+            return left
+
+        legacy_conf = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
+        data = self.spark.range(2, numPartitions=1)
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+                "spark.sql.adaptive.enabled": "false",
+            }
+        ):
+            for name, build in (
+                ("legacy", lambda: data.select(udf(scalar, "long", useArrow=True)("id"))),
+                ("scalar pandas", lambda: data.select(pandas_udf(scalar, "long")("id"))),
+                ("map pandas", lambda: data.mapInPandas(mapping, "id long")),
+                ("grouped pandas", lambda: data.groupBy().applyInPandas(scalar, "id long")),
+                (
+                    "cogrouped pandas",
+                    lambda: data.groupBy("id")
+                    .cogroup(data.groupBy("id"))
+                    .applyInPandas(cogroup, "id long"),
+                ),
+            ):
+                with (
+                    self.subTest(handler=name),
+                    self.sql_conf({legacy_conf: str(name == "legacy").lower()}),
+                ):
+                    result = build()
+                    self.assertEqual(sorted(row[0] for row in result.collect()), [0, 1])
+                    plan = result._jdf.queryExecution().executedPlan()
+
+                    def check_plan(node):
+                        for metric in phase_names:
+                            self.assertFalse(node.metrics().contains(metric), (name, metric))
+                        for i in range(node.children().size()):
+                            check_plan(node.children().apply(i))
+
+                    check_plan(plan)
+
+    def test_phase_metrics_disabled_when_plan_switches_to_legacy(self):
+        def identity(value):
+            from pyspark.worker_metrics import WorkerMetrics
+
+            assert "pythonDataReadTime" not in WorkerMetrics().to_dict()
+            return value
+
+        legacy_conf = "spark.sql.legacy.execution.pythonUDF.pandas.conversion.enabled"
+        with self.sql_conf(
+            {
+                "spark.sql.execution.pythonUDF.detailedTiming.enabled": "true",
+                "spark.sql.adaptive.enabled": "false",
+                legacy_conf: "false",
+            }
+        ):
+            result = self.spark.range(2, numPartitions=1).select(
+                udf(identity, "long", useArrow=True)("id")
+            )
+            plan = result._jdf.queryExecution().executedPlan()
+            while plan.nodeName() != "ArrowEvalPython":
+                plan = plan.children().apply(0)
+            metrics = plan.metrics()
+            self.assertTrue(metrics.contains("pythonNumTimingReports"))
+            with self.sql_conf({legacy_conf: "true"}):
+                self.assertEqual([row[0] for row in result.collect()], [0, 1])
+            self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 0)
 
 
 @unittest.skipIf(not have_pyarrow, pyarrow_requirement_message)
