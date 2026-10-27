@@ -27,7 +27,7 @@ import json
 import os
 import sys
 import warnings
-from typing import Any, BinaryIO, Callable
+from typing import BinaryIO
 
 from pyspark import shuffle
 from pyspark.accumulators import _accumulatorRegistry
@@ -41,12 +41,11 @@ from pyspark.messages import (
     SparkSocketMessageReceiver,
 )
 from pyspark.serializers import (
-    FramedSerializer,
     SpecialLengths,
     write_int,
     write_with_length,
 )
-from pyspark.sql.types import DataType, StructType, _parse_datatype_json_string
+from pyspark.sql.types import StructType, _parse_datatype_json_string
 from pyspark.taskcontext import BarrierTaskContext, TaskContext
 from pyspark.util import (
     PythonEvalType,
@@ -75,23 +74,6 @@ def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     payload = json.dumps(metrics, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.METRICS_DATA, outfile)
     write_with_length(payload, outfile)
-
-
-def chain(f: Callable[..., Any], g: Callable[..., Any]) -> Callable[..., Any]:
-    """chain two functions together"""
-    return lambda *a: g(f(*a))
-
-
-def unpickle_and_chain(
-    pickleSer: FramedSerializer, pickled_udfs: list[memoryview]
-) -> tuple[Callable[..., Any], DataType]:
-    """Unpickle the functions applied in turn to one column and chain them into one; returns the
-    chained function and the return type of the last one."""
-    chained_func, return_type = read_command(pickleSer, pickled_udfs[0])
-    for udf in pickled_udfs[1:]:
-        f, return_type = read_command(pickleSer, udf)
-        chained_func = chain(chained_func, f)
-    return chained_func, return_type
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
@@ -170,22 +152,28 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result=analyze_result,
                     name=init_info.udf_info.name,
                 )
-                handler = handler_cls(udfs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf)
+                handler = handler_cls(
+                    udf_descs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf
+                )
             else:
                 assert isinstance(init_info.udf_info, list)
-                udfs = []
+                udf_descs = []
                 for udf_info in init_info.udf_info:
-                    chained_func, return_type = unpickle_and_chain(pickleSer, udf_info.udfs)
-                    udfs.append(
+                    # The functions applied in turn to one column; the last one's return type
+                    # is the UDF's.
+                    funcs, return_types = zip(*(read_command(pickleSer, c) for c in udf_info.udfs))
+                    udf_descs.append(
                         UDF(
-                            raw_func=chained_func,
+                            funcs=list(funcs),
                             args_offsets=udf_info.args,
                             kwargs_offsets=udf_info.kwargs,
-                            return_type=return_type,
+                            return_type=return_types[-1],
                             result_id=udf_info.result_id,
                         )
                     )
-                handler = handler_cls(udfs=udfs, runner_conf=runner_conf, eval_conf=eval_conf)
+                handler = handler_cls(
+                    udf_descs=udf_descs, runner_conf=runner_conf, eval_conf=eval_conf
+                )
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
 
