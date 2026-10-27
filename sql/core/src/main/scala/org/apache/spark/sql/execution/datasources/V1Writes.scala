@@ -20,14 +20,14 @@ package org.apache.spark.sql.execution.datasources
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Ascending, Attribute, AttributeMap, AttributeSet, BitwiseAnd, Empty2Null, Expression, HiveHash, Literal, NamedExpression, Pmod, SortOrder}
-import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagation}
+import org.apache.spark.sql.catalyst.optimizer.{EliminateSorts, FoldablePropagation, NormalizeFloatingNumbers}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.plans.physical.HashPartitioning
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.command.DataWritingCommand
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.StringType
+import org.apache.spark.sql.types.{DoubleType, FloatType, StringType}
 
 trait V1WriteCommand extends DataWritingCommand {
   /**
@@ -93,10 +93,13 @@ object V1Writes extends Rule[LogicalPlan] {
   }
 
   private def prepareQuery(write: V1WriteCommand, query: LogicalPlan): LogicalPlan = {
-    val projectList = convertEmptyToNull(query.output, write.partitionColumns)
-    val empty2NullPlan = if (projectList.isEmpty) query else Project(projectList, query)
-    assert(empty2NullPlan.output.length == query.output.length)
-    val attrMap = AttributeMap(query.output.zip(empty2NullPlan.output))
+    val dynamicPartitionColumns =
+      write.partitionColumns.filterNot(p => write.staticPartitions.contains(p.name))
+    val projectList =
+      normalizePartitionValues(query.output, write.partitionColumns, dynamicPartitionColumns)
+    val normalizedPlan = if (projectList.isEmpty) query else Project(projectList, query)
+    assert(normalizedPlan.output.length == query.output.length)
+    val attrMap = AttributeMap(query.output.zip(normalizedPlan.output))
 
     // Rewrite the attribute references in the required ordering to use the new output,
     // then eliminate foldable ordering.
@@ -104,12 +107,12 @@ object V1Writes extends Rule[LogicalPlan] {
       val ordering = write.requiredOrdering.map(_.transform {
         case a: Attribute => attrMap.getOrElse(a, a)
       }.asInstanceOf[SortOrder])
-      eliminateFoldableOrdering(ordering, empty2NullPlan).outputOrdering
+      eliminateFoldableOrdering(ordering, normalizedPlan).outputOrdering
     }
-    if (isOrderingMatched(requiredOrdering.map(_.child), empty2NullPlan.outputOrdering)) {
-      empty2NullPlan
+    if (isOrderingMatched(requiredOrdering.map(_.child), normalizedPlan.outputOrdering)) {
+      normalizedPlan
     } else {
-      Sort(requiredOrdering, global = false, empty2NullPlan)
+      Sort(requiredOrdering, global = false, normalizedPlan)
     }
   }
 }
@@ -184,15 +187,32 @@ object V1WritesUtils {
     }
   }
 
-  def convertEmptyToNull(
+  /**
+   * Returns the project list that normalizes the partition values of the rows to write, or Nil if
+   * no partition column needs it:
+   *  - An empty string is converted to null, as both are written to the default partition.
+   *  - In a FLOAT or DOUBLE dynamic partition column, -0.0 is converted to 0.0 and every NaN to
+   *    the same NaN, as for grouping keys (see [[NormalizeFloatingNumbers]]). The rows are sorted
+   *    by the dynamic partition columns, where these values are equal, but the writer starts a new
+   *    directory whenever the bytes of the partition values change, so it would go back to a
+   *    directory that it has already written and fail on a file that already exists. A static
+   *    partition column holds one value, which names its directory in the partition spec.
+   */
+  def normalizePartitionValues(
       output: Seq[Attribute],
-      partitionColumns: Seq[Attribute]): Seq[NamedExpression] = {
+      partitionColumns: Seq[Attribute],
+      dynamicPartitionColumns: Seq[Attribute]): Seq[NamedExpression] = {
     val partitionSet = AttributeSet(partitionColumns)
+    val dynamicPartitionSet = AttributeSet(dynamicPartitionColumns)
     var needConvert = false
     val projectList: Seq[NamedExpression] = output.map {
       case p if partitionSet.contains(p) && p.dataType.isInstanceOf[StringType] && p.nullable =>
         needConvert = true
         Alias(Empty2Null(p), p.name)()
+      case p if dynamicPartitionSet.contains(p) &&
+          (p.dataType == FloatType || p.dataType == DoubleType) =>
+        needConvert = true
+        Alias(NormalizeFloatingNumbers.normalize(p), p.name)()
       case attr => attr
     }
     if (needConvert) projectList else Nil
