@@ -310,11 +310,7 @@ class HandlerUDFsTests(PySparkBaseTestCase):
             udf.raw_func(1)
 
     def test_fail_on_stopiteration_per_handler(self):
-        not_wrapped = {
-            PythonEvalType.SQL_SCALAR_PANDAS_ITER_UDF,
-            PythonEvalType.SQL_SCALAR_PANDAS_ITER_ELEMENTWISE_UDF,
-            PythonEvalType.SQL_ARROW_BATCHED_UDF,
-        }
+        not_wrapped = {PythonEvalType.SQL_ARROW_BATCHED_UDF}
         for _, variants in list(_eval_type_handlers.values()):
             for handler_cls in variants.values():
                 with self.subTest(handler=handler_cls.__name__):
@@ -359,6 +355,20 @@ class HandlerUDFsTests(PySparkBaseTestCase):
         ):
             self.assertEqual(udf_memory._with_profiler(f, 0), "memory")
         self.assertIs(no_profiler._with_profiler(f, 0), f)
+
+    def test_iter_profiler_keeps_stop_iteration_error(self):
+        # A StopIteration raised by the call of an iterator UDF fails with
+        # STOP_ITERATION_OCCURRED whether or not a profiler is set.
+        class _IterHandler(self._Handler):
+            _iter_based = True
+
+        for profiler in (None, "perf", "memory"):
+            with self.subTest(profiler=profiler):
+                conf = {"spark.sql.pyspark.udf.profiler": profiler} if profiler else {}
+                handler = self._new(_IterHandler, RunnerConf(conf))
+                with self.assertRaises(PySparkRuntimeError) as cm:
+                    handler._funcs[0](1)
+                self.assertEqual(cm.exception.getCondition(), "STOP_ITERATION_OCCURRED")
 
 
 class UnpickleAndChainTests(PySparkBaseTestCase):
