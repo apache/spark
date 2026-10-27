@@ -172,7 +172,7 @@ class AsyncProgressTrackingMicroBatchExecution(
     //   but this thread cannot stop until stop() returns.
     queryExecutionThread.interrupt()
 
-    // Codes after interrupt may never run, for critical cleanup, put them in cleanup().
+    // The query execution thread may spawn new jobs, so cancel again to prevent a leak.
     sparkSession.sparkContext.cancelJobGroup(runId.toString)
     asyncWritesExecutorService.shutdownNow()
   }
@@ -413,11 +413,6 @@ class AsyncProgressTrackingMicroBatchExecution(
       logWarning(log"Async progress tracking executor for query " +
         log"${MDC(PRETTY_ID_STRING, prettyIdString)} did not terminate in 30 seconds")
     }
-  }
-
-  override def cleanup(): Unit = {
-    asyncWritesExecutorService.shutdown()
-    super.cleanup()
   }
 
   // used for testing
