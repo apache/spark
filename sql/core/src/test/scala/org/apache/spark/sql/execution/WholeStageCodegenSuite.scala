@@ -2814,4 +2814,150 @@ class WholeStageCodegenSuite extends SharedSparkSession
       }
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // SPARK-59787: wide join field-based extraction tests
+  // ---------------------------------------------------------------------------
+
+  // Helper: build a DataFrame with `numCols` columns, mixing nullable and non-nullable types.
+  // Even-indexed columns are non-nullable Long (id + i), odd-indexed are nullable String
+  // (cast to string, with null when id % 7 == i % 3 to exercise null propagation).
+  private def wideDF(rows: Int, numCols: Int, prefix: String): DataFrame = {
+    val base = spark.range(rows).toDF("id")
+    (0 until numCols).foldLeft(base) { (df, i) =>
+      if (i % 2 == 0) {
+        // Non-nullable Long
+        df.withColumn(s"${prefix}_c$i", $"id" + i)
+      } else {
+        // Nullable String -- null when id % 7 == i % 3
+        df.withColumn(s"${prefix}_c$i",
+          when($"id" % 7 === lit(i % 3), lit(null: String))
+            .otherwise(concat(lit(s"${prefix}_"), $"id".cast(StringType))))
+      }
+    }
+  }
+
+  // Shared config for SMJ tests: disable broadcast, raise maxFields
+  private val wideSMJConf = Seq(
+    SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+    SQLConf.WHOLESTAGE_MAX_NUM_FIELDS.key -> "200"
+  )
+
+  // Assert that a SortMergeJoinExec is inside a WholeStageCodegenExec in the plan.
+  // This proves codegen compiled successfully -- a silent fallback would show
+  // SortMergeJoinExec outside WholeStageCodegenExec.
+  private def assertSMJCodegenUsed(df: DataFrame): Unit = {
+    val plan = df.queryExecution.executedPlan
+    val codegenWithSMJ = plan.collect {
+      case ws: WholeStageCodegenExec if ws.find(_.isInstanceOf[SortMergeJoinExec]).isDefined => ws
+    }
+    assert(codegenWithSMJ.nonEmpty,
+      s"Expected SortMergeJoinExec inside WholeStageCodegenExec, but plan was:\n$plan")
+  }
+
+  test("SPARK-59787: wide inner SortMergeJoin with mixed nullable columns") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r")
+      val joined = left.join(right, left("id") === right("id"))
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+    }
+  }
+
+  test("SPARK-59787: wide left outer SortMergeJoin with null output rows") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r").where($"id" >= 50)
+      val joined = left.join(right, left("id") === right("id"), "left_outer")
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+      val nullCount = joined.where(right("id").isNull).count()
+      assert(nullCount == 50, s"Expected 50 null-output rows, got $nullCount")
+    }
+  }
+
+  test("SPARK-59787: wide right outer SortMergeJoin with null output rows") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l").where($"id" >= 50)
+      val right = wideDF(100, 40, "r")
+      val joined = left.join(right, left("id") === right("id"), "right_outer")
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+      val nullCount = joined.where(left("id").isNull).count()
+      assert(nullCount == 50, s"Expected 50 null-output rows, got $nullCount")
+    }
+  }
+
+  test("SPARK-59787: wide left semi SortMergeJoin") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r").where($"id" >= 50)
+      val joined = left.join(right, left("id") === right("id"), "left_semi")
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+      assert(joined.count() == 50)
+    }
+  }
+
+  test("SPARK-59787: wide left anti SortMergeJoin") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r").where($"id" >= 50)
+      val joined = left.join(right, left("id") === right("id"), "left_anti")
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+      assert(joined.count() == 50)
+    }
+  }
+
+  test("SPARK-59787: wide existence SortMergeJoin") {
+    withSQLConf(
+      (wideSMJConf :+ (SQLConf.ENABLE_EXISTENCE_SORT_MERGE_JOIN_CODEGEN.key -> "true")): _*
+    ) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r").where($"id" >= 50)
+      left.createOrReplaceTempView("wide_left")
+      right.createOrReplaceTempView("wide_right")
+      val joined = spark.sql(
+        "SELECT wide_left.*, EXISTS (SELECT 1 FROM wide_right WHERE wide_left.id = wide_right.id)" +
+        " AS has_match FROM wide_left")
+      checkAnswer(joined, withoutWholeStage(joined))
+      val matchCount = joined.where($"has_match").count()
+      assert(matchCount == 50)
+    }
+  }
+
+  test("SPARK-59787: wide inner SortMergeJoin with extra join condition") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r")
+      val joined = left.join(right,
+        left("id") === right("id") && left("l_c0") > right("r_c0") - 5)
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+    }
+  }
+
+  test("SPARK-59787: wide left outer SortMergeJoin with extra join condition") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(100, 40, "l")
+      val right = wideDF(100, 40, "r").where($"id" >= 30)
+      val joined = left.join(right,
+        left("id") === right("id") && right("r_c0") > lit(40),
+        "left_outer")
+      assertSMJCodegenUsed(joined)
+      checkAnswer(joined, withoutWholeStage(joined))
+    }
+  }
+
+  test("SPARK-59787: wide SortMergeJoin without join condition (equi-only)") {
+    withSQLConf(wideSMJConf: _*) {
+      val left = wideDF(50, 40, "l")
+      val right = wideDF(50, 40, "r")
+      val joined = left.join(right, Seq("id"))
+      checkAnswer(joined, withoutWholeStage(joined))
+    }
+  }
+
 }
