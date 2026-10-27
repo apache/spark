@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis.{withPosition, Analyzer, SQLFunctionExpression, SQLFunctionNode, SQLScalarFunction, SQLTableFunction, UnresolvedAlias, UnresolvedAttribute, UnresolvedFunction, UnresolvedRelation, UnresolvedTableValuedFunction}
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, SQLFunction, UserDefinedFunction, UserDefinedFunctionErrors}
 import org.apache.spark.sql.catalyst.catalog.UserDefinedFunction._
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, Expression, Generator, LateralSubquery, Literal, ScalarSubquery, SubqueryExpression, UnresolvedJsonConstructor, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical.{LateralJoin, LocalRelation, LogicalPlan, OneRowRelation, Project, Range, UnresolvedWith, View}
@@ -356,6 +356,11 @@ case class CreateSQLFunctionCommand(
             case e: UnresolvedFunction
               if catalog.isTemporaryFunction(e.nameParts.asFunctionIdentifier) =>
               Seq(e.nameParts.asFunctionIdentifier.funcName)
+            // A routed nested SQL/JSON constructor is still a call a temp function may own.
+            case j: UnresolvedJsonConstructor
+              if j.routeThroughResolution &&
+                catalog.isTemporaryFunction(FunctionIdentifier(j.prettyName)) =>
+              Seq(j.prettyName)
             case _ => Seq.empty
           })
         case _ => Seq.empty

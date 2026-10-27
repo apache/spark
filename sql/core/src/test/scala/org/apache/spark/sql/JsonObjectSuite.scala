@@ -23,7 +23,17 @@ import org.antlr.v4.runtime.atn.PredictionMode
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.Star
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Cast, CodegenObjectFactoryMode, Collate, Expression, JsonConstructorNullBehavior, JsonImplicitFormatCarrier, JsonObjectExpr, Literal}
+import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
+import org.apache.spark.sql.catalyst.expressions.{
+  Cast,
+  CodegenObjectFactoryMode,
+  Collate,
+  Expression,
+  JsonConstructorNullBehavior,
+  JsonObjectExpr,
+  Literal,
+  UnresolvedJsonObject
+}
 import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErrorStrategy, SqlBaseLexer, SqlBaseParser}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
 import org.apache.spark.sql.execution.{ProjectExec, WholeStageCodegenExec}
@@ -1206,11 +1216,28 @@ world'))"""))
         // A clause-bearing colon form likewise stays the built-in constructor.
         checkAnswer(sql("SELECT json_object('id' : 7 RETURNING STRING)"), Row("""{"id":7}"""))
         checkAnswer(sql("SELECT json_object('id' VALUE NULL ABSENT ON NULL)"), Row("{}"))
-        // A nested JSON constructor stays on the direct-construction path, so it is not shadowed
-        // and its parse-time raw splice is preserved.
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
+  test("explicit FORMAT JSON stays stock-owned under a compatible shadow") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql("SELECT json_object('id' VALUE '[1]')"), Row("shadowed"))
         checkAnswer(
-          sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"),
-          Row("""{"a":{"b":1}}"""))
+          sql("SELECT json_object('id' VALUE '[1]' FORMAT JSON)"),
+          Row("""{"id":[1]}"""))
+        checkAnswer(
+          sql("SELECT json_object('id' : '[1]' FORMAT JSON)"),
+          Row("""{"id":[1]}"""))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
@@ -1220,7 +1247,7 @@ world'))"""))
 
   test("a comma-form nested JSON producer is spliced raw when unshadowed") {
     // The comma form routes through resolution, but the unshadowed built-in reconstruction still
-    // splices a lexically nested constructor raw (via JsonImplicitFormatCarrier), matching VALUE.
+    // splices a lexically nested constructor raw, matching VALUE.
     checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("""{"a":{"b":1}}"""))
     checkAnswer(sql("SELECT json_object('a', json_array(1, 2))"), Row("""{"a":[1,2]}"""))
     checkAnswer(
@@ -1244,18 +1271,18 @@ world'))"""))
       Row("""{"a":"Ada"}"""))
   }
 
-  test("routed comma-form builder ties each member's raw flag to its own position") {
-    // The routed builder groups the flat arg list by pairs and derives each member's raw flag from
-    // its own carrier. Mix a quoted ordinary string, a raw nested object, and a raw nested array in
-    // distinct positions so a grouping/indexing slip would splice or quote a neighbouring member.
+  test("JSON_OBJECT ties each member's raw flag to its own position") {
+    // Mix a quoted ordinary string, a raw nested object, and a raw nested array in distinct
+    // positions so a grouping/indexing slip would splice or quote a neighbouring member.
     checkAnswer(
       sql("""SELECT json_object('a', '{"x":1}', 'b', json_object('c', 1), 'd', json_array(1))"""),
       Row("""{"a":"{\"x\":1}","b":{"c":1},"d":[1]}"""))
   }
 
-  test("a compatible routine shadows a comma-form call even with a nested producer value") {
-    // Argument shape must not remove routine candidates: the carrier is transparent to overload
-    // selection, so a compatible (STRING, STRING) routine shadows the nested-producer call.
+  test("a compatible routine shadows a clause-free call even with a nested producer value") {
+    // Argument shape must not remove routine candidates: the routed wrapper hands off plain
+    // arguments to function resolution, so a compatible (STRING, STRING) routine shadows the
+    // nested-producer call across clause-free comma, VALUE, and colon spellings.
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
@@ -1266,11 +1293,10 @@ world'))"""))
         checkAnswer(sql("SELECT json_object('a', 'x')"), Row("shadowed"))
         checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("shadowed"))
         checkAnswer(sql("SELECT json_object('a', json_array(1))"), Row("shadowed"))
-        // The dedicated VALUE form's nested value stays on the direct path, so it is not shadowed
-        // and its parse-time raw splice is preserved.
-        checkAnswer(
-          sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"),
-          Row("""{"a":{"b":1}}"""))
+        checkAnswer(sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"), Row("shadowed"))
+        checkAnswer(sql("SELECT json_object('a': json_object('b': 1))"), Row("shadowed"))
+        checkAnswer(sql("SELECT json_object('a' VALUE builtin.json_object('b', 1))"),
+          Row("shadowed"))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
@@ -1278,8 +1304,36 @@ world'))"""))
     }
   }
 
+  test("SPARK-59243: a persistent function cannot reference a temp shadow via a nested call") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // Every routed spelling is a reference to the temp shadow, like the flat call.
+        Seq(
+          "json_object('a', 'x')",
+          "json_object('a', json_object('b', 1))",
+          "json_object('a' VALUE json_object('b' VALUE 1))",
+          "json_object('a': json_object('b': 1))"
+        ).foreach { body =>
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+          }
+          assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"for $body")
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP FUNCTION IF EXISTS perm_json_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
   test("a shadowing routine receives the routed nested producer's JSON text") {
-    // The routine returns its value argument, so this observes what the carrier passes through.
+    // The routine returns its value argument, so this observes what the shadow receives.
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
       SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
@@ -1288,6 +1342,10 @@ world'))"""))
         sql("SET PATH = system.session, system.builtin")
         checkAnswer(sql("SELECT json_object('a', json_object('b', 1))"), Row("""{"b":1}"""))
         checkAnswer(sql("SELECT json_object('a', json_array(1))"), Row("[1]"))
+        checkAnswer(
+          sql("SELECT json_object('a' VALUE json_object('b' VALUE 1))"),
+          Row("""{"b":1}"""))
+        checkAnswer(sql("SELECT json_object('a' VALUE builtin.json_array(1))"), Row("[1]"))
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
@@ -1323,15 +1381,103 @@ world'))"""))
     checkAnswer(sql("SELECT builtin.json_object()"), Row("{}"))
   }
 
-  test("a nested JSON-producing argument through a qualified JSON_OBJECT call is quoted") {
-    // A qualified call carries no lexical FORMAT JSON, so the nested result is quoted, unlike the
-    // unqualified forms. Splicing through it is left as a follow-up (SPARK-59243).
+  test("SPARK-59243: a nested JSON constructor through a routed JSON_OBJECT call is spliced") {
+    // A routed or qualified built-in JSON_OBJECT splices a lexically-nested JSON producer value,
+    // matching the direct comma form. The built-in builder derives the splice from the resolved
+    // value via `ImplicitlyFormattedAsJson.splicesThroughCollationCast`, so a qualified outer call
+    // and an unqualified call over a qualified nested constructor both splice.
     checkAnswer(
       sql("SELECT builtin.json_object('a', json_object('b', 1))"),
-      Row("""{"a":"{\"b\":1}"}"""))
+      Row("""{"a":{"b":1}}"""))
+    checkAnswer(
+      sql("SELECT system.builtin.json_object('a', json_object('b', 1))"),
+      Row("""{"a":{"b":1}}"""))
     checkAnswer(
       sql("SELECT json_object('a', builtin.json_object('b', 1))"),
+      Row("""{"a":{"b":1}}"""))
+    checkAnswer(
+      sql("SELECT builtin.json_object('a', json_array(1))"),
+      Row("""{"a":[1]}"""))
+    checkAnswer(
+      sql("""SELECT builtin.json_object('a', json_query('{"x":{"y":1}}', '$.x'))"""),
+      Row("""{"a":{"y":1}}"""))
+    // A user CAST still detaches FORMAT JSON, so the value stays quoted (the routed splice check
+    // sees through an analyzer collation Cast, but not a user `CAST(... AS STRING)`).
+    checkAnswer(
+      sql("SELECT builtin.json_object('a', CAST(json_object('b', 1) AS STRING))"),
       Row("""{"a":"{\"b\":1}"}"""))
+  }
+
+  test("SPARK-59243: VALUE/colon JSON_OBJECT splices qualified nested constructors") {
+    checkAnswer(
+      sql("SELECT json_object('a' VALUE json_object('b' VALUE 1), " +
+        "'c' VALUE builtin.json_object('d', 2))"),
+      Row("""{"a":{"b":1},"c":{"d":2}}"""))
+    checkAnswer(
+      sql("SELECT json_object('a': json_object('b': 1), " +
+        "'c': builtin.json_object('d', 2))"),
+      Row("""{"a":{"b":1},"c":{"d":2}}"""))
+
+    Seq(false, true).foreach { singlePass =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        val analyzed =
+          sql("SELECT json_object('a' VALUE builtin.json_object('b', 1) FORMAT JSON)")
+            .queryExecution.analyzed
+        val outer = analyzed.expressions
+          .flatMap(_.collect { case j: JsonObjectExpr => j })
+          .find(_.rawJson == Seq(true))
+          .get
+        assert(!outer.needsValidation.head, s"singlePass=$singlePass")
+      }
+    }
+  }
+
+  test("SPARK-59243: routed/qualified JSON_OBJECT splices under a default collation") {
+    // The qualified call resolves through the built-in builder; `ApplyDefaultCollation` wraps the
+    // nested producer in a collation Cast, which the builder must see through (an analyzer Cast,
+    // not a user one) and splice, matching the unqualified comma form rather than quoting.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(
+          """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT builtin.json_object('a', json_object('b', 1)) AS q,
+            |       json_object('a', json_object('b', 1)) AS u""".stripMargin)
+        checkAnswer(spark.table("t"), Row("""{"a":{"b":1}}""", """{"a":{"b":1}}"""))
+      }
+    }
+  }
+
+  test("SPARK-59243: a string() cast detaches a nested producer with an explicit collation") {
+    // The untagged `string(...)` cast changes the collation here, but it is a user cast, not a
+    // default-collation recoloring, so the nested object is quoted on every path.
+    val nested = "string(json_object('b', 1 RETURNING STRING COLLATE UTF8_LCASE))"
+    val quoted = Row("""{"a":"{\"b\":1}"}""")
+    checkAnswer(sql(s"SELECT builtin.json_object('a', $nested)"), quoted)
+    checkAnswer(sql(s"SELECT json_object('a', $nested)"), quoted)
+    checkAnswer(sql(s"SELECT json_object('a' VALUE $nested NULL ON NULL)"), quoted)
+  }
+
+  test("SPARK-59243: routed JSON_OBJECT splice round-trips through canonical SQL") {
+    // The analyzed expression's canonical SQL must reparse to the same spliced result.
+    Seq(
+      "SELECT builtin.json_object('a', json_object('b', 1))",
+      "SELECT json_object('a', builtin.json_object('b', 1))").foreach { query =>
+      val analyzed = sql(query).queryExecution.analyzed
+      val jsonObject = analyzed.expressions.flatMap(_.collect { case j: JsonObjectExpr => j }).head
+      checkAnswer(sql(s"SELECT ${jsonObject.sql}"), Row("""{"a":{"b":1}}"""))
+    }
+  }
+
+  test("SPARK-59243: VALUE/colon JSON_OBJECT in a lambda preserves qualified splicing") {
+    checkAnswer(
+      sql("SELECT transform(array(1), x -> json_object('a' VALUE json_object('b' VALUE x), " +
+        "'c' VALUE builtin.json_object('d', x)))"),
+      Row(Seq("""{"a":{"b":1},"c":{"d":1}}""")))
+    checkAnswer(
+      sql("SELECT transform(array(1), x -> json_object('a': json_object('b': x), " +
+        "'c': builtin.json_object('d', x)))"),
+      Row(Seq("""{"a":{"b":1},"c":{"d":1}}""")))
   }
 
   test("an odd number of arguments through a qualified call is rejected by the builder") {
@@ -1350,6 +1496,59 @@ world'))"""))
     }
   }
 
+  test("invalid: a direct star in VALUE/colon JSON_OBJECT forms is not expanded") {
+    // Clause-free VALUE / colon forms route through function resolution, but the stock built-in
+    // still rejects a direct member value `*`; only a shadowing routine may receive it expanded.
+    Seq(
+      "SELECT json_object('a' VALUE *, 'b' VALUE json_object('c' VALUE 1)) " +
+        "FROM VALUES ('id', 7) AS t(a, b)",
+      "SELECT json_object('a': *, 'b': json_object('c': 1)) " +
+        "FROM VALUES ('id', 7) AS t(a, b)"
+    ).foreach { query =>
+      Seq(false, true).foreach { singlePass =>
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+          val e = intercept[AnalysisException] {
+            sql(query).queryExecution.analyzed
+          }
+          assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX",
+            s"singlePass=$singlePass for $query")
+        }
+      }
+    }
+  }
+
+  test("VALUE/colon JSON_OBJECT star expands for a shadow owner") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(k1 STRING, v1 STRING, v2 INT, " +
+          "k2 STRING, v3 STRING) RETURNS STRING RETURN 'shadowed-5'")
+        sql("SET PATH = system.session, system.builtin")
+        Seq(
+          "SELECT json_object('a' VALUE *, 'b' VALUE json_object('c' VALUE 1)) " +
+            "FROM VALUES ('id', 7) AS t(a, b)",
+          "SELECT json_object('a': *, 'b': json_object('c': 1)) " +
+            "FROM VALUES ('id', 7) AS t(a, b)"
+        ).foreach { query =>
+          checkAnswer(sql(query), Row("shadowed-5"))
+          // Strict single-pass expands the nested star and routes to the shadow owner too, but the
+          // owner is a SQL function the single-pass analyzer does not yet resolve: reaching it
+          // (past star expansion and routing) then aborts with ExplicitlyUnsupportedResolverFeature
+          // on the SQL function body. Guard-gated modes fall back to the fixed-point result above.
+          withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+            intercept[ExplicitlyUnsupportedResolverFeature] {
+              sql(query).queryExecution.analyzed
+            }
+          }
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
   test("json_object is registered as a built-in function") {
     assert(spark.sessionState.catalog.isBuiltinFunction("json_object"))
   }
@@ -1359,22 +1558,24 @@ world'))"""))
       Seq(
         "SELECT json_object('id', 7)",
         "SELECT json_object('vals', array(*)) FROM VALUES (1, 2) AS t(a, b)",
-        // A routed comma-form nested producer carries a JsonImplicitFormatCarrier (a
-        // TaggingExpression the ResolverGuard admits) that the built-in unwraps.
-        "SELECT json_object('a', json_object('b', 1))"
+        // A routed nested producer keeps its raw-splice flag in UnresolvedJsonObject until the
+        // stock built-in path finalizes it.
+        "SELECT json_object('a', json_object('b', 1))",
+        "SELECT json_object('a' VALUE json_object('b' VALUE 1), " +
+          "'c' VALUE builtin.json_object('d', 2))"
       ).foreach { query =>
         // Analyze only: the single-pass analyzer cannot yet run every operator the action path
-        // needs, so assert the routed call resolves (via the ResolverGuard allowlist) and neither a
-        // star nor an un-unwrapped carrier survives, rather than executing it.
+        // needs, so assert JSON_OBJECT resolves (via the ResolverGuard allowlist) and neither a
+        // star nor an unresolved wrapper survives, rather than executing it.
         val analyzed = sql(query).queryExecution.analyzed
         assert(analyzed.resolved, s"for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
           s"star should not survive analysis for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(
-          _.isInstanceOf[JsonImplicitFormatCarrier]))),
-          s"carrier should not survive analysis for $query")
-        // The carrier must be unwrapped into rawJson = true, not merely stripped: a strip would
-        // pass the assertion above yet quote the nested object instead of splicing it raw.
+          _.isInstanceOf[UnresolvedJsonObject]))),
+          s"wrapper should not survive analysis for $query")
+        // The wrapper must preserve rawJson = true, not merely disappear: otherwise the nested
+        // object would be quoted instead of spliced raw.
         if (query.contains("json_object('a', json_object('b', 1))")) {
           val objs = analyzed.expressions.flatMap(_.collect { case j: JsonObjectExpr => j })
           val outer = objs.filter(_.members.exists { case (_, v) =>
@@ -1382,6 +1583,12 @@ world'))"""))
           })
           assert(outer.map(_.rawJson) == Seq(Seq(true)),
             s"nested producer must be marked raw-spliced for $query")
+        }
+        if (query.contains("'c' VALUE builtin.json_object")) {
+          val objs = analyzed.expressions.flatMap(_.collect { case j: JsonObjectExpr => j })
+          val outer = objs.find(_.members.length == 2).get
+          assert(outer.rawJson == Seq(true, true),
+            s"qualified VALUE member must be marked raw-spliced for $query")
         }
       }
     }

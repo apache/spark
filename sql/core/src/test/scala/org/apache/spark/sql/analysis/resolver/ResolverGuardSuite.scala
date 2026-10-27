@@ -143,17 +143,21 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
   test("SQL JSON constructor and path functions") {
     checkResolverGuard("""SELECT JSON_ARRAY(1, 'x', true)""")
     checkResolverGuard("""SELECT JSON_ARRAY('[1]' FORMAT JSON)""")
+    // Nested clause-free JSON_ARRAY routes as UnresolvedJsonArray before resolution; assert the
+    // guard admits it so tentative single-pass mode can cover it.
+    checkResolverGuard("""SELECT JSON_ARRAY(JSON_ARRAY(1))""")
     checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a')""")
     checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a' RETURNING INT)""")
     checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a')""")
     checkResolverGuard("""SELECT JSON_QUERY('{"a":[1]}', '$.a' WITH ARRAY WRAPPER)""")
     checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a')""")
     checkResolverGuard("""SELECT JSON_EXISTS('{"a":1}', '$.a' TRUE ON ERROR)""")
-    // A clause-free JSON_OBJECT routes as an UnresolvedFunction unless a VALUE/colon member is raw;
-    // such a call, or a clause-bearing one, is built directly as a JsonObjectExpr. Assert the guard
-    // admits that direct form (removing its allowlist arm would fail here).
+    // Clause-bearing and explicit FORMAT JSON forms parse to a stock-owned UnresolvedJsonObject;
+    // assert the guard admits it.
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE 1 RETURNING STRING)""")
     checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE '[1]' FORMAT JSON)""")
+    // A value-nested JSON_OBJECT keeps the direct wrapper before finalization.
+    checkResolverGuard("""SELECT JSON_OBJECT('a' VALUE JSON_OBJECT('b' VALUE 1))""")
   }
 
   test("Conditional expressions") {

@@ -942,10 +942,10 @@ object FunctionRegistry {
   )
 
   // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes the
-  // eligible flat clause-free calls here so a same-named routine can shadow them. Clause-bearing
-  // forms, and the nested/implicit-JSON clause-free forms (routing deferred to SPARK-59243), are
-  // still built directly by the grammar -- except the `json_object` comma form, whose nested
-  // producer value also routes here (carrying a `JsonImplicitFormatCarrier`).
+  // eligible flat clause-free calls here so a same-named routine can shadow them. A clause-free
+  // call with a lexically nested constructor routes too, via `UnresolvedJsonConstructor` (so a
+  // routine can shadow it while the built-in still splices). Clause-bearing forms, and
+  // `json_object` forms with explicit FORMAT JSON, are finalized from the direct grammar path.
   private val routedSqlJsonFunctionEntries: Seq[FunctionRegistryEntry] = Seq(
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),

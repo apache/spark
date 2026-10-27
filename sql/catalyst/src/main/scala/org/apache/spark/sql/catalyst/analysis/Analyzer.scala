@@ -709,6 +709,7 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
+      ResolveJsonConstructors ::
       ApplyDefaultCollation ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
@@ -2203,6 +2204,13 @@ class Analyzer(
      * Expands the matching attribute.*'s in `child`'s output.
      */
     def expandStarExpression(expr: Expression, child: LogicalPlan): Expression = {
+      def expandDirectStars(arguments: Seq[Expression]): Seq[Expression] = {
+        arguments.flatMap {
+          case s: Star => expand(s, child)
+          case o => o :: Nil
+        }
+      }
+
       expr.transformUp {
         case f: UnresolvedFunction if containsStar(f.arguments) =>
           // Only a direct star (bare `*` or qualified `t.*`) reaches here: a star nested in another
@@ -2251,6 +2259,24 @@ class Analyzer(
                   case o => o :: Nil
                 })
               }
+          }
+        case j: UnresolvedJsonConstructor if containsStar(j.arguments) =>
+          // Same once-only routed SQL/JSON owner decision as `UnresolvedFunction`: the stock
+          // built-in (and any non-routable direct grammar form) rejects a direct star; a
+          // shadow/injected replacement receives the expanded arguments as an ordinary call.
+          def rejectStar(): Nothing = throw QueryCompilationErrors.invalidStarUsageError(
+            s"expression `${j.prettyName}`", extractStar(j.arguments))
+          def routed: UnresolvedFunction =
+            UnresolvedFunction(j.prettyName, expandDirectStars(j.arguments), isDistinct = false)
+          if (!j.routeThroughResolution) {
+            rejectStar()
+          } else {
+            functionResolution.selectRoutedSqlJsonDirectStarOwner(Seq(j.prettyName)) match {
+              case RoutedSqlJsonStarOwner.RejectStockBuiltin => rejectStar()
+              case RoutedSqlJsonStarOwner.BindShadowOwner(candidate) =>
+                routed.copy(boundOwner = Some(candidate))
+              case RoutedSqlJsonStarOwner.NoBinding => routed
+            }
           }
         case c: CreateNamedStruct if containsStar(c.valExprs) =>
           val newChildren = c.children.grouped(2).flatMap {
@@ -2470,6 +2496,38 @@ class Analyzer(
       } else {
         name.map(_.toLowerCase(Locale.ROOT))
       }
+    }
+  }
+
+  /**
+   * Resolves unresolved SQL/JSON constructors before `ApplyDefaultCollation` so built-ins
+   * materialize in time to be recolored. Parse-time flags keep lexical nested constructors and
+   * explicit `FORMAT JSON`; resolved children recover qualified/routed nested constructors that
+   * were not visible to the parser.
+   */
+  object ResolveJsonConstructors extends Rule[LogicalPlan] {
+    // Finalize bottom-up and set the built-in's time zone as it materializes, so a nested wrapper
+    // is a resolved child before its parent in the same pass. Otherwise the `childrenResolved`
+    // guard peels one nesting level per iteration (depth-scaled, risking analyzer maxIterations).
+    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsUpWithPruning(
+      _.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
+      case j: UnresolvedJsonConstructor =>
+        if (functionResolution.routesJsonConstructorToFunction(j)) {
+          // A shadow/replacement owns the name: resolve as an ordinary call, like the flat path.
+          j.toUnresolvedFunction
+        } else {
+          val directStars = j.arguments.collect { case s: Star => s }
+          if (directStars.nonEmpty) {
+            throw QueryCompilationErrors.invalidStarUsageError(
+              s"expression `${j.prettyName}`", directStars)
+          } else if (!j.childrenResolved) {
+            // Wait for children that can later become JSON producers, e.g. qualified constructors
+            // inside a higher-order-function lambda whose variables bind later in this batch.
+            j
+          } else {
+            j.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
+          }
+        }
     }
   }
 
