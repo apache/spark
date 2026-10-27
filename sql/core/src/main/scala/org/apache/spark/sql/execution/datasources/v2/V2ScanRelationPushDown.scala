@@ -28,14 +28,14 @@ import org.apache.spark.sql.catalyst.expressions.{aggregate, Alias, And, Attribu
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.optimizer.{CollapseGroupedSumOfCount, CollapseProject}
 import org.apache.spark.sql.catalyst.planning.{PhysicalOperation, ScanOperation}
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LeafNode, Limit, LimitAndOffset, LocalLimit, LocalRelation, LogicalPlan, Offset, OffsetAndLimit, Project, Sample, SampleMethod, Sort, Subquery}
 import org.apache.spark.sql.catalyst.plans.logical.PlanHelper
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, Count, CountStar, Max, Min, Sum}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
-import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, VariantInRelation, VariantMetadata}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
@@ -48,9 +48,12 @@ import org.apache.spark.util.Utils
 object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   import DataSourceV2Implicits._
 
-  def apply(plan: LogicalPlan): LogicalPlan = {
+  def apply(plan: LogicalPlan): LogicalPlan =
+    applyWithContext(plan, isSubquery = plan.isInstanceOf[Subquery])
+
+  private def applyWithContext(plan: LogicalPlan, isSubquery: Boolean): LogicalPlan = {
     val pushdownRules = Seq[LogicalPlan => LogicalPlan] (
-      createScanBuilder,
+      createScanBuilder(_, isSubquery),
       pushDownSample,
       pushDownFilters,
       pushDownJoin,
@@ -79,13 +82,17 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
    * translation, column pruning, the iterative PartitionPredicate second pass) stays owned here.
    * `conditions` are pushed as a single `Filter` directly above the relation; the caller decides
    * which of them must come back fully enforced.
+   * `isSubquery` describes the destination plan's scope, absent from this synthetic input.
    */
   def rebuildScan(
       relation: DataSourceV2Relation,
       projectList: Seq[NamedExpression],
-      conditions: Seq[Expression]): Option[DataSourceV2ScanRelation] = {
+      conditions: Seq[Expression],
+      isSubquery: Boolean): Option[DataSourceV2ScanRelation] = {
     val child = conditions.reduceOption(And).map(Filter(_, relation)).getOrElse(relation)
-    apply(Project(projectList, child)).collectFirst { case s: DataSourceV2ScanRelation => s }
+    applyWithContext(Project(projectList, child), isSubquery).collectFirst {
+      case scan: DataSourceV2ScanRelation => scan
+    }
   }
 
   private def collapseGroupedSumOfCount(plan: LogicalPlan): LogicalPlan = {
@@ -97,9 +104,12 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     }
   }
 
-  private def createScanBuilder(plan: LogicalPlan) = plan.transform {
+  private def createScanBuilder(
+      plan: LogicalPlan,
+      isSubquery: Boolean): LogicalPlan = plan.transform {
     case r: DataSourceV2Relation =>
-      ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(r.options))
+      val context = new ScanContext(isSubquery)
+      ScanBuilderHolder(r.output, r, r.table.asReadable.newScanBuilder(context, r.options))
   }
 
   private def pushDownFilters(plan: LogicalPlan) = plan.transform {
