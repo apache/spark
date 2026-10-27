@@ -1413,6 +1413,20 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(CanonicalizeVariant(Literal.create(null, VariantType)), null)
   }
 
+  test("canonicalize_variant preserves invalid UTF-8 string and key bytes") {
+    val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable = true))
+    val metadata = Array[Byte](VERSION, 2, 0, 1, 2, 0xff.toByte, 0xfe.toByte)
+    val value = Array[Byte](objectHeader(false, 1, 1), 2, 1, 0, 6, 0, 12,
+      primitiveHeader(LONG_STR), 1, 0, 0, 0, 0xff.toByte,
+      primitiveHeader(LONG_STR), 1, 0, 0, 0, 0xfe.toByte)
+    val expected = new VariantVal(
+      Array[Byte](objectHeader(false, 1, 1), 2, 0, 1, 0, 2, 4,
+        shortStrHeader(1), 0xfe.toByte, shortStrHeader(1), 0xff.toByte),
+      Array[Byte](VERSION, 2, 0, 1, 2, 0xfe.toByte, 0xff.toByte))
+    checkEvaluation(expression, expected, InternalRow(new VariantVal(value, metadata)))
+    checkEvaluation(expression, expected, InternalRow(expected))
+  }
+
   test("canonicalize_variant input types and nullability") {
     Seq(true, false).foreach { nullable =>
       val expression = CanonicalizeVariant(BoundReference(0, VariantType, nullable))
@@ -1442,9 +1456,11 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("canonicalize_variant size limit") {
-    // Each invalid byte becomes a 3-byte U+FFFD, so 6 MiB of them exceed the 16 MiB test limit.
-    val value = Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0x60, 0) ++
-      Array.fill[Byte](0x600000)(0xff.toByte)
+    // Three elements share a 6 MiB string; writing each payload exceeds the 16 MiB limit.
+    val payload = Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0x60, 0) ++
+      Array.fill[Byte](0x600000)('a'.toByte)
+    val value = Array[Byte](arrayHeader(false, 4), 3) ++ Array.fill[Byte](12)(0) ++
+      Array[Byte](5, 0, 0x60, 0) ++ payload
     checkErrorInExpression[SparkRuntimeException](
       CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
       InternalRow(new VariantVal(value, Array[Byte](VERSION, 0, 0))),

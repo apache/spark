@@ -740,4 +740,17 @@ public class VariantUtil {
     // explicitly rather than relying on the platform-dependent JVM default charset.
     return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
   }
+
+  // Read the original dictionary key bytes without UTF-8 decoding or replacement.
+  static byte[] getMetadataKeyBytes(byte[] metadata, int id) {
+    int offsetSize = getMetadataOffsetSize(metadata);
+    int dictSize = getMetadataNumKeys(metadata, offsetSize);
+    if (id >= dictSize) throw malformedVariant();
+    int stringStart = getMetadataStringStart(metadata, dictSize, offsetSize);
+    int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
+    int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
+    if (offset > nextOffset) throw malformedVariant();
+    checkIndex(stringStart + nextOffset - 1, metadata.length);
+    return Arrays.copyOfRange(metadata, stringStart + offset, stringStart + nextOffset);
+  }
 }

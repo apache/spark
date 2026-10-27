@@ -473,45 +473,71 @@ class VariantCanonicalizeSuite extends AnyFunSuite { // scalastyle:ignore funsui
       obj(Seq(0 -> string(utf8("\u00e9" * 40), longEncoding = true),
         1 -> string(utf8("\ud800\udc00")))), dictionary("a", "b"))
   }
+  // scalastyle:on nonascii
 
-  test("invalid UTF-8 string replacement can require a long-string header") {
-    Seq((bytes(0xff), "\ufffd"), (bytes(97, 0xff, 98), "a\ufffdb"),
-      (bytes(0x80), "\ufffd"), (bytes(0xc0, 0xaf), "\ufffd\ufffd"),
-      (bytes(0xed, 0xa0, 0x80), "\ufffd"), (bytes(0xe2, 0x82), "\ufffd"),
-      (Array.fill[Byte](22)(0xff.toByte), "\ufffd" * 22))
-      .foreach { case (payload, decoded) =>
-        val normalized = utf8(decoded)
-        val expected = string(normalized, longEncoding = normalized.length > MAX_SHORT_STR_SIZE)
-        Seq(false, true).foreach { longEncoding =>
-          checkKeyless(string(payload, longEncoding), expected)
-        }
+  test("invalid UTF-8 string bytes are preserved while headers become minimal") {
+    val payloads = Seq(bytes(0xff), bytes(97, 0xff, 98), bytes(0x80), bytes(0xc0, 0xaf),
+      bytes(0xed, 0xa0, 0x80), bytes(0xe2, 0x82)) ++
+      Seq(22, 63, 64, 256).map(length => Array.fill[Byte](length)(0xff.toByte))
+    payloads.foreach { payload =>
+      val expected = string(payload, longEncoding = payload.length > MAX_SHORT_STR_SIZE)
+      val encodings = if (payload.length <= MAX_SHORT_STR_SIZE) Seq(false, true) else Seq(true)
+      encodings.foreach { longEncoding =>
+        checkKeyless(string(payload, longEncoding), expected)
       }
+    }
   }
 
-  test("invalid UTF-8 key normalization reorders both dictionary and field payloads") {
-    val sourceMetadata = metadata(Seq(bytes(0xf0, 97), bytes(0xf5)))
-    val sourceValue = obj(Seq(0 -> integer(1), 1 -> integer(2)))
-    val expectedValue = obj(Seq(0 -> integer(2), 1 -> integer(1)))
-    val actual = check(new Variant(sourceValue, sourceMetadata), expectedValue,
-      dictionary("\ufffd", "\ufffda"))
-    assert(actual.getFieldByKey("\ufffd").getLong == 2)
-    assert(actual.getFieldByKey("\ufffda").getLong == 1)
-    val expandedKey = obj(Seq(0 -> integer(1)))
-    check(new Variant(expandedKey, metadata(Seq(Array.fill[Byte](86)(0xff.toByte)))),
-      expandedKey, metadata(Seq(utf8("\ufffd" * 86)), 2))
+  test("distinct invalid UTF-8 strings stay distinct during nested rebuilds") {
+    val outputs = Seq(bytes(0xfe), bytes(0xff), bytes(0xef, 0xbf, 0xbd)).map { payload =>
+      val input = array(Seq(string(payload, longEncoding = true), integer(1, INT8, 8)))
+      val expected = array(Seq(string(payload), integer(1)))
+      check(new Variant(input, emptyMetadata), expected).value.toSeq
+    }
+    assert(outputs.distinct.size == outputs.size)
   }
 
-  test("replacement key collisions deduplicate across objects but fail within one object") {
-    val sourceMetadata = metadata(Seq(bytes(0xfe), bytes(0xff)))
+  test("invalid UTF-8 keys are preserved and ordered by their original bytes") {
+    val firstKey = bytes(0xf0, 97)
+    val secondKey = bytes(0xf5)
+    val sourceMetadata = metadata(Seq(secondKey, firstKey))
+    val sourceValue = obj(Seq(1 -> integer(1), 0 -> integer(2)), physicalOrder = Seq(1, 0))
+    check(new Variant(sourceValue, sourceMetadata),
+      obj(Seq(0 -> integer(1), 1 -> integer(2))), metadata(Seq(firstKey, secondKey)))
+    Seq(86, 255, 256).foreach { length =>
+      val key = Array.fill[Byte](length)(0xff.toByte)
+      val value = obj(Seq(0 -> integer(1)))
+      check(new Variant(value, metadata(Seq(key), 4)), value,
+        metadata(Seq(key), if (length <= U8_MAX) 1 else 2))
+    }
+  }
+
+  test("invalid UTF-8 keys that decode to the same string stay distinct") {
+    val keys = Seq(bytes(0xfe), bytes(0xff), bytes(0xef, 0xbf, 0xbd))
+    val sourceMetadata = metadata(keys)
+    val sourceValue = array(keys.indices.map(id => obj(Seq(id -> integer(id + 1)))))
+    val expectedMetadata = metadata(Seq(keys(2), keys(0), keys(1)))
+    check(new Variant(sourceValue, sourceMetadata),
+      array(Seq(obj(Seq(1 -> integer(1))), obj(Seq(2 -> integer(2))),
+        obj(Seq(0 -> integer(3))))), expectedMetadata)
+
+    val sameObject = obj(Seq(2 -> integer(3), 0 -> integer(1), 1 -> integer(2)),
+      physicalOrder = Seq(1, 2, 0))
+    check(new Variant(sameObject, sourceMetadata),
+      obj(Seq(0 -> integer(3), 1 -> integer(1), 2 -> integer(2))), expectedMetadata)
+  }
+
+  test("identical invalid UTF-8 keys deduplicate globally and fail within one object") {
+    val key = bytes(0xff)
+    val sourceMetadata = metadata(Seq(key, key))
     val sourceValue = array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(1 -> integer(2)))))
     check(new Variant(sourceValue, sourceMetadata),
-      array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(0 -> integer(2))))), dictionary("\ufffd"))
+      array(Seq(obj(Seq(0 -> integer(1))), obj(Seq(0 -> integer(2))))), metadata(Seq(key)))
     val duplicate = new Variant(obj(Seq(0 -> integer(1), 1 -> integer(2))), sourceMetadata)
     assert(!VariantBuilder.isCanonical(duplicate))
     checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.canonicalize(duplicate) }
     checkError("VARIANT_DUPLICATE_KEY") { VariantBuilder.doCanonicalize(duplicate) }
   }
-  // scalastyle:on nonascii
 
   test("nested objects arrays and views retain only keys used by the selected value") {
     val parent = VariantBuilder.parseJson(
