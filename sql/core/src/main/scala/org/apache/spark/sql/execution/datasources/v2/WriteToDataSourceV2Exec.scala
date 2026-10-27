@@ -372,6 +372,12 @@ case class OverwritePartitionsDynamicExec(
 
 /**
  * Physical plan node to replace data in existing tables.
+ *
+ * @param useWriteColumnUpdate whether UPDATE and COPY rows follow
+ *                             `LogicalWriteInfo.columnUpdateSchema()` and go to
+ *                             `DataWriter.writeColumnUpdate`. A node that replaces this one must
+ *                             send those rows to `writeColumnUpdate` when it is set, or not
+ *                             replace this node.
  */
 case class ReplaceDataExec(
     query: SparkPlan,

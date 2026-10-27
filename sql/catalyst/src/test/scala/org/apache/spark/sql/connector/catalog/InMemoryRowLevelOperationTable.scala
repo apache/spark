@@ -161,8 +161,14 @@ class InMemoryRowLevelOperationTable private (
     val splitUpdates = properties.getOrDefault(SPLIT_UPDATES, "false").toBoolean
     // the copy-on-write commit finds the original row by `pk`
     val updatesPk = info.updatedColumns().exists(_.describe() == "pk")
+    // The default column-update fixtures drop the mix-in for an UPDATE with no updated columns,
+    // as SupportsColumnUpdates asks. The fixed-declaration fixtures, the split row-ID fixture and
+    // all fixtures for DELETE and MERGE keep it.
+    val updatesNothing = info.command == Command.UPDATE && info.updatedColumns().isEmpty
     if (properties.getOrDefault(COLUMN_UPDATE, "false") == "true") {
-      if (splitUpdates) {
+      if (updatesNothing) {
+        () => DeltaBasedOperation(info.command, info.options)
+      } else if (splitUpdates) {
         () => new DeltaBasedColumnUpdateSplitOperation(
           info.command, info.updatedColumns().toSeq, info.options)
       } else {
@@ -181,7 +187,7 @@ class InMemoryRowLevelOperationTable private (
       () => new DeltaBasedColumnUpdateOperationWithReqAttrs(
         info.command, Array.empty, info.options)
     } else if (properties.getOrDefault(COLUMN_UPDATE_COW, "false") == "true") {
-      if (updatesPk) {
+      if (updatesPk || updatesNothing) {
         () => PartitionBasedOperation(info.command, info.options)
       } else {
         () => new PartitionBasedColumnUpdateOperation(
@@ -406,6 +412,15 @@ class InMemoryRowLevelOperationTable private (
     override def representUpdateAsDeleteAndInsert(): Boolean = false
     override def requiredDataAttributes(): Array[NamedReference] = declaredColumns(updatedCols)
 
+    // The case-class equality of DeltaBasedOperation would make this operation equal to a wide
+    // one, or to another column-update operation, with the same command and options.
+    override def equals(other: Any): Boolean = other match {
+      case ref: AnyRef => this eq ref
+      case _ => false
+    }
+    override def hashCode(): Int = System.identityHashCode(this)
+    override def canEqual(other: Any): Boolean = false
+
     private val clusterExprs: Seq[Expression] = {
       val refs = Option(properties.get(COLUMN_UPDATE_CLUSTER_BY))
         .map(_.split(",").map(name => FieldReference(name.trim)).toSeq)
@@ -507,7 +522,7 @@ class InMemoryRowLevelOperationTable private (
   class DeltaBasedColumnUpdateOperationWithReqAttrs(
       command: Command,
       reqCols: Array[String],
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      options: CaseInsensitiveStringMap)
       extends DeltaBasedColumnUpdateOperation(command, options = options) {
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
@@ -515,7 +530,7 @@ class InMemoryRowLevelOperationTable private (
   class DeltaBasedColumnUpdateSplitOperation(
       command: Command,
       updatedCols: Seq[NamedReference] = Nil,
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      options: CaseInsensitiveStringMap)
       extends DeltaBasedColumnUpdateOperation(command, updatedCols, options) {
     override def representUpdateAsDeleteAndInsert(): Boolean = true
 
@@ -597,7 +612,7 @@ class InMemoryRowLevelOperationTable private (
   class DeltaBasedColumnUpdateSplitOperationWithReqAttrs(
       command: Command,
       reqCols: Array[String],
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      options: CaseInsensitiveStringMap)
       extends DeltaBasedColumnUpdateSplitOperation(command, options = options) {
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
@@ -608,8 +623,8 @@ class InMemoryRowLevelOperationTable private (
   class DeltaBasedColumnUpdateSplitOperationWithRowId(
       command: Command,
       rowIdCol: String,
-      updatedCols: Seq[NamedReference] = Nil,
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      updatedCols: Seq[NamedReference],
+      options: CaseInsensitiveStringMap)
       extends DeltaBasedColumnUpdateSplitOperation(command, updatedCols, options) {
     override def rowId(): Array[NamedReference] = Array(FieldReference(rowIdCol))
     override def requiredDataAttributes(): Array[NamedReference] = updatedCols.toArray
@@ -648,8 +663,16 @@ class InMemoryRowLevelOperationTable private (
               readSchema: StructType,
               tableSchema: StructType,
               options: CaseInsensitiveStringMap): BatchScanBaseClass = {
-            new InMemoryBatchScan(partitions, readSchema, tableSchema, options) {
-              override def filterAttributes(): Array[NamedReference] = identityPartitionReferences
+            if (useCatalystRuntimeFiltering) {
+              new InMemoryCatalystRowLevelBatchScan(partitions, readSchema, tableSchema, options) {
+                override def filterAttributes(): Array[NamedReference] =
+                  identityPartitionReferences
+              }
+            } else {
+              new InMemoryBatchScan(partitions, readSchema, tableSchema, options) {
+                override def filterAttributes(): Array[NamedReference] =
+                  identityPartitionReferences
+              }
             }
           }
 
@@ -694,7 +717,7 @@ class InMemoryRowLevelOperationTable private (
   class PartitionBasedColumnUpdateOperationWithReqAttrs(
       command: Command,
       reqCols: Array[String],
-      options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty())
+      options: CaseInsensitiveStringMap)
       extends PartitionBasedColumnUpdateOperation(command, options = options) {
     override def requiredDataAttributes(): Array[NamedReference] = reqCols.map(FieldReference(_))
   }
@@ -812,43 +835,9 @@ private class DeltaBufferedRowsWriterFactory(
   }
 }
 
-// Test-only: a writer factory for a connector that never overrides writeColumnUpdate(), to
-// exercise the DataWriter#writeColumnUpdate default that throws
-// DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED.
-// Declared top-level (no reference to the enclosing table) so it stays task-serializable.
-private class NoWriteColumnUpdateOverrideWriterFactory extends DataWriterFactory {
-  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new NoWriteColumnUpdateOverrideWriter
-  }
-}
-
-private class NoWriteColumnUpdateOverrideWriter extends DataWriter[InternalRow] {
-  override def write(record: InternalRow): Unit = {}
-  override def commit(): WriterCommitMessage = new BufferedRows(Seq.empty, StructType(Nil))
-  override def abort(): Unit = {}
-  override def close(): Unit = {}
-}
-
-// Test-only: a writer that overrides writeColumnUpdate(record) but not
-// writeColumnUpdate(metadata, record), so rows with metadata reach it through the default.
-private class RecordOnlyColumnUpdateWriterFactory(schema: StructType) extends DataWriterFactory {
-  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
-    new RecordOnlyColumnUpdateWriter(schema)
-  }
-}
-
-private class RecordOnlyColumnUpdateWriter(schema: StructType) extends DataWriter[InternalRow] {
-  private val delegate = new BufferWriter(schema)
-  override def write(record: InternalRow): Unit = delegate.write(record)
-  override def writeColumnUpdate(record: InternalRow): Unit = delegate.writeColumnUpdate(record)
-  override def commit(): WriterCommitMessage = delegate.commit()
-  override def abort(): Unit = delegate.abort()
-  override def close(): Unit = delegate.close()
-}
-
 // Logs the row ID of a DELETE as an integer when `pkRowId` is set, i.e. when the row ID is `pk`,
 // and as null otherwise; the commit then resolves such a DELETE from its metadata.
-private class DeltaBufferWriter(schema: StructType, pkRowId: Boolean = true)
+private class DeltaBufferWriter(schema: StructType, pkRowId: Boolean)
   extends BufferWriter(schema) with DeltaWriter[InternalRow] {
 
   private final val DELETE = UTF8String.fromString(Delete.toString)
@@ -891,6 +880,40 @@ private class DeltaBufferWriter(schema: StructType, pkRowId: Boolean = true)
   }
 
   override def commit(): WriterCommitMessage = buffer
+}
+
+// Test-only: a writer factory for a connector that never overrides writeColumnUpdate(), to
+// exercise the DataWriter#writeColumnUpdate default that throws
+// DATA_SOURCE_WRITE_COLUMN_UPDATE_NOT_IMPLEMENTED.
+// Declared top-level (no reference to the enclosing table) so it stays task-serializable.
+private class NoWriteColumnUpdateOverrideWriterFactory extends DataWriterFactory {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    new NoWriteColumnUpdateOverrideWriter
+  }
+}
+
+private class NoWriteColumnUpdateOverrideWriter extends DataWriter[InternalRow] {
+  override def write(record: InternalRow): Unit = {}
+  override def commit(): WriterCommitMessage = new BufferedRows(Seq.empty, StructType(Nil))
+  override def abort(): Unit = {}
+  override def close(): Unit = {}
+}
+
+// Test-only: a writer that overrides writeColumnUpdate(record) but not
+// writeColumnUpdate(metadata, record), so rows with metadata reach it through the default.
+private class RecordOnlyColumnUpdateWriterFactory(schema: StructType) extends DataWriterFactory {
+  override def createWriter(partitionId: Int, taskId: Long): DataWriter[InternalRow] = {
+    new RecordOnlyColumnUpdateWriter(schema)
+  }
+}
+
+private class RecordOnlyColumnUpdateWriter(schema: StructType) extends DataWriter[InternalRow] {
+  private val delegate = new BufferWriter(schema)
+  override def write(record: InternalRow): Unit = delegate.write(record)
+  override def writeColumnUpdate(record: InternalRow): Unit = delegate.writeColumnUpdate(record)
+  override def commit(): WriterCommitMessage = delegate.commit()
+  override def abort(): Unit = delegate.abort()
+  override def close(): Unit = delegate.close()
 }
 
 object InMemoryRowLevelOperationTable {

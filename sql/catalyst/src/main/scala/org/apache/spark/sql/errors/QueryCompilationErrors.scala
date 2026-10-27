@@ -4728,7 +4728,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       connectorClass: String,
       columns: Seq[(Seq[String], Option[String])]): Throwable = {
     val names = columns.map {
-      case (parts, Some(condition)) if parts.nonEmpty => s"${toSQLId(parts)} ($condition)"
+      case (parts, Some(condition)) => s"${toSQLId(parts)} ($condition)"
       case (parts, _) => columnSQLId(parts)
     }
     new AnalysisException(

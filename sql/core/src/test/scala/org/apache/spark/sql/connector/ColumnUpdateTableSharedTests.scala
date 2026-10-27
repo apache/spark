@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connector
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.{SparkException, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
@@ -48,6 +50,13 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     classOf[InMemoryRowLevelOperationTable#PartitionBasedColumnUpdateOperationWithReqAttrs].getName
   }
 
+  // `base` with the given table properties added; a given key replaces the same key in `base`
+  protected def tablePropsWith(
+      base: java.util.Map[String, String],
+      props: (String, String)*): java.util.Map[String, String] = {
+    (base.asScala ++ props).asJava
+  }
+
   // t(pk, id, dep, salary, bonus, extra) with CHECK (extra > 0), partitioned by dep
   protected def createAndInitTableWithProps(props: java.util.Map[String, String]): Unit = {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING, salary INT, bonus INT, extra INT",
@@ -68,8 +77,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
 
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
 
-    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq ==
-      Seq("pk", "dep", "salary"))
+    checkLastColumnUpdateSchema("pk", "dep", "salary")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, -1, 10, "hr") ::
@@ -151,7 +159,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     }
     val relation = write.table.asInstanceOf[DataSourceV2Relation]
     val operationTable = relation.table.asInstanceOf[RowLevelOperationTable]
-    val t = table
+    val t = operationTable.table.asInstanceOf[InMemoryRowLevelOperationTable]
     val replacements: Seq[(RowLevelOperation, String)] = if (deltaUpdate) {
       Seq(
         t.DeltaBasedOperation(UPDATE, CaseInsensitiveStringMap.empty()) -> "[pk, salary, dep]",
@@ -162,6 +170,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
         new t.PartitionBasedColumnUpdateOperation(UPDATE) -> "[pk, dep]")
     }
     replacements.foreach { case (operation, expectedNames) =>
+      assert(operation != operationTable.operation)
       val replaced = write.withNewTable(
         relation.copy(table = operationTable.copy(operation = operation)(
           operationTable.operationInfo)))
@@ -183,7 +192,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     sql(s"UPDATE $tableNameAsString SET s.c1 = -1 WHERE pk = 1")
 
     checkLastUpdatedColumns("s")
-    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == Seq("pk", "dep", "s"))
+    checkLastColumnUpdateSchema("pk", "dep", "s")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, Row(-1, 2), "hr") :: Row(2, Row(3, 4), "hr") :: Nil)
@@ -198,7 +207,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
         s"pk INT, id INT, dep STRING, salary INT, bonus INT, extra INT$scanMetadataColumns")
     }
 
-    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == Seq("pk", "salary"))
+    checkLastColumnUpdateSchema("pk", "salary")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, 1, "hr", 110, 10, 1) ::
@@ -218,6 +227,33 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
       Row(2, 1, "hr", 0, 10, 1) ::
       Row(2, 2, "hr", 200, 20, 1) ::
       Row(3, 3, "software", 300, 30, 1) :: Nil)
+  }
+
+  test("column-update: an UPDATE whose assignments are all identity assignments is narrowed " +
+    "only if the operation keeps the mix-in") {
+    Seq(
+      extraTableProps -> None,
+      reqAttrsTableProps("pk,salary") -> Some(Seq("pk", "salary"))
+    ).foreach { case (props, columnUpdateNames) =>
+      withTable(tableNameAsString) {
+        createAndInitTableWithProps(props)
+
+        sql(s"UPDATE $tableNameAsString SET salary = salary, dep = dep WHERE pk = 1")
+
+        checkLastUpdatedColumns()
+        columnUpdateNames match {
+          case Some(names) => checkLastColumnUpdateSchema(names: _*)
+          case None =>
+            assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
+              s"the write must be full width: ${table.lastWriteInfo.columnUpdateSchema()}")
+        }
+        checkAnswer(
+          sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
+          Row(1, 1, "hr", 100, 10, 1) ::
+          Row(2, 2, "hr", 200, 20, 1) ::
+          Row(3, 3, "software", 300, 30, 1) :: Nil)
+      }
+    }
   }
 
   test("column-update: other operations keep a full-width write relation") {
@@ -337,17 +373,13 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
   }
 
   test("column-update: scan that returns unrequested columns still writes narrow rows") {
-    val props = new java.util.HashMap[String, String](extraTableProps)
-    props.put(InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "true")
     createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |""".stripMargin,
-      props)
+      tablePropsWith(extraTableProps, InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING -> "true"))
 
     executeAndCheckScanIncludes(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1", "bonus")
-    val columnUpdateSchema = table.lastWriteInfo.columnUpdateSchema().get()
-    assert(!columnUpdateSchema.fieldNames.contains("bonus"),
-      s"bonus must not be in column update schema: $columnUpdateSchema")
+    checkLastColumnUpdateSchema("pk", "dep", "salary")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString"),
       Row(1, -1, 10, "hr") :: Nil)

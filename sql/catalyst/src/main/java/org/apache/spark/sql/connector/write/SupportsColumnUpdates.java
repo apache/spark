@@ -29,12 +29,13 @@ import org.apache.spark.sql.connector.expressions.NamedReference;
  * rows follow it: group-based operations receive them through
  * {@link DataWriter#writeColumnUpdate(Object, Object)} or
  * {@link DataWriter#writeColumnUpdate(Object)}, and operations that mix in {@link SupportsDelta}
- * through {@link DeltaWriter#update} and {@link DeltaWriter#reinsert}. Inserted rows always follow
- * {@link LogicalWriteInfo#schema()} and arrive through {@link DataWriter#write(Object)} and
- * {@link DeltaWriter#insert}. When {@link LogicalWriteInfo#columnUpdateSchema()} is absent, every
- * row follows {@link LogicalWriteInfo#schema()}, as for any other operation. Connectors must
- * decide which layout to expect by whether {@link LogicalWriteInfo#columnUpdateSchema()} is
- * present, not by the command. A builder that wants full-width rows for some command can check
+ * through {@link DeltaWriter#update} and {@link DeltaWriter#reinsert}. Rows the command inserts
+ * always follow {@link LogicalWriteInfo#schema()} and arrive through
+ * {@link DataWriter#write(Object)} and {@link DeltaWriter#insert}. When
+ * {@link LogicalWriteInfo#columnUpdateSchema()} is absent, every row follows
+ * {@link LogicalWriteInfo#schema()}, as for any other operation. Connectors must decide which
+ * layout to expect by whether {@link LogicalWriteInfo#columnUpdateSchema()} is present, not by
+ * the command. A builder that wants full-width rows for some command can check
  * {@link RowLevelOperationInfo#command()} and build an operation without this mix-in. Currently
  * Spark narrows only UPDATE.
  * <p>
@@ -52,12 +53,17 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * Returns the data column references required to perform this row-level operation.
    * <p>
    * When Spark narrows the write, the returned columns become
-   * {@link LogicalWriteInfo#columnUpdateSchema()}, in declared order. Implementations must include
-   * every column they want to receive: every column reported by
+   * {@link LogicalWriteInfo#columnUpdateSchema()}, in declared order. Spark matches each declared
+   * column with the session's resolver, and {@link LogicalWriteInfo#columnUpdateSchema()} uses the
+   * table's spelling of each column, which can differ in case from the declared reference.
+   * Implementations must include every column they want to receive: every column reported by
    * {@link RowLevelOperationInfo#updatedColumns()}, plus any columns needed for row lookup or
    * routing. Columns that are not declared are absent from the rows the connector receives, so
    * the connector must preserve their values itself. Spark may call this method more than once
    * for the same operation, and every call must return the same columns.
+   * <p>
+   * If {@link RowLevelOperationInfo#updatedColumns()} is empty, the builder should build an
+   * operation without this mix-in.
    * <p>
    * An operation that does not mix in {@link SupportsDelta} should locate original rows through
    * metadata columns returned by {@link #requiredMetadataAttributes()} that are preserved on

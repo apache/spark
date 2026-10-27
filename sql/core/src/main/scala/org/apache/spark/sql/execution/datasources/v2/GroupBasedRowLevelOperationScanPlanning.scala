@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.v2
 
 import org.apache.spark.internal.LogKeys
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, ExpressionSet, NamedExpression, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, AttributeSet, Expression, ExpressionSet, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.TrueLiteral
 import org.apache.spark.sql.catalyst.planning.{GroupBasedRowLevelOperation, PhysicalOperation}
 import org.apache.spark.sql.catalyst.plans.logical.{Join, LogicalPlan, ReplaceData}
@@ -27,7 +27,6 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.REPLACE_DATA
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Filter}
 import org.apache.spark.sql.connector.read.ScanBuilder
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.MERGE
-import org.apache.spark.sql.connector.write.RowLevelOperationTable
 import org.apache.spark.sql.execution.datasources.DataSourceStrategy
 import org.apache.spark.sql.internal.connector.PartitionPredicateField
 import org.apache.spark.sql.sources.Filter
@@ -67,7 +66,7 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
       }
 
       val requiredAttrs =
-        if (V2Writes.hasNarrowRows(rd)) readAttrs(rd.query, table, relation) else relation.output
+        if (V2Writes.hasNarrowRows(rd)) readAttrs(rd.query, relation) else relation.output
       val (scan, output) = PushDownUtils.pruneColumns(scanBuilder, relation, requiredAttrs, Nil)
 
       // scalastyle:off line.size.limit
@@ -106,25 +105,17 @@ object GroupBasedRowLevelOperationScanPlanning extends Rule[LogicalPlan] with Pr
    */
   private def readAttrs(
       plan: LogicalPlan,
-      table: RowLevelOperationTable,
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
-    val readNames = tableReads(plan, table).flatMap { case (projects, filters, read) =>
-      val references = AttributeSet((projects ++ filters).flatMap(_.references))
-      read.output.filter(references.contains).map(_.name)
-    }.toSet
-    relation.output.filter(attr => readNames.contains(attr.name))
-  }
-
-  private def tableReads(
-      plan: LogicalPlan,
-      table: RowLevelOperationTable)
-  : Seq[(Seq[NamedExpression], Seq[Expression], DataSourceV2Relation)] = {
-    plan match {
-      case PhysicalOperation(projects, filters, r: DataSourceV2Relation) if r.table eq table =>
-        Seq((projects, filters, r))
+    def readNames(node: LogicalPlan): Seq[String] = node match {
+      case PhysicalOperation(projects, filters, r: DataSourceV2Relation)
+          if r.table eq relation.table =>
+        val references = AttributeSet((projects ++ filters).flatMap(_.references))
+        r.output.filter(references.contains).map(_.name)
       case _ =>
-        plan.children.flatMap(tableReads(_, table))
+        node.children.flatMap(readNames)
     }
+    val names = readNames(plan).toSet
+    relation.output.filter(attr => names.contains(attr.name))
   }
 
   // pushes down the operation condition and returns the following information:

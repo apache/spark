@@ -366,7 +366,7 @@ trait RowLevelWrite extends V2WriteCommand with SupportsSubquery {
    */
   override lazy val references: AttributeSet = {
     val output = query.output.toIndexedSeq
-    val readOrdinals = (0 +: queryProjections.flatMap(_.colOrdinals)).distinct
+    val readOrdinals = 0 +: queryProjections.flatMap(_.colOrdinals)
     AttributeSet(readOrdinals.map { ordinal =>
       if (!output.isDefinedAt(ordinal)) {
         throw SparkException.internalError(

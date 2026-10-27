@@ -58,6 +58,11 @@ public interface DeltaWriter<T> extends DataWriter<T> {
    * <p>
    * When {@link LogicalWriteInfo#columnUpdateSchema()} is present, the {@code row} follows it;
    * otherwise it follows {@link LogicalWriteInfo#schema()}.
+   * <p>
+   * The default implementation passes {@code row} to {@link #insert(Object)} and drops
+   * {@code metadata}. When {@link LogicalWriteInfo#columnUpdateSchema()} is present, writers must
+   * override this method, as {@code row} then follows the column update schema instead of the
+   * layout {@link #insert(Object)} expects.
    *
    * @param metadata values for metadata columns
    * @param row a row to reinsert

@@ -406,8 +406,8 @@ object RewriteRowLevelCommand extends SQLConfHelper {
       throw QueryCompilationErrors.metadataRequiredDataAttributeError(
         operation.getClass.getName, metadata)
     }
-    // `resolveRefOpt` matches case-insensitively but keeps the declared spelling, so map each
-    // resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
+    // `resolveRefOpt` matches with the session's resolver but keeps the declared spelling, so map
+    // each resolved attribute back to the relation's own (by exprId) to avoid a spelling mismatch
     // between the connector's declaration and the table's actual column name.
     val byExprId = relation.output.map(a => a.exprId -> a).toMap
     resolved.map(a => byExprId(a.exprId).asInstanceOf[AttributeReference])

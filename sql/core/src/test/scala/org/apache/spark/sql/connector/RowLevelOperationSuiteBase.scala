@@ -232,9 +232,7 @@ abstract class RowLevelOperationSuiteBase
       s"original table must have every column: ${write.originalTable.output}")
     assert(table.lastWriteInfo.schema.isEmpty,
       s"row schema must be empty: ${table.lastWriteInfo.schema}")
-    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == declaredNames,
-      s"column update schema must have the declared columns: " +
-        s"${table.lastWriteInfo.columnUpdateSchema}")
+    checkLastColumnUpdateSchema(declaredNames: _*)
   }
 
   // Asserts the given SQL options reached every V2 layer that should carry them: the target
@@ -297,12 +295,8 @@ abstract class RowLevelOperationSuiteBase
       sql(query)
     }
     val targetName = table.name
-    def scansTarget(scan: BatchScanExec): Boolean = scan.table match {
-      case RowLevelOperationTable(t, _) => t.name == targetName
-      case t => t.name == targetName
-    }
     val schemas = collect(executedPlan) {
-      case scan: BatchScanExec if scansTarget(scan) => scan.schema
+      case scan: BatchScanExec if scan.table.name == targetName => scan.schema
     }
     assert(schemas.nonEmpty, s"no scan of the target table for: $query")
     schemas
@@ -327,16 +321,6 @@ abstract class RowLevelOperationSuiteBase
       val missing = includedNames.toSet.diff(schema.fieldNames.toSet)
       assert(missing.isEmpty,
         s"scan must include ${missing.mkString("[", ", ", "]")} " +
-          s"but read ${schema.fieldNames.mkString("[", ", ", "]")}")
-    }
-  }
-
-  /** Executes the query and asserts that its table scans read none of the given columns. */
-  protected def executeAndCheckScanExcludes(query: String, excludedNames: String*): Unit = {
-    executeAndCollectScanSchemas(query).foreach { schema =>
-      val leaked = excludedNames.toSet.intersect(schema.fieldNames.toSet)
-      assert(leaked.isEmpty,
-        s"scan should not include ${leaked.mkString("[", ", ", "]")} " +
           s"but read ${schema.fieldNames.mkString("[", ", ", "]")}")
     }
   }
@@ -415,13 +399,28 @@ abstract class RowLevelOperationSuiteBase
         s"but got ${actual.mkString("[", ", ", "]")}")
   }
 
+  /** Asserts that the last write is narrow and its column update schema has the given names. */
+  protected def checkLastColumnUpdateSchema(expectedNames: String*): Unit = {
+    val actual = lastColumnUpdateSchema.fieldNames.toSeq
+    assert(actual == expectedNames,
+      s"column update schema mismatch: expected ${expectedNames.mkString("[", ", ", "]")} " +
+        s"but got ${actual.mkString("[", ", ", "]")}")
+  }
+
+  private def lastColumnUpdateSchema: StructType = {
+    val info = table.lastWriteInfo
+    assert(info.columnUpdateSchema.isPresent,
+      s"the last write has no column update schema, its row schema is ${info.schema.toDDL}")
+    info.columnUpdateSchema.get
+  }
+
   protected def checkLastWriteLog(expectedEntries: WriteLogEntry*): Unit = {
     checkWriteLog(table.schema, expectedEntries)
   }
 
   /** Checks the last write log, reading row data in the layout of `columnUpdateSchema()`. */
   protected def checkLastColumnUpdateWriteLog(expectedEntries: WriteLogEntry*): Unit = {
-    checkWriteLog(table.lastWriteInfo.columnUpdateSchema.get, expectedEntries)
+    checkWriteLog(lastColumnUpdateSchema, expectedEntries)
   }
 
   private def checkWriteLog(dataSchema: StructType, expectedEntries: Seq[WriteLogEntry]): Unit = {

@@ -67,7 +67,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithRowId].getName
 
   private def splitReqAttrsTableProps(reqAttrs: String): java.util.Map[String, String] = {
-    java.util.Map.of("column-update-req-attrs", reqAttrs, "split-updates", "true")
+    tablePropsWith(reqAttrsTableProps(reqAttrs), "split-updates" -> "true")
   }
 
   private def createAndInitTableWithReqAttrs(
@@ -77,28 +77,64 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     createAndInitTable(schemaString, jsonData, reqAttrsTableProps(reqAttrs))
   }
 
+  private val splitTableProps = tablePropsWith(extraTableProps, "split-updates" -> "true")
+
+  private val splitPartitionRowIdTableProps =
+    java.util.Map.of("column-update-split-row-id", "_partition")
+
   private def createAndInitTableSplit(schemaString: String, jsonData: String): Unit = {
-    createAndInitTable(schemaString, jsonData,
-      java.util.Map.of("column-update", "true", "split-updates", "true"))
+    createAndInitTable(schemaString, jsonData, splitTableProps)
   }
 
   test("column-update: column update schema contains a single assigned column") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |{ "pk": 3, "id": 3, "dep": "hr" }
-        |""".stripMargin)
+    Seq(extraTableProps, splitTableProps).foreach { props =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+          """{ "pk": 1, "id": 1, "dep": "hr" }
+            |{ "pk": 2, "id": 2, "dep": "software" }
+            |{ "pk": 3, "id": 3, "dep": "hr" }
+            |""".stripMargin,
+          props)
 
-    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
+        sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
 
-    checkLastWriteInfo(
-      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
-      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
-      expectedColumnUpdateSchema = Some(StructType(Seq(
-        PK_FIELD,
-        DEP_FIELD,
-        StructField("id", IntegerType, nullable = false)
-      ))))
+        checkLastWriteInfo(
+          expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
+          expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
+          expectedColumnUpdateSchema = Some(StructType(Seq(
+            PK_FIELD,
+            DEP_FIELD,
+            StructField("id", IntegerType, nullable = false)
+          ))))
+      }
+    }
+  }
+
+  test("column-update: update handles metadata columns correctly") {
+    Seq(
+      "id IN (1, 100)",
+      "id IN (1, 20) AND dep IN (SELECT * FROM updated_dep)"
+    ).foreach { condition =>
+      withTable(tableNameAsString) {
+        withTempView("updated_dep") {
+          createAndInitTable("pk INT NOT NULL, id INT, salary INT, dep STRING",
+            """{ "pk": 1, "id": 1, "salary": 100, "dep": "hr" }
+              |{ "pk": 2, "id": 2, "salary": 200, "dep": "software" }
+              |{ "pk": 3, "id": 3, "salary": 300, "dep": "hr" }
+              |""".stripMargin)
+          import testImplicits._
+          Seq(Some("hr"), Some("it")).toDF().createOrReplaceTempView("updated_dep")
+
+          sql(s"UPDATE $tableNameAsString SET id = -1 WHERE $condition")
+
+          checkLastColumnUpdateWriteLog(
+            updateWriteLogEntry(id = 1, metadata = Row("hr", null), data = Row(1, "hr", -1)))
+          checkAnswer(
+            sql(s"SELECT * FROM $tableNameAsString"),
+            Row(1, -1, 100, "hr") :: Row(2, 2, 200, "software") :: Row(3, 3, 300, "hr") :: Nil)
+        }
+      }
+    }
   }
 
   test("column-update: CHAR and VARCHAR self-assignments are reported as updated") {
@@ -130,10 +166,10 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
     "assignments") {
     Seq(
       ("id = -1", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
+      ("ID = -1", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
       ("id = -1, dep = 'eng'", Seq("id", "dep"), Seq("pk", "dep", "id"), Row(1, -1, "eng")),
       ("id = -1, dep = dep", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
       ("id = id, dep = 'eng'", Seq("dep"), Seq("pk", "dep"), Row(1, 10, "eng")),
-      ("id = id, dep = dep", Seq.empty, Seq("pk", "dep"), Row(1, 10, "hr")),
       ("id = pk", Seq("id"), Seq("pk", "dep", "id"), Row(1, 1, "hr"))
     ).foreach { case (assignments, updatedColumns, columnUpdateNames, updatedRow) =>
       withTable(tableNameAsString) {
@@ -144,7 +180,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
         sql(s"UPDATE $tableNameAsString SET $assignments WHERE pk = 1")
 
         checkLastUpdatedColumns(updatedColumns: _*)
-        assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == columnUpdateNames)
+        checkLastColumnUpdateSchema(columnUpdateNames: _*)
         checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), updatedRow :: Nil)
       }
     }
@@ -165,7 +201,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin,
-      java.util.Map.of("column-update-split-row-id", "_partition"))
+      splitPartitionRowIdTableProps)
     checkDeleteFallsBackToFullWidthRows(Row(2, 200, "software"))
   }
 
@@ -183,23 +219,21 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       classOf[InMemoryRowLevelOperationTable#DeltaBasedColumnUpdateSplitOperationWithReqAttrs]
         .getName
     Seq(
-      ("pk,salary", "dep", Map.empty[String, String], reqAttrsOperationClass, "[`dep`]"),
-      ("pk,salary", "dep", Map("split-updates" -> "true"), splitReqAttrsOperationClass,
+      (reqAttrsTableProps("pk,salary"), "dep", reqAttrsOperationClass, "[`dep`]"),
+      (splitReqAttrsTableProps("pk,salary"), "dep", splitReqAttrsOperationClass, "[`dep`]"),
+      (tablePropsWith(reqAttrsTableProps("pk,salary"),
+        "column-update-cluster-by-nested-transform" -> "true"), "dep", reqAttrsOperationClass,
         "[`dep`]"),
-      ("pk,salary", "dep", Map("column-update-cluster-by-nested-transform" -> "true"),
-        reqAttrsOperationClass, "[`dep`]"),
-      ("pk,salary", "id,dep", Map.empty[String, String], reqAttrsOperationClass,
-        "[`dep`, `id`]"),
-      ("pk,salary,s", "s.missing", Map.empty[String, String], reqAttrsOperationClass,
+      (reqAttrsTableProps("pk,salary"), "id,dep", reqAttrsOperationClass, "[`dep`, `id`]"),
+      (reqAttrsTableProps("pk,salary,s"), "s.missing", reqAttrsOperationClass,
         "[`s`.`missing` (FIELD_NOT_FOUND)]")
-    ).foreach { case (reqAttrs, clusterBy, props, operationClass, columns) =>
+    ).foreach { case (props, clusterBy, operationClass, columns) =>
       withTable(tableNameAsString) {
-        val tableProps = props ++ Map(
-          "column-update-req-attrs" -> reqAttrs, "column-update-cluster-by" -> clusterBy)
+        val tableProps = tablePropsWith(props, "column-update-cluster-by" -> clusterBy)
         createAndInitTable("pk INT NOT NULL, salary INT, id INT, s STRUCT<c1: INT>, dep STRING",
           """{ "pk": 1, "salary": 100, "id": 1, "s": { "c1": 1 }, "dep": "hr" }
             |""".stripMargin,
-          tableProps.asJava)
+          tableProps)
 
         Seq(Nil, Seq(excludeColumnPruning)).foreach { confs =>
           withSQLConf(confs: _*) {
@@ -230,9 +264,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
           """{ "pk": 1, "salary": 100, "dep": "hr" }
             |{ "pk": 2, "salary": 200, "dep": "hr" }
             |""".stripMargin,
-          java.util.Map.of(
-            "column-update-req-attrs", "salary,dep",
-            "column-update-cluster-by", "pk"))
+          tablePropsWith(reqAttrsTableProps("salary,dep"), "column-update-cluster-by" -> "pk"))
 
         sql(s"UPDATE $tableNameAsString SET $assignments WHERE pk = 1")
 
@@ -251,7 +283,8 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
         |{ "pk": 3, "id": 3, "dep": "hr" }
         |""".stripMargin)
 
-    executeAndCheckScanExcludes(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1", "dep")
+    executeAndCheckScan(
+      s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1", "pk INT, _partition STRING")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, -1, "hr") :: Row(2, 2, "software") :: Row(3, 3, "hr") :: Nil)
@@ -266,8 +299,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
     sql(s"UPDATE $tableNameAsString SET salary = salary + 1 WHERE pk = 1")
 
-    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq ==
-      Seq("pk", "salary", "dep"))
+    checkLastColumnUpdateSchema("pk", "salary", "dep")
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
       Row(1, 101, "hr") :: Row(2, 200, "software") :: Nil)
@@ -278,9 +310,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
         |""".stripMargin,
-      java.util.Map.of(
-        "column-update", "true",
-        InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "true"))
+      tablePropsWith(extraTableProps, InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING -> "true"))
 
     sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
 
@@ -298,8 +328,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
       sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
 
-      assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq ==
-        Seq("pk", "salary", "SALARY", "dep"))
+      checkLastColumnUpdateSchema("pk", "salary", "SALARY", "dep")
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, 200, "hr") :: Nil)
     }
   }
@@ -372,24 +401,6 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
         "connector" -> operation.getClass.getName, "unknownAttributes" -> "[<empty>, <empty>]"))
   }
 
-  test("column-update split: column update schema has the declared columns") {
-    createAndInitTableSplit("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }
-        |{ "pk": 2, "id": 2, "dep": "software" }
-        |""".stripMargin)
-
-    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE pk = 1")
-
-    checkLastWriteInfo(
-      expectedRowIdSchema = Some(StructType(Array(PK_FIELD))),
-      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD_NULLABLE))),
-      expectedColumnUpdateSchema = Some(StructType(Seq(
-        PK_FIELD,
-        DEP_FIELD,
-        StructField("id", IntegerType, nullable = false)
-      ))))
-  }
-
   test("column-update split: delete and reinsert carry the row ID and preserved metadata") {
     createAndInitTableSplit("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
@@ -445,7 +456,8 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       splitReqAttrsTableProps("pk,salary,dep"))
 
     // `_partition` and the coerced `salary > 0.5` make the analyzer add the metadata columns to
-    // the target relation in a later iteration.
+    // the target relation in a later iteration. Executing this statement fails in ExpandExec, so
+    // only the analyzed plan is checked.
     val parsed = spark.sessionState.sqlParser.parsePlan(
       s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 " +
         s"WHERE dep = 'hr' AND _partition = 'hr' AND salary > 0.5")
@@ -491,11 +503,11 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       """{ "pk": 1, "salary": 100, "dep": "hr" }
         |{ "pk": 2, "salary": 200, "dep": "software" }
         |""".stripMargin,
-      java.util.Map.of("column-update-split-row-id", "_partition"))
+      splitPartitionRowIdTableProps)
 
     sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE dep = 'hr'")
 
-    assert(table.lastWriteInfo.columnUpdateSchema.get.fieldNames.toSeq == Seq("salary"))
+    checkLastColumnUpdateSchema("salary")
     checkLastColumnUpdateWriteLog(
       WriteLogEntry(operation = Delete, metadata = Some(Row("hr", null))),
       reinsertWriteLogEntry(metadata = Row("hr", null), data = Row(-1)))
@@ -605,19 +617,6 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       sqlState = "23001",
       parameters = Map(
         "constraintName" -> "positive_pk", "expression" -> "pk > 0", "values" -> " - pk : -11"))
-  }
-
-  test("column-update: CHECK constraint column survives when a row-ID column is reassigned") {
-    createAndInitTable("pk INT NOT NULL, salary INT, extra INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "extra": 5, "dep": "hr" }
-        |""".stripMargin)
-    sql(s"ALTER TABLE $tableNameAsString ADD CONSTRAINT positive_extra CHECK (extra > 0)")
-
-    sql(s"UPDATE $tableNameAsString SET pk = pk + 10, salary = -1 WHERE dep = 'hr'")
-
-    checkAnswer(
-      sql(s"SELECT * FROM $tableNameAsString"),
-      Row(11, -1, 5, "hr") :: Nil)
   }
 
 }

@@ -67,7 +67,7 @@ object V2ExpressionUtils extends SQLConfHelper with Logging {
       case (Seq(), _) => "<empty>"
       case (parts, None) => parts.quoted
       case (parts, Some(condition)) => s"${parts.quoted} ($condition)"
-    }.distinct
+    }
   }
 
   /**

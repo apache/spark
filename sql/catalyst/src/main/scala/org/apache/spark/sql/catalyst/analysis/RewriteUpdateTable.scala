@@ -167,9 +167,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     // resolve all needed attrs (e.g. row ID and any required metadata attrs)
     val rowIdAttrs = resolveRowIdAttrs(relation, operation)
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
+    val splitUpdates = operation.representUpdateAsDeleteAndInsert
 
     operation match {
-      case op: SupportsColumnUpdates if op.representUpdateAsDeleteAndInsert =>
+      case op: SupportsColumnUpdates if splitUpdates =>
         val declared = AttributeSet(writeAttrs)
         validateNoRowIdReassignment(op, relation, declared, updatedAttrs, rowIdAttrs)
         validateRowIdDeclared(op, declared, rowIdAttrs, metadataAttrs)
@@ -181,7 +182,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
-    val rowDeltaPlan = if (operation.representUpdateAsDeleteAndInsert) {
+    val rowDeltaPlan = if (splitUpdates) {
       buildDeletesAndInserts(matchedRowsPlan, assignments, rowIdAttrs)
     } else {
       buildWriteDeltaUpdateProjection(matchedRowsPlan, assignments, rowIdAttrs)
