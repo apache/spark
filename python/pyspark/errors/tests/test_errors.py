@@ -136,6 +136,9 @@ class ErrorsTest(unittest.TestCase):
                     "mitigation_config": {"key": "config.key1", "value": "config.value1"},
                     "needsAudit": False,
                 },
+                "sub_class": {
+                    "SUBCLASS_WITHOUT_INFO": {"message": ["Subclass message without info."]},
+                },
             },
             "TEST_ERROR_WITH_SUB_CLASS": {
                 "message": ["Error message 2 with <param>."],
@@ -150,7 +153,8 @@ class ErrorsTest(unittest.TestCase):
                             },
                             "needsAudit": True,
                         },
-                    }
+                    },
+                    "SUBCLASS_WITHOUT_INFO": {"message": ["Subclass message without info."]},
                 },
             },
         }
@@ -178,6 +182,35 @@ class ErrorsTest(unittest.TestCase):
         )
         subclass_map = error_reader.error_info_map["TEST_ERROR_WITH_SUB_CLASS"]["sub_class"]
         self.assertEqual(breaking_change_info2, subclass_map["SUBCLASS"]["breaking_change_info"])
+
+        # A sub-class without breaking_change_info falls back to the main class's one.
+        self.assertEqual(
+            error_reader.get_breaking_change_info("TEST_ERROR.SUBCLASS_WITHOUT_INFO"),
+            breaking_change_info1,
+        )
+        # None when neither the sub-class nor the main class declares it, or no error class.
+        self.assertIsNone(error_reader.get_breaking_change_info("TEST_ERROR_WITH_SUB_CLASS"))
+        self.assertIsNone(
+            error_reader.get_breaking_change_info("TEST_ERROR_WITH_SUB_CLASS.SUBCLASS_WITHOUT_INFO")
+        )
+        self.assertIsNone(error_reader.get_breaking_change_info(None))
+        # Unknown main or sub error classes raise.
+        with self.assertRaisesRegex(ValueError, "Cannot find main error class 'NON_EXISTENT'"):
+            error_reader.get_breaking_change_info("NON_EXISTENT")
+        with self.assertRaisesRegex(ValueError, "Cannot find sub error class 'NON_EXISTENT_SUB'"):
+            error_reader.get_breaking_change_info("TEST_ERROR_WITH_SUB_CLASS.NON_EXISTENT_SUB")
+
+    def test_message_template_sub_class_not_found(self):
+        # get_message_template raises when the main class exists but the sub-class does not.
+        error_reader = ErrorClassesReader()
+        error_reader.error_info_map = {
+            "TEST_ERROR": {
+                "message": ["Error message."],
+                "sub_class": {"SUBCLASS": {"message": ["Subclass message."]}},
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "Cannot find sub error class 'NON_EXISTENT_SUB'"):
+            error_reader.get_message_template("TEST_ERROR.NON_EXISTENT_SUB")
 
     def test_sqlstate(self):
         error = PySparkRuntimeError(errorClass="APPLICATION_NAME_NOT_SET", messageParameters={})
@@ -211,6 +244,7 @@ class ErrorsTest(unittest.TestCase):
         self.assertEqual(error_reader.get_sqlstate("TEST_ERROR.SUBCLASS"), "42604")
         self.assertEqual(error_reader.get_sqlstate("TEST_ERROR.NON_EXISTENT_SUB"), "42604")
         self.assertIsNone(error_reader.get_sqlstate("NON_EXISTENT_ERROR.SUBCLASS"))
+        self.assertIsNone(error_reader.get_sqlstate(None))
 
 
 if __name__ == "__main__":

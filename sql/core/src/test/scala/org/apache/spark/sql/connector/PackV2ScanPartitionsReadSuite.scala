@@ -60,6 +60,41 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
       "(2, 'aa', 4.0, NULL), (2, 'bb', 5.0, NULL), (2, 'cc', 6.0, NULL)")
   }
 
+  test("SPARK-60265: packed readers preserve storage filters and their checked column") {
+    withSQLConf(enabled -> "true", SQLConf.V2_STORAGE_FILTER_PUSHDOWN_ENABLED.key -> "true",
+        SQLConf.RUNTIME_BLOOM_FILTER_ENABLED.key -> "true",
+        SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "1000") {
+      withTable("packing_bloom_build") {
+        spark.range(0, 30).selectExpr("id AS bk", "id AS bv")
+          .write.format("parquet").saveAsTable("packing_bloom_build")
+        for (columnar <- Seq(false, true); adaptive <- Seq(false, true);
+            giveUp <- Seq(false, true)) {
+          withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+            StorageFilterTestSource.reset()
+            val probe = spark.read.format(classOf[StorageFilterTestSource].getName)
+              .option("numPartitions", "10").option("columnar", columnar.toString)
+              .option("giveUp", giveUp.toString).load()
+            val build = spark.table("packing_bloom_build").where("bv = 5")
+            val df = probe.join(build, probe("k") === build("bk"))
+              .select(probe("k"), probe("v"))
+            assert(df.collect().toSeq === Seq(Row(5L, 50L)))
+            val plan = df.queryExecution.executedPlan
+            val scan = collectScans(plan).head
+            assert(scan.partitionPacking.isDefined)
+            assert(scan.inputPartitions.size === 10)
+            assert(scan.inputRDD.getNumPartitions === 2)
+            assert(scan.storageFilters.size === 1)
+            assert(scan.appendsCheckedColumn)
+            assert(scan.supportsColumnar === columnar)
+            assert(StorageFilterTestSource.filteredReaders.get() === 10)
+            assert(StorageFilterTestSource.checkedColumnRequests.get() === 10)
+            assert(ValidateRequirements.validate(stripAQEPlan(plan)))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60265: columnar readers keep reused batches correct through a shuffled pipeline") {
     withTempView("columnar") {
       spark.read.format(classOf[CoalescingColumnarScanSource].getName).load()

@@ -26,7 +26,7 @@ import scala.util.Random
 import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
-import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.plans.logical.OneRowRelation
@@ -6209,6 +6209,40 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         ov1 + iv1 + ov2 + iv2))),
       Seq(Row(Map("a" -> Map("a" -> 6, "b" -> 8), "b" -> Map("a" -> 8, "b" -> 10))))
     )
+  }
+
+  test("SPARK-60508: nested higher-order functions capturing lambda variables") {
+    // A file source, because a `LocalRelation` is evaluated before the optimizer simplifies the
+    // expressions below.
+    withTable("t") {
+      sql("CREATE TABLE t USING parquet AS " +
+        "SELECT array(1, 5) AS xs1, array(3, 2) AS xs2, array(1, 2, 3, 4, 5) AS ys")
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "IF(x1 > x2, filter(ys, y -> y > x1), filter(ys, y -> y > x2))) FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "CASE WHEN x1 > x2 THEN filter(ys, y -> y > x1) ELSE filter(ys, y -> y > x2) END) " +
+          "FROM t"),
+        Row(Seq(Seq(4, 5), Seq.empty)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "exists(ys, y -> y > x1) OR exists(ys, y -> y > x2)) FROM t"),
+        Row(Seq(true, true)))
+      checkAnswer(
+        sql("SELECT zip_with(xs1, xs2, (x1, x2) -> " +
+          "filter(ys, y -> y > x1) <=> filter(ys, y -> y > x2)) FROM t"),
+        Row(Seq(false, false)))
+
+      // The functions capturing the same variable are still simplified into one.
+      val df = sql("SELECT transform(xs1, x -> " +
+        "exists(ys, y -> y > x) AND exists(ys, y -> y > x)) FROM t")
+      checkAnswer(df, Row(Seq(true, false)))
+      assert(df.queryExecution.optimizedPlan.expressions.flatMap(_.collect {
+        case e: ArrayExists => e
+      }).size == 1)
+    }
   }
 
   test("from_json - invalid schema string") {

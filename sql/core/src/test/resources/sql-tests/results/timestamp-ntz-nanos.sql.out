@@ -573,6 +573,104 @@ struct<named_struct(f, DATE '2020-01-01'):struct<f:timestamp_ntz(9)>>
 
 
 -- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1):date>
+-- !query output
+2020-02-29
+
+
+-- !query
+SELECT date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query schema
+struct<date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1):date>
+-- !query output
+2020-02-29
+
+
+-- !query
+SELECT dateadd('2020-01-31 12:00:00.1234567' :: timestamp_ntz(7), 30)
+-- !query schema
+struct<date_add(CAST(2020-01-31 12:00:00.1234567 AS TIMESTAMP_NTZ(7)), 30):date>
+-- !query output
+2020-03-01
+
+
+-- !query
+SELECT date_sub('2020-01-01 12:00:00.12345678' :: timestamp_ntz(8), -1)
+-- !query schema
+struct<date_sub(CAST(2020-01-01 12:00:00.12345678 AS TIMESTAMP_NTZ(8)), -1):date>
+-- !query output
+2020-01-02
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 2):date>
+-- !query output
+2020-01-03
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999', 1):date>
+-- !query output
+1970-01-01
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1),
+       date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 1):date,date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456', 1):date>
+-- !query output
+2020-01-02	2020-01-02
+
+
+-- !query
+SELECT date_add(NULL :: timestamp_ntz(9), 1), date_sub(NULL :: timestamp_ntz(9), 1)
+-- !query schema
+struct<date_add(CAST(NULL AS TIMESTAMP_NTZ(9)), 1):date,date_sub(CAST(NULL AS TIMESTAMP_NTZ(9)), 1):date>
+-- !query output
+NULL	NULL
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1),
+       date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1)
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-02-28 23:59:59.999999999', 1):date,date_sub(TIMESTAMP_NTZ '2020-03-01 00:00:00.000000001', 1):date>
+-- !query output
+2020-02-29	2020-02-29
+
+
+-- !query
+SELECT date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', '2')
+-- !query schema
+struct<date_add(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', 2):date>
+-- !query output
+2020-01-03
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
 SELECT TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND
 -- !query schema
 struct<TIMESTAMP_NTZ '2020-01-02 03:04:05.123456789' + INTERVAL '2 00:03:00.000456' DAY TO SECOND:timestamp_ntz(9)>
@@ -1759,6 +1857,170 @@ SELECT timestampadd(NANOSECOND, 50, '2020-01-01 00:00:00.0000001' :: timestamp_n
 struct<timestampadd(NANOSECOND, 50, CAST(2020-01-01 00:00:00.0000001 AS TIMESTAMP_NTZ(7))):timestamp_ntz(7)>
 -- !query output
 2020-01-01 00:00:00.0000001
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query schema
+struct<to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ntz(9)>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8)
+-- !query schema
+struct<to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ntz(8)>
+-- !query output
+2020-01-01 13:24:35.12345678
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7)
+-- !query schema
+struct<to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ntz(7)>
+-- !query output
+2020-01-01 13:24:35.1234567
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 6)
+-- !query schema
+struct<to_timestamp_ntz(2020-01-01 13:24:35.123456789, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ntz>
+-- !query output
+2020-01-01 13:24:35.123456
+
+
+-- !query
+SELECT to_timestamp_ntz('1969-12-31 23:59:59.999999999', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9)
+-- !query schema
+struct<to_timestamp_ntz(1969-12-31 23:59:59.999999999, yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ntz(9)>
+-- !query output
+1969-12-31 23:59:59.999999999
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.123456789 UTC', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS z', 9)
+-- !query schema
+struct<to_timestamp_ntz(2020-01-01 13:24:35.123456789 UTC, yyyy-MM-dd HH:mm:ss.SSSSSSSSS z):timestamp_ntz(9)>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT typeof(to_timestamp_ntz('2020-01-01 13:24:35.1', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 8))
+-- !query schema
+struct<typeof(to_timestamp_ntz(2020-01-01 13:24:35.1, yyyy-MM-dd HH:mm:ss.SSSSSSSSS)):string>
+-- !query output
+timestamp_ntz(8)
+
+
+-- !query
+SELECT to_timestamp_ntz('bad', 'yyyy-MM-dd', 9)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkDateTimeException
+{
+  "errorClass" : "CANNOT_PARSE_TIMESTAMP",
+  "sqlState" : "22007",
+  "messageParameters" : {
+    "func" : "`try_to_timestamp`",
+    "message" : "Text 'bad' could not be parsed at index 0"
+  }
+}
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))
+-- !query schema
+struct<to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):timestamp_ntz(9),typeof(to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')):string>
+-- !query output
+2020-01-01 13:24:35.123456789	timestamp_ntz(9)
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'),
+  typeof(to_timestamp_ntz('2020-01-01 13:24:35.12345678' :: timestamp_ntz(8), 'yyyy'))
+-- !query schema
+struct<to_timestamp_ntz(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_NTZ(8)), yyyy):timestamp_ntz(8),typeof(to_timestamp_ntz(CAST(2020-01-01 13:24:35.12345678 AS TIMESTAMP_NTZ(8)), yyyy)):string>
+-- !query output
+2020-01-01 13:24:35.12345678	timestamp_ntz(8)
+
+
+-- !query
+SELECT to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy', 7)
+-- !query schema
+struct<to_timestamp_ntz(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy):timestamp_ntz(7)>
+-- !query output
+2020-01-01 13:24:35.1234567
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'),
+  typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'))
+-- !query schema
+struct<to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789'):timestamp_ltz(9),typeof(to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789')):string>
+-- !query output
+2020-01-01 13:24:35.123456789	timestamp_ltz(9)
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 10)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkException
+{
+  "errorClass" : "INVALID_TIMESTAMP_PRECISION",
+  "sqlState" : "22023",
+  "messageParameters" : {
+    "precision" : "10",
+    "type" : "TIMESTAMP_NTZ"
+  }
+}
+
+
+-- !query
+SELECT to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS')
+-- !query schema
+struct<to_timestamp(TIMESTAMP_NTZ '2020-01-01 13:24:35.123456789', yyyy-MM-dd HH:mm:ss.SSSSSSSSS):timestamp_ltz(9)>
+-- !query output
+2020-01-01 13:24:35.123456789
+
+
+-- !query
+SELECT to_timestamp_ntz(DATE '2020-01-01', 'yyyy-MM-dd', 9)
+-- !query schema
+struct<to_timestamp_ntz(DATE '2020-01-01', yyyy-MM-dd):timestamp_ntz(9)>
+-- !query output
+2020-01-01 00:00:00
+
+
+-- !query
+SELECT to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "WRONG_NUM_ARGS.WITHOUT_SUGGESTION",
+  "sqlState" : "42605",
+  "messageParameters" : {
+    "actualNum" : "4",
+    "docroot" : "https://spark.apache.org/docs/latest",
+    "expectedNum" : "[1, 2, 3]",
+    "functionName" : "`to_timestamp_ntz`"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 75,
+    "fragment" : "to_timestamp_ntz('2020-01-01 13:24:35', 'yyyy-MM-dd HH:mm:ss', 9, 9)"
+  } ]
+}
 
 
 -- !query
