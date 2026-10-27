@@ -944,6 +944,22 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     )
   }
 
+  test("nested variant to string uses the session time zone") {
+    // A variant TIMESTAMP at the epoch.
+    val v = Literal(new VariantVal(
+      primitiveHeader(TIMESTAMP) +: Array.fill[Byte](8)(0), Array[Byte](VERSION, 0, 0)))
+    Seq(
+      "UTC" -> "\"1970-01-01 00:00:00+00:00\"",
+      "America/Los_Angeles" -> "\"1969-12-31 16:00:00-08:00\"").foreach { case (tz, ts) =>
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> tz) {
+        checkEvaluation(Cast(CreateNamedStruct(Seq(Literal("a"), v)), StringType), s"{$ts}")
+        checkEvaluation(Cast(CreateArray(Seq(v)), StringType), s"[$ts]")
+        checkEvaluation(Cast(CreateMap(Seq(Literal("k"), v)), StringType), s"{k -> $ts}")
+        checkEvaluation(ToPrettyString(v), ts)
+      }
+    }
+  }
+
   test("atomic types that are not produced by parse_json") {
     // Dictionary size is `0` for value 0. An empty dictionary contains one offset `0` for the
     // one-past-the-end position (i.e. the sum of all string lengths).
