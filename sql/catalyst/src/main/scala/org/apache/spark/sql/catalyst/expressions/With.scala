@@ -165,7 +165,7 @@ case class With(child: Expression, defs: Seq[CommonExpressionDef])
    * falls back (`With` is not a `CodegenFallback`, so it has to be named rather than matched). Such
    * a reference needs its cell bound and cleared; the generated code clears codegen flags instead.
    */
-  @transient private lazy val refUnderCodegenFallback: Boolean = {
+  @transient private[expressions] lazy val refUnderCodegenFallback: Boolean = {
     val ids = defs.map(_.id).toSet
     def holdsMyRef(e: Expression): Boolean = e.exists {
       case r: CommonExpressionRef => ids.contains(r.id)
@@ -425,8 +425,7 @@ case class CommonExpressionRef(id: CommonExpressionId, dataType: DataType, nulla
    * body encloses another, so repeating it declares nothing twice in one scope: a definition
    * reading a sibling is generated inside that sibling's guard, not inside its own, and one that
    * reaches its own id -- directly or around a cycle -- re-enters `fill` and is refused before any
-   * Java exists. See `CommonExprSlots.fill`, which also says what bounds the code when a method is
-   * not possible.
+   * Java exists. See `CommonExprSlots.fill`.
    */
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val slots = ctx.getCommonExpr(id.id)

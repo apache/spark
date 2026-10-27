@@ -441,7 +441,8 @@ object AggUtils {
    *    - For each input, do the following
    *      - Read the previous value for grouping key in state store
    *      - Merge the input and previous value (if any)
-   *      - Store the new value to the state store
+   *      - Hold the new value in a bounded dirty-write cache, which is flushed to the state
+   *        store on cache eviction or when the input iterator completes
    *  - Complete (output the current result of the aggregation)
    *
    * The concept is to aggregate only between input and the state store, enabling an output to

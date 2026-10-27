@@ -63,7 +63,7 @@ Data source options of CSV can be set via:
   <tr>
     <td><code>extension</code></td>
     <td>csv</td>
-    <td>Sets the file extension for the output files. Limited to letters. Length must equal 3.</td>
+    <td>Sets the file extension for the output files. Must be non-empty and contain only letters. If it matches a compression codec suffix (for example, <code>gz</code> or <code>zst</code>), set <code>compression</code> too; otherwise Spark may try to decompress plain-text output when reading it back.</td>
     <td>write</td>
   </tr>
   <tr>
@@ -143,6 +143,12 @@ Data source options of CSV can be set via:
     <td></td>
     <td>Sets the string representation of a null value. Since 2.0.1, this <code>nullValue</code> param applies to all supported types including the string type.</td>
     <td>read/write</td>
+  </tr>
+  <tr>
+    <td><code>treatNullAsEmptyString</code></td>
+    <td></td>
+    <td>Controls how null values are written when <code>nullValue</code> is left at its default (empty string). When <code>true</code>, a null is written through <code>emptyValue</code> (a quoted empty string <code>""</code> by default), which makes it indistinguishable from an actual empty string. When <code>false</code>, a null is written as a bare, unquoted empty token, so it can be told apart from an empty string. When unset, the write follows the session default. Setting a non-empty <code>nullValue</code> makes this option a no-op, since the <code>nullValue</code> is then written verbatim. This option only affects writing.</td>
+    <td>write</td>
   </tr>
   <tr>
     <td><code>nanValue</code></td>

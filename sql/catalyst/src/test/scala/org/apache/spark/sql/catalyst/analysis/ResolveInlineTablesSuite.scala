@@ -20,12 +20,13 @@ package org.apache.spark.sql.catalyst.analysis
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, CurrentTime, CurrentTimestamp, Literal, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, CreateArray, CurrentTime, CurrentTimestamp, CurrentUser, Exists, Explode, InSubquery, ListQuery, Literal, OuterReference, Rand, ScalarSubquery, Uuid}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
-import org.apache.spark.sql.types.{LongType, NullType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, NullType, TimestampNTZType, TimestampType, TimeType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -37,33 +38,62 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
   private def lit(v: Any): Literal = Literal(v)
 
   test("validate inputs are foldable") {
-    EvaluateUnresolvedInlineTable.validateInputEvaluable(
-      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
-
-    // Alias is OK
-    EvaluateUnresolvedInlineTable.validateInputEvaluable(
-      UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Alias(lit(1), "a")()))))
-
-    // nondeterministic (rand) should not work
-    intercept[AnalysisException] {
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
       EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
+        UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(lit(1)))))
+
+      // Alias is OK
+      EvaluateUnresolvedInlineTable.validateInputEvaluable(
+        UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Alias(lit(1), "a")()))))
+
+      // nondeterministic (rand) should not work
+      intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.validateInputEvaluable(
+          UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)))))
+      }
+      intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.validateInputEvaluable(
+          UnresolvedInlineTable(Seq("c1"), Seq(Seq(Cast(Rand(1), TimestampNTZType)))))
+      }
+
+      // aggregate should not work
+      intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.validateInputEvaluable(
+          UnresolvedInlineTable(Seq("c1"), Seq(Seq(Count(lit(1))))))
+      }
+
+      // unresolved attribute should not work
+      intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.validateInputEvaluable(
+          UnresolvedInlineTable(Seq("c1"), Seq(Seq(UnresolvedAttribute("A")))))
+      }
     }
-    intercept[AnalysisException] {
-      EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Cast(Rand(1), TimestampNTZType)))))
+  }
+
+  test("validate inputs are foldable or can be evaluated when the query runs") {
+    val oneRow = Project(Seq(Alias(lit(1), "a")()), OneRowRelation())
+    Seq(lit(1), Alias(lit(1), "a")(), Rand(1), Uuid(Some(1L)), ScalarSubquery(oneRow)).foreach {
+      e =>
+        EvaluateUnresolvedInlineTable.validateInputEvaluable(
+          UnresolvedInlineTable(Seq("c1"), Seq(Seq(e))))
     }
 
-    // aggregate should not work
-    intercept[AnalysisException] {
-      EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(Count(lit(1))))))
-    }
-
-    // unresolved attribute should not work
-    intercept[AnalysisException] {
-      EvaluateUnresolvedInlineTable.validateInputEvaluable(
-        UnresolvedInlineTable(Seq("c1"), Seq(Seq(UnresolvedAttribute("A")))))
+    val outerReference = OuterReference(AttributeReference("a", IntegerType)())
+    val correlatedPlan = Project(Seq(Alias(outerReference, "b")()), OneRowRelation())
+    Seq(
+      Count(lit(1)),
+      Count(lit(1)).toAggregateExpression(),
+      Explode(CreateArray(Seq(lit(1), lit(2)))),
+      outerReference,
+      ScalarSubquery(correlatedPlan, outerAttrs = Seq(outerReference)),
+      Exists(oneRow),
+      InSubquery(Seq(lit(1)), ListQuery(oneRow, numCols = 1)),
+      UnresolvedAttribute("A")
+    ).foreach { e =>
+      intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.validateInputEvaluable(
+          UnresolvedInlineTable(Seq("c1"), Seq(Seq(e))))
+      }
     }
   }
 
@@ -154,6 +184,109 @@ class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
     assert(output.map(_.dataType) == Seq(TimestampType))
     assert(data.size == 1)
     assert(data.head.getLong(0) == correct)
+  }
+
+  test("inline tables with non-foldable expressions are evaluated when the query runs") {
+    val table = UnresolvedInlineTable(Seq("c1", "c2"),
+      Seq(Seq(lit(1), Rand(1)), Seq(Add(lit(2), lit(3)), lit(1.5))))
+    val resolved = ResolveInlineTables(table)
+    resolved match {
+      case Expand(projections, output, _: OneRowRelation) =>
+        assert(output.map(_.dataType) == Seq(IntegerType, DoubleType))
+        // Foldable expressions are evaluated during analysis.
+        assert(projections == Seq(Seq(lit(1), Rand(1)), Seq(lit(5), lit(1.5))))
+      case other => fail(s"Expected an Expand, but got $other")
+    }
+    assert(resolved.maxRows.contains(2L))
+    // The optimizer leaves the table in the plan, to be evaluated when the query runs.
+    assert(EvalInlineTables(resolved) == resolved)
+  }
+
+  test("inline tables without non-foldable expressions are resolved as before") {
+    val flag = SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key
+    Seq(
+      Seq(Seq(lit(1), Add(lit(2), lit(3))), Seq(lit(4L), lit(5))),
+      // CURRENT_LIKE expressions are replaced at the end of the analysis phase, so the other
+      // expressions of the table are evaluated at that point too.
+      Seq(Seq(CurrentTimestamp(), Add(lit(2), lit(3))))
+    ).foreach { rows =>
+      val table = UnresolvedInlineTable(rows.head.indices.map(i => s"c$i"), rows)
+      val resolved = ResolveInlineTables(table)
+      assert(!resolved.isInstanceOf[Expand])
+      comparePlans(
+        resolved, withSQLConf(flag -> "false")(ResolveInlineTables(table)), checkAnalysis = false)
+    }
+  }
+
+  test("aliased foldable expressions are evaluated during analysis") {
+    // Column DEFAULT values are substituted as aliased expressions.
+    val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(Alias(lit(1), "a")())))
+    assert(ResolveInlineTables(table).isInstanceOf[LocalRelation])
+
+    val mixed = UnresolvedInlineTable(Seq("c1", "c2"), Seq(Seq(Alias(lit(1), "a")(), Rand(1))))
+    ResolveInlineTables(mixed) match {
+      case Expand(Seq(Seq(l: Literal, _: Rand)), _, _) => assert(l == lit(1))
+      case other => fail(s"Expected an Expand, but got $other")
+    }
+  }
+
+  test("CURRENT_LIKE expressions next to non-foldable expressions") {
+    val table = UnresolvedInlineTable(Seq("c1", "c2"),
+      Seq(Seq(CurrentTimestamp(), Rand(1)), Seq(CurrentTimestamp(), Rand(2))))
+    EvalInlineTables(ComputeCurrentTime(ResolveInlineTables(table))) match {
+      case Expand(Seq(Seq(ts1: Literal, _: Rand), Seq(ts2: Literal, _: Rand)), _, _) =>
+        // Both CURRENT_TIMESTAMP expressions are evaluated to the same value.
+        assert(ts1 == ts2)
+      case other => fail(s"Expected an Expand, but got $other")
+    }
+  }
+
+  test("nondeterministic expressions next to CURRENT_LIKE expressions in the same expression") {
+    // A ResolvedInlineTable cannot contain nondeterministic expressions.
+    val e = Concat(Seq(CurrentUser(), Uuid(Some(1L))))
+    val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(e)))
+    ResolveInlineTables(table) match {
+      case Expand(Seq(Seq(projection)), _, _: OneRowRelation) => assert(projection == e)
+      case other => fail(s"Expected an Expand, but got $other")
+    }
+    withSQLConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "false") {
+      assert(ResolveInlineTables(table).isInstanceOf[ResolvedInlineTable])
+    }
+  }
+
+  test("subqueries with CURRENT_LIKE expressions are not evaluated during analysis") {
+    // The tree patterns of a subquery expression include those of its plan.
+    val currentTimestampRow = Project(Seq(Alias(CurrentTimestamp(), "ts")()), OneRowRelation())
+    Seq(
+      ScalarSubquery(currentTimestampRow),
+      CreateArray(Seq(CurrentTimestamp(), ScalarSubquery(currentTimestampRow)))
+    ).foreach { e =>
+      ResolveInlineTables(UnresolvedInlineTable(Seq("c1"), Seq(Seq(e)))) match {
+        case Expand(Seq(Seq(projection)), _, _: OneRowRelation) => assert(projection == e)
+        case other => fail(s"Expected an Expand, but got $other")
+      }
+    }
+    Seq(
+      Exists(currentTimestampRow),
+      InSubquery(Seq(CurrentTimestamp()), ListQuery(currentTimestampRow, numCols = 1))
+    ).foreach { e =>
+      val table = UnresolvedInlineTable(Seq("c1"), Seq(Seq(e)))
+      val ex = intercept[AnalysisException](ResolveInlineTables(table))
+      assert(ex.getCondition == "INVALID_INLINE_TABLE.CANNOT_EVALUATE_EXPRESSION_IN_INLINE_TABLE")
+    }
+  }
+
+  test("evaluation errors of foldable expressions next to non-foldable expressions") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("c1", "c2"),
+        Seq(Seq(Cast(lit("abc"), IntegerType), Rand(1))))
+      val e = intercept[AnalysisException](ResolveInlineTables(table))
+      assert(e.getCondition == "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION")
+    }
+  }
+
+  test("analysis of inline tables with nondeterministic expressions") {
+    assertAnalysisSuccess(UnresolvedInlineTable(Seq("c1"), Seq(Seq(Rand(1)), Seq(Rand(2)))))
   }
 
   test("nullability inference in convert") {

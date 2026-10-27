@@ -371,10 +371,7 @@ object CommandUtils extends Logging {
     case _: IntegralType => true
     case _: DecimalType => true
     case DoubleType | FloatType => true
-    // ApproximatePercentile/ApproxCountDistinctForIntervals only know how to summarize types
-    // whose internal value is directly numeric; TimestampNanosVal (epochMicros +
-    // nanosWithinMicro) isn't, so nanosecond timestamps are excluded here the same way
-    // binary/string types are. Basic stats (min/max/ndv/nullCount) are unaffected.
+    // percentile_approx rejects nanosecond timestamps, so they get no histogram.
     case _: AnyTimestampNanoType => false
     case _: DatetimeType => true
     case _ => false

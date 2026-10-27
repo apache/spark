@@ -33,6 +33,21 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
 
   override def fullName: String = s"$catalog.$ns.$table"
 
+  test("show create table excludes display-only properties") {
+    withNamespaceAndTable(ns, table) { t =>
+      createTableWithDisplayProperties(ns, table, withLocation = true)
+
+      assert(getShowCreateDDL(t, false) === Array(
+        s"CREATE TABLE $t (",
+        "id BIGINT)",
+        defaultUsing,
+        "COMMENT 'table comment'",
+        "LOCATION 'file:/tmp/display-properties'",
+        "TBLPROPERTIES (",
+        "'persisted' = 'stored')"))
+    }
+  }
+
   test("SPARK-33898: show create table as serde") {
     withNamespaceAndTable(ns, table) { t =>
       spark.sql(s"CREATE TABLE $t (id bigint, data string) $defaultUsing")
@@ -273,6 +288,45 @@ class ShowCreateTableSuite extends command.ShowCreateTableSuiteBase with Command
         val expectedDDLArrayAfterDrop = expectedDDLArrayWithNewConstraint.filterNot(
           _.contains("c1 CHECK (c IS NOT NULL) ENFORCED NORELY"))
         assert(showDDL === expectedDDLArrayAfterDrop)
+      }
+    }
+  }
+
+  test("SPARK-60344: show table constraints whose names need quoting") {
+    withNamespaceAndTable("ns", "`tbl-1`", nonPartitionCatalog) { t =>
+      withNamespaceAndTable("ns", "other_table", nonPartitionCatalog) { otherTable =>
+        sql(s"CREATE TABLE $otherTable (id STRING PRIMARY KEY) $defaultUsing")
+        sql(
+          s"""
+             |CREATE TABLE $t (
+             |  a INT,
+             |  b STRING,
+             |  c STRING,
+             |  PRIMARY KEY (a),
+             |  CONSTRAINT `uk b` UNIQUE (b),
+             |  CONSTRAINT `fk.c` FOREIGN KEY (c) REFERENCES $otherTable(id) RELY,
+             |  CONSTRAINT `c``1` CHECK (c IS NOT NULL)
+             |)
+             |$defaultUsing
+        """.stripMargin)
+        val showDDL = getShowCreateDDL(t)
+        assert(showDDL === Array(
+          s"CREATE TABLE $t (",
+          "a INT NOT NULL,",
+          "b STRING COLLATE UTF8_BINARY,",
+          "c STRING COLLATE UTF8_BINARY,",
+          // The generated name of the primary key starts with the table name.
+          "CONSTRAINT `tbl-1_pk` PRIMARY KEY (a) NOT ENFORCED NORELY,",
+          "CONSTRAINT `uk b` UNIQUE (b) NOT ENFORCED NORELY,",
+          s"CONSTRAINT `fk.c` FOREIGN KEY (c) REFERENCES $otherTable (id) NOT ENFORCED RELY,",
+          "CONSTRAINT `c``1` CHECK (c IS NOT NULL) ENFORCED NORELY)",
+          defaultUsing))
+
+        // The output can be run again.
+        val ddl = sql(s"SHOW CREATE TABLE $t").head().getString(0)
+        sql(s"DROP TABLE $t")
+        sql(ddl)
+        assert(getShowCreateDDL(t) === showDDL)
       }
     }
   }

@@ -505,11 +505,26 @@ private[sql] object CatalogV2Util {
   def extractTableStateOptions(
       catalog: CatalogPlugin,
       options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
-    val stateKeys = catalog.asTableCatalog.tableStateOptionKeys.asScala
-      .map(_.toLowerCase(Locale.ROOT))
-      .toSet
+    extractStateOptions(catalog.asTableCatalog.tableStateOptionKeys, options)
+  }
+
+  /**
+   * Extracts the options passed to `loadChangelog`. Together with the changelog context, these
+   * options identify changelog state independently of the complete options used to plan each scan.
+   */
+  def extractChangelogStateOptions(
+      catalog: CatalogPlugin,
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    extractStateOptions(catalog.asTableCatalog.changelogStateOptionKeys, options)
+  }
+
+  private def extractStateOptions(
+      keys: util.Set[String],
+      options: CaseInsensitiveStringMap): CaseInsensitiveStringMap = {
+    val stateKeys = keys.asScala.map(_.toLowerCase(Locale.ROOT)).toSet
+    // Preserve the effective value even if differently cased aliases have different values.
     val projected = options.asCaseSensitiveMap().asScala.collect {
-      case (key, value) if stateKeys.contains(key.toLowerCase(Locale.ROOT)) => key -> value
+      case (key, _) if stateKeys.contains(key.toLowerCase(Locale.ROOT)) => key -> options.get(key)
     }.toMap
     new CaseInsensitiveStringMap(projected.asJava)
   }
@@ -675,6 +690,16 @@ private[sql] object CatalogV2Util {
     Option(existing.schemaMode).foreach(builder.withSchemaMode)
     Option(existing.viewDependencies).foreach(builder.withViewDependencies)
     builder
+  }
+
+  /** Returns redacted, non-reserved table properties with additional display-only metadata. */
+  def tablePropertiesForDisplay(
+      properties: util.Map[String, String],
+      displayProperties: util.Map[String, String],
+      conf: SQLConf): Map[String, String] = {
+    val merged = (displayProperties.asScala.toMap ++ properties.asScala)
+      .filterNot { case (key, _) => TABLE_RESERVED_PROPERTIES.contains(key) }
+    conf.redactOptions(merged)
   }
 
   def convertTableProperties(t: TableSpec): Map[String, String] = {

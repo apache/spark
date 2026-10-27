@@ -464,8 +464,7 @@ of the most common options to set are:
   <td>
     A timeout for Spark driver in minutes. 0 means infinite. For the positive time value,
     terminate the driver with the exit code 124 if it runs after timeout duration. To use,
-    it's required to set <code>spark.plugins</code> with
-    <code>org.apache.spark.deploy.DriverTimeoutPlugin</code>.
+    it's required to set <code>spark.plugins</code> with <code>DriverTimeoutPlugin</code>.
   </td>
   <td>4.0.0</td>
 </tr>
@@ -530,7 +529,7 @@ of the most common options to set are:
   <td>
     Comma-separated list of the console output kind for driver that needs to redirect
     to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
-    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+    `spark.plugins` is configured with `RedirectConsolePlugin`.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -789,7 +788,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma-separated list of the console output kind for executor that needs to redirect
     to logging system. Supported values are `stdout`, `stderr`. It only takes affect when
-    `spark.plugins` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.
+    `spark.plugins` is configured with `RedirectConsolePlugin`.
   </td>
   <td>4.1.0</td>
 </tr>
@@ -833,7 +832,10 @@ Apart from these, the following properties are also available, and may be useful
     cogrouped-map, grouped-aggregate and window functions; Python UDTFs, both row and Arrow;
     <code>applyInPandasWithState</code> and <code>transformWithState</code>;
     <code>writeStream.foreach</code>; and Python data sources, including the workers that plan them
-    and read a streaming source.
+    and read a streaming source. In-process Python UDFs share the executor process and reject
+    this configuration; set their environment before executor startup instead, using
+    <code>spark.executorEnv.[EnvironmentVariableName]</code>. In local mode, set these variables
+    in the launching environment instead, because the interpreter runs inside the driver JVM.
     <br /><br />
     A running streaming query holds a configuration snapshot, because its batches run on a cloned
     session whose configurations are copied when the query starts. A change made while a query is
@@ -909,7 +911,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Regex to decide which parts of strings produced by Spark contain sensitive information.
     When this regex matches a string part, that string part is replaced by a dummy value.
-    This is currently used to redact the output of SQL explain commands.
+    This is currently used to redact the output of SQL explain commands and the exit exception annotation on Kubernetes.
   </td>
   <td>2.2.0</td>
 </tr>
@@ -959,6 +961,21 @@ Apart from these, the following properties are also available, and may be useful
     from JVM to Python worker for every task.
   </td>
   <td>1.2.0</td>
+</tr>
+<tr>
+  <td><code>spark.python.inProcess.sitePackages</code></td>
+  <td>(none)</td>
+  <td>
+    Comma-separated executor directories for packages used by opt-in in-process Python UDFs.
+    JEP must be directly importable from these directories. Spark distribution paths and
+    process <code>PYTHONPATH</code> take precedence; <code>.pth</code> files are processed.
+    Paths cannot contain single quotes, newlines, NUL, surrogate characters (including
+    supplementary Unicode characters) or the platform path separator. Restart the executor
+    process before changing these directories, including after a failed Python bootstrap.
+    See the <a href="sql-pyspark-inprocess-udf.html">in-process Python UDF guide</a>
+    for plugin setup, native dependencies and limitations.
+  </td>
+  <td>4.4.0</td>
 </tr>
 <tr>
   <td><code>spark.python.factory.idleWorkerMaxPoolSize</code></td>
@@ -1071,9 +1088,16 @@ Apart from these, the following properties are also available, and may be useful
   <td><code>spark.jars.ivySettings</code></td>
   <td></td>
   <td>
-    Path to an Ivy settings file to customize resolution of jars specified using <code>spark.jars.packages</code>
-    instead of the built-in defaults, such as maven central. Additional repositories given by the command-line
-    option <code>--repositories</code> or <code>spark.jars.repositories</code> will also be included.
+    Path to an Ivy settings file to customize resolution of jars specified using
+    <code>spark.jars.packages</code> or <code>ivy://</code> URIs passed to
+    <code>SparkSession.addArtifact</code> instead of the built-in defaults, such as maven central.
+    For <code>spark.jars.packages</code>, additional repositories from
+    <code>spark.jars.repositories</code> will also be included.
+    The <code>spark-submit --repositories</code> option applies to submission-time resolution.
+    In Spark Connect, Ivy URIs with a <code>repos</code> query parameter or sent to a server without
+    server-side Maven resolution are resolved by the client and do not use this setting. Other Ivy
+    URIs are resolved by the server, so Maven and Ivy repositories local to the client, such as
+    <code>~/.m2/repository</code> and <code>~/.ivy2.5.2/local</code>, are not searched.
     Useful for allowing Spark to resolve artifacts from behind a firewall e.g. via an in-house
     artifact server like Artifactory. Details on the settings file format can be
     found at <a href="http://ant.apache.org/ivy/history/latest-milestone/settings.html">Settings Files</a>.
@@ -1085,7 +1109,28 @@ Apart from these, the following properties are also available, and may be useful
   </td>
   <td>2.2.0</td>
 </tr>
- <tr>
+<tr>
+  <td><code>spark.jars.ivyConnectTimeout</code></td>
+  <td>30s</td>
+  <td>
+    Connection timeout for Ivy repository requests made by
+    <code>SparkSession.addArtifact</code>.
+    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    This must be set before the SparkContext starts.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
+  <td><code>spark.jars.ivyReadTimeout</code></td>
+  <td>5m</td>
+  <td>
+    Read timeout for Ivy repository requests made by <code>SparkSession.addArtifact</code>.
+    Client-resolved Spark Connect Ivy URIs do not use this setting.
+    This must be set before the SparkContext starts.
+  </td>
+  <td>4.4.0</td>
+</tr>
+<tr>
   <td><code>spark.jars.repositories</code></td>
   <td></td>
   <td>
@@ -1386,14 +1431,18 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td><code>spark.shuffle.accurateBlockSkewedFactor</code></td>
-  <td>-1.0</td>
+  <td>5.0</td>
   <td>
     A shuffle block is considered as skewed and will be accurately recorded in
     <code>HighlyCompressedMapStatus</code> if its size is larger than this factor multiplying
-    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>. It is
-    recommended to set this parameter to be the same as
-    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable this
-    feature by default.
+    the median shuffle block size or <code>spark.shuffle.accurateBlockThreshold</code>.
+    Otherwise every block below <code>spark.shuffle.accurateBlockThreshold</code> is reported
+    as the average block size, which hides skew from adaptive query execution once a shuffle
+    has more than <code>spark.shuffle.minNumPartitionsToHighlyCompress</code> partitions. At
+    most <code>spark.shuffle.maxAccurateSkewedBlockNumber</code> block sizes are recorded
+    accurately per map task. The default matches
+    <code>spark.sql.adaptive.skewJoin.skewedPartitionFactor</code>. Set to -1.0 to disable
+    this feature.
   </td>
   <td>3.3.0</td>
 </tr>
@@ -1688,6 +1737,30 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.ui.actionsViaGetEnabled</code></td>
+  <td><code>true</code> on YARN, <code>false</code> otherwise</td>
+  <td>
+    Whether the state-changing endpoints of the web UI (job/stage kill, application hold
+    and resume) accept HTTP GET requests in addition to POST. Left unset, this follows
+    the cluster manager: GET is accepted when <code>spark.master</code> is
+    <code>yarn</code>, because the YARN ResourceManager/AM proxy does not forward POST
+    requests, and refused everywhere else.
+    Either way the state-changing endpoints require the random per-UI CSRF token embedded
+    in the forms the UI renders, and reject prefetch requests (identified by
+    the Purpose, Sec-Purpose, or X-Moz headers) and HEAD requests, so forged cross-site
+    requests and incidental fetches cannot trigger them. Scripted clients can read
+    the token from the jobs page before calling the endpoint. The kill controls on the
+    jobs and stages pages and the hold/resume control on the jobs page are the same forms
+    in both modes; only their method follows this setting. In GET mode the browser
+    submits the token in the URL's query string, so it can be recorded in browser history
+    and server or proxy access logs; it is random per UI instance and grants nothing
+    beyond the UI's own state-changing endpoints. Prefetch rejection relies on the
+    prefetcher identifying itself via those headers; one that sends none of them is not
+    detected.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.ui.holdEnabled</code></td>
   <td>true</td>
   <td>
@@ -1698,7 +1771,9 @@ Apart from these, the following properties are also available, and may be useful
     executors (through either <code>spark.shuffle.service.enabled</code> or a
     <code>ShuffleDataIO</code> with reliable storage), and the cluster manager can hold
     executors: Standalone, YARN, and Kubernetes with
-    <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
+    <code>spark.kubernetes.allocation.pods.allocator=direct</code>. On a Standalone Master,
+    this also gates the <code>hold</code> and <code>resume</code> actions of the
+    <a href="spark-standalone.html#rest-api">Master REST API</a>.
   </td>
   <td>4.4.0</td>
 </tr>
@@ -2071,6 +2146,7 @@ Apart from these, the following properties are also available, and may be useful
     is used. Lowering this size will lower the shuffle memory usage when Zstd is used, but it
     might increase the compression cost because of excessive JNI call overhead. This
     configuration only applies to <code>spark.io.compression.codec</code>.
+    The value must be positive and less than or equal to 2147483632 bytes.
   </td>
   <td>2.3.0</td>
 </tr>
@@ -3050,6 +3126,24 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.1.0</td>
 </tr>
 <tr>
+  <td><code>spark.standalone.submit.filterEnvironment</code></td>
+  <td><code>true</code></td>
+  <td>
+    In standalone cluster mode, controls whether the client forwards only Spark-related environment
+    variables to the driver, i.e. variables whose name starts with <code>SPARK_</code>, excluding
+    <code>SPARK_ENV_LOADED</code>, <code>SPARK_HOME</code>, <code>SPARK_CONF_DIR</code>,
+    <code>SPARK_LOCAL_IP</code>, and <code>SPARK_LOCAL_HOSTNAME</code>, matching the REST submission
+    gateway. If set to <code>false</code>, the full environment of the submitting process is
+    forwarded to the driver, except <code>SPARK_LOCAL_IP</code> and
+    <code>SPARK_LOCAL_HOSTNAME</code>, which are never forwarded since they describe the
+    submitting host rather than the worker the driver runs on. This governs the RPC submission
+    gateway, which is what <code>spark-submit</code> uses unless
+    <code>spark.master.rest.enabled</code> is set to <code>true</code>; REST submissions filter
+    regardless of this setting.
+  </td>
+  <td>4.3.0</td>
+</tr>
+<tr>
   <td><code>spark.excludeOnFailure.enabled</code></td>
   <td>
     false
@@ -3644,7 +3738,7 @@ They are typically set via the config file and command-line options with `--conf
   <td>
     (none)
   </td>
-  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface</td>
+  <td>Comma separated list of class names that must implement the <code>io.grpc.ServerInterceptor</code> interface. When authentication is enabled these interceptors run after it, so they only see calls that have already been authenticated and cannot supply the <code>Authorization</code> header themselves.</td>
   <td>3.4.0</td>
 </tr>
 <tr>
@@ -3786,6 +3880,10 @@ Command types in proto.</td>
 
 Please refer to the [Security](security.html) page for available options on how to secure different
 Spark subsystems.
+
+For OIDC credential propagation (obtaining and distributing short-lived, identity-derived
+credentials to executors), the `spark.security.oidc.*` configuration keys are documented under
+[OIDC Credential Propagation](security.html#oidc-credential-propagation).
 
 
 ### Spark SQL

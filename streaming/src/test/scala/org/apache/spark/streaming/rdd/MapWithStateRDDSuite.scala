@@ -144,9 +144,9 @@ class MapWithStateRDDSuite extends SparkFunSuite with RDDCheckpointTester {
 
     // No data, no state should be changed, function should not be called,
     assertRecordUpdate(initStates = Nil, data = None, expectedStates = Nil)
-    assert(functionCalled === false)
+    assert(!functionCalled)
     assertRecordUpdate(initStates = Seq(0), data = None, expectedStates = Seq((0, initialTime)))
-    assert(functionCalled === false)
+    assert(!functionCalled)
 
     // Data present, function should be called irrespective of whether state exists
     assertRecordUpdate(initStates = Seq(0), data = Seq("noop"),

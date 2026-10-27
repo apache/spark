@@ -269,32 +269,37 @@ case class LocalTimestampNanos(precision: Int, timeZoneId: Option[String] = None
 }
 
 /**
- * Shared precision handling for the `current_timestamp(p)` / `now(p)` / `localtimestamp(p)`
- * expression builders.
+ * Shared precision handling for the `current_timestamp(p)` / `now(p)` / `localtimestamp(p)` and
+ * `to_timestamp*(str, fmt, p)` expression builders.
  */
 private[expressions] object CurrentTimestampPrecision {
   /**
-   * Validates the foldable integer precision argument `p` of a current-timestamp function and
+   * Validates the foldable integer precision argument `p` of a timestamp function and
    * returns it. `p == 6` selects the historical microsecond type; `p` in `[7, 9]` selects the
    * nanosecond type (which requires `spark.sql.timestampNanosTypes.enabled`). Any other value is
    * rejected with `INVALID_TIMESTAMP_PRECISION`. The `typeName` (`TIMESTAMP_LTZ` / `TIMESTAMP_NTZ`)
    * is used in the precision / feature-flag error messages, matching the `TIMESTAMP(p)` type
-   * parser.
+   * parser. `paramIndex` is the 1-based position of the argument, used in type errors.
    */
-  def validate(funcName: String, precision: Expression, typeName: String): Int = {
+  def validate(
+      funcName: String,
+      precision: Expression,
+      typeName: String,
+      paramIndex: Int = 1): Int = {
     if (!precision.foldable) {
       throw QueryCompilationErrors.nonFoldableArgumentError(
         funcName, "precision", precision.dataType)
     }
     if (!precision.dataType.isInstanceOf[IntegralType]) {
       throw QueryCompilationErrors.unexpectedInputDataTypeError(
-        funcName, 1, IntegerType, precision)
+        funcName, paramIndex, IntegerType, precision)
     }
     val value = precision.eval()
     if (value == null) {
       throw QueryCompilationErrors.unexpectedNullError("precision", precision)
     }
-    val p = value.asInstanceOf[Number].intValue()
+    // Range-check the long value so a BIGINT precision can't wrap into range.
+    val p = value.asInstanceOf[Number].longValue()
     // Reject out-of-range precisions before the feature-flag check so the error is always
     // INVALID_TIMESTAMP_PRECISION, not FEATURE_NOT_ENABLED (mirrors the TIMESTAMP(p) type parser).
     if (p != 6 &&
@@ -304,7 +309,7 @@ private[expressions] object CurrentTimestampPrecision {
     if (p != 6) {
       DataTypeErrors.checkTimestampNanosTypesEnabled()
     }
-    p
+    p.toInt
   }
 }
 
@@ -1340,7 +1345,8 @@ case class UnixNanos(child: Expression)
   override def inputTypes: Seq[AbstractDataType] = Seq(AnyTimestampNanoType)
 
   // epochMicros * 1000 overflows a 64-bit BIGINT across the full [0001..9999] calendar range, so
-  // the result is a lossless DECIMAL with enough precision to hold every value (~2.5e20 max).
+  // the result is a DECIMAL that holds every value in that range (~2.5e20 max). Values beyond
+  // ~+/-31,700 years from the epoch exceed 21 digits and raise NUMERIC_VALUE_OUT_OF_RANGE.
   override def dataType: DataType = DecimalType(21, 0)
 
   override def nullSafeEval(input: Any): Any = {
@@ -1965,7 +1971,9 @@ case class UnixTimestamp(
 }
 
 /**
- * Gets a timestamp from a string or a date.
+ * Gets a timestamp from a string or a date. For a nanosecond `TIMESTAMP_NTZ(p)` /
+ * `TIMESTAMP_LTZ(p)` result `dataType`, only a string is accepted. It is parsed with up to 9
+ * fractional digits, truncated to `p`; [[ParseToTimestamp]] casts other inputs instead.
  */
 case class GetTimestamp(
     left: Expression,
@@ -1975,9 +1983,103 @@ case class GetTimestamp(
     timeZoneId: Option[String] = None,
     failOnError: Boolean = SQLConf.get.ansiEnabled) extends ToTimestamp {
 
-  override val forTimestampNTZ: Boolean = dataType == TimestampNTZType
+  override val forTimestampNTZ: Boolean = TimestampFamily.isNtz(dataType)
+
+  // The precision p in [7, 9] of a nanosecond result type; None for a microsecond one.
+  @transient private lazy val nanosPrecision: Option[Int] = dataType match {
+    case _: AnyTimestampNanoType => TimestampFamily.fractionalPrecision(dataType)
+    case _ => None
+  }
 
   override protected def downScaleFactor: Long = 1
+
+  override def inputTypes: Seq[AbstractDataType] = nanosPrecision match {
+    case None => super.inputTypes
+    case Some(_) => Seq.fill(2)(StringTypeWithCollation(supportsTrimCollation = true))
+  }
+
+  override def eval(input: InternalRow): Any = nanosPrecision match {
+    case None => super.eval(input)
+    case Some(precision) =>
+      val str = left.eval(input)
+      if (str == null) {
+        null
+      } else {
+        parseStringNanos(str.asInstanceOf[UTF8String], input, precision)
+      }
+  }
+
+  private def parseStringNanos(str: UTF8String, input: InternalRow, precision: Int): Any = {
+    val fmt = right.eval(input)
+    if (fmt == null) {
+      null
+    } else {
+      val formatter = formatterOption.getOrElse(getFormatter(fmt.toString))
+      if (failOnError) {
+        DateTimeExpressionUtils.parseToTimestampNanosExact(
+          formatter, str.toString, precision, forTimestampNTZ, suggestedFuncOnFail)
+      } else {
+        try {
+          if (forTimestampNTZ) {
+            formatter.parseWithoutTimeZoneNanos(str.toString, precision)
+          } else {
+            formatter.parseNanos(str.toString, precision)
+          }
+        } catch {
+          case e if isParseError(e) => null
+        }
+      }
+    }
+  }
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = nanosPrecision match {
+    case None => super.doGenCode(ctx, ev)
+    case Some(precision) => nanosGenCode(ctx, ev, precision)
+  }
+
+  private def nanosGenCode(ctx: CodegenContext, ev: ExprCode, precision: Int): ExprCode = {
+    val utils = classOf[DateTimeExpressionUtils].getName
+    val parseMethod = if (forTimestampNTZ) "parseWithoutTimeZoneNanos" else "parseNanos"
+    def parseTimestampCode(formatterExpr: String, inputExpr: String): String = {
+      if (failOnError) {
+        s"""${ev.value} = $utils.parseToTimestampNanosExact(
+           |    $formatterExpr, $inputExpr, $precision,
+           |    $forTimestampNTZ, "$suggestedFuncOnFail");""".stripMargin
+      } else {
+        s"""
+           |try {
+           |  ${ev.value} = $formatterExpr.$parseMethod($inputExpr, $precision);
+           |} catch (java.time.DateTimeException e) {
+           |  ${ev.isNull} = true;
+           |} catch (java.text.ParseException e) {
+           |  ${ev.isNull} = true;
+           |}
+           |""".stripMargin
+      }
+    }
+    formatterOption.map { fmt =>
+      val df = classOf[TimestampFormatter].getName
+      val formatterName = ctx.addReferenceObj("formatter", fmt, df)
+      nullSafeCodeGen(ctx, ev, (datetimeStr, _) =>
+        parseTimestampCode(formatterName, s"$datetimeStr.toString()"))
+    }.getOrElse {
+      val zid = ctx.addReferenceObj("zoneId", zoneId, classOf[ZoneId].getName)
+      val tf = TimestampFormatter.getClass.getName.stripSuffix("$")
+      val ldf = LegacyDateFormats.getClass.getName.stripSuffix("$")
+      val timestampFormatter = ctx.freshName("timestampFormatter")
+      // Passes `forTimestampNTZ` like `getFormatter` in the interpreted path.
+      nullSafeCodeGen(ctx, ev, (string, format) =>
+        s"""
+           |$tf $timestampFormatter = $tf$$.MODULE$$.apply(
+           |  $format.toString(),
+           |  $zid,
+           |  $ldf$$.MODULE$$.SIMPLE_DATE_FORMAT(),
+           |  true,
+           |  $forTimestampNTZ);
+           |${parseTimestampCode(timestampFormatter, s"$string.toString()")}
+           |""".stripMargin)
+    }
+  }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Some(timeZoneId))
@@ -1994,20 +2096,28 @@ case class GetTimestamp(
 /**
  * Parses a column to a timestamp without time zone based on the supplied format.
  */
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
       to a timestamp without time zone. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
+
+    _FUNC_(timestamp_str, fmt, precision) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp without time zone with the given fractional-seconds precision. A precision in [7, 9] returns a
+      nanosecond-precision TIMESTAMP_NTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true;
+      precision 6 returns the microsecond TIMESTAMP_NTZ.
   """,
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp without time zone.
-        An expression that evaluates to a string, date, or timestamp.
+        An expression that evaluates to a string, date, or timestamp. A nanosecond-precision
+        timestamp keeps its precision if `precision` is omitted.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
+      * precision - An optional integer literal, either 6 or a value in [7, 9]. Fractional digits
+        beyond `precision` are truncated.
   """,
   examples = """
     Examples:
@@ -2015,38 +2125,45 @@ case class GetTimestamp(
        2016-12-31 00:12:00
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_('2016-12-31 00:12:00.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 7);
+       2016-12-31 00:12:00.1234567
   """,
   group = "datetime_funcs",
   since = "3.4.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val numArgs = expressions.length
-    if (numArgs == 1 || numArgs == 2) {
-      ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampNTZType)
-    } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
-    }
-  }
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    ParseToTimestampBuilder.build(funcName, expressions, TimestampNTZType)
 }
 
 /**
  * Parses a column to a timestamp with local time zone based on the supplied format.
  */
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
       to a timestamp with local time zone. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted.
+
+    _FUNC_(timestamp_str, fmt, precision) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp with local time zone with the given fractional-seconds precision. A precision in [7, 9] returns a
+      nanosecond-precision TIMESTAMP_LTZ(precision) and requires spark.sql.timestampNanosTypes.enabled to be true;
+      precision 6 returns the microsecond TIMESTAMP.
   """,
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp with local time zone.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
+        A nanosecond-precision timestamp keeps its precision if `precision` is omitted.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
+      * precision - An optional integer literal, either 6 or a value in [7, 9]. Fractional digits
+        beyond `precision` are truncated.
   """,
   examples = """
     Examples:
@@ -2054,39 +2171,47 @@ object ParseToTimestampNTZExpressionBuilder extends ExpressionBuilder {
        2016-12-31 00:12:00
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_('2016-12-31 00:12:00.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+       2016-12-31 00:12:00.123456789
   """,
   group = "datetime_funcs",
   since = "3.4.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val numArgs = expressions.length
-    if (numArgs == 1 || numArgs == 2) {
-      ParseToTimestamp(expressions(0), expressions.drop(1).lastOption, TimestampType)
-    } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
-    }
-  }
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    ParseToTimestampBuilder.build(funcName, expressions, TimestampType)
 }
 
 /**
  * * Parses a column to a timestamp based on the supplied format.
  */
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
       to a timestamp. The function always returns null on an invalid input with/without ANSI SQL
       mode enabled. By default, it follows casting rules to a timestamp if the `fmt` is omitted.
       The result data type is consistent with the value of configuration `spark.sql.timestampType`.
+
+    _FUNC_(timestamp_str, fmt, precision) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp with the given fractional-seconds precision, returning null on an invalid input. A precision
+      in [7, 9] returns a nanosecond-precision TIMESTAMP_LTZ(precision) or TIMESTAMP_NTZ(precision), following
+      `spark.sql.timestampType`, and requires spark.sql.timestampNanosTypes.enabled to be true; precision 6
+      returns the microsecond timestamp.
   """,
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
+        A nanosecond-precision timestamp keeps its precision if `precision` is omitted.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
+      * precision - An optional integer literal, either 6 or a value in [7, 9]. Fractional digits
+        beyond `precision` are truncated.
   """,
   examples = """
     Examples:
@@ -2096,22 +2221,59 @@ object ParseToTimestampLTZExpressionBuilder extends ExpressionBuilder {
        2016-12-31 00:00:00
       > SELECT _FUNC_('foo', 'yyyy-MM-dd');
        NULL
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_('foo', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+       NULL
   """,
   group = "datetime_funcs",
   since = "3.4.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
 object TryToTimestampExpressionBuilder extends ExpressionBuilder {
-  override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    val numArgs = expressions.length
-    if (numArgs == 1 || numArgs == 2) {
-      ParseToTimestamp(
-        expressions.head,
-        expressions.drop(1).lastOption,
-        SQLConf.get.timestampType,
-        failOnError = false)
-    } else {
-      throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2), numArgs)
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    ParseToTimestampBuilder.build(
+      funcName, expressions, SQLConf.get.timestampType, failOnError = false)
+}
+
+/**
+ * Shared argument handling of the `to_timestamp`, `to_timestamp_ntz`, `to_timestamp_ltz` and
+ * `try_to_timestamp` builders: `(timestamp_str[, fmt[, precision]])`. `timestampType` is the
+ * microsecond result type of the function. An explicit `precision` (which requires `fmt`) selects
+ * that type (6) or its nanosecond counterpart (7-9). Without it, a nanosecond input keeps its
+ * precision so it is not silently narrowed, and any other input gets `timestampType`.
+ */
+private[expressions] object ParseToTimestampBuilder {
+  def build(
+      funcName: String,
+      expressions: Seq[Expression],
+      timestampType: DataType,
+      failOnError: Boolean = SQLConf.get.ansiEnabled): Expression = {
+    val dataType = expressions match {
+      case Seq(_) | Seq(_, _) => inputResultType(expressions.head, timestampType)
+      case Seq(_, _, precision) =>
+        val typeName = if (timestampType == TimestampNTZType) "TIMESTAMP_NTZ" else "TIMESTAMP_LTZ"
+        withPrecision(
+          timestampType,
+          CurrentTimestampPrecision.validate(funcName, precision, typeName, paramIndex = 3))
+      case _ =>
+        throw QueryCompilationErrors.wrongNumArgsError(funcName, Seq(1, 2, 3), expressions.length)
     }
+    ParseToTimestamp(
+      expressions.head, expressions.drop(1).headOption, dataType, failOnError = failOnError)
+  }
+
+  private def inputResultType(left: Expression, timestampType: DataType): DataType = {
+    if (left.resolved && left.dataType.isInstanceOf[AnyTimestampNanoType]) {
+      withPrecision(timestampType, TimestampFamily.fractionalPrecision(left.dataType).get)
+    } else {
+      timestampType
+    }
+  }
+
+  private def withPrecision(timestampType: DataType, precision: Int): DataType = precision match {
+    case 6 => timestampType
+    case p if timestampType == TimestampNTZType => TimestampNTZNanosType(p)
+    case p => TimestampLTZNanosType(p)
   }
 }
 
@@ -2142,7 +2304,7 @@ abstract class ToTimestamp
   override def dataType: DataType = LongType
   override def nullable: Boolean = if (failOnError) children.exists(_.nullable) else true
 
-  private def isParseError(e: Throwable): Boolean = e match {
+  protected def isParseError(e: Throwable): Boolean = e match {
     case _: DateTimeParseException |
          _: DateTimeException |
          _: ParseException => true
@@ -2610,7 +2772,8 @@ case class TimestampAddInterval(
       left.dataType match {
         case _: AnyTimestampNanoType =>
           timestampNanosAddDayTime(
-            start.asInstanceOf[TimestampNanosVal], interval.asInstanceOf[Long], zoneIdInEval)
+            start.asInstanceOf[TimestampNanosVal], interval.asInstanceOf[Long], zoneIdInEval,
+            left.dataType, right.dataType)
         case _ =>
           timestampAddDayTime(start.asInstanceOf[Long], interval.asInstanceOf[Long], zoneIdInEval)
       }
@@ -2626,7 +2789,10 @@ case class TimestampAddInterval(
       case _: DayTimeIntervalType =>
         left.dataType match {
           case _: AnyTimestampNanoType =>
-            defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampNanosAddDayTime($sd, $dt, $zid)""")
+            val st = ctx.addReferenceObj("startType", left.dataType, classOf[DataType].getName)
+            val it = ctx.addReferenceObj("intervalType", right.dataType, classOf[DataType].getName)
+            defineCodeGen(ctx, ev, (sd, dt) =>
+              s"""$dtu.timestampNanosAddDayTime($sd, $dt, $zid, $st, $it)""")
           case _ =>
             defineCodeGen(ctx, ev, (sd, dt) => s"""$dtu.timestampAddDayTime($sd, $dt, $zid)""")
         }
@@ -2997,7 +3163,8 @@ case class TimestampAddYMInterval(
   override def nullSafeEval(start: Any, months: Any): Any = left.dataType match {
     case _: AnyTimestampNanoType =>
       timestampNanosAddMonths(
-        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval)
+        start.asInstanceOf[TimestampNanosVal], months.asInstanceOf[Int], zoneIdInEval,
+        left.dataType, right.dataType)
     case _ =>
       timestampAddMonths(start.asInstanceOf[Long], months.asInstanceOf[Int], zoneIdInEval)
   }
@@ -3007,8 +3174,10 @@ case class TimestampAddYMInterval(
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     left.dataType match {
       case _: AnyTimestampNanoType =>
+        val st = ctx.addReferenceObj("startType", left.dataType, classOf[DataType].getName)
+        val it = ctx.addReferenceObj("intervalType", right.dataType, classOf[DataType].getName)
         defineCodeGen(ctx, ev, (sd, months) =>
-          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid)""")
+          s"""$dtu.timestampNanosAddMonths($sd, $months, $zid, $st, $it)""")
       case _ =>
         defineCodeGen(ctx, ev, (micros, months) =>
           s"""$dtu.timestampAddMonths($micros, $months, $zid)""")
@@ -3224,21 +3393,30 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
 /**
  * Parses a column to a timestamp based on the supplied format.
  */
-// scalastyle:off line.size.limit
+// scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = """
     _FUNC_(timestamp_str[, fmt]) - Parses the `timestamp_str` expression with the `fmt` expression
       to a timestamp. Returns null with invalid input. By default, it follows casting rules to
       a timestamp if the `fmt` is omitted. The result data type is consistent with the value of
       configuration `spark.sql.timestampType`.
+
+    _FUNC_(timestamp_str, fmt, precision) - Parses the `timestamp_str` expression with the `fmt` expression
+      to a timestamp with the given fractional-seconds precision. A precision in [7, 9] returns a nanosecond-precision
+      TIMESTAMP_LTZ(precision) or TIMESTAMP_NTZ(precision), following `spark.sql.timestampType`, and requires
+      spark.sql.timestampNanosTypes.enabled to be true; precision 6 returns the microsecond timestamp.
   """,
   arguments = """
     Arguments:
       * timestamp_str - A string to be parsed to timestamp.
         An expression that evaluates to a string, date, timestamp, or numeric.
+        If `fmt` is specified, a numeric input is cast to a string and then parsed with `fmt`.
+        A nanosecond-precision timestamp keeps its precision if `precision` is omitted.
       * fmt - Timestamp format pattern to follow. See <a href="https://spark.apache.org/docs/latest/sql-ref-datetime-pattern.html">Datetime Patterns</a> for valid
               date and time format patterns.
         An expression that evaluates to a string.
+      * precision - An optional integer literal, either 6 or a value in [7, 9]. Fractional digits
+        beyond `precision` are truncated.
   """,
   examples = """
     Examples:
@@ -3246,10 +3424,23 @@ object TryToDateExpressionBuilder extends ExpressionBuilder {
        2016-12-31 00:12:00
       > SELECT _FUNC_('2016-12-31', 'yyyy-MM-dd');
        2016-12-31 00:00:00
+      > SET spark.sql.timestampNanosTypes.enabled=true;
+      spark.sql.timestampNanosTypes.enabled	true
+      > SELECT _FUNC_('2016-12-31 00:12:00.123456789', 'yyyy-MM-dd HH:mm:ss.SSSSSSSSS', 9);
+       2016-12-31 00:12:00.123456789
   """,
   group = "datetime_funcs",
   since = "2.2.0")
-// scalastyle:on line.size.limit
+// scalastyle:on line.size.limit line.contains.tab
+object ParseToTimestampExpressionBuilder extends ExpressionBuilder {
+  override def build(funcName: String, expressions: Seq[Expression]): Expression =
+    ParseToTimestampBuilder.build(funcName, expressions, SQLConf.get.timestampType)
+}
+
+/**
+ * Parses a column to a timestamp based on the supplied format. Without a format, it casts the
+ * input to `dataType`.
+ */
 case class ParseToTimestamp(
     left: Expression,
     format: Option[Expression],
@@ -3259,10 +3450,15 @@ case class ParseToTimestamp(
   extends RuntimeReplaceable with ImplicitCastInputTypes with TimeZoneAwareExpression {
 
   override lazy val replacement: Expression = withOrigin(origin) {
-    format.map { f =>
+    format.filterNot(_ => castsNanos).map { f =>
       GetTimestamp(left, f, dataType, "try_to_timestamp", timeZoneId, failOnError = failOnError)
     }.getOrElse(Cast(left, dataType, timeZoneId, ansiEnabled = failOnError))
   }
+
+  // The format only applies to a string, so a DATE or timestamp input converted to or from a
+  // nanosecond type is cast, as without a format.
+  private def castsNanos: Boolean = left.resolved && !left.dataType.isInstanceOf[StringType] &&
+    Seq(left.dataType, dataType).exists(_.isInstanceOf[AnyTimestampNanoType])
 
   def this(left: Expression, format: Expression) = {
     this(left, Option(format), SQLConf.get.timestampType)
@@ -3289,8 +3485,13 @@ case class ParseToTimestamp(
         DateType,
         TimestampType,
         TimestampNTZType)
+    // NumericType is only accepted without a format, where `replacement` is a plain Cast. With a
+    // format, `replacement` is GetTimestamp, which does not accept numeric inputs, so numeric
+    // inputs are implicitly cast to string and parsed with the format instead.
+    val acceptsNumeric = dataType.isInstanceOf[TimestampType] && format.isEmpty
+    // Nanosecond timestamps go last so they never change how the other inputs are coerced.
     TypeCollection(
-      (if (dataType.isInstanceOf[TimestampType]) types :+ NumericType else types): _*
+      (if (acceptsNumeric) types :+ NumericType else types) :+ AnyTimestampNanoType: _*
     ) +: format.map(_ => StringTypeWithCollation(supportsTrimCollation = true)).toSeq
   }
 
@@ -5021,8 +5222,13 @@ case class ConvertTimezone(
           - "SECOND"
           - "MILLISECOND"
           - "MICROSECOND"
+          - "NANOSECOND" - only for nanosecond-precision timestamp inputs (TIMESTAMP_NTZ(p) /
+            TIMESTAMP_LTZ(p), p in [7, 9]); the result is floored to the input's precision, so a
+            quantity finer than the type's step (10^(9-p) ns) is truncated to it
       * quantity - this is the number of units of time that you want to add.
-      * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add.
+      * timestamp - this is a timestamp (w/ or w/o timezone) to which you want to add. A
+        nanosecond-precision timestamp keeps its sub-microsecond fraction; units of MICROSECOND or
+        coarser leave the fraction unchanged.
   """,
   examples = """
     Examples:
@@ -5060,23 +5266,48 @@ case class TimestampAdd(
   override def left: Expression = quantity
   override def right: Expression = timestamp
 
-  override def inputTypes: Seq[AbstractDataType] = Seq(LongType, AnyTimestampType)
+  override def inputTypes: Seq[AbstractDataType] =
+    Seq(LongType, TypeCollection(AnyTimestampType, AnyTimestampNanoType))
   override def dataType: DataType = timestamp.dataType
+
+  // A nanosecond-precision timestamp is carried as a TimestampNanosVal object rather than a
+  // primitive microsecond Long, so the nanos-aware add path preserves the sub-microsecond fraction.
+  @transient private lazy val isNanos: Boolean =
+    timestamp.dataType.isInstanceOf[AnyTimestampNanoType]
+
+  // The declared fractional-second precision p in [7, 9] of a nanosecond timestamp input; -1 for a
+  // microsecond timestamp (where it is unused). Every produced element is floored to this p.
+  @transient private lazy val nanosPrecision: Int = timestamp.dataType match {
+    case t: TimestampNTZNanosType => t.precision
+    case t: TimestampLTZNanosType => t.precision
+    case _ => -1
+  }
 
   override def withTimeZone(timeZoneId: String): TimeZoneAwareExpression =
     copy(timeZoneId = Option(timeZoneId))
 
   @transient private lazy val zoneIdInEval: ZoneId = zoneIdForType(timestamp.dataType)
 
-  override def nullSafeEval(q: Any, micros: Any): Any = {
-    DateTimeUtils.timestampAdd(unit, q.asInstanceOf[Long], micros.asInstanceOf[Long], zoneIdInEval)
+  override def nullSafeEval(q: Any, ts: Any): Any = {
+    if (isNanos) {
+      DateTimeUtils.timestampAddNanos(
+        unit, q.asInstanceOf[Long], ts.asInstanceOf[TimestampNanosVal],
+        nanosPrecision, zoneIdInEval)
+    } else {
+      DateTimeUtils.timestampAdd(unit, q.asInstanceOf[Long], ts.asInstanceOf[Long], zoneIdInEval)
+    }
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val dtu = DateTimeUtils.getClass.getName.stripSuffix("$")
     val zid = ctx.addReferenceObj("zoneId", zoneIdInEval, classOf[ZoneId].getName)
-    defineCodeGen(ctx, ev, (q, micros) =>
-      s"""$dtu.timestampAdd("$unit", $q, $micros, $zid)""")
+    if (isNanos) {
+      defineCodeGen(ctx, ev, (q, ts) =>
+        s"""$dtu.timestampAddNanos("$unit", $q, $ts, $nanosPrecision, $zid)""")
+    } else {
+      defineCodeGen(ctx, ev, (q, micros) =>
+        s"""$dtu.timestampAdd("$unit", $q, $micros, $zid)""")
+    }
   }
 
   override def prettyName: String = "timestampadd"
@@ -5380,7 +5611,7 @@ object TimeBucketExpressionBuilder extends ExpressionBuilder {
     expressions match {
       case Seq(rawBucketSize, rawTs) =>
         val bucketSize = retypeNull(rawBucketSize, DayTimeIntervalType())
-        // Fall back to TimestampType for bad ts types; ExpectsInputTypes will report it.
+        // Fall back to TimestampType when ts is not a recognized timestamp type.
         val tsType = rawTs.dataType match {
           case t if acceptsTsType(t) => t
           case _ => TimestampType

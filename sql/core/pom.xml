@@ -35,6 +35,16 @@
   </properties>
 
   <dependencies>
+    <!--
+      jep (Java Embedded Python): embeds CPython in the JVM via JNI for in-process Python UDFs.
+      Marked as "provided": users must install jep on each executor separately.
+      See: https://github.com/ninia/jep
+    -->
+    <dependency>
+      <groupId>black.ninia</groupId>
+      <artifactId>jep</artifactId>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>org.rocksdb</groupId>
       <artifactId>rocksdbjni</artifactId>
@@ -235,7 +245,7 @@
     </dependency>
     <dependency>
       <groupId>net.snowflake</groupId>
-      <artifactId>snowflake-jdbc</artifactId>
+      <artifactId>snowflake-jdbc-thin</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -314,6 +324,11 @@
       <version>${project.version}</version>
       <type>test-jar</type>
       <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.arrow</groupId>
+      <artifactId>arrow-c-data</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
   <build>
