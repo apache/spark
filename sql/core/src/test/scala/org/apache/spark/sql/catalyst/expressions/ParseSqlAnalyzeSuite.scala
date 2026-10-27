@@ -91,11 +91,111 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(j \ "parse_success" === JBool(true))
       assert(j \ "analyze_success" === JBool(false))
       assert(j \ "statement_identifier" === JString("SELECT"))
-      assert(j \ "source_table_references" ===
-        JArray(List(JArray(List(JString("missing_parse_sql_analyze_t"))))))
+      assert(j \ "source_table_references" === JArray(List(JArray(List(
+        JString("spark_catalog"),
+        JString("default"),
+        JString("missing_parse_sql_analyze_t"))))))
       val errorClass = (j \ "error" \ "errorClass").asInstanceOf[JString].s
       assert(errorClass == "TABLE_OR_VIEW_NOT_FOUND" ||
         errorClass.contains("TABLE_OR_VIEW_NOT_FOUND"))
+    }
+  }
+
+  test("ANALYZE inherits invoker schema and can override current_schema") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      sql("CREATE DATABASE parse_sql_ctx_a")
+      sql("CREATE DATABASE parse_sql_ctx_b")
+      try {
+        sql("CREATE TABLE parse_sql_ctx_a.t (a INT) USING parquet")
+        sql("USE parse_sql_ctx_b")
+        try {
+          val missing = evalStatement("SELECT a FROM t")
+          assert(missing \ "analyze_success" === JBool(false))
+          assert(missing \ "source_table_references" === JArray(List(JArray(List(
+            JString("spark_catalog"), JString("parse_sql_ctx_b"), JString("t"))))))
+
+          val json = spark.sql(
+            """SELECT parse_sql(
+              |  'SELECT a FROM t',
+              |  'ANALYZE',
+              |  current_schema => 'parse_sql_ctx_a')""".stripMargin).head().getString(0)
+          val analyzed = parse(json) match {
+            case JArray(List(value: JObject)) => value
+            case other => fail(s"expected one statement object, got: $other")
+          }
+          assert(analyzed \ "analyze_success" === JBool(true))
+          assert(analyzed \ "source_table_references" === JArray(List(JArray(List(
+            JString("spark_catalog"), JString("parse_sql_ctx_a"), JString("t"))))))
+          assert(spark.sql("SELECT current_schema()").head().getString(0) ===
+            "parse_sql_ctx_b")
+        } finally {
+          sql("USE default")
+        }
+      } finally {
+        sql("DROP TABLE IF EXISTS parse_sql_ctx_a.t")
+        sql("DROP DATABASE IF EXISTS parse_sql_ctx_a CASCADE")
+        sql("DROP DATABASE IF EXISTS parse_sql_ctx_b CASCADE")
+      }
+    }
+  }
+
+  test("ANALYZE named mode and current_catalog inherit from invoker") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """SELECT parse_sql(
+          |  'SELECT 1 AS a',
+          |  mode => 'ANALYZE',
+          |  current_catalog => current_catalog())""".stripMargin).head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "analyze_success" === JBool(true))
+      assert(analyzed \ "select_list" === JArray(List(
+        JObject("name" -> JArray(List(JString("a"))), "type" -> JString("INT")))))
+    }
+  }
+
+  test("ANALYZE current_path override is restored on the invoker") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.PATH_ENABLED.key -> "true") {
+      sql("SET PATH = spark_catalog.default, system.builtin")
+      try {
+        val before = spark.sql("SELECT current_path()").head().getString(0)
+        val json = spark.sql(
+          """SELECT parse_sql(
+            |  'SELECT 1 AS a',
+            |  'ANALYZE',
+            |  current_path => 'system.builtin, spark_catalog.default')""".stripMargin)
+          .head().getString(0)
+        val analyzed = parse(json) match {
+          case JArray(List(value: JObject)) => value
+          case other => fail(s"expected one statement object, got: $other")
+        }
+        assert(analyzed \ "analyze_success" === JBool(true))
+        assert(spark.sql("SELECT current_path()").head().getString(0) === before)
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("ANALYZE reports invalid current_schema as JSON instead of failing the query") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        "SELECT parse_sql('SELECT 1 AS a', 'ANALYZE', current_schema => '!!!')")
+        .head().getString(0)
+      val analyzed = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(analyzed \ "parse_success" === JBool(true))
+      assert(analyzed \ "analyze_success" === JBool(false))
+      assert(analyzed \ "select_list" === JArray(List(
+        JObject("name" -> JArray(List(JString("a")))))))
+      assert((analyzed \ "error" \ "errorClass").asInstanceOf[JString].s ===
+        "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT")
     }
   }
 }

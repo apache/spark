@@ -3719,4 +3719,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       errorClass = "PARSE_SQL_ANALYZE_REQUIRES_SESSION",
       messageParameters = Map.empty)
   }
+
+  def invalidParseSqlContext(parameter: String, value: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT",
+      messageParameters = Map(
+        "functionName" -> toSQLId("parse_sql"),
+        "parameter" -> toSQLId(parameter),
+        "invalidValue" -> toSQLValue(value, StringType)))
+  }
 }

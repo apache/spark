@@ -31,11 +31,13 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, PathElement}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Mode for [[ParseSqlResult.fromSql]]. `PARSE` is unresolved. `ANALYZE` types
@@ -53,10 +55,27 @@ object ParseSqlMode {
 }
 
 /**
+ * Optional ANALYZE-mode catalog context for [[ParseSqlResult.fromSql]].
+ * `None` on a field means inherit the invoker session value.
+ */
+case class ParseSqlAnalyzeContext(
+    catalog: Option[String] = None,
+    schema: Option[String] = None,
+    path: Option[String] = None) {
+  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty && path.isEmpty
+}
+
+object ParseSqlAnalyzeContext {
+  val empty: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext()
+}
+
+/**
  * Parses a SQL batch string and returns a compact JSON array describing its
  * statements. `PARSE` mode is unresolved (no catalog resolution). `ANALYZE`
  * mode also types selected columns and fully qualifies relation / routine
- * names using the active session catalog.
+ * names using the active session catalog. ANALYZE inherits the invoker's
+ * current catalog, schema, and SQL path unless [[ParseSqlAnalyzeContext]]
+ * overrides them.
  *
  * Uses a stock [[SparkSqlParser]] (ThreadLocal) so statement coverage matches
  * the default production parser (EXPLAIN / SET / ADD JAR / temp views / etc.).
@@ -86,13 +105,62 @@ object ParseSqlResult {
     ThreadLocal.withInitial(() => new SparkSqlParser())
 
   /** Parse `sql` as a batch and render the JSON result array. */
-  def fromSql(sql: String, mode: String = ParseSqlMode.Parse): String = {
+  def fromSql(
+      sql: String,
+      mode: String = ParseSqlMode.Parse,
+      context: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext.empty): String = {
     val split = parser.get().splitStatementsWithPositions(sql)
     val statements = split.completeStatements ++ split.partialStatement
-    compact(render(JArray(statements.map(parseStatement(_, mode)).toList)))
+    val json = if (mode == ParseSqlMode.Analyze) {
+      analyzeBatch(statements, context)
+    } else {
+      JArray(statements.map { segment =>
+        parsePlanOrError(segment) match {
+          case ParseFailed(errorObj) => errorObj
+          case Parsed(seg, plan) =>
+            successJson(plan, analyzed = None, analyzeError = None, None, seg)
+        }
+      }.toList)
+    }
+    compact(render(json))
   }
 
-  private def parseStatement(segment: PositionedSqlStatement, mode: String): JObject = {
+  private sealed trait ParsedStatement
+  private case class Parsed(segment: PositionedSqlStatement, plan: LogicalPlan)
+    extends ParsedStatement
+  private case class ParseFailed(errorObj: JObject) extends ParsedStatement
+
+  /**
+   * Parse every statement, then analyze with optional context overrides.
+   * Analysis / context failures stay JSON (`analyze_success` false) with
+   * whatever parse and catalog qualification is already known.
+   */
+  private def analyzeBatch(
+      statements: Seq[PositionedSqlStatement],
+      context: ParseSqlAnalyzeContext): JArray = {
+    val parsed = statements.map(parsePlanOrError)
+    val session = ClassicSparkSession.getActiveSession
+      .orElse(ClassicSparkSession.getDefaultSession)
+      .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
+    try {
+      withAnalyzeContext(session, context) {
+        JArray(parsed.map {
+          case ParseFailed(errorObj) => errorObj
+          case Parsed(segment, plan) => analyzeJson(plan, segment, session)
+        }.toList)
+      }
+    } catch {
+      case e: SparkThrowable with Throwable =>
+        JArray(parsed.map {
+          case ParseFailed(errorObj) => errorObj
+          case Parsed(segment, plan) =>
+            successJson(plan, None, Some(e), Some(session), segment)
+        }.toList)
+    }
+  }
+
+  /** Parsed plan, or parse-failure JSON for this statement. */
+  private def parsePlanOrError(segment: PositionedSqlStatement): ParsedStatement = {
     val sql = segment.statement
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
@@ -103,19 +171,13 @@ object ParseSqlResult {
         Origin(sqlText = Some(sql))
       }
       CurrentOrigin.withOrigin(origin) {
-        val plan = parser.get().parsePlan(sql)
-        if (mode == ParseSqlMode.Analyze) {
-          analyzeJson(plan, segment)
-        } else {
-          successJson(plan, analyzed = None, analyzeError = None, session = None, segment)
-        }
+        Parsed(segment, parser.get().parsePlan(sql))
       }
     } catch {
-      // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
-        errorJson(e, segment)
+        ParseFailed(errorJson(e, segment))
       case e: SqlScriptingException =>
-        errorJson(e, segment)
+        ParseFailed(errorJson(e, segment))
     }
   }
 
@@ -123,10 +185,10 @@ object ParseSqlResult {
    * Analyze `plan` with the active session catalog. Parse metadata is always
    * retained; analysis failures become JSON (`analyze_success` false).
    */
-  private def analyzeJson(plan: LogicalPlan, segment: PositionedSqlStatement): JObject = {
-    val session = ClassicSparkSession.getActiveSession
-      .orElse(ClassicSparkSession.getDefaultSession)
-      .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
+  private def analyzeJson(
+      plan: LogicalPlan,
+      segment: PositionedSqlStatement,
+      session: ClassicSparkSession): JObject = {
     try {
       val analyzed =
         session.sessionState.executePlan(plan, CommandExecutionMode.SKIP).analyzed
@@ -134,6 +196,86 @@ object ParseSqlResult {
     } catch {
       case e: SparkThrowable with Throwable =>
         successJson(plan, None, Some(e), Some(session), segment)
+    }
+  }
+
+  /**
+   * Run `f` with optional catalog / schema / SQL path overrides, then restore
+   * the invoker session. `None` on a field keeps the current value.
+   */
+  private def withAnalyzeContext[T](
+      session: ClassicSparkSession,
+      context: ParseSqlAnalyzeContext)(f: => T): T = {
+    if (context.isEmpty) {
+      f
+    } else {
+      val mgr = session.sessionState.catalogManager
+      val conf = session.sessionState.conf
+      val prevCatalog = mgr.currentCatalog.name()
+      val prevNamespace = mgr.currentNamespace.clone()
+      val prevPath = mgr.storedSessionPathEntries
+      val prevPathEnabled = conf.getConf(SQLConf.PATH_ENABLED)
+      try {
+        context.catalog.foreach { catalog =>
+          if (catalog.trim.isEmpty) {
+            throw QueryExecutionErrors.invalidParseSqlContext("current_catalog", catalog)
+          }
+          mgr.setCurrentCatalog(catalog)
+        }
+        context.schema.foreach { schema =>
+          val parts = try {
+            parser.get().parseMultipartIdentifier(schema)
+          } catch {
+            case _: ParseException =>
+              throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
+          }
+          if (parts.isEmpty) {
+            throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
+          }
+          mgr.setCurrentNamespace(parts.toArray)
+        }
+        context.path.foreach { path =>
+          if (!prevPathEnabled) {
+            conf.setConf(SQLConf.PATH_ENABLED, true)
+          }
+          applyPathOverride(mgr, conf, path)
+        }
+        f
+      } finally {
+        mgr.setCurrentCatalog(prevCatalog)
+        mgr.setCurrentNamespace(prevNamespace)
+        prevPath match {
+          case Some(entries) => mgr.setSessionPath(entries)
+          case None => mgr.clearSessionPath()
+        }
+        if (conf.getConf(SQLConf.PATH_ENABLED) != prevPathEnabled) {
+          conf.setConf(SQLConf.PATH_ENABLED, prevPathEnabled)
+        }
+      }
+    }
+  }
+
+  private def applyPathOverride(
+      mgr: CatalogManager,
+      conf: SQLConf,
+      path: String): Unit = {
+    if (path.trim.isEmpty) {
+      mgr.clearSessionPath()
+    } else {
+      val elements = try {
+        parser.get().parsePathElements(path)
+      } catch {
+        case _: ParseException =>
+          throw QueryExecutionErrors.invalidParseSqlContext("current_path", path)
+      }
+      val expanded = PathElement.validateNoStaticDuplicates(
+        PathElement.expand(elements, conf, mgr),
+        conf.caseSensitiveAnalysis)
+      if (expanded.isEmpty) {
+        mgr.clearSessionPath()
+      } else {
+        mgr.setSessionPath(expanded)
+      }
     }
   }
 
@@ -156,12 +298,13 @@ object ParseSqlResult {
     }
     // Omit unused collections / markers so consumers can treat absence as empty.
     val refs = collectPlanReferences(plan)
-    val qualifiedSession = analyzed.flatMap(_ => session)
-    val targetTables = qualifiedSession.map(s => refs.targetTables.map(qualifyRelation(_, s)))
+    // Qualify from the ANALYZE session even when analysis failed: names and
+    // builtins are known from parse plus current catalog / schema / path.
+    val targetTables = session.map(s => refs.targetTables.map(qualifyRelation(_, s)))
       .getOrElse(refs.targetTables)
-    val sourceTables = qualifiedSession.map(s => refs.sourceTables.map(qualifyRelation(_, s)))
+    val sourceTables = session.map(s => refs.sourceTables.map(qualifyRelation(_, s)))
       .getOrElse(refs.sourceTables)
-    val functions = qualifiedSession.map(s => refs.functions.map(qualifyRoutine(_, s)))
+    val functions = session.map(s => refs.functions.map(qualifyRoutine(_, s)))
       .getOrElse(refs.functions)
     if (targetTables.nonEmpty) {
       fields += "target_table_references" ->
