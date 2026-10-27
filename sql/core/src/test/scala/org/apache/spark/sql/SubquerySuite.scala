@@ -2510,6 +2510,66 @@ class SubquerySuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60577: FileSourceScanExec supports push down IN data filter with scalar subquery") {
+    def checkFileSourceScan(query: String, numScalarSubqueries: Int): Unit = {
+      val df = sql(query)
+      // `PushedFilters` is a part of the output of EXPLAIN, and of the plan description that is
+      // built when the query starts.
+      Seq(SimpleMode, FormattedMode).foreach(df.queryExecution.explainString(_))
+      checkAnswer(df, Seq.empty)
+      val fileSourceScanExec = collect(df.queryExecution.executedPlan) {
+        case f: FileSourceScanExec => f
+      }
+      sparkContext.listenerBus.waitUntilEmpty()
+      assert(fileSourceScanExec.size === 1)
+      val scalarSubquery = fileSourceScanExec.head.dataFilters.flatMap(_.collect {
+        case s: ScalarSubquery => s
+      })
+      assert(scalarSubquery.length === numScalarSubqueries)
+      // The `In` is not displayed in `PushedFilters`, but it is pushed down to skip the row group.
+      assert(!fileSourceScanExec.head.metadata("PushedFilters").contains("In("))
+      assert(fileSourceScanExec.head.metrics("numOutputRows").value === 0)
+    }
+
+    withTable("t1", "t2") {
+      // Parquet does not skip row groups by INT96 timestamps, which are the default.
+      withSQLConf(
+          SQLConf.LEAF_NODE_DEFAULT_PARALLELISM.key -> "1",
+          SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key -> "TIMESTAMP_MICROS") {
+        Seq("t1" -> Seq(1, 2, 3), "t2" -> Seq(4, 5, 6)).foreach { case (table, ids) =>
+          ids.toDF("id").selectExpr(
+            "DATE_FROM_UNIX_DATE(id) AS d",
+            "TIMESTAMP_SECONDS(id) AS ts",
+            "CAST(id AS DECIMAL(10, 2)) AS dec").write.format("parquet").saveAsTable(table)
+        }
+
+        Seq(
+          "d" -> "DATE_FROM_UNIX_DATE(5)",
+          "ts" -> "TIMESTAMP_SECONDS(5)",
+          "dec" -> "CAST(5 AS DECIMAL(10, 2))").foreach { case (column, literal) =>
+          checkFileSourceScan(
+            s"SELECT * FROM t1 WHERE $column IN ($literal, (SELECT max($column) FROM t2))", 1)
+          // Otherwise, the two scalar subqueries are merged into one.
+          withSQLConf(SQLConf.SUBQUERY_REUSE_ENABLED.key -> "false") {
+            checkFileSourceScan(
+              s"SELECT * FROM t1 WHERE $column IN " +
+                s"((SELECT min($column) FROM t2), (SELECT max($column) FROM t2))", 2)
+          }
+        }
+
+        // `NOT IN` and an `IN` under `OR` hold the `In` below the top of the filter.
+        Seq(
+          "SELECT * FROM t1 WHERE d NOT IN (DATE_FROM_UNIX_DATE(5), (SELECT max(d) FROM t2))",
+          "SELECT * FROM t1 WHERE d IN (DATE_FROM_UNIX_DATE(5), (SELECT max(d) FROM t2)) " +
+            "OR dec IS NULL").foreach { query =>
+          val df = sql(query)
+          Seq(SimpleMode, FormattedMode).foreach(df.queryExecution.explainString(_))
+          df.collect()
+        }
+      }
+    }
+  }
+
   test("SPARK-44562: Add OptimizeOneRowRelationSubquery in batch of Subquery") {
     withTempView("v1", "v2") {
       sql(
