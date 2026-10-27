@@ -625,27 +625,17 @@ object WholeStageCodegenExec {
       report: () => Unit)
 
   /**
-   * Compiles `code` as a trial (`CodeCompiler.trial`). A hit in the compile cache produces no
-   * method sizes, so the class is then dropped and compiled again. A hit happens where the class
-   * is cached while the decision for its code is not: the decision was evicted, or the same body
-   * was compiled earlier without being decided - with the split off, whose code is the recorded
-   * code without its marks, but for the compacted-slot rule, or under another limit. Should
-   * another thread load the class again in between, the second compile is a hit as well, and the
-   * sizes are unknown.
+   * Compiles `code` as a trial (`CodeCompiler.trial`). The class can be cached while the decision
+   * for its code is not: the decision was evicted, or the same body was compiled without being
+   * decided - with the split off, whose code is the recorded code without its marks, but for the
+   * compacted-slot rule, under another limit, or by another thread. The trial then holds what the
+   * class's compile held, kept with it in the cache, so it does not compile the class again.
    */
   private[execution] def trialCompile(
       code: CodeAndComment,
       failureExpected: Boolean): TrialResult = {
-    def once(): (Try[Map[String, Int]], CodeCompiler.TrialCompile) = {
-      val (result, trial) = CodeCompiler.trial(failureExpected)(CodeGenerator.compile(code))
-      (result.map(_ => trial.methodSizes), trial)
-    }
-    val (sizes, trial) = once() match {
-      case (Success(m), _) if m.isEmpty =>
-        CodeGenerator.invalidateCompiled(code)
-        once()
-      case result => result
-    }
+    val (result, trial) = CodeCompiler.trial(failureExpected)(CodeGenerator.compile(code))
+    val sizes = result.map(_ => trial.methodSizes)
     TrialResult(sizes.map(m => Option.when(m.nonEmpty)(m)), () => trial.report())
   }
 
