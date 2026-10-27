@@ -879,13 +879,18 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             phase_timers = None
 
         @fail_on_stopiteration
-        def _evaluate_batch_udf(udf_func: Any, rows: list[tuple]) -> list[Any]:
+        def _evaluate_batch_udf(udf_func: Any, args: list[list[Any]], num_rows: int) -> list[Any]:
             if runner_conf.arrow_concurrency_level <= 0:
-                return [udf_func(*row) for row in rows]
+                if not args:
+                    return [udf_func() for _ in range(num_rows)]
+                # Feed the columns straight to map() to avoid building a tuple per row.
+                return list(map(udf_func, *args))
             from concurrent.futures import ThreadPoolExecutor
 
             with ThreadPoolExecutor(max_workers=runner_conf.arrow_concurrency_level) as pool:
-                return list(pool.map(lambda row: udf_func(*row), rows))
+                if not args:
+                    return list(pool.map(lambda _: udf_func(), range(num_rows)))
+                return list(pool.map(udf_func, *args))
 
         # Keep phase totals and the batch count local, then publish them once per task.
         input_duration_ns = 0
@@ -920,15 +925,11 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
                         # Reuse the batch start for the first UDF, avoiding another clock read.
                         # Later UDFs start input after the loop transition.
                         input_start_ns = clock()
-                    rows = (
-                        [() for _ in range(num_rows)]
-                        if zero_arg
-                        else list(zip(*[columns[o] for o in offsets]))
-                    )
+                    args = [] if zero_arg else [columns[o] for o in offsets]
                     if phase_timers is not None:
                         udf_start_ns = clock()
                         input_duration_ns += udf_start_ns - input_start_ns
-                    results = _evaluate_batch_udf(udf_func, rows)
+                    results = _evaluate_batch_udf(udf_func, args, num_rows)
                     if phase_timers is not None:
                         output_start_ns = clock()
                         udf_duration_ns += output_start_ns - udf_start_ns
