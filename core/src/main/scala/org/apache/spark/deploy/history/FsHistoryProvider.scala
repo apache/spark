@@ -875,14 +875,15 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
    * Resolve the log path by searching across all log directories.
    * Returns the FileSystem and full Path for the given log path name.
    *
-   * If logSourceFullPath is available, it is used first to avoid ambiguity
-   * when the same filename exists in multiple directories.
+   * If logSourceFullPath is available (non-null and non-empty), it is used first to avoid
+   * ambiguity when the same filename exists in multiple directories.
    * Falls back to scanning all directories if the source path is not found.
    */
   private def resolveLogPath(
       logPathName: String, logSourceFullPath: String): (FileSystem, Path) = {
-    // Try the known source directory first
-    if (logSourceFullPath.nonEmpty) {
+    // Try the known source directory first. logSourceFullPath is null for listing entries
+    // written before SPARK-55793 (Spark 4.1 and earlier), or carried over from them.
+    if (Option(logSourceFullPath).exists(_.nonEmpty)) {
       try {
         val sourceFs = logDirFs(logSourceFullPath)
         val fullPath = new Path(logSourceFullPath, logPathName)
@@ -1866,6 +1867,8 @@ private[history] class AttemptInfoWrapper(
     val viewAcls: Option[String],
     val adminAclsGroups: Option[String],
     val viewAclsGroups: Option[String],
+    // Both are null for listing entries written before SPARK-55793 (Spark 4.1 and earlier), or
+    // carried over from such entries, which did not record the log source; see resolveLogPath.
     val logSourceName: String,
     val logSourceFullPath: String)
 
