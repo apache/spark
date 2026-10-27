@@ -2,55 +2,132 @@
 high-cardinality input, pass-through at the periodic check
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 adaptive partial agg, high card, no spill:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-codegen = true, adaptive = F                        4118           4125          11          2.0         490.9       1.0X
-codegen = true, adaptive = T                        2411           2427          23          3.5         287.4       1.7X
-codegen = false, adaptive = F                       4846           4861          21          1.7         577.7       0.8X
-codegen = false, adaptive = T                       2991           3009          25          2.8         356.6       1.4X
+codegen = true, adaptive = F                        4303           4326          32          1.9         513.0       1.0X
+codegen = true, adaptive = T                        2621           2627           8          3.2         312.4       1.6X
+codegen = false, adaptive = F                       5219           5228          12          1.6         622.2       0.8X
+codegen = false, adaptive = T                       3259           3298          55          2.6         388.5       1.3X
 
 
 ================================================================================================
 low-cardinality input, pass-through at the periodic check
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 adaptive partial agg, low card, no spill:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = true, adaptive = F                        270            311          37         62.2          16.1       1.0X
-codegen = true, adaptive = T                        293            318          22         57.3          17.5       0.9X
-codegen = false, adaptive = F                      1305           1312          10         12.9          77.8       0.2X
-codegen = false, adaptive = T                      1329           1435         150         12.6          79.2       0.2X
+codegen = true, adaptive = F                        317            339          18         53.0          18.9       1.0X
+codegen = true, adaptive = T                        300            321          21         56.0          17.9       1.1X
+codegen = false, adaptive = F                      1299           1304           7         12.9          77.4       0.2X
+codegen = false, adaptive = T                      1332           1349          24         12.6          79.4       0.2X
 
 
 ================================================================================================
 high-cardinality input, pass-through at the spill check
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 adaptive partial agg, high card, spill:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = true, adaptive = F                       8196           8247          73          1.0         977.0       1.0X
-codegen = true, adaptive = T                       4433           4530         137          1.9         528.5       1.8X
-codegen = false, adaptive = F                      9544           9555          15          0.9        1137.8       0.9X
-codegen = false, adaptive = T                      5243           5395         215          1.6         625.0       1.6X
+codegen = true, adaptive = F                       8760           8789          41          1.0        1044.2       1.0X
+codegen = true, adaptive = T                       4692           4712          28          1.8         559.3       1.9X
+codegen = false, adaptive = F                     10134          10142          11          0.8        1208.1       0.9X
+codegen = false, adaptive = T                      5904           6003         140          1.4         703.8       1.5X
 
 
 ================================================================================================
 low-cardinality input, pass-through at the spill check
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
 AMD EPYC 7763 64-Core Processor
 adaptive partial agg, low card, spill:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-codegen = true, adaptive = F                        803            813          11         20.9          47.8       1.0X
-codegen = true, adaptive = T                        829            839           9         20.2          49.4       1.0X
-codegen = false, adaptive = F                      1362           1387          35         12.3          81.2       0.6X
-codegen = false, adaptive = T                      1365           1376          15         12.3          81.4       0.6X
+codegen = true, adaptive = F                        845            856          12         19.9          50.3       1.0X
+codegen = true, adaptive = T                        894            908          22         18.8          53.3       0.9X
+codegen = false, adaptive = F                      1508           1521          18         11.1          89.9       0.6X
+codegen = false, adaptive = T                      1487           1499          16         11.3          88.7       0.6X
+
+
+================================================================================================
+spill check with an Exchange, keys arrive together
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, spill check, keys arrive together:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                                      6354           6448         134          1.3         757.4       1.0X
+codegen = true, minCompactionToSpill = 1.05                       6816           6848          45          1.2         812.6       0.9X
+codegen = true, minCompactionToSpill = 2.0                        4959           4979          27          1.7         591.2       1.3X
+codegen = false, adaptive = F                                     7335           7360          35          1.1         874.4       0.9X
+codegen = false, minCompactionToSpill = 1.05                      7368           7444         108          1.1         878.3       0.9X
+codegen = false, minCompactionToSpill = 2.0                       5710           5781         101          1.5         680.6       1.1X
+
+
+================================================================================================
+spill check with an Exchange, keys recur
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, spill check, keys recur:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                            2712           2732          27          3.1         323.3       1.0X
+codegen = true, minCompactionToSpill = 1.05             2733           2784          73          3.1         325.7       1.0X
+codegen = true, minCompactionToSpill = 2.0              2722           2741          27          3.1         324.5       1.0X
+codegen = false, adaptive = F                           3738           3745          10          2.2         445.6       0.7X
+codegen = false, minCompactionToSpill = 1.05            3728           3853         177          2.3         444.4       0.7X
+codegen = false, minCompactionToSpill = 2.0             3889           3897          11          2.2         463.6       0.7X
+
+
+================================================================================================
+spill check with an Exchange, keys recur, map holds 40% of them, fast map off
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, spill check, keys recur, map holds 40% of them, fast map off:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                                                                 7715           7775          84          2.2         459.9       1.0X
+codegen = true, minCompactionToSpill = 1.05                                                  7764           7785          30          2.2         462.8       1.0X
+codegen = true, minCompactionToSpill = 2.0                                                   8011           8020          12          2.1         477.5       1.0X
+codegen = false, adaptive = F                                                                8729           8839         156          1.9         520.3       0.9X
+codegen = false, minCompactionToSpill = 1.05                                                 9086           9099          19          1.8         541.5       0.8X
+codegen = false, minCompactionToSpill = 2.0                                                  9106           9155          68          1.8         542.8       0.8X
+
+
+================================================================================================
+spill check with an Exchange, keys recur, maps hold 40% of them, fast map on
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, spill check, keys recur, maps hold 40% of them, fast map on:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                                                                7826           7860          48          2.1         466.5       1.0X
+codegen = true, minCompactionToSpill = 1.05                                                 7637           7850         301          2.2         455.2       1.0X
+codegen = true, minCompactionToSpill = 2.0                                                  8170           8221          72          2.1         487.0       1.0X
+
+
+================================================================================================
+spill check with an Exchange, hot keys
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 7763 64-Core Processor
+adaptive partial agg, spill check, hot keys:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+----------------------------------------------------------------------------------------------------------------------------
+codegen = true, adaptive = F                           6443           6507          89          1.3         768.1       1.0X
+codegen = true, minCompactionToSpill = 1.05            6544           6556          17          1.3         780.1       1.0X
+codegen = true, minCompactionToSpill = 2.0             4985           4987           2          1.7         594.2       1.3X
+codegen = false, adaptive = F                          7311           7320          13          1.1         871.6       0.9X
+codegen = false, minCompactionToSpill = 1.05           7310           7317          11          1.1         871.4       0.9X
+codegen = false, minCompactionToSpill = 2.0            5761           5790          41          1.5         686.8       1.1X
 
 
