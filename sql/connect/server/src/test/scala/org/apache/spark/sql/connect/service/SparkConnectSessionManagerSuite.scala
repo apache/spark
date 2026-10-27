@@ -251,6 +251,60 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-50569: closed sessions release cache ownership when cleanup is disabled") {
+    val cacheManager = spark.sharedState.cacheManager
+    spark.catalog.clearCache()
+    try {
+      withSparkConf(Connect.CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED.key -> "false") {
+        for (_ <- 0 until 5) {
+          val holder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+            SessionKey("user", UUID.randomUUID().toString),
+            None)
+          holder.session.range(10).persist()
+          assert(cacheManager.numCachedEntries == 1)
+          assert(cacheManager.numCacheOwners == 1)
+
+          SparkConnectService.sessionManager.closeSession(holder.key)
+          assert(cacheManager.numCachedEntries == 1)
+          assert(cacheManager.numCacheOwners == 0)
+        }
+      }
+
+      // Recaching and later registrations must preserve data retained by a closed session.
+      val dataFrame = spark.range(10)
+      cacheManager.recacheByPlan(spark, dataFrame.queryExecution.analyzed)
+      assert(cacheManager.numCachedEntries == 1)
+      assert(cacheManager.numCacheOwners == 0)
+      withSparkConf(Connect.CONNECT_SESSION_MANAGER_CLEANUP_CACHED_DATA_ENABLED.key -> "true") {
+        val holder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+          SessionKey("user", UUID.randomUUID().toString),
+          None)
+        holder.session.range(10).persist()
+        assert(cacheManager.numCacheOwners == 1)
+        holder.session.catalog.clearCache(allSessions = false)
+        assert(cacheManager.numCachedEntries == 1)
+        assert(cacheManager.numCacheOwners == 0)
+        holder.session.range(10).persist()
+        SparkConnectService.sessionManager.closeSession(holder.key)
+        assert(cacheManager.numCachedEntries == 1)
+        assert(cacheManager.numCacheOwners == 0)
+
+        // Explicit uncaching removes the retention flag as well as the cache entry.
+        dataFrame.unpersist(blocking = true)
+        assert(cacheManager.isEmpty)
+        val nextHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(
+          SessionKey("user", UUID.randomUUID().toString),
+          None)
+        nextHolder.session.range(10).persist()
+        SparkConnectService.sessionManager.closeSession(nextHolder.key)
+        assert(cacheManager.isEmpty)
+        assert(cacheManager.numCacheOwners == 0)
+      }
+    } finally {
+      spark.catalog.clearCache()
+    }
+  }
+
   test("baseSession allows creating sessions after default session is cleared") {
     // Create a new session manager to test initialization
     val sessionManager = new SparkConnectSessionManager()

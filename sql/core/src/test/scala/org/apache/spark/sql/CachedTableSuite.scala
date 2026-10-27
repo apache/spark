@@ -123,6 +123,39 @@ class CachedTableSuite extends SharedSparkSession
     assert(spark.sharedState.cacheManager.isEmpty)
   }
 
+  test("SPARK-50569: session-scoped clearing does not resurrect dependent cache buffers") {
+    for (adaptive <- Seq(false, true); materialized <- Seq(false, true)) {
+      withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        withClue(s"adaptive=$adaptive, materialized=$materialized") {
+          val otherSession = spark.newSession()
+          otherSession.conf.set(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key, adaptive.toString)
+          val cacheManager = spark.sharedState.cacheManager
+          val initialRDDs = spark.sparkContext.getPersistentRDDs.keySet.toSet
+          val firstDataFrame = spark.range(10).cache()
+          val firstCache = cacheManager.lookupCachedData(firstDataFrame).get
+          val secondDataFrame = otherSession.range(10).filter("id > 0").cache()
+          val expected = 1L until 10L
+          if (materialized) {
+            assert(secondDataFrame.collect().toSeq == expected)
+          }
+
+          spark.catalog.clearCache(allSessions = false)
+          assert(cacheManager.lookupCachedData(firstDataFrame).isEmpty)
+          assert(cacheManager.lookupCachedData(secondDataFrame).isDefined)
+          assert(secondDataFrame.collect().toSeq == expected)
+          assert(!firstCache.cachedRepresentation.cacheBuilder.isCachedColumnBuffersLoaded)
+          val secondCache = cacheManager.lookupCachedData(secondDataFrame).get
+          val secondRDD = secondCache.cachedRepresentation.cacheBuilder.cachedColumnBuffers.id
+          assert(spark.sparkContext.getPersistentRDDs.keySet == initialRDDs + secondRDD)
+
+          otherSession.catalog.clearCache(allSessions = false)
+          assert(cacheManager.isEmpty)
+          assert(spark.sparkContext.getPersistentRDDs.keySet == initialRDDs)
+        }
+      }
+    }
+  }
+
   def rddIdOf(tableName: String): Int = {
     val plan = spark.table(tableName).queryExecution.sparkPlan
     plan.collect {
