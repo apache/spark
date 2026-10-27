@@ -202,7 +202,10 @@ merges after that key's accumulated rows, keeping an order-sensitive aggregate s
 again right before the aggregation map would spill, in which case the spill is skipped entirely.
 Because pass-through cannot be reversed, the evaluation before a spill also waits until the current
 map has processed `minRows` rows, so a map that fills sooner spills as usual instead of committing
-the task on a small sample.
+the task on a small sample. The SQL UI counts the passed-through rows in
+`number of pass-through output rows`. They are not timed: `time in aggregation build` covers the
+aggregation up to the point where pass-through starts, and preparing the aggregated map for output,
+which in a task that has spilled also writes the map to disk and merges it with the spilled data.
 
 Both evaluations use the cumulative rows and keys of the current map epoch and, once triggered,
 pass-through is not reversed for the rest of the task, so a skewed prefix biases the outcome in

@@ -548,9 +548,15 @@ trait FileSourceScanLike extends DataSourceScanExec with SessionStateHelper {
       location.getClass.getSimpleName +
         Utils.buildLocationMetadata(location.rootPaths, maxMetadataValueLength)
     // `metadata` is accessed during planning and the scalar subquery is not executed yet. Here
-    // we get the pretty string of the scalar subquery, for display purpose only.
+    // we get the pretty string of the scalar subquery, for display purpose only. A filter with an
+    // `In` that has a scalar subquery in its list is not displayed, since the values of an `In`
+    // are converted to the type of its column, which the string does not have.
     val pushedFiltersForDisplay = translateToV1Filters(
-      dataFilters, s => Literal("ScalarSubquery#" + s.exprId.id))
+      dataFilters.filterNot(_.exists {
+        case in: In => in.list.exists(_.exists(_.isInstanceOf[execution.ScalarSubquery]))
+        case _ => false
+      }),
+      s => Literal("ScalarSubquery#" + s.exprId.id))
     val metadata =
       Map(
         "Format" -> relation.fileFormat.toString,
@@ -817,8 +823,8 @@ case class FileSourceScanExec(
   protected lazy val preparedStorageFilters: Seq[Expression] = {
     val requestedDataAttrs = output.take(requiredSchema.length)
     storageFilters.map { expr =>
-      val subqueryReplaced = expr.transform { case s: execution.ScalarSubquery => s.toLiteral }
-      BindReferences.bindReference(subqueryReplaced, requestedDataAttrs)
+      BindReferences.bindReference(
+        StorageFilterPlanning.withSubqueryResults(expr), requestedDataAttrs)
     }
   }
 
