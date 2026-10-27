@@ -627,19 +627,21 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
       withTable("t") {
         createTable(
           "t",
-          Seq("arr", "m"),
+          Seq("s", "arr", "m"),
           Seq(
+            "STRUCT<x: INT, y: INT>",
             "ARRAY<STRUCT<x: INT, y: INT>>",
             "MAP<STRING, STRUCT<x: INT, y: INT>>"))
         sql(
-          """INSERT INTO t (arr, m)
+          """INSERT INTO t (s, arr, m)
             |SELECT
+            |  named_struct('y', 20, 'x', 10),
             |  array(named_struct('y', 20, 'x', 10)),
             |  map('k', named_struct('y', 20, 'x', 10))
             |""".stripMargin)
         checkAnswer(
           spark.table("t"),
-          Row(Seq(Row(10, 20)), Map("k" -> Row(10, 20))))
+          Row(Row(20, 10), Seq(Row(10, 20)), Map("k" -> Row(10, 20))))
       }
     }
   }

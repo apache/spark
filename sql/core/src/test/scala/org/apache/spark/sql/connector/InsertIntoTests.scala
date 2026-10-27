@@ -747,23 +747,61 @@ trait InsertIntoSchemaEvolutionTests { this: InsertIntoTests =>
             resolveNestedFieldsByPosition.toString) {
         val t1 = s"${catalogAndNamespace}tbl"
         withTable(t1) {
-          sql(s"CREATE TABLE $t1 (s struct<x: int, y: int>) USING $v2Format")
+          sql(s"""CREATE TABLE $t1 (
+               |  s struct<x: int, y: int>,
+               |  arr array<struct<x: int, y: int>>,
+               |  m map<string, struct<x: int, y: int>>)
+               |USING $v2Format""".stripMargin)
           sql(
-            s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s)
-               |SELECT named_struct('y', 1, 'x', 2, 'z', 3)
+            s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s, arr, m)
+               |SELECT
+               |  named_struct('y', 1, 'x', 2, 'z', 3),
+               |  array(named_struct('y', 1, 'x', 2, 'z', 3)),
+               |  map('k', named_struct('y', 1, 'x', 2, 'z', 3))
                |""".stripMargin)
 
           checkAnswer(
-            sql(s"SELECT s.x, s.y, s.z FROM $t1"),
-            expected)
+            sql(s"""SELECT
+                 |  s.x, s.y, s.z,
+                 |  arr[0].x, arr[0].y, arr[0].z,
+                 |  m['k'].x, m['k'].y, m['k'].z
+                 |FROM $t1""".stripMargin),
+            Row.fromSeq(expected.toSeq ++ expected.toSeq ++ expected.toSeq))
+        }
+      }
+    }
+  }
+
+  Seq(
+    true -> Row(1, null),
+    false -> Row(null, 1)
+  ).foreach { case (resolveNestedFieldsByPosition, expected) =>
+    test(
+      "Insert schema evolution: column list resolves narrower nested struct by position - " +
+        s"enabled=$resolveNestedFieldsByPosition") {
+      withSQLConf(
+          SQLConf.INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION.key ->
+            resolveNestedFieldsByPosition.toString) {
+        withInsertNestedTypeCoercion {
+          val t1 = s"${catalogAndNamespace}tbl"
+          withTable(t1) {
+            sql(s"CREATE TABLE $t1 (s struct<x: int, y: int>) USING $v2Format")
+            sql(
+              s"""INSERT WITH SCHEMA EVOLUTION INTO $t1 (s)
+                 |SELECT named_struct('y', 1)
+                 |""".stripMargin)
+
+            checkAnswer(sql(s"SELECT s.x, s.y FROM $t1"), expected)
+          }
         }
       }
     }
   }
 
   Seq(false, true).foreach { schemaEvolutionEnabled =>
-    test("Insert schema evolution: column list rejects duplicate fields after positional rename - " +
-      s"schemaEvolutionEnabled=$schemaEvolutionEnabled") {
+    test(
+      "Insert schema evolution: column list rejects duplicate fields after positional rename - " +
+        s"schemaEvolutionEnabled=$schemaEvolutionEnabled") {
       withSQLConf(
           SQLConf.INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION.key -> "true") {
         val t1 = s"${catalogAndNamespace}tbl"
