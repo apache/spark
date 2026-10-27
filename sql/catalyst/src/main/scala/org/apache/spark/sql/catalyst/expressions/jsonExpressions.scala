@@ -2693,7 +2693,7 @@ object JsonObjectExpr {
 // Shape qualifier for IS [NOT] JSON: which top-level JSON type to require.
 sealed trait IsJsonShape
 object IsJsonShape {
-  // Per ANSI SQL:2016 T801, IS JSON VALUE is semantically equivalent to bare IS JSON:
+  // Per ANSI SQL:2016 T821, IS JSON VALUE is semantically equivalent to bare IS JSON:
   // both accept any well-formed JSON value (object, array, or scalar). They are kept as
   // separate shapes so the sql() output round-trips faithfully.
   case object Any extends IsJsonShape    // IS JSON (no qualifier)

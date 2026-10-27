@@ -1163,6 +1163,38 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // The double-quoted equivalents are well-formed ANSI JSON.
     checkEvaluation(IsJson(Literal("""{"a":1}"""), IsJsonShape.Any), true)
     checkEvaluation(IsJson(Literal("""["a", "b"]"""), IsJsonShape.Any), true)
+    // Other parser extensions are rejected too: comments, unquoted field names, non-numeric
+    // numbers, leading zeros, and whitespace-only input.
+    Seq("/* c */ {}", "{} // c", "# c\n{}", "{a:1}", "NaN", "Infinity", "-Infinity", "01",
+        "-01", "[01]", "   ", "\n\t").foreach { json =>
+      checkEvaluation(IsJson(Literal(json), IsJsonShape.Any), false)
+    }
+    // Duplicate field names are accepted (no WITH UNIQUE KEYS support).
+    checkEvaluation(IsJson(Literal("""{"a":1,"a":2}"""), IsJsonShape.Object), true)
+  }
+
+  test("SPARK-58793: IS JSON fails on input beyond the parser limits, like parse_json") {
+    def checkLimit(json: String, shape: IsJsonShape, reason: String): Unit = {
+      // Only the first 128 characters of the input are echoed in the error.
+      checkErrorInExpression[SparkRuntimeException](
+        IsJson(Literal(json), shape),
+        InternalRow.empty,
+        "IS_JSON_INPUT_LIMIT_EXCEEDED",
+        Map("reason" -> reason, "inputPrefix" -> s"'${json.take(128)}...'"))
+    }
+    // Inputs at the limits are classified as usual.
+    checkEvaluation(IsJson(Literal("[" * 1000 + "]" * 1000), IsJsonShape.Array), true)
+    checkEvaluation(IsJson(Literal("1" * 1000), IsJsonShape.Scalar), true)
+    // One past the nesting depth, number length, or field name length limit is an error rather
+    // than a false result, since the input may well be well-formed.
+    checkLimit("[" * 1001 + "]" * 1001, IsJsonShape.Any,
+      "the nesting depth of objects and arrays exceeds the maximum of 1000")
+    checkLimit("1" * 1001, IsJsonShape.Scalar,
+      "a number is longer than the maximum of 1000 characters")
+    checkLimit(s"""{"${"a" * 50001}":1}""", IsJsonShape.Object,
+      "a field name is longer than the maximum of 50000 characters")
+    // A shape mismatch is decided by the first token, before any limit is reached.
+    checkEvaluation(IsJson(Literal("[" * 1001 + "]" * 1001), IsJsonShape.Object), false)
   }
 
   test("SPARK-58793: IS JSON rejects malformed UTF-8 and unpaired surrogates") {

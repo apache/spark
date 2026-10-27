@@ -435,7 +435,7 @@ Project [is_json([1], Array) AS ([1] IS JSON ARRAY)#x, (20181117 >> 2) AS (20181
 
 
 -- !query
-select cast(null as array /* comment */ <array<int>>), 20181117 >> 2
+select cast(null as array /* comment */ <array /* comment */ <int>>), 20181117 >> 2
 -- !query analysis
 Project [cast(null as array<array<int>>) AS NULL#x, (20181117 >> 2) AS (20181117 >> 2)#x]
 +- OneRowRelation

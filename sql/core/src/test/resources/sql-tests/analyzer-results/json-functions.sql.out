@@ -2234,6 +2234,34 @@ Project [is_json({} [], Any) AS ({} [] IS JSON)#x]
 
 
 -- !query
+select '/* c */ {}' IS JSON, '{a:1}' IS JSON, 'NaN' IS JSON, 'Infinity' IS JSON, '01' IS JSON
+-- !query analysis
+Project [is_json(/* c */ {}, Any) AS (/* c */ {} IS JSON)#x, is_json({a:1}, Any) AS ({a:1} IS JSON)#x, is_json(NaN, Any) AS (NaN IS JSON)#x, is_json(Infinity, Any) AS (Infinity IS JSON)#x, is_json(01, Any) AS (01 IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '   ' IS JSON
+-- !query analysis
+Project [is_json(   , Any) AS (    IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
+select '{"a":1,"a":2}' IS JSON OBJECT
+-- !query analysis
+Project [is_json({"a":1,"a":2}, Object) AS ({"a":1,"a":2} IS JSON OBJECT)#x]
++- OneRowRelation
+
+
+-- !query
+select concat(repeat('[', 1001), repeat(']', 1001)) IS JSON
+-- !query analysis
+Project [is_json(concat(repeat([, 1001), repeat(], 1001)), Any) AS (concat(repeat([, 1001), repeat(], 1001)) IS JSON)#x]
++- OneRowRelation
+
+
+-- !query
 select cast(X'228022' AS STRING) IS JSON
 -- !query analysis
 Project [is_json(cast(0x228022 as string), Any) AS (CAST(X'228022' AS STRING) IS JSON)#x]
@@ -2287,6 +2315,51 @@ select '[1]' IS JSON ARRAY, 8 >> 1, 8 >>> 1
 -- !query analysis
 Project [is_json([1], Array) AS ([1] IS JSON ARRAY)#x, (8 >> 1) AS (8 >> 1)#x, (8 >>> 1) AS (8 >>> 1)#x]
 +- OneRowRelation
+
+
+-- !query
+select '{"a":1}' COLLATE UTF8_LCASE IS JSON OBJECT, '[1] ' COLLATE UTF8_LCASE_RTRIM IS JSON ARRAY
+-- !query analysis
+Project [is_json(collate({"a":1}, UTF8_LCASE), Object) AS (collate({"a":1}, UTF8_LCASE) IS JSON OBJECT)#x, is_json(collate([1] , UTF8_LCASE_RTRIM), Array) AS (collate([1] , UTF8_LCASE_RTRIM) IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
+select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY
+-- !query analysis
+Project [is_json(collate(bad, UNICODE), Any) AS (collate(bad, UNICODE) IS JSON)#x, is_json(cast([1] as string), Array) AS (CAST([1] AS STRING) IS JSON ARRAY)#x]
++- OneRowRelation
+
+
+-- !query
+select NULL IS JSON, NULL IS NOT JSON
+-- !query analysis
+Project [is_json(null, Any) AS (NULL IS JSON)#x, NOT is_json(null, Any) AS (NOT (NULL IS JSON))#x]
++- OneRowRelation
+
+
+-- !query
+select 1 IS JSON
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"(1 IS JSON)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 16,
+    "fragment" : "IS JSON"
+  } ]
+}
 
 
 -- !query

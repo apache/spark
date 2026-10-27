@@ -2587,6 +2587,46 @@ false
 
 
 -- !query
+select '/* c */ {}' IS JSON, '{a:1}' IS JSON, 'NaN' IS JSON, 'Infinity' IS JSON, '01' IS JSON
+-- !query schema
+struct<(/* c */ {} IS JSON):boolean,({a:1} IS JSON):boolean,(NaN IS JSON):boolean,(Infinity IS JSON):boolean,(01 IS JSON):boolean>
+-- !query output
+false	false	false	false	false
+
+
+-- !query
+select '   ' IS JSON
+-- !query schema
+struct<(    IS JSON):boolean>
+-- !query output
+false
+
+
+-- !query
+select '{"a":1,"a":2}' IS JSON OBJECT
+-- !query schema
+struct<({"a":1,"a":2} IS JSON OBJECT):boolean>
+-- !query output
+true
+
+
+-- !query
+select concat(repeat('[', 1001), repeat(']', 1001)) IS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "IS_JSON_INPUT_LIMIT_EXCEEDED",
+  "sqlState" : "54000",
+  "messageParameters" : {
+    "inputPrefix" : "'[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[[...'",
+    "reason" : "the nesting depth of objects and arrays exceeds the maximum of 1000"
+  }
+}
+
+
+-- !query
 select cast(X'228022' AS STRING) IS JSON
 -- !query schema
 struct<(CAST(X'228022' AS STRING) IS JSON):boolean>
@@ -2648,6 +2688,56 @@ select '[1]' IS JSON ARRAY, 8 >> 1, 8 >>> 1
 struct<([1] IS JSON ARRAY):boolean,(8 >> 1):int,(8 >>> 1):int>
 -- !query output
 true	4	4
+
+
+-- !query
+select '{"a":1}' COLLATE UTF8_LCASE IS JSON OBJECT, '[1] ' COLLATE UTF8_LCASE_RTRIM IS JSON ARRAY
+-- !query schema
+struct<(collate({"a":1}, UTF8_LCASE) IS JSON OBJECT):boolean,(collate([1] , UTF8_LCASE_RTRIM) IS JSON ARRAY):boolean>
+-- !query output
+true	true
+
+
+-- !query
+select 'bad' COLLATE UNICODE IS JSON, cast('[1]' AS VARCHAR(10)) IS JSON ARRAY
+-- !query schema
+struct<(collate(bad, UNICODE) IS JSON):boolean,(CAST([1] AS STRING) IS JSON ARRAY):boolean>
+-- !query output
+false	true
+
+
+-- !query
+select NULL IS JSON, NULL IS NOT JSON
+-- !query schema
+struct<(NULL IS JSON):boolean,(NOT (NULL IS JSON)):boolean>
+-- !query output
+NULL	NULL
+
+
+-- !query
+select 1 IS JSON
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputSql" : "\"1\"",
+    "inputType" : "\"INT\"",
+    "paramIndex" : "first",
+    "requiredType" : "\"STRING\"",
+    "sqlExpr" : "\"(1 IS JSON)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 10,
+    "stopIndex" : 16,
+    "fragment" : "IS JSON"
+  } ]
+}
 
 
 -- !query

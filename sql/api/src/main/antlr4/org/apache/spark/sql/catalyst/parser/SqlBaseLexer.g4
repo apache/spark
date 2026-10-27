@@ -102,9 +102,10 @@ import java.util.Deque;
         // Covers every character of the WS rule, including no-break spaces.
         i++;
       } else if (c == '-' && _input.LA(i + 1) == '-') {
-        // Simple comment: skip to the end of the line, honoring backslash line continuations.
+        // Simple comment: skip to the end of the line (LF or a bare CR, as in SIMPLE_COMMENT),
+        // honoring backslash line continuations.
         i += 2;
-        while (_input.LA(i) != '\n' && _input.LA(i) != CharStream.EOF) {
+        while (_input.LA(i) != '\n' && _input.LA(i) != '\r' && _input.LA(i) != CharStream.EOF) {
           i += (_input.LA(i) == '\\' && _input.LA(i + 1) == '\n') ? 2 : 1;
         }
       } else if (c == '/' && _input.LA(i + 1) == '*') {
