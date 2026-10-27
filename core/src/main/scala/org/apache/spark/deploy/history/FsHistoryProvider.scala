@@ -1049,8 +1049,9 @@ private[history] class FsHistoryProvider(conf: SparkConf, clock: Clock)
     toDelete.foreach { attempt =>
       logInfo(log"Deleting expired event log for ${MDC(PATH, attempt.logPath)}")
       val logPath = new Path(logDir, attempt.logPath)
+      // LogInfo is keyed by the qualified path returned by FileSystem.listStatus.
       listing.synchronized {
-        listing.delete(classOf[LogInfo], logPath.toString())
+        listing.delete(classOf[LogInfo], fs.makeQualified(logPath).toString())
       }
       cleanAppData(app.id, attempt.info.attemptId, logPath.toString())
       if (deleteLog(fs, logPath)) {
