@@ -99,13 +99,23 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             def run(self, split_index, data):
                 return data
 
-        self.assertIsInstance(_Batch([], RunnerConf({}), None).serializer, ArrowStreamSerializer)
-        self.assertIsInstance(
-            _Grouped([], RunnerConf({}), None).serializer, ArrowStreamGroupSerializer
-        )
-        self.assertIsInstance(
-            _CoGrouped([], RunnerConf({}), None).serializer, ArrowStreamCoGroupSerializer
-        )
+        for handler_class, serializer_class in (
+            (_Batch, ArrowStreamSerializer),
+            (_Grouped, ArrowStreamGroupSerializer),
+            (_CoGrouped, ArrowStreamCoGroupSerializer),
+        ):
+            for enabled in (False, True):
+                with self.subTest(handler=handler_class.__name__, enabled=enabled):
+                    conf = RunnerConf(
+                        {
+                            "spark.sql.execution.pythonUDF.detailedTiming.enabled": str(
+                                enabled
+                            ).lower()
+                        }
+                    )
+                    serializer = handler_class([], conf, None).serializer
+                    self.assertIsInstance(serializer, serializer_class)
+                    self.assertEqual(serializer._collect_timing, enabled)
 
     def test_run_produces_output(self):
         class _Doubler(BatchEvalTypeHandler["pa.RecordBatch"]):
