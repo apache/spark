@@ -2556,6 +2556,16 @@ class SubquerySuite extends SharedSparkSession
                 s"((SELECT min($column) FROM t2), (SELECT max($column) FROM t2))", 2)
           }
         }
+
+        // `NOT IN` and an `IN` under `OR` hold the `In` below the top of the filter.
+        Seq(
+          "SELECT * FROM t1 WHERE d NOT IN (DATE_FROM_UNIX_DATE(5), (SELECT max(d) FROM t2))",
+          "SELECT * FROM t1 WHERE d IN (DATE_FROM_UNIX_DATE(5), (SELECT max(d) FROM t2)) " +
+            "OR dec IS NULL").foreach { query =>
+          val df = sql(query)
+          Seq(SimpleMode, FormattedMode).foreach(df.queryExecution.explainString(_))
+          df.collect()
+        }
       }
     }
   }
