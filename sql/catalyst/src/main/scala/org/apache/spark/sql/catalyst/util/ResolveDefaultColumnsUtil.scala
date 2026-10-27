@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
@@ -30,10 +31,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, ReplaceCurrentLike, ReplaceExpressions}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, ReplaceCurrentLike, ReplaceExpressions, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, PLAN_EXPRESSION}
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CAST_TO_TIMESTAMP, CURRENT_LIKE, PLAN_EXPRESSION, RUNTIME_REPLACEABLE}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -307,12 +308,12 @@ object ResolveDefaultColumns extends QueryErrorsBase
       val analyzer: Analyzer = DefaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(defaultExpr, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
-      // Eagerly execute finish-analysis and constant-folding rules before checking whether the
-      // expression is foldable and resolved.
-      val folded = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
       val expression = analyzed.collectFirst {
         case Project(Seq(a: Alias), OneRowRelation()) => a.child
       }.get
+      // Keep validation on the original tree: partial folding can change nested nullability
+      // and therefore which target types are accepted.
+      val folded = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
       (folded, expression)
     } catch {
       case ex: AnalysisException =>
@@ -339,25 +340,67 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
     // Perform implicit coercion from the provided expression type to the required column type.
     val coerced = coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
-    if (preserveCurrentTime) {
-      // Keep the eager validation above, but let the enclosing query compute one instant for
-      // all current-time defaults and explicit current-time expressions. Other current-like
-      // functions keep their existing binding to the default column's catalog context.
-      val currentDefault = ReplaceCurrentLike(DefaultColumnAnalyzer.catalogManager)
-        .applyForExpression(ReplaceExpressions.replace(unfolded))
-      if (currentDefault.containsPattern(CURRENT_LIKE)) {
-        // Use the validated target type, including permissive literal narrowing. Coercing the
-        // unfolded expression again could evaluate current-time functions prematurely.
-        if (currentDefault.dataType == coerced.dataType) {
-          currentDefault
-        } else {
-          Cast(currentDefault, coerced.dataType, Some(conf.sessionLocalTimeZone))
-        }
+    val currentDefault = if (preserveCurrentTime) {
+      val replaced = if (unfolded.containsPattern(RUNTIME_REPLACEABLE)) {
+        ReplaceExpressions.replace(unfolded)
       } else {
-        coerced
+        unfolded
       }
+      // Non-time current-like functions retain the default analyzer's catalog context.
+      val bound = ReplaceCurrentLike(DefaultColumnAnalyzer.catalogManager)
+        .applyForExpression(replaced)
+      Option.when(bound.containsPattern(CURRENT_LIKE))(normalizeCurrentTimeDefault(bound))
     } else {
-      coerced
+      None
+    }
+    currentDefault.map { expr =>
+      // Use the validated target type, including permissive literal narrowing. Coercing the
+      // preserved expression again could evaluate current-time functions prematurely.
+      if (expr.dataType == coerced.dataType) {
+        expr
+      } else {
+        val cast = Cast(expr, coerced.dataType, Some(conf.sessionLocalTimeZone))
+        if (cast.checkInputDataTypes().isSuccess) {
+          cast
+        } else {
+          // Clock-dependent special datetime strings can become non-null only after clock
+          // binding. Enforce those validated nested constraints at runtime before casting.
+          val input = AttributeReference(colName, expr.dataType, expr.nullable)()
+          val target = AttributeReference(colName, coerced.dataType, expr.nullable)()
+          val nullCheckConf = conf.clone()
+          nullCheckConf.setConf(SQLConf.STORE_ASSIGNMENT_POLICY,
+            SQLConf.StoreAssignmentPolicy.ANSI)
+          val output = TableOutputResolver.resolveOutputColumns(
+            "", Seq(target), LocalRelation(input), byName = false, nullCheckConf)
+            .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
+          val checked = output.transform {
+            case attr: AttributeReference if attr.exprId == input.exprId => expr
+          }
+          Cast(checked, coerced.dataType, Some(conf.sessionLocalTimeZone))
+        }
+      }
+    }.getOrElse(coerced)
+  }
+
+  private def normalizeCurrentTimeDefault(expression: Expression): Expression = {
+    val clocks = mutable.HashMap.empty[ExprId, Expression]
+    def mask(clock: Expression): Expression = {
+      val placeholder = AttributeReference("current_time", clock.dataType, clock.nullable)()
+      clocks(placeholder.exprId) = clock
+      placeholder
+    }
+    val masked = expression.transformWithPruning(
+      _.containsAnyPattern(CURRENT_LIKE, CAST_TO_TIMESTAMP)) {
+      case clock: LeafExpression if clock.containsPattern(CURRENT_LIKE) => mask(clock)
+      case cast: Cast if Cast.isTimeToTimestampNTZ(cast.child.dataType, cast.dataType) ||
+          Cast.isTimeToTimestampLTZ(cast.child.dataType, cast.dataType) => mask(cast)
+    }
+    // Runtime replacements and context binding are already done. Protect clock-dependent ancestors
+    // while normalizing independent subtrees, retaining conditional folding's error handling.
+    val normalized = ConstantFolding.constantFolding(
+      SpecialDatetimeValues.applyForExpression(masked))
+    normalized.transform {
+      case attr: AttributeReference if clocks.contains(attr.exprId) => clocks(attr.exprId)
     }
   }
 

@@ -20,15 +20,17 @@ package org.apache.spark.sql
 import java.time.Instant
 
 import org.apache.spark.SparkRuntimeException
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
-import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceCurrentLike, SpecialDatetimeValues}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ByteType, DateType, IntegerType, MetadataBuilder, StringType, StructField, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ByteType, DateType, DoubleType, IntegerType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -88,6 +90,12 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
 
   test("current-time defaults use the enclosing query instant") {
     val instant = Instant.parse("2000-01-01T12:34:56.123456789Z")
+    val guardedDivision = "IF(current_date() > DATE'1900-01-01', 1, 1 / 0)"
+    val mixedTimeDefault =
+      "named_struct('a', CAST(TIME'12:00:00' AS TIMESTAMP_NTZ), 'b', current_timestamp())"
+    val mixedTimeType = StructType(Seq(
+      StructField("a", TimestampNTZType),
+      StructField("b", TimestampType, nullable = false)))
     val defaults = Seq(
       (TimestampType, "current_timestamp()", "current_timestamp()"),
       (TimestampType, "now()", "now()"),
@@ -100,11 +108,15 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       (StringType, "CAST(current_timestamp() AS STRING)",
         "CAST(current_timestamp() AS STRING)"),
       (StringType, "current_timestamp()", "CAST(current_timestamp() AS STRING)"),
-      (ByteType, "day(current_date())", "CAST(day(current_date()) AS TINYINT)"))
+      (ByteType, "day(current_date())", "CAST(day(current_date()) AS TINYINT)"),
+      (DoubleType, guardedDivision, guardedDivision),
+      (mixedTimeType, mixedTimeDefault, mixedTimeDefault))
 
     withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
         SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
-        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.TIME_TYPE_ENABLED.key -> "true") {
       defaults.foreach { case (dataType, defaultSQL, referenceSQL) =>
         val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
         val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
@@ -134,6 +146,96 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
       checkAnswer(
         sql("SELECT i, d1 = d2 AND d1 = explicit_ts FROM t"),
         (1 to 8).map(i => Row(i, true)))
+    }
+  }
+
+  test("current-time defaults preserve nested NOT NULL fields") {
+    val instant = Instant.parse("2000-01-01T12:34:56.123456Z")
+    val dataType = StructType(Seq(
+      StructField("a", TimestampType, nullable = false),
+      StructField("b", TimestampType)))
+    val defaults = Seq(
+      "named_struct('a', CAST('epoch' AS TIMESTAMP), 'b', current_timestamp())",
+      "named_struct('a', CAST(IF(current_date() > DATE'1900-01-01', " +
+        "'epoch', CAST(NULL AS STRING)) AS TIMESTAMP), 'b', current_timestamp())")
+    val invalidDefaultSQL =
+      "named_struct('a', IF(true, TIMESTAMP'1970-01-01', CAST(NULL AS TIMESTAMP)), " +
+        "'b', current_timestamp())"
+    val invalidField = StructField("s", dataType).withCurrentDefaultValue(invalidDefaultSQL)
+    val tableName = "current_time_defaults.t"
+
+    for {
+      ansiEnabled <- Seq(true, false)
+      storeAssignmentPolicy <- Seq("ANSI", "LEGACY")
+      defaultSQL <- defaults
+    } {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+          SQLConf.STORE_ASSIGNMENT_POLICY.key -> storeAssignmentPolicy,
+          SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+          "spark.sql.catalog.current_time_defaults" -> classOf[InMemoryTableCatalog].getName) {
+        val invalidResolvers = Seq(
+          () => ResolveDefaultColumns.analyze(invalidField, "INSERT"),
+          () => ResolveDefaultColumns.getDefaultValueExprOrNullLit(invalidField))
+        invalidResolvers.foreach { resolve =>
+          assert(intercept[AnalysisException](resolve()).getCondition ==
+            "INVALID_DEFAULT_VALUE.DATA_TYPE")
+        }
+        val field = StructField("s", dataType).withCurrentDefaultValue(defaultSQL)
+        assert(ResolveDefaultColumns.analyze(field, "INSERT").dataType == dataType)
+        val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+        val projection = Project(Seq(Alias(default, "s")()), OneRowRelation())
+        spark.sessionState.analyzer.checkAnalysis(projection)
+        assert(default.dataType == dataType)
+        val timedDefault = ComputeCurrentTime.applyForExpression(default, instant)
+        val value = SpecialDatetimeValues.applyForExpression(timedDefault)
+          .eval().asInstanceOf[InternalRow]
+        assert(value.getLong(0) == 0L)
+        assert(value.getLong(1) == DateTimeUtils.instantToMicros(instant))
+
+        if (storeAssignmentPolicy == "ANSI") {
+          withTable(tableName) {
+            val catalog = spark.sessionState.catalogManager.catalog("current_time_defaults")
+              .asInstanceOf[InMemoryTableCatalog]
+            val columns = Array(
+              Column.create("i", IntegerType),
+              Column.create("s", dataType, true, null,
+                new ColumnDefaultValue(defaultSQL, null), "{}"),
+              Column.create("explicit_ts", TimestampType))
+            catalog.createTable(Identifier.of(Array.empty, "t"),
+              new TableInfo.Builder().withColumns(columns).build())
+            sql(s"INSERT INTO $tableName SELECT 1, DEFAULT, current_timestamp()")
+            sql(s"INSERT INTO $tableName (i, explicit_ts) SELECT 2, current_timestamp()")
+            checkAnswer(
+              sql(s"SELECT i, s.a = TIMESTAMP'1970-01-01 00:00:00', " +
+                s"s.b = explicit_ts FROM $tableName"),
+              Seq(Row(1, true, true), Row(2, true, true)))
+          }
+        }
+      }
+    }
+  }
+
+  test("current-time defaults retain their default analyzer namespace") {
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withCurrentCatalogAndNamespace {
+        withDatabase("current_time_namespace") {
+          sql("CREATE DATABASE current_time_namespace")
+          sql("USE current_time_namespace")
+          val namespace = ResolveDefaultColumns
+            .analyze("namespace", StringType, "current_database()", "INSERT").eval().toString
+          assert(namespace != spark.catalog.currentDatabase)
+          val defaultSQL =
+            "concat(current_database(), ':', CAST(current_timestamp() AS STRING))"
+          val field = StructField("value", StringType).withCurrentDefaultValue(defaultSQL)
+          val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+          val bound = ReplaceCurrentLike(spark.sessionState.catalogManager)
+            .applyForExpression(default)
+          val instant = Instant.parse("2000-01-01T12:34:56.123456Z")
+          val value = ComputeCurrentTime.applyForExpression(bound, instant).eval().toString
+          assert(value == s"$namespace:2000-01-01 12:34:56.123456")
+        }
+      }
     }
   }
 
