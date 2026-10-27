@@ -5059,6 +5059,11 @@
           "Unsupported dtype: <invalidValue>. Valid values: float64, float32."
         ]
       },
+      "EVALUATION_ERROR" : {
+        "message" : [
+          "the expression <invalidValue> could not be evaluated."
+        ]
+      },
       "EXTENSION" : {
         "message" : [
           "Invalid extension: <invalidValue>. Extension must be non-empty and contain only letters."
