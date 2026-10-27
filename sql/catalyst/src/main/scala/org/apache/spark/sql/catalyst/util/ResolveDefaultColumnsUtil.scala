@@ -30,10 +30,10 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, SessionCatalog}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
-import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
+import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer, ReplaceCurrentLike, ReplaceExpressions}
 import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
+import org.apache.spark.sql.catalyst.trees.TreePattern.{CURRENT_LIKE, PLAN_EXPRESSION}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -144,7 +144,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
 
   private def getDefaultValueExprOpt(field: StructField): Option[Expression] = {
     if (field.metadata.contains(CURRENT_DEFAULT_COLUMN_METADATA_KEY)) {
-      Some(analyze(field, "INSERT"))
+      Some(analyze(field, "INSERT", preserveCurrentTime = true))
     } else {
       None
     }
@@ -210,17 +210,19 @@ object ResolveDefaultColumns extends QueryErrorsBase
    * @param statementType which type of statement we are running, such as INSERT; useful for errors.
    * @param metadataKey   which key to look up from the column metadata; generally either
    *                      CURRENT_DEFAULT_COLUMN_METADATA_KEY or EXISTS_DEFAULT_COLUMN_METADATA_KEY.
+   * @param preserveCurrentTime whether to leave current-time expressions for the enclosing query.
    * @return Result of the analysis and constant-folding operation.
    */
   def analyze(
       field: StructField,
       statementType: String,
-      metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY): Expression = {
+      metadataKey: String = CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+      preserveCurrentTime: Boolean = false): Expression = {
     field.metadata.getExpression[Expression](metadataKey) match {
       case (sql, Some(expr)) =>
-        analyze(field.name, field.dataType, expr, sql, statementType)
+        analyze(field.name, field.dataType, expr, sql, statementType, preserveCurrentTime)
       case (sql, _) =>
-        analyze(field.name, field.dataType, sql, statementType)
+        analyze(field.name, field.dataType, sql, statementType, preserveCurrentTime)
     }
   }
 
@@ -234,6 +236,15 @@ object ResolveDefaultColumns extends QueryErrorsBase
       dataType: DataType,
       defaultSQL: String,
       statementType: String): Expression = {
+    analyze(colName, dataType, defaultSQL, statementType, preserveCurrentTime = false)
+  }
+
+  private def analyze(
+      colName: String,
+      dataType: DataType,
+      defaultSQL: String,
+      statementType: String,
+      preserveCurrentTime: Boolean): Expression = {
     // Parse the expression.
     lazy val parser = new CatalystSqlParser()
     val parsed: Expression = try {
@@ -243,7 +254,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
           statementType, colName, defaultSQL, ex)
     }
-    analyze(colName, dataType, parsed, defaultSQL, statementType)
+    analyze(colName, dataType, parsed, defaultSQL, statementType, preserveCurrentTime)
   }
 
   /**
@@ -264,7 +275,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
       V2ExpressionUtils.toCatalyst(defaultValue.getExpression) match {
         case Some(defaultExpr) =>
           val defaultSQL = Option(defaultValue.getSql).getOrElse(defaultExpr.sql)
-          analyze(colName, dataType, defaultExpr, defaultSQL, statementType)
+          analyze(colName, dataType, defaultExpr, defaultSQL, statementType,
+            preserveCurrentTime = false)
 
         case None if defaultValue.getSql != null =>
           analyze(colName, dataType, defaultValue.getSql, statementType)
@@ -282,7 +294,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
       dataType: DataType,
       defaultExpr: Expression,
       defaultSQL: String,
-      statementType: String): Expression = {
+      statementType: String,
+      preserveCurrentTime: Boolean): Expression = {
     // Check invariants before moving on to analysis.
     if (defaultExpr.containsPattern(PLAN_EXPRESSION)) {
       throw QueryCompilationErrors.defaultValuesMayNotContainSubQueryExpressions(
@@ -290,13 +303,17 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
 
     // Analyze the parse result.
-    val plan = try {
+    val (plan, unfolded) = try {
       val analyzer: Analyzer = DefaultColumnAnalyzer
       val analyzed = analyzer.execute(Project(Seq(Alias(defaultExpr, colName)()), OneRowRelation()))
       analyzer.checkAnalysis(analyzed)
       // Eagerly execute finish-analysis and constant-folding rules before checking whether the
       // expression is foldable and resolved.
-      ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      val folded = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
+      val expression = analyzed.collectFirst {
+        case Project(Seq(a: Alias), OneRowRelation()) => a.child
+      }.get
+      (folded, expression)
     } catch {
       case ex: AnalysisException =>
         throw QueryCompilationErrors.defaultValuesUnresolvedExprError(
@@ -321,7 +338,27 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
 
     // Perform implicit coercion from the provided expression type to the required column type.
-    coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+    val coerced = coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
+    if (preserveCurrentTime) {
+      // Keep the eager validation above, but let the enclosing query compute one instant for
+      // all current-time defaults and explicit current-time expressions. Other current-like
+      // functions keep their existing binding to the default column's catalog context.
+      val currentDefault = ReplaceCurrentLike(DefaultColumnAnalyzer.catalogManager)
+        .applyForExpression(ReplaceExpressions.replace(unfolded))
+      if (currentDefault.containsPattern(CURRENT_LIKE)) {
+        // Use the validated target type, including permissive literal narrowing. Coercing the
+        // unfolded expression again could evaluate current-time functions prematurely.
+        if (currentDefault.dataType == coerced.dataType) {
+          currentDefault
+        } else {
+          Cast(currentDefault, coerced.dataType, Some(conf.sessionLocalTimeZone))
+        }
+      } else {
+        coerced
+      }
+    } else {
+      coerced
+    }
   }
 
   /**

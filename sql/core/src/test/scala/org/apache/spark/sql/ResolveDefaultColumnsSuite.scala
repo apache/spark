@@ -17,14 +17,18 @@
 
 package org.apache.spark.sql
 
+import java.time.Instant
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo}
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
-import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
+import org.apache.spark.sql.catalyst.optimizer.ComputeCurrentTime
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
 import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType}
+import org.apache.spark.sql.types.{ByteType, DateType, IntegerType, MetadataBuilder, StringType, StructField, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -79,6 +83,57 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           "tableName" -> "`spark_catalog`.`default`.`t`",
           "tableColumns" -> "`c1`, `c2`",
           "dataColumns" -> "`col1`"))
+    }
+  }
+
+  test("current-time defaults use the enclosing query instant") {
+    val instant = Instant.parse("2000-01-01T12:34:56.123456789Z")
+    val defaults = Seq(
+      (TimestampType, "current_timestamp()", "current_timestamp()"),
+      (TimestampType, "now()", "now()"),
+      (TimestampLTZNanosType(9), "current_timestamp(9)", "current_timestamp(9)"),
+      (DateType, "current_date()", "current_date()"),
+      (TimestampNTZType, "localtimestamp()", "localtimestamp()"),
+      (TimestampNTZNanosType(9), "localtimestamp(9)", "localtimestamp(9)"),
+      (TimestampType, "current_timestamp() + INTERVAL 1 SECOND",
+        "current_timestamp() + INTERVAL 1 SECOND"),
+      (StringType, "CAST(current_timestamp() AS STRING)",
+        "CAST(current_timestamp() AS STRING)"),
+      (StringType, "current_timestamp()", "CAST(current_timestamp() AS STRING)"),
+      (ByteType, "day(current_date())", "CAST(day(current_date()) AS TINYINT)"))
+
+    withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      defaults.foreach { case (dataType, defaultSQL, referenceSQL) =>
+        val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
+        val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+        val reference = sql(s"SELECT $referenceSQL").queryExecution.analyzed
+          .asInstanceOf[Project].projectList.head
+        val comparison = EqualTo(default, reference)
+        withClue(s"$defaultSQL as $dataType: ") {
+          assert(ComputeCurrentTime.applyForExpression(comparison, instant).eval() == true)
+        }
+      }
+    }
+  }
+
+  test("current-time defaults match explicit timestamps in INSERT") {
+    withTable("t") {
+      sql("CREATE TABLE t(i INT, d1 TIMESTAMP DEFAULT current_timestamp(), " +
+        "d2 TIMESTAMP DEFAULT current_timestamp(), explicit_ts TIMESTAMP) USING parquet")
+      sql("INSERT INTO t VALUES (1, DEFAULT, DEFAULT, current_timestamp()), " +
+        "(2, DEFAULT, DEFAULT, current_timestamp())")
+      sql("INSERT INTO t (i, explicit_ts) VALUES " +
+        "(3, current_timestamp()), (4, current_timestamp())")
+      sql("INSERT INTO t SELECT CAST(id AS INT), DEFAULT, DEFAULT, current_timestamp() " +
+        "FROM range(5, 7)")
+      sql("INSERT INTO t (i, explicit_ts) SELECT CAST(id AS INT), current_timestamp() " +
+        "FROM range(7, 9)")
+
+      checkAnswer(
+        sql("SELECT i, d1 = d2 AND d1 = explicit_ts FROM t"),
+        (1 to 8).map(i => Row(i, true)))
     }
   }
 
