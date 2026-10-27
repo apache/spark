@@ -1,0 +1,104 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.hive.thriftserver
+
+import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
+import org.apache.hive.service.auth.HiveAuthFactory.AuthTypes
+
+import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.internal.StaticSQLConf
+
+/**
+ * Tests for the SPARK-59118 startup warning: `hive.server2.enable.doAs` is accepted but
+ * impersonation does not reach executor-side data access. Spark 5.0 is expected to refuse
+ * to start instead, on the same configuration and with the same opt-out conf.
+ */
+class HiveThriftServer2DoAsSuite extends SparkFunSuite {
+
+  private def hiveConf(authType: String, doAs: Boolean): HiveConf = {
+    val conf = new HiveConf()
+    conf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, authType)
+    conf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, doAs)
+    conf
+  }
+
+  /**
+   * The warning text (if any) that checking `conf` would log. These tests assert on the
+   * returned entry rather than captured log output, which is hostage to JVM-global logging
+   * state when the whole module shares one forked JVM (SERIAL_SBT_TESTS=1 in CI).
+   */
+  private def doAsWarnings(conf: HiveConf, allowIneffectiveDoAs: Boolean = false): Seq[String] = {
+    HiveThriftServer2.ineffectiveDoAsWarning(conf, allowIneffectiveDoAs).map(_.message).toSeq
+  }
+
+  // The auth types that establish a user identity worth impersonating.
+  private val verifyingAuthTypes =
+    AuthTypes.values().filterNot(Set(AuthTypes.NONE, AuthTypes.NOSASL)).map(_.getAuthName)
+
+  test("SPARK-5159 / SPARK-59118 warn when doAs is enabled but not enforced") {
+    val warnings = doAsWarnings(hiveConf("KERBEROS", doAs = true))
+    assert(warnings.length == 1)
+    assert(warnings.head.contains("SPARK-5159"))
+    // Auth type matching is case-insensitive.
+    assert(doAsWarnings(hiveConf("kerberos", doAs = true)).length == 1)
+  }
+
+  test("SPARK-59118 allowIneffectiveDoAs=true silences an otherwise-warned config") {
+    assert(doAsWarnings(hiveConf("KERBEROS", doAs = true), allowIneffectiveDoAs = true).isEmpty)
+  }
+
+  test("SPARK-59118 the warning names the conf that silences it") {
+    val warning = doAsWarnings(hiveConf("KERBEROS", doAs = true)).head
+    assert(warning.contains(StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key))
+  }
+
+  test("SPARK-59118 warn for every auth type that verifies the user") {
+    // Guards against a new AuthTypes value silently landing on the quiet side.
+    assert(verifyingAuthTypes.nonEmpty)
+    verifyingAuthTypes.foreach { authType =>
+      assert(doAsWarnings(hiveConf(authType, doAs = true)).length == 1, s"no warning: $authType")
+    }
+  }
+
+  test("SPARK-59118 does not warn when auth type establishes no user identity") {
+    Seq("NONE", "NOSASL", "none", "noSasl").foreach { authType =>
+      assert(doAsWarnings(hiveConf(authType, doAs = true)).isEmpty, s"warned: $authType")
+    }
+  }
+
+  test("SPARK-59118 does not warn when doAs is disabled") {
+    verifyingAuthTypes.foreach { authType =>
+      assert(doAsWarnings(hiveConf(authType, doAs = false)).isEmpty, s"warned: $authType")
+    }
+  }
+
+  test("SPARK-59118 does not warn on an untouched Hive config") {
+    // Hive defaults doAs to true and auth to NONE, so a stock config must stay quiet.
+    assert(doAsWarnings(new HiveConf()).isEmpty)
+  }
+
+  test("SPARK-59118 an unrecognized or empty auth type is left to Hive's own error") {
+    // HiveAuthFactory rejects these with "Unsupported authentication type", where the
+    // warning's advice would not help. getVar returns "" (never null) for an explicitly
+    // empty value, so this must not NPE.
+    Seq("NOT_AN_AUTH_TYPE", "").foreach { authType =>
+      assert(doAsWarnings(hiveConf(authType, doAs = true)).isEmpty, s"warned: $authType")
+    }
+  }
+}
