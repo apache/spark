@@ -649,7 +649,8 @@ private[spark] object Config extends Logging {
     ConfigBuilder("spark.kubernetes.allocation.batch.parallel.enabled")
       .doc("When true, executor pods are created in parallel using a thread pool sized by " +
         "spark.kubernetes.allocation.batch.concurrency. This can speed up executor allocation " +
-        "when Kubernetes API latency is high. When false, pods are created serially.")
+        "when Kubernetes API latency is high. When false, pods are created serially. " +
+        "Only applies when spark.kubernetes.allocation.pods.allocator is direct.")
       .version("4.4.0")
       .booleanConf
       .createWithDefault(false)
@@ -657,7 +658,8 @@ private[spark] object Config extends Logging {
   val KUBERNETES_ALLOCATION_BATCH_CONCURRENCY =
     ConfigBuilder("spark.kubernetes.allocation.batch.concurrency")
       .doc("Number of concurrent threads used to create executor pods in each allocation batch. " +
-        "Only takes effect when spark.kubernetes.allocation.batch.parallel.enabled is true. " +
+        "Only takes effect when spark.kubernetes.allocation.pods.allocator is direct and " +
+        "spark.kubernetes.allocation.batch.parallel.enabled is true. " +
         "The number of pods requested is still limited by spark.kubernetes.allocation.batch.size " +
         "and spark.kubernetes.allocation.maxPendingPods.")
       .version("4.4.0")
@@ -671,7 +673,8 @@ private[spark] object Config extends Logging {
       .doc("Maximum time to wait for in-flight parallel executor pod creation during shutdown. " +
         "Queued requests are cancelled. After this timeout, application cleanup proceeds and " +
         "late API responses may not be cleaned up by the allocator. This wait is separate from " +
-        "the snapshot subscriber shutdown timeout and only applies to parallel allocation.")
+        "the snapshot subscriber shutdown timeout and only applies to parallel allocation " +
+        "when spark.kubernetes.allocation.pods.allocator is direct.")
       .version("4.4.0")
       .timeConf(TimeUnit.MILLISECONDS)
       .checkValue(value => value >= 0, "Allocation shutdown timeout must not be negative")

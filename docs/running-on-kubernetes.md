@@ -1010,6 +1010,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.allocation.batch.parallel.enabled</code></td>
   <td><code>false</code></td>
   <td>
+    Only applies when <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
     Create executor pods concurrently within each allocation batch. Pod specifications and PVC reuse
     decisions are prepared serially; Kubernetes API requests run in a fixed thread pool. This can
     reduce allocation time when API server or admission webhook latency is high. The batch size and
@@ -1021,6 +1022,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.allocation.batch.concurrency</code></td>
   <td><code>5</code></td>
   <td>
+    Only applies when <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
     Positive number of threads used for executor pod creation when
     <code>spark.kubernetes.allocation.batch.parallel.enabled</code> is true. Start with 3 to 5 and
     tune against API server latency and throttling; increasing concurrency does not increase batch
@@ -1034,6 +1036,7 @@ See the [configuration page](configuration.html) for information on Spark config
   <td><code>spark.kubernetes.allocation.shutdownTimeout</code></td>
   <td><code>20s</code></td>
   <td>
+    Only applies when <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
     Maximum time to wait for active executor pod creation tasks during shutdown when parallel
     allocation is enabled. Queued tasks are cancelled without interrupting active requests.
     Zero skips the wait; negative values are not allowed. This setting does not control API
