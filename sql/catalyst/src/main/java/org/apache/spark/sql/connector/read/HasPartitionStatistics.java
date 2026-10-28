@@ -20,18 +20,19 @@ package org.apache.spark.sql.connector.read;
 import java.util.OptionalLong;
 
 /**
- * A mix-in for input partitions whose records are clustered on the same set of partition keys
- * (provided via {@link SupportsReportPartitioning}, see below). Data sources can opt-in to
- * implement this interface for the partitions they report to Spark, which will use the info
- * to decide whether partition grouping should be applied or not.
+ * A mix-in for input partitions that can report size, row count and file count statistics.
+ * Data sources can implement this interface for keyed or unkeyed input partitions.
+ * <p>
+ * When batch scan partition packing is enabled and the physical plan does not require the
+ * scan's partitioning or ordering, Spark can use the reported sizes to pack multiple inputs
+ * into one task. Packing is disabled by default and does not split individual inputs.
  *
- * @see org.apache.spark.sql.connector.read.SupportsReportPartitioning
  * @since 4.0.0
  */
 public interface HasPartitionStatistics extends InputPartition {
 
   /**
-   * Returns the size in bytes of the partition statistics associated to this partition.
+   * Returns the estimated size in bytes of this input, or an empty value if unknown.
    */
   OptionalLong sizeInBytes();
 
