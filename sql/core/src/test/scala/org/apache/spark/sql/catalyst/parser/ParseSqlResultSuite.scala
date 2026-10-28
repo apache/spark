@@ -294,5 +294,15 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sliceByCodePoints(sql, start.toInt, stop.toInt - start.toInt + 1) === fragment)
     // ANTLR column is already a 0-based code-point offset on the line.
     assert(position.toInt === sql.codePointCount(0, sql.lastIndexOf('t')))
+
+    val literalSql = s"SELECT '$emoji' AS e, DATE 'bad'"
+    val literal = obj(literalSql)
+    assert(literal \ "error" \ "errorClass" === JString("INVALID_TYPED_LITERAL"))
+    val literalCtx = (literal \ "error" \ "queryContext")(0)
+    val JInt(literalStart) = literalCtx \ "startIndex"
+    val JInt(literalStop) = literalCtx \ "stopIndex"
+    assert(literalCtx \ "fragment" === JString("DATE 'bad'"))
+    assert(literalStart.toInt === literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
+    assert(literalStop.toInt === literalSql.codePointCount(0, literalSql.length))
   }
 }
