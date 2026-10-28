@@ -1503,7 +1503,8 @@ class CodegenContext extends Logging {
    * Under `WholeStageSplit.Record`, a digest of the stage's source with the marks of the recorded
    * expressions, which `WholeStageCodegenExec.generate` sets before it strips them: the marks say
    * which expression each index in [[wholeStageSplitsRecorded]] is, so a decision made for these
-   * indices holds for this digest and no other.
+   * indices holds for this digest and no other. The values of the literals that move no method's
+   * size are left out of it (`CodeGenerator.wholeStageSplitDigestSource`).
    */
   private[sql] var wholeStageSplitDigest: String = ""
 
@@ -3115,6 +3116,35 @@ object CodeGenerator extends Logging {
       stripped.append(source, from, source.length).toString
     }
   }
+
+  /**
+   * `source` as `CodegenContext.wholeStageSplitDigest` digests it: each long and double literal in
+   * its code but 0 and 1 becomes its length and the index of its text among them. The JVM loads
+   * each of them with `ldc2_w` whatever its value, and the length and index keep the split's
+   * blocks and the constant pool, so sources that differ only in those values, as the runs of a
+   * stage with `current_timestamp()` do, have the same method sizes and share a decision.
+   */
+  private[sql] def wholeStageSplitDigestSource(source: String): String = {
+    val digested = new java.lang.StringBuilder(source.length)
+    val textIndex = mutable.HashMap.empty[String, Int]
+    // A double of 0 or 1 loads with `dconst`, one byte, so it keeps its value.
+    def masked(literal: String): String = literal.last.toLower match {
+      case 'd' if Set(0.0, 1.0).contains(literal.init.toDouble) => literal
+      case _ => s"#${literal.length}:${textIndex.getOrElseUpdate(literal, textIndex.size)}"
+    }
+    CodeCompiler.forEachJavaSpan(source) {
+      case (CodeCompiler.JavaSpan.Code, start, end) =>
+        digested.append(
+          LongOrDoubleLiteral.replaceAllIn(source.substring(start, end), m => masked(m.matched)))
+      case (_, start, end) =>
+        digested.append(source, start, end)
+    }
+    digested.toString
+  }
+
+  /** A long literal but 0 and 1, or a double literal with its suffix, outside any name. */
+  private val LongOrDoubleLiteral =
+    """(?<![\w$.])(?:(?:[2-9]|[1-9]\d+)[lL]|\d+\.\d+(?:[eE][+-]?\d+)?[dD])(?![\w$.])""".r
 
   /**
    * `e` with the value of every lambda variable in it replaced by one value: a fresh copy of a

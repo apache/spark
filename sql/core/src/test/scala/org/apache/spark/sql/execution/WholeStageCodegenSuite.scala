@@ -2294,6 +2294,54 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60048: a split decision holds across runs of current_timestamp()") {
+    // The time is written into the code as a long literal, new on every run, which the digest
+    // counts without its value; a conf that changes the code still changes the digest.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      // An int, whose value the digest keeps, so that no decision is remembered for this code yet.
+      val salt = (System.nanoTime() & Int.MaxValue).toInt
+      val query = s"SELECT ${caseWhenOverV(300, 9000)} AS c, current_timestamp() AS ts, " +
+        s"$salt AS salt FROM t"
+      // The stage's digest, the code `chooseCode` keeps and its trial compiles.
+      def decide(): (String, CodeAndComment, Int) = {
+        val stage = stageOf(sql(query))
+        val recorded = stage.generate(WholeStageSplit.Record)
+        var trials = 0
+        val (_, chosen) = stage.chooseCode(recorded,
+          only => stage.generate(WholeStageSplit.Split(only)),
+          (code, failureExpected) => {
+            trials += 1
+            WholeStageCodegenExec.trialCompile(code, failureExpected)
+          },
+          CodeGenerator.invalidateCompiled, throwSplitFailure = true)
+        (recorded._1.wholeStageSplitDigest, chosen, trials)
+      }
+      val (digest, first, firstTrials) = decide()
+      val (secondDigest, second, secondTrials) = decide()
+      assert(first.body != second.body)
+      assert(secondDigest === digest)
+      assert(firstTrials === 2 && secondTrials === 0)
+      assert(methodsHolding(second, "9299L").exists(_.contains("caseWhen")))
+      withSQLConf(SQLConf.WHOLESTAGE_SPLIT_CONSUME_FUNC_BY_OPERATOR.key -> "false") {
+        val (otherDigest, _, otherTrials) = decide()
+        assert(otherDigest != digest && otherTrials > 0)
+      }
+    }
+  }
+
+  test("SPARK-60048: the decision digest counts a long or a double without its value") {
+    // A long or a double but 0 and 1 loads with `ldc2_w` whatever its value, so it counts by its
+    // length and by which of them it equals; other numbers, and digits elsewhere, as they are.
+    def digested(code: String): String = CodeGenerator.wholeStageSplitDigestSource(code)
+    assert(digested("t = 1793208100063000L; d = 2.5E-7D; i = 7; one = 1L; z = 0.0D;") ===
+      "t = #17:0; d = #7:1; i = 7; one = 1L; z = 0.0D;")
+    assert(digested("a = 12L; b = 12L; c = -13L; f = 1.5F; x = value_12L + 0x12L;") ===
+      "a = #3:0; b = #3:0; c = -#3:1; f = 1.5F; x = value_12L + 0x12L;")
+    val untouched = "s = \"12L\"; c = '1'; /* 12L */ m(); /*wholeStageSplit:12*/ // 12L"
+    assert(digested(untouched) === untouched)
+  }
+
   test("SPARK-33301: a literal holding the text of a mark is left as it is") {
     // A foldable pattern is written into the code as a Java literal. The stage records its CASE
     // WHEN and keeps its code in one piece, the marks stripped, and the literal with them.
@@ -2405,10 +2453,10 @@ class WholeStageCodegenSuite extends SharedSparkSession
         if (i % 2 == 0) s"WHEN k = $i THEN k * ${1000 + i}" else s"WHEN k = $i THEN c${i / 2}"
       }.mkString(" ")
       val common = commonSubexprColumns("k", "s")
-      // So that no decision is remembered for this code yet.
-      val salt = System.nanoTime()
+      // So that no decision is remembered for this code yet: an int, whose value the digest keeps.
+      val salt = (System.nanoTime() & Int.MaxValue).toInt
       def df: DataFrame = spark.read.parquet(path.getCanonicalPath)
-        .selectExpr(s"CASE $branches ELSE c75 END AS v" +: s"${salt}L AS salt" +: common: _*)
+        .selectExpr(s"CASE $branches ELSE c75 END AS v" +: s"$salt AS salt" +: common: _*)
       val stage = stageOf(df)
       val recorded = stage.generate(WholeStageSplit.Record)
       assert(recorded._1.wholeStageSplitsRecorded.nonEmpty)
