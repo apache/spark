@@ -180,7 +180,7 @@ object ArrowPythonRunner {
   /** Return runner settings with the plan's timing decision, disabled by default. */
   def getPythonRunnerConfMap(
       conf: SQLConf,
-      timing: Option[PythonUDFTiming] = None): Map[String, String] = {
+      timingGate: Option[PythonUDFTimingGate] = None): Map[String, String] = {
     val confMap = collection.mutable.Map.empty[String, String]
     Seq(
       SQLConf.SESSION_LOCAL_TIMEZONE,
@@ -205,7 +205,7 @@ object ArrowPythonRunner {
         confMap.update(c.key, conf.getConf(c).toString)
     }
     confMap.update(SQLConf.PYTHON_UDF_DETAILED_TIMING_ENABLED.key,
-      timing.exists(_.workerEnabled(conf)).toString)
+      timingGate.exists(_.workerEnabled(conf)).toString)
     confMap.toMap
   }
 }
