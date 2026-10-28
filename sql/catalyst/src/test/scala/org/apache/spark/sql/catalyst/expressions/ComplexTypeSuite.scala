@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions
 import org.apache.spark.{SPARK_DOC_ROOT, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.dsl.expressions._
@@ -372,6 +373,34 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
         checkEvaluation(GetMapValue(structMap, Literal.create(create_row(1, 1), structType)), 10)
         checkEvaluation(GetMapValue(structMap, Literal.create(create_row(2, 2), structType)), 20)
         checkEvaluation(GetMapValue(structMap, Literal.create(create_row(3, 3), structType)), null)
+      }
+    }
+  }
+
+  for (keyType <- Seq(FloatType, DoubleType);
+       zeros <- Seq(Seq(-0.0d), Seq(0.0d), Seq(-0.0d, 0.0d), Seq(0.0d, -0.0d))) {
+    test(s"map lookup uses SQL signed-zero equality: $keyType, $zeros") {
+      def key(value: Double): Any =
+        if (keyType == FloatType) (value.toFloat: Any) else value
+      val keys = (zeros ++ Seq(1.0d, Double.NaN)).map(key).toArray
+      val values = keys.indices.map(_ + 10).toArray
+      val map = Literal.create(new ArrayBasedMapData(
+        new GenericArrayData(keys), new GenericArrayData(values)),
+        MapType(keyType, IntegerType, valueContainsNull = false))
+      for (threshold <- Seq(0, Int.MaxValue)) {
+        withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {
+          val lookup = BoundReference(0, keyType, nullable = true)
+          val get = GetMapValue(map, lookup)
+          assert(get.usesFoldableHashLookup == (threshold == 0))
+          for (expression <- Seq(get, ElementAt(map, lookup, failOnError = false))) {
+            checkEvaluation(expression, 10, InternalRow(key(-0.0d)))
+            checkEvaluation(expression, 10, InternalRow(key(0.0d)))
+            checkEvaluation(expression, zeros.size + 10, InternalRow(key(1.0d)))
+            checkEvaluation(expression, zeros.size + 11, InternalRow(key(Double.NaN)))
+            checkEvaluation(expression, null, InternalRow(key(42.0d)))
+            checkEvaluation(expression, null, InternalRow(null))
+          }
+        }
       }
     }
   }
