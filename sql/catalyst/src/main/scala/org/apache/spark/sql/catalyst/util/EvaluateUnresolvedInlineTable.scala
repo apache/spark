@@ -56,7 +56,7 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
     table.rows.flatten.foreach(NanosTimestampSubtractionCheck.checkExpression)
     val resolvedTable = findCommonTypesAndCast(table, ignoreCollation)
     if (canEvalAllDuringAnalysis(table)) {
-      earlyEvalIfPossible(resolvedTable)
+      earlyEvalIfPossible(resolvedTable, table.rows)
     } else {
       toExpand(resolvedTable)
     }
@@ -68,9 +68,42 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
    * expressions will be evaluated and inlined as [[LocalRelation]]
    * This is package visible for unit testing.
    */
-  private def earlyEvalIfPossible(table: ResolvedInlineTable): LogicalPlan = {
+  private def earlyEvalIfPossible(
+      table: ResolvedInlineTable,
+      originalRows: Seq[Seq[Expression]]): LogicalPlan = {
     val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
-    if (earlyEvalPossible) EvalInlineTables.eval(table) else table
+    if (earlyEvalPossible) {
+      val relation = EvalInlineTables.eval(table)
+      val originallyNullable = Array.fill(relation.output.length)(false)
+      if (relation.output.exists(_.nullable)) {
+        // SQL parser rows can be Lists. Visit cells in row order so wide VALUES inputs do not
+        // repeatedly traverse a linked-list prefix for each column.
+        originalRows.foreach { row =>
+          row.iterator.zipWithIndex.foreach { case (expression, index) =>
+            originallyNullable(index) = originallyNullable(index) || expression.nullable
+          }
+        }
+      }
+      val output = relation.output.zipWithIndex.map { case (attribute, index) =>
+        // Restore only nullability introduced by coercion, using the already evaluated rows.
+        // Originally nullable inputs and actual overflow NULLs must retain nullable metadata.
+        if (attribute.nullable && !originallyNullable(index) &&
+            relation.data.forall(row => !row.isNullAt(index))) {
+          attribute.withNullability(false)
+        } else {
+          attribute
+        }
+      }
+      if (output == relation.output) {
+        relation
+      } else {
+        val result = relation.copy(output = output)
+        result.copyTagsFrom(relation)
+        result
+      }
+    } else {
+      table
+    }
   }
 
   /**
@@ -218,7 +251,9 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
         case expr =>
           cast(expr, tpe)
       }
-      (StructField(name, tpe, nullable = column.exists(_.nullable)), newColumn)
+      // Coercion can introduce NULL (e.g. a non-ANSI decimal cast that overflows), even when
+      // every input literal is non-null. Metadata must describe the expressions we evaluate.
+      (StructField(name, tpe, nullable = newColumn.exists(_.nullable)), newColumn)
     }.unzip
     assert(fields.size == table.names.size)
     val attributes = DataTypeUtils.toAttributes(StructType(fields))

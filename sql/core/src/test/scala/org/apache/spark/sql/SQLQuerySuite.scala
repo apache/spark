@@ -68,6 +68,27 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
 
   setupTestData()
 
+  test("VALUES nullability accounts for decimal coercion") {
+    for (eager <- Seq(false, true); runtime <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "false",
+        SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true",
+        SQLConf.EAGER_EVAL_OF_UNRESOLVED_INLINE_TABLE_ENABLED.key -> eager.toString,
+        SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> runtime.toString) {
+        val values = if (runtime) {
+          """VALUES (99999999999999999999999999999999999999, rand(1)),
+            |(0.1, rand(2)) AS t(c, r)""".stripMargin
+        } else {
+          "VALUES (99999999999999999999999999999999999999), (0.1) AS t(c)"
+        }
+        checkAnswer(sql(s"SELECT c, c IS NULL FROM $values"),
+          Seq(Row(null, true), Row(BigDecimal("0.1"), false)))
+        checkAnswer(sql(s"SELECT count(c), count(*) FROM $values"), Row(1L, 2L))
+        checkAnswer(sql(s"SELECT c FROM $values WHERE c IS NULL"), Row(null))
+      }
+    }
+  }
+
   test("SPARK-8010: promote numeric to string") {
     withTempView("src") {
       val df = Seq((1, 1)).toDF("key", "value")

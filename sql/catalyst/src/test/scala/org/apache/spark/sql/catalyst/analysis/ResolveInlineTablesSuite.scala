@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, CreateArray, CurrentTime, CurrentTimestamp, CurrentUser, Exists, Explode, InSubquery, ListQuery, Literal, OuterReference, Rand, ScalarSubquery, Uuid}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, AttributeReference, Cast, Concat, CreateArray, CurrentTime, CurrentTimestamp, CurrentUser, Exists, Explode, Expression, InSubquery, ListQuery, Literal, OuterReference, Rand, ScalarSubquery, UnaryExpression, Uuid}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, EvalInlineTables}
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, LocalRelation, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, NullType, TimestampNTZType, TimestampType, TimeType}
+import org.apache.spark.sql.types.{DataType, Decimal, DecimalType, DoubleType, IntegerType, LongType, NullType, TimestampNTZType, TimestampType, TimeType}
 
 /**
  * Unit tests for [[ResolveInlineTables]]. Note that there are also test cases defined in
@@ -34,6 +37,150 @@ import org.apache.spark.sql.types.{DoubleType, IntegerType, LongType, NullType, 
  * in negative cases.
  */
 class ResolveInlineTablesSuite extends AnalysisTest with BeforeAndAfter {
+
+  for (scale <- Seq(1, 10, 20)) {
+    test(s"inline table nullability includes decimal coercion at scale $scale") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false",
+        SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true") {
+        val large = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
+        val fraction = Literal(Decimal(BigDecimal("0." + "1" * scale)),
+          DecimalType(scale, scale))
+        val table = UnresolvedInlineTable(Seq("c"), Seq(Seq(large), Seq(fraction)))
+        val resolved = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(table)
+        assert(resolved.output.head.nullable)
+        assert(resolved.rows.head.head.eval() == null)
+        assert(resolved.rows(1).head.eval() != null)
+        val converted = EvaluateUnresolvedInlineTable.evaluate(table).asInstanceOf[LocalRelation]
+        assert(converted.output.head.nullable)
+        assert(converted.data.head.isNullAt(0))
+        assert(!converted.data(1).isNullAt(0))
+
+        val fitting = table.copy(rows = Seq(
+          Seq(Literal(Decimal(1), DecimalType(38, 0))), Seq(fraction)))
+        val fittingResult =
+          EvaluateUnresolvedInlineTable.evaluate(fitting).asInstanceOf[LocalRelation]
+        assert(fittingResult.output.head.dataType == DecimalType(38, scale))
+        assert(!fittingResult.output.head.nullable)
+        assert(fittingResult.data.map(_.getDecimal(0, 38, scale)) ==
+          Seq(Decimal(1), fraction.value))
+
+        val integral = EvaluateUnresolvedInlineTable.findCommonTypesAndCast(
+          UnresolvedInlineTable(Seq("c"), Seq(Seq(Literal(1)), Seq(Literal(2L)))))
+        assert(!integral.output.head.nullable)
+      }
+    }
+  }
+
+  test("inline table preserves originally nullable inputs") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false",
+      SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true") {
+      val fraction = Literal(Decimal(BigDecimal("0.1")), DecimalType(1, 1))
+      val fittingCast = Cast(Literal("1"), DecimalType(38, 0))
+      assert(fittingCast.nullable)
+      Seq(fittingCast, Literal.create(null, DecimalType(38, 0))).foreach { first =>
+        val table = UnresolvedInlineTable(Seq("c"), Seq(Seq(first), Seq(fraction)))
+        val result = EvaluateUnresolvedInlineTable.evaluate(table).asInstanceOf[LocalRelation]
+        assert(result.output.head.nullable)
+        assert(result.data.head.isNullAt(0) == (first != fittingCast))
+        assert(result.data(1).getDecimal(0, 38, 1) == Decimal(BigDecimal("0.1")))
+      }
+    }
+  }
+
+  test("inline table refines List-backed columns independently") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false",
+      SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true") {
+      val fraction = Literal(Decimal(BigDecimal("0.1")), DecimalType(1, 1))
+      val fitting = Literal(Decimal(1), DecimalType(38, 0))
+      val overflow = Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))
+      val nullable = Cast(Literal("1"), DecimalType(38, 0))
+      val table = UnresolvedInlineTable(List("fitting", "overflow", "nullable"), List(
+        List(fitting, overflow, nullable), List(fraction, fraction, fraction)))
+      val result = EvaluateUnresolvedInlineTable.evaluate(table).asInstanceOf[LocalRelation]
+      assert(result.output.map(_.nullable) == Seq(false, true, true))
+      assert(result.output.map(_.dataType) == Seq.fill(3)(DecimalType(38, 1)))
+      assert(result.data.head.getDecimal(0, 38, 1) == Decimal(1))
+      assert(result.data.head.isNullAt(1))
+      assert(result.data.head.getDecimal(2, 38, 1) == Decimal(1))
+    }
+  }
+
+  for (deferred <- Seq(false, true)) {
+    test(s"inline table evaluates coercion inputs once, deferred=$deferred") {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> "false",
+        SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true") {
+        val evaluations = new AtomicInteger()
+        def counted(value: String, dataType: DecimalType): Expression =
+          CountedInlineValue(Literal(Decimal(BigDecimal(value)), dataType), evaluations)
+        val rows = Seq(
+          Seq(counted("1", DecimalType(38, 0)), counted("9" * 38, DecimalType(38, 0))),
+          Seq(counted("0.1", DecimalType(1, 1)), counted("0.1", DecimalType(1, 1))))
+        val input = if (deferred) {
+          UnresolvedInlineTable(Seq("fitting", "overflow", "time"),
+            rows.map(_ :+ CurrentTimestamp()))
+        } else {
+          UnresolvedInlineTable(Seq("fitting", "overflow"), rows)
+        }
+        val resolved = EvaluateUnresolvedInlineTable.evaluate(input)
+        val result = if (deferred) {
+          assert(resolved.isInstanceOf[ResolvedInlineTable])
+          assert(resolved.output.map(_.nullable) == Seq(true, true, false))
+          assert(evaluations.get() == 0)
+          EvalInlineTables(ComputeCurrentTime(resolved)).asInstanceOf[LocalRelation]
+        } else {
+          resolved.asInstanceOf[LocalRelation]
+        }
+        assert(evaluations.get() == 4)
+        assert(result.output.take(2).map(_.nullable) == Seq(deferred, true))
+        assert(result.data.head.getDecimal(0, 38, 1) == Decimal(1))
+        assert(result.data.head.isNullAt(1))
+        assert(result.data(1).getDecimal(0, 38, 1) == Decimal(BigDecimal("0.1")))
+        assert(result.data(1).getDecimal(1, 38, 1) == Decimal(BigDecimal("0.1")))
+        if (deferred) {
+          assert(result.data.head.getLong(2) == result.data(1).getLong(2))
+        }
+      }
+    }
+  }
+
+  test("inline table preserves ANSI overflow errors") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("c"), Seq(
+        Seq(Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0))),
+        Seq(Literal(Decimal(BigDecimal("0.1")), DecimalType(1, 1)))))
+      val error = intercept[AnalysisException] {
+        EvaluateUnresolvedInlineTable.evaluate(table)
+      }
+      assert(error.getCondition == "INVALID_INLINE_TABLE.FAILED_SQL_EXPRESSION_EVALUATION")
+    }
+  }
+
+  // Test-only instrumentation of a foldable value to detect duplicate evaluation.
+  private case class CountedInlineValue(child: Expression, evaluations: AtomicInteger)
+    extends UnaryExpression with CodegenFallback {
+    override def dataType: DataType = child.dataType
+    override protected def nullSafeEval(input: Any): Any = {
+      evaluations.incrementAndGet()
+      input
+    }
+    override protected def withNewChildInternal(newChild: Expression): Expression =
+      copy(child = newChild)
+  }
+
+  test("inline table runtime projections include nullable coerced inputs") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false",
+      SQLConf.LEGACY_RETAIN_FRACTION_DIGITS_FIRST.key -> "true",
+      SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED.key -> "true") {
+      val table = UnresolvedInlineTable(Seq("c", "r"), Seq(
+        Seq(Literal(Decimal(BigDecimal("9" * 38)), DecimalType(38, 0)), Rand(1)),
+        Seq(Literal(Decimal(BigDecimal("0.1")), DecimalType(1, 1)), Rand(2))))
+      val result = EvaluateUnresolvedInlineTable.evaluate(table).asInstanceOf[Expand]
+      assert(result.output.head.nullable)
+      assert(result.projections.head.head.eval() == null)
+      assert(result.projections(1).head.eval() == Decimal(BigDecimal("0.1")))
+    }
+  }
 
   private def lit(v: Any): Literal = Literal(v)
 
