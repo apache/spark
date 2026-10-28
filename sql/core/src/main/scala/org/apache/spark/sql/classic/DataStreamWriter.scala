@@ -28,7 +28,7 @@ import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
 import org.apache.spark.sql.{streaming, Dataset => DS, ForeachWriter}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedIdentifier
-import org.apache.spark.sql.catalyst.catalog.CatalogTable
+import org.apache.spark.sql.catalyst.catalog.{CatalogTable, CatalogUtils}
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreateTable, OptionList, UnresolvedTableSpec}
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes
@@ -206,6 +206,16 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         throw QueryCompilationErrors.inputSourceDiffersFromDataSourceProviderError(
           source, tableName, table)
       }
+      // Like a batch append, the specified partitioning should match that of the table.
+      partitioningColumns.foreach { cols =>
+        val resolver = ds.sparkSession.sessionState.analyzer.resolver
+        val specifiedPartCols = CatalogUtils.normalizePartCols(
+          table.qualifiedName, table.schema.map(_.name), cols, resolver)
+        if (specifiedPartCols != table.partitionColumnNames) {
+          throw QueryCompilationErrors.mismatchedTablePartitionColumnError(
+            table.qualifiedName, specifiedPartCols, table.partitionColumnNames.mkString(", "))
+        }
+      }
       format(table.provider.get).startInternal(
         Some(new Path(table.location).toString), catalogTable = Some(table))
     }
@@ -348,12 +358,15 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
           DataSourceUtils.encodePartitioningColumns(cols))
       case None => optionsWithoutClusteringKey
     }
+    // A table is written with its partitioning, which `toTable` checks against `partitionBy`.
+    val partitionColumns = catalogTable.map(_.partitionColumnNames.map(normalize(_, "Partition")))
+      .orElse(normalizedParCols)
     val ds = DataSource(
       this.ds.sparkSession,
       className = source,
       options = optionsWithClusteringColumns,
       catalogTable = catalogTable,
-      partitionColumns = normalizedParCols.getOrElse(Nil))
+      partitionColumns = partitionColumns.getOrElse(Nil))
     ds.createSink(outputMode, this.ds.schema)
   }
 

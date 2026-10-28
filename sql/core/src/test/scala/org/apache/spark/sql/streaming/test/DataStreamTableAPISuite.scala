@@ -20,9 +20,10 @@ package org.apache.spark.sql.streaming.test
 import java.io.File
 import java.util
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.sql.{AnalysisException, Row, SaveMode}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row, SaveMode}
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable, CatalogTableType}
@@ -350,6 +351,98 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
       }
       assert(exc.getMessage.contains("The input source(parquet) is different from the table " +
         s"$tableName's data source provider(json)"))
+    }
+  }
+
+  test("SPARK-60665: write to a partitioned table with the partitioning of the table") {
+    def writeAndCheck(tableName: String, partitionColumns: Option[Seq[String]]): Unit = {
+      withTempDir { checkpointDir =>
+        val input = MemoryStream[Int]
+        val writer = input.toDF().selectExpr("value AS i", "value % 2 AS p")
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        val query = partitionColumns.map(cols => writer.partitionBy(cols: _*)).getOrElse(writer)
+          .toTable(tableName)
+        try {
+          input.addData(1, 2)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+      checkAnswer(spark.table(tableName), Seq(Row(1, 1), Row(2, 0)))
+      assert(spark.table(tableName).inputFiles.map(new Path(_).getParent.getName).toSet ===
+        Set("p=0", "p=1"))
+    }
+
+    val tableName = "partition_test"
+    Seq(None, Some(Seq("P"))).foreach { partitionColumns =>
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet PARTITIONED BY (p)")
+        writeAndCheck(tableName, partitionColumns)
+      }
+    }
+    withTable(tableName) {
+      writeAndCheck(tableName, Some(Seq("p")))
+      assert(spark.sessionState.catalog.getTableMetadata(TableIdentifier(tableName))
+        .partitionColumnNames === Seq("p"))
+    }
+  }
+
+  test("SPARK-60665: write to an existing table with mismatched partitioning") {
+    val tableName = "partition_test"
+    val df = MemoryStream[Int].toDF().selectExpr("value AS i", "value % 2 AS p")
+    def startQuery(data: DataFrame, partitionColumns: Option[Seq[String]]): Unit = {
+      withTempDir { checkpointDir =>
+        val writer = data.writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        partitionColumns.map(cols => writer.partitionBy(cols: _*)).getOrElse(writer)
+          .toTable(tableName)
+      }
+    }
+
+    Seq(
+      "PARTITIONED BY (p)" -> Seq("i"),
+      "PARTITIONED BY (p)" -> Seq("i", "p"),
+      "PARTITIONED BY (p)" -> Seq.empty,
+      "" -> Seq("p")).foreach { case (partitionSpec, partitionColumns) =>
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet $partitionSpec")
+        checkError(
+          exception = intercept[AnalysisException] {
+            startQuery(df, Some(partitionColumns))
+          },
+          condition = "_LEGACY_ERROR_TEMP_1163",
+          parameters = Map(
+            "tableName" -> s"spark_catalog.default.$tableName",
+            "specifiedPartCols" -> partitionColumns.mkString(", "),
+            "existingPartCols" -> (if (partitionSpec.isEmpty) "" else "p")))
+      }
+    }
+
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet PARTITIONED BY (p)")
+      checkError(
+        exception = intercept[AnalysisException] {
+          startQuery(df, Some(Seq("x")))
+        },
+        condition = "COLUMN_NOT_DEFINED_IN_TABLE",
+        parameters = Map(
+          "colType" -> "partition",
+          "colName" -> "`x`",
+          "tableName" -> s"`spark_catalog`.`default`.`$tableName`",
+          "tableCols" -> "`i`, `p`"))
+      checkError(
+        exception = intercept[AnalysisException] {
+          startQuery(df.select("i"), None)
+        },
+        condition = "_LEGACY_ERROR_TEMP_1196",
+        parameters = Map(
+          "columnType" -> "Partition",
+          "columnName" -> "p",
+          "validColumnNames" -> "i"))
     }
   }
 

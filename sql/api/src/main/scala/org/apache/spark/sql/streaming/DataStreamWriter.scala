@@ -215,8 +215,9 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * [[org.apache.spark.sql.streaming.StreamingQuery]] object can be used to interact with the
    * stream.
    *
-   * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
-   * table exists or not. A new table will be created if the table not exists.
+   * For v1 table, a new table will be created with the partitioning columns provided by
+   * `partitionBy` if the table does not exist. If the table exists, the partitioning of the table
+   * will be respected, and `partitionBy` should match it if provided.
    *
    * For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
    * be respected only if the v2 table does not exist. Besides, the v2 table created by this API
