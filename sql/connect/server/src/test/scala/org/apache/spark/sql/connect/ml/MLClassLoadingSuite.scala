@@ -21,7 +21,7 @@ import java.io.File
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Model, Transformer}
-import org.apache.spark.ml.feature.{RFormulaModelTestHelper, VectorAssembler}
+import org.apache.spark.ml.feature.{RFormula, RFormulaModel, RFormulaModelTestHelper, VectorAssembler}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
@@ -60,7 +60,7 @@ class MLClassLoadingSuite extends MLHelper {
     }
   }
 
-  private def readModel(path: String): proto.MlCommandResult = {
+  private def readModel(path: String): RFormulaModel = {
     val command = proto.MlCommand
       .newBuilder()
       .setRead(
@@ -74,7 +74,10 @@ class MLClassLoadingSuite extends MLHelper {
           .setPath(path))
       .build()
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-    MLHandler.handleMlCommand(sessionHolder, command)
+    val result = MLHandler.handleMlCommand(sessionHolder, command)
+    val modelId = result.getOperatorInfo.getObjRef.getId
+    assert(modelId.nonEmpty)
+    sessionHolder.mlCache.get(modelId).asInstanceOf[RFormulaModel]
   }
 
   test("load an RFormulaModel with an allowlisted nested stage") {
@@ -82,9 +85,27 @@ class MLClassLoadingSuite extends MLHelper {
       .setInputCols(Array("x"))
       .setOutputCol("features")
     withSavedModel(stage) { path =>
-      val result = readModel(path)
-      assert(result.getOperatorInfo.getUid == "rFormulaFixture")
-      assert(result.getOperatorInfo.getObjRef.getId.nonEmpty)
+      val model = readModel(path)
+      assert(model.uid == "rFormulaFixture")
+    }
+  }
+
+  test("load a fitted RFormulaModel with internal nested stages") {
+    val dataset = spark.createDataFrame(
+      Seq((1.0, 1.0, "a"), (0.0, 2.0, "b"), (1.0, 0.0, "a"))).toDF("y", "x", "s")
+    val model = new RFormula()
+      .setFormula("y ~ x + s")
+      .setStringIndexerOrderType("alphabetDesc")
+      .fit(dataset)
+    val expected = model.transform(dataset).select("features", "label").collect().toSeq
+
+    withTempDir { dir =>
+      val path = new File(dir, "model").getAbsolutePath
+      model.write.save(path)
+      val loadedModel = readModel(path)
+      assert(loadedModel.uid == model.uid)
+      assert(loadedModel.getFormula == model.getFormula)
+      assert(loadedModel.transform(dataset).select("features", "label").collect().toSeq == expected)
     }
   }
 
