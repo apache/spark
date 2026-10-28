@@ -1161,8 +1161,13 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
         offered.exists(_.exists(_.isInstanceOf[Remainder])) &&
         offered.exists(_.isInstanceOf[IsNotNull]),
         s"expected the bloom, k % 4 = 0 and isnotnull(k); got $offered.\nPlan:\n$plan")
-      val bareNotNull = collect(plan) { case f: FilterExec => f.condition }
-        .flatMap(splitConjunctivePredicates).exists(_.isInstanceOf[IsNotNull])
+      // Only the fact side's Filter reads the checked column. bf2's own Filter holds a bare
+      // `isnotnull(v)`, which would satisfy this on its own.
+      val bareNotNull = collect(plan) {
+        case f: FilterExec
+            if f.references.exists(_.name == FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME) =>
+          f.condition
+      }.flatMap(splitConjunctivePredicates).exists(_.isInstanceOf[IsNotNull])
       assert(bareNotNull, s"the Filter must keep isnotnull(k) bare.\nPlan:\n$plan")
       val excluded = rowsExcludedByStorageFilters(plan)
       assert(excluded > 600 - 20,
@@ -2839,16 +2844,20 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
     // first in the Filter. The reader evaluates the key conjunct first, so it gives that row group
     // up, and the Filter then decides in plan order, with the same rows as a plain read.
     withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
-      readKeysUnder { (k, v) =>
-        And(And(BloomFilterMightContain(bloomLiteralOf(0L, 42L), new XxHash64(Seq(k))),
-          Not(EqualTo(v, Literal("0")))), GreaterThanOrEqual(Remainder(Literal(100L), k),
-          Literal(0L)))
-      } { (plain, rows, excluded) =>
-        assert(rows == plain, s"got $rows, a plain read got $plain")
-        assert(rows.contains(42L) && !rows.contains(0L), s"expected 42 and not 0; got $rows")
-        assert(excluded < 1000L - rows.size,
-          s"the row group holding k = 0 must be read with no filter; the reader excluded $excluded")
+      val (_, givenUp) = withLogged(evaluationGivenUp) {
+        readKeysUnder { (k, v) =>
+          And(And(BloomFilterMightContain(bloomLiteralOf(0L, 42L), new XxHash64(Seq(k))),
+            Not(EqualTo(v, Literal("0")))), GreaterThanOrEqual(Remainder(Literal(100L), k),
+            Literal(0L)))
+        } { (plain, rows, excluded) =>
+          assert(rows == plain, s"got $rows, a plain read got $plain")
+          assert(rows.contains(42L) && !rows.contains(0L), s"expected 42 and not 0; got $rows")
+          assert(excluded < 1000L - rows.size,
+            s"the row group holding k = 0 must be read with no filter; the reader excluded " +
+              excluded)
+        }
       }
+      assert(givenUp > 0, "the reader must give up the row group holding k = 0")
     }
   }
 
@@ -2861,6 +2870,22 @@ class ParquetStorageFilterSuite extends QueryTest with SharedSparkSession
       assert(rows == Seq(42L) && rows == plain, s"got $rows, a plain read got $plain")
       assert(excluded == 999L, s"the reader must drop the null keys too; it excluded $excluded")
     }
+  }
+
+  test("an IsNotNull over the key columns is evaluated before the other conjuncts over them") {
+    // `FilterExec` checks `isnotnull(k)` before a conjunct over `k`, so in a plain read
+    // `assert_not_null(k) > 0` never sees a null key. The bloom keeps the null keys, so the reader
+    // has to check `isnotnull(k)` first too, or it would give every row group up.
+    val (_, givenUp) = withLogged(evaluationGivenUp) {
+      readKeysUnder((k, _) => And(And(BloomFilterMightContain(
+          bloomLiteralOfNullable(Some(42L), None), new XxHash64(Seq(k))),
+          GreaterThan(AssertNotNull(k), Literal(0L))), IsNotNull(k)),
+        oddKeysNull = true) { (plain, rows, excluded) =>
+        assert(rows == Seq(42L) && rows == plain, s"got $rows, a plain read got $plain")
+        assert(excluded == 999L, s"the reader must not give a row group up; it excluded $excluded")
+      }
+    }
+    assert(givenUp == 0, s"the reader gave $givenUp row groups up")
   }
 
   test("a null mark leaves the offered conjunct as it was, an And around it included") {

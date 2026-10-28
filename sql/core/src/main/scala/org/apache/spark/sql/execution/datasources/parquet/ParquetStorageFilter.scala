@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.{SparkContext, SparkException}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BasePredicate, BloomFilterMightContain, BoundReference, Expression, If, Literal, Unevaluable}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, BasePredicate, BloomFilterMightContain, BoundReference, Expression, If, IsNotNull, Literal, Unevaluable}
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.execution.datasources.FileFormat
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
@@ -141,8 +141,8 @@ object ParquetStorageFilter {
   /**
    * Builds a [[ParquetStorageFilter]] from storage filters bound to the scan's requested data
    * schema. The blooms are combined with AND, and so are the conjuncts over their key columns,
-   * which are evaluated only where the blooms keep the row. Every condition below is asserted,
-   * since `storageFiltersFor` pre-checks them and a violation is a planner bug.
+   * `IsNotNull` first, which are evaluated only where the blooms keep the row. Every condition
+   * below is asserted, since `storageFiltersFor` pre-checks them and a violation is a planner bug.
    */
   def create(
       boundExpressions: Seq[Expression],
@@ -154,7 +154,11 @@ object ParquetStorageFilter {
     // The conjuncts over the blooms' key columns go under an `If` on the blooms, so they run only
     // on the rows the blooms keep. In one `And`, subexpression elimination would compute what
     // they share on every row.
-    val (blooms, onKeys) = boundExpressions.partition(_.isInstanceOf[BloomFilterMightContain])
+    val (blooms, conditions) =
+      boundExpressions.partition(_.isInstanceOf[BloomFilterMightContain])
+    // `IsNotNull` first, as `FilterExec` checks it before the conjuncts over its column, so a
+    // conjunct that throws on null never sees the null keys the blooms keep.
+    val onKeys = conditions.sortBy(e => if (e.isInstanceOf[IsNotNull]) 0 else 1)
     val expr = if (blooms.isEmpty || onKeys.isEmpty) {
       boundExpressions.reduce(And)
     } else {

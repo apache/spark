@@ -2094,7 +2094,7 @@ object SQLConf {
         "the reader also applies the query's other filter conditions that reference only the " +
         "bloom filter's columns, on the rows the bloom filter keeps. They then run before the " +
         "query's conditions on other columns. Only scans that return columnar batches with whole-" +
-        "stage codegen take them. The answer does not change, with the exceptions of " +
+        "stage codegen take them. The answer does not change, with the same exceptions as " +
         s"${PARQUET_STORAGE_FILTER_PUSHDOWN_ENABLED.key} and one more. A condition that raises a " +
         "fatal error, such as a regular expression or a UDF overflowing the stack, on a row that " +
         "a condition on another column would have dropped first fails the query.")

@@ -175,12 +175,13 @@ trait FileFormat {
    * Applying them is optional, since the planner also leaves each in the post-scan `Filter`. A
    * storage filter is evaluated without the conjuncts that precede it in the plan, so it can raise
    * an error on a row a plain scan never evaluates it on. A reader must not fail the query for
-   * that. It gives the filter up there and lets the `Filter` decide.
+   * a non-fatal one. It gives the filter up there and lets the `Filter` decide.
    *
    * The `Filter` can skip them on the rows the reader says it has checked. The planner asks for
    * that only where the scan returns columnar batches. `requiredSchema` then ends with a nullable
    * boolean column named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]], which is not a column
-   * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`.
+   * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`,
+   * except an `IsNotNull`, which it keeps bare.
    *  - True says every storage filter was evaluated on the row and kept it.
    *  - False or null says the row was not checked. So a reader that does not know the column, and
    *    reads it as missing from the file, is still right.
