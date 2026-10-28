@@ -144,6 +144,17 @@ class AbstractTranspiler(object):
     def register(cls) -> None:
         AbstractTranspiler.varieties[cls.variety] = cls
 
+    def _param_category_combos(
+        self, function_ast: ast.FunctionDef, public_params: List[str]
+    ) -> List[dict]:
+        """Input-type variants to offer ``_transpile_from_ast``, one dict per variant.
+
+        Override when the target cannot share Catalyst's coarse ``"numeric"``
+        category. ``ResolveTranspiledPythonUDFOptions`` has to understand
+        whatever is returned here.
+        """
+        return _param_category_combos(function_ast, public_params)
+
     def _transpile_from_ast(
         self,
         src: Optional[str],
@@ -923,11 +934,27 @@ CatalystTranspiler.register()
 
 
 def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
-    """Get the transpilers we should try."""
+    """Get the transpilers we should try, in the order the conf names them."""
+    # Side-effect registration; here rather than the top because it imports us.
+    from pyspark.sql import transpile_java  # noqa: F401
+
     configured_transpilers = session.conf.get("spark.sql.experimental.optimizer.pyTranspilers")
     if not configured_transpilers:
         return []
-    transpiler_names = configured_transpilers.split(",")
+    # Strip: ``"catalyst, java"`` is how a human writes a comma-separated conf.
+    transpiler_names = [name.strip() for name in configured_transpilers.split(",") if name.strip()]
+    unknown = [name for name in transpiler_names if name not in AbstractTranspiler.varieties]
+    if unknown:
+        try:
+            warnings.warn(
+                f"Ignoring unknown Python UDF transpiler(s) {unknown} in "
+                "spark.sql.experimental.optimizer.pyTranspilers; known transpilers are "
+                f"{sorted(AbstractTranspiler.varieties)}."
+            )
+        except Exception:
+            # Inside ``_transpile_func``'s blanket handler. -W error would turn a
+            # mistyped name into "no transpilation at all".
+            pass
     return [
         AbstractTranspiler.varieties[name]()
         for name in transpiler_names
@@ -1370,23 +1397,36 @@ def _transpile_func(
         transpiled: list[Column] = []
         input_categories: list[list[str]] = []
         errors = []
-        # One transpiled option per (backend x input-type variant). Untyped
-        # params are tried as both numeric and string so the JVM can pick the
-        # option matching the actual column types (or fall back if none match).
-        combos = _param_category_combos(function_ast, public_params)
         # Maybe multiple transpilers (think CUDA, etc.).
         transpilers = _get_transpilers(session)
         for transpiler in transpilers:
+            try:
+                combos = transpiler._param_category_combos(function_ast, public_params)
+            except Exception as e:
+                # Isolate like the per-combo failures below: one transpiler's bug computing
+                # its own combos must not discard results another transpiler already produced
+                # in an earlier iteration of this loop.
+                errors.append(str(e))
+                continue
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
                         src, ast_info, function_ast, public_params, returnType, combo
                     )
                     if transpiled_column is not None:
+                        # No guessed default: a missing index is a transpiler bug, and
+                        # tagging a Long lowering as ``"numeric"`` would keep it for a
+                        # double column. Append both lists after everything that can
+                        # raise -- they must stay parallel.
+                        missing = [i for i in range(len(public_params)) if i not in combo]
+                        if missing:
+                            raise UnsupportedOperationException(
+                                f"transpiler {transpiler.variety!r} returned a combo missing "
+                                f"categories for parameter(s) {missing}; every public parameter "
+                                "needs one so the JVM can prune the option by argument type"
+                            )
                         transpiled.append(transpiled_column)
-                        input_categories.append(
-                            [combo.get(i, "numeric") for i in range(len(public_params))]
-                        )
+                        input_categories.append([combo[i] for i in range(len(public_params))])
                 except Exception as e:
                     errors.append(str(e))
         return (

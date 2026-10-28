@@ -693,7 +693,11 @@ object SQLConf {
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
     .doc("Comma-separated list of Python transpilers to attempt, in order. " +
       "The first transpiler that successfully produces a Catalyst expression " +
-      "is used. Default: catalyst.")
+      "is used. Default: catalyst. " +
+      "`catalyst` lowers to Catalyst expressions; `java` lowers to generated " +
+      "Java source (locals, several statements, early returns) at the cost of " +
+      "being opaque to the optimizer. Prefer `catalyst,java`. Off by default; " +
+      "see pyspark.sql.transpile_java for what it lowers.")
     .version("4.3.0")
     .stringConf
     .createWithDefault("catalyst")
