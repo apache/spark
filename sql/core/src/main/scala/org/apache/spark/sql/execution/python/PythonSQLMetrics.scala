@@ -24,8 +24,8 @@ trait PythonSQLMetrics { self: SparkPlan =>
   protected def pythonTimingEvalType: Option[Int] = None
 
   // Share the plan's timing decision with metric registration and the Python runner.
-  protected val pythonTiming: Option[PythonUDFTiming] =
-    pythonTimingEvalType.map(PythonUDFTiming(_, conf))
+  protected val pythonTimingGate: Option[PythonUDFTimingGate] =
+    pythonTimingEvalType.map(PythonUDFTimingGate(_, conf))
 
   protected val pythonMetrics: Map[String, SQLMetric] = {
     sizeMetricsDesc.map { case (k, v) =>
@@ -35,7 +35,7 @@ trait PythonSQLMetrics { self: SparkPlan =>
     } ++ otherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
     } ++ additionalMetrics ++ {
-      if (pythonTiming.exists(_.enabled)) createPythonPhaseMetrics() else Map.empty
+      if (pythonTimingGate.exists(_.enabled)) createPythonPhaseMetrics() else Map.empty
     }
   }
 
