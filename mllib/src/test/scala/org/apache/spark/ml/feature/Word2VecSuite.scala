@@ -241,7 +241,7 @@ class Word2VecSuite extends MLTest with DefaultReadWriteTest {
   }
 
   test("Load Word2VecModel saved by Spark 4.0.0") {
-    val modelPath = testFile("ml-models/word2VecModel-4.0.0")
+    val modelPath = testFile("ml-models/w2v-4.0.0")
 
     val loadedModel = Word2VecModel.load(modelPath)
     assert(loadedModel.getVectorSize === 4)
