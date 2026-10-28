@@ -942,7 +942,7 @@ class AstBuilder extends DataTypeAstBuilder
     ctx match {
       case table: InsertIntoTableContext =>
         val insertParams = visitInsertIntoTable(table)
-        createUnresolvedInsert(
+        createInsertIntoStatement(
           insertParams = insertParams,
           query = query,
           overwrite = false,
@@ -950,7 +950,7 @@ class AstBuilder extends DataTypeAstBuilder
           writePrivileges = Set(TableWritePrivilege.INSERT))
       case table: InsertOverwriteTableContext =>
         val insertParams = visitInsertOverwriteTable(table)
-        createUnresolvedInsert(
+        createInsertIntoStatement(
           insertParams = insertParams,
           query = query,
           overwrite = true,
@@ -966,7 +966,7 @@ class AstBuilder extends DataTypeAstBuilder
         val isInsertReplaceWhere = ctx.WHERE() != null
         if (isInsertReplaceWhere) {
           val insertParams = visitInsertIntoReplaceWhere(ctx)
-          createUnresolvedInsert(
+          createInsertIntoStatement(
             insertParams = insertParams,
             query = query,
             overwrite = true,
@@ -983,7 +983,7 @@ class AstBuilder extends DataTypeAstBuilder
               }
             }.getOrElse(query)
           }
-          createUnresolvedInsert(
+          createInsertIntoStatement(
             insertParams = insertParams,
             query = finalQuery,
             overwrite = true,
@@ -992,7 +992,7 @@ class AstBuilder extends DataTypeAstBuilder
         }
       case ctx: InsertIntoReplaceUsingContext =>
         val insertParams = visitInsertIntoReplaceUsing(ctx)
-        createUnresolvedInsert(
+        createInsertIntoStatement(
           insertParams = insertParams,
           query = query,
           overwrite = true,
@@ -1157,16 +1157,21 @@ class AstBuilder extends DataTypeAstBuilder
       replaceCriteriaOpt = replaceCriteriaOpt)
   }
 
-  /** Creates an unresolved INSERT plan from [[InsertTableParams]]. */
-  private def createUnresolvedInsert(
+  /**
+   * Creates an INSERT plan from [[InsertTableParams]]. A dynamic target is exposed only by the
+   * temporary `UnresolvedInsert` plan. Once its identifier expression has been evaluated, analysis
+   * continues with `InsertIntoStatement`, which a static target produces directly.
+   */
+  private def createInsertIntoStatement(
       insertParams: InsertTableParams,
       query: LogicalPlan,
       overwrite: Boolean,
       withSchemaEvolution: Boolean,
-      writePrivileges: Set[TableWritePrivilege]): UnresolvedInsert = {
-    UnresolvedInsert(
-      table = buildWriteTableSlot(
-        insertParams.relationCtx, insertParams.options, writePrivileges),
+      writePrivileges: Set[TableWritePrivilege]): LogicalPlan = {
+    val tableSlot = buildWriteTableSlot(
+      insertParams.relationCtx, insertParams.options, writePrivileges)
+    val unresolvedInsert = UnresolvedInsert(
+      table = tableSlot,
       partitionSpec = insertParams.partitionSpec,
       userSpecifiedCols = insertParams.userSpecifiedCols,
       query = query,
@@ -1175,12 +1180,18 @@ class AstBuilder extends DataTypeAstBuilder
       byName = insertParams.byName,
       replaceCriteriaOpt = insertParams.replaceCriteriaOpt,
       withSchemaEvolution = withSchemaEvolution)
+
+    tableSlot match {
+      case target: UnresolvedInsertTarget =>
+        unresolvedInsert.toInsertIntoStatement(target.toUnresolvedRelation)
+      case _ => unresolvedInsert
+    }
   }
 
   /**
-   * Build the target of an INSERT. An `IDENTIFIER` expression receives normal analyzer traversal.
-   * A resolved identifier is kept in `UnresolvedInsertTarget` rather than `UnresolvedRelation` so
-   * CTE substitution cannot interpret the target as a source.
+   * Build the target of an INSERT. A dynamic IDENTIFIER remains inside `UnresolvedInsert` so its
+   * expression receives normal analyzer traversal. The builder produces `UnresolvedInsertTarget`
+   * rather than `UnresolvedRelation` so CTE substitution cannot interpret the target as a source.
    */
   private def buildWriteTableSlot(
       ctx: IdentifierReferenceContext,

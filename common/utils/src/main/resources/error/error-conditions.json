@@ -1426,9 +1426,19 @@
           "To disable plan compression, set 'spark.connect.session.planCompression.threshold' to -1."
         ]
       },
+      "CHECKPOINT_RELATION_ID_EMPTY" : {
+        "message" : [
+          "The checkpoint relation ID must not be empty."
+        ]
+      },
       "CHUNKED_CACHED_LOCAL_RELATION_WITHOUT_DATA" : {
         "message" : [
           "ChunkedCachedLocalRelation should contain data."
+        ]
+      },
+      "DATAFRAME_ALREADY_EXISTS" : {
+        "message" : [
+          "A DataFrame with id <dfId> already exists in the session <sessionId>."
         ]
       },
       "DATAFRAME_NOT_FOUND" : {
@@ -2384,6 +2394,18 @@
   "DATA_SOURCE_ROW_ID_SCHEMA_NOT_IMPLEMENTED" : {
     "message" : [
       "<class> does not implement rowIdSchema."
+    ],
+    "sqlState" : "0A000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_CHECKED_COLUMN_MISSING" : {
+    "message" : [
+      "A reader of <class> was asked for the column that marks the rows a storage filter checked, right after the <numScanColumns> columns of the scan's read schema. That column is missing, not a boolean, or not the last one. The reader returned <numColumns> columns."
+    ],
+    "sqlState" : "KD000"
+  },
+  "DATA_SOURCE_STORAGE_FILTER_READER_NOT_SUPPORTED" : {
+    "message" : [
+      "<class> cannot create a reader that applies a storage filter."
     ],
     "sqlState" : "0A000"
   },
@@ -7918,6 +7940,12 @@
     ],
     "sqlState" : "42601"
   },
+  "STORAGE_FILTER_NOT_APPLIED" : {
+    "message" : [
+      "A storage filter could not be evaluated. The data source's reader should have read the rows without it instead of failing."
+    ],
+    "sqlState" : "KD000"
+  },
   "STORAGE_PARTITION_JOIN_INCOMPATIBLE_REDUCED_TYPES" : {
     "message" : [
       "Storage-partition join partition transforms produced incompatible reduced types,",
@@ -9476,6 +9504,11 @@
       "TEMPORARY_VIEW_WITH_SCHEMA_BINDING_MODE" : {
         "message" : [
           "Temporary views cannot be created with the WITH SCHEMA clause. Recreate the temporary view when the underlying schema changes, or use a persisted view."
+        ]
+      },
+      "TIMESTAMP_NANOS_SUBTRACTION" : {
+        "message" : [
+          "Subtracting nanosecond-precision timestamps (TIMESTAMP_LTZ/TIMESTAMP_NTZ with precision in [7, 9]) in <sqlExpr>. The interval result has microsecond precision. Cast both operands to TIMESTAMP_LTZ or TIMESTAMP_NTZ to subtract at microsecond precision, or cast them to TIMESTAMP_LTZ(9) or TIMESTAMP_NTZ(9) and use `unix_nanos(end) - unix_nanos(start)` for the elapsed time in nanoseconds."
         ]
       },
       "TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER" : {

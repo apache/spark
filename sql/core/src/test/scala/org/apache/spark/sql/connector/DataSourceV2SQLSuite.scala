@@ -5624,6 +5624,37 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
         s"Expected the non-deterministic filter above the scan, got $postScanConditions")
     }
   }
+
+  test("SPARK-60569: scalar subquery filters merged by MergeSubplans are pushed to the scan") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (1), (3)")
+
+      // `MergeSubplans` merges the two subqueries into one, and each filter reads its result out
+      // of the struct the merged one returns.
+      val df = sql(s"SELECT * FROM $tbl " +
+        s"WHERE part = (SELECT max(val) FROM $dim) AND id > (SELECT min(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3))
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.exists(_.exists(_.isInstanceOf[GetStructField])),
+        s"Expected a runtime filter on a merged scalar subquery, got ${batchScan.runtimeFilters}")
+
+      // Verify partition pruning: only 1 of 10 partitions should remain
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 1,
+        s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
+    }
+  }
 }
 
 class ReserveSchemaNullabilityCatalog extends InMemoryCatalog {
