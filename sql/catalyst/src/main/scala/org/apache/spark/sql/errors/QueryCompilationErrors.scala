@@ -256,6 +256,10 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "invalidValue" -> toSQLExpr(invalidValue)))
   }
 
+  def invalidParseSqlMode(mode: Expression): Throwable = {
+    invalidParameter("PARSE_SQL_MODE", "parse_sql", "mode", mode)
+  }
+
   def unorderablePivotColError(pivotCol: Expression): Throwable = {
     new AnalysisException(
       errorClass = "INCOMPARABLE_PIVOT_COLUMN",
