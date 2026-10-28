@@ -74,8 +74,10 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
     val earlyEvalPossible = table.rows.flatten.forall(!_.containsPattern(CURRENT_LIKE))
     if (earlyEvalPossible) {
       val relation = EvalInlineTables.eval(table)
-      val originallyNullable = Array.fill(relation.output.length)(false)
-      if (relation.output.exists(_.nullable)) {
+      if (relation.output.forall(!_.nullable)) {
+        relation
+      } else {
+        val originallyNullable = Array.fill(relation.output.length)(false)
         // SQL parser rows can be Lists. Visit cells in row order so wide VALUES inputs do not
         // repeatedly traverse a linked-list prefix for each column.
         originalRows.foreach { row =>
@@ -83,23 +85,23 @@ object EvaluateUnresolvedInlineTable extends SQLConfHelper
             originallyNullable(index) = originallyNullable(index) || expression.nullable
           }
         }
-      }
-      val output = relation.output.zipWithIndex.map { case (attribute, index) =>
-        // Restore only nullability introduced by coercion, using the already evaluated rows.
-        // Originally nullable inputs and actual overflow NULLs must retain nullable metadata.
-        if (attribute.nullable && !originallyNullable(index) &&
-            relation.data.forall(row => !row.isNullAt(index))) {
-          attribute.withNullability(false)
-        } else {
-          attribute
+        val output = relation.output.zipWithIndex.map { case (attribute, index) =>
+          // Restore only nullability introduced by coercion, using the already evaluated rows.
+          // Originally nullable inputs and actual overflow NULLs must retain nullable metadata.
+          if (attribute.nullable && !originallyNullable(index) &&
+              relation.data.forall(row => !row.isNullAt(index))) {
+            attribute.withNullability(false)
+          } else {
+            attribute
+          }
         }
-      }
-      if (output == relation.output) {
-        relation
-      } else {
-        val result = relation.copy(output = output)
-        result.copyTagsFrom(relation)
-        result
+        if (output == relation.output) {
+          relation
+        } else {
+          val result = relation.copy(output = output)
+          result.copyTagsFrom(relation)
+          result
+        }
       }
     } else {
       table
