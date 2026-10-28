@@ -766,6 +766,25 @@ class UDFProfiler2TestsMixin:
     def sampling_profile_results(self):
         return self.spark._profiler_collector._sampling_profile_results
 
+    def assert_sampled_frame_present(self, result, func_name):
+        # Flatten the per-thread call trees and assert the function frame was sampled.
+        idents = []
+
+        def collect_idents(node):
+            for key, child in node.items():
+                if key == "count":
+                    continue
+                idents.append(key)
+                collect_idents(child)
+
+        for thread_tree in result["callstack"].values():
+            collect_idents(thread_tree)
+
+        self.assertTrue(
+            any(func_name in ident for ident in idents),
+            f"{func_name} frame not found in samples: {idents}",
+        )
+
     def test_sampling_profiler_udf(self):
         import time
 
@@ -791,24 +810,71 @@ class UDFProfiler2TestsMixin:
         # One partition -> one task -> one call-tree keyed by task.
         self.assertEqual(1, len(results), str(list(results)))
 
-        # Flatten the per-thread call trees and assert the UDF frame was sampled.
-        idents = []
+        for result in results.values():
+            self.assert_sampled_frame_present(result, "busy_add1")
 
-        def collect_idents(node):
-            for key, child in node.items():
-                if key == "count":
-                    continue
-                idents.append(key)
-                collect_idents(child)
+    @unittest.skipIf(
+        not have_pandas or not have_pyarrow,
+        pandas_requirement_message or pyarrow_requirement_message,
+    )
+    def test_sampling_profiler_pandas_udf(self):
+        import time
+
+        @pandas_udf("long")
+        def busy_add1(x):
+            # Sleep so the sampling thread reliably catches this frame on the stack.
+            time.sleep(0.2)
+            return x + 1
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(busy_add1("id")).collect()
+
+        results = self.sampling_profile_results
+        # Two partitions -> two tasks -> two call-trees keyed by task.
+        self.assertEqual(2, len(results), str(list(results)))
 
         for result in results.values():
-            for thread_tree in result["callstack"].values():
-                collect_idents(thread_tree)
+            self.assert_sampled_frame_present(result, "busy_add1")
 
-        self.assertTrue(
-            any("busy_add1" in ident for ident in idents),
-            f"UDF frame not found in samples: {idents}",
-        )
+    def test_sampling_profiler_clear(self):
+        @udf("long")
+        def add1(x):
+            return x + 1
+
+        def run():
+            with self.sql_conf(
+                {
+                    "spark.sql.pyspark.udf.profiler": "sampling",
+                    "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+                }
+            ):
+                self.spark.range(10, numPartitions=2).select(add1("id")).collect()
+
+        run()
+        self.assertEqual(2, len(self.sampling_profile_results))
+
+        for id in self.sampling_profile_results:
+            self.spark._profiler_collector.clear_sampling_profiles(id)
+            self.assertNotIn(id, self.sampling_profile_results)
+        self.assertEqual(0, len(self.sampling_profile_results))
+
+        run()
+        self.assertEqual(2, len(self.sampling_profile_results))
+
+        # Clearing other profiler types keeps the sampling results.
+        self.spark.profile.clear(type="perf")
+        self.spark.profile.clear(type="memory")
+        self.assertEqual(2, len(self.sampling_profile_results))
+
+        self.spark.profile.clear()
+        self.assertEqual(0, len(self.sampling_profile_results))
+        # The emptied entries are dropped as well.
+        self.assertEqual(0, len(self.spark._profiler_collector._profile_results))
 
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
