@@ -325,7 +325,7 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
   def this(children: Seq[Expression]) = {
     this(
       children,
-      children.zipWithIndex.map {
+      children.map(trimTempResolvedColumn).zipWithIndex.map {
         case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
         case (e: NamedExpression, _) if e.resolved => Literal(e.name)
         case (e: NamedExpression, _) => NamePlaceholder

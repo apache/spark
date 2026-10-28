@@ -261,12 +261,28 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       .orderBy(ordering.toAttribute.asc)
       .select(selected.toAttribute)
 
-    Seq(max($"score"), UnresolvedFunction("max", Seq($"score"), isDistinct = false)).foreach {
+    Seq(max(score), max($"score"),
+      UnresolvedFunction("max", Seq($"score"), isDistinct = false)).foreach {
       aggregate =>
         val plan = input.groupBy($"key")(min($"score").as("score"))
           .orderBy(aggregate.asc)
         checkAnalysis(plan, expected)
     }
+  }
+
+  test("SPARK-38951: ORDER BY preserves explicitly targeted DataFrame columns") {
+    val input = LocalRelation($"key".int, $"score".int)
+    val selected = min(input.output(1)).as("score")
+    val agg = input.groupBy(input.output.head)(selected)
+    agg.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    val target = UnresolvedAttribute("score")
+    target.setTagValue(LogicalPlan.PLAN_ID_TAG, 1L)
+    val plan = agg.orderBy(UnresolvedFunction("max", Seq(target), isDistinct = false).asc)
+    val analyzed = getAnalyzer.execute(plan)
+    val maxInputs = analyzed.flatMap(_.expressions.flatMap(_.collect {
+      case m: org.apache.spark.sql.catalyst.expressions.aggregate.Max => m.child
+    }))
+    assert(maxInputs == Seq(selected.toAttribute))
   }
 
   test("resolve relations") {

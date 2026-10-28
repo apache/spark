@@ -17,8 +17,10 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
-import org.apache.spark.sql.catalyst.expressions.SortOrder
+import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, WindowExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 
@@ -77,12 +79,19 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   private def resolveReferencesInSort(sort: Sort): LogicalPlan = {
     // Keep the original name until functions are resolved: aggregate arguments use the
     // Aggregate's input, whereas ordinary ORDER BY expressions prefer its output aliases.
-    val preserveColumnName = sort.child match {
-      case _: Aggregate | Filter(_, _: Aggregate) => true
-      case _ => false
+    val aggregate = sort.child match {
+      case agg: Aggregate => Some(agg)
+      case Filter(_, agg: Aggregate) => Some(agg)
+      case _ => None
     }
-    val resolvedBasic = sort.order.map(
-      resolveExpressionByPlanOutput(_, sort.child, preserveColumnName = preserveColumnName))
+    val order = aggregate.map { agg =>
+      sort.order.map { e =>
+        // Resolve explicit DataFrame targets before saving the lexical SQL invocation.
+        preserveOriginalFunctions(tryResolveDataFrameColumns(e, Seq(sort.child)), agg)
+      }
+    }.getOrElse(sort.order)
+    val resolvedBasic = order.map(
+      resolveExpressionByPlanOutput(_, sort.child, preserveColumnName = aggregate.isDefined))
     val resolvedWithAgg = sort.child match {
       case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
       case _ => resolvedBasic.map(resolveColWithAgg(_, sort.child))
@@ -99,6 +108,28 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       // Add missing attributes and then project them away.
       val newSort = sort.copy(order = resolvedFinal, child = newChild)
       Project(sort.child.output, newSort)
+    }
+  }
+
+  private def preserveOriginalFunctions(e: Expression, agg: Aggregate): Expression = {
+    import ResolveReferencesInSort._
+    e match {
+      // Window aggregates use their own scope, rather than the grouped ORDER BY input scope.
+      case _: WindowExpression => e
+      // A DataFrame target that could not bind must not fall back to SQL name rebinding.
+      case f if (f.isInstanceOf[UnresolvedFunction] || f.isInstanceOf[AggregateExpression]) &&
+          f.exists {
+            case u: UnresolvedAttribute => u.containsTag(LogicalPlan.PLAN_ID_TAG)
+            case _ => false
+          } => f
+      case ae: AggregateExpression => resolveColWithAgg(ae, agg)
+      case f: UnresolvedFunction =>
+        if (!f.containsTag(ORIGINAL_FUNCTION) && !f.containsTag(AGGREGATE_INPUT)) {
+          // Save the whole invocation before output resolution can specialize its arguments.
+          f.setTagValue(ORIGINAL_FUNCTION, f.clone().asInstanceOf[UnresolvedFunction])
+        }
+        f.mapChildren(preserveOriginalFunctions(_, agg))
+      case other => other.mapChildren(preserveOriginalFunctions(_, agg))
     }
   }
 
@@ -120,4 +151,10 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       case _ => orders
     }
   }
+}
+
+object ResolveReferencesInSort {
+  private[analysis] val ORIGINAL_FUNCTION =
+    TreeNodeTag[UnresolvedFunction]("sortOriginalFunction")
+  private[analysis] val AGGREGATE_INPUT = TreeNodeTag[Boolean]("sortAggregateInput")
 }

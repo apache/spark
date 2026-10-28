@@ -28,6 +28,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.CodegenObjectFactoryMode.{FALLBACK, NO_CODEGEN}
+import org.apache.spark.sql.catalyst.expressions.aggregate.V2Aggregator
 import org.apache.spark.sql.connector.catalog.{BasicInMemoryTableCatalog, Identifier, InMemoryCatalog, SupportsNamespaces}
 import org.apache.spark.sql.connector.catalog.functions.{AggregateFunction, _}
 import org.apache.spark.sql.execution.ProjectExec
@@ -599,6 +600,30 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
 
       (1L to 100L).toDF("i").write.saveAsTable(t)
       checkAnswer(sql(s"SELECT testcat.ns.avg(i) from $t"), Row(50) :: Nil)
+    }
+  }
+
+  gridTest("ORDER BY catalog aggregates bind shadowed input types")(Seq(false, true)) { ansi =>
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> ansi.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      addFunction(Identifier.of(Array("ns"), "avg"), IntegralAverage)
+
+      val df = sql(
+        """SELECT team, CAST(min(score) AS INT) AS score
+          |FROM VALUES ('a', 3L), ('b', 2L), ('b', 4294967298L) AS scores(team, score)
+          |GROUP BY team
+          |ORDER BY testcat.ns.avg(score)
+          |""".stripMargin)
+      val boundFunctions = df.queryExecution.analyzed.flatMap { plan =>
+        plan.expressions.flatMap(_.collect {
+          case agg: V2Aggregator[_, _] => agg.aggrFunc
+        })
+      }
+      assert(boundFunctions.toSet == Set(LongAverage))
+      checkAnswer(df, Seq(Row("a", 3), Row("b", 2)))
     }
   }
 

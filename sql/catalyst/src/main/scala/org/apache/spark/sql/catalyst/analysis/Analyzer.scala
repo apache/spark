@@ -2593,6 +2593,11 @@ class Analyzer(
         }
 
       case q: LogicalPlan =>
+        val sortAggregate = q match {
+          case Sort(_, _, agg: Aggregate, _) => Some(agg)
+          case Sort(_, _, Filter(_, agg: Aggregate), _) => Some(agg)
+          case _ => None
+        }
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
@@ -2619,7 +2624,28 @@ class Analyzer(
             }
           }
 
-          case u: UnresolvedFunction => functionResolution.resolveFunction(u)
+          case u: UnresolvedFunction =>
+            val resolved = functionResolution.resolveFunction(u)
+            val original = u.getTagValue(ResolveReferencesInSort.ORIGINAL_FUNCTION)
+            if (resolved.isInstanceOf[AggregateExpression] && original.isDefined &&
+                sortAggregate.isDefined) {
+              // Function construction identifies the aggregate context. Discard the provisional
+              // output-bound invocation, including its extractors, casts and catalog binding.
+              // The next iteration resolves the original invocation using the aggregate input.
+              val inputFunction = original.get.clone()
+              inputFunction.foreach {
+                case f: UnresolvedFunction =>
+                  f.unsetTagValue(ResolveReferencesInSort.ORIGINAL_FUNCTION)
+                  f.setTagValue(ResolveReferencesInSort.AGGREGATE_INPUT, true)
+                case _ =>
+              }
+              val inputResolved = resolveColWithAgg(inputFunction, sortAggregate.get)
+              // If the invocation already used input columns, keep its resolved result. A
+              // tag-only replacement would be discarded by tree transformation and convergence.
+              if (inputResolved.fastEquals(u)) resolved else inputResolved
+            } else {
+              resolved
+            }
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             // Check if this is a call to a Python user-defined table function whose polymorphic
@@ -3279,21 +3305,7 @@ class Analyzer(
         sort: Sort,
         agg: Aggregate,
         buildChild: Aggregate => LogicalPlan): LogicalPlan = {
-      // ORDER BY initially prefers output aliases, but aggregate arguments must use the input.
-      // Resolve their original names before checking types, aggregate matching, and coercion.
-      val order = sort.order.map { expression =>
-        expression.transformDown {
-          case ae: AggregateExpression =>
-            ae.transformDown {
-              case t: TempResolvedColumn => withOrigin(t.origin) {
-                resolveExpressionByPlanOutput(UnresolvedAttribute(t.nameParts), agg.child) match {
-                  case _: UnresolvedAttribute => t
-                  case input => t.copy(child = input)
-                }
-              }
-            }
-        }.asInstanceOf[SortOrder]
-      }
+      val order = sort.order
       if (order.forall(_.resolved)) {
         val resolvedOrder = order.map(_.transformDown {
           case t: TempResolvedColumn if t.child.references.subsetOf(agg.outputSet) => t.child

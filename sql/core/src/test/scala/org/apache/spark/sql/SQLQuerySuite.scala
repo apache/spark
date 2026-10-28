@@ -1453,6 +1453,64 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  gridTest("ORDER BY alias scope interactions")(
+    for {
+      singlePassEnabled <- Seq(false, true)
+      ansiEnabled <- Seq(false, true)
+      interaction <- Seq("struct extraction", "nested scalar coercion", "explicit cast",
+        "scalar field naming")
+    } yield (singlePassEnabled, ansiEnabled, interaction)) {
+    case (singlePassEnabled, ansiEnabled, interaction) =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+        SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        val (sqlText, expectedAnswer) = interaction match {
+          case "struct extraction" =>
+            (
+              """SELECT k, named_struct('y', min(a.y), 'x', min(a.x)) AS a
+                |FROM VALUES
+                |  (1, named_struct('x', 10, 'y', 20)),
+                |  (2, named_struct('x', 30, 'y', 5)) AS t(k, a)
+                |GROUP BY k
+                |ORDER BY max(a['x'])""".stripMargin,
+              Seq(Row(1, Row(20, 10)), Row(2, Row(5, 30))))
+          case "nested scalar coercion" =>
+            (
+              """SELECT team, CAST(min(score) AS STRING) AS score
+                |FROM VALUES ('a', 9007199254740992L), ('b', 9007199254740993L)
+                |  AS scores(team, score)
+                |GROUP BY team
+                |ORDER BY max(abs(score)), team DESC""".stripMargin,
+              Seq(Row("a", "9007199254740992"), Row("b", "9007199254740993")))
+          case "scalar field naming" =>
+            (
+              """SELECT a FROM VALUES (array(2)), (array(1)) AS t(a)
+                |GROUP BY a
+                |ORDER BY arrays_zip(a)[0].a""".stripMargin,
+              Seq(Row(Seq(1)), Row(Seq(2))))
+          case "explicit cast" =>
+            (
+              """SELECT team, CAST(min(score) AS STRING) AS score
+                |FROM VALUES ('a', 9007199254740992L), ('b', 9007199254740993L)
+                |  AS scores(team, score)
+                |GROUP BY team
+                |ORDER BY max(abs(CAST(score AS DOUBLE))), team DESC""".stripMargin,
+              Seq(Row("b", "9007199254740993"), Row("a", "9007199254740992")))
+        }
+        val df = sql(sqlText)
+        assert(df.queryExecution.analyzed.resolved)
+        // Resolve the SQL with the requested analyzer before using the encoder test harness.
+        withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+  }
+
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
     // If ANSI mode is on, Spark disallows comparing Int with Boolean.
     if (!conf.ansiEnabled) {

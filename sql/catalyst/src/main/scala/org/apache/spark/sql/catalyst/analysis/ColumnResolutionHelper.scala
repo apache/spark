@@ -563,7 +563,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //       tiebreaker yields a single winner.
   //    7. if all the resolved attributes are filtered out, return the original expression
   //       as it is.
-  private def tryResolveDataFrameColumns(
+  protected def tryResolveDataFrameColumns(
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
