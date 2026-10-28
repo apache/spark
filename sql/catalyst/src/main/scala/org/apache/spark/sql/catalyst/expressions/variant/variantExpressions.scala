@@ -2154,6 +2154,7 @@ object VariantExplode {
   }
 
   // Use dot notation for dot-safe keys and single-quoted bracket notation for other keys.
+  // Emitted paths target the default escaped-path parser, regardless of the legacy parser setting.
   private def appendObjectPath(parentPath: String, key: String): String = {
     if (isDotSafeKey(key)) {
       s"$parentPath.$key"
