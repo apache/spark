@@ -250,6 +250,7 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
   Seq(
     ("10000000000000000000000000000000000000", "0.0007", "0.0005"),
     ("99999999999999999999999999999999999999", "0.0007", "0.0004"),
+    ("99999999999999999999999999999999999999", "7E-38", "2E-38"),
     ("99999999999999999999999999999999999999", "1E-38", "0")
   ).foreach { case (dividend, divisor, expected) =>
     test(s"decimal remainder with a large integral quotient: $dividend % $divisor") {
@@ -357,6 +358,26 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       }
       intercept[ArithmeticException] {
         left % right
+      }
+    }
+  }
+
+  test("decimal remainder bounds exact retries for legacy negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val divisor = Decimal(3L)
+      // This upper bound is twice the maximum SQL decimal precision.
+      val withinBound = Decimal(1L, 1, -(2 * DecimalType.MAX_PRECISION - 1))
+      assert(withinBound % divisor == Decimal(1L))
+      for (scale <- Seq(-2 * DecimalType.MAX_PRECISION, -1000000000, Int.MinValue)) {
+        val dividend = Decimal(1L, 1, scale)
+        val original = intercept[ArithmeticException] {
+          dividend.toJavaBigDecimal.remainder(
+            divisor.toJavaBigDecimal, new MathContext(39, RoundingMode.DOWN))
+        }
+        val error = intercept[ArithmeticException] {
+          dividend % divisor
+        }
+        assert(error.getMessage == original.getMessage)
       }
     }
   }

@@ -568,7 +568,13 @@ final class Decimal extends Ordered[Decimal] with Serializable {
       val remainder = try {
         dividend.remainder(divisor, MATH_CONTEXT)
       } catch {
-        case _: ArithmeticException => dividend.remainder(divisor)
+        case error: ArithmeticException =>
+          // Exact division materializes the integral quotient. Two maximum SQL decimal
+          // precisions cover ordinary decimal operands; keep the original failure for larger
+          // legacy scale gaps instead of attempting a potentially enormous allocation.
+          val quotientDigits = dividend.precision().toLong - dividend.scale() + divisor.scale()
+          if (quotientDigits > 2 * DecimalType.MAX_PRECISION) throw error
+          dividend.remainder(divisor)
       }
       Decimal(remainder)
     }
