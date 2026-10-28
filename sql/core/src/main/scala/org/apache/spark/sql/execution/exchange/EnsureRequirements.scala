@@ -913,7 +913,9 @@ case class EnsureRequirements(
         }
       }
 
-      // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      // Now we need to push-down the common partition information to the sides that need it. A
+      // side whose alignment is the identity keeps its child instead (see `regroupOrIdentity`
+      // below), which is common when one side was shuffled onto the other side's layout.
       //
       // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
       // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
@@ -924,15 +926,19 @@ case class EnsureRequirements(
       // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
       // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
       // routing (`GroupPartitionsExec.distributePartitions`).
-      (
-        GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), leftReducers,
+      def regroupOrIdentity(
+          child: SparkPlan,
+          spec: KeyedShuffleSpec,
+          reducers: Option[Seq[Option[KeyReducer]]],
+          replicates: Boolean): SparkPlan = {
+        val gpe = GroupPartitionsExec(child, spec.joinKeyPositions,
+          Some(mergedPartitionKeys), reducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
-        GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), rightReducers,
-          ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
+            if (replicates) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN))
+        if (gpe.outputPartitioning == child.outputPartitioning) child else gpe
+      }
+      (regroupOrIdentity(rawLeft, leftSpec, leftReducers, replicateLeftSide),
+        regroupOrIdentity(rawRight, rightSpec, rightReducers, replicateRightSide))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
