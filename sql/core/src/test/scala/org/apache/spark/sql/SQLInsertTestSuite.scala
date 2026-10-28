@@ -621,6 +621,31 @@ trait SQLInsertTestSuite extends QueryTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-59538: nested collection resolution can use legacy behavior") {
+    withSQLConf(
+        SQLConf.INSERT_COLUMN_LIST_NESTED_FIELDS_RESOLVE_BY_POSITION.key -> "false") {
+      withTable("t") {
+        createTable(
+          "t",
+          Seq("s", "arr", "m"),
+          Seq(
+            "STRUCT<x: INT, y: INT>",
+            "ARRAY<STRUCT<x: INT, y: INT>>",
+            "MAP<STRING, STRUCT<x: INT, y: INT>>"))
+        sql(
+          """INSERT INTO t (s, arr, m)
+            |SELECT
+            |  named_struct('y', 20, 'x', 10),
+            |  array(named_struct('y', 20, 'x', 10)),
+            |  map('k', named_struct('y', 20, 'x', 10))
+            |""".stripMargin)
+        checkAnswer(
+          spark.table("t"),
+          Row(Row(20, 10), Seq(Row(10, 20)), Map("k" -> Row(10, 20))))
+      }
+    }
+  }
+
   test("SPARK-58816: insert with column list resolves structs positionally at all nesting levels") {
     // All three nesting modes must behave identically: direct struct, array-of-struct,
     // map-of-struct.  Source fields are (y, x); target fields are (x, y).
