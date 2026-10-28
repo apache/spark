@@ -1,0 +1,1 @@
+{"class":"org.apache.spark.ml.feature.VectorAssembler","timestamp":0,"sparkVersion":"4.0.0","uid":"stageFixture","paramMap":{"inputCols":["x"],"outputCol":"features"},"defaultParamMap":{}}

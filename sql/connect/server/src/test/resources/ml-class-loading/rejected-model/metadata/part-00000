@@ -1,0 +1,1 @@
+{"class":"org.apache.spark.ml.feature.RFormulaModel","timestamp":0,"sparkVersion":"4.0.0","uid":"rFormulaFixture","paramMap":{"formula":"y ~ x"},"defaultParamMap":{}}
