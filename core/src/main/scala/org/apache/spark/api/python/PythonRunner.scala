@@ -30,7 +30,7 @@ import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
-import com.fasterxml.jackson.databind.{DeserializationFeature, ObjectMapper}
+import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 
 import org.apache.spark._
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
@@ -477,7 +477,7 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
-  private lazy val workerMetricsMapper = new ObjectMapper()
+  private lazy val workerJsonMapper = new ObjectMapper()
     .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
     .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
 
@@ -489,7 +489,7 @@ private[spark] object BasePythonRunner extends Logging {
     }
     val json = PythonWorkerUtils.readUTF(length, stream)
     val report = try {
-      workerMetricsMapper.readTree(json)
+      workerJsonMapper.readTree(json)
     } catch {
       case e: JsonProcessingException =>
         throw new SparkException("Malformed Python worker report JSON", e)
@@ -505,6 +505,45 @@ private[spark] object BasePythonRunner extends Logging {
       }
       entry.getKey -> value.longValue()
     }.toMap
+  }
+
+  /**
+   * Decode the init response that follows START_OF_INIT_RESPONSE: a length-prefixed JSON object
+   * that is `{}` once the worker is initialized, or carries an `error` if initialization failed.
+   * Unknown fields are ignored.
+   */
+  private[python] def readInitResponse(stream: DataInputStream): Option[PythonWorkerInitError] = {
+    val length = stream.readInt()
+    if (length <= 0) {
+      throw new SparkException(s"Invalid Python worker init response length: $length")
+    }
+    val json = PythonWorkerUtils.readUTF(length, stream)
+    val response = try {
+      workerJsonMapper.readTree(json)
+    } catch {
+      case e: JsonProcessingException =>
+        throw new SparkException("Malformed Python worker init response JSON", e)
+    }
+    if (response == null || !response.isObject) {
+      throw new SparkException("Expected a Python worker init response JSON object")
+    }
+    Option(response.get("error")).map { error =>
+      def field(name: String, isValid: JsonNode => Boolean): JsonNode = {
+        val value = error.get(name)
+        if (value == null || !isValid(value)) {
+          throw new SparkException(s"Invalid Python worker init error field: $name")
+        }
+        value
+      }
+      if (!error.isObject) {
+        throw new SparkException("Expected a Python worker init error JSON object")
+      }
+      PythonWorkerInitError(
+        message = field("message", _.isTextual).asText(),
+        traceback = field("traceback", _.isTextual).asText(),
+        errorClass = field("errorClass", _.isTextual).asText(),
+        isPayloadError = field("isPayloadError", _.isBoolean).asBoolean())
+    }
   }
 
   /**
@@ -1105,6 +1144,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     private var nextObj: OUT = _
     private var eos = false
+    private var initialized = false
 
     // Track batches and data size for logging
     protected var batchesProcessed: Long = 0
@@ -1112,6 +1152,9 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     override def hasNext: Boolean = nextObj != null || {
       if (!eos) {
+        if (!initialized) {
+          handleInitResponse()
+        }
         nextObj = read()
         hasNext
       } else {
@@ -1135,6 +1178,30 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
      * and then returns null.
      */
     protected def read(): OUT
+
+    /**
+     * Waits for the worker's init response, which precedes all of its output, and throws the
+     * error the worker reports if it failed to initialize. No output follows an init error.
+     */
+    private def handleInitResponse(): Unit = {
+      if (writer.exception.isDefined) {
+        throw writer.exception.get
+      }
+      try {
+        stream.readInt() match {
+          case SpecialLengths.START_OF_INIT_RESPONSE =>
+            BasePythonRunner.readInitResponse(stream).foreach { error =>
+              logDebug(s"Python worker failed to initialize with ${error.errorClass} " +
+                s"(payload error: ${error.isPayloadError}) - ${taskIdentifier(context)}")
+              throw newPythonException(error.traceback)
+            }
+          case other =>
+            throw SparkException.internalError(
+              s"Expected the Python worker init response, but got $other")
+        }
+      } catch handleException
+      initialized = true
+    }
 
     protected def handleMetricsData(): Unit = {
       val workerMetrics = BasePythonRunner.readWorkerMetrics(stream)
@@ -1188,7 +1255,10 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
 
     protected def handlePythonException(): PythonException = {
       // Signals that an exception has been thrown in python
-      val traceback = PythonWorkerUtils.readUTF(stream)
+      newPythonException(PythonWorkerUtils.readUTF(stream))
+    }
+
+    private def newPythonException(traceback: String): PythonException = {
       val msg = "An exception was thrown from the Python worker"
       new PythonException(
         errorClass = "PYTHON_EXCEPTION",
@@ -1761,7 +1831,23 @@ private[spark] object SpecialLengths {
   val START_ARROW_STREAM = -6
   val END_OF_MICRO_BATCH = -7
   val START_OF_INIT_MESSAGE = -8
+  val START_OF_INIT_RESPONSE = -9
 }
+
+/**
+ * An initialization failure reported by the Python worker in its init response.
+ *
+ * @param message the exception message
+ * @param traceback the formatted exception, as reported for a failure while processing data
+ * @param errorClass the Python exception class name, e.g. "ValueError"
+ * @param isPayloadError whether the worker failed to load the UDF payload (e.g. it could not be
+ *                       unpickled or raised while being defined) rather than to set up the task
+ */
+private[spark] case class PythonWorkerInitError(
+    message: String,
+    traceback: String,
+    errorClass: String,
+    isPayloadError: Boolean)
 
 private[spark] object BarrierTaskContextMessageProtocol {
   val BARRIER_FUNCTION = 1

@@ -833,4 +833,45 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
     assert(result == expectedMetrics + ("futureMetric" -> 17L))
     checkEndMarkers(stream)
   }
+
+  private val initErrorJson =
+    "{\"error\":{\"message\":\"bad\",\"traceback\":\"Traceback ...\\nValueError: bad\"," +
+      "\"errorClass\":\"ValueError\",\"isPayloadError\":true}}"
+
+  test("SPARK-60613: read an init response and leave the following sections aligned") {
+    Seq("{}", "{\"futureField\":1}").foreach { json =>
+      val stream = framedMetricsStream(json)
+      assert(BasePythonRunner.readInitResponse(stream).isEmpty)
+      checkEndMarkers(stream)
+    }
+  }
+
+  test("SPARK-60613: decode the init error in an init response") {
+    val stream = framedMetricsStream(initErrorJson)
+    assert(BasePythonRunner.readInitResponse(stream) === Some(PythonWorkerInitError(
+      message = "bad",
+      traceback = "Traceback ...\nValueError: bad",
+      errorClass = "ValueError",
+      isPayloadError = true)))
+    checkEndMarkers(stream)
+  }
+
+  test("SPARK-60613: init response rejects malformed JSON and invalid init errors") {
+    val invalid = Seq("[]", "null", "{", "{}{}", "{\"error\":1}", "{\"error\":null}",
+      initErrorJson.replace("\"message\":\"bad\",", ""),
+      initErrorJson.replace("\"errorClass\":\"ValueError\"", "\"errorClass\":1"),
+      initErrorJson.replace("\"isPayloadError\":true", "\"isPayloadError\":\"true\""))
+    invalid.foreach { json =>
+      val stream = framedMetricsStream(json)
+      intercept[SparkException] {
+        BasePythonRunner.readInitResponse(stream)
+      }
+      checkEndMarkers(stream)
+    }
+    Seq(-1, 0).foreach { length =>
+      intercept[SparkException] {
+        BasePythonRunner.readInitResponse(framedMetricsStream("{}", Some(length)))
+      }
+    }
+  }
 }
