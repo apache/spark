@@ -27,10 +27,8 @@ import org.apache.spark.sql.execution.exchange.CTEReuseExchange
  * [[AdaptiveExecutionContext.cteAQERegistry]] by `cteId`, and attaches it onto the node
  * (`CTEReuseExchange.innerAQE`).
  *
- * Runs as a preprocessing rule next to [[PlanAdaptiveSubqueries]] so the inner AQE exists before
- * the Photon rules run: the Photon dry run reads the CTE subplan's real photonization estimate
- * (`initialPlanForExplain`) off the node instead of guessing, which is what lets it decide
- * accurately whether a broadcast hash join over a CTE reference photonizes.
+ * Runs as a preprocessing rule next to [[PlanAdaptiveSubqueries]] so the shared inner AQE exists
+ * before the later preprocessing rules and stage creation need it.
  *
  * The registry is the source of truth: it lives on the shared [[AdaptiveExecutionContext]], so the
  * SAME inner AQE instance is reused across every reference (main query and subqueries) and across

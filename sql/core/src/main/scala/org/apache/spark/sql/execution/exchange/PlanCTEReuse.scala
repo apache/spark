@@ -32,8 +32,8 @@ import org.apache.spark.sql.execution.SparkPlan
  * confirm the copies were reused without relying on a tree-node tag -- the origin survives node
  * reconstructions (e.g. photonization rebuilding the shuffle) that would drop a tag.
  *
- * After unwrapping, all preparation rules (EnsureRequirements, PhotonStageCompiler, columnar
- * transitions, codegen, etc.) process each CTE subplan copy normally, in its own consumer context.
+ * After unwrapping, all preparation rules (EnsureRequirements, columnar transitions, codegen,
+ * etc.) process each CTE subplan copy normally, in its own consumer context.
  * The `LOCAL_SHUFFLE_FOR_CTE` shuffle serves as a protected boundary: `EnsureRequirements` /
  * `EnsureRequirementsDP` treat it as immutable (see `ShuffleExchangeLike.isCreatedForSubplanReuse`)
  * and add consumer-dependent operators above it, so the subtree below stays canonically equal

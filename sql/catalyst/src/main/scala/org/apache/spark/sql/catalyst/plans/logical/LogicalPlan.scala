@@ -580,9 +580,9 @@ object LogicalPlanIntegrity {
   }
 
   /**
-   * Validates that CTEReuseRelation nodes are correctly formed.
-   * join must also reside within the same shared subplan. A subplan whose runtime
-   * filter references an external join would fail when materialized independently.
+   * Validates that [[CTEReuseRelation]] nodes sharing a `cteId` have semantically equivalent shared
+   * subplans (the same canonicalized form), descending into nested `sharedSubplan`s so nested
+   * same-id reuse relations are checked too.
    *
    * Returns an error message if the check fails, or None if it succeeds.
    */

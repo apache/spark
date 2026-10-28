@@ -25,9 +25,8 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 
 /**
- * End-to-end tests for CTE reuse through AQE: verifies that
- * CTEReuseQueryStageExec instances share the same inner AQE,
- * metrics are recorded correctly, and AQE re-optimization
+ * End-to-end tests for CTE reuse through AQE: verifies that CTEReuseQueryStageExec instances
+ * reusing one CTE share the same inner AdaptiveSparkPlanExec, and that AQE re-optimization
  * interacts properly with CTE reuse stages.
  */
 class CTEReuseWithAQESuite
@@ -45,16 +44,10 @@ class CTEReuseWithAQESuite
   }
 
   /**
-   * Verify that all [[CTEReuseQueryStageExec]] with the same cteId
-   * share the same inner AQE by identity. This is the core
-   * single-materialization invariant: N refs create N stage wrappers
-   * but all point to the same [[AdaptiveSparkPlanExec]], so the CTE
-   * shuffle is materialized exactly once.
-   */
-  /**
-   * Verify single-materialization: each distinct CTE has exactly one
-   * inner AQE shared by all its refs. `expectedDistinctCTEs` is the
-   * number of CTE definitions (default 1).
+   * Verify the single-materialization invariant: all [[CTEReuseQueryStageExec]] stages reusing one
+   * CTE point to the same inner AdaptiveSparkPlanExec by identity, so a CTE referenced N times
+   * creates N stage wrappers but is materialized exactly once. `expectedDistinctCTEs` is the number
+   * of distinct CTE definitions (default 1).
    */
   private def assertInnerAQEShared(
       df: DataFrame,
@@ -101,10 +94,10 @@ class CTEReuseWithAQESuite
   }
 
   // -----------------------------------------------------------------
-  // Metrics tests
+  // Inner-AQE sharing tests
   // -----------------------------------------------------------------
 
-  test("CTE reuse metrics: 2 reuse for 2 refs") {
+  test("CTE reuse: 2 refs share one inner AQE") {
     withCTEReuseEnabled {
       withTable("metric_src") {
         sql("CREATE TABLE metric_src (id INT) USING parquet")
@@ -126,7 +119,7 @@ class CTEReuseWithAQESuite
     }
   }
 
-  test("CTE reuse metrics when subplan produces empty result") {
+  test("CTE reuse when subplan produces empty result") {
     withCTEReuseEnabled {
       withTable("metric_empty_src") {
         sql("CREATE TABLE metric_empty_src (id INT) USING parquet")

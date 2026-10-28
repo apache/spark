@@ -1326,9 +1326,10 @@ object AdaptiveSparkPlanExec {
   private[adaptive] val executionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("QueryStageCreator", 16))
 
-  // A separate, larger pool for CTE-reuse inner AQEs. Each inner AQE's `materialize()` blocks a
-  // pool thread waiting on its child stages; sharing the 16-thread `QueryStageCreator` pool would
-  // let deeply nested CTEs exhaust it and deadlock, so CTE inner AQEs get their own pool.
+  // A separate pool for CTE-reuse inner AQEs. Each inner AQE's `materialize()` blocks a pool
+  // thread waiting on its child stages; sharing the 16-thread `QueryStageCreator` pool would let
+  // deeply nested CTEs exhaust it and deadlock, so CTE inner AQEs get their own pool (sized by
+  // CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD).
   private[adaptive] val cteExecutionContext = ExecutionContext.fromExecutorService(
     ThreadUtils.newDaemonCachedThreadPool("CTEReuseInnerAQE",
       SQLConf.get.getConf(StaticSQLConf.CTE_MATERIALIZATION_MAX_THREAD_THRESHOLD)))

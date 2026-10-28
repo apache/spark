@@ -41,9 +41,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern._
  * happens in the [[ReplaceRepartitionWithCTEReuse]] rule.
  *
  * @param cteId Unique identifier for the subplan or CTE to be reused.
- * @param partitioning Pre-determined partitioning for the shared exchange. Either a
- *                     HashPartitioning derived from the common distribution requirements of
- *                     all consumers, or LocalPartition as a safe fallback.
+ * @param partitioning Pre-determined partitioning for the shared exchange: a HashPartitioning
+ *                     when the CTE is pinned via forcePartitioning, otherwise a round-robin
+ *                     partitioning (RoundRobinPartitioning) as the fallback.
  * @param sharedSubplan The logical plan of the CTE definition. NOT a child node.
  */
 case class CTEReuseRelation(

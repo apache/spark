@@ -46,10 +46,9 @@ import org.apache.spark.sql.vectorized.ColumnarBatch
  *                 inner AQE can re-optimize correctly.
  * @param innerAQE The shared inner [[AdaptiveSparkPlanExec]] for this `cteId`, attached by
  *                 `PlanCTEReuse` (AQE on only) from `AdaptiveExecutionContext.cteAQERegistry`.
- *                 It is auxiliary metadata carried so the Photon compiler can read the CTE
- *                 subplan's photonization estimate (`initialPlanForExplain`) off this node; the
- *                 registry, shared across the main query and its subqueries, remains the source
- *                 of truth. `None` before `PlanCTEReuse` runs and on the AQE-off path.
+ *                 It is auxiliary metadata carried on the node; the registry, shared across the
+ *                 main query and its subqueries, remains the source of truth. `None` before
+ *                 `PlanCTEReuse` runs and on the AQE-off path.
  */
 case class CTEReuseExchange(
     cteId: Long,
