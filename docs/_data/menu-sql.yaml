@@ -82,8 +82,8 @@
       url: sql-native-data-sources.html#overview
     - text: How It Works
       url: sql-native-data-sources.html#how-it-works
-    - text: Packages
-      url: sql-native-data-sources.html#packages
+    - text: Finding Native Data Sources
+      url: sql-native-data-sources.html#finding-native-data-sources
     - text: Example in Rust
       url: sql-native-data-sources.html#example-in-rust
     - text: Example in C++
