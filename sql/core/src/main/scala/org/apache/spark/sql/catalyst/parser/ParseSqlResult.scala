@@ -102,17 +102,20 @@ object ParseSqlAnalyzeContext {
  * original batch and its character `length`, excluding surrounding
  * whitespace and the terminating semicolon. Characters are Unicode code
  * points (Spark SQL `length()` / UTF-8 strings): a supplementary-plane
- * emoji is one character. ANTLR offsets are UTF-16; they are converted
- * here. On success it also includes
+ * emoji is one character. Java `String` offsets are UTF-16 (emoji = 2);
+ * ANTLR `CodePointCharStream` offsets are already code points (emoji = 1).
+ * The splitter maps ANTLR indexes to UTF-16 for `substring`; JSON converts
+ * those spans back to code points. On success it also includes
  * `parse_success`, the statement
  * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
  * fields (`target_table_references`, `source_table_references`,
  * `function_references`, `select_list`, `parameter_markers`) when empty. On
  * parse failure the statement object contains `parse_success: false` with
  * source location and a nested STANDARD-format error object, and parsing
- * continues with later statements. Nested error locations are relative to the
- * individual statement, while `start` is relative to the original batch. An
- * empty or closed-comment-only batch produces an empty array. Only
+ * continues with later statements. Nested `queryContext` indexes are 1-based
+ * Unicode code points relative to the individual statement, while `start` is
+ * relative to the original batch. An empty or closed-comment-only batch
+ * produces an empty array. Only
  * [[ParseException]] / [[SqlScriptingException]] are converted to JSON;
  * unexpected / internal failures propagate so the function fails.
  */
@@ -465,7 +468,7 @@ object ParseSqlResult {
     analyzeError.foreach { e =>
       val errorObj = parseJson(
         SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
-      fields += "error" -> errorObj
+      fields += "error" -> rewriteErrorCharIndexes(errorObj, segment.statement)
     }
     JObject(fields.toList)
   }
@@ -480,6 +483,92 @@ object ParseSqlResult {
   private def charLength(segment: PositionedSqlStatement): Int = {
     val text = segment.statement
     if (text.isEmpty) 0 else text.codePointCount(0, text.length)
+  }
+
+  /**
+   * `queryContext` indexes in STANDARD errors are not one unit: some Origins
+   * store Java `String` (UTF-16) offsets, some store ANTLR code-point offsets.
+   * Emit Unicode code points so a supplementary character is length 1, matching
+   * statement `start`/`length`. Leave values that already slice the fragment
+   * as code points.
+   */
+  private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
+    JObject(errorObj.obj.map {
+      case ("queryContext", JArray(contexts)) =>
+        "queryContext" -> JArray(contexts.map {
+          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement)
+          case other => other
+        }.toList)
+      case other => other
+    })
+  }
+
+  private def rewriteQueryContextIndexes(ctx: JObject, statement: String): JObject = {
+    val start = ctx.obj.collectFirst { case ("startIndex", JInt(n)) => n.toInt }
+    val stop = ctx.obj.collectFirst { case ("stopIndex", JInt(n)) => n.toInt }
+    val fragment = ctx.obj.collectFirst { case ("fragment", JString(s)) => s }
+    (start, stop, fragment) match {
+      case (Some(from), Some(to), Some(frag))
+          if shouldConvertUtf16Indexes(statement, from, to, frag) =>
+        JObject(ctx.obj.map {
+          case ("startIndex", _) =>
+            "startIndex" -> JInt(utf16OneBasedStartToChar(statement, from))
+          case ("stopIndex", _) =>
+            "stopIndex" -> JInt(utf16OneBasedStopToChar(statement, to))
+          case other => other
+        })
+      case _ => ctx
+    }
+  }
+
+  private def shouldConvertUtf16Indexes(
+      text: String,
+      start: Int,
+      stop: Int,
+      fragment: String): Boolean = {
+    utf16Slice(text, start, stop).contains(fragment) &&
+      !charSlice(text, start, stop).contains(fragment)
+  }
+
+  private def utf16Slice(text: String, start: Int, stop: Int): Option[String] = {
+    val begin = math.max(0, start - 1)
+    val end = math.min(text.length, math.max(begin, stop))
+    if (begin <= end && end <= text.length) Some(text.substring(begin, end)) else None
+  }
+
+  private def charSlice(text: String, start: Int, stop: Int): Option[String] = {
+    try {
+      val len = stop - start + 1
+      if (start < 1 || len < 0) {
+        None
+      } else {
+        val begin = text.offsetByCodePoints(0, start - 1)
+        val end = text.offsetByCodePoints(begin, len)
+        Some(text.substring(begin, end))
+      }
+    } catch {
+      case _: IndexOutOfBoundsException => None
+    }
+  }
+
+  private def utf16OneBasedStartToChar(text: String, start: Int): Int = {
+    var utf16 = math.max(0, math.min(start - 1, text.length))
+    if (utf16 > 0 && utf16 < text.length &&
+        Character.isLowSurrogate(text.charAt(utf16)) &&
+        Character.isHighSurrogate(text.charAt(utf16 - 1))) {
+      utf16 -= 1
+    }
+    text.codePointCount(0, utf16) + 1
+  }
+
+  private def utf16OneBasedStopToChar(text: String, stop: Int): Int = {
+    var end = math.max(0, math.min(stop, text.length))
+    if (end > 0 && end < text.length &&
+        Character.isHighSurrogate(text.charAt(end - 1)) &&
+        Character.isLowSurrogate(text.charAt(end))) {
+      end += 1
+    }
+    if (end == 0) 1 else text.codePointCount(0, end)
   }
 
   private def errorJson(
@@ -503,7 +592,9 @@ object ParseSqlResult {
       "start" -> JInt(charStart(batch, segment)),
       "length" -> JInt(charLength(segment)),
       "parse_success" -> JBool(false),
-      "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
+      "error" -> rewriteErrorCharIndexes(
+        JObject(errorObj.obj ++ contextFields ++ locationFields),
+        segment.statement)
     )
   }
 

@@ -253,4 +253,22 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(j \ "parse_success" === JBool(false))
     assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
   }
+
+  test("error queryContext indexes are Unicode code points") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji' FRUM t"
+    val j = obj(sql)
+    assert(j \ "parse_success" === JBool(false))
+    val ctx = (j \ "error" \ "queryContext")(0)
+    val JString(fragment) = ctx \ "fragment"
+    val JInt(start) = ctx \ "startIndex"
+    val JInt(stop) = ctx \ "stopIndex"
+    val JInt(position) = j \ "error" \ "position"
+    assert(fragment === sql)
+    assert(start.toInt === 1)
+    assert(stop.toInt === sql.codePointCount(0, sql.length))
+    assert(sliceByCodePoints(sql, start.toInt, stop.toInt - start.toInt + 1) === fragment)
+    // ANTLR column is already a 0-based code-point offset on the line.
+    assert(position.toInt === sql.codePointCount(0, sql.lastIndexOf('t')))
+  }
 }

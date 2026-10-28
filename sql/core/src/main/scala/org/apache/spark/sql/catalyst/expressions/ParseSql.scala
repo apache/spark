@@ -83,8 +83,9 @@ import org.apache.spark.unsafe.types.UTF8String
     change while spark.sql.function.parseSql.enabled remains off by default. On syntax /
     parse error returns JSON for that statement with `parse_success` false, source
     location, and a nested STANDARD error object instead of throwing or stopping later
-    statements. Nested error locations are statement-relative. Unexpected internal
-    failures still fail the outer query. An empty or closed-comment-only batch returns
+    statements. Nested error locations are statement-relative Unicode code
+    points. Unexpected internal failures still fail the outer query. An empty
+    or closed-comment-only batch returns
     `[]`. NULL `sqlStmt` or `mode` returns NULL.""",
   arguments = """
     Arguments:
@@ -165,8 +166,9 @@ import org.apache.spark.unsafe.types.UTF8String
     functions as `system.session`, builtins as `system.builtin`; CTE aliases in
     scope are not listed as tables), `select_list` (`{name}` parts; ANALYZE adds
     `type` as a DESCRIBE TABLE EXTENDED AS JSON type object), `parameter_markers` (`named`
-    and/or `unnamed_count`), and `error` (STANDARD format; nested locations are
-    statement-relative). Later statements are still processed after a per-statement
+    and/or `unnamed_count`), and `error` (STANDARD format; nested `queryContext`
+    `startIndex`/`stopIndex` are 1-based Unicode code points, statement-relative).
+    Later statements are still processed after a per-statement
     parse or analysis failure.
   """,
   group = "misc_funcs",
