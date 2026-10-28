@@ -112,3 +112,14 @@ FROM nt1 JOIN nt2 USING (k) JOIN nt2 x ON nt2.k = x.k;
 -- The same join with a correlated scalar subquery in the condition, which a Join cannot host
 FROM nt1 JOIN nt2 USING (k) JOIN nt2 x
   ON nt2.k = x.k AND x.v2 = (SELECT max(y.v2) FROM nt2 y WHERE y.k = x.k);
+
+-- A top-level LEFT SEMI or LEFT ANTI join outputs only its left side, so a hidden key of its right
+-- side in the condition does not change its output
+FROM nt2 x LEFT SEMI JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k;
+
+FROM nt2 x LEFT ANTI JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k;
+
+-- A hidden key of the left side of a LEFT SEMI join, and of the right side of a LEFT OUTER join
+FROM nt1 JOIN nt2 USING (k) LEFT SEMI JOIN nt2 x ON nt2.k = x.k;
+
+FROM nt2 x LEFT JOIN (nt1 JOIN nt2 USING (k)) ON x.k = nt2.k;
