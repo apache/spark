@@ -91,8 +91,9 @@ class MLClassLoadingSuite extends MLHelper {
   }
 
   test("load a fitted RFormulaModel with internal nested stages") {
-    val dataset = spark.createDataFrame(
-      Seq((1.0, 1.0, "a"), (0.0, 2.0, "b"), (1.0, 0.0, "a"))).toDF("y", "x", "s")
+    val dataset = spark
+      .createDataFrame(Seq((1.0, 1.0, "a"), (0.0, 2.0, "b"), (1.0, 0.0, "a")))
+      .toDF("y", "x", "s")
     val model = new RFormula()
       .setFormula("y ~ x + s")
       .setStringIndexerOrderType("alphabetDesc")
@@ -105,7 +106,8 @@ class MLClassLoadingSuite extends MLHelper {
       val loadedModel = readModel(path)
       assert(loadedModel.uid == model.uid)
       assert(loadedModel.getFormula == model.getFormula)
-      assert(loadedModel.transform(dataset).select("features", "label").collect().toSeq == expected)
+      assert(
+        loadedModel.transform(dataset).select("features", "label").collect().toSeq == expected)
     }
   }
 
