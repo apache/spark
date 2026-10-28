@@ -716,7 +716,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             for name, build in (
                 ("legacy", lambda: data.select(udf(scalar, "long", useArrow=True)("id"))),
                 ("scalar pandas", lambda: data.select(pandas_udf(scalar, "long")("id"))),
-                ("map pandas", lambda: data.mapInPandas(mapping, "id long")),
+                ("map arrow", lambda: data.mapInArrow(mapping, "id long")),
                 ("grouped pandas", lambda: data.groupBy().applyInPandas(scalar, "id long")),
                 (
                     "cogrouped pandas",

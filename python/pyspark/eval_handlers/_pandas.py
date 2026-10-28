@@ -29,6 +29,7 @@ dependency surfaces a clear error when the handler runs.
 from __future__ import annotations
 
 import inspect
+import time
 from collections.abc import Iterator
 from typing import TYPE_CHECKING, Any
 
@@ -59,6 +60,7 @@ from pyspark.sql.pandas.utils import (
 )
 from pyspark.sql.types import BinaryType, StringType, StructField, StructType
 from pyspark.util import PythonEvalType, fail_on_stopiteration
+from pyspark.worker_metrics import WorkerMetrics
 
 if TYPE_CHECKING:
     import pyarrow as pa
@@ -243,49 +245,112 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
         )
 
     def run(self, split_index: int, data: "Iterator[pa.RecordBatch]") -> "Iterator[pa.RecordBatch]":
+        metrics = WorkerMetrics()
+        phase_timers = self._create_phase_timers()
+        if phase_timers is not None:
+            # If the UDF never pulls from its lazy input iterator, the serializer's load_stream()
+            # may never start, leaving the read timer unregistered. Register a zero for that case.
+            metrics.measure("pythonDataReadTime")
+
+            # Sequential input intervals include reads. Subtract them at report time because
+            # the serializer may publish its read total after the handler finishes.
+            metrics.subtract_duration_at_report(
+                total_metric="pythonInputPreparationTime", nested_metric="pythonDataReadTime"
+            )
+
+        clock = time.perf_counter_ns
+        input_duration_ns = 0
+        udf_duration_ns = 0
+        output_duration_ns = 0
+        num_timed_batches = 0
+
         def dataframe_iter() -> "Iterator[Any]":
+            nonlocal input_duration_ns, num_timed_batches
             # Input batches have a single struct column (see MapInBatchEvaluatorFactory);
             # convert lazily so peakmem stays bounded by one batch.
-            for batch in data:
-                yield ArrowToPandasConversion.to_pandas(
-                    batch,
+            while True:
+                if phase_timers is not None:
+                    input_start_ns = clock()
+                try:
+                    batch = next(data, None)
+                    if batch is None:
+                        return
+                    if phase_timers is not None:
+                        num_timed_batches += 1
+                    df = ArrowToPandasConversion.to_pandas(
+                        batch,
+                        timezone=self._runner_conf.timezone,
+                        prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
+                        df_for_struct=True,
+                    )[0]
+                finally:
+                    if phase_timers is not None:
+                        input_duration_ns += clock() - input_start_ns
+                yield df
+                del df
+
+        if phase_timers is not None:
+            udf_start_ns = clock()
+        try:
+            result = self._func(dataframe_iter())
+            # The declared signature is Iterator[...], so a strict iterator is required by
+            # default. With the legacy flag, accept any object Python can iterate over -- via
+            # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
+            # by adapting it into an iterator before the shared element-type verification.
+            if self._runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
+                result, Iterator
+            ):
+                try:
+                    result = iter(result)
+                except TypeError:
+                    # Not iterable at all; leave it so verify_return_type below raises the
+                    # standard UDF_RETURN_TYPE error.
+                    pass
+            result = verify_return_type(result, self._expected_iter_type)
+            if phase_timers is not None:
+                udf_duration_ns += clock() - udf_start_ns
+
+            while True:
+                if phase_timers is not None:
+                    udf_start_ns = clock()
+                df = next(result, None)
+                if phase_timers is not None:
+                    udf_duration_ns += clock() - udf_start_ns
+                if df is None:
+                    break
+
+                if phase_timers is not None:
+                    output_start_ns = clock()
+                verify_pandas_result(
+                    df,
+                    self._udf_desc.return_type,
+                    assign_cols_by_name=True,
+                    truncate_return_schema=True,
+                )
+                batch = PandasToArrowConversion.from_pandas(
+                    [df],
+                    self._return_schema,
                     timezone=self._runner_conf.timezone,
-                    prefer_int_ext_dtype=self._runner_conf.prefer_int_ext_dtype,
-                    df_for_struct=True,
-                )[0]
-
-        result = self._func(dataframe_iter())
-        # The declared signature is Iterator[...], so a strict iterator is required by
-        # default. With the legacy flag, accept any object Python can iterate over -- via
-        # iter(...), which honors both __iter__ and the sequence protocol (__getitem__) --
-        # by adapting it into an iterator before the shared element-type verification.
-        if self._runner_conf.map_in_batch_legacy_accept_any_iterable and not isinstance(
-            result, Iterator
-        ):
-            try:
-                result = iter(result)
-            except TypeError:
-                # Not iterable at all; leave it so verify_return_type below raises the
-                # standard UDF_RETURN_TYPE error.
-                pass
-
-        for df in verify_return_type(result, self._expected_iter_type):
-            verify_pandas_result(
-                df,
-                self._udf_desc.return_type,
-                assign_cols_by_name=True,
-                truncate_return_schema=True,
-            )
-            yield PandasToArrowConversion.from_pandas(
-                [df],
-                self._return_schema,
-                timezone=self._runner_conf.timezone,
-                safecheck=self._runner_conf.safecheck,
-                arrow_cast=True,
-                prefers_large_types=self._runner_conf.use_large_var_types,
-                assign_cols_by_name=self._runner_conf.assign_cols_by_name,
-                int_to_decimal_coercion_enabled=self._runner_conf.int_to_decimal_coercion_enabled,
-            )
+                    safecheck=self._runner_conf.safecheck,
+                    arrow_cast=True,
+                    prefers_large_types=self._runner_conf.use_large_var_types,
+                    assign_cols_by_name=self._runner_conf.assign_cols_by_name,
+                    int_to_decimal_coercion_enabled=(
+                        self._runner_conf.int_to_decimal_coercion_enabled
+                    ),
+                )
+                if phase_timers is not None:
+                    output_duration_ns += clock() - output_start_ns
+                yield batch
+                del batch
+        finally:
+            if phase_timers is not None:
+                metrics.set("pythonNumTimedBatches", num_timed_batches)
+                input_timer, udf_timer, output_timer = phase_timers
+                input_timer.add_duration_ns(input_duration_ns)
+                # Input requests run inside UDF execution; subtract their full duration.
+                udf_timer.add_duration_ns(udf_duration_ns - input_duration_ns)
+                output_timer.add_duration_ns(output_duration_ns)
 
 
 class PandasCoGroupedMapUDFHandler(CoGroupedEvalTypeHandler["pa.RecordBatch"]):
