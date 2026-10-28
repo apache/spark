@@ -27,6 +27,8 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
 import org.apache.spark.sql.catalyst.util.CharsetProvider
 import org.apache.spark.sql.catalyst.util.CollationFactory
 import org.apache.spark.sql.catalyst.util.ToNumberParser
@@ -1651,7 +1653,6 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       val second = expression.freshCopyIfContainsStatefulExpression()
       assert(first ne expression)
       assert(second ne first)
-      assert(first.foldable == expression.foldable)
       checkEvaluation(first, expected)
       checkEvaluation(second, expected)
       val contexts = Seq(first, second).map { copy =>
@@ -1663,6 +1664,30 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       assert(contexts.head.head ne contexts.last.head)
       checkEvaluation(expression.withNewChildren(Seq(
         Literal.create(null, expression.children.head.dataType), Literal("99"))), null)
+    }
+
+    test(s"number format expressions preserve constant folding: ${expression.prettyName}") {
+      val copies = Seq(expression,
+        expression.freshCopyIfContainsStatefulExpression(),
+        expression.freshCopyIfContainsStatefulExpression())
+      copies.foreach { copy =>
+        assert(copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), OneRowRelation())
+        val optimized = ConstantFolding(project).asInstanceOf[Project]
+        assert(optimized.projectList.head.asInstanceOf[Alias].child ==
+          Literal.create(expected, expression.dataType))
+      }
+
+      val input = AttributeReference("input", expression.children.head.dataType)()
+      val nonFoldable = expression.withNewChildren(Seq(input, Literal("99")))
+      val nonFoldableCopies = Seq(nonFoldable,
+        nonFoldable.freshCopyIfContainsStatefulExpression(),
+        nonFoldable.freshCopyIfContainsStatefulExpression())
+      nonFoldableCopies.foreach { copy =>
+        assert(!copy.foldable)
+        val project = Project(Seq(Alias(copy, "result")()), LocalRelation(input))
+        assert(ConstantFolding(project) === project)
+      }
     }
   }
 
