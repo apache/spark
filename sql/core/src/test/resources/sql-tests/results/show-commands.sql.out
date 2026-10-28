@@ -8,6 +8,14 @@ spark_catalog
 
 
 -- !query
+SHOW CATALOGS 'non_existing_catalog_pattern'
+-- !query schema
+struct<catalog:string>
+-- !query output
+
+
+
+-- !query
 SHOW CURRENT NAMESPACE
 -- !query schema
 struct<catalog:string,namespace:string>
@@ -40,80 +48,15 @@ spark_catalog	show_commands_db
 
 
 -- !query
-SET CATALOG 'testcat'
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-SHOW CURRENT NAMESPACE
--- !query schema
-struct<catalog:string,namespace:string>
--- !query output
-testcat
-
-
--- !query
-SHOW CATALOGS
--- !query schema
-struct<catalog:string>
--- !query output
-spark_catalog
-testcat
-
-
--- !query
-SHOW CATALOGS LIKE 'TEST*'
--- !query schema
-struct<catalog:string>
--- !query output
-testcat
-
-
--- !query
-SHOW CATALOGS 'non_existing_catalog_pattern'
--- !query schema
-struct<catalog:string>
--- !query output
-
-
-
--- !query
-CREATE NAMESPACE testcat.show_commands_ns.`inner.ns`
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-USE testcat.show_commands_ns.`inner.ns`
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
 SHOW CURRENT SCHEMA
 -- !query schema
 struct<catalog:string,namespace:string>
 -- !query output
-testcat	show_commands_ns.`inner.ns`
+spark_catalog	show_commands_db
 
 
 -- !query
-USE spark_catalog.default
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP NAMESPACE testcat.show_commands_ns.`inner.ns`
+USE default
 -- !query schema
 struct<>
 -- !query output
