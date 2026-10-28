@@ -493,10 +493,13 @@ jobs:
                     }
                     throw error
                   }
+                  // Pass the output on: a PATCH without it clears the text, so the run params
+                  // above would be lost for the next pass.
                   const body = {
                     owner: context.repo.owner,
                     repo: context.repo.repo,
                     check_run_id: cr.id,
+                    output: cr.output,
                     details_url: run.html_url
                   }
                   if (run.status == 'completed') {

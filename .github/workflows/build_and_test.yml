@@ -111,10 +111,10 @@ jobs:
         # A post-merge build in a fork tests the changes of the pushed commit, like the build of a
         # push to apache/spark. There, github.event.before is the previous commit pushed to the
         # fork branch, not the parent of this one.
-        if [[ "${{ github.repository }}" != 'apache/spark' && "${{ github.ref_name }}" == post-merge-* ]]; then
-          echo "prev_sha=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
+        if [[ "${{ github.repository }}" != 'apache/spark' && "$GITHUB_REF_NAME" == post-merge-* ]]; then
+          echo "prev_sha=$(git rev-parse HEAD~1)" >> "$GITHUB_OUTPUT"
         else
-          echo "prev_sha=${{ github.event.before }}" >> $GITHUB_OUTPUT
+          echo "prev_sha=${{ github.event.before }}" >> "$GITHUB_OUTPUT"
         fi
     - name: Check all modules
       id: set-outputs
@@ -129,7 +129,7 @@ jobs:
           pyspark_periodic=`./dev/is-changed.py -m pyspark-periodic`
           pyspark_connect_old_client="$pyspark"
           # A post-merge build in a fork runs the same jobs as on apache/spark.
-          if [[ "${{ github.repository }}" != 'apache/spark' && "${{ github.ref_name }}" != post-merge-* ]]; then
+          if [[ "${{ github.repository }}" != 'apache/spark' && "$GITHUB_REF_NAME" != post-merge-* ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
             # The OIDC E2E job covers connector/credential-aws end to end on K8s, so it
