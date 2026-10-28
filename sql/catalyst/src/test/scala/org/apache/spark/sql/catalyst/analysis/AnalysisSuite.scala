@@ -293,9 +293,14 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       .asInstanceOf[Sort].order.head.child
   }
 
-  test("SPARK-38951: ORDER BY function snapshots retain a linear expression graph") {
-    import ResolveReferencesInSort.ORIGINAL_FUNCTION
+  private def savedSortFunction(expression: Expression): UnresolvedFunction = {
+    expression.asInstanceOf[UnresolvedFunction].sortResolutionState match {
+      case UnresolvedFunction.WithOriginalFunction(original) => original
+      case other => fail(s"Expected a saved ORDER BY invocation, found $other")
+    }
+  }
 
+  test("SPARK-38951: ORDER BY function snapshots retain a linear expression graph") {
     Seq(8, 32).foreach { depth =>
       val branches = (0 until 64).map { i =>
         EqualTo(UnresolvedAttribute("score"), Literal(i)) -> UnresolvedAttribute("score")
@@ -306,11 +311,11 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       }
       val resolved = resolveGroupedSortExpression(expression)
       val snapshots = resolved.collect {
-        case f: UnresolvedFunction => f.getTagValue(ORIGINAL_FUNCTION).get
+        case f: UnresolvedFunction => savedSortFunction(f)
       }
       assert(snapshots.size == depth)
 
-      // Count the complete retained graph by identity, including metadata references. Nested
+      // Count the complete retained graph by identity, including saved invocations. Nested
       // invocations must share the corresponding saved subtrees instead of retaining copies of
       // the wide CASE expression at every depth.
       val retained = Collections.newSetFromMap(
@@ -318,7 +323,13 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       def visit(e: Expression): Unit = {
         if (retained.add(e)) {
           e.children.foreach(visit)
-          e.getTagValue(ORIGINAL_FUNCTION).foreach(visit)
+          e match {
+            case f: UnresolvedFunction => f.sortResolutionState match {
+              case UnresolvedFunction.WithOriginalFunction(original) => visit(original)
+              case _ =>
+            }
+            case _ =>
+          }
         }
       }
       snapshots.foreach(visit)
@@ -327,7 +338,7 @@ class AnalysisSuite extends AnalysisTest with Matchers {
   }
 
   test("SPARK-38951: ORDER BY function snapshots are private to each resolution") {
-    import ResolveReferencesInSort.{AGGREGATE_INPUT, ORIGINAL_FUNCTION}
+    import UnresolvedFunction.{AggregateInput, Ordinary}
 
     def function(name: String): UnresolvedFunction = {
       UnresolvedFunction(name, Seq(UnresolvedAttribute("score")), isDistinct = false)
@@ -341,58 +352,133 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     val first = resolveGroupedSortExpression(expression).asInstanceOf[UnresolvedFunction]
     val second = resolveGroupedSortExpression(expression).asInstanceOf[UnresolvedFunction]
 
-    // Lazy DataFrame branches can share the caller's expression. Publishing analyzer metadata
+    // Lazy DataFrame branches can share the caller's expression. Recording resolution state
     // must not mutate those shared expressions or expose another branch's mutable live nodes.
     assert(expression.collect { case f: UnresolvedFunction => f }.forall { f =>
-      !f.containsTag(ORIGINAL_FUNCTION) && !f.containsTag(AGGREGATE_INPUT)
+      f.sortResolutionState == Ordinary
     })
     val firstFunctions = first.collect { case f: UnresolvedFunction => f }
     val secondFunctions = second.collect { case f: UnresolvedFunction => f }
     assert(firstFunctions.size == 4)
     firstFunctions.zip(secondFunctions).foreach { case (left, right) =>
       assert(!(left eq right))
-      val leftSaved = left.getTagValue(ORIGINAL_FUNCTION).get
-      val rightSaved = right.getTagValue(ORIGINAL_FUNCTION).get
+      val leftSaved = savedSortFunction(left)
+      val rightSaved = savedSortFunction(right)
       assert(leftSaved == rightSaved)
       assert(!(leftSaved eq rightSaved))
-      // ResolveFunctions clones snapshots before adding its classification metadata. Changing a
+      // ResolveFunctions clones snapshots before changing their resolution state. Changing a
       // consumed copy must leave both the saved enclosing invocation and the other branch intact.
-      val consumed = leftSaved.clone().asInstanceOf[UnresolvedFunction]
-      consumed.foreach {
-        case f: UnresolvedFunction => f.setTagValue(AGGREGATE_INPUT, true)
-        case _ =>
+      val consumed = leftSaved.clone().transformDown {
+        case f: UnresolvedFunction => f.copy(sortResolutionState = AggregateInput)
       }
-      assert(!leftSaved.exists(_.containsTag(AGGREGATE_INPUT)))
-      assert(!rightSaved.exists(_.containsTag(AGGREGATE_INPUT)))
+      assert(consumed.collect { case f: UnresolvedFunction => f }.forall { f =>
+        f.sortResolutionState == AggregateInput
+      })
+      Seq(leftSaved, rightSaved).foreach { saved =>
+        assert(saved.collect { case f: UnresolvedFunction => f }.forall { f =>
+          f.sortResolutionState == Ordinary
+        })
+      }
     }
-    val saved = first.getTagValue(ORIGINAL_FUNCTION).get
+    val saved = savedSortFunction(first)
     assert(saved == expression)
-    assert(first.arguments.head.getTagValue(ORIGINAL_FUNCTION).get eq saved.arguments.head)
-    assert(first.filter.get.getTagValue(ORIGINAL_FUNCTION).get eq saved.filter.get)
-    assert(first.orderingWithinGroup.head.child.getTagValue(ORIGINAL_FUNCTION).get eq
+    assert(savedSortFunction(first.arguments.head) eq saved.arguments.head)
+    assert(savedSortFunction(first.filter.get) eq saved.filter.get)
+    assert(savedSortFunction(first.orderingWithinGroup.head.child) eq
       saved.orderingWithinGroup.head.child)
   }
 
   test("SPARK-38951: marked ORDER BY functions still preserve newly introduced children") {
-    import ResolveReferencesInSort.{AGGREGATE_INPUT, ORIGINAL_FUNCTION}
+    import UnresolvedFunction.{AggregateInput, Ordinary, WithOriginalFunction}
 
     Seq(false, true).foreach { aggregateInput =>
       val child = UnresolvedFunction(
         "abs", Seq(Cast(UnresolvedAttribute("score"), LongType)), isDistinct = false)
-      val expression = UnresolvedFunction("abs", Seq(child), isDistinct = false)
       val oldSnapshot = UnresolvedFunction("abs", Seq(Literal(1)), isDistinct = false)
-      if (aggregateInput) {
-        expression.setTagValue(AGGREGATE_INPUT, true)
-      } else {
-        expression.setTagValue(ORIGINAL_FUNCTION, oldSnapshot)
-      }
+      val state = if (aggregateInput) AggregateInput else WithOriginalFunction(oldSnapshot)
+      val expression = UnresolvedFunction("abs", Seq(child), isDistinct = false)
+        .copy(sortResolutionState = state)
       val resolved = resolveGroupedSortExpression(expression).asInstanceOf[UnresolvedFunction]
-      val savedChild = resolved.arguments.head.getTagValue(ORIGINAL_FUNCTION).get
+      val savedChild = savedSortFunction(resolved.arguments.head)
       assert(savedChild == child)
       assert(savedChild.arguments.head.isInstanceOf[Cast])
-      assert(!child.containsTag(ORIGINAL_FUNCTION))
-      assert(!oldSnapshot.containsTag(AGGREGATE_INPUT))
+      assert(child.sortResolutionState == Ordinary)
+      assert(oldSnapshot.sortResolutionState == Ordinary)
     }
+  }
+
+  test("SPARK-38951: ORDER BY lexical invocations survive function child copying") {
+    val input = LocalRelation($"key".int, $"score".int)
+    val key = input.output.head
+    val score = input.output(1)
+    val selected = min(score).as("score")
+    val aggregate = input.groupBy(key)(selected)
+    val function = UnresolvedFunction("max", Seq($"score"), isDistinct = false)
+    val sort = Sort(Seq(function.asc, $"score".asc), global = true, aggregate)
+    val preserved = new ResolveReferencesInSort(getAnalyzer.catalogManager).apply(sort)
+      .asInstanceOf[Sort]
+    val invocation = preserved.order.head.child.asInstanceOf[UnresolvedFunction]
+
+    // Analyzer preprocessing and extension rules can replace an invocation's children through
+    // case-class copy. Unrelated metadata on that replacement must not change its input scope.
+    val replacement = invocation.copy(arguments = invocation.arguments.map(identity))
+    val unrelated = org.apache.spark.sql.catalyst.trees.TreeNodeTag[Boolean]("replacementMetadata")
+    replacement.setTagValue(unrelated, true)
+    replacement.copyTagsFrom(invocation)
+    val copied = preserved.copy(order =
+      preserved.order.updated(0, preserved.order.head.copy(child = replacement)))
+
+    val ordering = max(score).as("max(score)")
+    val expected = input.groupBy(key)(selected, ordering)
+      .orderBy(ordering.toAttribute.asc, selected.toAttribute.asc)
+      .select(selected.toAttribute)
+    checkAnalysis(copied, expected)
+  }
+
+  test("SPARK-38951: ORDER BY function state survives copies and advances tree transformations") {
+    import UnresolvedFunction.{AggregateInput, Ordinary, WithOriginalFunction}
+
+    val lexical = UnresolvedFunction(
+      Seq("sum"),
+      Seq(Literal(1)),
+      isDistinct = false,
+      filter = Some(Literal(true)),
+      orderingWithinGroup = Seq(Literal(2).asc),
+      boundOwner = Some(Seq("catalog", "namespace", "sum")))
+    assert(lexical.sortResolutionState == Ordinary)
+    val pending = lexical.copy(sortResolutionState = WithOriginalFunction(lexical))
+    val copied = pending.withNewChildren(Seq(Literal(3), Literal(false), Literal(4).asc))
+      .asInstanceOf[UnresolvedFunction]
+    assert(copied.sortResolutionState == pending.sortResolutionState)
+    assert(copied.boundOwner == pending.boundOwner)
+    assert(copied.arguments == Seq(Literal(3)))
+    assert(copied.filter.contains(Literal(false)))
+    assert(copied.orderingWithinGroup == Seq(Literal(4).asc))
+    val cloned = pending.clone().asInstanceOf[UnresolvedFunction]
+    assert(cloned.sortResolutionState eq pending.sortResolutionState)
+    assert(!(cloned.arguments.head eq pending.arguments.head))
+    assert(cloned.hashCode() == pending.hashCode())
+    assert(pending.collect { case f: UnresolvedFunction => f }.size == 1)
+
+    // A phase-only transition must survive both replacement equality checks and parent copies.
+    val replay = pending.copy(sortResolutionState = AggregateInput)
+    assert(!pending.fastEquals(replay))
+    assert(!lexical.fastEquals(replay))
+    // Diagnostic exports describe the live invocation; shared snapshots and replay phases must
+    // neither duplicate saved expression graphs nor change the existing JSON representation.
+    assert(pending.toJSON == lexical.toJSON)
+    assert(replay.toJSON == lexical.toJSON)
+    assert(!pending.toJSON.contains("sortResolutionState"))
+    val parent = SortOrder(pending, Ascending)
+    val mapped = parent.mapChildren(_ => replay).asInstanceOf[SortOrder]
+    val transformed = parent.transformDown {
+      case f: UnresolvedFunction => f.copy(sortResolutionState = AggregateInput)
+    }.asInstanceOf[SortOrder]
+    assert(mapped.child.asInstanceOf[UnresolvedFunction].sortResolutionState == AggregateInput)
+    assert(transformed.child.asInstanceOf[UnresolvedFunction].sortResolutionState == AggregateInput)
+    assert(transformed.transformDown {
+      case f: UnresolvedFunction => f.copy(sortResolutionState = AggregateInput)
+    }.fastEquals(transformed))
   }
 
   test("resolve relations") {

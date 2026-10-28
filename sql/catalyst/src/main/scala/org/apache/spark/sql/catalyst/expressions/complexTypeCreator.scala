@@ -17,12 +17,14 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import scala.annotation.tailrec
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{Resolver, TypeCheckResult, TypeCoercion, TypeCoercionValidation, UnresolvedAttribute, UnresolvedExtractValue}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry.{FUNC_ALIAS, FunctionBuilder}
+import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -391,6 +393,12 @@ case object NamePlaceholder extends LeafExpression with Unevaluable {
  * Returns a Row containing the evaluation of all children expressions.
  */
 object CreateStruct {
+  @tailrec
+  private def unwrapForName(expression: Expression): Expression = expression match {
+    case t: TempResolvedColumn => unwrapForName(t.child)
+    case other => other
+  }
+
   /**
    * Returns a named struct with generated names or using the names when available.
    * It should not be used for `struct` expressions or functions explicitly called
@@ -405,10 +413,14 @@ object CreateStruct {
       //   4. GetMapValue if `a.b` refers to a map-type column.
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
-      // Temporary resolution wrappers affect neither the name nor the original value expression.
-      val nameExpr = trimTempResolvedColumn(child) match {
+      // Only the root determines the name. Ignore its temporary wrappers without scanning the
+      // value expression, and retain the original child below.
+      val nameExpr = unwrapForName(child) match {
         case u: UnresolvedAttribute => Literal(u.nameParts.last)
-        case UnresolvedExtractValue(_, e: Literal) if e.dataType.isInstanceOf[StringType] => e
+        case UnresolvedExtractValue(_, extraction) => unwrapForName(extraction) match {
+          case e: Literal if e.dataType.isInstanceOf[StringType] => e
+          case _ => Literal(s"col${index + 1}")
+        }
         case a: Alias => Literal(a.name)
         case e: NamedExpression if e.resolved => Literal(e.name)
         case _: NamedExpression => NamePlaceholder

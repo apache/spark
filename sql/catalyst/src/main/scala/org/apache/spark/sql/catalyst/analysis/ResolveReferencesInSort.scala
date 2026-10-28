@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
-import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, UNRESOLVED_FUNCTION}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
@@ -115,17 +115,24 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   }
 
   private def preserveOriginalFunctions(e: Expression, agg: Aggregate): Expression = {
-    import ResolveReferencesInSort._
+    import UnresolvedFunction.{Ordinary, WithOriginalFunction}
     if (!e.containsAnyPattern(UNRESOLVED_FUNCTION, AGGREGATE_EXPRESSION)) {
       return e
     }
 
     // Separate lazy DataFrame branches may share the caller's expression. Own the live tree
-    // before writing tags, and retain one detached snapshot rather than overlapping deep copies
-    // at every nested invocation. The consumer clones saved subtrees before mutating them.
+    // before resolving direct aggregates, and retain one detached snapshot rather than overlapping
+    // deep copies at every nested invocation. Saved trees contain no prior resolution state.
     val owned = e.clone()
-    val saved = owned.clone()
-    saved.foreach(_.unsetTagValue(ORIGINAL_FUNCTION))
+    val saved = if (owned.containsPattern(UNRESOLVED_FUNCTION)) {
+      owned.clone().transformDown {
+        case f: UnresolvedFunction if f.sortResolutionState != Ordinary =>
+          withOrigin(f.origin) { f.copy(sortResolutionState = Ordinary) }
+      }
+    } else {
+      // Direct aggregate expressions use only the owned live tree, with no lexical replay.
+      owned
+    }
 
     // Cache negative results too: nested ordinary functions otherwise repeatedly inspect the
     // same descendants for an explicitly targeted DataFrame attribute.
@@ -146,7 +153,7 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
 
     def preserveChildren(current: Expression, original: Expression): Expression = {
       // Pair all structural children, including FILTER and WITHIN GROUP. Always use the fresh
-      // snapshot: a previous ORIGINAL_FUNCTION may predate casts or extractors in the live tree.
+      // snapshot: a previous saved invocation may predate casts or extractors in the live tree.
       val originals = original.children.iterator
       current.mapChildren(child => preserve(child, originals.next()))
     }
@@ -159,10 +166,14 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
           hasUnresolvedPlanId(f) => f
       case ae: AggregateExpression => resolveColWithAgg(ae, agg)
       case f: UnresolvedFunction =>
-        if (!f.containsTag(ORIGINAL_FUNCTION) && !f.containsTag(AGGREGATE_INPUT)) {
-          f.setTagValue(ORIGINAL_FUNCTION, original.asInstanceOf[UnresolvedFunction])
+        val preserved = f.sortResolutionState match {
+          case Ordinary => withOrigin(f.origin) {
+            f.copy(sortResolutionState =
+              WithOriginalFunction(original.asInstanceOf[UnresolvedFunction]))
+          }
+          case _ => f
         }
-        preserveChildren(f, original)
+        preserveChildren(preserved, original)
       case other => preserveChildren(other, original)
     }
 
@@ -187,10 +198,4 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
       case _ => orders
     }
   }
-}
-
-object ResolveReferencesInSort {
-  private[analysis] val ORIGINAL_FUNCTION =
-    TreeNodeTag[UnresolvedFunction]("sortOriginalFunction")
-  private[analysis] val AGGREGATE_INPUT = TreeNodeTag[Boolean]("sortAggregateInput")
 }
