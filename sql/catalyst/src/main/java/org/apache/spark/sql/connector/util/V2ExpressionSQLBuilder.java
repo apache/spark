@@ -125,7 +125,9 @@ public class V2ExpressionSQLBuilder {
         case "IN" -> {
           Expression[] expressions = e.children();
           List<String> children = expressionsToStringList(expressions, 1, expressions.length - 1);
-          yield visitIn(build(expressions[0]), children);
+          // IN needs the same operand grouping as IS NULL: without it, NOT a IN (...)
+          // means NOT (a IN (...)) rather than (NOT a) IN (...).
+          yield visitIn(visitIsNullOperand(expressions[0]), children);
         }
         case "IS_NULL" -> visitIsNull(visitIsNullOperand(e.children()[0]));
         case "IS_NOT_NULL" -> visitIsNotNull(visitIsNullOperand(e.children()[0]));
