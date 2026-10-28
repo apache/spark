@@ -177,3 +177,53 @@ object TruncateFunction extends ScalarFunction[UTF8String] {
     str.substring(0, length)
   }
 }
+
+// Reducible `hours`, `days` and `years`, matching the in-memory table's transforms of those
+// names. Hours reduce onto days with floorDiv(h, 24), and days onto years. Unlike bucket's x % n,
+// neither reducer is idempotent, so applying one twice gives a wrong value.
+object ReducibleHoursFunction extends ScalarFunction[Long] with ReducibleFunction[Long, Long] {
+  override def inputTypes(): Array[DataType] = Array(TimestampType)
+  override def resultType(): DataType = LongType
+  override def name(): String = "hours"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Long =
+    ChronoUnit.HOURS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(input.getLong(0)))
+  override def reducer(other: ReducibleFunction[_, _]): Reducer[Long, Long] =
+    if (other eq ReducibleDaysFunction) HoursToDaysReducer else null
+}
+
+object ReducibleDaysFunction extends ScalarFunction[Long] with ReducibleFunction[Long, Long] {
+  override def inputTypes(): Array[DataType] = Array(TimestampType)
+  override def resultType(): DataType = LongType
+  override def name(): String = "days"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Long =
+    ChronoUnit.DAYS.between(Instant.EPOCH, DateTimeUtils.microsToInstant(input.getLong(0)))
+  override def reducer(other: ReducibleFunction[_, _]): Reducer[Long, Long] =
+    if (other eq ReducibleYearsFunction) DaysToYearsReducer else null
+}
+
+object ReducibleYearsFunction extends ScalarFunction[Long] with ReducibleFunction[Long, Long] {
+  override def inputTypes(): Array[DataType] = Array(TimestampType)
+  override def resultType(): DataType = LongType
+  override def name(): String = "years"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Long =
+    YearsFunction.invoke(input.getLong(0))
+  override def reducer(other: ReducibleFunction[_, _]): Reducer[Long, Long] = null
+}
+
+case object HoursToDaysReducer extends Reducer[Long, Long] {
+  override def reduce(hours: Long): Long = Math.floorDiv(hours, 24L)
+}
+
+case object DaysToYearsReducer extends Reducer[Long, Long] {
+  override def reduce(days: Long): Long =
+    ChronoUnit.YEARS.between(YearsFunction.EPOCH_LOCAL_DATE, LocalDate.ofEpochDay(days))
+}
+
+class UnboundReducibleFunction(fn: BoundFunction) extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = fn
+  override def description(): String = name()
+  override def name(): String = fn.name()
+}
