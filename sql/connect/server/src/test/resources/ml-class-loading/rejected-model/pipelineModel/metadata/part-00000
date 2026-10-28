@@ -1,1 +1,0 @@
-{"class":"org.apache.spark.ml.PipelineModel","timestamp":0,"sparkVersion":"4.0.0","uid":"pipelineFixture","paramMap":{"stageUids":["stageFixture"]},"defaultParamMap":{}}

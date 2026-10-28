@@ -1,1 +1,0 @@
-{"class":"org.apache.spark.sql.connect.ml.UnregisteredModel","timestamp":0,"sparkVersion":"4.0.0","uid":"stageFixture","paramMap":{"inputCols":["x"],"outputCol":"features"},"defaultParamMap":{}}
