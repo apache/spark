@@ -67,7 +67,7 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
-  private def containsUnsupportedCharPad(pred: Predicate): Boolean = {
+  private def containsUnsupportedCharPad(expr: Expression): Boolean = {
     if (dialect.isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
       false
     } else {
@@ -76,7 +76,7 @@ case class JDBCScanBuilder(
             if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => true
         case _ => Option(e.children()).exists(_.exists(walk))
       }
-      walk(pred)
+      walk(expr)
     }
   }
 
@@ -109,6 +109,10 @@ case class JDBCScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
+    if (aggregation.aggregateExpressions.exists(containsUnsupportedCharPad) ||
+        aggregation.groupByExpressions.exists(containsUnsupportedCharPad)) {
+      return false
+    }
 
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileExpression)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
@@ -216,6 +220,10 @@ case class JDBCScanBuilder(
     if (!joinTypeStringOption.isDefined) {
       logError(log"Failed to push down join to JDBC due to unsupported join type " +
         log"${MDC(JOIN_TYPE, joinType)}")
+      return false
+    }
+
+    if (containsUnsupportedCharPad(condition)) {
       return false
     }
 
@@ -331,6 +339,7 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
+      if (orders.exists(containsUnsupportedCharPad)) return false
       val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit

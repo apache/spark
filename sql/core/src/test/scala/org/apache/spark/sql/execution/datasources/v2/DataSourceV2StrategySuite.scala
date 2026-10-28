@@ -1957,6 +1957,21 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val nseq = new V2ExpressionBuilder(EqualNullSafe(padded, Literal("Y")), isPredicate = true)
       .build()
     assert(nseq.isDefined)
+    nseq.get match {
+      case p: Predicate if p.name() == "<=>" =>
+        p.children()(0) match {
+          case g: GeneralScalarExpression
+              if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+            assert(g.children()(0) === FieldReference("flag"))
+            assert(g.children()(1) === LiteralValue(1, IntegerType))
+            assert(g.children()(2) ===
+              LiteralValue(UTF8String.fromString(" "), StringType))
+          case other =>
+            fail(s"expected CHAR_READ_SIDE_PADDING, got ${other.describe()}")
+        }
+        assert(p.children()(1) === LiteralValue(UTF8String.fromString("Y"), StringType))
+      case other => fail(s"expected '<=>' predicate, got ${other.describe()}")
+    }
     val in = new V2ExpressionBuilder(In(padded, Seq(Literal("Y"))), isPredicate = true).build()
     assert(in.isDefined)
     val neq = new V2ExpressionBuilder(Not(EqualTo(padded, Literal("Y"))), isPredicate = true)

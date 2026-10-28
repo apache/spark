@@ -43,7 +43,8 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
@@ -1660,6 +1661,8 @@ class JDBCSuite extends SharedSparkSession {
       Some(ArrayType(CharType(64))))
     assert(Postgres.getCatalystType(java.sql.Types.CHAR, "char", 1, md) === Some(StringType))
     assert(Postgres.getCatalystType(java.sql.Types.CHAR, "bpchar", 5, md) === None)
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_char", 1, md) ==
+      Some(ArrayType(StringType)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -2413,6 +2416,10 @@ class JDBCSuite extends SharedSparkSession {
     val leftoverEq = new Predicate("=",
       Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
     val isNull = new Predicate("IS_NULL", Array[V2Expression](FieldReference("flag")))
+    val caseWhen = new GeneralScalarExpression("CASE_WHEN",
+      Array[V2Expression](leftoverEq, LiteralValue(1, IntegerType)))
+    val agg = new Aggregation(Array(new Sum(caseWhen, false)), Array.empty)
+    val sort = SortValue(leftoverEq, SortDirection.ASCENDING, NullOrdering.NULLS_LAST)
     val options = new JDBCOptions("jdbc:derby:memory:db", "t", Map.empty[String, String])
     val builder = JDBCScanBuilder(spark, new StructType().add("flag", StringType), options)
     val logAppender = new LogAppender("compile V2")
@@ -2421,6 +2428,8 @@ class JDBCSuite extends SharedSparkSession {
       assert(leftover.exists(_.name() == "="))
       assert(!leftover.exists(_.name() == "IS_NULL"))
       assert(builder.pushedPredicates().exists(_.name() == "IS_NULL"))
+      assert(!builder.pushAggregation(agg))
+      assert(!builder.pushTopN(Array(sort), 1))
     }
     assert(!logAppender.loggingEvents.exists { ev =>
       ev.getMessage.getFormattedMessage.contains("Error occurs while compiling V2 expression")

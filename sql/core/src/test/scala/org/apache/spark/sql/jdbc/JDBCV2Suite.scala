@@ -2064,7 +2064,17 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
       val nseq = sql(s"SELECT id FROM $table WHERE flag <=> 'Y'")
       checkFiltersRemoved(nseq)
+      checkPushedInfo(nseq,
+        "CHAR_READ_SIDE_PADDING(flag, 5, ' ')) = 'Y    '",
+        "IS NULL AND 'Y    ' IS NULL")
       checkAnswer(nseq, Seq(Row(1)))
+
+      val notNseq = sql(s"SELECT id FROM $table WHERE NOT (flag <=> 'Y')")
+      checkFiltersRemoved(notNseq)
+      checkPushedInfo(notNseq,
+        "NOT ((((CHAR_READ_SIDE_PADDING(flag, 5, ' ')) IS NOT NULL",
+        "IS NULL AND 'Y    ' IS NULL")
+      checkAnswer(notNseq, Seq(Row(2), Row(3), Row(4), Row(5)))
 
       val neq = sql(s"SELECT id FROM $table WHERE flag <> 'Y'")
       checkFiltersRemoved(neq)
@@ -2109,6 +2119,11 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       val cnt = sql(s"SELECT COUNT(flag) FROM $table")
       checkAggregateRemoved(cnt, removed = false)
       checkAnswer(cnt, Seq(Row(4)))
+
+      val caseSum = sql(
+        s"SELECT SUM(CASE WHEN flag = 'Y' THEN 1 ELSE 0 END) FROM $table")
+      checkAggregateRemoved(caseSum)
+      checkAnswer(caseSum, Seq(Row(1)))
 
       val grp = sql(s"SELECT flag, COUNT(*) FROM $table GROUP BY flag")
       checkAggregateRemoved(grp, removed = false)
