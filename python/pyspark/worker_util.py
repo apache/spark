@@ -395,7 +395,7 @@ class RunnerConf(Conf):
 
     @property
     def udf_profiler_sampling_interval(self) -> int:
-        return int(self.get("spark.sql.pyspark.udf.profiler.samplingInterval", 1000))
+        return int(self.get("spark.sql.pyspark.udf.profiler.samplingInterval", 100))
 
     @property
     def data_source_profiler(self) -> Optional[str]:

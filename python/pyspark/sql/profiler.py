@@ -541,6 +541,30 @@ class ProfilerCollector(ABC):
                     if not self._profile_results[id]:
                         self._profile_results.pop(id)
 
+    def clear_sampling_profiles(self, id: Optional[Union[int, str]] = None) -> None:
+        """
+        Clear the sampling profile results.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        id : int or str, optional
+            The result ID whose sampling profile results should be cleared.
+            If not specified, all the results will be cleared.
+        """
+        with self._lock:
+            if id is not None:
+                if id in self._profile_results:
+                    self._profile_results[id].pop("sampling", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
+            else:
+                for id in list(self._profile_results.keys()):
+                    self._profile_results[id].pop("sampling", None)
+                    if not self._profile_results[id]:
+                        self._profile_results.pop(id)
+
 
 class AccumulatorProfilerCollector(ProfilerCollector):
     def __init__(self) -> None:
@@ -740,8 +764,9 @@ class Profile:
             self.profiler_collector.clear_memory_profiles(id)
         elif type == "perf" or type is None:
             self.profiler_collector.clear_perf_profiles(id)
-            if type is None:  # Clear both perf and memory profiles
+            if type is None:  # Clear perf, memory and sampling profiles
                 self.profiler_collector.clear_memory_profiles(id)
+                self.profiler_collector.clear_sampling_profiles(id)
         else:
             raise PySparkValueError(
                 errorClass="VALUE_NOT_ALLOWED",
