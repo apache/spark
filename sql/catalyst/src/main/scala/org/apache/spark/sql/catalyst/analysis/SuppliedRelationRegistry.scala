@@ -40,13 +40,9 @@ private[sql] object SuppliedRelationRegistry
   val IDENTITY_TAG: TreeNodeTag[Seq[String]] =
     TreeNodeTag[Seq[String]]("suppliedRelationIdentity")
 
-  def create(
-      catalogManager: CatalogManager,
-      relations: Seq[(Seq[String], StructType)]): Handle = {
-    val entries = relations.map { case (nameParts, schema) =>
-      canonicalize(catalogManager, nameParts) -> schema
-    }
-    createHandle(Some(entries))
+  /** Install `relations`, whose names must already be [[canonicalize]]d. */
+  def create(relations: Seq[(Seq[String], StructType)]): Handle = {
+    if (relations.isEmpty) createHandle(None) else createHandle(Some(relations))
   }
 
   def lookup(
@@ -75,7 +71,12 @@ private[sql] object SuppliedRelationRegistry
     }
   }
 
-  /** The identity a supplied name is stored and matched under. */
+  /**
+   * The identity a supplied name is stored and matched under: the name parts
+   * relation resolution qualifies a persistent name to (as
+   * `CatalogAndIdentifier` does), `system.session.v` for a session-qualified
+   * name, and `global_temp.v` for a global temp view. Idempotent.
+   */
   def canonicalize(
       catalogManager: CatalogManager,
       nameParts: Seq[String]): Seq[String] = {
@@ -84,16 +85,13 @@ private[sql] object SuppliedRelationRegistry
     } else if (nameParts.length == 2 &&
         catalogManager.v1SessionCatalog.isGlobalTempViewDB(nameParts.head)) {
       nameParts
+    } else if (nameParts.length == 1) {
+      catalogManager.currentCatalog.name() +:
+        catalogManager.currentNamespace.toSeq :+ nameParts.head
+    } else if (catalogManager.isCatalogRegistered(nameParts.head)) {
+      nameParts
     } else {
-      nameParts match {
-        case Seq(name) =>
-          catalogManager.currentCatalog.name() +:
-            catalogManager.currentNamespace.toSeq :+ name
-        case Seq(namespace, name) =>
-          catalogManager.currentCatalog.name() +: Seq(namespace, name)
-        case catalog +: identifier =>
-          catalog +: identifier
-      }
+      catalogManager.currentCatalog.name() +: nameParts
     }
   }
 }

@@ -17,12 +17,24 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
+
 import org.json4s._
 import org.json4s.jackson.JsonMethods.parse
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{AnalysisException, QueryTest}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog}
+import org.apache.spark.sql.connector.catalog.procedures.{
+  BoundProcedure,
+  ProcedureParameter,
+  UnboundProcedure
+}
+import org.apache.spark.sql.connector.read.Scan
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DataTypes, StructType}
 
 class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
 
@@ -782,8 +794,7 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       }
       assert(selected === List(
         "failed" -> jsonString,
-        "condition" -> jsonString,
-        "condition" -> jsonString,
+        "condition" -> jsonBoolean,
         "one" -> jsonInt,
         "other" -> jsonString).map { case (name, dataType) =>
           JObject("name" -> JArray(List(JString(name))), "type" -> dataType)
@@ -898,6 +909,212 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       val fetch = nested(script).find(s => (s \ "error") != JNothing).get
       assert(fetch \ "analyze_success" === JBool(false))
       assert(fetch \ "error" \ "errorClass" === JString("CURSOR_NOT_FOUND"))
+    }
+  }
+
+  /** Run a full `SELECT parse_sql(...)` and return its statement objects. */
+  private def evalCall(query: String): List[JObject] =
+    parse(spark.sql(query).head().getString(0)) match {
+      case JArray(values) => values.map(_.asInstanceOf[JObject])
+      case other => fail(s"expected a JSON array, got: $other")
+    }
+
+  private def errorClass(statement: JObject): JValue = statement \ "error" \ "errorClass"
+
+  private def queryContext(statement: JObject): JObject =
+    statement \ "error" \ "queryContext" match {
+      case JArray(List(ctx: JObject)) => ctx
+      case other => fail(s"expected one query context, got: $other")
+    }
+
+  private val emoji = new String(Character.toChars(0x1F600))
+
+  test("ANALYZE does not run CALL, directly or through EXECUTE IMMEDIATE") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      spark.conf.set("spark.sql.catalog.parse_sql_cat", classOf[InMemoryCatalog].getName)
+      try {
+        val catalog = spark.sessionState.catalogManager.catalog("parse_sql_cat")
+          .asInstanceOf[InMemoryCatalog]
+        catalog.createProcedure(
+          Identifier.of(Array("ns"), "record"), ParseSqlAnalyzeSuite.UnboundRecord)
+        ParseSqlAnalyzeSuite.calls.set(0)
+        val results = evalBatch(
+          """CALL parse_sql_cat.ns.record(1);
+            |EXECUTE IMMEDIATE 'CALL parse_sql_cat.ns.record(2)'""".stripMargin)
+        assert(results.map(_ \ "parse_success") === List(JBool(true), JBool(true)))
+        assert(ParseSqlAnalyzeSuite.calls.get === 0)
+        sql("CALL parse_sql_cat.ns.record(3)").collect()
+        assert(ParseSqlAnalyzeSuite.calls.get === 1)
+      } finally {
+        spark.sessionState.catalogManager.reset()
+        spark.sessionState.conf.unsetConf("spark.sql.catalog.parse_sql_cat")
+      }
+    }
+  }
+
+  test("ANALYZE inside a SQL script does not see the script's locals") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val json = spark.sql(
+        """BEGIN
+          |  DECLARE parse_sql_outer INT DEFAULT 5;
+          |  SELECT parse_sql('SELECT parse_sql_outer AS x', 'ANALYZE');
+          |END""".stripMargin).head().getString(0)
+      val statement = parse(json) match {
+        case JArray(List(value: JObject)) => value
+        case other => fail(s"expected one statement object, got: $other")
+      }
+      assert(statement \ "analyze_success" === JBool(false))
+    }
+  }
+
+  test("ANALYZE system.session overlays do not change persistent view bodies") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      withTable("parse_sql_pv_base") {
+        withView("parse_sql_pv") {
+          sql("CREATE TABLE parse_sql_pv_base (a INT) USING parquet")
+          sql("CREATE VIEW parse_sql_pv AS SELECT a FROM parse_sql_pv_base")
+          val results = evalCall(
+            """SELECT parse_sql(
+              |  'SELECT * FROM parse_sql_pv',
+              |  'ANALYZE',
+              |  relations => array(named_struct(
+              |    'name', 'system.session.parse_sql_pv_base', 'schema', 'z STRING')))
+              |""".stripMargin)
+          assert(results.head \ "analyze_success" === JBool(true))
+          assert(results.head \ "select_list" === typedColumns("a" -> jsonInt))
+        }
+      }
+    }
+  }
+
+  test("ANALYZE INSERT into an overlay honors a column list") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val results = evalCall(
+        """SELECT parse_sql(
+          |  'INSERT INTO t (b, a) VALUES (''x'', 1); INSERT INTO t (b) VALUES (''y'')',
+          |  'ANALYZE',
+          |  relations => array(named_struct('name', 't', 'schema', 'a INT, b STRING')))
+          |""".stripMargin)
+      assert(results.map(_ \ "analyze_success") === List(JBool(true), JBool(true)))
+    }
+  }
+
+  test("ANALYZE script applies the interpreter's local variable rules") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE OR REPLACE v INT;
+          |  DECLARE system.session.w INT;
+          |  DROP TEMPORARY VARIABLE IF EXISTS u;
+          |END""".stripMargin)
+      assert(nested(script).map(errorClass) === List(
+        JString("INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE"),
+        JString("INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE"),
+        JString("UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE")))
+    }
+  }
+
+  test("ANALYZE requires constant arguments; PARSE does not") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val query = "SELECT parse_sql(c, '%s') FROM VALUES ('SELECT 1') AS t(c)"
+      val e = intercept[AnalysisException](spark.sql(query.format("ANALYZE")).collect())
+      assert(e.getCondition === "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+      assert(spark.sql(query.format("PARSE")).collect().length === 1)
+    }
+  }
+
+  test("ANALYZE error indexes are code points relative to each statement") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val top = evalStatement(s"SELECT '$emoji' AS e, missing_col")
+      val topCtx = queryContext(top)
+      assert(topCtx \ "startIndex" === JInt(18))
+      assert(topCtx \ "stopIndex" === JInt(28))
+      assert(topCtx \ "fragment" === JString("missing_col"))
+
+      val script = evalStatement(s"BEGIN SELECT '$emoji' AS e; SELECT missing_col; END")
+      val failed = nested(script)(1)
+      assert(failed \ "start" === JInt(24))
+      val nestedCtx = queryContext(failed)
+      assert(nestedCtx \ "objectType" === JString(""))
+      assert(nestedCtx \ "startIndex" === JInt(8))
+      assert(nestedCtx \ "stopIndex" === JInt(18))
+      assert(nestedCtx \ "fragment" === JString("missing_col"))
+    }
+  }
+
+  test("ANALYZE script conditions must be BOOLEAN") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement("BEGIN IF 1 THEN SELECT 1; END IF; END")
+      val condition = nested(script).head
+      assert(condition \ "analyze_success" === JBool(false))
+      assert(errorClass(condition) === JString("INVALID_BOOLEAN_STATEMENT"))
+    }
+  }
+
+  test("ANALYZE binds parameter markers in subqueries and CTEs") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val results = evalCall(
+        """SELECT parse_sql(
+          |  'SELECT (SELECT :p) AS x; WITH c AS (SELECT :p AS v) SELECT v FROM c',
+          |  'ANALYZE',
+          |  parameter_markers => array(named_struct('name', 'p', 'type', 'INT')))
+          |""".stripMargin)
+      assert(results.map(_ \ "analyze_success") === List(JBool(true), JBool(true)))
+      assert(results(0) \ "select_list" === typedColumns("x" -> jsonInt))
+      assert(results(1) \ "select_list" === typedColumns("v" -> jsonInt))
+    }
+  }
+
+  test("ANALYZE script types a parameterized cursor query at OPEN") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE c CURSOR FOR SELECT :lo + 1 AS id;
+          |  DECLARE d CURSOR FOR SELECT missing_col WHERE :lo > 0;
+          |  DECLARE e CURSOR FOR SELECT missing_col;
+          |  OPEN c USING 5 AS lo;
+          |  OPEN d USING 1 AS lo;
+          |  CLOSE c;
+          |END""".stripMargin)
+      val Seq(declareC, declareD, declareE, openC, openD, closeC) = nested(script)
+      Seq(declareC, declareD, openC, closeC).foreach { s =>
+        assert(s \ "analyze_success" === JBool(true), s)
+      }
+      assert(errorClass(declareE) === JString("UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"))
+      val declareCtx = queryContext(declareE)
+      assert(declareCtx \ "startIndex" === JInt(29))
+      assert(declareCtx \ "fragment" === JString("missing_col"))
+      assert(errorClass(openD) === JString("UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"))
+      val openCtx = queryContext(openD)
+      assert(openCtx \ "objectType" === JString("CURSOR"))
+      assert(openCtx \ "objectName" === JString("d"))
+      assert(openCtx \ "startIndex" === JInt(8))
+      assert(openCtx \ "fragment" === JString("missing_col"))
+    }
+  }
+}
+
+object ParseSqlAnalyzeSuite {
+  val calls = new AtomicInteger(0)
+
+  object UnboundRecord extends UnboundProcedure {
+    override def name: String = "record"
+    override def description: String = "counts its invocations"
+    override def bind(inputType: StructType): BoundProcedure = Record
+  }
+
+  object Record extends BoundProcedure {
+    override def name: String = "record"
+    override def description: String = "counts its invocations"
+    override def isDeterministic: Boolean = false
+    override def parameters: Array[ProcedureParameter] = Array(
+      ProcedureParameter.in("in1", DataTypes.IntegerType).build())
+    override def call(input: InternalRow): java.util.Iterator[Scan] = {
+      calls.incrementAndGet()
+      Collections.emptyIterator[Scan]()
     }
   }
 }

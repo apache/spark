@@ -187,7 +187,7 @@ class RelationResolution(
     // system.session.v (3 parts): overlay, then local temp view by name.
     if (CatalogManager.isFullyQualifiedSystemSessionViewName(identifier)) {
       val normalized = normalizeSessionQualifiedViewIdentifier(identifier)
-      return lookupSuppliedRelation(identifier).orElse(
+      return lookupSuppliedTempRelation(identifier, identifier).orElse(
         resolveTempView(
           normalized,
           u.isStreaming,
@@ -202,7 +202,7 @@ class RelationResolution(
       val viewNameOnly = Seq(identifier.last)
       val sessionIdent = SuppliedRelationRegistry.sessionIdentity(identifier.last)
       val tempSession = () =>
-        lookupSuppliedRelation(sessionIdent).orElse(
+        lookupSuppliedTempRelation(identifier, sessionIdent).orElse(
           resolveTempView(viewNameOnly, u.isStreaming, isTimeTravel))
       val persistentSessionDb = () =>
         tryResolvePersistent(u, identifier, finalTimeTravelSpec)
@@ -218,7 +218,7 @@ class RelationResolution(
     if (identifier.length > 1) {
       val globalOverlay =
         if (identifier.length == 2 && v1SessionCatalog.isGlobalTempViewDB(identifier.head)) {
-          lookupSuppliedRelation(identifier)
+          lookupSuppliedTempRelation(identifier, identifier)
         } else {
           None
         }
@@ -233,8 +233,8 @@ class RelationResolution(
     for (step <- steps) {
       val result = step match {
         case SessionScopeStep =>
-          lookupSuppliedRelation(
-            SuppliedRelationRegistry.sessionIdentity(identifier.head)).orElse(
+          lookupSuppliedTempRelation(
+            identifier, SuppliedRelationRegistry.sessionIdentity(identifier.head)).orElse(
             resolveTempView(identifier, u.isStreaming, isTimeTravel))
         case PersistentCatalogStep(prefix) =>
           tryResolvePersistent(u, prefix ++ identifier, finalTimeTravelSpec)
@@ -242,6 +242,18 @@ class RelationResolution(
       if (result.isDefined) return result
     }
     None
+  }
+
+  /**
+   * [[lookupSuppliedRelation]] for a temp view `identity` referenced as `name`.
+   * Like [[lookupTempView]], a persistent view body only sees the temp views it
+   * referred to when it was created.
+   */
+  def lookupSuppliedTempRelation(
+      name: Seq[String],
+      identity: Seq[String]): Option[LogicalPlan] = {
+    if (isResolvingView && !isReferredTempViewName(name)) None
+    else lookupSuppliedRelation(identity)
   }
 
   /**

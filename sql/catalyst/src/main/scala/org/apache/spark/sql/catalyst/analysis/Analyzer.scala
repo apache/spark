@@ -1371,8 +1371,8 @@ class Analyzer(
         viewOnly: Boolean = false): Option[LogicalPlan] = {
       val sessionOverlay =
         if (identifier.length == 1 || CatalogManager.isSessionQualifiedViewName(identifier)) {
-          relationResolution.lookupSuppliedRelation(
-            SuppliedRelationRegistry.sessionIdentity(identifier.last))
+          relationResolution.lookupSuppliedTempRelation(
+            identifier, SuppliedRelationRegistry.sessionIdentity(identifier.last))
         } else {
           None
         }
@@ -1478,24 +1478,51 @@ class Analyzer(
    * Finish analysis of INSERT when the target is a caller-supplied overlay
    * relation. [[InsertIntoStatement]] stays unresolved as a ParsedStatement.
    */
-  object ResolveInsertIntoSuppliedRelation extends Rule[LogicalPlan] {
-    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
-      case i @ InsertIntoStatement(table, _, _, query, _, _, byName, _, _)
-          if query.resolved && SuppliedRelationRegistry.isSupplied(table) =>
-        EliminateSubqueryAliases(table) match {
-          case local: LocalRelation =>
-            val ident = local.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG)
-              .getOrElse(Nil)
-            val newQuery = TableOutputResolver.resolveOutputColumns(
-              ident.quoted,
-              local.output,
-              query,
-              byName,
-              conf,
-              FILL)
-            InsertIntoSuppliedRelation(local, newQuery)
-          case _ => i
+  object ResolveInsertIntoSuppliedRelation extends ResolveInsertionBase {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (SuppliedRelationRegistry.get().isEmpty) {
+        plan
+      } else {
+        plan.resolveOperatorsUp {
+          case i: InsertIntoStatement
+              if i.query.resolved && SuppliedRelationRegistry.isSupplied(i.table) =>
+            EliminateSubqueryAliases(i.table) match {
+              case local: LocalRelation => resolveInsert(i, local)
+              case _ => i
+            }
         }
+      }
+    }
+
+    private def resolveInsert(
+        i: InsertIntoStatement,
+        local: LocalRelation): LogicalPlan = {
+      val name = local.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).getOrElse(Nil).quoted
+      val byName = i.byName || i.userSpecifiedCols.nonEmpty
+      val query =
+        if (i.userSpecifiedCols.nonEmpty) createProjectForByNameQuery(name, i) else i.query
+      val staticPartitions = i.partitionSpec.collect { case (col, Some(value)) =>
+        val attr = local.resolve(Seq(col), this.resolver).getOrElse(
+          throw QueryCompilationErrors.unresolvedAttributeError(
+            "UNRESOLVED_COLUMN", col, local.output.map(_.name), i.origin))
+        attr.name -> Alias(Cast(Literal(value), attr.dataType), attr.name)()
+      }
+      val withPartitions = if (staticPartitions.isEmpty) {
+        query
+      } else if (byName) {
+        Project(query.output ++ staticPartitions.values, query)
+      } else {
+        val dynamic = query.output.iterator
+        val columns = local.output.flatMap { attr =>
+          staticPartitions.collectFirst {
+            case (col, value) if this.resolver(col, attr.name) => value
+          }.orElse(if (dynamic.hasNext) Some(dynamic.next()) else None)
+        }
+        Project(columns ++ dynamic, query)
+      }
+      val newQuery = TableOutputResolver.resolveOutputColumns(
+        name, local.output, withPartitions, byName, conf, FILL)
+      InsertIntoSuppliedRelation(local, newQuery)
     }
   }
 

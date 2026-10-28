@@ -49,24 +49,15 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolved = identifiers.map {
         case u @ UnresolvedIdentifier(nameParts, _) =>
           if (withinLocalVariableScope) {
-            if (c.replace) {
-              throw new AnalysisException(
-                "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
-                Map("varName" -> toSQLId(nameParts))
-              )
-            }
-
-            if (nameParts.length != 1) {
-              throw new AnalysisException(
-                "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
-                Map("varName" -> toSQLId(nameParts)))
-            }
-
+            checkLocalVariableDeclaration(c, nameParts)
             SqlScriptingContextManager.get().flatMap(_.getVariableManager)
               .getOrElse(throw SparkException.internalError(
                 "Scripting local variable manager should be present in SQL script."))
               .qualify(nameParts.last)
           } else {
+            if (withinSuppliedLocalScope) {
+              checkLocalVariableDeclaration(c, nameParts)
+            }
             val resolvedIdentifier
             = catalogManager.tempVariableManager.qualify(nameParts.last)
 
@@ -78,7 +69,7 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       c.copy(names = resolved)
 
     case d @ DropVariable(u @ UnresolvedIdentifier(nameParts, _), _) =>
-      if (withinLocalVariableScope) {
+      if (withinLocalVariableScope || withinSuppliedLocalScope) {
         throw new AnalysisException(
           "UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE", Map.empty)
       }
@@ -232,6 +223,22 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
    */
   private def withinLocalVariableScope: Boolean =
     SqlScriptingContextManager.get().flatMap(_.getVariableManager).isDefined
+
+  /** A SQL script analyzed without executing it (see [[SuppliedLocalScopeRegistry]]). */
+  private def withinSuppliedLocalScope: Boolean = SuppliedLocalScopeRegistry.get().isDefined
+
+  private def checkLocalVariableDeclaration(c: CreateVariable, nameParts: Seq[String]): Unit = {
+    if (c.replace) {
+      throw new AnalysisException(
+        "INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE",
+        Map("varName" -> toSQLId(nameParts)))
+    }
+    if (nameParts.length != 1) {
+      throw new AnalysisException(
+        "INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE",
+        Map("varName" -> toSQLId(nameParts)))
+    }
+  }
 
   private def assertValidSessionVariableNameParts(
       nameParts: Seq[String],

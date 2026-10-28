@@ -22,13 +22,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{
   ExpressionBuilder, FunctionRegistry, FunctionRegistryBase, TypeCheckResult
 }
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.parser.{
   ParseSqlAnalyzeContext, ParseSqlMode, ParseSqlResult
 }
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.catalyst.util.ArrayData
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{
@@ -75,12 +76,18 @@ import org.apache.spark.unsafe.types.UTF8String
     control-flow conditions in a `statements` array; in `ANALYZE` each sees the script
     locals in scope (by block label or FOR variable) and the objects created before it.
     `DECLARE CURSOR` is recorded in that scope; `OPEN` / `FETCH` / `CLOSE` resolve it
-    the same way, and the cursor query is analyzed at DECLARE. Dynamic SQL
-    (`EXECUTE IMMEDIATE`) and in-place schema changes such as ALTER TABLE are
-    not simulated. `ANALYZE` inherits the invoker's current catalog, schema,
-    and SQL path. Named `current_catalog`, `current_schema`, and `current_path` override
-    that context for analysis only; omitted or NULL keeps the invoker value, which is
-    restored after the call. Named `variables` is an array of structs (`name`, `type`) for
+    the same way. The cursor query is analyzed at DECLARE, or at OPEN with the types
+    of its USING arguments when it has parameter markers. Conditions must be a single
+    BOOLEAN column, and a simple CASE is checked as `operand = value` per WHEN.
+    Dynamic SQL (`EXECUTE IMMEDIATE`), in-place schema changes such as ALTER TABLE,
+    USE, SET PATH, SET VAR, and SET of a config are not simulated. `CALL` is
+    analyzed but the procedure is not run. A SQL script calling `parse_sql` does not
+    lend it its locals or cursors. `ANALYZE` inherits the invoker's current catalog,
+    schema, and SQL path. Named `current_catalog`, `current_schema`, and
+    `current_path` override that context for analysis only; omitted or NULL keeps the
+    invoker value, which is restored after the call. An override changes the session
+    for the duration of the call, so other queries running concurrently on the same
+    session can observe it; `current_path` also enables the SQL path for the call. Named `variables` is an array of structs (`name`, `type`) for
     session or procedure variables not in the persisted schema. Named `relations` is an
     array of structs (`name`, `schema`) whose `schema` is a DDL column list, parsed like
     `from_json`. Named `parameter_markers` is an array of structs (`name`, `type`) whose
@@ -125,15 +132,17 @@ import org.apache.spark.unsafe.types.UTF8String
         Other names follow ordinary relation qualification (one-part: analysis catalog
         and schema). During ANALYZE the overlay eclipses the real object of that
         identity: temp view, persistent table, or view; query source or DML target.
-        PATH still selects the identity of an unqualified SQL name.
+        PATH still selects the identity of an unqualified SQL name. As a DML target an
+        overlay supports INSERT only. DDL on an overlay name is not checked against it.
       * parameter_markers - Optional ARRAY<STRUCT<name STRING, type STRING>> of known
         parameter markers for `ANALYZE`. `name` is `?` for each positional marker in
         left-to-right order, or a simple identifier for `:name`. `type` is a DDL data
         type string as accepted by `from_json`. NULL or omitted injects none.
         Ignored in `PARSE`, which still reports marker names and `unnamed_count`
         without binding types. Bound as typed NULLs so functions can type-check;
-        values are not executed. Named and unnamed markers cannot be mixed in one
-        statement.
+        values are not executed, so a context that needs a constant (`LIMIT :n`) may
+        fail. Positional markers bind per statement, nested ones included. Named and
+        unnamed markers cannot be mixed in one statement.
   """,
   examples = """
     Examples:
@@ -162,8 +171,10 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   note = """
     Requires spark.sql.function.parseSql.enabled=true. The result type is STRING JSON.
-    ANALYZE needs an active session. Overlays exist only for that call: Spark does not
-    register temp views, mutate session variables, or install a SQL-script context.
+    ANALYZE needs an active session, and every argument must be constant for the query
+    (DATATYPE_MISMATCH.NON_FOLDABLE_INPUT otherwise); a DataFrame column of statements
+    can use PARSE only. Overlays exist only for that call: Spark does not register temp
+    views, mutate session variables, or install a SQL-script context.
     A NULL array element or empty name/type/schema fails the outer query with
     INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT. Invalid DDL types and names are recorded
     as JSON (`analyze_success` false) and do not fail the outer query. Each JSON object
@@ -174,13 +185,15 @@ import org.apache.spark.unsafe.types.UTF8String
     `target_table_references`, `source_table_references`, `function_references` (arrays
     of name parts; ANALYZE qualifies persistent names, local temp views and temp
     functions as `system.session`, builtins as `system.builtin`; CTE aliases in
-    scope are not listed as tables), `select_list` (`{name}` parts; ANALYZE adds
-    `type` as a DESCRIBE TABLE EXTENDED AS JSON type object), `parameter_markers` (`named`
+    scope are not listed as tables), `select_list` (`{name}` parts; ANALYZE lists the
+    output columns, with `*` expanded, and adds `type` as a DESCRIBE TABLE EXTENDED AS
+    JSON type object), `parameter_markers` (`named`
     and/or `unnamed_count`), and `error` (STANDARD format; nested `queryContext`
     `startIndex`/`stopIndex` are 1-based Unicode code points, statement-relative).
     A SQL script object also has `statements`: one object of the same shape per nested
     statement or condition, ordered by `start` (batch-relative); nested error indexes are
-    relative to the enclosing script. ANALYZE sets the script's `analyze_success` only
+    relative to that nested statement. A cursor query error reported on OPEN has a
+    `CURSOR` query context whose indexes are relative to the cursor query. ANALYZE sets the script's `analyze_success` only
     when every nested statement analyzed, and its references are the nested union.
     Later statements are still processed after a per-statement
     parse or analysis failure.
@@ -200,7 +213,8 @@ case class ParseSql(
     parameterMarkers: Expression)
   extends Expression
   with ImplicitCastInputTypes
-  with CodegenFallback {
+  with CodegenFallback
+  with QueryErrorsBase {
 
   def this(
       sqlStmt: Expression,
@@ -293,16 +307,35 @@ case class ParseSql(
     if (!typeCheck.isSuccess) {
       typeCheck
     } else {
-      if (mode.foldable) {
-        val value = mode.eval()
-        if (value != null) {
+      val parsedMode = if (mode.foldable) {
+        Option(mode.eval()).map { value =>
           val modeStr = value.asInstanceOf[UTF8String].toString
-          if (ParseSqlMode.parse(modeStr).isEmpty) {
+          ParseSqlMode.parse(modeStr).getOrElse {
             throw QueryCompilationErrors.invalidParseSqlMode(mode)
           }
         }
+      } else {
+        None
       }
-      TypeCheckResult.TypeCheckSuccess
+      // ANALYZE needs the session, which only the driver has: every argument
+      // must be constant so the call folds there. current_catalog() and the
+      // like are constant too; the optimizer replaces them with literals.
+      def constant(e: Expression): Boolean = e.foldable || (e match {
+        case _: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser => true
+        case _: LeafExpression => false
+        case other => other.deterministic && other.children.forall(constant)
+      })
+      val nonFoldable = ParseSql.parameterNames.zip(children).find(c => !constant(c._2))
+      (parsedMode, nonFoldable) match {
+        case (Some(ParseSqlMode.Analyze), Some((name, child))) =>
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId(name),
+              "inputType" -> toSQLType(child.dataType),
+              "inputExpr" -> toSQLExpr(child)))
+        case _ => TypeCheckResult.TypeCheckSuccess
+      }
     }
   }
 
@@ -407,6 +440,11 @@ object ParseSql extends ExpressionBuilder {
     case other =>
       throw QueryExecutionErrors.invalidParseSqlContext(parameter, String.valueOf(other))
   }
+
+  /** Parameter names in argument order. */
+  val parameterNames: Seq[String] = Seq(
+    "sqlStmt", "mode", "current_catalog", "current_schema", "current_path",
+    "variables", "relations", "parameter_markers")
 
   // All eight parameters are named-invocation eligible, including required `sqlStmt`.
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
