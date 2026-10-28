@@ -7431,6 +7431,7 @@ object SQLConf {
   val FWF_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.fwf.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to the fixed-width file datasource.")
     .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(true)
 
