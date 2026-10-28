@@ -84,33 +84,32 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override def expensive: Boolean = hasExpensiveChild || _expensiveRegex
+  override def expensive: Boolean = hasExpensiveChild || _expensivePattern
 
-  // Heuristic, not designed to be perfect. Look for things likely to have
-  // back tracking.
-  private val detectExpensiveRegexPattern = Pattern.compile("\\+\\*\\{")
-
-  private lazy val _expensiveRegex = {
-    // A quick heuristic for expensive a pattern is.
-    left match {
-      case StringLiteral(str) =>
-        // If we have a clear start limited back tracking required.
-        if (str.startsWith("^") || str.startsWith("\\b")) {
-          false
-        } else if (detectExpensiveRegexPattern.matcher(str).matches()) {
-          // Greedy matching can be tricky.
-          true
-        } else {
-          // Default to pushdown for now.
-          false
-        }
-      case _ =>
-        true // per row regex compilation.
-    }
+  // Heuristic, not designed to be perfect. A pattern that is not foldable is compiled for every
+  // row; a foldable one is left to `isExpensivePattern`.
+  private lazy val _expensivePattern = if (right.foldable) {
+    val str = right.eval()
+    str != null && isExpensivePattern(str.toString)
+  } else {
+    true
   }
+
+  /** Whether matching against the constant pattern `str` is likely to be expensive. */
+  protected def isExpensivePattern(str: String): Boolean
 }
 
 private[catalyst] object StringRegexExpression {
+  // Quantifiers, which are what make a regex backtrack.
+  private val quantifierPattern = Pattern.compile("[+*{]")
+
+  /**
+   * Heuristic for whether a regex is likely to backtrack: one with a clear start limits the
+   * backtracking, otherwise any quantifier may need it.
+   */
+  def isExpensiveRegex(regex: String): Boolean =
+    !regex.startsWith("^") && !regex.startsWith("\\b") && quantifierPattern.matcher(regex).find()
+
   def expressionToEscapeChar(e: Expression): Char = e match {
     case StringLiteral(v) if v.length == 1 => v.charAt(0)
     case _ => throw QueryCompilationErrors.invalidEscapeChar(e)
@@ -181,6 +180,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
   override def escape(v: String): String = StringUtils.escapeLikeRegex(v, escapeChar)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
+
+  // A LIKE pattern only has the `%` and `_` wildcards, which do not nest.
+  override protected def isExpensivePattern(str: String): Boolean = false
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
@@ -534,6 +536,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
+  override protected def isExpensivePattern(str: String): Boolean =
+    StringRegexExpression.isExpensiveRegex(str)
   override def toString: String = s"RLIKE($left, $right)"
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 

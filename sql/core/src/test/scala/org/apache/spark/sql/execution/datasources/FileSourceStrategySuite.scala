@@ -606,6 +606,30 @@ class FileSourceStrategySuite extends SharedSparkSession {
     checkDataFilters(Set.empty)
   }
 
+  test("SPARK-60632: Filters on an aliased LIKE/RLIKE column are pushed into the file scan") {
+    withTempPath { path =>
+      spark.range(20)
+        .selectExpr("CAST(id AS STRING) AS name", "CAST(id % 4 AS STRING) AS part")
+        .write.partitionBy("part").parquet(path.getCanonicalPath)
+      val table = spark.read.parquet(path.getCanonicalPath)
+
+      def scanOf(df: DataFrame): FileSourceScanExec =
+        df.queryExecution.sparkPlan.collectFirst { case s: FileSourceScanExec => s }.get
+
+      Seq("part RLIKE '^1'", "part LIKE '1_' OR part = '1'").foreach { pred =>
+        withClue(pred) {
+          val df = table.selectExpr("name", s"$pred AS p").where("p")
+          assert(scanOf(df).partitionFilters.nonEmpty)
+          checkAnswer(df, table.where(pred).selectExpr("name", "true AS p"))
+        }
+      }
+
+      val df = table.selectExpr("part", "name RLIKE '^1' AS p").where("p")
+      assert(scanOf(df).dataFilters.nonEmpty)
+      checkAnswer(df, table.where("name RLIKE '^1'").selectExpr("part", "true AS p"))
+    }
+  }
+
   test(s"SPARK-44021: Test ${SQLConf.FILES_MAX_PARTITION_NUM.key} works as expected") {
     withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "128MB") {
       val files =

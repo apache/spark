@@ -735,4 +735,28 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(extractAllCopy ne extractAll,
       "freshCopyIfContainsStatefulExpression should return a new instance for RegExpExtractAll")
   }
+
+  test("SPARK-60632: LIKE and RLIKE expensive heuristic looks at the pattern") {
+    val str = $"s".string.at(0)
+    val pattern = $"p".string.at(1)
+
+    // The subject string is irrelevant; a constant pattern is checked.
+    Seq("^1", "\\b1", "^a.*b", "magic", "a.b").foreach { p =>
+      assert(!RLike(str, Literal(p)).expensive, p)
+    }
+    Seq(".*magic", "a+b", "(a+)+b", "a{2,}").foreach { p =>
+      assert(RLike(str, Literal(p)).expensive, p)
+    }
+    Seq("1_", "%magic%", "%a%b%").foreach { p =>
+      assert(!Like(str, Literal(p), '\\').expensive, p)
+    }
+    // A foldable pattern that is not yet a literal.
+    assert(!RLike(str, Concat(Seq(Literal("^"), Literal("a.*")))).expensive)
+    assert(RLike(str, Concat(Seq(Literal("a"), Literal(".*")))).expensive)
+    assert(!RLike(str, Literal.create(null, StringType)).expensive)
+
+    // A non-foldable pattern is compiled for every row.
+    assert(RLike(str, pattern).expensive)
+    assert(Like(str, pattern, '\\').expensive)
+  }
 }
