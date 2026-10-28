@@ -5015,7 +5015,7 @@
       },
       "PARSE_SQL_CONTEXT" : {
         "message" : [
-          "expects a valid catalog, schema, or SQL path, but got <invalidValue>."
+          "expects a valid catalog, schema, SQL path, variable, relation, or parameter marker specification, but got <invalidValue>."
         ]
       },
       "PARSE_SQL_MODE" : {

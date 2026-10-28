@@ -2,28 +2,28 @@
 -- !query
 SELECT parse_sql('SELECT 1 AS a')
 -- !query analysis
-Project [parse_sql(SELECT 1 AS a, PARSE, null, null, null) AS parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT 1 AS a, PARSE, null, null, null, null, null, null) AS parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL, NULL, NULL, NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT 1 AS a', 'PARSE')
 -- !query analysis
-Project [parse_sql(SELECT 1 AS a, PARSE, null, null, null) AS parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT 1 AS a, PARSE, null, null, null, null, null, null) AS parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL, NULL, NULL, NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT parse_sql('SELECT 1 AS a', 'ANALYZE')
 -- !query analysis
-Project [parse_sql(SELECT 1 AS a, ANALYZE, null, null, null) AS parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT 1 AS a, ANALYZE, null, null, null, null, null, null) AS parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL)#x]
 +- OneRowRelation
 
 
 -- !query
 SELECT get_json_object(parse_sql('SELECT 1 AS a', 'analyze'), '$[0].select_list[0].type.name')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT 1 AS a, analyze, null, null, null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT 1 AS a, analyze, NULL, NULL, NULL), $[0].select_list[0].type.name)#x]
+Project [get_json_object(parse_sql(SELECT 1 AS a, analyze, null, null, null, null, null, null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT 1 AS a, analyze, NULL, NULL, NULL, NULL, NULL, NULL), $[0].select_list[0].type.name)#x]
 +- OneRowRelation
 
 
@@ -31,7 +31,7 @@ Project [get_json_object(parse_sql(SELECT 1 AS a, analyze, null, null, null), $[
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].parse_success')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null), $[0].parse_success) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].parse_success)#x]
+Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null, null, null, null), $[0].parse_success) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].parse_success)#x]
 +- OneRowRelation
 
 
@@ -39,7 +39,7 @@ Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, AN
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].analyze_success')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].analyze_success)#x]
+Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null, null, null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].analyze_success)#x]
 +- OneRowRelation
 
 
@@ -47,7 +47,7 @@ Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, AN
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].error.errorClass')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null), $[0].error.errorClass) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].error.errorClass)#x]
+Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null, null, null, null), $[0].error.errorClass) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].error.errorClass)#x]
 +- OneRowRelation
 
 
@@ -55,7 +55,7 @@ Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, AN
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].source_table_references[0][0]')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null), $[0].source_table_references[0][0]) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].source_table_references[0][0])#x]
+Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null, null, null, null), $[0].source_table_references[0][0]) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].source_table_references[0][0])#x]
 +- OneRowRelation
 
 
@@ -63,7 +63,7 @@ Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, AN
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].source_table_references[0][1]')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null), $[0].source_table_references[0][1]) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].source_table_references[0][1])#x]
+Project [get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, null, null, null, null, null, null), $[0].source_table_references[0][1]) AS get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].source_table_references[0][1])#x]
 +- OneRowRelation
 
 
@@ -78,7 +78,7 @@ CreateViewCommand `parse_sql_analyze_v`, SELECT 1 AS a, 'x' AS b, false, true, L
 -- !query
 SELECT parse_sql('SELECT a, b FROM parse_sql_analyze_v', 'ANALYZE')
 -- !query analysis
-Project [parse_sql(SELECT a, b FROM parse_sql_analyze_v, ANALYZE, null, null, null) AS parse_sql(SELECT a, b FROM parse_sql_analyze_v, ANALYZE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT a, b FROM parse_sql_analyze_v, ANALYZE, null, null, null, null, null, null) AS parse_sql(SELECT a, b FROM parse_sql_analyze_v, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL)#x]
 +- OneRowRelation
 
 
@@ -97,7 +97,7 @@ CreateDataSourceTableCommand `spark_catalog`.`default`.`parse_sql_analyze_t`, fa
 -- !query
 SELECT parse_sql('SELECT count(a) AS c FROM parse_sql_analyze_t', 'ANALYZE')
 -- !query analysis
-Project [parse_sql(SELECT count(a) AS c FROM parse_sql_analyze_t, ANALYZE, null, null, null) AS parse_sql(SELECT count(a) AS c FROM parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL)#x]
+Project [parse_sql(SELECT count(a) AS c FROM parse_sql_analyze_t, ANALYZE, null, null, null, null, null, null) AS parse_sql(SELECT count(a) AS c FROM parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL)#x]
 +- OneRowRelation
 
 
@@ -126,7 +126,7 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT get_json_object(parse_sql('SELECT 1 AS a', mode => 'ANALYZE'), '$[0].select_list[0].type.name')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, null, null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL), $[0].select_list[0].type.name)#x]
+Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, null, null, null, null, null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].select_list[0].type.name)#x]
 +- OneRowRelation
 
 
@@ -160,7 +160,7 @@ SetCatalogAndNamespace
 -- !query
 SELECT get_json_object(parse_sql('SELECT a FROM t', 'ANALYZE'), '$[0].analyze_success')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, NULL, NULL), $[0].analyze_success)#x]
+Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, null, null, null, null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL), $[0].analyze_success)#x]
 +- OneRowRelation
 
 
@@ -169,7 +169,7 @@ SELECT get_json_object(
   parse_sql('SELECT a FROM t', 'ANALYZE', current_schema => 'parse_sql_ctx_a'),
   '$[0].analyze_success')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, parse_sql_ctx_a, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, parse_sql_ctx_a, NULL), $[0].analyze_success)#x]
+Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, parse_sql_ctx_a, null, null, null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, parse_sql_ctx_a, NULL, NULL, NULL, NULL), $[0].analyze_success)#x]
 +- OneRowRelation
 
 
@@ -178,7 +178,7 @@ SELECT get_json_object(
   parse_sql('SELECT a FROM t', 'ANALYZE', current_schema => 'parse_sql_ctx_a'),
   '$[0].source_table_references[0][1]')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, parse_sql_ctx_a, null), $[0].source_table_references[0][1]) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, parse_sql_ctx_a, NULL), $[0].source_table_references[0][1])#x]
+Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, parse_sql_ctx_a, null, null, null, null), $[0].source_table_references[0][1]) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, parse_sql_ctx_a, NULL, NULL, NULL, NULL), $[0].source_table_references[0][1])#x]
 +- OneRowRelation
 
 
@@ -194,7 +194,7 @@ SELECT get_json_object(
   parse_sql('SELECT 1 AS a', 'ANALYZE', current_schema => '!!!'),
   '$[0].analyze_success')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, !!!, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, !!!, NULL), $[0].analyze_success)#x]
+Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, !!!, null, null, null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, !!!, NULL, NULL, NULL, NULL), $[0].analyze_success)#x]
 +- OneRowRelation
 
 
@@ -203,7 +203,7 @@ SELECT get_json_object(
   parse_sql('SELECT 1 AS a', 'ANALYZE', current_schema => '!!!'),
   '$[0].error.errorClass')
 -- !query analysis
-Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, !!!, null), $[0].error.errorClass) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, !!!, NULL), $[0].error.errorClass)#x]
+Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, !!!, null, null, null, null), $[0].error.errorClass) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, !!!, NULL, NULL, NULL, NULL), $[0].error.errorClass)#x]
 +- OneRowRelation
 
 
@@ -233,3 +233,114 @@ DROP DATABASE parse_sql_ctx_b
 -- !query analysis
 DropNamespace false, false
 +- ResolvedNamespace V2SessionCatalog(spark_catalog), [parse_sql_ctx_b]
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT system.session.v AS x',
+    'ANALYZE',
+    variables => array(named_struct('name', 'system.session.v', 'type', 'INT'))),
+  '$[0].select_list[0].type.name')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT system.session.v AS x, ANALYZE, null, null, null, array(named_struct(name, system.session.v, type, INT)), null, null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT system.session.v AS x, ANALYZE, NULL, NULL, NULL, array(named_struct(name, system.session.v, type, INT)), NULL, NULL), $[0].select_list[0].type.name)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT proc.parm1 AS x',
+    'ANALYZE',
+    variables => array(named_struct('name', 'proc.parm1', 'type', 'STRING'))),
+  '$[0].select_list[0].type.name')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT proc.parm1 AS x, ANALYZE, null, null, null, array(named_struct(name, proc.parm1, type, STRING)), null, null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT proc.parm1 AS x, ANALYZE, NULL, NULL, NULL, array(named_struct(name, proc.parm1, type, STRING)), NULL, NULL), $[0].select_list[0].type.name)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT a FROM t',
+    'ANALYZE',
+    relations => array(named_struct('name', 't', 'schema', 'a INT'))),
+  '$[0].select_list[0].type.name')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT a FROM t, ANALYZE, null, null, null, null, array(named_struct(name, t, schema, a INT)), null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, NULL, NULL, NULL, array(named_struct(name, t, schema, a INT)), NULL), $[0].select_list[0].type.name)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT 1 AS a',
+    'ANALYZE',
+    variables => array(named_struct('name', 'v', 'type', '!!!'))),
+  '$[0].analyze_success')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, null, null, array(named_struct(name, v, type, !!!)), null, null), $[0].analyze_success) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL, array(named_struct(name, v, type, !!!)), NULL, NULL), $[0].analyze_success)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT 1 AS a',
+    'ANALYZE',
+    variables => array(named_struct('name', 'v', 'type', '!!!'))),
+  '$[0].error.errorClass')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, null, null, null, array(named_struct(name, v, type, !!!)), null, null), $[0].error.errorClass) AS get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL, array(named_struct(name, v, type, !!!)), NULL, NULL), $[0].error.errorClass)#x]
++- OneRowRelation
+
+
+-- !query
+CREATE TABLE parse_sql_overlay_t (a BIGINT) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`parse_sql_overlay_t`, false
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT a FROM parse_sql_overlay_t',
+    'ANALYZE',
+    relations => array(named_struct(
+      'name', 'parse_sql_overlay_t',
+      'schema', 'a STRING'))),
+  '$[0].select_list[0].type.name')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT a FROM parse_sql_overlay_t, ANALYZE, null, null, null, null, array(named_struct(name, parse_sql_overlay_t, schema, a STRING)), null), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT a FROM parse_sql_overlay_t, ANALYZE, NULL, NULL, NULL, NULL, array(named_struct(name, parse_sql_overlay_t, schema, a STRING)), NULL), $[0].select_list[0].type.name)#x]
++- OneRowRelation
+
+
+-- !query
+DROP TABLE parse_sql_overlay_t
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.parse_sql_overlay_t
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT abs(?) AS x',
+    'ANALYZE',
+    parameter_markers => array(named_struct('name', '?', 'type', 'INT'))),
+  '$[0].select_list[0].type.name')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT abs(?) AS x, ANALYZE, null, null, null, null, null, array(named_struct(name, ?, type, INT))), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT abs(?) AS x, ANALYZE, NULL, NULL, NULL, NULL, NULL, array(named_struct(name, ?, type, INT))), $[0].select_list[0].type.name)#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(
+  parse_sql(
+    'SELECT :p AS x',
+    'ANALYZE',
+    parameter_markers => array(named_struct('name', 'p', 'type', 'STRING'))),
+  '$[0].select_list[0].type.name')
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT :p AS x, ANALYZE, null, null, null, null, null, array(named_struct(name, p, type, STRING))), $[0].select_list[0].type.name) AS get_json_object(parse_sql(SELECT :p AS x, ANALYZE, NULL, NULL, NULL, NULL, NULL, array(named_struct(name, p, type, STRING))), $[0].select_list[0].type.name)#x]
++- OneRowRelation

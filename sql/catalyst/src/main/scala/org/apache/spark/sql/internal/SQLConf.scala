@@ -6100,7 +6100,8 @@ object SQLConf {
 
   val PARSE_SQL_ENABLED =
     buildConf("spark.sql.function.parseSql.enabled")
-      .doc("When true, enables the parse_sql SQL function (PARSE and ANALYZE). " +
+      .doc("When true, enables the parse_sql SQL function (PARSE and ANALYZE). ANALYZE can " +
+        "resolve optional caller-supplied relations, variables, and parameter marker types. " +
         "This feature is under active development; the JSON contract may change across " +
         "releases while the flag remains off by default.")
       .version("4.4.0")
