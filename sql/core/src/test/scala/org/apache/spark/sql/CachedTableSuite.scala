@@ -49,7 +49,7 @@ import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEProp
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, LogicalRelation, LogicalRelationWithTable}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, FileTable}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
 import org.apache.spark.sql.functions._
@@ -867,21 +867,34 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
-  for (relationCount <- Seq(1, 2, 3)) {
-    test(s"refreshByPath refreshes all $relationCount file indexes in one cached plan") {
-      withTempDir { dir =>
-        val paths = (0 until relationCount).map(i => new File(dir, s"part$i").getCanonicalPath)
-        paths.foreach(path => spark.range(1).write.parquet(path))
-        val cached = paths.map(spark.read.parquet(_)).reduce(_.union(_)).cache()
-        try {
-          assert(cached.count() == relationCount)
-          paths.foreach(path => appendParquetWithoutRefresh(path, 1L))
-          assert(cached.count() == relationCount)
-          spark.catalog.refreshByPath(dir.getCanonicalPath)
-          checkAnswer(cached, Seq.fill(relationCount)(Row(0L)) ++
-            Seq.fill(relationCount)(Row(1L)))
-        } finally {
-          cached.unpersist(blocking = true)
+  for {
+    useV1SourceList <- Seq("parquet", "")
+    relationCount <- Seq(1, 2, 3)
+  } {
+    val sourceVersion = if (useV1SourceList.nonEmpty) "V1" else "V2"
+    test(s"refreshByPath refreshes all $relationCount file indexes in one cached plan " +
+        s"($sourceVersion)") {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
+        withTempDir { dir =>
+          val paths = (0 until relationCount).map(i => new File(dir, s"part$i").getCanonicalPath)
+          paths.foreach(path => spark.range(1).write.parquet(path))
+          val cached = paths.map(spark.read.parquet(_)).reduce(_.union(_)).cache()
+          try {
+            // Check the analyzed relations so a V2 fallback cannot silently test only V1.
+            val fileSources = cached.queryExecution.analyzed.collect {
+              case LogicalRelationWithTable(_: HadoopFsRelation, _) => "V1"
+              case DataSourceV2Relation(_: FileTable, _, _, _, _, _) => "V2"
+            }
+            assert(fileSources == Seq.fill(relationCount)(sourceVersion))
+            assert(cached.count() == relationCount)
+            paths.foreach(path => appendParquetWithoutRefresh(path, 1L))
+            assert(cached.count() == relationCount)
+            spark.catalog.refreshByPath(dir.getCanonicalPath)
+            checkAnswer(cached, Seq.fill(relationCount)(Row(0L)) ++
+              Seq.fill(relationCount)(Row(1L)))
+          } finally {
+            cached.unpersist(blocking = true)
+          }
         }
       }
     }
@@ -943,7 +956,7 @@ class CachedTableSuite extends SharedSparkSession
     }
   }
 
-  test("refreshByPath deduplicates shared indexes separately for each cached entry") {
+  test("refreshByPath deduplicates shared indexes across cached entries per call") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
       spark.range(1).write.parquet(path)
@@ -953,11 +966,16 @@ class CachedTableSuite extends SharedSparkSession
       try {
         checkAnswer(first.select("*"), Seq(Row(0L), Row(0L)))
         checkAnswer(second.select("*"), Seq.empty[Row])
-        appendParquetWithoutRefresh(path, 1L)
-        spark.catalog.refreshByPath(path)
-        assert(index.refreshCount == 2)
-        checkAnswer(first.select("*"), Seq(Row(0L), Row(0L), Row(1L), Row(1L)))
-        checkAnswer(second.select("*"), Seq(Row(1L), Row(1L)))
+        for (value <- 1L to 2L) {
+          appendParquetWithoutRefresh(path, value)
+          assert(first.count() == value * 2)
+          assert(second.count() == (value - 1) * 2)
+          spark.catalog.refreshByPath(path)
+          assert(index.refreshCount == value)
+          // Both entries must rebuild even when their shared index was already refreshed.
+          checkAnswer(first.select("*"), (0L to value).flatMap(i => Seq.fill(2)(Row(i))))
+          checkAnswer(second.select("*"), (1L to value).flatMap(i => Seq.fill(2)(Row(i))))
+        }
       } finally {
         first.unpersist(blocking = true)
         second.unpersist(blocking = true)
