@@ -43,8 +43,10 @@ from pyspark.serializers import (
     SpecialLengths,
     read_int,
     write_int,
+    write_long,
     write_with_length,
 )
+from pyspark.sql.types import LongType
 from pyspark.taskcontext import TaskContext
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
 from pyspark.util import PythonEvalType
@@ -148,8 +150,14 @@ def _write_utf8(s: str, buf: io.BytesIO) -> None:
     write_with_length(s.encode("utf-8"), buf)
 
 
-def _worker_input(command: bytes, items: list, python_version: Optional[str] = None) -> bytes:
-    """Build the socket input of a classic RDD (NON_UDF) task running ``command``."""
+def _worker_input(
+    udf_info: bytes,
+    items: list,
+    python_version: Optional[str] = None,
+    eval_type: int = PythonEvalType.NON_UDF,
+) -> bytes:
+    """Build the socket input of a task of ``eval_type`` whose init message ends with
+    ``udf_info``, followed by ``items`` as pickled input."""
     init = io.BytesIO()
     write_int(0, init)  # split_index
     _write_utf8(python_version or "%d.%d" % sys.version_info[:2], init)
@@ -171,10 +179,10 @@ def _worker_input(command: bytes, items: list, python_version: Optional[str] = N
     write_int(0, init)  # num_python_includes
     init.write(b"\x00")  # needs_broadcast_decryption_server
     write_int(0, init)  # num_broadcast_variables
-    write_int(PythonEvalType.NON_UDF, init)
+    write_int(eval_type, init)
     write_int(0, init)  # runner conf
     write_int(0, init)  # eval conf
-    write_with_length(command, init)
+    init.write(udf_info)
 
     buf = io.BytesIO()
     write_int(SpecialLengths.START_OF_INIT_MESSAGE, buf)
@@ -185,9 +193,48 @@ def _worker_input(command: bytes, items: list, python_version: Optional[str] = N
     return buf.getvalue()
 
 
+def _framed(payload: bytes) -> bytes:
+    buf = io.BytesIO()
+    write_with_length(payload, buf)
+    return buf.getvalue()
+
+
 def _command(func: Any) -> bytes:
+    """The udf_info of a classic RDD (NON_UDF) task running ``func``."""
     ser = CPickleSerializer()
-    return CloudPickleSerializer().dumps((func, None, ser, ser))
+    return _framed(CloudPickleSerializer().dumps((func, None, ser, ser)))
+
+
+def _udf_info(func: Any) -> bytes:
+    """The udf_info of a task running one single-argument UDF ``func``."""
+    buf = io.BytesIO()
+    write_int(1, buf)  # num_udfs
+    write_int(1, buf)  # num_args
+    write_int(0, buf)  # arg offset
+    buf.write(b"\x00")  # is_kwarg
+    write_int(1, buf)  # num_chained
+    write_with_length(CloudPickleSerializer().dumps((func, LongType())), buf)
+    write_long(0, buf)  # result_id
+    return buf.getvalue()
+
+
+class _UnprintableError(Exception):
+    def __str__(self):
+        raise RuntimeError("str() failed")
+
+
+def _raise_unprintable():
+    raise _UnprintableError()
+
+
+class _RaisesOnUnpickle:
+    def __reduce__(self):
+        return _raise_unprintable, ()
+
+
+class _FailingHandler:
+    def __init__(self, **kwargs):
+        raise ImportError("pyarrow is not installed")
 
 
 class WorkerInitResponseTests(unittest.TestCase):
@@ -230,13 +277,29 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertEqual(read_int(outfile), SpecialLengths.METRICS_DATA)
 
     def test_payload_error_is_reported_in_init_response(self):
-        outfile = self._run(_worker_input(b"not a pickle", [1]), expect_exit=True)
+        outfile = self._run(_worker_input(_framed(b"not a pickle"), [1]), expect_exit=True)
         error = self._read_init_response(outfile)["error"]
         self.assertTrue(error["isPayloadError"])
         self.assertEqual(error["errorClass"], "UnpicklingError")
         self.assertIn("UnpicklingError", error["traceback"])
         self.assertTrue(error["message"])
         # No output follows an init error.
+        self.assertEqual(outfile.read(), b"")
+
+    def test_payload_error_with_unprintable_exception(self):
+        payload = _framed(CloudPickleSerializer().dumps(_RaisesOnUnpickle()))
+        outfile = self._run(_worker_input(payload, [1]), expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertEqual(
+            error,
+            {
+                "message": "<exception str() failed>",
+                "traceback": error["traceback"],
+                "errorClass": "_UnprintableError",
+                "isPayloadError": True,
+            },
+        )
+        self.assertIn("_UnprintableError", error["traceback"])
         self.assertEqual(outfile.read(), b"")
 
     def test_setup_error_is_reported_in_init_response(self):
@@ -246,6 +309,18 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertFalse(error["isPayloadError"])
         self.assertEqual(error["errorClass"], "PySparkRuntimeError")
         self.assertIn("PYTHON_VERSION_MISMATCH", error["traceback"])
+        self.assertEqual(outfile.read(), b"")
+
+    def test_handler_construction_error_is_not_a_payload_error(self):
+        worker_input = _worker_input(
+            _udf_info(lambda x: x), [1], eval_type=PythonEvalType.SQL_BATCHED_UDF
+        )
+        with patch("pyspark.worker.get_eval_type_handler", return_value=_FailingHandler):
+            outfile = self._run(worker_input, expect_exit=True)
+        error = self._read_init_response(outfile)["error"]
+        self.assertFalse(error["isPayloadError"])
+        self.assertEqual(error["errorClass"], "ImportError")
+        self.assertEqual(error["message"], "pyarrow is not installed")
         self.assertEqual(outfile.read(), b"")
 
     def test_data_error_is_reported_after_init_response(self):

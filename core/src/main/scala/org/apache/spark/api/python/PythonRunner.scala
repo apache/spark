@@ -1840,8 +1840,9 @@ private[spark] object SpecialLengths {
  * @param message the exception message
  * @param traceback the formatted exception, as reported for a failure while processing data
  * @param errorClass the Python exception class name, e.g. "ValueError"
- * @param isPayloadError whether the worker failed to load the UDF payload (e.g. it could not be
- *                       unpickled or raised while being defined) rather than to set up the task
+ * @param isPayloadError whether the worker could not deserialize the UDF payload (e.g. it does
+ *                       not unpickle); setting up the task, including constructing the eval type
+ *                       handler and its dependency and connection checks, is not payload loading
  */
 private[spark] case class PythonWorkerInitError(
     message: String,

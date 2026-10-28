@@ -78,6 +78,14 @@ def report_metrics(outfile: BinaryIO, metrics: dict[str, int]) -> None:
     write_with_length(payload, outfile)
 
 
+def _exception_message(e: BaseException) -> str:
+    """``str(e)``, or the placeholder ``traceback`` uses when the conversion fails."""
+    try:
+        return str(e)
+    except BaseException:
+        return "<exception str() failed>"
+
+
 def report_init_response(
     outfile: BinaryIO, error: Optional[BaseException] = None, is_payload_error: bool = False
 ) -> None:
@@ -87,13 +95,15 @@ def report_init_response(
     It is sent exactly once per task, before any output: ``{}`` once the task is initialized, or
     ``{"error": {...}}`` if initialization failed, in which case no output follows. An init error
     carries the exception message, the traceback as the JVM reports it, the exception class name,
-    and whether the worker failed to load the UDF payload (``isPayloadError``) rather than to set
-    up the task. Must be called while handling ``error``.
+    and whether the worker could not deserialize the UDF payload (``isPayloadError``), e.g. the
+    command does not unpickle or a UDTF declares a non-struct return type. Setting up the task,
+    including constructing the eval type handler and its dependency and connection checks, is not
+    payload loading. Must be called while handling ``error``.
     """
     response: dict[str, Any] = {}
     if error is not None:
         response["error"] = {
-            "message": str(error),
+            "message": _exception_message(error),
             "traceback": format_worker_exception(error),
             "errorClass": type(error).__name__,
             "isPayloadError": is_payload_error,
@@ -101,8 +111,6 @@ def report_init_response(
     payload = json.dumps(response, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.START_OF_INIT_RESPONSE, outfile)
     write_with_length(payload, outfile)
-    # The JVM waits for this response before it reads any output.
-    outfile.flush()
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
@@ -158,16 +166,17 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
             assert isinstance(init_info.udf_info, (bytes, memoryview))
             loading_payload = True
             func, profiler, deserializer, serializer = read_command(pickleSer, init_info.udf_info)
+            loading_payload = False
         else:
             # UDF and UDTF runners dispatch through the eval type's registered handler, which
             # provides both the function and the single serializer for input and output.
             handler_cls = get_eval_type_handler(eval_type, runner_conf)
             if handler_cls is None:
                 raise ValueError("Unknown eval type: {}".format(eval_type))
-            loading_payload = True
             handler: EvalTypeHandler
             if isinstance(init_info.udf_info, UDTFInfo):
                 assert issubclass(handler_cls, UDTFHandlerBase)
+                loading_payload = True
                 udtf_cls = read_command(pickleSer, init_info.udf_info.handler)
                 return_type = _parse_datatype_json_string(init_info.udf_info.return_type)
                 if not isinstance(return_type, StructType):
@@ -188,11 +197,13 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                     analyze_result=analyze_result,
                     name=init_info.udf_info.name,
                 )
+                loading_payload = False
                 handler = handler_cls(
                     udf_descs=[udtf], runner_conf=runner_conf, eval_conf=eval_conf
                 )
             else:
                 assert isinstance(init_info.udf_info, list)
+                loading_payload = True
                 udf_descs = []
                 for udf_info in init_info.udf_info:
                     # The functions applied in turn to one column; the last one's return type
@@ -207,12 +218,12 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
                             result_id=udf_info.result_id,
                         )
                     )
+                loading_payload = False
                 handler = handler_cls(
                     udf_descs=udf_descs, runner_conf=runner_conf, eval_conf=eval_conf
                 )
             func, serializer = handler.run, handler.serializer
             deserializer = serializer
-        loading_payload = False
 
         split_index = init_info.split_index
         del init_info
