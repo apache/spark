@@ -1174,7 +1174,8 @@ def maybe_compile_check(ref_name: str, cherry: bool = False) -> None:
     # into a shell without the semicolons splitting it into four commands.
     print("Optional pre-push check: %s" % shlex.join(COMPILE_CHECK_CMD))
     print("Note: 'clean' deletes every module's build output, including under --dry-run.")
-    if get_input("Run it on %s before pushing? (y/N): " % ref_name, ["y", "n", ""]) != "y":
+    prompt = "Run an optional clean compile on %s before pushing? (y/N): " % ref_name
+    if get_input(prompt, ["y", "n", ""]) != "y":
         return
     # build/sbt is repo-relative and SPARK_HOME defaults to the cwd, which is dev/ when the
     # script is run as ./merge_spark_pr.py per its own usage line. Ask git for the root instead.
@@ -1217,9 +1218,10 @@ def _is_pre_binding_policy_branch(ref: str) -> bool:
     do not. Ranking is semver_branch_rank's job -- branch-M.x sorts above every branch-M.N,
     and a ref it cannot classify as a maintenance branch gets its (-1, -1) sentinel. Those
     refs are treated as carrying the API: fail-open, so master, a tag, or a custom ref never
-    raises a false warning. The committer sees nothing in that case, which is the right trade
-    only because maybe_compile_check, offered right after this, is the check that covers
-    everything rather than one known API.
+    raises a false warning. The committer sees nothing in that case, which is the right trade:
+    a backport additionally gets maybe_compile_check right after this -- the check that covers
+    everything rather than one known API -- and the fail-open refs on a direct merge (master,
+    a tag, a custom ref) are not pre-4.2 branches in the first place.
 
     >>> _is_pre_binding_policy_branch("master")
     False
@@ -1478,10 +1480,10 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     git.run(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
 
-    # A PR can be opened straight against a maintenance branch, so the pre-4.2 check belongs
-    # here too, not only on the cherry-picks. Cheap grep before the slow build, as there.
+    # A PR can be opened straight against a maintenance branch, so the pre-4.2 binding-policy
+    # check belongs here too, not only on the cherry-picks. The optional compile check is not
+    # offered on the initial merge -- it is the backports we are mainly trying to catch.
     maybe_binding_policy_warning(target_ref, target_head)
-    maybe_compile_check(target_branch_name)
 
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
