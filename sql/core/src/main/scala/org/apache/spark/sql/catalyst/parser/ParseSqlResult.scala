@@ -17,24 +17,81 @@
 
 package org.apache.spark.sql.catalyst.parser
 
+import java.util.Locale
+
 import scala.collection.mutable
+import scala.util.control.NonFatal
 
 import org.json4s._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.{FunctionIdentifier, SqlScriptingContextManager, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
+import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, PathElement, TableCatalog}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
-import org.apache.spark.sql.execution.SparkSqlParser
-import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
+import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
+import org.apache.spark.sql.execution.command.{
+  CreateViewCommand,
+  DataWritingCommand,
+  DescribeQueryCommand,
+  DescribeRelationJsonCommand,
+  ExplainCommand
+}
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructField, StructType}
+
+/**
+ * Mode for [[ParseSqlResult.fromSql]]. `PARSE` is unresolved. `ANALYZE` types
+ * the select list and fully qualifies resolved relations and routines.
+ */
+object ParseSqlMode {
+  val Parse = "PARSE"
+  val Analyze = "ANALYZE"
+
+  def parse(value: String): Option[String] = value.trim.toUpperCase(Locale.ROOT) match {
+    case Parse => Some(Parse)
+    case Analyze => Some(Analyze)
+    case _ => None
+  }
+}
+
+/**
+ * Optional ANALYZE-mode catalog context for [[ParseSqlResult.fromSql]].
+ * `None` on a field means inherit the invoker session value.
+ */
+case class ParseSqlAnalyzeContext(
+    catalog: Option[String] = None,
+    schema: Option[String] = None,
+    path: Option[String] = None,
+    variables: Seq[(String, String)] = Nil,
+    relations: Seq[(String, String)] = Nil,
+    parameterMarkers: Seq[(String, String)] = Nil) {
+  def isEmpty: Boolean = {
+    catalog.isEmpty && schema.isEmpty && path.isEmpty &&
+      variables.isEmpty && relations.isEmpty && parameterMarkers.isEmpty
+  }
+}
+
+object ParseSqlAnalyzeContext {
+  val empty: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext()
+}
 
 /**
  * Parses a SQL batch string and returns a compact JSON array describing its
- * unresolved statements (parse-only; no catalog resolution).
+ * statements. `PARSE` mode is unresolved (no catalog resolution). `ANALYZE`
+ * mode also types selected columns and fully qualifies relation / routine
+ * names using the active session catalog. ANALYZE inherits the invoker's
+ * current catalog, schema, and SQL path unless [[ParseSqlAnalyzeContext]]
+ * overrides them.
  *
  * Uses a stock [[SparkSqlParser]] (ThreadLocal) so statement coverage matches
  * the default production parser (EXPLAIN / SET / ADD JAR / temp views / etc.).
@@ -43,18 +100,24 @@ import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
  * executors without a session, so only the stock parser is available under
  * distributed eval.
  *
- * Every statement object includes its 1-based UTF-16 code-unit `start` in the
- * original batch and its UTF-16 code-unit `length`, excluding surrounding
- * whitespace and the terminating semicolon. On success it also includes
+ * Every statement object includes its 1-based character `start` in the
+ * original batch and its character `length`, excluding surrounding
+ * whitespace and the terminating semicolon. Characters are Unicode code
+ * points (Spark SQL `length()` / UTF-8 strings): a supplementary-plane
+ * emoji is one character. Java `String` offsets are UTF-16 (emoji = 2);
+ * ANTLR `CodePointCharStream` offsets are already code points (emoji = 1).
+ * The splitter maps ANTLR indexes to UTF-16 for `substring`; JSON converts
+ * those spans back to code points. On success it also includes
  * `parse_success`, the statement
  * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
  * fields (`target_table_references`, `source_table_references`,
  * `function_references`, `select_list`, `parameter_markers`) when empty. On
  * parse failure the statement object contains `parse_success: false` with
  * source location and a nested STANDARD-format error object, and parsing
- * continues with later statements. Nested error locations are relative to the
- * individual statement, while `start` is relative to the original batch. An
- * empty or closed-comment-only batch produces an empty array. Only
+ * continues with later statements. Nested `queryContext` indexes are 1-based
+ * Unicode code points relative to the individual statement, while `start` is
+ * relative to the original batch. An empty or closed-comment-only batch
+ * produces an empty array. Only
  * [[ParseException]] / [[SqlScriptingException]] are converted to JSON;
  * unexpected / internal failures propagate so the function fails.
  */
@@ -64,68 +127,629 @@ object ParseSqlResult {
     ThreadLocal.withInitial(() => new SparkSqlParser())
 
   /** Parse `sql` as a batch and render the JSON result array. */
-  def fromSql(sql: String): String = {
+  def fromSql(
+      sql: String,
+      mode: String = ParseSqlMode.Parse,
+      context: ParseSqlAnalyzeContext = ParseSqlAnalyzeContext.empty): String = {
     val split = parser.get().splitStatementsWithPositions(sql)
     val statements = split.completeStatements ++ split.partialStatement
-    compact(render(JArray(statements.map(parseStatement).toList)))
+    val json = if (mode == ParseSqlMode.Analyze) {
+      analyzeBatch(sql, statements, context)
+    } else {
+      JArray(statements.map { segment =>
+        parsePlanOrError(sql, segment) match {
+          case ParseFailed(errorObj) => errorObj
+          case Parsed(seg, plan) =>
+            successJson(plan, analyzed = None, analyzeError = None, None, segmentSpan(sql, seg))
+        }
+      }.toList)
+    }
+    compact(render(json))
   }
 
-  private def parseStatement(segment: PositionedSqlStatement): JObject = {
+  private sealed trait ParsedStatement
+  private case class Parsed(segment: PositionedSqlStatement, plan: LogicalPlan)
+    extends ParsedStatement
+  private case class ParseFailed(errorObj: JObject) extends ParsedStatement
+
+  /**
+   * Parse every statement, then analyze with optional context overrides.
+   * Statements are analyzed in order without being executed: each sees the
+   * variables, tables, and views declared or created by earlier statements
+   * (see [[AnalyzeState]]).
+   * Analysis / context failures stay JSON (`analyze_success` false) with
+   * whatever parse and catalog qualification is already known.
+   */
+  private def analyzeBatch(
+      batch: String,
+      statements: Seq[PositionedSqlStatement],
+      context: ParseSqlAnalyzeContext): JArray = {
+    val parsed = statements.map(parsePlanOrError(batch, _))
+    val session = ClassicSparkSession.getActiveSession
+      .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
+    // The batch is analyzed on its own: a SQL script that calls parse_sql does
+    // not lend it its locals, and CALL is not run.
+    SqlScriptingContextManager.create(null).runWith {
+      InvokeProcedures.withoutInvocation {
+        try {
+          withAnalyzeContext(session, context) { env =>
+            val state = new AnalyzeState(env)
+            JArray(parsed.map {
+              case ParseFailed(errorObj) => errorObj
+              case Parsed(segment, plan) =>
+                state.statement(plan, segmentSpan(batch, segment))
+            }.toList)
+          }
+        } catch {
+          case e: SparkThrowable with Throwable if !isInternalError(e) =>
+            JArray(parsed.map {
+              case ParseFailed(errorObj) => errorObj
+              case Parsed(segment, plan) =>
+                successJson(plan, None, Some(e), Some(session), segmentSpan(batch, segment))
+            }.toList)
+        }
+      }
+    }
+  }
+
+  /** INTERNAL_ERROR is a Spark bug, not an analysis result: it fails the call. */
+  private def isInternalError(e: SparkThrowable): Boolean =
+    Option(e.getCondition).exists(_.startsWith("INTERNAL_ERROR"))
+
+  /**
+   * Character span of a statement object; `text` is the statement's own text,
+   * which its error indexes are relative to.
+   */
+  private case class StatementSpan(start: Int, length: Int, text: String)
+
+  private def segmentSpan(batch: String, segment: PositionedSqlStatement): StatementSpan =
+    StatementSpan(charStart(batch, segment), charLength(segment), segment.statement)
+
+  /** Code points `[from, until)` of `text`, clamped to its bounds. */
+  private def codePointSlice(text: String, from: Int, until: Int): String = {
+    val count = text.codePointCount(0, text.length)
+    val begin = math.max(0, math.min(from, count))
+    val end = math.max(begin, math.min(until, count))
+    text.substring(text.offsetByCodePoints(0, begin), text.offsetByCodePoints(0, end))
+  }
+
+  /**
+   * Analysis state carried across the statements of one ANALYZE batch. It
+   * starts from the caller-supplied variables and relations and records the
+   * effect of each analyzed statement on later ones, without executing
+   * anything:
+   *  - DECLARE VARIABLE adds a session variable. DROP TEMPORARY VARIABLE
+   *    removes it.
+   *  - CREATE [OR REPLACE] TABLE / VIEW / TEMP VIEW (column list, AS query,
+   *    LIKE, or a temp view USING with a schema) adds a schema-only relation of
+   *    that identity. DROP TABLE / VIEW removes a relation known this way.
+   * Objects dropped that exist in the catalog stay visible, and statements that
+   * change a schema in place (for example ALTER TABLE) are not tracked.
+   */
+  private final class AnalyzeState(env: AnalyzeEnv) {
+    private val session = env.session
+    private def mgr: CatalogManager = session.sessionState.catalogManager
+    private def resolver: (String, String) => Boolean = session.sessionState.conf.resolver
+
+    private var variables: List[(Seq[String], DataType)] = env.variables.map {
+      case (name, dataType) => SuppliedVariableRegistry.canonicalize(name) -> dataType
+    }.toList
+    private var relations: List[(Seq[String], StructType)] = env.relations.map {
+      case (name, schema) => SuppliedRelationRegistry.canonicalize(mgr, name) -> schema
+    }.toList
+
+    /**
+     * Analyze one statement with the known objects, render its JSON, then
+     * record its effect.
+     */
+    def statement(plan: LogicalPlan, span: StatementSpan): JObject = {
+      SuppliedVariableRegistry.create(variables).runWith {
+        SuppliedRelationRegistry.create(relations).runWith {
+          val (analyzed, error) = analyze(plan)
+          val json = successJson(plan, analyzed, error, Some(session), span)
+          record(plan, analyzed)
+          json
+        }
+      }
+    }
+
+    private def analyze(
+        plan: LogicalPlan,
+        markers: Seq[(String, DataType)] = env.parameterMarkers)
+        : (Option[LogicalPlan], Option[SparkThrowable with Throwable]) = {
+      try {
+        val toAnalyze = bindSuppliedParameterMarkers(plan, markers)
+        val analyzed =
+          session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
+        (Some(analyzed), None)
+      } catch {
+        case e: SparkThrowable with Throwable if !isInternalError(e) => (None, Some(e))
+      }
+    }
+
+    private def record(plan: LogicalPlan, analyzed: Option[LogicalPlan]): Unit = plan match {
+      case c: CreateVariable =>
+        variableType(c, analyzed).foreach { dataType =>
+          c.names.foreach {
+            case UnresolvedIdentifier(nameParts, _) => declareVariable(nameParts, dataType)
+            case _ =>
+          }
+        }
+      case DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
+        val identity = SuppliedVariableRegistry.canonicalize(nameParts)
+        variables = variables.filterNot { case (name, _) => sameName(name, identity) }
+      case c: CreateTable =>
+        nameOf(c.name).filterNot(n => c.ignoreIfExists && relationExists(n)).foreach {
+          createRelation(_, StructType(c.columns.map(col =>
+            StructField(col.name, col.dataType, col.nullable))))
+        }
+      case r: ReplaceTable =>
+        nameOf(r.name).foreach {
+          createRelation(_, StructType(r.columns.map(col =>
+            StructField(col.name, col.dataType, col.nullable))))
+        }
+      case c: CreateTableAsSelect =>
+        nameOf(c.name).filterNot(n => c.ignoreIfExists && relationExists(n)).foreach { name =>
+          querySchema(c.query).foreach(createRelation(name, _))
+        }
+      case r: ReplaceTableAsSelect =>
+        nameOf(r.name).foreach(name => querySchema(r.query).foreach(createRelation(name, _)))
+      case c: CreateTableLike =>
+        for {
+          name <- nameOf(c.name) if !(c.ifNotExists && relationExists(name))
+          source <- nameOf(c.source)
+          schema <- querySchema(UnresolvedRelation(source))
+        } createRelation(name, schema)
+      case v: CreateView =>
+        nameOf(v.child).filterNot(n => v.allowExisting && relationExists(n)).foreach { name =>
+          querySchema(v.query).foreach(s =>
+            createRelation(name, withColumnNames(s, v.userSpecifiedColumns)))
+        }
+      case v: CreateViewCommand =>
+        val name = viewIdentity(v.name, v.viewType)
+        if (!(v.allowExisting && relationExists(name))) {
+          querySchema(v.plan).foreach(s =>
+            createRelation(name, withColumnNames(s, v.userSpecifiedColumns)))
+        }
+      case v: CreateTempViewUsing =>
+        val viewType = if (v.global) GlobalTempView else LocalTempView
+        v.userSpecifiedSchema.foreach(createRelation(viewIdentity(v.tableIdent, viewType), _))
+      case d: DropTable => nameOf(d.child).foreach(dropRelation)
+      case d: DropView => nameOf(d.child).foreach(dropRelation)
+      case _ =>
+    }
+
+    /** The declared type, else the type of the analyzed DEFAULT expression. */
+    private def variableType(
+        c: CreateVariable,
+        analyzed: Option[LogicalPlan]): Option[DataType] = c.defaultExpr.child match {
+      case cast: Cast => Some(cast.dataType)
+      case Literal(null, dataType) => Some(dataType)
+      case _ =>
+        analyzed.flatMap(_.collectFirst {
+          case v: CreateVariable if v.defaultExpr.child.resolved => v.defaultExpr.child.dataType
+        })
+    }
+
+    private def declareVariable(nameParts: Seq[String], dataType: DataType): Unit = {
+      val identity = SuppliedVariableRegistry.canonicalize(nameParts)
+      variables = (identity -> dataType) ::
+        variables.filterNot { case (name, _) => sameName(name, identity) }
+    }
+
+    private def nameOf(plan: LogicalPlan): Option[Seq[String]] = plan match {
+      case UnresolvedIdentifier(nameParts, _) => Some(nameParts)
+      case u: UnresolvedTableOrView => Some(u.multipartIdentifier)
+      case u: UnresolvedTable => Some(u.multipartIdentifier)
+      case u: UnresolvedView => Some(u.multipartIdentifier)
+      case u: UnresolvedRelation => Some(u.multipartIdentifier)
+      case _ => None
+    }
+
+    private def viewIdentity(name: TableIdentifier, viewType: ViewType): Seq[String] =
+      viewType match {
+        case LocalTempView => SuppliedRelationRegistry.sessionIdentity(name.table)
+        case GlobalTempView => Seq(session.sessionState.catalog.globalTempDatabase, name.table)
+        case _ => tableIdentifierParts(name)
+      }
+
+    private def withColumnNames(
+        schema: StructType,
+        columns: Seq[(String, Option[String])]): StructType = {
+      if (columns.nonEmpty && columns.length == schema.length) {
+        StructType(schema.fields.zip(columns).map { case (f, (name, _)) => f.copy(name = name) })
+      } else {
+        schema
+      }
+    }
+
+    private def querySchema(query: LogicalPlan): Option[StructType] =
+      analyze(query)._1.map(_.schema)
+
+    /**
+     * Whether an object of the identity `nameParts` names already exists, for
+     * IF NOT EXISTS. This checks that identity only, not what the name would
+     * resolve to through the path.
+     */
+    private def relationExists(nameParts: Seq[String]): Boolean = {
+      val identity = SuppliedRelationRegistry.canonicalize(mgr, nameParts)
+      val catalog = session.sessionState.catalog
+      relations.exists(r => sameName(r._1, identity)) || {
+        try {
+          if (CatalogManager.isSessionQualifiedViewName(identity)) {
+            catalog.getRawTempView(identity.last).isDefined
+          } else if (identity.length == 2 && catalog.isGlobalTempViewDB(identity.head)) {
+            catalog.getRawGlobalTempView(identity.last).isDefined
+          } else {
+            mgr.catalog(identity.head) match {
+              case tables: TableCatalog =>
+                tables.tableExists(Identifier.of(identity.tail.init.toArray, identity.last))
+              case _ => false
+            }
+          }
+        } catch {
+          case NonFatal(_) => false
+        }
+      }
+    }
+
+    private def createRelation(nameParts: Seq[String], schema: StructType): Unit = {
+      if (schema.nonEmpty) {
+        val identity = SuppliedRelationRegistry.canonicalize(mgr, nameParts)
+        relations = (identity -> schema) ::
+          relations.filterNot { case (name, _) => sameName(name, identity) }
+      }
+    }
+
+    /** A one-part name drops the temp view of that name first, as DROP does. */
+    private def dropRelation(nameParts: Seq[String]): Unit = {
+      val sessionIdentity = SuppliedRelationRegistry.sessionIdentity(nameParts.last)
+      val identity =
+        if (nameParts.length == 1 && relations.exists(r => sameName(r._1, sessionIdentity))) {
+          sessionIdentity
+        } else {
+          SuppliedRelationRegistry.canonicalize(mgr, nameParts)
+        }
+      relations = relations.filterNot { case (name, _) => sameName(name, identity) }
+    }
+
+    private def sameName(left: Seq[String], right: Seq[String]): Boolean =
+      left.length == right.length && left.zip(right).forall { case (a, b) => resolver(a, b) }
+  }
+
+  /** Parsed plan, or parse-failure JSON for this statement. */
+  private def parsePlanOrError(
+      batch: String,
+      segment: PositionedSqlStatement): ParsedStatement = {
     val sql = segment.statement
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
       // Errors and parsed nodes refer to the individual statement.
       val origin = if (sql.nonEmpty) {
-        Origin(startIndex = Some(0), stopIndex = Some(sql.length - 1), sqlText = Some(sql))
+        Origin(
+          startIndex = Some(0),
+          stopIndex = Some(sql.codePointCount(0, sql.length) - 1),
+          sqlText = Some(sql))
       } else {
         Origin(sqlText = Some(sql))
       }
       CurrentOrigin.withOrigin(origin) {
-        val plan = parser.get().parsePlan(sql)
-        successJson(plan, segment)
+        Parsed(segment, parser.get().parsePlan(sql))
       }
     } catch {
-      // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
-        errorJson(e, segment)
+        ParseFailed(errorJson(e, segmentSpan(batch, segment)))
       case e: SqlScriptingException =>
-        errorJson(e, segment)
+        ParseFailed(errorJson(e, segmentSpan(batch, segment)))
+    }
+  }
+
+  /** Session and caller-supplied objects for one ANALYZE batch. */
+  private case class AnalyzeEnv(
+      session: ClassicSparkSession,
+      parameterMarkers: Seq[(String, DataType)],
+      variables: Seq[(Seq[String], DataType)],
+      relations: Seq[(Seq[String], StructType)])
+
+  /**
+   * Run `f` with optional catalog / schema / SQL path overrides, then restore
+   * the invoker session. `None` on a field keeps the current value. Supplied
+   * variables and relations are validated here and overlaid per statement.
+   */
+  private def withAnalyzeContext[T](
+      session: ClassicSparkSession,
+      context: ParseSqlAnalyzeContext)(f: AnalyzeEnv => T): T = {
+    val parsedVars = context.variables.map(parseKnownVariable)
+    val parsedRels = context.relations.map(parseKnownRelation)
+    val parsedMarkers = context.parameterMarkers.map(parseKnownParameterMarker)
+    val env = AnalyzeEnv(session, parsedMarkers, parsedVars, parsedRels)
+    val needsSessionOverride =
+      context.catalog.nonEmpty || context.schema.nonEmpty || context.path.nonEmpty
+    if (!needsSessionOverride) {
+      f(env)
+    } else {
+      val mgr = session.sessionState.catalogManager
+      val conf = session.sessionState.conf
+      val prevCatalog = mgr.currentCatalog.name()
+      val prevNamespace = mgr.currentNamespace.clone()
+      val prevPath = mgr.storedSessionPathEntries
+      val prevPathEnabled = conf.getConf(SQLConf.PATH_ENABLED)
+      try {
+        context.catalog.foreach { catalog =>
+          if (catalog.trim.isEmpty) {
+            throw QueryExecutionErrors.invalidParseSqlContext("current_catalog", catalog)
+          }
+          mgr.setCurrentCatalog(catalog)
+        }
+        context.schema.foreach { schema =>
+          val parts = try {
+            parser.get().parseMultipartIdentifier(schema)
+          } catch {
+            case _: ParseException =>
+              throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
+          }
+          if (parts.isEmpty) {
+            throw QueryExecutionErrors.invalidParseSqlContext("current_schema", schema)
+          }
+          mgr.setCurrentNamespace(parts.toArray)
+        }
+        context.path.foreach { path =>
+          if (!prevPathEnabled) {
+            conf.setConf(SQLConf.PATH_ENABLED, true)
+          }
+          applyPathOverride(mgr, conf, path)
+        }
+        f(env)
+      } finally {
+        mgr.setCurrentCatalog(prevCatalog)
+        mgr.setCurrentNamespace(prevNamespace)
+        prevPath match {
+          case Some(entries) => mgr.setSessionPath(entries)
+          case None => mgr.clearSessionPath()
+        }
+        if (conf.getConf(SQLConf.PATH_ENABLED) != prevPathEnabled) {
+          conf.setConf(SQLConf.PATH_ENABLED, prevPathEnabled)
+        }
+      }
+    }
+  }
+
+  private def applyPathOverride(
+      mgr: CatalogManager,
+      conf: SQLConf,
+      path: String): Unit = {
+    if (path.trim.isEmpty) {
+      mgr.clearSessionPath()
+    } else {
+      val elements = try {
+        parser.get().parsePathElements(path)
+      } catch {
+        case _: ParseException =>
+          throw QueryExecutionErrors.invalidParseSqlContext("current_path", path)
+      }
+      val expanded = PathElement.validateNoStaticDuplicates(
+        PathElement.expand(elements, conf, mgr),
+        conf.caseSensitiveAnalysis)
+      if (expanded.isEmpty) {
+        mgr.clearSessionPath()
+      } else {
+        mgr.setSessionPath(expanded)
+      }
+    }
+  }
+
+  private def parseKnownVariable(
+      spec: (String, String)): (Seq[String], DataType) = {
+    val (name, typeDdl) = spec
+    val parts = parseKnownName(name, "variables")
+    val dataType = try {
+      DataType.fromDDL(typeDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("variables", typeDdl)
+    }
+    (parts, dataType)
+  }
+
+  private def parseKnownRelation(
+      spec: (String, String)): (Seq[String], StructType) = {
+    val (name, schemaDdl) = spec
+    val parts = parseKnownName(name, "relations")
+    val dataType = try {
+      DataType.fromDDL(schemaDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("relations", schemaDdl)
+    }
+    dataType match {
+      case schema: StructType if schema.nonEmpty =>
+        (parts, CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema))
+      case _ =>
+        throw QueryExecutionErrors.invalidParseSqlContext("relations", schemaDdl)
+    }
+  }
+
+  private def parseKnownName(name: String, parameter: String): Seq[String] = {
+    val parts = try {
+      parser.get().parseMultipartIdentifier(name)
+    } catch {
+      case _: ParseException =>
+        throw QueryExecutionErrors.invalidParseSqlContext(parameter, name)
+    }
+    if (parts.isEmpty) {
+      throw QueryExecutionErrors.invalidParseSqlContext(parameter, name)
+    }
+    parts
+  }
+
+  private def parseKnownParameterMarker(
+      spec: (String, String)): (String, DataType) = {
+    val (name, typeDdl) = spec
+    val dataType = try {
+      DataType.fromDDL(typeDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("parameter_markers", typeDdl)
+    }
+    val trimmed = name.trim
+    if (trimmed == "?") {
+      ("?", dataType)
+    } else {
+      val parts = parseKnownName(trimmed, "parameter_markers")
+      if (parts.length != 1) {
+        throw QueryExecutionErrors.invalidParseSqlContext("parameter_markers", name)
+      }
+      (parts.head, dataType)
+    }
+  }
+
+  /**
+   * Bind caller-supplied marker types using the same [[BindParameters]] rule as
+   * `sql(..., args)`, then analyze the bound plan.
+   */
+  private def bindSuppliedParameterMarkers(
+      plan: LogicalPlan,
+      markers: Seq[(String, DataType)]): LogicalPlan = {
+    // Markers may sit in subqueries and CTE definitions, so look deep.
+    val used = if (markers.isEmpty) None else collectPlanReferences(plan).parameterMarkers
+    if (used.isEmpty) {
+      plan
+    } else {
+      val namedArgs = markers.collect {
+        case (name, dataType) if name != "?" =>
+          name -> Literal.create(null, dataType)
+      }
+      val posArgs = markers.collect {
+        case ("?", dataType) => Literal.create(null, dataType)
+      }
+      val usesNamed = used.exists(_.obj.exists(_._1 == "named"))
+      val usesPos = used.exists(_.obj.exists(_._1 == "unnamed_count"))
+      val wrapped = if (usesNamed && namedArgs.nonEmpty) {
+        NameParameterizedQuery(plan, namedArgs.toMap)
+      } else if (usesPos && posArgs.nonEmpty) {
+        PosParameterizedQuery(plan, posArgs)
+      } else {
+        plan
+      }
+      BindParameters(wrapped)
     }
   }
 
   /** Build success JSON from an already-parsed unresolved plan. */
-  private def successJson(plan: LogicalPlan, segment: PositionedSqlStatement): JObject = {
+  private def successJson(
+      plan: LogicalPlan,
+      analyzed: Option[LogicalPlan],
+      analyzeError: Option[SparkThrowable with Throwable],
+      session: Option[ClassicSparkSession],
+      span: StatementSpan): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
-    fields += "start" -> JInt(segment.start + 1)
-    fields += "length" -> JInt(segment.length)
+    fields += "start" -> JInt(span.start)
+    fields += "length" -> JInt(span.length)
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
+    if (session.nonEmpty) {
+      fields += "analyze_success" -> JBool(analyzed.isDefined)
+    }
     // Omit unused collections / markers so consumers can treat absence as empty.
     val refs = collectPlanReferences(plan)
-    if (refs.targetTables.nonEmpty) {
+    // Qualify from the ANALYZE session even when analysis failed: names and
+    // builtins are known from parse plus current catalog / schema / path.
+    // A DML target is the existing object its name resolves to; a DDL target
+    // is named in the current schema.
+    val dmlTarget = plan match {
+      case _: InsertIntoStatement | _: UnresolvedInsert | _: UpdateTable | _: DeleteFromTable |
+          _: MergeIntoTable => true
+      case _ => false
+    }
+    val targetTables = session.map(s => refs.targetTables.map(qualifyRelation(_, s, dmlTarget)))
+      .getOrElse(refs.targetTables)
+    val sourceTables = session.map(s => refs.sourceTables.map(qualifyRelation(_, s)))
+      .getOrElse(refs.sourceTables)
+    val functions = session.map(s => refs.functions.map(qualifyRoutine(_, s)))
+      .getOrElse(refs.functions)
+    if (targetTables.nonEmpty) {
       fields += "target_table_references" ->
-        JArray(refs.targetTables.map(partsToJArray).toList)
+        JArray(targetTables.map(partsToJArray).toList)
     }
-    if (refs.sourceTables.nonEmpty) {
+    if (sourceTables.nonEmpty) {
       fields += "source_table_references" ->
-        JArray(refs.sourceTables.map(partsToJArray).toList)
+        JArray(sourceTables.map(partsToJArray).toList)
     }
-    if (refs.functions.nonEmpty) {
-      fields += "function_references" -> JArray(refs.functions.map(partsToJArray).toList)
+    if (functions.nonEmpty) {
+      fields += "function_references" -> JArray(functions.map(partsToJArray).toList)
     }
-    val selectList = collectSelectList(plan)
+    val selectList = analyzed.map(collectTypedSelectList)
+      .getOrElse(collectSelectList(plan))
     if (selectList.nonEmpty) {
       fields += "select_list" -> JArray(selectList.toList)
     }
     refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
+    analyzeError.foreach { e =>
+      fields += "error" -> errorObject(e, span.text)
+    }
     JObject(fields.toList)
   }
 
-  private def errorJson(
-      e: SparkThrowable with Throwable,
-      segment: PositionedSqlStatement): JObject = {
+  /** 1-based Unicode code-point offset of `segment` in `batch`. */
+  private def charStart(batch: String, segment: PositionedSqlStatement): Int = {
+    val utf16 = math.max(0, math.min(segment.start, batch.length))
+    batch.codePointCount(0, utf16) + 1
+  }
+
+  /** Unicode code-point length of the trimmed statement text. */
+  private def charLength(segment: PositionedSqlStatement): Int = {
+    val text = segment.statement
+    if (text.isEmpty) 0 else text.codePointCount(0, text.length)
+  }
+
+  /** STANDARD JSON of `e` with `queryContext` in code points of `statement`. */
+  private def errorObject(e: SparkThrowable with Throwable, statement: String): JObject = {
+    val errorObj = parseJson(
+      SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
+    rewriteErrorCharIndexes(errorObj, statement)
+  }
+
+  /**
+   * Recompute the fragment of each statement `queryContext` by code points.
+   * The indexes are parser (code-point) offsets, but [[SQLQueryContext]]
+   * slices its fragment by UTF-16 units, which is off after a supplementary
+   * character. A context that falls outside the statement covers all of it.
+   * Contexts of another object (a view body, an EXECUTE IMMEDIATE string) are
+   * left as is.
+   */
+  private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
+    JObject(errorObj.obj.map {
+      case ("queryContext", JArray(contexts)) =>
+        "queryContext" -> JArray(contexts.map {
+          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement)
+          case other => other
+        }.toList)
+      case other => other
+    })
+  }
+
+  private def rewriteQueryContextIndexes(ctx: JObject, statement: String): JObject = {
+    val objectType = ctx.obj.collectFirst { case ("objectType", JString(t)) => t }
+    val start = ctx.obj.collectFirst { case ("startIndex", JInt(n)) => n.toInt }
+    val stop = ctx.obj.collectFirst { case ("stopIndex", JInt(n)) => n.toInt }
+    (objectType, start, stop) match {
+      case (Some(""), Some(from), Some(to)) =>
+        val length = statement.codePointCount(0, statement.length)
+        val (first, last) =
+          if (from >= 1 && to >= from && to <= length) (from, to) else (1, length)
+        JObject(ctx.obj.map {
+          case ("startIndex", _) => "startIndex" -> JInt(first)
+          case ("stopIndex", _) => "stopIndex" -> JInt(last)
+          case ("fragment", _) => "fragment" -> JString(codePointSlice(statement, first - 1, last))
+          case other => other
+        })
+      case _ => ctx
+    }
+  }
+
+  private def errorJson(e: SparkThrowable with Throwable, span: StatementSpan): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
     val origin = e match {
@@ -140,10 +764,12 @@ object ParseSqlResult {
       origin.toSeq.flatMap(queryContextField)
     }
     JObject(
-      "start" -> JInt(segment.start + 1),
-      "length" -> JInt(segment.length),
+      "start" -> JInt(span.start),
+      "length" -> JInt(span.length),
       "parse_success" -> JBool(false),
-      "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
+      "error" -> rewriteErrorCharIndexes(
+        JObject(errorObj.obj ++ contextFields ++ locationFields),
+        span.text)
     )
   }
 
@@ -247,6 +873,8 @@ object ParseSqlResult {
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case i: InsertIntoStatement =>
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
+      case i: InsertIntoSuppliedRelation =>
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
         visitPlan(c.query, nextScope, TableRefRole.Source)(f)
@@ -307,7 +935,7 @@ object ParseSqlResult {
     }
   }
 
-  private def tableIdentifierParts(id: org.apache.spark.sql.catalyst.TableIdentifier): Seq[String] =
+  private def tableIdentifierParts(id: TableIdentifier): Seq[String] =
     id.catalog.toSeq ++ id.database.toSeq :+ id.table
 
   private final case class PlanReferences(
@@ -407,12 +1035,116 @@ object ParseSqlResult {
     named.map(selectListItem)
   }
 
+  /** Select-list items with SQL types from an analyzed query's output. */
+  private def collectTypedSelectList(plan: LogicalPlan): Seq[JObject] = {
+    val query = primaryQueryPlan(plan)
+    if (query.resolved && query.output.nonEmpty) {
+      query.output.map { attr =>
+        JObject(
+          "name" -> partsToJArray(Seq(attr.name)),
+          "type" -> DescribeRelationJsonCommand.jsonType(
+            CharVarcharUtils.getRawType(attr.metadata).getOrElse(attr.dataType)))
+      }
+    } else {
+      collectSelectList(plan)
+    }
+  }
+
+  private def qualifyRelation(
+      parts: Seq[String],
+      session: ClassicSparkSession,
+      resolve: Boolean = true): Seq[String] = {
+    val catalog = session.sessionState.catalog
+    val resolver = session.sessionState.conf.resolver
+    val mgr = session.sessionState.catalogManager
+    val sessionIdent = SuppliedRelationRegistry.sessionIdentity(parts.last)
+    val overlaySession =
+      SuppliedRelationRegistry.lookup(sessionIdent, resolver).isDefined
+    parts match {
+      case Seq(name) if catalog.getRawTempView(name).isDefined =>
+        sessionIdent
+      case Seq(name) if overlaySession && mgr.isSystemSessionOnPath =>
+        sessionIdent
+      case _ if CatalogManager.isSessionQualifiedViewName(parts) &&
+          (catalog.isTempView(parts) || overlaySession) =>
+        sessionIdent
+      case _ if catalog.isTempView(parts) =>
+        parts match {
+          case Seq(db, name) => Seq(db, name)
+          case other => other
+        }
+      case _ =>
+        Option.when(resolve)(resolvedRelationIdentity(parts, session)).flatten
+          .getOrElse(qualifyWithCurrentNamespace(parts, session))
+    }
+  }
+
+  /**
+   * Identity of the relation `parts` resolves to, so a name found through the
+   * path is reported where it was found. None when it does not resolve.
+   */
+  private def resolvedRelationIdentity(
+      parts: Seq[String],
+      session: ClassicSparkSession): Option[Seq[String]] = {
+    try {
+      session.sessionState.analyzer.execute(UnresolvedRelation(parts)) match {
+        case s: SubqueryAlias if s.identifier.qualifier.nonEmpty =>
+          Some(s.identifier.qualifier :+ s.identifier.name)
+        case _ => None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  private def qualifyRoutine(
+      parts: Seq[String],
+      session: ClassicSparkSession): Seq[String] = {
+    val catalog = session.sessionState.catalog
+    parts match {
+      case Seq(name) if catalog.isTemporaryFunction(FunctionIdentifier(name)) =>
+        Seq(
+          CatalogManager.SYSTEM_CATALOG_NAME,
+          CatalogManager.SESSION_NAMESPACE,
+          name)
+      case Seq(name) if FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) =>
+        FunctionRegistry.builtinFunctionIdentifier(name).nameParts
+      case Seq(ns, name) if isSystemNamespace(ns) =>
+        Seq(CatalogManager.SYSTEM_CATALOG_NAME, ns.toLowerCase(Locale.ROOT), name)
+      case Seq(cat, ns, name)
+          if cat.equalsIgnoreCase(CatalogManager.SYSTEM_CATALOG_NAME) && isSystemNamespace(ns) =>
+        Seq(CatalogManager.SYSTEM_CATALOG_NAME, ns.toLowerCase(Locale.ROOT), name)
+      case other =>
+        qualifyWithCurrentNamespace(other, session)
+    }
+  }
+
+  private def qualifyWithCurrentNamespace(
+      parts: Seq[String],
+      session: ClassicSparkSession): Seq[String] = {
+    val mgr = session.sessionState.catalogManager
+    val catalogName = mgr.currentCatalog.name()
+    val namespace = mgr.currentNamespace.toSeq
+    parts match {
+      case Seq(name) => Seq(catalogName) ++ namespace :+ name
+      case other if mgr.isCatalogRegistered(other.head) => other
+      case other => catalogName +: other
+    }
+  }
+
+  private def isSystemNamespace(ns: String): Boolean =
+    ns.equalsIgnoreCase(CatalogManager.BUILTIN_NAMESPACE) ||
+      ns.equalsIgnoreCase(CatalogManager.SESSION_NAMESPACE)
+
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
+    case WithCTE(child, _) => primaryQueryPlan(child)
     case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
-    case InsertIntoStatement(_, _, _, query, _, _, _, _, _) =>
-      primaryQueryPlan(query)
+    case i: InsertIntoSuppliedRelation => primaryQueryPlan(i.query)
+    case i: InsertIntoStatement => primaryQueryPlan(i.query)
+    case d: DataWritingCommand => primaryQueryPlan(d.query)
+    case w: V2WriteCommand => primaryQueryPlan(w.query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)
     case c: CreateView => primaryQueryPlan(c.query)
