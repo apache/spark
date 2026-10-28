@@ -171,7 +171,7 @@ object StaticSQLConf {
         "specified in spark.sql.extensions. When the same extension appears in both configs, " +
         "the entry here is dropped with a warning; repeats within a single config are still " +
         "applied as many times as listed.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .stringConf
       .toSequence
