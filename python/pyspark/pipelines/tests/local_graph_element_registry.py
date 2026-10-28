@@ -19,9 +19,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
-from pyspark.pipelines.output import Output
 from pyspark.pipelines.flow import AutoCdcFlow, Flow
 from pyspark.pipelines.graph_element_registry import GraphElementRegistry
+from pyspark.pipelines.output import Output
 
 
 @dataclass(frozen=True)

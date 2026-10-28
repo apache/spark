@@ -257,6 +257,15 @@ class SingleEventLogFileWriter(
 }
 
 object SingleEventLogFileWriter {
+  /** Returns names for completed and in-progress single event logs. */
+  private[history] def getLogFileNames(appId: String, appAttemptId: Option[String]): Seq[String] = {
+    val logBaseName = EventLogFileWriter.nameForAppAndAttempt(appId, appAttemptId)
+    val names = logBaseName +: CompressionCodec.shortCompressionCodecNames.keys.toSeq.map {
+      codec => s"$logBaseName.$codec"
+    }
+    names ++ names.map(_ + EventLogFileWriter.IN_PROGRESS)
+  }
+
   /**
    * Return a file-system-safe path to the log file for the given application.
    *

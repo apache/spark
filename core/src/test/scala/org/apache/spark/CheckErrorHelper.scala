@@ -67,7 +67,10 @@ trait CheckErrorHelper { self: Suite =>
    * Test suites may override this to add or change ignorable parameters per condition.
    */
   protected def checkErrorIgnorableParameters: Map[String, Set[String]] = Map(
-    "TABLE_OR_VIEW_NOT_FOUND" -> Set("searchPath")
+    "TABLE_OR_VIEW_NOT_FOUND" -> Set("searchPath"),
+    // The per-consumer memory breakdown is a best-effort diagnostic whose content (live memory
+    // sizes and consumer identities) is inherently non-deterministic, so tests need not pin it.
+    "UNABLE_TO_ACQUIRE_MEMORY" -> Set("consumerBreakdown")
   )
 
   /**

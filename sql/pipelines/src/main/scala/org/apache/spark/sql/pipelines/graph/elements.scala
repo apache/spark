@@ -160,12 +160,14 @@ case class Table(
  * @param identifier  The identifier of the parent table.
  * @param specifiedSchema The user-specified schema for the parent table.
  * @param incomingFlowIdentifiers The identifiers of all flows that write to the parent table.
+ * @param sessionCaseSensitive The session's `spark.sql.caseSensitive` fallback.
  * @param availableFlows  All resolved flows that write to the parent table.
  */
 case class VirtualTableInput(
     identifier: TableIdentifier,
     specifiedSchema: Option[StructType],
     incomingFlowIdentifiers: Set[TableIdentifier],
+    sessionCaseSensitive: Boolean,
     availableFlows: Seq[ResolvedFlow] = Nil
 ) extends TableElement with Input
     with Logging {
@@ -186,7 +188,11 @@ case class VirtualTableInput(
       // Otherwise infer the schema from a combination of the incoming flows and the
       // user-specified schema, if provided.
       case _ =>
-        SchemaInferenceUtils.inferSchemaFromFlows(availableFlows, specifiedSchema)
+        SchemaInferenceUtils.inferSchemaFromFlows(
+          tableIdentifier = identifier,
+          flows = availableFlows,
+          userSpecifiedSchema = specifiedSchema,
+          sessionCaseSensitive = sessionCaseSensitive)
     }
 
     // Produce either a streaming or batch dataframe, depending on whether this is a virtual

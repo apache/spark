@@ -61,6 +61,11 @@ options { tokenVocab = SqlBaseLexer; }
   public boolean single_character_pipe_operator_enabled = true;
 
   /**
+   * When true, the FILE data type is recognized and supported.
+   */
+  public boolean file_type_enabled = false;
+
+  /**
    * Checks if the next token after PIPE can start an operator pipe right side.
    * This disambiguates between bitwise OR (|) in expressions and pipe operator (|) in queries.
    * Used to maintain backwards compatibility when allowing both | and |> as pipe operators.
@@ -79,6 +84,206 @@ options { tokenVocab = SqlBaseLexer; }
            la == SETMINUS || la == INTERSECT || la == ORDER || la == CLUSTER ||
            la == DISTRIBUTE || la == SORT || la == LIMIT || la == OFFSET ||
            la == AGGREGATE || la == WINDOW || la == LATERAL || la == BIN;
+  }
+
+  /**
+   * Checks if the next token is a top-level COLON inside a `jsonObjectColonKey`, i.e. the
+   * JSON_OBJECT member separator, so the key does not absorb it as `k:v` or `'k' :v`.
+   *
+   * Scans the token stream, not the parse tree, because it runs during ANTLR prediction before the
+   * rule-context stack above `_ctx` is materialized. The COLON separates only at the key's top
+   * level: not inside parens/brackets and not inside a CASE branch. CASE and END are non-reserved,
+   * so each is counted as CASE nesting only when a neighbouring token shows it is the keyword, not
+   * a column (see the helpers below).
+   */
+  public boolean isJsonObjectColonSeparator() {
+    Token next = _input.LT(1);
+    if (next.getType() != COLON) {
+      return false;
+    }
+    for (ParserRuleContext ctx = _ctx; ctx != null; ctx = ctx.getParent()) {
+      if (ctx instanceof JsonObjectColonKeyContext) {
+        int stop = next.getTokenIndex();
+        int start = ctx.getStart().getTokenIndex();
+        int depth = 0;
+        int caseDepth = 0;
+        int prevType = -1;
+        for (int i = start; i < stop; i++) {
+          Token tok = _input.get(i);
+          // Skip hidden-channel whitespace/comments so neighbour-token checks see real tokens.
+          if (tok.getChannel() != Token.DEFAULT_CHANNEL) {
+            continue;
+          }
+          int type = tok.getType();
+          switch (type) {
+            case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
+            case RIGHT_PAREN: case RIGHT_BRACKET: depth--; break;
+            case CASE:
+              // Only count a top-level CASE: one inside parens/brackets has its colons balanced by
+              // `depth` already, so counting it would misread a parenthesized `case` column (e.g.
+              // `CAST(case AS ...)`) as keyword nesting no `END` clears. A `case` column, not the
+              // keyword, when an operator/terminator follows -- except a following COLON, which is
+              // ambiguous: `CASE :p WHEN ... END` (a simple CASE over a named-parameter operand)
+              // and `case : value` (a `case` column before the member separator) both read as
+              // `CASE COLON identifier`, so the one-token peek cannot tell them apart. Only a
+              // complete CASE body ahead -- a top-level WHEN closed by its END -- proves the
+              // keyword, so look ahead for that.
+              if (depth == 0) {
+                int follow = nextDefaultChannelType(i, stop);
+                boolean caseKeyword = (follow == COLON)
+                    ? caseKeywordBeforeColon(i)
+                    : !jsonKeyTokenFollowsOperand(follow);
+                if (caseKeyword) caseDepth++;
+              }
+              break;
+            case END:
+              // Matched to the top-level CASE above; an `end` column in an operand position.
+              if (depth == 0 && caseDepth > 0 &&
+                  !jsonKeyOperandExpectedAfter(prevType)) caseDepth--;
+              break;
+            default: break;
+          }
+          prevType = type;
+        }
+        return depth == 0 && caseDepth == 0 && stop > start;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Type of the first default-channel token after index {@code i}, up to and including
+   * {@code stop}, or -1 if there is none.
+   */
+  private int nextDefaultChannelType(int i, int stop) {
+    for (int j = i + 1; j <= stop; j++) {
+      Token tok = _input.get(j);
+      if (tok.getChannel() == Token.DEFAULT_CHANNEL) {
+        return tok.getType();
+      }
+    }
+    return -1;
+  }
+
+  /**
+   * True when the `CASE` at {@code caseIdx} (sitting right before a COLON) opens a complete simple
+   * CASE (`CASE operand WHEN ... END`), proving it is the keyword, not a `case` column before the
+   * member separator. Requires the matching top-level END, not just a WHEN: a bare `when` value
+   * column (non-reserved outside ANSI) would otherwise masquerade as the WHEN, e.g.
+   * `JSON_OBJECT(case : when)`. Tracks paren/bracket depth and nested CASE...END; stops at depth-0
+   * terminator (COMMA/SEMICOLON), an unmatched closer, or EOF. Reads ahead of the current token, so
+   * it fetches via {@code tokenAt}.
+   */
+  private boolean caseKeywordBeforeColon(int caseIdx) {
+    int depth = 0;        // paren/bracket depth
+    int caseNesting = 0;  // nested CASE...END below this CASE
+    boolean seenWhen = false;
+    for (int i = caseIdx + 1; ; i++) {
+      Token tok = tokenAt(i);
+      if (tok == null || tok.getType() == Token.EOF) {
+        return false;
+      }
+      if (tok.getChannel() != Token.DEFAULT_CHANNEL) {
+        continue;
+      }
+      switch (tok.getType()) {
+        case LEFT_PAREN: case LEFT_BRACKET: depth++; break;
+        case RIGHT_PAREN: case RIGHT_BRACKET:
+          if (depth == 0) return false;
+          depth--;
+          break;
+        case CASE:
+          if (depth == 0) caseNesting++;
+          break;
+        case WHEN:
+          if (depth == 0 && caseNesting == 0) seenWhen = true;
+          break;
+        case END:
+          if (depth == 0) {
+            if (caseNesting == 0) return seenWhen;
+            caseNesting--;
+          }
+          break;
+        case COMMA: case SEMICOLON:
+          if (depth == 0 && caseNesting == 0) return false;
+          break;
+        default: break;
+      }
+    }
+  }
+
+  /**
+   * Returns the token at absolute index {@code i}, forcing a lazy fetch (via {@code LT}, which does
+   * not consume) when {@code i} is at or ahead of the current position, or null past EOF. Needed
+   * because {@code caseKeywordBeforeColon} scans ahead of the current token, which may not be
+   * buffered.
+   */
+  private Token tokenAt(int i) {
+    int cur = _input.index();
+    if (i >= cur) {
+      _input.LT(i - cur + 1);
+    }
+    return i < _input.size() ? _input.get(i) : null;
+  }
+
+  /**
+   * True when an operand is expected after this token type, so a following `CASE`/`END` is a column
+   * rather than the keyword. Lists only tokens that never complete an expression; any other
+   * predecessor falls back to treating `CASE`/`END` as the keyword.
+   */
+  private boolean jsonKeyOperandExpectedAfter(int type) {
+    switch (type) {
+      case LEFT_PAREN: case LEFT_BRACKET: case COMMA:
+      case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
+      case PLUS: case MINUS: case ASTERISK: case SLASH: case PERCENT: case DIV:
+      case TILDE: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
+      case AND: case OR: case NOT:
+      case WHEN: case THEN: case ELSE: case CASE:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * True when this token type can only follow a completed operand, so a preceding `CASE` is a
+   * column rather than the keyword. Covers the postfix operators (`.`, `::`, `COLLATE`, `[`/`]`
+   * subscript -- Spark has no `[...]` array literal, so `[` only ever subscripts an operand)
+   * alongside the closers and binary/comparison operators. Any other follower falls back to
+   * treating `CASE` as the keyword -- including `+`/`-`/`~`/`*`, which can also start a CASE value
+   * and so do not prove `CASE` is a column.
+   */
+  private boolean jsonKeyTokenFollowsOperand(int type) {
+    switch (type) {
+      case COLON: case COMMA: case RIGHT_PAREN: case LEFT_BRACKET: case RIGHT_BRACKET:
+      case DOUBLE_COLON: case DOT: case COLLATE: case SEMICOLON:
+      case EQ: case NEQ: case NEQJ: case LT: case LTE: case GT: case GTE:
+      case SLASH: case PERCENT: case AMPERSAND: case PIPE: case CONCAT_PIPE: case HAT:
+      case AND: case OR:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * True when the token after a leading `KEY` continues it as an operand, so the `KEY` is a column
+   * (`JSON_OBJECT(key + 1 VALUE v)` is key expression `key + 1`, not the `KEY` keyword with key
+   * `+ 1`). Delegates to the shared operand-follower set and adds `+`/`-` -- the only operators
+   * that both continue `key` as an operand and open a key expression as a unary prefix. Without
+   * this, `KEY +1 VALUE ...` also matches the optional-`KEY` alternative and swallows the `key`
+   * column.
+   * The shared set holds the purely infix/postfix operators, which cannot open a key expression and
+   * so already fail that alternative. Used only to disable the optional-`KEY` alternative, never to
+   * enable it.
+   */
+  private boolean jsonOptionalKeyFollowsOperand(int type) {
+    switch (type) {
+      case PLUS: case MINUS:
+        return true;
+      default:
+        return jsonKeyTokenFollowsOperand(type);
+    }
   }
 }
 
@@ -658,7 +863,7 @@ ctes
     ;
 
 namedQuery
-    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? LEFT_PAREN query RIGHT_PAREN
+    : name=errorCapturingIdentifier (columnAliases=identifierList)? (MAX RECURSION LEVEL integerValue)? AS? (NOT? MATERIALIZED)? LEFT_PAREN query RIGHT_PAREN
     ;
 
 tableProvider
@@ -747,7 +952,7 @@ resource
 dmlStatementNoWith
     : insertInto (query | LEFT_PAREN query RIGHT_PAREN queryAlias=tableAlias)      #singleInsertQuery
     | fromClause multiInsertQueryBody+                                             #multiInsertQuery
-    | DELETE FROM identifierReference tableAlias whereClause?                      #deleteFromTable
+    | DELETE FROM identifierReference tableAlias optionsClause? whereClause?       #deleteFromTable
     | UPDATE identifierReference tableAlias optionsClause? setClause whereClause?  #updateTable
     | MERGE (WITH SCHEMA EVOLUTION)? INTO target=identifierReference targetAlias=tableAlias
         targetOptions=optionsClause?
@@ -771,11 +976,12 @@ autoCdcBody
 autoCdcParameters
     : FROM source=relationPrimary
         KEYS LEFT_PAREN keys=identifierSeq RIGHT_PAREN
-        autoCdcDeleteClause?
-        autoCdcSequenceByClause
-        autoCdcColumnsClause?
-        autoCdcStoredAsClause?
-        autoCdcTrackHistoryClause?
+        (autoCdcDeleteClause
+        | autoCdcSequenceByClause
+        | autoCdcColumnsClause
+        | autoCdcStoredAsClause
+        | autoCdcTrackHistoryClause
+        | autoCdcIgnoreNullClause)*
     ;
 
 autoCdcDeleteClause
@@ -800,6 +1006,12 @@ autoCdcTrackHistoryClause
     : TRACK HISTORY ON (
         LEFT_PAREN trackCols=identifierSeq RIGHT_PAREN |
         ASTERISK EXCEPT LEFT_PAREN nonTrackCols=identifierSeq RIGHT_PAREN)
+    ;
+
+autoCdcIgnoreNullClause
+    : IGNORE NULL UPDATES (ON (
+        LEFT_PAREN ignoreNullCols=identifierSeq RIGHT_PAREN |
+        ASTERISK EXCEPT LEFT_PAREN ignoreNullExceptCols=identifierSeq RIGHT_PAREN))?
     ;
 
 identifierReference
@@ -1208,7 +1420,38 @@ relationPrimary
     | LEFT_PAREN relation RIGHT_PAREN sample?
        watermarkClause? tableAlias                          #aliasedRelation
     | inlineTable                                           #inlineTableDefault2
+    | unnest                                                #unnestTable
+    | jsonTable                                             #jsonTableRelation
     | tableFunctionCallWithTrailingClauses                  #tableValuedFunction
+    ;
+
+// ANSI SQL UNNEST of one or more arrays in the FROM clause, with an optional
+// trailing ordinality column (WITH ORDINALITY). Multiple arrays are expanded in
+// parallel, padded with NULLs to the length of the longest array.
+unnest
+    : UNNEST LEFT_PAREN expression (COMMA expression)* RIGHT_PAREN
+      (WITH ORDINALITY)? tableAlias
+    ;
+
+// The ANSI SQL:2016 JSON_TABLE table-valued function. Because the COLUMNS clause is not a normal
+// function-argument list, it has a dedicated production rather than going through
+// tableFunctionCall. Only the flat (non-NESTED) subset is currently supported.
+jsonTable
+    : JSON_TABLE LEFT_PAREN jsonExpr=expression COMMA rowPath=stringLit
+        COLUMNS LEFT_PAREN jsonTableColumn (COMMA jsonTableColumn)* RIGHT_PAREN
+        jsonTableOnErrorClause?
+      RIGHT_PAREN tableAlias
+    ;
+
+jsonTableColumn
+    : colName=errorCapturingIdentifier FOR ORDINALITY                           #jsonTableOrdinalityColumn
+    | colName=errorCapturingIdentifier dataType
+        EXISTS (PATH path=stringLit)?                                           #jsonTableExistsColumn
+    | colName=errorCapturingIdentifier dataType (PATH path=stringLit)?          #jsonTableValueColumn
+    ;
+
+jsonTableOnErrorClause
+    : (NULL | ERROR) ON ERROR
     ;
 
 optionsClause
@@ -1414,7 +1657,7 @@ shiftOperator
 datetimeUnit
     : YEAR | QUARTER | MONTH
     | WEEK | DAY | DAYOFYEAR
-    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND
+    | HOUR | MINUTE | SECOND | MILLISECOND | MICROSECOND | NANOSECOND
     ;
 
 primaryExpression
@@ -1431,10 +1674,29 @@ primaryExpression
     | ANY_VALUE LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                              #any_value
     | LAST LEFT_PAREN expression (IGNORE NULLS)? RIGHT_PAREN                                   #last
     | POSITION LEFT_PAREN substr=valueExpression IN str=valueExpression RIGHT_PAREN            #position
+    | JSON_VALUE LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      (emptyBehavior=jsonValueBehavior ON EMPTY)?
+      (errorBehavior=jsonValueBehavior ON ERROR)? RIGHT_PAREN                                  #jsonValue
+    | JSON_EXISTS LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (errorBehavior=jsonExistsErrorBehavior ON ERROR)? RIGHT_PAREN                             #jsonExists
+    | JSON_QUERY LEFT_PAREN jsonExpr=valueExpression COMMA path=stringLit
+      (RETURNING returning=dataType)?
+      wrapper=jsonQueryArrayWrapper?
+      quotes=jsonQueryQuotes?
+      (emptyBehavior=jsonQueryBehavior ON EMPTY)?
+      (errorBehavior=jsonQueryBehavior ON ERROR)? RIGHT_PAREN                                  #jsonQuery
+    | JSON_ARRAY LEFT_PAREN
+      (values+=jsonArrayValue (COMMA values+=jsonArrayValue)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)?
+      RIGHT_PAREN                                  #jsonArray
+    | jsonObjectConstructor                                                                    #jsonObject
     | constant                                                                                 #constantDefault
     | ASTERISK exceptClause?                                                                   #star
     | qualifiedName DOT ASTERISK exceptClause?                                                 #star
-    | col=primaryExpression COLON path=semiStructuredExtractionPath                            #semiStructuredExtract
+    | col=primaryExpression {!isJsonObjectColonSeparator()}?
+      COLON path=semiStructuredExtractionPath                                                  #semiStructuredExtract
     | LEFT_PAREN namedExpression (COMMA namedExpression)+ RIGHT_PAREN                          #rowConstructor
     | LEFT_PAREN query RIGHT_PAREN                                                             #subqueryExpression
     | functionName LEFT_PAREN (setQuantifier? argument+=functionArgument
@@ -1455,6 +1717,108 @@ primaryExpression
        FROM srcStr=valueExpression RIGHT_PAREN                                                 #trim
     | OVERLAY LEFT_PAREN input=valueExpression PLACING replace=valueExpression
       FROM position=valueExpression (FOR length=valueExpression)? RIGHT_PAREN                  #overlay
+    ;
+
+// The behavior selected by a JSON_VALUE `... ON EMPTY` / `... ON ERROR` clause. NULL and ERROR are
+// keywords; DEFAULT carries an expression evaluated in place of the missing/erroring value.
+jsonValueBehavior
+    : NULL                                                                                     #jsonValueBehaviorNull
+    | ERROR                                                                                     #jsonValueBehaviorError
+    | DEFAULT defaultExpr=expression                                                            #jsonValueBehaviorDefault
+    ;
+
+// The behavior selected by a JSON_EXISTS `... ON ERROR` clause: the boolean (or UNKNOWN, i.e. a
+// BOOLEAN NULL) to produce when the input is not a single well-formed JSON value.
+jsonExistsErrorBehavior
+    : TRUE
+    | FALSE
+    | UNKNOWN
+    | ERROR
+    ;
+
+// The JSON_QUERY array-wrapper clause. `WITH [UNCONDITIONAL]` always wraps the result in `[...]`;
+// `WITH CONDITIONAL` wraps only a non-array/object (scalar) result; `WITHOUT` (default) never wraps.
+// The `ARRAY` word is optional, matching the SQL standard (`WITH WRAPPER` == `WITH ARRAY WRAPPER`).
+jsonQueryArrayWrapper
+    : WITHOUT ARRAY? WRAPPER                                                                    #jsonQueryWrapperWithout
+    | WITH wrapperType=(CONDITIONAL | UNCONDITIONAL)? ARRAY? WRAPPER                            #jsonQueryWrapperWith
+    ;
+
+// The JSON_QUERY quotes clause: `OMIT QUOTES` strips the surrounding quotes from a scalar string
+// result; `KEEP QUOTES` (default) leaves them.
+jsonQueryQuotes
+    : KEEP QUOTES                                                                              #jsonQueryQuotesKeep
+    | OMIT QUOTES                                                                              #jsonQueryQuotesOmit
+    ;
+
+// The behavior selected by a JSON_QUERY `... ON EMPTY` / `... ON ERROR` clause.
+jsonQueryBehavior
+    : NULL                                                                                     #jsonQueryBehaviorNull
+    | ERROR                                                                                     #jsonQueryBehaviorError
+    | EMPTY ARRAY                                                                              #jsonQueryBehaviorEmptyArray
+    | EMPTY OBJECT                                                                             #jsonQueryBehaviorEmptyObject
+    ;
+
+// The behavior selected by JSON_ARRAY/JSON_OBJECT `... ON NULL` clause: NULL keeps nulls, ABSENT
+// drops null elements/pairs.
+jsonConstructorNullBehavior
+    : NULL                                                                                     #jsonConstructorNullBehaviorNull
+    | ABSENT                                                                                   #jsonConstructorNullBehaviorAbsent
+    ;
+
+// A JSON_ARRAY element. The optional `FORMAT JSON` clause marks a string argument as already-JSON
+// text, so it is spliced into the array verbatim instead of being quoted as a JSON string. A
+// lexically-nested JSON constructor (e.g. JSON_ARRAY(JSON_ARRAY(1))) carries this implicitly.
+jsonArrayValue
+    : value=expression (FORMAT JSON)?
+    ;
+
+// Kept out of `primaryExpression` so its generated method stays under the JIT size limit.
+jsonObjectConstructor
+    : JSON_OBJECT LEFT_PAREN (
+        jsonObjectMember (COMMA jsonObjectMember)*
+        | jsonObjectCommaMember (COMMA jsonObjectCommaMember)*)?
+      (nullBehavior=jsonConstructorNullBehavior ON NULL)?
+      (RETURNING returning=dataType)? RIGHT_PAREN
+    ;
+
+// A key-value pair in JSON_OBJECT: `key VALUE value`, `KEY key VALUE value`, or `key : value`.
+// Both sides accept a full `expression` (not just `valueExpression`) so that ordinary predicates --
+// e.g. `JSON_OBJECT('present' VALUE x IS NOT NULL)` -- work without parentheses, matching normal
+// function-argument syntax. The optional `FORMAT JSON` clause marks a string value as already-JSON
+// text to splice in raw instead of quoting; a lexically-nested JSON constructor carries it
+// implicitly (see `jsonArrayValue`). The KEY form precedes the plain VALUE form (which would read
+// `KEY 'k'` as a typed literal), except before a `value` identifier, so that
+// `JSON_OBJECT(key VALUE value + 1)` reads `key` as the member name; the last alternative still
+// accepts `KEY value VALUE ...`. The leading `KEY` is also skipped when the next token continues it
+// as an operand (e.g. `key + 1 VALUE v`), so a `key` column is read as the key, not the keyword.
+jsonObjectMember
+    : {_input.LA(2) != VALUE && !jsonOptionalKeyFollowsOperand(_input.LA(2))}?
+      KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    | colonKey=jsonObjectColonKey COLON valueExpr=expression (FORMAT JSON)?
+    | KEY keyExpr=expression VALUE valueExpr=expression (FORMAT JSON)?
+    ;
+
+// The key of a `key : value` member. A top-level `:` after the key's first token ends the key, so
+// `JSON_OBJECT(k: v:x)` is key `k` with value `v:x`. A key that is itself an extraction, or that
+// coalesces a trailing named parameter marker (`'k' :p`), needs parentheses -- `(v:x) : 1`,
+// `('k' :p) : 1` -- or the VALUE form, else the key's own `:` reads as the member separator.
+jsonObjectColonKey
+    : keyExpr=expression
+    ;
+
+// Compatibility form used by systems such as MySQL: `JSON_OBJECT(key, value[, key, value]...)`.
+// Kept as a separate alternative from `jsonObjectMember` because COMMA is both the key/value
+// separator inside a member and the separator between members.
+//
+// The `jsonObjectMember` (colon/VALUE) list is listed first in `#jsonObject`, so when a token
+// stream matches both forms the colon-member reading wins. This only overlaps when a comma-form
+// argument itself contains a `:` extraction, e.g. `JSON_OBJECT(v:k, v:x)`: this parses as the two
+// colon members `v:k` and `v:x` (the natural reading), not as one comma-form pair. To force the
+// comma form on colon-bearing arguments, parenthesize them: `JSON_OBJECT((v:k), (v:x))`.
+jsonObjectCommaMember
+    : keyExpr=expression COMMA valueExpr=expression
     ;
 
 semiStructuredExtractionPath
@@ -1585,6 +1949,7 @@ nonTrivialPrimitiveType
     | TIME (LEFT_PAREN precision=integerValue RIGHT_PAREN)? (withoutTimeZone)?
     | GEOGRAPHY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
     | GEOMETRY LEFT_PAREN (srid=integerValue | any=ANY) RIGHT_PAREN
+    | {file_type_enabled}? FILE (fileTypeMode=EXTERNAL)?
     ;
 
 trivialPrimitiveType
@@ -1976,7 +2341,7 @@ singleStringLit
     ;
 
 parameterMarker
-    : {parameter_substitution_enabled}? namedParameterMarker                                   #namedParameterMarkerRule
+    : {parameter_substitution_enabled && !isJsonObjectColonSeparator()}? namedParameterMarker #namedParameterMarkerRule
     | {parameter_substitution_enabled}? QUESTION                                               #positionalParameterMarkerRule
     ;
 
@@ -2038,7 +2403,8 @@ operatorPipeSetAssignmentSeq
 // The non-reserved keywords are listed below. Keywords not in this list are reserved keywords.
 ansiNonReserved
 //--ANSI-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2098,6 +2464,7 @@ ansiNonReserved
     | COMPUTE
     | CONCATENATE
     | CONDITION
+    | CONDITIONAL
     | CONTAINS
     | CONTINUE
     | COST
@@ -2140,7 +2507,9 @@ ansiNonReserved
     | DOUBLE
     | DROP
     | ELSEIF
+    | EMPTY
     | ENFORCED
+    | ERROR
     | ESCAPED
     | EVOLUTION
     | EXACT
@@ -2156,6 +2525,7 @@ ansiNonReserved
     | EXTERNAL
     | EXTRACT
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -2199,6 +2569,13 @@ ansiNonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
+    | JSON_EXISTS
+    | JSON_OBJECT
+    | JSON_QUERY
+    | JSON_TABLE
+    | JSON_VALUE
+    | KEEP
     | KEY
     | KEYS
     | LANGUAGE
@@ -2250,10 +2627,13 @@ ansiNonReserved
     | NORELY
     | NULLS
     | NUMERIC
+    | OBJECT
     | OF
+    | OMIT
     | OPEN
     | OPTION
     | OPTIONS
+    | ORDINALITY
     | OUT
     | OUTPUTFORMAT
     | OVER
@@ -2276,6 +2656,7 @@ ansiNonReserved
     | QUALIFY
     | QUARTER
     | QUERY
+    | QUOTES
     | RANGE
     | READ
     | READS
@@ -2296,6 +2677,7 @@ ansiNonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2372,12 +2754,15 @@ ansiNonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNCONDITIONAL
     | UNIFORM
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | VALUE
     | VALUES
@@ -2396,6 +2781,7 @@ ansiNonReserved
     | WIDTH
     | WINDOW
     | WITHOUT
+    | WRAPPER
     | YEAR
     | YEARS
     | ZONE
@@ -2432,7 +2818,8 @@ strictNonReserved
 
 nonReserved
 //--DEFAULT-NON-RESERVED-START
-    : ADD
+    : ABSENT
+    | ADD
     | AFTER
     | AGGREGATE
     | ALIGN
@@ -2505,6 +2892,7 @@ nonReserved
     | COMPUTE
     | CONCATENATE
     | CONDITION
+    | CONDITIONAL
     | CONSTRAINT
     | CONTAINS
     | CONTINUE
@@ -2557,8 +2945,10 @@ nonReserved
     | DROP
     | ELSE
     | ELSEIF
+    | EMPTY
     | END
     | ENFORCED
+    | ERROR
     | ESCAPE
     | ESCAPED
     | EVOLUTION
@@ -2579,6 +2969,7 @@ nonReserved
     | FETCH
     | FILTER
     | FIELDS
+    | FILE
     | FILEFORMAT
     | FIRST
     | FLOAT
@@ -2631,6 +3022,13 @@ nonReserved
     | ITEMS
     | ITERATE
     | JSON
+    | JSON_ARRAY
+    | JSON_EXISTS
+    | JSON_OBJECT
+    | JSON_QUERY
+    | JSON_TABLE
+    | JSON_VALUE
+    | KEEP
     | KEY
     | KEYS
     | LANGUAGE
@@ -2687,14 +3085,17 @@ nonReserved
     | NULL
     | NULLS
     | NUMERIC
+    | OBJECT
     | OF
     | OFFSET
+    | OMIT
     | ONLY
     | OPEN
     | OPTION
     | OPTIONS
     | OR
     | ORDER
+    | ORDINALITY
     | OUT
     | OUTER
     | OUTPUTFORMAT
@@ -2720,6 +3121,7 @@ nonReserved
     | QUALIFY
     | QUARTER
     | QUERY
+    | QUOTES
     | RANGE
     | READ
     | READS
@@ -2742,6 +3144,7 @@ nonReserved
     | RESPECT
     | RESTRICT
     | RETURN
+    | RETURNING
     | RETURNS
     | REVOKE
     | RLIKE
@@ -2825,14 +3228,17 @@ nonReserved
     | UNARCHIVE
     | UNBOUNDED
     | UNCACHE
+    | UNCONDITIONAL
     | UNIFORM
     | UNIQUE
     | UNKNOWN
     | UNLOCK
+    | UNNEST
     | UNPIVOT
     | UNSET
     | UNTIL
     | UPDATE
+    | UPDATES
     | USE
     | USER
     | VALUE
@@ -2856,6 +3262,7 @@ nonReserved
     | WITH
     | WITHIN
     | WITHOUT
+    | WRAPPER
     | YEAR
     | YEARS
     | ZONE

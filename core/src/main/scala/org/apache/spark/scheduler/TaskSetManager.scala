@@ -70,6 +70,15 @@ private[spark] class TaskSetManager(
   val ser = env.closureSerializer.newInstance()
 
   val tasks = taskSet.tasks
+
+  // A pipelined-group member reads/writes a transient shuffle that cannot be re-read in isolation,
+  // so a single task failure must fail the whole group (which fails the job, triggering a rerun)
+  // rather than be retried per-task. For such a task set we cap attempts at 1 and count every
+  // failure, including reasons that are normally not counted (e.g. executor loss). This is the
+  // native equivalent of the prototype's per-batch "any failure counts" behavior, keyed on the
+  // pipelined dependency (via TaskSet.isPipelined) rather than a job property.
+  private val effectiveMaxTaskFailures = if (taskSet.isPipelined) 1 else maxTaskFailures
+
   private val isShuffleMapTasks = tasks(0).isInstanceOf[ShuffleMapTask]
   // shuffleId is only available when isShuffleMapTasks=true
   private val shuffleId = taskSet.shuffleId
@@ -595,6 +604,7 @@ private[spark] class TaskSetManager(
       task.localProperties,
       taskCpus,
       taskResourceAssignments,
+      Option(env.userCredentials.get()).map(vc => (vc.version, vc.bytes)),
       serializedTask)
   }
 
@@ -1106,16 +1116,29 @@ private[spark] class TaskSetManager(
     emptyTaskInfoAccumulablesAndNotifyDagScheduler(tid, tasks(index), reason, null,
       accumUpdates, metricPeaks)
 
-    if (!isZombie && reason.countTowardsTaskFailures) {
+    // A pipelined-group member's transient shuffle cannot be recovered per-task: the rest of the
+    // group has already exchanged part of the stream with this attempt, so retrying the task in
+    // the same stage attempt could deliver rows twice (a producer) or wait for a stream that is
+    // gone (a consumer). So every failure of a live pipelined attempt counts, even a reason that
+    // is normally not counted -- executor loss not caused by the app, a kill (e.g.
+    // SparkContext.killTaskAttempt), or a denied commit -- and the first one fails the group; the
+    // caller reruns it as a fresh job. None of these is benign: a pipelined task runs a single
+    // attempt (a pipelined job rejects speculation, and a failure aborts the set rather than
+    // retrying the task), so there is no losing duplicate to forgive. The kills the scheduler
+    // itself sends when it fails, cancels, or finishes the job do not count: killAllTaskAttempts
+    // makes the set a zombie before they are reported. Non-pipelined sets are unchanged.
+    val countTowardsTaskFailures = reason.countTowardsTaskFailures || taskSet.isPipelined
+    if (!isZombie && countTowardsTaskFailures) {
       assert (null != failureReason)
       taskSetExcludelistHelperOpt.foreach(_.updateExcludedForFailedTask(
         info.host, info.executorId, index, failureReasonString))
       numFailures(index) += 1
-      if (numFailures(index) >= maxTaskFailures) {
+      if (numFailures(index) >= effectiveMaxTaskFailures) {
         logError(log"Task ${MDC(TASK_INDEX, index)} in stage " + taskSet.logId +
-          log" failed ${MDC(MAX_ATTEMPTS, maxTaskFailures)} times; aborting job")
+          log" failed ${MDC(MAX_ATTEMPTS, effectiveMaxTaskFailures)} times; aborting job")
         abort("Task %d in stage %s failed %d times, most recent failure: %s\nDriver stacktrace:"
-          .format(index, taskSet.id, maxTaskFailures, failureReasonString), failureException)
+          .format(index, taskSet.id, effectiveMaxTaskFailures, failureReasonString),
+          failureException)
         return
       }
     }
@@ -1191,7 +1214,16 @@ private[spark] class TaskSetManager(
     // could serve the shuffle outputs or the executor lost is caused by decommission (which
     // can destroy the whole host). The reason is the next stage wouldn't be able to fetch the
     // data from this dead executor so we would need to rerun these tasks on other executors.
-    val maybeShuffleMapOutputLoss = isShuffleMapTasks &&
+    // A pipelined-group member must never single-resubmit an already-successful map task: its
+    // transient shuffle output is not addressable and a lone producer rerun hangs the streaming
+    // writer in awaitTerminationAcks. This "Resubmitted" re-enqueue loop bypasses handleFailedTask,
+    // so the group-atomic abort (driven from handleFailedTask via maxTaskFailures=1) would never
+    // see it; exclude pipelined sets here. A genuine executor loss still flows through the
+    // running-task loop below (iter2 -> handleFailedTask(ExecutorLostFailure)), force-counted for a
+    // pipelined set and aborts the whole group. Note isZombie already skips a fully-complete
+    // producer's set; this guard also covers a PARTIALLY-complete producer losing an executor on
+    // decommission.
+    val maybeShuffleMapOutputLoss = isShuffleMapTasks && !taskSet.isPipelined &&
       !sched.sc.shuffleDriverComponents.supportsReliableStorage() &&
       (reason.isInstanceOf[ExecutorDecommission] || !env.blockManager.externalShuffleServiceEnabled)
     if (maybeShuffleMapOutputLoss && !isZombie) {

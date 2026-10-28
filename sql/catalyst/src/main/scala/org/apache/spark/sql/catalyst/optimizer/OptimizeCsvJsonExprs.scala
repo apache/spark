@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CREATE_NAMED_STRUCT, EXTRACT_VALUE,
   GET_JSON_OBJECT, JSON_TO_STRUCT}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{ArrayType, StringType, StructType}
+import org.apache.spark.sql.types.{ArrayType, CharType, DataType, MapType, StringType, StructType,
+  VarcharType}
 import org.apache.spark.unsafe.types.UTF8String
 
 /**
@@ -43,6 +44,10 @@ import org.apache.spark.unsafe.types.UTF8String
  */
 object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
   private def nameOfCorruptRecord = conf.columnNameOfCorruptRecord
+
+  /** Whether the field this extracts is the corrupt record column of its `JsonToStructs`. */
+  private def selectsCorruptRecord(g: GetStructField): Boolean =
+    g.childSchema(g.ordinal).name == nameOfCorruptRecord
 
   private type SimpleJsonPath = Seq[GetJsonObject.SimpleJsonPathSegment]
   private type SharedJsonCandidate = (GetJsonObject, SimpleJsonPath, String)
@@ -393,10 +398,14 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
 
   private val jsonOptimization: PartialFunction[Expression, Expression] = {
     case c: CreateNamedStruct
-        // If we create struct from various fields of the same `JsonToStructs`.
+        // If we create struct from various fields of the same `JsonToStructs`. Pruning the
+        // schema stops the parser from converting the dropped fields, so a malformed value in
+        // one of them no longer fails under a parse mode such as failfast. To be more
+        // conservative, it does not optimize when any option is set, like the cases below.
         if c.valExprs.forall { v =>
           v.isInstanceOf[GetStructField] &&
             v.asInstanceOf[GetStructField].child.isInstanceOf[JsonToStructs] &&
+            v.asInstanceOf[GetStructField].child.asInstanceOf[JsonToStructs].options.isEmpty &&
             v.children.head.semanticEquals(c.valExprs.head.children.head)
         } =>
       val jsonToStructs = c.valExprs.map(_.children.head)
@@ -410,9 +419,18 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       // `JsonToStructs` does not support parsing json with duplicated field names.
       val duplicateFields = c.names.map(_.toString).distinct.length != c.names.length
 
+      // Dropping a field stops the parser from converting it, so the parser never records the
+      // row when a dropped field contains a malformed value, and the corrupt record column comes
+      // back null. Selecting as many fields as the schema has drops nothing: with `sameFieldName`
+      // and no duplicates the selected names are distinct names of the schema, so the counts
+      // match only when every field is selected.
+      val fields = c.valExprs.map(_.asInstanceOf[GetStructField])
+      val prunesCorruptRecord = fields.exists(selectsCorruptRecord) &&
+        fields.length != fields.head.childSchema.length
+
       // If we create struct from various fields of the same `JsonToStructs` and we don't
       // alias field names and there is no duplicated field in the struct.
-      if (sameFieldName && !duplicateFields) {
+      if (sameFieldName && !duplicateFields && !prunesCorruptRecord) {
         val fromJson = jsonToStructs.head.asInstanceOf[JsonToStructs].copy(schema = c.dataType)
         val nullFields = c.children.grouped(2).flatMap {
           case Seq(name, value) => Seq(name, Literal(null, value.dataType))
@@ -426,7 +444,12 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
     case jsonToStructs @ JsonToStructs(_, options1,
       StructsToJson(options2, child, timeZoneId2), timeZoneId1)
         if options1.isEmpty && options2.isEmpty && timeZoneId1 == timeZoneId2 &&
-          jsonToStructs.dataType == child.dataType =>
+          jsonToStructs.dataType == child.dataType &&
+          // SPARK-60108 length-checks CHAR/VARCHAR map keys in from_json. Folding
+          // from_json(to_json(m)) => m would skip that check when m already carries
+          // an off-width key (SPARK-60229).
+          !(jsonToStructs.charVarcharStandardSemantics &&
+            hasCharVarcharMapKey(jsonToStructs.dataType)) =>
       // `StructsToJson` only fails when `JacksonGenerator` encounters data types it
       // cannot convert to JSON. But `StructsToJson.checkInputDataTypes` already
       // verifies its child's data types is convertible to JSON. But in
@@ -436,12 +459,15 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       child
 
     case g @ GetStructField(j @ JsonToStructs(schema: StructType, _, _, _), ordinal, _)
-        if schema.length > 1 && j.options.isEmpty =>
+        if schema.length > 1 && j.options.isEmpty && !selectsCorruptRecord(g) =>
         // Options here should be empty because the optimization should not be enabled
         // for some options. For example, when the parse mode is failfast it should not
         // optimize, and should force to parse the whole input JSON with failing fast for
         // an invalid input.
         // To be more conservative, it does not optimize when any option is set for now.
+        // Pruning to the corrupt record column alone is excluded as well: it leaves the
+        // parser nothing to convert, so the parser never records the row when a dropped
+        // field contains a malformed value, and the column comes back null.
       val prunedSchema = StructType(Array(schema(ordinal)))
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0)
 
@@ -450,6 +476,17 @@ object OptimizeCsvJsonExprs extends Rule[LogicalPlan] {
       // Obtain the pruned schema by picking the `ordinal` field of the struct.
       val prunedSchema = ArrayType(StructType(Array(schema(ordinal))), g.containsNull)
       g.copy(child = j.copy(schema = prunedSchema), ordinal = 0, numFields = 1)
+  }
+
+  /**
+   * True when `dt` has a MAP whose key type is CHAR or VARCHAR at any nesting.
+   * Only keys: this preserves the SPARK-60108 map-key check, which runs only under the captured
+   * standard semantics and never pads or trims. CHAR/VARCHAR values get pad/length semantics from
+   * applyTextParseSemantics regardless of that flag and are outside this guard.
+   */
+  private def hasCharVarcharMapKey(dt: DataType): Boolean = dt.existsRecursively {
+    case MapType(_: CharType | _: VarcharType, _, _) => true
+    case _ => false
   }
 
   private val csvOptimization: PartialFunction[Expression, Expression] = {

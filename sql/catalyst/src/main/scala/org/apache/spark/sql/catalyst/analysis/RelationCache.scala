@@ -18,11 +18,18 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 private[sql] trait RelationCache {
-  def lookup(nameParts: Seq[String], resolver: Resolver): Option[LogicalPlan]
+  def lookup(
+      catalog: CatalogPlugin,
+      ident: Identifier,
+      tableId: Option[String],
+      stateOptions: CaseInsensitiveStringMap,
+      resolver: Resolver): Option[LogicalPlan]
 }
 
 private[sql] object RelationCache {
-  val empty: RelationCache = (_, _) => None
+  val empty: RelationCache = (_, _, _, _, _) => None
 }

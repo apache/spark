@@ -32,6 +32,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{INTERVAL, SESSION_HOLD_INFO}
 import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connect.config.Connect.{CONNECT_SESSION_MANAGER_CLOSED_SESSIONS_TOMBSTONES_SIZE, CONNECT_SESSION_MANAGER_DEFAULT_SESSION_TIMEOUT, CONNECT_SESSION_MANAGER_MAINTENANCE_INTERVAL}
+import org.apache.spark.sql.connect.ml.MLCacheStatus
 import org.apache.spark.util.ThreadUtils
 
 /**
@@ -284,6 +285,16 @@ class SparkConnectSessionManager extends Logging {
     closedSessionsCache.asMap.asScala.values.toSeq
   }
 
+  // Read live cache state directly without updating the sessions' last-access times.
+  private[connect] def getMLCacheStatuses: Map[SessionKey, Option[MLCacheStatus]] = {
+    sessionStore
+      .entrySet()
+      .asScala
+      .iterator
+      .map(entry => entry.getKey -> entry.getValue.getMLCacheStatus)
+      .toMap
+  }
+
   /**
    * Schedules periodic maintenance checks if it is not already scheduled.
    *
@@ -381,6 +392,49 @@ class SparkConnectSessionManager extends Logging {
         errorClass = "INVALID_HANDLE.SESSION_CLOSED",
         messageParameters = Map("handle" -> key.sessionId))
     }
+  }
+
+  /**
+   * Register an existing SparkSession under a new session ID. Unlike [[cloneSession]], this wraps
+   * the *exact* SparkSession instance (no cloning). Used for foreachBatch to register the
+   * stream-level SparkSession created by StreamExecution.
+   *
+   * The returned SessionHolder has `customInactiveTimeoutMs = Some(-1)` (never expire by
+   * inactivity); its lifecycle is managed by the streaming query termination.
+   */
+  private[connect] def registerExistingSession(
+      userId: String,
+      newSessionId: String,
+      existingSession: SparkSession): SessionHolder = {
+
+    // Validate UUID format.
+    try {
+      UUID.fromString(newSessionId).toString
+    } catch {
+      case _: IllegalArgumentException =>
+        throw new SparkSQLException(
+          errorClass = "INVALID_HANDLE.FORMAT",
+          messageParameters = Map("handle" -> newSessionId))
+    }
+
+    val key = SessionKey(userId, newSessionId)
+
+    // Validate that session with this key has not been already closed.
+    if (closedSessionsCache.getIfPresent(key) != null) {
+      throw new SparkSQLException(
+        errorClass = "INVALID_HANDLE.SESSION_CLOSED",
+        messageParameters = Map("handle" -> newSessionId))
+    }
+
+    schedulePeriodicChecks()
+    sessionStore.computeIfAbsent(
+      key,
+      _ => {
+        val h = SessionHolder(userId, newSessionId, existingSession)
+        h.initializeSession()
+        h.setCustomInactiveTimeoutMs(Some(-1L)) // Never expire; query manages lifetime.
+        h
+      })
   }
 
   /**

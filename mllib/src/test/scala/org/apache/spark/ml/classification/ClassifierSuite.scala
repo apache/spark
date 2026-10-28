@@ -18,13 +18,15 @@
 package org.apache.spark.ml.classification
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.ml.classification.ClassifierSuite.MockClassifier
+import org.apache.spark.ml.classification.ClassifierSuite.{
+  MockClassificationModelWithColumnFunctions, MockClassifier}
 import org.apache.spark.ml.feature.LabeledPoint
 import org.apache.spark.ml.linalg.{Vector, Vectors}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.util._
 import org.apache.spark.mllib.util.MLlibTestSparkContext
-import org.apache.spark.sql.{DataFrame, Dataset}
+import org.apache.spark.sql.{Column, DataFrame, Dataset}
+import org.apache.spark.sql.functions.udf
 
 class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
 
@@ -62,6 +64,20 @@ class ClassifierSuite extends SparkFunSuite with MLlibTestSparkContext {
       assert(e.getMessage == "ML algorithm was given empty dataset.")
     }
   }
+
+  test("transform uses column prediction hooks") {
+    val expectedRawPrediction = Vectors.dense(-1.0, 1.0)
+    val data = Seq(Tuple1(expectedRawPrediction)).toDF("features")
+
+    val model = new MockClassificationModelWithColumnFunctions
+    val bothOutputs = model.transform(data).select("rawPrediction", "prediction").head()
+    assert(bothOutputs.getAs[Vector](0) === expectedRawPrediction)
+    assert(bothOutputs.getDouble(1) === 1.0)
+
+    val predictionOnly = new MockClassificationModelWithColumnFunctions().setRawPredictionCol("")
+      .transform(data).select("prediction").head()
+    assert(predictionOnly.getDouble(0) === 1.0)
+  }
 }
 
 object ClassifierSuite {
@@ -95,12 +111,43 @@ object ClassifierSuite {
 
     def this() = this(Identifiable.randomUID("mockclassificationmodel"))
 
-    def predictRaw(features: Vector): Vector = throw new UnsupportedOperationException()
+    override def predictRaw(features: Vector): Vector = throw new UnsupportedOperationException()
 
     override def copy(extra: ParamMap): MockClassificationModel =
       throw new UnsupportedOperationException()
 
     override def numClasses: Int = throw new UnsupportedOperationException()
+  }
+
+  class MockClassificationModelWithColumnFunctions(override val uid: String)
+    extends ClassificationModel[Vector, MockClassificationModelWithColumnFunctions] {
+
+    def this() = this(Identifiable.randomUID("mockclassificationmodelwithcolumnfunctions"))
+
+    override protected def predictRawColumn(features: Column): Column = {
+      udf((value: Vector) => value).apply(features)
+    }
+
+    override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+      udf((value: Vector) => value.argmax.toDouble).apply(rawPrediction)
+    }
+
+    override protected def predictionColumn(features: Column): Column = {
+      udf((value: Vector) => value.argmax.toDouble).apply(features)
+    }
+
+    override def predict(features: Vector): Double = throw new UnsupportedOperationException()
+
+    override def predictRaw(features: Vector): Vector = throw new UnsupportedOperationException()
+
+    override protected def raw2prediction(rawPrediction: Vector): Double = {
+      throw new UnsupportedOperationException()
+    }
+
+    override def copy(extra: ParamMap): MockClassificationModelWithColumnFunctions =
+      throw new UnsupportedOperationException()
+
+    override def numClasses: Int = 2
   }
 
 }

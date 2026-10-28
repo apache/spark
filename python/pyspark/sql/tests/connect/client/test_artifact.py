@@ -15,22 +15,22 @@
 # limitations under the License.
 #
 import hashlib
+import os
 import shutil
 import tempfile
 import unittest
-import os
 import zipfile
 import zlib
 
-from pyspark.util import is_remote_only
 from pyspark.sql import SparkSession
+from pyspark.sql.functions import assert_true, lit, udf
 from pyspark.testing.connectutils import ReusedConnectTestCase, should_test_connect
-from pyspark.sql.functions import udf, assert_true, lit
+from pyspark.util import is_remote_only
 
 if should_test_connect:
-    from pyspark.sql.connect.client.artifact import ArtifactManager
-    from pyspark.sql.connect.client import DefaultChannelBuilder
     from pyspark.errors import SparkRuntimeException
+    from pyspark.sql.connect.client import DefaultChannelBuilder
+    from pyspark.sql.connect.client.artifact import ArtifactManager
 
 
 class ArtifactTestsMixin:

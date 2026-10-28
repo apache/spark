@@ -28,6 +28,11 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType, Integ
   usage = """
     _FUNC_(expr) - Returns the estimated number of unique values
     given the binary representation of a Datasketches ThetaSketch. """,
+  arguments = """
+    Arguments:
+      * expr - The binary representation of a Datasketches ThetaSketch.
+          An expression that evaluates to binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(theta_sketch_agg(col)) FROM VALUES (1), (1), (2), (2), (3) tab(col);
@@ -66,6 +71,16 @@ case class ThetaSketchEstimate(child: Expression)
     Datasketches ThetaSketch objects using a ThetaSketch Union object. Users can set
     lgNomEntries to a value between 4 and 26 to find the union of sketches with different
     union buffer size values (defaults to 12). """,
+  arguments = """
+    Arguments:
+      * first - The binary representation of the first Datasketches ThetaSketch.
+          An expression that evaluates to binary.
+      * second - The binary representation of the second Datasketches ThetaSketch.
+          An expression that evaluates to binary.
+      * lgNomEntries - Optional. The log-base-2 of the nominal entries used to size the
+          union buffer, between 4 and 26. An expression that evaluates to an integer.
+          Defaults to 12.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (1, 4), (1, 4), (2, 5), (2, 5), (3, 6) tab(col1, col2);
@@ -125,6 +140,13 @@ case class ThetaUnion(first: Expression, second: Expression, third: Expression)
     _FUNC_(first, second) - Subtracts two binary representations of
     Datasketches ThetaSketch objects from two input columns using a
     ThetaSketch AnotB object. """,
+  arguments = """
+    Arguments:
+      * first - The binary representation of the first Datasketches ThetaSketch.
+          An expression that evaluates to binary.
+      * second - The binary representation of the second Datasketches ThetaSketch to
+          subtract from the first. An expression that evaluates to binary.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);
@@ -173,6 +195,13 @@ case class ThetaDifference(first: Expression, second: Expression)
     _FUNC_(first, second) - Intersects two binary representations of
     Datasketches ThetaSketch objects from two input columns using a
     ThetaSketch Intersect object. """,
+  arguments = """
+    Arguments:
+      * first - The binary representation of the first Datasketches ThetaSketch.
+          An expression that evaluates to binary.
+      * second - The binary representation of the second Datasketches ThetaSketch.
+          An expression that evaluates to binary.
+  """,
   examples = """
     Examples:
       > SELECT theta_sketch_estimate(_FUNC_(theta_sketch_agg(col1), theta_sketch_agg(col2))) FROM VALUES (5, 4), (1, 4), (2, 5), (2, 5), (3, 1) tab(col1, col2);

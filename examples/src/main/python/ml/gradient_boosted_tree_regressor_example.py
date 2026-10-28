@@ -20,9 +20,10 @@ Gradient Boosted Tree Regressor Example.
 """
 # $example on$
 from pyspark.ml import Pipeline
-from pyspark.ml.regression import GBTRegressor
-from pyspark.ml.feature import VectorIndexer
 from pyspark.ml.evaluation import RegressionEvaluator
+from pyspark.ml.feature import VectorIndexer
+from pyspark.ml.regression import GBTRegressor
+
 # $example off$
 from pyspark.sql import SparkSession
 

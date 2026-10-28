@@ -804,7 +804,7 @@ class BlockManagerMasterEndpoint(
      case ShuffleIndexBlockId(shuffleId, mapId, _) =>
        // SPARK-36782: Invoke `MapOutputTracker.updateMapOutput` within the thread
        // `dispatcher-BlockManagerMaster` could lead to the deadlock when
-       // `MapOutputTracker.serializeOutputStatuses` broadcasts the serialized mapstatues under
+       // `MapOutputTracker.serializeOutputStatuses` broadcasts the serialized map statuses under
        // the acquired write lock. The broadcast block would report its status to
        // `BlockManagerMasterEndpoint`, while the `BlockManagerMasterEndpoint` is occupied by
        // `updateMapOutput` since it's waiting for the write lock. Thus, we use `Future` to call

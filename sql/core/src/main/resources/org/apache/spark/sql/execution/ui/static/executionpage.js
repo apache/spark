@@ -43,6 +43,7 @@ $(document).ready(function () {
         description: data.description || "",
         submissionTime: data.submissionTime,
         duration: data.duration,
+        totalTaskTime: data.totalTaskTime,
         jobIds: data.successJobIds || [],
         errorMessage: data.errorMessage || ""
       };

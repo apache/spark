@@ -598,7 +598,7 @@ WHERE  t1c = (SELECT t2c
 -- !query schema
 struct<t1a:string,t1b:smallint>
 -- !query output
-val1a	16
+
 
 
 -- !query
@@ -625,7 +625,7 @@ WHERE  t1c = (SELECT DISTINCT t2c
 -- !query schema
 struct<t1a:string,t1b:smallint>
 -- !query output
-val1a	16
+
 
 
 -- !query

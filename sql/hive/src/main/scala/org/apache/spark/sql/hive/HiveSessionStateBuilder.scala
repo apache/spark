@@ -85,6 +85,9 @@ class HiveSessionStateBuilder(
    * A logical query plan `Analyzer` with rules specific to Hive.
    */
   override protected def analyzer: Analyzer = new Analyzer(catalogManager, sharedRelationCache) {
+    override val hintResolutionRules: Seq[Rule[LogicalPlan]] =
+      customHintResolutionRules
+
     override val singlePassResolverExtensions: Seq[ResolverExtension] = Seq(
       new LogicalRelationResolver,
       new HiveTableRelationNoopResolver

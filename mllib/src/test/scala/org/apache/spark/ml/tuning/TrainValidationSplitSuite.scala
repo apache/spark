@@ -73,6 +73,21 @@ class TrainValidationSplitSuite
     }
   }
 
+  test("TrainValidationSplitModel estimated size") {
+    val estimator = new LogisticRegression().setMaxIter(1)
+    // Initialize the estimator's logger before retaining it in the TrainValidationSplitModel.
+    estimator.fit(dataset)
+    val model = new TrainValidationSplit()
+      .setEstimator(estimator)
+      .setEstimatorParamMaps(Array(ParamMap.empty))
+      .setEvaluator(new BinaryClassificationEvaluator())
+      .fit(dataset)
+
+    val maxSize = 16 * 1024
+    assert(model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should not include shared runtime state")
+  }
+
   test("train validation with linear regression") {
     val dataset = sc.parallelize(
       LinearDataGenerator.generateLinearInput(

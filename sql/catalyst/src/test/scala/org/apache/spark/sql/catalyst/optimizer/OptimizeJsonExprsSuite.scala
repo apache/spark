@@ -94,6 +94,73 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     comparePlans(optimized2, expected)
   }
 
+  test("SPARK-60229: not optimize from_json + to_json with CHAR/VARCHAR map keys") {
+    // CHAR/VARCHAR attributes are rejected at analysis unless one of these flags is on.
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      val options = Map.empty[String, String]
+
+      def roundTrip(
+          schema: DataType, child: Expression, standardSemantics: Boolean): Expression =
+        JsonToStructs(
+          schema,
+          options,
+          StructsToJson(options, child),
+          charVarcharStandardSemantics = standardSemantics)
+
+      val charMap = MapType(CharType(3), IntegerType)
+      val varcharMap = MapType(VarcharType(3), IntegerType)
+      val stringMap = MapType(StringType, IntegerType)
+      val nestedCharMap = StructType(Seq(
+        StructField("m", charMap),
+        StructField("tail", IntegerType)))
+      val arrayCharMap = ArrayType(charMap)
+
+      val mapRel = LocalRelation(Symbol("m").map(CharType(3), IntegerType).notNull)
+      val charRoundTrip = roundTrip(charMap, Symbol("m").attr, standardSemantics = true)
+      val query = mapRel.select(charRoundTrip.as("m"))
+      val optimized = Optimizer.execute(query.analyze)
+      val expected = mapRel.select(charRoundTrip.as("m")).analyze
+      comparePlans(optimized, expected)
+
+      val varcharRel = LocalRelation(Symbol("m").map(VarcharType(3), IntegerType).notNull)
+      val varcharQuery = varcharRel.select(
+        roundTrip(varcharMap, Symbol("m").attr, standardSemantics = true).as("m"))
+      comparePlans(
+        Optimizer.execute(varcharQuery.analyze),
+        varcharRel.select(
+          roundTrip(varcharMap, Symbol("m").attr, standardSemantics = true).as("m")).analyze)
+
+      val nestedRel = LocalRelation($"s".struct(nestedCharMap).notNull)
+      val nestedQuery =
+        nestedRel.select(roundTrip(nestedCharMap, $"s", standardSemantics = true).as("s"))
+      comparePlans(
+        Optimizer.execute(nestedQuery.analyze),
+        nestedRel.select(roundTrip(nestedCharMap, $"s", standardSemantics = true).as("s")).analyze)
+
+      val arrayRel = LocalRelation($"a".array(arrayCharMap).notNull)
+      val arrayQuery =
+        arrayRel.select(roundTrip(arrayCharMap, $"a", standardSemantics = true).as("a"))
+      comparePlans(
+        Optimizer.execute(arrayQuery.analyze),
+        arrayRel.select(roundTrip(arrayCharMap, $"a", standardSemantics = true).as("a")).analyze)
+
+      // STRING keys have no length check, so the round-trip is still folded.
+      val stringRel = LocalRelation(Symbol("m").map(StringType, IntegerType).notNull)
+      val stringQuery = stringRel.select(
+        roundTrip(stringMap, Symbol("m").attr, standardSemantics = true).as("m"))
+      comparePlans(
+        Optimizer.execute(stringQuery.analyze),
+        stringRel.select($"m".as("m")).analyze)
+
+      // Flag off: the check is not applied, so folding remains valid.
+      val offQuery = mapRel.select(
+        roundTrip(charMap, Symbol("m").attr, standardSemantics = false).as("m"))
+      comparePlans(
+        Optimizer.execute(offQuery.analyze),
+        mapRel.select($"m".as("m")).analyze)
+    }
+  }
+
   test("SPARK-32948: not optimize from_json + to_json if schema is different") {
     val options = Map.empty[String, String]
     val schema = StructType.fromDDL("a int")
@@ -688,6 +755,67 @@ class OptimizeJsonExprsSuite extends PlanTest with ExpressionEvalHelper {
     val optimized2 = Optimizer.execute(query2.analyze)
 
     comparePlans(optimized2, query2.analyze)
+  }
+
+  test("SPARK-58373: do not simplify named_struct + from_json if options is not empty") {
+    val schema = StructType.fromDDL("a int, b int, c long")
+    def query(options: Map[String, String]): LogicalPlan = testRelation2.select(namedStruct(
+      "a", GetStructField(JsonToStructs(schema, options, $"json"), 0),
+      "b", GetStructField(JsonToStructs(schema, options, $"json"), 1)).as("struct")).analyze
+
+    // Any option disables the rewrite, not just a parse mode: pruning `c` out of the schema
+    // stops the parser from converting it, which a caller may be relying on.
+    Seq(Map("mode" -> "failfast"), Map("timestampFormat" -> "yyyy")).foreach { options =>
+      comparePlans(Optimizer.execute(query(options)), query(options))
+    }
+
+    // Control: the same shape with no options is still rewritten, so the guard above is what
+    // blocks it rather than some other precondition of the rule.
+    val optimized = Optimizer.execute(query(Map.empty))
+    assert(optimized != query(Map.empty), "expected the empty-options plan to be rewritten")
+  }
+
+  test("SPARK-58707: do not prune a from_json schema down to the corrupt record column") {
+    val schema = StructType.fromDDL("a int, b int, _corrupt_record string")
+
+    def getField(ordinal: Int): LogicalPlan = testRelation2
+      .select(GetStructField(JsonToStructs(schema, Map.empty, $"json"), ordinal)).analyze
+
+    // Pruning to the corrupt record column alone leaves the parser nothing to convert, so a
+    // malformed value in a dropped field would no longer populate the column.
+    comparePlans(Optimizer.execute(getField(2)), getField(2))
+
+    // Control: a non-corrupt field is still pruned, so the guard above is what blocks it rather
+    // than some other precondition of the rule.
+    val prunedSchema = StructType.fromDDL("a int")
+    comparePlans(
+      Optimizer.execute(getField(0)),
+      testRelation2
+        .select(GetStructField(JsonToStructs(prunedSchema, Map.empty, $"json"), 0)).analyze)
+  }
+
+  test("SPARK-58707: simplify named_struct + from_json when no field is dropped") {
+    val schema = StructType.fromDDL("a int, _corrupt_record string")
+
+    def query(fields: (String, Int)*): LogicalPlan = testRelation2.select(
+      namedStruct(fields.flatMap { case (name, ordinal) =>
+        Seq(Literal(name), GetStructField(JsonToStructs(schema, Map.empty, $"json"), ordinal))
+      }: _*).as("struct")).analyze
+
+    // Selecting the corrupt record column together with every other field drops nothing, so the
+    // rewrite is safe and still collapses the repeated parses into one.
+    val nullStruct = namedStruct(
+      "a", Literal(null, IntegerType), "_corrupt_record", Literal(null, StringType))
+    comparePlans(
+      Optimizer.execute(query("a" -> 0, "_corrupt_record" -> 1)),
+      testRelation2.select(
+        If(IsNull($"json"),
+          nullStruct,
+          KnownNotNull(JsonToStructs(schema, Map.empty, $"json"))).as("struct")).analyze)
+
+    // Dropping `a` while selecting the corrupt record column is what makes the column unreliable.
+    val pruning = query("_corrupt_record" -> 1)
+    comparePlans(Optimizer.execute(pruning), pruning)
   }
 
   test("SPARK-33007: simplify named_struct + from_json") {

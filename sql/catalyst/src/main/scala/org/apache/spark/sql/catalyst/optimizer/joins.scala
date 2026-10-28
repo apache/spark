@@ -415,17 +415,51 @@ trait JoinSelectionHelper extends Logging {
     result
   }
 
-  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean = join match {
+  /**
+   * The build side a broadcast hash join would use, or `None` when one is ruled out by the join
+   * shape, a hint, or its size.
+   *
+   * For equi-joins, `Some` does not promise the planner picks a broadcast hash join: other hints,
+   * unsupported join keys, or AQE can select another strategy. For a single-column null-aware anti
+   * join, the dedicated and automatic broadcast thresholds determine eligibility before hints.
+   * Callers that only need to know whether a broadcast hash join is possible should use
+   * `canPlanAsBroadcastHashJoin`.
+   */
+  def getBroadcastHashJoinBuildSide(join: Join, conf: SQLConf): Option[BuildSide] = join match {
     case ExtractEquiJoinKeys(_, leftKeys, rightKeys, _, _, _, _, _) =>
-      val hashJoinSupport = hashJoinSupported(leftKeys, rightKeys)
-      val noShufflePlannedBefore =
-        !hashJoinSupport || getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty
-      getBroadcastBuildSide(join, hintOnly = true, conf).isDefined ||
-        (noShufflePlannedBefore &&
-          getBroadcastBuildSide(join, hintOnly = false, conf).isDefined)
-    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) => canBroadcastBySize(j.right, conf)
-    case _ => false
+      // A shuffle hash hint outranks a size-based broadcast, so it vetoes one. Keys no hash join
+      // supports cannot honor that hint either, so it does not veto here; the sizes then still
+      // produce an answer, which over-approximates `JoinSelection` (it falls through to a sort
+      // merge join). That over-approximation predates this method and is kept deliberately, so
+      // that `canPlanAsBroadcastHashJoin` keeps its truth table.
+      val noShufflePlannedBefore = !hashJoinSupported(leftKeys, rightKeys) ||
+        getShuffleHashJoinBuildSide(join, hintOnly = true, conf).isEmpty
+      getBroadcastBuildSide(join, hintOnly = true, conf).orElse {
+        if (noShufflePlannedBefore) getBroadcastBuildSide(join, hintOnly = false, conf) else None
+      }
+    // `JoinSelection` always builds from the right for this shape. The applicable automatic
+    // broadcast threshold floors a nonnegative dedicated threshold. As before, threshold
+    // eligibility takes precedence over join hints. This same decision intentionally controls
+    // aggregate pushdown. If neither threshold admits the hash join, regular planning may still
+    // broadcast the right side for a nested-loop join. The thresholds limit hash relation
+    // construction, not all broadcasts.
+    case j @ ExtractSingleColumnNullAwareAntiJoin(_, _) =>
+      val dedicatedThreshold = conf.nullAwareAntiJoinBroadcastThreshold
+      val canBroadcast = dedicatedThreshold < 0 ||
+        (dedicatedThreshold > 0 && {
+          val rightSize = j.right.stats.sizeInBytes
+          rightSize >= 0 && rightSize <= dedicatedThreshold
+        }) || canBroadcastBySize(j.right, conf)
+      if (canBroadcast) {
+        Some(BuildRight)
+      } else {
+        None
+      }
+    case _ => None
   }
+
+  def canPlanAsBroadcastHashJoin(join: Join, conf: SQLConf): Boolean =
+    getBroadcastHashJoinBuildSide(join, conf).isDefined
 
   def canPruneLeft(joinType: JoinType): Boolean = joinType match {
     case Inner | LeftSemi | RightOuter => true

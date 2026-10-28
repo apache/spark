@@ -29,12 +29,14 @@ import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, Offset
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.StreamTest
 import org.apache.spark.sql.streaming.Trigger._
+import org.apache.spark.tags.SlowSQLTest
 import org.apache.spark.util.Utils
 
 /**
  * Test suite for streaming source naming and validation.
  * Tests cover the naming API, validation rules, and resolution pipeline.
  */
+@SlowSQLTest
 class StreamingSourceEvolutionSuite extends StreamTest {
 
   private def newMetadataDir =

@@ -17,7 +17,7 @@
 import random
 import unittest
 
-from pyspark import SparkContext, SparkConf
+from pyspark import SparkConf, SparkContext
 
 
 class ConfTests(unittest.TestCase):

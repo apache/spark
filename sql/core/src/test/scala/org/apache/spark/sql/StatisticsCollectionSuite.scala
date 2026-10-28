@@ -158,6 +158,50 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
     }
   }
 
+  test("SPARK-59273: collect CHAR/VARCHAR column statistics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val tableName = "char_varchar_column_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c CHAR(3), v VARCHAR(3)) USING parquet")
+        sql(s"INSERT INTO $tableName VALUES ('a', 'x'), ('bb', 'yz'), (NULL, NULL)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c, v")
+
+        val columnStats = getCatalogTable(tableName).stats.get.colStats
+        assert(columnStats.keySet === Set("c", "v"))
+        assert(columnStats("c").distinctCount.contains(BigInt(2)))
+        assert(columnStats("v").distinctCount.contains(BigInt(2)))
+        assert(columnStats("c").nullCount.contains(BigInt(1)))
+        assert(columnStats("v").nullCount.contains(BigInt(1)))
+      }
+    }
+  }
+
+  test("SPARK-59273: CBO plans CHAR/VARCHAR predicates after ANALYZE") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.CBO_ENABLED.key -> "true") {
+      val tableName = "char_varchar_cbo_stats"
+      withTable(tableName) {
+        sql(s"CREATE TABLE $tableName(c CHAR(3), v VARCHAR(3)) USING parquet")
+        sql(s"INSERT INTO $tableName VALUES ('a', 'x'), ('bb', 'yz'), (NULL, NULL)")
+        sql(s"ANALYZE TABLE $tableName COMPUTE STATISTICS FOR COLUMNS c, v")
+
+        // CBO FilterEstimation used to throw a MatchError on CharType/VarcharType after ANALYZE.
+        sql(s"SELECT c FROM $tableName WHERE c = 'a'").collect()
+        sql(s"SELECT c FROM $tableName WHERE c IN ('a  ', 'bb ')").collect()
+        sql(s"SELECT v FROM $tableName WHERE v IN ('x', 'yz')").collect()
+        sql(s"SELECT v FROM $tableName WHERE v > 'x'").collect()
+
+        checkAnswer(
+          sql(s"SELECT v FROM $tableName WHERE v IN ('x', 'yz')"),
+          Row("x") :: Row("yz") :: Nil)
+        checkAnswer(
+          sql(s"SELECT v FROM $tableName WHERE v > 'x'"),
+          Row("yz"))
+      }
+    }
+  }
+
   test("test table-level statistics for data source table") {
     val tableName = "tbl"
     withTable(tableName) {
@@ -619,6 +663,28 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
       // Analyzes two more columns
       sql("ANALYZE TABLE cachedQuery COMPUTE STATISTICS FOR COLUMNS c0, v2")
       assert(getStatAttrNames("cachedQuery")  === Set("c0", "v1", "v2"))
+    }
+  }
+
+  test("SPARK-60337: no histogram for nanosecond timestamp columns") {
+    withSQLConf(SQLConf.HISTOGRAM_ENABLED.key -> "true") {
+      withTempView("nanos") {
+        sql(
+          """CACHE TABLE nanos AS SELECT * FROM VALUES
+            |  (TIMESTAMP_NTZ '2020-01-01 12:00:00.123456789', CAST(NULL AS TIMESTAMP_LTZ(7)), 1),
+            |  (TIMESTAMP_NTZ '2021-06-01 00:00:00.000000001', CAST(NULL AS TIMESTAMP_LTZ(7)), 2)
+            |  AS t(ntz, ltz, i)
+          """.stripMargin)
+        sql("ANALYZE TABLE nanos COMPUTE STATISTICS FOR COLUMNS ntz, ltz, i")
+        val stats = spark.table("nanos").queryExecution.optimizedPlan.stats.attributeStats
+          .map { case (attr, stat) => attr.name -> stat }
+        assert(stats.keySet === Set("ntz", "ltz", "i"))
+        assert(stats("ntz").histogram.isEmpty)
+        assert(stats("ntz").nullCount.contains(0))
+        assert(stats("ltz").histogram.isEmpty)
+        assert(stats("ltz").nullCount.contains(2))
+        assert(stats("i").histogram.isDefined)
+      }
     }
   }
 

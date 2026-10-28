@@ -30,7 +30,7 @@ object AQEUtils {
     // Project/Filter/LocalSort/CollectMetrics.
     // Note: we only care about `HashPartitioning` as `EnsureRequirements` can only optimize out
     // user-specified repartition with `HashPartitioning`.
-    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin, _)
+    case ShuffleExchangeExec(h: HashPartitioning, _, shuffleOrigin, _, _)
         if shuffleOrigin == REPARTITION_BY_COL || shuffleOrigin == REPARTITION_BY_NUM =>
       val numPartitions = if (shuffleOrigin == REPARTITION_BY_NUM) {
         Some(h.numPartitions)
@@ -45,7 +45,7 @@ object AQEUtils {
     case p: ProjectExec =>
       getRequiredDistribution(p.child).flatMap {
         case h: ClusteredDistribution =>
-          if (h.clustering.forall(e => p.projectList.exists(_.semanticEquals(e)))) {
+          if (h.allClusterKeysAmong(p.projectList)) {
             Some(h)
           } else {
             // It's possible that the user-specified repartition is effective but the output

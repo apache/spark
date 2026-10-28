@@ -213,8 +213,21 @@ class KMeansModel private[ml] (
   @Since("2.0.0")
   override def summary: KMeansSummary = super.summary
 
-  private[spark] override def estimatedSize: Long =
-    SizeEstimator.estimate(parentModel.clusterCenters)
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (parentModel != null) {
+      // clusterCenters: Array[Vector]
+      // distanceMeasure: String
+      // trainingCost: Double
+      // numIter: Int
+      size += SizeEstimator.estimate((
+        parentModel.clusterCenters,
+        parentModel.distanceMeasure,
+        parentModel.trainingCost,
+        parentModel.numIter))
+    }
+    size
+  }
 
   private[spark] def createSummary(
     predictions: DataFrame, numIter: Int, trainingCost: Double
@@ -435,7 +448,7 @@ class KMeans @Since("1.5.0") (
   def setMaxBlockSizeInMB(value: Double): this.type = set(maxBlockSizeInMB, value)
 
   /** @group expertSetParam */
-  @Since("5.0.0")
+  @Since("4.3.0")
   def setIntermediateStorageLevel(value: String): this.type = set(intermediateStorageLevel, value)
 
   @Since("2.0.0")

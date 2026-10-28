@@ -58,3 +58,12 @@ SELECT hmac('key', CAST(NULL AS BINARY));
 SELECT hmac('key', 'message', CAST(NULL AS STRING));
 -- Unsupported algorithm.
 SELECT hmac('key', 'message', 'SHA-3');
+
+-- xxh3_64 and xxh3_128
+SELECT xxh3_64('Spark');
+SELECT xxh3_64(CAST('Spark' AS BINARY));
+SELECT xxh3_128('Spark');
+SELECT xxh3_128(CAST('Spark' AS BINARY));
+-- Null propagation.
+SELECT xxh3_64(CAST(NULL AS STRING));
+SELECT xxh3_128(CAST(NULL AS BINARY));

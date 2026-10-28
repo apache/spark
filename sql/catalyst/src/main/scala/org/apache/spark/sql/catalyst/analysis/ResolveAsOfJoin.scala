@@ -19,22 +19,28 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{
+  Cast,
   Expression,
+  GreaterThan,
+  If,
   SubqueryExpression,
+  SubtractTimestamps,
   WindowExpression
 }
 import org.apache.spark.sql.catalyst.expressions.AttributeSet
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
-import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan, Project}
+import org.apache.spark.sql.catalyst.plans.{AsOfJoinDirection, MatchComparisonOperator}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, LogicalPlan}
 import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin.MatchConditionTypes
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{AS_OF_JOIN, GENERATOR}
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.errors.QueryErrorsBase
+import org.apache.spark.sql.types.{DataType, StringType, TimestampFamily}
 
 /**
- * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into `asOfCondition` and
- * `orderExpression`, and expands `USING` column lists into equi-join predicates.
+ * Resolves SQL [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into the fields of
+ * [[MaterializedMatchCondition]], and expands `USING` column lists into equi-join predicates.
  */
 object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
 
@@ -45,6 +51,7 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
         right,
         _,
         condition,
+        _,
         _,
         _,
         _,
@@ -73,51 +80,113 @@ object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
       }
       val resolvedJoin = (matchLeft, matchOp, matchRight) match {
         case (Some(leftExpr), Some(operator), Some(rightExpr)) =>
-          AsOfJoinValidation.validateMatchConditionTableReferences(
-            joinBase, left, right, leftExpr, rightExpr)
-          if (leftExpr.resolved && rightExpr.resolved) {
-            AsOfJoinValidation.validateMatchConditionOperands(joinBase, leftExpr, rightExpr)
-            val (leftOperand, rightOperand, normalizedOp) =
-              AsOfJoin.normalizeMatchOperands(left, right, leftExpr, operator, rightExpr)
-            val (asOfCondition, orderExpression, leftSortExprs, rightSortExprs) =
-              AsOfJoin.materializeMatchComparison(leftOperand, rightOperand, normalizedOp)
-            joinBase.copy(
-              asOfCondition = asOfCondition,
-              orderExpression = orderExpression,
-              leftSortExprs = leftSortExprs,
-              rightSortExprs = rightSortExprs,
-              matchLeftOperand = None,
-              matchOperator = None,
-              matchRightOperand = None)
-          } else {
-            joinBase
+          val leftQualifiedAccessOnlyColumns = left.metadataOutput.filter(_.qualifiedAccessOnly)
+          val rightQualifiedAccessOnlyColumns = right.metadataOutput.filter(_.qualifiedAccessOnly)
+          AsOfJoinMatchConditionResolution.materialize(
+            join = joinBase,
+            leftSet = AttributeSet(left.output ++ leftQualifiedAccessOnlyColumns),
+            rightSet = AttributeSet(right.output ++ rightQualifiedAccessOnlyColumns),
+            leftOperand = leftExpr,
+            operator = operator,
+            rightOperand = rightExpr) match {
+            case Some(materialized) =>
+              joinBase.copy(
+                asOfCondition = materialized.asOfCondition,
+                orderExpression = materialized.orderExpression,
+                direction = materialized.direction,
+                leftSortExprs = materialized.leftSortExpressions,
+                rightSortExprs = materialized.rightSortExpressions,
+                matchLeftOperand = None,
+                matchOperator = None,
+                matchRightOperand = None)
+            case None => joinBase
           }
         case (None, None, None) => joinBase
         case _ => joinBase
       }
       usingProjection match {
         case Some((projectList, hiddenList)) =>
-          val project = Project(projectList, resolvedJoin)
-          project.setTagValue(
-            Project.hiddenOutputTag,
-            hiddenList.map(_.markAsQualifiedAccessOnly()))
-          project
+          NaturalAndUsingJoinResolution.buildUsingJoinProject(
+            projectList,
+            hiddenList,
+            resolvedJoin,
+            resolvedJoin.metadataOutput)
         case None => resolvedJoin
       }
   }
 }
 
-private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
+/**
+ * The executable [[AsOfJoin]] fields that a SQL `MATCH_CONDITION` clause materializes into.
+ */
+private[analysis] case class MaterializedMatchCondition(
+    asOfCondition: Expression,
+    orderExpression: Expression,
+    direction: AsOfJoinDirection,
+    leftSortExpressions: Seq[Expression],
+    rightSortExpressions: Seq[Expression])
+
+/**
+ * Validates a SQL `MATCH_CONDITION` clause and materializes it into the executable [[AsOfJoin]]
+ * fields, shared by the fixed-point [[ResolveAsOfJoin]] rule and the single-pass
+ * [[org.apache.spark.sql.catalyst.analysis.resolver.AsOfJoinResolver]] so the two analyzers
+ * cannot diverge on match-condition validation or normalization.
+ */
+private[analysis] object AsOfJoinMatchConditionResolution {
+
+  /**
+   * Returns [[None]] while either operand is still unresolved, which the fixed-point analyzer
+   * reaches on iterations before the operands resolve. Table-reference validation runs
+   * regardless, as it only needs the operands' attribute references.
+   */
+  def materialize(
+      join: AsOfJoin,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
+      leftOperand: Expression,
+      operator: MatchComparisonOperator,
+      rightOperand: Expression): Option[MaterializedMatchCondition] = {
+    AsOfJoinValidation.validateMatchConditionTableReferences(
+      join = join,
+      leftSet = leftSet,
+      rightSet = rightSet,
+      leftExpr = leftOperand,
+      rightExpr = rightOperand)
+
+    if (leftOperand.resolved && rightOperand.resolved) {
+      AsOfJoinValidation.validateMatchConditionOperands(join, leftOperand, rightOperand)
+      val (normalizedLeft, normalizedRight, normalizedOperator) =
+        AsOfJoin.normalizeMatchOperands(
+          leftSet = leftSet,
+          rightSet = rightSet,
+          expr1 = leftOperand,
+          operator = operator,
+          expr2 = rightOperand)
+      val (asOfCondition, orderExpression, leftSortExpressions, rightSortExpressions) =
+        AsOfJoin.materializeMatchComparison(
+          leftOperand = normalizedLeft,
+          rightOperand = normalizedRight,
+          normalizedOp = normalizedOperator)
+      Some(MaterializedMatchCondition(
+        asOfCondition = asOfCondition,
+        orderExpression = orderExpression,
+        direction = normalizedOperator.direction,
+        leftSortExpressions = leftSortExpressions,
+        rightSortExpressions = rightSortExpressions))
+    } else {
+      None
+    }
+  }
+}
+
+private[catalyst] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelper {
 
   def validateMatchConditionTableReferences(
       join: AsOfJoin,
-      left: LogicalPlan,
-      right: LogicalPlan,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
       leftExpr: Expression,
       rightExpr: Expression): Unit = {
-    val leftSet = left.outputSet
-    val rightSet = right.outputSet
-
     def referencesBothJoinSides(refs: AttributeSet): Boolean = {
       refs.nonEmpty &&
         refs.intersect(leftSet).nonEmpty &&
@@ -157,6 +226,49 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
     }
   }
 
+  /** Rejects unsupported DataFrame sort-merge keys before constant folding erases their types. */
+  def validateKeyTypes(join: AsOfJoin): Unit = {
+    if (conf.sortMergeAsOfJoinEnabled) {
+      if (hasMixedTimestampKeyTypes(join)) {
+        join.failAnalysis(
+          errorClass = "DATATYPE_MISMATCH.TYPE_CHECK_FAILURE_WITH_HINT",
+          messageParameters = Map(
+            "sqlExpr" -> toSQLExpr(join.orderExpression),
+            "msg" -> ("Sort-merge as-of joins do not support mixing " +
+              "TIMESTAMP_LTZ and TIMESTAMP_NTZ keys"),
+            "hint" -> "")
+        )
+      }
+
+      if (hasNearestStringKeys(join)) {
+        join.failAnalysis(
+          errorClass = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
+          messageParameters = Map("dataType" -> toSQLType(StringType))
+        )
+      }
+    }
+  }
+
+  /** Whether DataFrame timestamp keys mix LTZ and NTZ before implicit coercion. */
+  def hasMixedTimestampKeyTypes(join: AsOfJoin): Boolean = {
+    def hasMixedKeys(expr: Expression): Boolean = expr match {
+      case SubtractTimestamps(l, r, _, _) => mixesTimeZoneFamilies(l, r)
+      case If(_, thenExpr, _) => hasMixedKeys(thenExpr)
+      case _ => false
+    }
+
+    !join.requiresSortMergeAsOfJoin && hasMixedKeys(join.orderExpression)
+  }
+
+  /** Whether a DataFrame nearest join compares STRING keys before numeric subtraction. */
+  def hasNearestStringKeys(join: AsOfJoin): Boolean = {
+    !join.requiresSortMergeAsOfJoin && (join.orderExpression match {
+      case If(GreaterThan(l, r), _, _) =>
+        l.dataType.isInstanceOf[StringType] && r.dataType.isInstanceOf[StringType]
+      case _ => false
+    })
+  }
+
   private def findInvalidMatchConditionExpression(expr: Expression): Option[Expression] = {
     expr.collect {
       case e: SubqueryExpression => e
@@ -165,5 +277,20 @@ private[analysis] object AsOfJoinValidation extends QueryErrorsBase {
       case e if e.containsPattern(GENERATOR) => e
       case e if !e.deterministic => e
     }.headOption
+  }
+
+  private def mixesTimeZoneFamilies(l: Expression, r: Expression): Boolean = {
+    // Read through implicit coercion, but preserve the target type of an explicit user cast.
+    def keyType(e: Expression): DataType = e match {
+      case cast @ Cast(child, _, _, _)
+          if !cast.containsTag(Cast.USER_SPECIFIED_CAST) &&
+            (TimestampFamily.isLtz(child.dataType) || TimestampFamily.isNtz(child.dataType)) =>
+        child.dataType
+      case _ => e.dataType
+    }
+
+    val (leftType, rightType) = (keyType(l), keyType(r))
+    (TimestampFamily.isLtz(leftType) && TimestampFamily.isNtz(rightType)) ||
+      (TimestampFamily.isNtz(leftType) && TimestampFamily.isLtz(rightType))
   }
 }

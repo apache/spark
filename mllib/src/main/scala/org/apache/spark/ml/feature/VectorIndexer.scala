@@ -29,7 +29,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.annotation.Since
 import org.apache.spark.ml.{Estimator, Model}
 import org.apache.spark.ml.attribute._
-import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{DenseVector, SparseVector, SQLDataTypes, Vector}
 import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
@@ -160,11 +160,10 @@ class VectorIndexer @Since("1.4.0") (
   override def transformSchema(schema: StructType): StructType = {
     // We do not transfer feature metadata since we do not know what types of features we will
     // produce in transform().
-    val dataType = new VectorUDT
     require(isDefined(inputCol), s"VectorIndexer requires input column parameter: $inputCol")
     require(isDefined(outputCol), s"VectorIndexer requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
-    SchemaUtils.appendColumn(schema, $(outputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
+    SchemaUtils.appendColumn(schema, $(outputCol), SQLDataTypes.VectorType)
   }
 
   @Since("1.4.1")
@@ -366,17 +365,15 @@ class VectorIndexerModel private[ml] (
     attrs
   }
 
-  // TODO: Check more carefully about whether this whole class will be included in a closure.
-
   /** Per-vector transform function */
-  private lazy val transformFunc: Vector => Vector = {
+  private def getTransformFunc: Vector => Vector = {
     val sortedCatFeatureIndices = categoryMaps.keys.toArray.sorted
     val localVectorMap = categoryMaps
     val localNumFeatures = numFeatures
     val localHandleInvalid = getHandleInvalid
     val f: Vector => Vector = { (v: Vector) =>
       assert(v.size == localNumFeatures, "VectorIndexerModel expected vector of length" +
-        s" $numFeatures but found length ${v.size}")
+        s" $localNumFeatures but found length ${v.size}")
       v match {
         case dv: DenseVector =>
           var hasInvalid = false
@@ -449,7 +446,7 @@ class VectorIndexerModel private[ml] (
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
     val newField = prepOutputField(dataset.schema)
-    val transformUDF = udf { vector: Vector => transformFunc(vector) }
+    val transformUDF = udf(getTransformFunc)
     val newCol = transformUDF(dataset($(inputCol)))
     val ds = dataset.withColumn($(outputCol), newCol, newField.metadata)
     if (getHandleInvalid == VectorIndexer.SKIP_INVALID) {
@@ -461,12 +458,11 @@ class VectorIndexerModel private[ml] (
 
   @Since("1.4.0")
   override def transformSchema(schema: StructType): StructType = {
-    val dataType = new VectorUDT
     require(isDefined(inputCol),
       s"VectorIndexerModel requires input column parameter: $inputCol")
     require(isDefined(outputCol),
       s"VectorIndexerModel requires output column parameter: $outputCol")
-    SchemaUtils.checkColumnType(schema, $(inputCol), dataType)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
 
     // If the input metadata specifies numFeatures, compare with expected numFeatures.
     val origAttrGroup = AttributeGroup.fromStructField(

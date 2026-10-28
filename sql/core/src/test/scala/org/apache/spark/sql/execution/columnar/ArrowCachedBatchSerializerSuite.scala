@@ -25,11 +25,14 @@ import org.apache.arrow.vector.{
   Float4Vector, Float8Vector, IntVector, LargeVarCharVector, SmallIntVector,
   TimeNanoVector, TimeStampMicroTZVector, TimeStampMicroVector, TinyIntVector,
   VarBinaryVector, VarCharVector, VectorSchemaRoot, VectorUnloader}
+import org.apache.arrow.vector.complex.{MapVector, StructVector}
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType}
 
-import org.apache.spark.{SparkConf, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkConf, SparkException, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow}
+import org.apache.spark.sql.columnar.CachedBatch
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -259,6 +262,102 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
 
     // Verify cache was used
     assert(projected.queryExecution.executedPlan.toString.contains("InMemoryTableScan"))
+  }
+
+  test("column projection prunes columns on load for every projection shape") {
+    // The read path reads only the selected columns' buffers out of the cached bytes. Exercise a
+    // spread of projection shapes -- reordering, single column at each position, complex columns
+    // mixed with primitives, and duplicate selection -- under both the row and vectorized read
+    // paths, so the buffer-span arithmetic (which must skip the exact node/buffer runs of
+    // unselected columns, including the child buffers of complex columns) is covered end to end.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val df = (1 to 50).map { i =>
+          (i, s"str$i", Seq(i, i + 1), (i.toLong, s"n$i"))
+        }.toDF("a", "b", "arr", "st")
+        df.cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 50).map { i =>
+            Row.fromSeq(cols.map {
+              case "a" => i
+              case "b" => s"str$i"
+              case "arr" => Seq(i, i + 1)
+              case "st" => Row(i.toLong, s"n$i")
+            })
+          }
+          // Selecting a complex column after skipping a var-width one exercises skipping the
+          // multi-buffer runs (offset + data) of the unselected string.
+          checkAnswer(df.select("arr"), expected(Seq("arr")))
+          checkAnswer(df.select("st"), expected(Seq("st")))
+          checkAnswer(df.select("b"), expected(Seq("b")))
+          // Reordered projection: the loaded root must be in output (columnIndices) order.
+          checkAnswer(df.select("st", "a"), expected(Seq("st", "a")))
+          checkAnswer(df.select("arr", "b", "a"), expected(Seq("arr", "b", "a")))
+          // Duplicate selection maps two output columns to one cached column.
+          checkAnswer(df.select("a", "a"), (1 to 50).map(i => Row(i, i)))
+          // Full projection (no pruning) still round-trips.
+          checkAnswer(df.select("a", "b", "arr", "st"), expected(Seq("a", "b", "arr", "st")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
+  }
+
+  test("column projection prunes deeply nested columns on load") {
+    // The buffer-span arithmetic must skip (and, when selected, copy) a column's ENTIRE buffer
+    // subtree, at arbitrary nesting depth. Exercise array<struct>, struct<struct<struct>>, and
+    // map<int, array<int>>, each selected while pruning neighbours whose own subtrees have varying
+    // buffer counts, under both read paths, so an off-by-one in the recursive span would surface
+    // as wrong values in a following column.
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("arrOfStruct", ArrayType(new StructType().add("x", LongType).add("y", StringType)))
+          .add("s", StringType)
+          .add("deepStruct", new StructType()
+            .add("l1", new StructType()
+              .add("l2", new StructType().add("v", LongType).add("t", StringType))))
+          .add("mapOfArray", MapType(IntegerType, ArrayType(IntegerType)))
+        val rows = (1 to 30).map { i =>
+          Row(i, Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i")), s"s$i",
+            Row(Row(Row(i.toLong * 10, s"deep$i"))), Map(i -> Seq(i, i + 1, i + 2)))
+        }
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(rows, 1), schema).cache()
+        try {
+          def expected(cols: Seq[String]): Seq[Row] = (1 to 30).map { i =>
+            Row.fromSeq(cols.map {
+              case "id" => i
+              case "arrOfStruct" => Seq(Row(i.toLong, s"a$i"), Row((i + 1).toLong, s"b$i"))
+              case "s" => s"s$i"
+              case "deepStruct" => Row(Row(Row(i.toLong * 10, s"deep$i")))
+              case "mapOfArray" => Map(i -> Seq(i, i + 1, i + 2))
+            })
+          }
+          // Each nested column selected alone: its whole subtree must be copied, nothing else.
+          checkAnswer(df.select("arrOfStruct"), expected(Seq("arrOfStruct")))
+          checkAnswer(df.select("deepStruct"), expected(Seq("deepStruct")))
+          checkAnswer(df.select("mapOfArray"), expected(Seq("mapOfArray")))
+          // A primitive after a pruned deep column: the skip must span the whole deep subtree.
+          checkAnswer(df.select("id", "s"), expected(Seq("id", "s")))
+          // Reordered mix of nested and primitive columns, pruning others in between.
+          checkAnswer(
+            df.select("mapOfArray", "id", "deepStruct"),
+            expected(Seq("mapOfArray", "id", "deepStruct")))
+          checkAnswer(
+            df.select("deepStruct", "arrOfStruct"),
+            expected(Seq("deepStruct", "arrOfStruct")))
+          // Full projection round-trips.
+          checkAnswer(
+            df.select("id", "arrOfStruct", "s", "deepStruct", "mapOfArray"),
+            expected(Seq("id", "arrOfStruct", "s", "deepStruct", "mapOfArray")))
+        } finally {
+          df.unpersist()
+        }
+      }
+    }
   }
 
   test("caching with multiple batches") {
@@ -730,6 +829,63 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("zero-copy cache write requires physical congruence with the cache schema") {
+    // An Arrow map vector whose entry-struct children sit in [value, key] order: Arrow tolerates
+    // the layout and ArrowColumnVector reads it correctly (key/value are addressed by name), but
+    // record-batch buffers are laid out positionally, so serializing them verbatim under the
+    // cache's canonical [key, value] schema would silently swap every key with its value when the
+    // cached batch is read back. Such input must take the row-based conversion path, which
+    // rewrites the values through ArrowWriter under the cache schema.
+    val serializer = new ArrowCachedBatchSerializer
+    val attrs = Seq(AttributeReference("m", MapType(IntegerType, IntegerType, false))())
+    val input = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+      val allocator = ArrowUtils.rootAllocator.newChildAllocator(
+        "swapped-map-input", 0, Long.MaxValue)
+      Option(TaskContext.get()).foreach(
+        _.addTaskCompletionListener[Unit](_ => allocator.close()))
+      val intType = new ArrowType.Int(32, true)
+      val entriesField = new Field(
+        "entries",
+        FieldType.notNullable(ArrowType.Struct.INSTANCE),
+        java.util.Arrays.asList(
+          new Field("value", FieldType.notNullable(intType), null),
+          new Field("key", FieldType.notNullable(intType), null)))
+      val mapField = new Field(
+        "m",
+        FieldType.nullable(new ArrowType.Map(false)),
+        java.util.Collections.singletonList(entriesField))
+      val mapVector = mapField.createVector(allocator).asInstanceOf[MapVector]
+      mapVector.allocateNew()
+      val entries = mapVector.getDataVector.asInstanceOf[StructVector]
+      entries.getChild("key").asInstanceOf[IntVector].setSafe(0, 123)
+      entries.getChild("value").asInstanceOf[IntVector].setSafe(0, 7)
+      entries.setIndexDefined(0)
+      mapVector.startNewValue(0)
+      mapVector.endValue(0, 1)
+      mapVector.setValueCount(1)
+      val column = new ArrowColumnVector(mapVector)
+      // The source itself reads correctly; only the cache round trip is under test.
+      val sourceMap = column.getMap(0)
+      assert(sourceMap.keyArray.getInt(0) == 123 && sourceMap.valueArray.getInt(0) == 7)
+      Iterator(new ColumnarBatch(Array[ColumnVector](column), 1))
+    }
+    val conf = spark.sessionState.conf
+    val cached = serializer.convertColumnarBatchToCachedBatch(
+      input, attrs, StorageLevel.MEMORY_ONLY, conf)
+    val roundTripped = serializer
+      .convertCachedBatchToColumnarBatch(cached, attrs, attrs, conf)
+      .mapPartitions { batches =>
+        batches.flatMap { batch =>
+          (0 until batch.numRows()).map { i =>
+            val m = batch.column(0).getMap(i)
+            (m.keyArray.getInt(0), m.valueArray.getInt(0))
+          }
+        }
+      }
+      .collect()
+    assert(roundTripped === Array((123, 7)))
+  }
+
   test("columnar input with empty arrays and maps from parquet") {
     withTempPath { dir =>
       val path = dir.getAbsolutePath
@@ -1103,6 +1259,107 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     spark.createDataFrame(
       spark.sparkContext.parallelize(values.map(v => Row(v)), 1),
       StructType(Seq(StructField("v", dt, nullable = true))))
+
+  // Helper: the InMemoryRelation behind a cached DataFrame, after populating the cache. The
+  // DataFrame's queryExecution is memoized, so this must run before anything else forces it.
+  private def cachedRelation(df: org.apache.spark.sql.DataFrame): InMemoryRelation = {
+    df.cache()
+    df.count()
+    df.queryExecution.executedPlan.collectFirst {
+      case scan: InMemoryTableScanExec => scan.relation
+    }.get
+  }
+
+  // Helper: (Arrow vector class, Spark type, row count, null count) per cached batch of a
+  // single-column relation, read back through the serializer's own columnar path. The Spark type
+  // is the one ArrowColumnVector recovers from the read-side Arrow field via
+  // ArrowUtils.fromArrowField, so a type whose fractional-second precision lives in that field's
+  // metadata is reported as it comes back rather than as it went in.
+  private def cachedVectors(relation: InMemoryRelation): Array[(String, DataType, Int, Int)] = {
+    val attrs = relation.output
+    relation.cacheBuilder.serializer
+      .convertCachedBatchToColumnarBatch(
+        relation.cacheBuilder.cachedColumnBuffers, attrs, attrs, spark.sessionState.conf)
+      .mapPartitions { batches =>
+        batches.map { batch =>
+          val column = batch.column(0).asInstanceOf[ArrowColumnVector]
+          (column.getValueVector.getClass.getSimpleName, column.dataType(), batch.numRows(),
+            column.numNulls())
+        }
+      }
+      .collect()
+  }
+
+  private val nullPatterns: Seq[(String, Int => Boolean)] = Seq(
+    ("every 31st row null", i => i % 31 == 0),
+    ("no nulls", _ => false),
+    ("all nulls", _ => true))
+
+  test("SPARK-59571: TIME keeps its precision and its nulls through the cache, at every " +
+      "precision") {
+    // Every precision of TIME is written to the same TimeNanoVector, so the precision rides in
+    // the Arrow field metadata rather than in the value. The cache read path rebuilds its Arrow
+    // schema from the cache schema and wraps each vector in an ArrowColumnVector, whose type is
+    // recovered from that field, so the column's type on the way out pins the tag-and-recover
+    // path: dropping the precision key on either side falls back to TimeType(6). The values are
+    // truncated to the declared precision so a precision loss could not hide behind a value the
+    // type would round anyway.
+    val rows = 1000
+    val nanosPerDay = 86400000000000L
+    val precisions = TimeType.MIN_PRECISION to TimeType.MAX_PRECISION
+    for (precision <- precisions; (pattern, isNull) <- nullPatterns) {
+      val unit = math.pow(10, 9 - precision).toLong
+      def timeAt(i: Int): LocalTime = {
+        val nanos = ((i.toLong * nanosPerDay) / rows + i.toLong * 1234567L) % nanosPerDay
+        LocalTime.ofNanoOfDay(nanos / unit * unit)
+      }
+      // The fixture has to reach the digits the precision admits, or the case would pass for a
+      // kernel that dropped them: at every precision above zero some value's last admitted digit
+      // is non-zero, and no value carries a digit the precision does not admit. Checked on the
+      // values the generator makes, before the null pattern hides some of them.
+      val generated = (0 until rows).map(i => timeAt(i).toNanoOfDay)
+      assert(generated.forall(_ % unit == 0), s"TIME($precision): fixture below the unit")
+      assert(precision == 0 || generated.exists(n => (n / unit) % 10 != 0),
+        s"TIME($precision): fixture never uses the last digit the precision admits")
+      val values = (0 until rows).map(i => if (isNull(i)) null else timeAt(i))
+      val df = singlePartDf(values, TimeType(precision))
+      val relation = cachedRelation(df)
+      checkAnswer(df, values.map(Row(_)))
+      val vectors = cachedVectors(relation)
+      assert(vectors.map(_._1).toSet === Set("TimeNanoVector"), s"TIME($precision), $pattern")
+      assert(vectors.map(_._2).toSet === Set[DataType](TimeType(precision)),
+        s"TIME($precision), $pattern: the precision must survive the read-side Arrow field")
+      assert(vectors.map(_._3).sum === rows, s"TIME($precision), $pattern")
+      assert(vectors.map(_._4).sum === (0 until rows).count(isNull),
+        s"TIME($precision), $pattern: null count")
+      df.unpersist()
+    }
+  }
+
+  test("SPARK-59571: day-time intervals of both signs keep their microseconds through the " +
+      "cache") {
+    val rows = 1000
+    for ((pattern, isNull) <- nullPatterns) {
+      // Whole microseconds, negative for the first half of the rows and positive for the rest.
+      // The step is 7_001_001 microseconds, not a whole number of milliseconds, so a lane that
+      // came back rounded to the millisecond would fail rather than compare equal.
+      def intervalAt(i: Int): Duration = Duration.ofNanos((i.toLong - rows / 2) * 7001001000L)
+      val generated = (0 until rows).map(i => intervalAt(i).toNanos)
+      assert(generated.forall(_ % 1000 == 0), "fixture below the microsecond")
+      assert(generated.count(_ % 1000000 != 0) > rows / 2,
+        "fixture does not exercise sub-millisecond microseconds")
+      val values = (0 until rows).map(i => if (isNull(i)) null else intervalAt(i))
+      val df = singlePartDf(values, DayTimeIntervalType())
+      val relation = cachedRelation(df)
+      checkAnswer(df, values.map(Row(_)))
+      val vectors = cachedVectors(relation)
+      assert(vectors.map(_._1).toSet === Set("DurationVector"), pattern)
+      assert(vectors.map(_._2).toSet === Set[DataType](DayTimeIntervalType()), pattern)
+      assert(vectors.map(_._3).sum === rows, pattern)
+      assert(vectors.map(_._4).sum === (0 until rows).count(isNull), s"$pattern: null count")
+      df.unpersist()
+    }
+  }
 
   test("createColumnStats returns the correct ColumnStats subclass for each supported type") {
     // Direct unit test: verify the stats class dispatched for each Spark type, which determines
@@ -2216,6 +2473,59 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     }
   }
 
+  test("nanosecond timestamps round-trip inside complex types") {
+    // Nested nanosecond timestamps go through the same recursive machinery as top-level ones:
+    // ArrowWriter's field writers dispatch recursively on (type, vector), and every container
+    // accessor in ArrowColumnVector wraps its element vector through the constructor that runs
+    // the tagged-struct recognizers -- so the lossless struct representation must round-trip at
+    // any nesting depth, including values outside the int64 epoch-nanos window (~1677-2262)
+    // that the standard interchange encoding cannot represent. Like the neighboring round-trip
+    // tests, run under both vectorized-reader settings.
+    val outOfWindow = LocalDateTime.of(3000, 1, 6, 12, 30, 45, 123456789)
+    val inWindow = LocalDateTime.of(2025, 1, 6, 12, 30, 45, 987654321)
+    val nanosType = TimestampNTZNanosType(9)
+
+    Seq(false, true).foreach { vectorized =>
+      withSQLConf(SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        val arrayDf = singlePartDf(
+          Seq(Seq(outOfWindow, inWindow)), ArrayType(nanosType)).cache()
+        try {
+          assert(arrayDf.count() == 1)
+          val read = arrayDf.collect().head.getSeq[LocalDateTime](0)
+          assert(read == Seq(outOfWindow, inWindow),
+            s"expected nested nanos to round-trip through an array, got: $read")
+        } finally {
+          arrayDf.unpersist()
+          InMemoryRelation.clearSerializer()
+        }
+
+        val structDf = singlePartDf(
+          Seq(Row(outOfWindow)), StructType(Seq(StructField("ts", nanosType)))).cache()
+        try {
+          assert(structDf.count() == 1)
+          val read = structDf.collect().head.getStruct(0).getAs[LocalDateTime](0)
+          assert(read == outOfWindow,
+            s"expected nested nanos to round-trip through a struct, got: $read")
+        } finally {
+          structDf.unpersist()
+          InMemoryRelation.clearSerializer()
+        }
+
+        val mapDf = singlePartDf(
+          Seq(Map(1 -> outOfWindow)), MapType(IntegerType, nanosType)).cache()
+        try {
+          assert(mapDf.count() == 1)
+          val read = mapDf.collect().head.getMap[Int, LocalDateTime](0)
+          assert(read == Map(1 -> outOfWindow),
+            s"expected nested nanos to round-trip through a map value, got: $read")
+        } finally {
+          mapDf.unpersist()
+          InMemoryRelation.clearSerializer()
+        }
+      }
+    }
+  }
+
   test("nonpositive maxRecordsPerBatch caches all rows in a single batch") {
     // A nonpositive maxRecordsPerBatch means unlimited; without the `<= 0` guard the write
     // iterator would emit zero-row batches forever instead of finishing.
@@ -2400,6 +2710,51 @@ class ArrowCachedBatchSerializerSuite extends QueryTest with SharedSparkSession 
     assert(restored, "an interrupt delivered during the drain must be restored, not swallowed")
     // If the produced root was not closed, this throws "Memory was leaked by query".
     alloc.close()
+  }
+
+  test("empty projection emits row counts without deserializing the Arrow payload") {
+    // A count-style read selects no columns, and the row count is already recorded on the cached
+    // batch, so the Arrow payload must not be deserialized at all. Prove it by handing the reader
+    // a batch whose payload is garbage: the empty projection succeeds purely from numRows, while
+    // a projection that actually needs the payload fails on the same batch.
+    val serializer = new ArrowCachedBatchSerializer
+    val attrs = Seq(AttributeReference("i", IntegerType)())
+    val garbage = ArrowCachedBatch(
+      numRows = 5,
+      arrowData = Array[Byte](0x13, 0x37, 0x00, -1),
+      stats = InternalRow(null, null, 0, 5, 4L))
+    val input = spark.sparkContext.parallelize(Seq[CachedBatch](garbage), 1)
+    val conf = spark.sessionState.conf
+
+    val emptyProjection =
+      serializer.convertCachedBatchToInternalRow(input, attrs, Seq.empty, conf)
+    assert(emptyProjection.map(_.numFields).collect() === Array(0, 0, 0, 0, 0))
+
+    val fullProjection =
+      serializer.convertCachedBatchToInternalRow(input, attrs, attrs, conf)
+    intercept[SparkException] {
+      fullProjection.collect()
+    }
+  }
+
+  test("count aggregate over the cached relation with the row-based reader") {
+    // End-to-end coverage of the empty-projection read: with the vectorized reader disabled the
+    // scan produces rows via convertCachedBatchToInternalRow, and a count aggregate selects no
+    // columns. Small Arrow batches make the count span many cached batches.
+    withSQLConf(
+        SQLConf.CACHE_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "10") {
+      val df = (1 to 257).toList.toDF("i")
+      df.cache()
+      try {
+        assert(df.count() === 257)
+        checkAnswer(df.selectExpr("count(*)"), Seq(Row(257)))
+        // A projecting query over the same cached data still reads the payload correctly.
+        checkAnswer(df.selectExpr("sum(i)"), Seq(Row((1 to 257).sum.toLong)))
+      } finally {
+        df.unpersist()
+      }
+    }
   }
 }
 

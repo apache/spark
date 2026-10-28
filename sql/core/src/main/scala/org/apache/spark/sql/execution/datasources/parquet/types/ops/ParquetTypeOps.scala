@@ -306,5 +306,9 @@ private[parquet] object ParquetTypeOps {
    * predicate pushdown lists its [[ParquetFilterOps]] here. This is what `filterOpsFor`
    * scans, so a new type participates in pushdown by adding its ops to this Seq.
    */
-  private val filterOpsList: Seq[ParquetFilterOps] = Seq(TimeTypeParquetOps.filterOps)
+  private val filterOpsList: Seq[ParquetFilterOps] = Seq(
+    TimeTypeParquetOps.filterOps,
+    TimeTypeParquetOps.filterOpsAdjustedToUtc,
+    TimestampNanosParquetOps.ltzFilterOps,
+    TimestampNanosParquetOps.ntzFilterOps)
 }

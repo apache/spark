@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.util.SparkCharVarcharUtils.replaceCharVarch
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
 import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -37,6 +38,8 @@ import org.apache.spark.util.ArrayImplicits._
  */
 class ResolveCatalogs(val catalogManager: CatalogManager)
   extends Rule[LogicalPlan] with LookupCatalog {
+
+  private val catalogIdentifierResolution = new CatalogIdentifierResolution(catalogManager)
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperatorsDown {
     // We only support temp variables for now and the system catalog is not properly implemented
@@ -127,6 +130,18 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
       c.copy(name = resolvedIdentifier)
 
+    case c @ CreateTableAsSelect(
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
+      c.copy(name = resolvedIdentifier)
+
+    case r @ ReplaceTableAsSelect(
+        UnresolvedIdentifier(nameParts, allowTemp), _, _, _, writeOptions, _, _) =>
+      val resolvedIdentifier = resolveIdentifier(nameParts, allowTemp, Nil)
+      rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
+      r.copy(name = resolvedIdentifier)
+
     case UnresolvedIdentifier(nameParts, allowTemp) =>
       resolveIdentifier(nameParts, allowTemp, Nil)
 
@@ -143,20 +158,23 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       allowTemp: Boolean,
       columns: Seq[ColumnDefinition]): ResolvedIdentifier = {
     val columnOutput = columns.map { col =>
-      val dataType = if (conf.preserveCharVarcharTypeInfo) {
+      val dataType = if (conf.charVarcharFirstClassTypes) {
         col.dataType
       } else {
         replaceCharVarcharWithString(col.dataType)
       }
       AttributeReference(col.name, dataType, col.nullable, col.metadata)()
     }
-    if (allowTemp && catalogManager.v1SessionCatalog.isTempView(nameParts)) {
-      val ident = Identifier.of(nameParts.dropRight(1).toArray, nameParts.last)
-      ResolvedIdentifier(FakeSystemCatalog, ident, columnOutput)
-    } else {
-      val CatalogAndIdentifier(catalog, identifier) = nameParts
-      ResolvedIdentifier(catalog, identifier, columnOutput)
-    }
+    catalogIdentifierResolution.resolveIdentifier(nameParts, allowTemp, columnOutput)
+  }
+
+  private def rejectTimeTravelOptionsForWrite(
+      resolvedIdentifier: ResolvedIdentifier,
+      writeOptions: Map[String, String]): Unit = {
+    CatalogV2Util.rejectTimeTravelOptionsForWrite(
+      resolvedIdentifier.catalog,
+      resolvedIdentifier.identifier,
+      new CaseInsensitiveStringMap(writeOptions.asJava))
   }
 
   private def isSystemBuiltinName(nameParts: Seq[String]): Boolean = {

@@ -23,7 +23,7 @@ import java.util.{Calendar, Locale, TimeZone}
 
 import org.scalatest.exceptions.TestFailedException
 
-import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.{SparkException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
@@ -909,6 +909,33 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("json_typeof") {
+    Seq(
+      // Invalid or empty inputs return null.
+      ("", null),
+      ("bad", null),
+      ("""{"key": 45, "random_string"}""", null),
+      // Trailing content after a valid value is not a single well-formed JSON document.
+      ("123 true", null),
+      // Valid JSON values return the type of the outermost value.
+      ("{}", "object"),
+      ("""{"key": 1, "arr": [1, 2]}""", "object"),
+      ("[]", "array"),
+      ("[1, 2, 3]", "array"),
+      ("\"hello\"", "string"),
+      ("123", "number"),
+      ("1.5", "number"),
+      ("-123", "number"),
+      ("-1.5", "number"),
+      ("true", "boolean"),
+      ("false", "boolean"),
+      ("null", "null")
+    ).foreach {
+      case (input, expected) =>
+        checkEvaluation(JsonTypeof(Literal(input)), expected)
+    }
+  }
+
   test("SPARK-35320: from_json should fail with a key type different of StringType") {
     Seq(
       (MapType(IntegerType, StringType), """{"1": "test"}"""),
@@ -1041,4 +1068,74 @@ class JsonExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       input)
   }
 
+  test("JsonToStructs, GetJsonObject, JsonTuple, MultiGetJsonObject, JsonValue, JsonObjectExpr " +
+      "are stateful and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+    val jsonToStructs = JsonToStructs(schema, Map.empty, Literal("{}"), UTC_OPT)
+    assert(jsonToStructs.stateful)
+    assert(jsonToStructs.freshCopyIfContainsStatefulExpression() ne jsonToStructs)
+
+    val getJsonObject = GetJsonObject(Literal("{}"), Literal("$.a"))
+    assert(getJsonObject.stateful)
+    assert(getJsonObject.freshCopyIfContainsStatefulExpression() ne getJsonObject)
+
+    val jsonTuple = JsonTuple(Literal("{}") :: Literal("a") :: Nil)
+    assert(jsonTuple.stateful)
+    assert(jsonTuple.freshCopyIfContainsStatefulExpression() ne jsonTuple)
+
+    val multiGetJsonObject = MultiGetJsonObject(Literal("{}"), Seq("$.a", "$.b"))
+    assert(multiGetJsonObject.stateful)
+    assert(multiGetJsonObject.freshCopyIfContainsStatefulExpression() ne multiGetJsonObject)
+
+    // JsonValue reuses a mutable row to cast the extracted scalar, so it must be stateful.
+    val jsonValue = JsonValue(
+      Literal("{}"), "$.a", StringType,
+      JsonValueBehavior.Null, JsonValueBehavior.Null, None, None)
+    assert(jsonValue.stateful)
+    assert(jsonValue.freshCopyIfContainsStatefulExpression() ne jsonValue)
+
+    // JsonObjectExpr's evaluator owns mutable scratch (a per-task generator, writer, and
+    // validated-text cache), so it must be stateful and hand out a fresh copy.
+    val jsonObject = JsonObjectExpr(
+      Seq((Literal("a"), Literal(1))), Seq(false), Seq(false))
+    assert(jsonObject.stateful)
+    assert(jsonObject.freshCopyIfContainsStatefulExpression() ne jsonObject)
+  }
+
+  test("JSON_OBJECT raises JSON_OBJECT_NULL_KEY before the value in interpreted and codegen") {
+    // Covers the interpreted key-guard branch, which the end-to-end suites do not reach (they run
+    // codegen, or use a non-null key). The guard runs while the carrier struct is evaluated left to
+    // right, so the null-key error must win over a paired value that would itself throw.
+    checkErrorInExpression[SparkRuntimeException](
+      JsonObjectExpr(Seq((Literal(null, StringType), Literal(1))), Seq(false), Seq(false)),
+      "JSON_OBJECT_NULL_KEY")
+    checkErrorInExpression[SparkRuntimeException](
+      JsonObjectExpr(
+        Seq((BoundReference(0, StringType, nullable = true), Literal(1))), Seq(false), Seq(false)),
+      InternalRow(null),
+      "JSON_OBJECT_NULL_KEY")
+    // The value is an ANSI cast that always throws; the null-key error must still win.
+    checkErrorInExpression[SparkRuntimeException](
+      JsonObjectExpr(
+        Seq((Literal(null, StringType), Cast(Literal("x"), IntegerType, None, EvalMode.ANSI))),
+        Seq(false), Seq(false)),
+      "JSON_OBJECT_NULL_KEY")
+  }
+
+  test("a JSON schema argument cannot bring in the FILE type when it is disabled") {
+    val schema = Literal(
+      """{"type":"struct","fields":[{"name":"f","type":"file","nullable":true,"metadata":{}}]}""")
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          ExprUtils.evalTypeExpr(schema)
+        },
+        condition = "UNSUPPORTED_FILE_TYPE",
+        parameters = Map.empty)
+    }
+    withSQLConf(SQLConf.FILE_TYPE_ENABLED.key -> "true") {
+      assert(ExprUtils.evalTypeExpr(schema) ===
+        StructType(StructField("f", FileType.external) :: Nil))
+    }
+  }
 }

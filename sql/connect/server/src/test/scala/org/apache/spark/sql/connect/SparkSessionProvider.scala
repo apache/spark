@@ -25,4 +25,6 @@ import org.apache.spark.sql
  */
 trait SparkSessionProvider extends sql.SparkSessionProvider {
   protected override def spark: SparkSession
+
+  override protected def sql(query: String): DataFrame = spark.sql(query)
 }

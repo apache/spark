@@ -2327,6 +2327,33 @@ class DDLParserSuite extends AnalysisTest {
         stop = 56))
   }
 
+  test("SPARK-58008: delete from table: with options") {
+    parseCompare(
+      """
+        |DELETE FROM testcat.ns1.ns2.tbl WITH (`write.split-size` = 10)
+        |WHERE a = 1
+      """.stripMargin,
+      DeleteFromTable(
+        UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+          new CaseInsensitiveStringMap(
+            java.util.Map.of("write.split-size", "10"))),
+        EqualTo(UnresolvedAttribute("a"), Literal(1))))
+  }
+
+  test("SPARK-58008: delete from table: with options and alias") {
+    parseCompare(
+      """
+        |DELETE FROM testcat.ns1.ns2.tbl AS t WITH (`k` = 'v')
+        |WHERE t.a = 2
+      """.stripMargin,
+      DeleteFromTable(
+        SubqueryAlias("t",
+          UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"),
+            new CaseInsensitiveStringMap(
+              java.util.Map.of("k", "v")))),
+        EqualTo(UnresolvedAttribute("t.a"), Literal(2))))
+  }
+
   test("update table: basic") {
     parseCompare(
       """
@@ -2531,8 +2558,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
         SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
-          Seq(("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))), None)))),
+          Seq(UnresolvedCTERelation("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))))))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),

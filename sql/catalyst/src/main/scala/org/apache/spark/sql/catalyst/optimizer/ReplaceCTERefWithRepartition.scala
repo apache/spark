@@ -22,7 +22,6 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.DeduplicateRelations
 import org.apache.spark.sql.catalyst.expressions.{Alias, SubqueryExpression}
-import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{CTE, PLAN_EXPRESSION}
@@ -74,8 +73,7 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
       if (ref.outputSet == cteDefPlan.outputSet) {
         cteDefPlan
       } else {
-        val ctePlan = DeduplicateRelations(
-          Join(cteDefPlan, cteDefPlan, Inner, None, JoinHint(None, None))).children(1)
+        val ctePlan = DeduplicateRelations.deduplicateRight(cteDefPlan, cteDefPlan)
         val projectList = ref.output.zip(ctePlan.output).map { case (tgtAttr, srcAttr) =>
           Alias(srcAttr, tgtAttr.name)(exprId = tgtAttr.exprId)
         }

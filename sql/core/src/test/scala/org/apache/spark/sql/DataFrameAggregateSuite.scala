@@ -573,6 +573,56 @@ class DataFrameAggregateSuite extends SharedSparkSession
     }
   }
 
+  testWithWholeStageCodegenOnAndOff("SPARK-58213: corr returns NULL for zero variance") { _ =>
+    val input = Seq(
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("both-constant", Some(1.0), Some(1.0)),
+      ("empty", None, None),
+      ("normal", Some(1.0), Some(1.0)),
+      ("normal", Some(2.0), Some(2.0)),
+      ("normal", Some(3.0), Some(3.0)),
+      ("partial-null", None, Some(0.0)),
+      ("partial-null", Some(1.0), Some(1.0)),
+      ("partial-null", Some(2.0), None),
+      ("partial-null", Some(3.0), Some(3.0)),
+      ("single", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(1.0)),
+      ("x-constant", Some(1.0), Some(2.0)),
+      ("x-constant", Some(1.0), Some(3.0)),
+      ("y-constant", Some(1.0), Some(1.0)),
+      ("y-constant", Some(2.0), Some(1.0)),
+      ("y-constant", Some(3.0), Some(1.0)),
+      ("zero-correlation", Some(0.0), Some(1.0)),
+      ("zero-correlation", Some(1.0), Some(-2.0)),
+      ("zero-correlation", Some(2.0), Some(1.0))).toDF("case", "x", "y")
+
+    Seq(true, false).foreach { ansiEnabled =>
+      Seq(true, false).foreach { legacyStatisticalAggregate =>
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString,
+            SQLConf.LEGACY_STATISTICAL_AGGREGATE.key ->
+              legacyStatisticalAggregate.toString) {
+          val singleRow = if (legacyStatisticalAggregate) {
+            Row("single", Double.NaN)
+          } else {
+            Row("single", null)
+          }
+          checkAnswer(
+            input.groupBy($"case").agg(corr($"x", $"y")).orderBy($"case"),
+            Seq(
+              Row("both-constant", null),
+              Row("empty", null),
+              Row("normal", 1.0),
+              Row("partial-null", 1.0),
+              singleRow,
+              Row("x-constant", null),
+              Row("y-constant", null),
+              Row("zero-correlation", 0.0)))
+        }
+      }
+    }
+  }
+
   test("null moments") {
     val emptyTableData = Seq.empty[(Int, Int)].toDF("a", "b")
     checkAnswer(emptyTableData.agg(
@@ -674,6 +724,72 @@ class DataFrameAggregateSuite extends SharedSparkSession
       df.select(array_agg($"a"), array_agg($"b")),
       Seq(Row(Seq(1, 2, 3), Seq(2, 2, 4)))
     )
+  }
+
+  test("collect_union function") {
+    // Distinct union of array elements across rows.
+    val df = Seq(Seq(1, 2), Seq(2, 3), Seq(1)).toDF("arr")
+    checkDataset(
+      df.select(collect_union($"arr").as("u")).as[Set[Int]],
+      Set(1, 2, 3))
+    checkAnswer(
+      df.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+    checkAnswer(
+      df.selectExpr("sort_array(collect_union(arr))"),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL array inputs are always skipped.
+    val dfNulls = Seq(Seq(1, 2), null, Seq(2, 3)).toDF("arr")
+    checkAnswer(
+      dfNulls.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2, 3))))
+
+    // NULL elements: dropped by default (IGNORE NULLS, matching collect_set) ...
+    val dfNullElem = Seq(Seq(Integer.valueOf(1), null), Seq(Integer.valueOf(2))).toDF("arr")
+    checkAnswer(
+      dfNullElem.select(sort_array(collect_union($"arr"))),
+      Seq(Row(Seq(1, 2))))
+    // ... and kept (a single null) with RESPECT NULLS, matching
+    // array_distinct(flatten(collect_list(...))). sort_array puts null first in asc order.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      Seq(Row(Seq(null, 1, 2))))
+    // Equivalent to array_distinct(flatten(collect_list(...))) under RESPECT NULLS. Compare
+    // order-insensitively via sort_array, since element order in either result is unspecified.
+    checkAnswer(
+      dfNullElem.selectExpr("sort_array(collect_union(arr) RESPECT NULLS)"),
+      dfNullElem.selectExpr("sort_array(array_distinct(flatten(collect_list(arr))))"))
+
+    // Per-group union.
+    val g = Seq(("a", Seq(1, 2)), ("a", Seq(2, 3)), ("b", Seq(4))).toDF("k", "arr")
+    checkAnswer(
+      g.groupBy("k").agg(sort_array(collect_union($"arr"))).orderBy("k"),
+      Seq(Row("a", Seq(1, 2, 3)), Row("b", Seq(4))))
+
+    // Empty result: only-NULL arrays produce an empty array, not null.
+    val dfEmpty = Seq[Seq[Int]](null, null).toDF("arr")
+    checkAnswer(
+      dfEmpty.select(collect_union($"arr")),
+      Seq(Row(Seq.empty[Int])))
+  }
+
+  test("collect_union requires an array input") {
+    // A non-array (scalar) input is rejected at analysis time.
+    val df = Seq(1, 2, 3).toDF("a")
+    checkError(
+      exception = intercept[AnalysisException] {
+        df.select(collect_union($"a")).collect()
+      },
+      condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+      parameters = Map(
+        "sqlExpr" -> "\"collect_union(a)\"",
+        "paramIndex" -> "first",
+        "inputSql" -> "\"a\"",
+        "inputType" -> "\"INT\"",
+        "requiredType" -> "\"ARRAY\""),
+      context = ExpectedContext(
+        fragment = "collect_union", callSitePattern = getCurrentClassCallSitePattern))
   }
 
   test("SPARK-55256: array_agg and collect_list skip nulls by default") {
@@ -873,7 +989,7 @@ class DataFrameAggregateSuite extends SharedSparkSession
       condition = "DATATYPE_MISMATCH.UNSUPPORTED_INPUT_TYPE",
       parameters = Map(
         "functionName" -> "`collect_set`",
-        "dataType" -> "\"MAP\" or \"COLLATED STRING\"",
+        "dataType" -> "\"MAP\"",
         "sqlExpr" -> "\"collect_set(b)\""
       ),
       context = ExpectedContext(
@@ -1203,6 +1319,40 @@ class DataFrameAggregateSuite extends SharedSparkSession
       Seq(nan1, nan1, nan2, nan2, 9.0d, 9.0d, 9.0d).toDF("v")
         .select(struct(col("v")).as("s")).select(expr("mode(s)")),
       Row(Row(Double.NaN)))
+  }
+
+  test("SPARK-60309: mode compares binary values by content") {
+    // X'02' occurs three times. Counting byte arrays by reference made every count 1, so mode()
+    // returned an arbitrary value and mode() WITHIN GROUP the smallest one, X'01'.
+    val values = Seq(2, 1, 1, 2, 2, 3).map(i => Array(i.toByte))
+    def checkModes(df: DataFrame): Unit = {
+      checkAnswer(
+        df.selectExpr("mode(b)", "mode() WITHIN GROUP (ORDER BY b)"),
+        Row(Array[Byte](2), Array[Byte](2)))
+      // pandas_mode is an internal expression, so invoke it via Column.internalFn.
+      checkAnswer(
+        df.select(Column.internalFn("pandas_mode", col("b"), lit(true))),
+        Row(Seq(Array[Byte](2))))
+    }
+
+    // One partition, aggregated in Complete mode (update only) or by adjacent Partial and Final
+    // aggregates (which also serialize, deserialize and merge the buffer).
+    val df = values.toDF("b").repartition(1)
+    Seq(true, false).foreach { combine =>
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> combine.toString) {
+        checkModes(df)
+      }
+    }
+    // Three partitions [X'02', X'01'], [X'01', X'02'] and [X'02', X'03']: each one sees X'02'
+    // once, so only a merge that compares the deserialized keys by content counts it 3 times.
+    checkModes(spark.sparkContext.parallelize(values, 3).toDF("b"))
+
+    // X'7F' and X'80' tie as the most frequent values. Binary values compare as unsigned bytes,
+    // so X'7F' is the smaller one.
+    checkAnswer(
+      sql("SELECT mode() WITHIN GROUP (ORDER BY b), mode() WITHIN GROUP (ORDER BY b DESC) " +
+        "FROM VALUES (X'01'), (X'7F'), (X'7F'), (X'80'), (X'80'), (X'FF') AS t(b)"),
+      Row(Array(0x7F.toByte), Array(0x80.toByte)))
   }
 
   test("SPARK-27581: DataFrame count_distinct(\"*\") shouldn't fail with AnalysisException") {
@@ -2738,6 +2888,70 @@ class DataFrameAggregateSuite extends SharedSparkSession
         df.explain("codegen")
       }
       assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
+    }
+  }
+
+  // Byte 3 of the serialized sketch holds lgConfigK, so SUBSTRING(hex(...), 7, 2) reads it as a
+  // hex pair: 0x0F = 15, 0x0C = 12.
+  private val allNullGroupSketches =
+    """
+      |with sketches as (
+      |  select 'has_data' as grp, hll_sketch_agg(cast(id as string), 15) as sketch
+      |  from (select explode(sequence(1, 1000)) as id)
+      |  union all
+      |  select 'all_null' as grp, cast(null as binary) as sketch
+      |)
+      |""".stripMargin
+
+  test("hll_union_agg reports the default lgConfigK for a group with no non-NULL sketch") {
+    // hll_union_agg has no lgConfigK parameter, and the all-NULL group holds no sketch to take one
+    // from, so it cannot report the 15 the other group was built at. The estimate is correct either
+    // way; the mismatched precision is what the next test has to cope with.
+    checkAnswer(
+      sql(allNullGroupSketches +
+        """
+          |select
+          |  grp,
+          |  substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k,
+          |  hll_sketch_estimate(hll_union_agg(sketch)) as estimate
+          |from sketches
+          |group by grp
+          |""".stripMargin),
+      Seq(Row("all_null", "0C", 0L), Row("has_data", "0F", 1000L)))
+  }
+
+  test("hll_union_agg and hll_union re-merge the empty sketch produced for an all-NULL group") {
+    // The stored sketches are now an empty lgConfigK=12 one beside a populated lgConfigK=15 one.
+    // Rolling them back up must not fail under default settings, because an empty sketch holds no
+    // coupons and so cannot cost precision at any lgConfigK.
+    val stored = sql(allNullGroupSketches +
+      "select grp, hll_union_agg(sketch) as sketch from sketches group by grp")
+      .collect()
+      .map(row => row.getString(0) -> row.getAs[Array[Byte]]("sketch"))
+      .toMap
+
+    Seq(
+      "empty sketch first" -> Seq(stored("all_null"), stored("has_data")),
+      "empty sketch last" -> Seq(stored("has_data"), stored("all_null"))
+    ).foreach { case (order, sketches) =>
+      // One partition exercises update(); two exercise the partial-to-final merge() as well.
+      Seq(1, 2).foreach { numPartitions =>
+        withClue(s"hll_union_agg, $order, $numPartitions partition(s): ") {
+          checkAnswer(
+            sketches.toDF("sketch").repartition(numPartitions).selectExpr(
+              "substring(hex(hll_union_agg(sketch)), 7, 2) as lg_config_k",
+              "hll_sketch_estimate(hll_union_agg(sketch)) as estimate"),
+            Seq(Row("0F", 1000L)))
+        }
+      }
+
+      withClue(s"hll_union, $order: ") {
+        checkAnswer(
+          Seq((sketches.head, sketches.last)).toDF("left", "right").selectExpr(
+            "substring(hex(hll_union(left, right)), 7, 2) as lg_config_k",
+            "hll_sketch_estimate(hll_union(left, right)) as estimate"),
+          Seq(Row("0F", 1000L)))
+      }
     }
   }
 
@@ -4849,6 +5063,128 @@ class DataFrameAggregateSuite extends SharedSparkSession
       .select(tuple_sketch_estimate_integer($"intersection_sketch"))
       .collect()(0)(0)
     assert(estimateResult == 2.0)
+  }
+
+  private val intersectionSketchFunctions = Map(
+    "theta_intersection_agg" ->
+      ("theta_sketch_agg(id)", "theta_intersection_agg", "theta_sketch_estimate"),
+    "tuple_intersection_agg_double" ->
+      ("tuple_sketch_agg_double(id, 1.0D)",
+        "tuple_intersection_agg_double", "tuple_sketch_estimate_double"),
+    "tuple_intersection_agg_integer" ->
+      ("tuple_sketch_agg_integer(id, 1)",
+        "tuple_intersection_agg_integer", "tuple_sketch_estimate_integer")
+  )
+
+  namedGridTest(
+    "SPARK-59975: intersection returns an empty sketch for all-null input")(
+    intersectionSketchFunctions) {
+    case (_, intersection, estimate) =>
+      val rows = spark.sparkContext.parallelize(Seq.fill(4)(Row(null)), 2)
+      val schema = new StructType().add("sketch", BinaryType)
+      withTempView("intersection_null_inputs") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_null_inputs")
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_null_inputs
+            |""".stripMargin),
+          Row(0.0))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection skips null-only partials for mixed groups")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      // Group 0 is all-null. Group 1 has a null-only partial and a populated partial.
+      val partitions = Seq(
+        Seq(Row(0, null), Row(1, null)),
+        Seq(Row(0, null), Row(1, sketch)))
+      val rows = spark.sparkContext.parallelize(partitions, partitions.size).flatMap(_.iterator)
+      val schema = new StructType().add("group_id", IntegerType).add("sketch", BinaryType)
+      withTempView("intersection_mixed_inputs") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_mixed_inputs")
+        checkAnswer(
+          sql(s"""
+            |SELECT group_id, CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_mixed_inputs
+            |GROUP BY group_id
+            |""".stripMargin),
+          Seq(Row(0, 0.0), Row(1, 2.0)))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection skips empty partitions in a global aggregate")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      // The first partition is empty, but a global aggregate still emits and serializes
+      // a default partial buffer for it.
+      val rows = spark.sparkContext.parallelize(Seq(Row(sketch)), 2)
+      val schema = new StructType().add("sketch", BinaryType)
+      withTempView("intersection_empty_partition") {
+        spark.createDataFrame(rows, schema).createOrReplaceTempView("intersection_empty_partition")
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_empty_partition
+            |""".stripMargin),
+          Row(2.0))
+        // Zero input rows return an empty sketch.
+        checkAnswer(
+          sql(s"""
+            |SELECT CAST($estimate($intersection(sketch)) AS DOUBLE)
+            |FROM intersection_empty_partition
+            |WHERE false
+            |""".stripMargin),
+          Row(0.0))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection with multiple DISTINCT aggregates")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      withTempView("intersection_distinct_inputs") {
+        Seq((1, 10, sketch), (2, 20, sketch)).toDF("a", "b", "sketch")
+          .createOrReplaceTempView("intersection_distinct_inputs")
+        // RewriteDistinctAggregates sets the intersection input to NULL on the expanded rows
+        // of each DISTINCT group, so the intersection sees all-NULL groups.
+        val df = sql(s"""
+          |SELECT
+          |  CAST($estimate($intersection(sketch)) AS DOUBLE),
+          |  count(DISTINCT a),
+          |  count(DISTINCT b)
+          |FROM intersection_distinct_inputs
+          |""".stripMargin)
+        assert(df.queryExecution.optimizedPlan.collectFirst { case e: Expand => e }.nonEmpty)
+        checkAnswer(df, Row(2.0, 2L, 2L))
+      }
+  }
+
+  namedGridTest(
+    "SPARK-59975: intersection window aggregate over a frame with only null sketches")(
+    intersectionSketchFunctions) {
+    case (buildSketch, intersection, estimate) =>
+      val sketch = sql(s"SELECT $buildSketch FROM range(1, 3)").head().getAs[Array[Byte]](0)
+      withTempView("intersection_window_inputs") {
+        Seq[(Int, Array[Byte])]((1, null), (2, sketch)).toDF("id", "sketch")
+          .createOrReplaceTempView("intersection_window_inputs")
+        // A window aggregate evaluates the frame buffer directly, without serializing it.
+        checkAnswer(
+          sql(s"""
+            |SELECT
+            |  id,
+            |  CAST($estimate($intersection(sketch) OVER (
+            |    ORDER BY id ROWS BETWEEN CURRENT ROW AND CURRENT ROW)) AS DOUBLE)
+            |FROM intersection_window_inputs
+            |""".stripMargin),
+          Seq(Row(1, 0.0), Row(2, 2.0)))
+      }
   }
 
   test("SPARK-54179: tuple_sketch_agg + operations + estimate comprehensive test - double") {

@@ -14,12 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import re
 import functools
 import inspect
 import itertools
 import os
+import re
 import threading
+from types import FrameType
 from typing import (
     Any,
     Callable,
@@ -27,14 +28,13 @@ from typing import (
     Iterator,
     List,
     Match,
-    TypeVar,
-    Type,
     Optional,
+    Type,
+    TypeVar,
     Union,
-    overload,
     cast,
+    overload,
 )
-from types import FrameType
 
 import pyspark
 from pyspark.errors.error_classes import ERROR_CLASSES_MAP
@@ -98,20 +98,16 @@ class ErrorClassesReader:
     def get_sqlstate(self, errorClass: Optional[str]) -> Optional[str]:
         """
         Returns the SQL state for the given error class.
+
+        The SQL state is declared on the main class, so a sub-class inherits it.
         """
         if errorClass is None:
             return None
 
-        error_classes = errorClass.split(".")
-        try:
-            if len(error_classes) == 1:
-                return self.error_info_map[errorClass]["sqlState"]
-            else:
-                return self.error_info_map[error_classes[0]]["sub_class"][error_classes[1]][
-                    "sqlState"
-                ]
-        except KeyError:
+        main_class_info = self.error_info_map.get(errorClass.split(".")[0])
+        if main_class_info is None:
             return None
+        return main_class_info.get("sqlState")
 
     def get_error_message(self, errorClass: str, messageParameters: Dict[str, str]) -> str:
         """
@@ -268,10 +264,9 @@ def _capture_call_site(depth: int) -> str:
 
     # We try import here since IPython is not a required dependency
     try:
-        import IPython
-
         # ipykernel is required for IPython
         import ipykernel
+        import IPython
 
         ipython = IPython.get_ipython()
         # Filtering out IPython related frames

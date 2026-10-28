@@ -27,7 +27,7 @@ import org.apache.avro.generic.{GenericDatumReader, GenericRecord}
 import org.apache.avro.mapred.{AvroOutputFormat, FsInput}
 import org.apache.avro.mapreduce.AvroJob
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, Path}
+import org.apache.hadoop.fs.{FileStatus, GlobPattern, Path}
 import org.apache.hadoop.mapreduce.Job
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -97,7 +97,8 @@ private[sql] object AvroUtils extends Logging {
         }
         if (archives.nonEmpty) {
           inferAvroSchemaFromArchives(archives, nonArchives, conf, parsedOptions.ignoreExtension,
-            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles)
+            fileSourceOptions.ignoreCorruptFiles, fileSourceOptions.ignoreMissingFiles,
+            fileSourceOptions.archivePathFilterPattern)
         } else {
           inferAvroSchemaFromFiles(files, conf, parsedOptions.ignoreExtension,
             fileSourceOptions.ignoreCorruptFiles)
@@ -250,10 +251,12 @@ private[sql] object AvroUtils extends Logging {
       conf: Configuration,
       ignoreExtension: Boolean,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Schema = {
+      ignoreMissingFiles: Boolean,
+      archivePathFilter: Option[GlobPattern]): Schema = {
     archives.iterator
       .flatMap { f =>
-        firstArchiveEntrySchema(f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles)
+        firstArchiveEntrySchema(
+          f.getPath, conf, ignoreCorruptFiles, ignoreMissingFiles, archivePathFilter)
       }
       .nextOption()
       .getOrElse {
@@ -274,11 +277,13 @@ private[sql] object AvroUtils extends Logging {
       path: Path,
       conf: Configuration,
       ignoreCorruptFiles: Boolean,
-      ignoreMissingFiles: Boolean): Option[Schema] = {
+      ignoreMissingFiles: Boolean,
+      archivePathFilter: Option[GlobPattern]): Option[Schema] = {
     try {
       // `readArchiveEntries` returns a Closeable iterator; take the first entry's schema and close
       // it so the archive stream is released without draining the remaining entries.
-      val entries = SupportsArchiveFormat.readArchiveEntries(path, conf) { (_, in) =>
+      val entries = SupportsArchiveFormat.readArchiveEntries(
+          path, conf, archivePathFilter = archivePathFilter) { (_, in) =>
         val stream = new DataFileStream[GenericRecord](in, new GenericDatumReader[GenericRecord]())
         try {
           Iterator.single(stream.getSchema)
@@ -368,17 +373,28 @@ private[sql] object AvroUtils extends Logging {
    * @param positionalFieldMatch If true, perform field matching in a positional fashion
    *                             (structural comparison between schemas, ignoring names);
    *                             otherwise, perform field matching using field names.
+   * @param dataSchemaPositions The position of each `catalystSchema` field in the schema it was
+   *                            projected from, for a positional match against a projection. A
+   *                            positional match pairs a Catalyst field with the Avro field at the
+   *                            same position, and that position is the one in the full schema, so
+   *                            a read of only the third column still takes the third Avro field.
+   *                            Empty when `catalystSchema` is not a projection, in which case a
+   *                            field's own position is used.
    */
   class AvroSchemaHelper(
       avroSchema: Schema,
       catalystSchema: StructType,
       avroPath: Seq[String],
       catalystPath: Seq[String],
-      positionalFieldMatch: Boolean) {
+      positionalFieldMatch: Boolean,
+      dataSchemaPositions: Array[Int] = Array.empty) {
     if (avroSchema.getType != Schema.Type.RECORD) {
       throw new IncompatibleSchemaException(
         s"Attempting to treat ${avroSchema.getName} as a RECORD, but it was: ${avroSchema.getType}")
     }
+    require(dataSchemaPositions.isEmpty || dataSchemaPositions.length == catalystSchema.length,
+      s"Got ${dataSchemaPositions.length} data schema positions for " +
+        s"${catalystSchema.length} Catalyst fields")
 
     private[this] val avroFieldArray = avroSchema.getFields.asScala.toArray
     private[this] val fieldMap = avroSchema.getFields.asScala
@@ -402,8 +418,9 @@ private[sql] object AvroUtils extends Logging {
         if (getAvroField(sqlField.name, sqlPos).isEmpty &&
           (!ignoreNullable || !sqlField.nullable)) {
           if (positionalFieldMatch) {
-            throw new IncompatibleSchemaException("Cannot find field at position " +
-              s"$sqlPos of ${toFieldStr(avroPath)} from Avro schema (using positional matching)")
+            throw new IncompatibleSchemaException(
+              s"Cannot find field at position ${avroPosition(sqlPos)} of " +
+                s"${toFieldStr(avroPath)} from Avro schema (using positional matching)")
           } else {
             throw new IncompatibleSchemaException(
               s"Cannot find ${toFieldStr(catalystPath :+ sqlField.name)} in Avro schema")
@@ -457,11 +474,15 @@ private[sql] object AvroUtils extends Logging {
     /** Get the Avro field corresponding to the provided Catalyst field name/position, if any. */
     def getAvroField(fieldName: String, catalystPos: Int): Option[Schema.Field] = {
       if (positionalFieldMatch) {
-        avroFieldArray.lift(catalystPos)
+        avroFieldArray.lift(avroPosition(catalystPos))
       } else {
         getFieldByName(fieldName)
       }
     }
+
+    /** The Avro field position a positional match pairs the given Catalyst position with. */
+    private def avroPosition(catalystPos: Int): Int =
+      if (dataSchemaPositions.isEmpty) catalystPos else dataSchemaPositions(catalystPos)
   }
 
   /**

@@ -271,6 +271,15 @@ or
 
     ./build/sbt -Pdocker-integration-tests docker-integration-tests/test
 
+## Local network binding
+
+On a machine with multiple network interfaces (for example a VPN), Spark may bind to a
+non-loopback address, causing local tests to fail with errors such as
+`RemoteClassLoaderError` or Netty `Connection reset by peer`. Forcing the loopback
+interface usually resolves this:
+
+    export SPARK_LOCAL_IP=localhost
+
 <!---
 ## Change Scala Version
 

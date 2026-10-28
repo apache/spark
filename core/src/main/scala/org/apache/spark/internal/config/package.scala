@@ -503,6 +503,21 @@ package object config {
     .doubleConf
     .createWithDefault(0.6)
 
+  private[spark] val MEMORY_OOM_ERROR_CONSUMER_BREAKDOWN_LIMIT =
+    ConfigBuilder("spark.memory.oomErrorConsumerBreakdownLimit")
+      .internal()
+      .doc("The maximum number of memory consumers listed individually in the per-consumer " +
+        "memory breakdown attached to an UNABLE_TO_ACQUIRE_MEMORY error. The largest consumers " +
+        "are listed first; any beyond this limit are collapsed into a single summary line. This " +
+        "bounds the size of the error message that is sent to the driver and shown in the UI. " +
+        "It does not affect the full breakdown written to the executor logs. Set to 0 to omit " +
+        "the breakdown from the error message entirely.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ >= 0, "The consumer breakdown limit must not be negative")
+      .createWithDefault(5)
+
   private[spark] val UNMANAGED_MEMORY_POLLING_INTERVAL =
     ConfigBuilder("spark.memory.unmanagedMemoryPollingInterval")
       .doc("Interval for polling unmanaged memory users to track their memory usage. " +
@@ -1236,7 +1251,7 @@ package object config {
   private[spark] val DRIVER_TIMEOUT = ConfigBuilder("spark.driver.timeout")
     .doc("A timeout for Spark driver in minutes. 0 means infinite. For the positive time value, " +
       "terminate the driver with the exit code 124 if it runs after timeout duration. To use, " +
-      "it's required to set `spark.plugins=org.apache.spark.deploy.DriverTimeoutPlugin`.")
+      "it's required to set `spark.plugins=DriverTimeoutPlugin`.")
     .version("4.0.0")
     .timeConf(TimeUnit.MINUTES)
     .checkValue(v => v >= 0, "The value should be a non-negative time value.")
@@ -1330,13 +1345,14 @@ package object config {
         "like YARN and event logs.")
       .version("2.1.2")
       .regexConf
-      .createWithDefault("(?i)secret|password|token|access[.]?key".r)
+      .createWithDefault("(?i)secret|password|token|access[.]?key|credential".r)
 
   private[spark] val STRING_REDACTION_PATTERN =
     ConfigBuilder("spark.redaction.string.regex")
       .doc("Regex to decide which parts of strings produced by Spark contain sensitive " +
         "information. When this regex matches a string part, that string part is replaced by a " +
-        "dummy value. This is currently used to redact the output of SQL explain commands.")
+        "dummy value. This is currently used to redact the output of SQL explain commands and " +
+        "the exit exception annotation on Kubernetes.")
       .version("2.2.0")
       .regexConf
       .createOptional
@@ -1452,12 +1468,20 @@ package object config {
     ConfigBuilder("spark.shuffle.accurateBlockSkewedFactor")
       .doc("A shuffle block is considered as skewed and will be accurately recorded in " +
         "HighlyCompressedMapStatus if its size is larger than this factor multiplying " +
-        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. It is " +
-        "recommended to set this parameter to be the same as SKEW_JOIN_SKEWED_PARTITION_FACTOR." +
-        "Set to -1.0 to disable this feature by default.")
+        "the median shuffle block size or SHUFFLE_ACCURATE_BLOCK_THRESHOLD. Otherwise every " +
+        "block below SHUFFLE_ACCURATE_BLOCK_THRESHOLD is reported as the average block size, " +
+        "which hides skew from adaptive query execution once a shuffle has more than " +
+        "SHUFFLE_MIN_NUM_PARTS_TO_HIGHLY_COMPRESS partitions. At most " +
+        "SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER block sizes are recorded accurately per map " +
+        "task, plus the blocks tied at the cutoff of that selection, whose reduce ids are held " +
+        "in a bitmap. The tied blocks are not capped, so in the worst case, where they are " +
+        "scattered across the reduce id space, that bitmap costs a bit per reduce partition per " +
+        "map task on the driver, about 8 KiB per map task at 50000 reduce partitions. " +
+        "The default matches SKEW_JOIN_SKEWED_PARTITION_FACTOR. Set to -1.0 to disable " +
+        "this feature.")
       .version("3.3.0")
       .doubleConf
-      .createWithDefault(-1.0)
+      .createWithDefault(5.0)
 
   private[spark] val SHUFFLE_MAX_ACCURATE_SKEWED_BLOCK_NUMBER =
     ConfigBuilder("spark.shuffle.maxAccurateSkewedBlockNumber")
@@ -1690,6 +1714,69 @@ package object config {
       .timeConf(TimeUnit.SECONDS)
       .createWithDefaultString("1h")
 
+  private[spark] val SECURITY_OIDC_ENABLED =
+    ConfigBuilder("spark.security.oidc.enabled")
+      .doc("Whether to enable OIDC credential propagation. When enabled, the driver reads an " +
+        "identity token from a file, exchanges it for short-lived service credentials via " +
+        "CredentialProvider implementations, and propagates those credentials to executors.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val SECURITY_OIDC_IDENTITY_TOKEN_FILE =
+    ConfigBuilder("spark.security.oidc.identityToken.file")
+      .doc("Path to the OIDC identity token file on the driver. Required when " +
+        "spark.security.oidc.enabled is true. The file should contain a JWT token " +
+        "(e.g., a Kubernetes projected service account token).")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .stringConf
+      .createOptional
+
+  private[spark] val SECURITY_OIDC_RENEWAL_SAFETY_MARGIN =
+    ConfigBuilder("spark.security.oidc.renewal.safetyMargin")
+      .doc("How long before credential expiry to trigger renewal. Credentials are refreshed " +
+        "at min(identity token expiry, service credential expiry) minus this margin.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The safety margin must be a positive time value.")
+      .createWithDefaultString("60s")
+
+  private[spark] val SECURITY_OIDC_RENEWAL_MIN_INTERVAL =
+    ConfigBuilder("spark.security.oidc.renewal.minInterval")
+      .doc("Minimum interval between credential renewal attempts. This prevents tight renewal " +
+        "loops when credentials have very short TTLs or when failures cause rapid retries.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(_ > 0, "The minimum renewal interval must be a positive time value.")
+      .createWithDefaultString("30s")
+
+  private[spark] val SECURITY_OIDC_REQUIRE_RPC_ENCRYPTION =
+    ConfigBuilder("spark.security.oidc.requireRpcEncryption")
+      .doc("When OIDC credential propagation is enabled, whether to require RPC channel " +
+        "encryption. When true, Spark refuses to start if RPC encryption is not configured, " +
+        "instead of only logging a warning. Defaults to false to preserve the warn-by-default " +
+        "behavior described in the SPIP.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  private[spark] val DIRECT_CREDENTIAL_PROVIDERS_ENABLED =
+    ConfigBuilder("spark.security.directCredentialProviders.enabled")
+      .doc(
+        "When true, enables delegation token collection and renewal without Kerberos. " +
+        "Providers are called directly (without doLogin/doAs) and participate in the " +
+        "same renewal and distribution lifecycle as Kerberos delegation token providers. " +
+        "Providers that require Kerberos self-gate via delegationTokensRequired.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   private[spark] val SHUFFLE_SORT_INIT_BUFFER_SIZE =
     ConfigBuilder("spark.shuffle.sort.initialBufferSize")
       .internal()
@@ -1800,6 +1887,36 @@ package object config {
       .stringConf
       .createWithDefault("streaming")
 
+  private[spark] val SHUFFLE_PIPELINED_CHANNEL_BATCH_SIZE =
+    ConfigBuilder("spark.shuffle.channel.batchSize")
+      .internal()
+      .doc("Number of records the in-process pipelined channel shuffle accumulates per output " +
+        "partition before handing a batch across its queue in one operation. Larger batches " +
+        "amortize the queue's per-operation lock cost at the price of higher hand-off latency " +
+        "and per-partition buffering. Only used when spark.shuffle.manager.incremental is the " +
+        "in-process channel manager.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "batch size must be positive")
+      .createWithDefault(1024)
+
+  private[spark] val SHUFFLE_PIPELINED_CHANNEL_QUEUE_CAPACITY =
+    ConfigBuilder("spark.shuffle.channel.queueCapacity")
+      .internal()
+      .doc("Depth, in BATCHES, of each per-reduce-partition queue in the in-process pipelined " +
+        "channel shuffle. This is the backpressure bound: a producer blocks once a partition's " +
+        "queue holds this many batches. It also sets the worst-case heap the transport pins for " +
+        "one shuffle -- roughly queueCapacity * spark.shuffle.channel.batchSize * " +
+        "numPartitions rows held as strong references (not tracked by the memory manager and not " +
+        "spilled), so raise it together with an eye on that product. Only used when " +
+        "spark.shuffle.manager.incremental is the in-process channel manager.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "queue capacity must be positive")
+      .createWithDefault(64)
+
   private[spark] val SHUFFLE_REDUCE_LOCALITY_ENABLE =
     ConfigBuilder("spark.shuffle.reduceLocality.enabled")
       .doc("Whether to compute locality preferences for reduce tasks")
@@ -1867,6 +1984,18 @@ package object config {
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
       .createWithDefault(50)
+
+  private[spark] val STREAMING_SHUFFLE_WRITER_CONNECTION_TIMEOUT_MS =
+    ConfigBuilder("spark.shuffle.streaming.writerConnectionTimeout")
+      .doc("Maximum time a streaming shuffle writer waits for each reader to connect. " +
+        "Set to -1 to wait indefinitely.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeoutMs => timeoutMs == -1 || timeoutMs > 0,
+        "The reader connection timeout must be positive or -1 to wait indefinitely.")
+      .createWithDefaultString("1h")
 
   private[spark] val STREAMING_SHUFFLE_WRITER_MAX_MEMORY =
     ConfigBuilder("spark.shuffle.streaming.writerMaxMemory")
@@ -2017,6 +2146,21 @@ package object config {
       .checkValue(v => v > 0, "The max failures should be a positive value.")
       .createWithDefault(40)
 
+  private[spark] val PIPELINED_GROUP_SLOT_CHECK_ENABLED =
+    ConfigBuilder("spark.scheduler.pipelinedGroup.slotCheck.enabled")
+      .internal()
+      .doc("When true, before co-scheduling a pipelined-shuffle stage group the DAGScheduler " +
+        "checks that the group's total task demand fits in the currently free slots of its " +
+        "resource profile (total capacity minus the outstanding -- running plus enqueued -- " +
+        "tasks of other work), and fails the job with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT " +
+        "rather than co-scheduling a group that cannot fit and deadlocking. Set to false for " +
+        "deployments that admit capacity out-of-band (e.g. a slot reservation), which then own " +
+        "admission. Only applies to jobs that use a pipelined shuffle dependency.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
+
   private[spark] val NUM_CANCELLED_JOB_GROUPS_TO_TRACK =
     ConfigBuilder("spark.scheduler.numCancelledJobGroupsToTrack")
       .doc("The maximum number of tracked job groups that are cancelled with " +
@@ -2068,13 +2212,27 @@ package object config {
 
   private[spark] val DEFAULT_PLUGINS_LIST = "spark.plugins.defaultList"
 
+  // A map from the short class names of built-in plugins to their fully-qualified class names.
+  private val BUILTIN_PLUGINS: Map[String, String] = Seq(
+    "org.apache.spark.deploy.DriverTimeoutPlugin",
+    "org.apache.spark.deploy.RedirectConsolePlugin",
+    "org.apache.spark.profiler.ProfilerPlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorPVCResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorResizePlugin",
+    "org.apache.spark.scheduler.cluster.k8s.ExecutorRollPlugin",
+    "org.apache.spark.sql.connect.SparkConnectPlugin"
+  ).map(name => name.substring(name.lastIndexOf('.') + 1) -> name).toMap
+
   private[spark] val PLUGINS =
     ConfigBuilder("spark.plugins")
       .withPrepended(DEFAULT_PLUGINS_LIST, separator = ",")
       .doc("Comma-separated list of class names implementing " +
-        "org.apache.spark.api.plugin.SparkPlugin to load into the application.")
+        "org.apache.spark.api.plugin.SparkPlugin to load into the application. " +
+        "Built-in plugins can also be specified by their short class names, " +
+        "e.g. `DriverTimeoutPlugin`.")
       .version("3.0.0")
       .stringConf
+      .transform(name => BUILTIN_PLUGINS.getOrElse(name, name))
       .toSequence
       .createWithDefault(Nil)
 
@@ -2268,6 +2426,9 @@ package object config {
         "cost because of excessive JNI call overhead")
       .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        s"The buffer size must be positive and less than or equal to" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefaultString("32k")
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =
@@ -2587,8 +2748,8 @@ package object config {
 
   private[spark] val SPECULATION_EFFICIENCY_TASK_PROCESS_RATE_MULTIPLIER =
     ConfigBuilder("spark.speculation.efficiency.processRateMultiplier")
-      .doc("A multiplier that used when evaluating inefficient tasks. The higher the multiplier " +
-        "is, the more tasks will be possibly considered as inefficient.")
+      .doc("A multiplier that is used when evaluating inefficient tasks. The higher the " +
+        "multiplier is, the more tasks will be possibly considered as inefficient.")
       .version("3.4.0")
       .doubleConf
       .checkValue(v => v > 0.0 && v <= 1.0, "multiplier must be in (0.0, 1.0]")
@@ -2692,6 +2853,22 @@ package object config {
       .version("3.1.0")
       .booleanConf
       .createWithDefault(false)
+
+  private[spark] val STANDALONE_SUBMIT_FILTER_ENVIRONMENT =
+    ConfigBuilder("spark.standalone.submit.filterEnvironment")
+      .doc("In standalone cluster mode, controls whether the client forwards only " +
+        "Spark-related environment variables (i.e. SPARK_* excluding SPARK_ENV_LOADED, " +
+        "SPARK_HOME, SPARK_CONF_DIR, SPARK_LOCAL_IP, and SPARK_LOCAL_HOSTNAME) to the driver, " +
+        "matching the REST submission gateway. If set to false, the full environment of the " +
+        "submitting process is forwarded to the driver, except SPARK_LOCAL_IP and " +
+        "SPARK_LOCAL_HOSTNAME, which are never forwarded since they describe the submitting " +
+        "host rather than the worker the driver runs on. This governs the RPC submission " +
+        "gateway, which is what spark-submit uses unless spark.master.rest.enabled is set to " +
+        "true; REST submissions filter regardless of this setting.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   private[spark] val EXECUTOR_ALLOW_SPARK_CONTEXT =
     ConfigBuilder("spark.executor.allowSparkContext")
@@ -2904,15 +3081,44 @@ package object config {
   private[spark] val JAR_IVY_SETTING_PATH =
     ConfigBuilder(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
-        "using spark.jars.packages instead of the built-in defaults, such as maven central. " +
-        "Additional repositories given by the command-line option --repositories " +
-        "or spark.jars.repositories will also be included. " +
+        "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
+        "of the built-in defaults, such as maven central. " +
+        "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
+        "also be included. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "The spark-submit --repositories option applies to submission-time resolution. " +
         "Useful for allowing Spark to resolve artifacts from behind a firewall " +
         "e.g. via an in-house artifact server like Artifactory. " +
         "Details on the settings file format can be found at Settings Files")
       .version("2.2.0")
       .stringConf
       .createOptional
+
+  private[spark] val JAR_IVY_CONNECT_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyConnectTimeout")
+      .doc("Connection timeout for Ivy repository requests made by " +
+        "SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use this " +
+        "setting. This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("30s")
+
+  private[spark] val JAR_IVY_READ_TIMEOUT =
+    ConfigBuilder("spark.jars.ivyReadTimeout")
+      .doc("Read timeout for Ivy repository requests made by SparkSession.addArtifact. " +
+        "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
+        "This must be set before the SparkContext starts.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(
+        timeout => timeout > 0 && timeout <= Int.MaxValue,
+        s"Timeout must be positive and no greater than ${Int.MaxValue} milliseconds.")
+      .createWithDefaultString("5m")
 
   private[spark] val JAR_PACKAGES =
     ConfigBuilder("spark.jars.packages")
@@ -3141,7 +3347,7 @@ package object config {
     ConfigBuilder("spark.driver.log.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for driver that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
@@ -3154,7 +3360,7 @@ package object config {
     ConfigBuilder("spark.executor.logs.redirectConsoleOutputs")
       .doc("Comma-separated list of the console output kind for executor that needs to redirect " +
         "to logging system. Supported values are `stdout`, `stderr`. It only takes affect when " +
-        s"`${PLUGINS.key}` is configured with `org.apache.spark.deploy.RedirectConsolePlugin`.")
+        s"`${PLUGINS.key}` is configured with `RedirectConsolePlugin`.")
       .version("4.1.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))

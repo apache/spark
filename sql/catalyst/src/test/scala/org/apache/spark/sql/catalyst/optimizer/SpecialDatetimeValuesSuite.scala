@@ -26,7 +26,9 @@ import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, 
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_MINUTE
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{instantToMicros, localDateTimeToMicros}
-import org.apache.spark.sql.types.{AtomicType, DateType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 class SpecialDatetimeValuesSuite extends PlanTest {
   object Optimize extends RuleExecutor[LogicalPlan] {
@@ -55,6 +57,45 @@ class SpecialDatetimeValuesSuite extends PlanTest {
         e
       }
       assert(expected === lits.toSet)
+    }
+  }
+
+  test("applyForExpression rewrites a foldable special datetime cast to a literal") {
+    val zoneId = ZoneId.systemDefault()
+    val cast = Cast(Literal("epoch"), DateType, Some(zoneId.getId))
+    assert(SpecialDatetimeValues.applyForExpression(cast) == Literal(0, DateType))
+  }
+
+  test("applyForExpression folds special timestamp values") {
+    val cast = Cast(Literal("epoch"), TimestampType, Some("UTC"))
+    assert(SpecialDatetimeValues.applyForExpression(cast) == Literal(0L, TimestampType))
+  }
+
+  test("applyForExpression leaves non-special casts and other expressions unchanged") {
+    val cast = Cast(Literal("2021-01-01"), DateType, Some("UTC"))
+    assert(SpecialDatetimeValues.applyForExpression(cast) == cast)
+    assert(SpecialDatetimeValues.applyForExpression(Literal(1)) == Literal(1))
+  }
+
+  test("SPARK-59112: special datetime values from CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val stringTypes = Seq(CharType(10), VarcharType(10))
+      val datetimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
+      val expressions = for {
+        stringType <- stringTypes
+        datetimeType <- datetimeTypes
+      } yield {
+        val value = if (stringType.isInstanceOf[CharType]) "epoch     " else "epoch"
+        Alias(
+          Cast(
+            Literal.create(UTF8String.fromString(value), stringType),
+            datetimeType,
+            Some("UTC")),
+          "v")()
+      }
+      val plan = Optimize.execute(Project(expressions, LocalRelation()))
+
+      assert(plan.expressions.flatMap(_.collect { case cast: Cast => cast }).isEmpty)
     }
   }
 

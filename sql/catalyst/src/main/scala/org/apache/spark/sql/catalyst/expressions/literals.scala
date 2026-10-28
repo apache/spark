@@ -171,7 +171,7 @@ object Literal {
       case _: DayTimeIntervalType if v.isInstanceOf[Duration] =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _: ObjectType => Literal(v, dataType)
-      case _: CharType | _: VarcharType if SQLConf.get.preserveCharVarcharTypeInfo =>
+      case _: CharType | _: VarcharType if SQLConf.get.charVarcharFirstClassTypes =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
       case _ if requiresSchemaAwareNanosConversion(dataType, v) =>
         Literal(CatalystTypeConverters.createToCatalystConverter(dataType)(v), dataType)
@@ -688,6 +688,12 @@ case class Literal (value: Any, dataType: DataType) extends LeafExpression {
     case (v: Decimal, t: DecimalType) => s"${v}BD"
     case (v: Int, DateType) =>
       s"DATE '$toString'"
+    // The parser derives TIME(7)..TIME(9) from the number of fractional digits (6 or fewer give
+    // TIME(6)), so render exactly `precision` digits: truncate the value like formatNanos does
+    // for the nanosecond timestamps, and pad back the trailing zeros the formatter strips.
+    case (v: Long, t: TimeType) if t.precision > TimeType.MICROS_PRECISION =>
+      val truncated = DateTimeUtils.truncateTimeToPrecision(v, t.precision)
+      s"TIME '${padToNanosPrecision(new FractionTimeFormatter().format(truncated), t.precision)}'"
     case (_: Long, _: TimeType) =>
       s"TIME '$toString'"
     case (v: Long, TimestampType) =>

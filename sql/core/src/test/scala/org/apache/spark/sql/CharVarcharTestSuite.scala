@@ -17,20 +17,38 @@
 
 package org.apache.spark.sql
 
-import org.apache.spark.{SparkConf, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.expressions.{Attribute, EqualTo, GreaterThan, ScalarSubquery, StringRPad}
+import java.util.concurrent.atomic.AtomicBoolean
+
+import scala.util.Try
+
+import org.apache.logging.log4j.Level
+
+import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkThrowable}
+import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
+import org.apache.spark.sql.catalyst.analysis.resolver.ResolverGuard
+import org.apache.spark.sql.catalyst.expressions.{
+  Alias, ArrayJoin, Attribute, Concat, EqualTo, Expression, GreaterThan, InSet, Literal,
+  ScalarSubquery, StringRPad, StringToMap, Upper
+}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
-import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
-import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Project}
+import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.plans.logical.{
+  Aggregate, Filter, LogicalPlan, OneRowRelation, Project
+}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.SchemaRequiredDataSource
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, InMemoryPartitionTableCatalog}
-import org.apache.spark.sql.execution.datasources.LogicalRelation
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.{ApplyCharTypePadding, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.v2.{
+  DataSourceV2Relation, DataSourceV2ScanRelation, PushDownUtils
+}
+import org.apache.spark.sql.functions
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.SimpleInsertSource
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 
 // The base trait for char/varchar tests that need to be run with different table implementations.
 trait CharVarcharTestSuite extends QueryTest {
@@ -500,6 +518,106 @@ trait CharVarcharTestSuite extends QueryTest {
     }
   }
 
+  test("SPARK-59278: char type IN list with a NULL ahead of the matching literal") {
+    // A NULL element must not shift the literals that follow it. `c IN (null, 'a')` is TRUE
+    // because one of the comparisons is TRUE, and NULL OR TRUE is TRUE. Both spellings of NULL
+    // are covered: an untyped NULL goes through InConversion, which casts only that NULL to the
+    // wider common type, while a pre-typed STRING NULL needs no coercion at all. The CHAR-backed
+    // value stays unchanged in both cases.
+    val nulls = Seq("null", "cast(null as string)")
+    val trueConditions = nulls.flatMap { n =>
+      Seq(
+        (s"c IN ($n, 'a')", true),
+        (s"c IN ($n, 'a  ')", true),
+        (s"c IN ('a', $n)", true),
+        (s"c IN ($n, 'x', $n, 'a')", true),
+        // 'bcd' widens the comparison to 3 characters, so the padded 'a' has to match 'a  '.
+        (s"c IN ($n, 'a', 'bcd')", true))
+    }
+    val nullConditions = nulls.flatMap { n =>
+      Seq(s"c IN ($n, 'b')", s"c IN ($n, 'abc')")
+    }
+
+    def checkTable(): Unit = {
+      testConditions(spark.table("t"), trueConditions)
+      testNullConditions(spark.table("t"), nullConditions)
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+      checkTable()
+    }
+
+    withTable("t") {
+      sql(s"CREATE TABLE t(i INT, c CHAR(2)) USING $format PARTITIONED BY (c)")
+      sql("INSERT INTO t VALUES (1, 'a')")
+      checkTable()
+    }
+
+    // Without read-side padding the column is padded in the predicate instead of at scan.
+    withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+        sql("INSERT INTO t VALUES ('a')")
+        checkTable()
+      }
+    }
+
+    // Once the list is long enough, OptimizeIn freezes it into an InSet whose HashSet is built
+    // by evaluating the elements, so a list corrupted at analysis time cannot be recovered from
+    // later. The NULL has to reach the set as a NULL instead of displacing the literals after it.
+    withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "1") {
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2)) USING $format")
+        sql("INSERT INTO t VALUES ('a')")
+        val df = sql("SELECT c IN (null, 'a', 'b'), c IN (null, 'x', 'y') FROM t")
+        assert(
+          df.queryExecution.optimizedPlan.exists(
+            _.expressions.exists(_.exists(_.isInstanceOf[InSet]))),
+          "the IN list was expected to be converted to an InSet")
+        checkAnswer(df, Row(true, null))
+      }
+      // The InSet path looks the padded value up in a CollationAwareSet, so a collated column
+      // has to keep its collation through both padding and the set conversion.
+      withTable("t") {
+        sql(s"CREATE TABLE t(c CHAR(2) COLLATE UTF8_LCASE) USING $format")
+        sql("INSERT INTO t VALUES ('a')")
+        checkAnswer(
+          sql("SELECT c IN (null, 'A', 'b'), c IN (null, 'x', 'y') FROM t"),
+          Row(true, null))
+      }
+    }
+
+    // NOT IN, and a correlated subquery where the value is an OuterReference.
+    withTable("t1", "t2") {
+      sql(s"CREATE TABLE t1(c CHAR(2)) USING $format")
+      sql(s"CREATE TABLE t2(c CHAR(5)) USING $format")
+      sql("INSERT INTO t1 VALUES ('a')")
+      sql("INSERT INTO t2 VALUES ('a')")
+      checkAnswer(
+        sql("SELECT c NOT IN (null, 'a'), c NOT IN (null, 'b') FROM t1"),
+        Row(false, null))
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (null, 'a'))"),
+        Row("a "))
+      checkAnswer(
+        sql("SELECT c FROM t1 WHERE EXISTS (SELECT 1 FROM t2 WHERE t1.c IN (null, 'zz'))"),
+        Nil)
+    }
+
+    // A collated CHAR column used to fail analysis with DATA_DIFF_TYPES, because the NULL
+    // elements were rebuilt as default-collation StringType literals while the padded ones
+    // kept the column's collation.
+    withTable("t") {
+      sql(s"CREATE TABLE t(c CHAR(2) COLLATE UTF8_LCASE) USING $format")
+      sql("INSERT INTO t VALUES ('a')")
+      checkAnswer(
+        sql("SELECT c IN (null, 'A'), c IN ('A', null), c IN (null, 'zz') FROM t"),
+        Row(true, true, null))
+    }
+  }
+
   test("char type comparison: partition pruning") {
     withTable("t") {
       sql(s"CREATE TABLE t(i INT, c1 CHAR(2), c2 VARCHAR(5)) USING $format PARTITIONED BY (c1, c2)")
@@ -538,6 +656,81 @@ trait CharVarcharTestSuite extends QueryTest {
         ("c1 = c2", true),
         ("c1 < c2", false),
         ("c1 IN (c2)", true)))
+    }
+  }
+
+  test("SPARK-59278: char type comparison: struct nullability is preserved") {
+    // Padding rebuilds a struct field by field, which must not turn a NULL struct into a
+    // non-NULL struct of NULL fields. Single-field (s*) and multi-field (m*) structs agree.
+    withTable("t") {
+      sql("CREATE TABLE t(id INT, " +
+        "m1 STRUCT<c: CHAR(2), i: INT>, m2 STRUCT<c: CHAR(5), i: INT>, " +
+        s"s1 STRUCT<c: CHAR(2)>, s2 STRUCT<c: CHAR(5)>) USING $format")
+      sql("INSERT INTO t VALUES (1, null, null, null, null)")
+      sql("INSERT INTO t VALUES (2, struct('a', 1), null, struct('a'), null)")
+      sql("INSERT INTO t VALUES (3, null, struct('a', 1), null, struct('a'))")
+      checkAnswer(
+        sql("SELECT m1 = m2, s1 = s2, m1 <=> m2, s1 <=> s2 FROM t ORDER BY id"),
+        Seq(
+          // Both sides NULL: `=` is NULL, null-safe `<=>` is true.
+          Row(null, null, true, true),
+          // Exactly one side NULL: `=` is NULL, `<=>` is false.
+          Row(null, null, false, false),
+          Row(null, null, false, false)))
+    }
+
+    // Arrays keep their nullability through ArrayTransform, NULL elements included.
+    withTable("t") {
+      sql("CREATE TABLE t(id INT, a1 ARRAY<STRUCT<c: CHAR(2), i: INT>>, " +
+        s"a2 ARRAY<STRUCT<c: CHAR(5), i: INT>>) USING $format")
+      sql("INSERT INTO t VALUES (1, null, null)")
+      sql("INSERT INTO t VALUES (2, array(null, struct('a', 1)), array(null, struct('a', 1)))")
+      checkAnswer(
+        sql("SELECT a1 = a2, a1 <=> a2 FROM t ORDER BY id"),
+        Seq(Row(null, true), Row(true, true)))
+    }
+  }
+
+  test("SPARK-59278: char type comparison: non-orderable struct keeps its original error") {
+    // A struct holding a MAP is not comparable. Padding must leave the comparison alone so
+    // CheckAnalysis reports the attribute the user wrote, not the rewritten struct.
+    withTable("t") {
+      sql("CREATE TABLE t(s1 STRUCT<c: CHAR(2), m: MAP<STRING, STRING>>, " +
+        s"s2 STRUCT<c: CHAR(5), m: MAP<STRING, STRING>>) USING $format")
+      val e = intercept[AnalysisException](sql("SELECT s1 = s2 FROM t").collect())
+      assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ORDERING_TYPE")
+      assert(e.getMessageParameters.get("sqlExpr") == "\"(s1 = s2)\"")
+    }
+  }
+
+  test("SPARK-59278: char type comparison: multi-field struct") {
+    // Padding is decided per field, but a struct that needs padding in any field has to be
+    // rebuilt as a whole. A field that needs no padding must not discard the padding computed
+    // for the fields before it, whatever its position in the struct or its nesting depth.
+    Seq(
+      // CHAR field first, non-char field last.
+      ("STRUCT<c: CHAR(2), i: INT>", "STRUCT<c: CHAR(5), i: INT>", "struct('a', 1)"),
+      // Non-char field first, CHAR field last. This order already worked.
+      ("STRUCT<i: INT, c: CHAR(2)>", "STRUCT<i: INT, c: CHAR(5)>", "struct(1, 'a')"),
+      // Both fields are CHAR, but only the first one needs padding.
+      ("STRUCT<a: CHAR(2), b: CHAR(5)>", "STRUCT<a: CHAR(5), b: CHAR(5)>", "struct('a', 'b')"),
+      // Multi-field struct nested one level down.
+      ("STRUCT<s: STRUCT<c: CHAR(2), i: INT>>", "STRUCT<s: STRUCT<c: CHAR(5), i: INT>>",
+        "struct(struct('a', 1))"),
+      // Multi-field struct inside an array.
+      ("ARRAY<STRUCT<c: CHAR(2), i: INT>>", "ARRAY<STRUCT<c: CHAR(5), i: INT>>",
+        "array(struct('a', 1))")
+    ).foreach { case (type1, type2, value) =>
+      withClue(s"$type1 vs $type2: ") {
+        withTable("t") {
+          sql(s"CREATE TABLE t(c1 $type1, c2 $type2) USING $format")
+          sql(s"INSERT INTO t VALUES ($value, $value)")
+          testConditions(spark.table("t"), Seq(
+            ("c1 = c2", true),
+            ("c1 < c2", false),
+            ("c1 IN (c2)", true)))
+        }
+      }
     }
   }
 
@@ -837,6 +1030,70 @@ trait CharVarcharTestSuite extends QueryTest {
 class BasicCharVarcharTestSuite extends SharedSparkSession {
   import testImplicits._
 
+  private def assertParseExceedLimit(query: String, expectedLimit: String = "5"): Unit = {
+    assertParseExceedLimitError(sql(query).collect(), expectedLimit)
+  }
+
+  private def assertParseExceedLimitError(body: => Any, expectedLimit: String = "5"): Unit = {
+    val e = intercept[SparkException] { body }
+    val cause = e.getCause match {
+      case r: SparkRuntimeException => r
+      case other =>
+        Option(other).flatMap(t => Option(t.getCause)).getOrElse(other) match {
+          case r: SparkRuntimeException => r
+          case _ => fail(s"expected EXCEED_LIMIT_LENGTH cause, got: $e")
+        }
+    }
+    checkError(
+      exception = cause,
+      condition = "EXCEED_LIMIT_LENGTH",
+      parameters = Map("limit" -> expectedLimit))
+  }
+
+  private def assertUnsupportedJsonMapKey(
+      query: String, key: String, dataTypeSql: String): Unit = {
+    assertUnsupportedJsonMapKeyError(sql(query).collect(), key, dataTypeSql)
+  }
+
+  private def assertUnsupportedJsonMapKeyError(
+      body: => Any, key: String, dataTypeSql: String): Unit = {
+    val error = intercept[Exception] { body }
+    val cause = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException
+          if e.getCondition == "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause", error))
+    checkError(
+      exception = cause,
+      condition = "UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY",
+      sqlState = "0A000",
+      parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
+  }
+
+  private def assertUnsupportedXmlMapKey(
+      query: String, key: String, dataTypeSql: String): Unit = {
+    assertUnsupportedXmlMapKeyError(sql(query).collect(), key, dataTypeSql)
+  }
+
+  private def assertUnsupportedXmlMapKeyError(
+      body: => Any, key: String, dataTypeSql: String): Unit = {
+    val error = intercept[Exception] { body }
+    val cause = Iterator.iterate[Throwable](error)(_.getCause)
+      .takeWhile(_ != null)
+      .collectFirst {
+        case e: SparkRuntimeException
+          if e.getCondition == "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY" => e
+      }
+      .getOrElse(fail("expected UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY cause", error))
+    checkError(
+      exception = cause,
+      condition = "UNSUPPORTED_XML_CHAR_VARCHAR_MAP_KEY",
+      sqlState = "0A000",
+      parameters = Map("key" -> s"'$key'", "dataType" -> s""""$dataTypeSql""""))
+  }
+
   test("user-specified schema in cast") {
     def assertNoCharType(df: DataFrame): Unit = {
       checkAnswer(df, Row("0"))
@@ -851,6 +1108,1573 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       assertNoCharType(spark.range(1).select($"id".cast(CharType(5))))
       assertNoCharType(spark.range(1).selectExpr("CAST(id AS CHAR(5))"))
       assertNoCharType(sql("SELECT CAST(id AS CHAR(5)) FROM range(1)"))
+    }
+  }
+
+  test("SPARK-58797: CAST to CHAR/VARCHAR with standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charDf = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(charDf.schema.head.dataType === CharType(5))
+      checkAnswer(charDf, Row("ab   "))
+
+      val varcharDf = sql("SELECT CAST('hello' AS VARCHAR(5)) AS v")
+      assert(varcharDf.schema.head.dataType === VarcharType(5))
+      checkAnswer(varcharDf, Row("hello"))
+
+      // ISO 6.13: character-to-character CAST truncates rather than erroring.
+      checkAnswer(sql("SELECT CAST('hello!' AS VARCHAR(5)) AS v"), Row("hello"))
+      checkAnswer(sql("SELECT CAST('abcdef' AS CHAR(2)) AS c"), Row("ab"))
+      checkAnswer(sql("SELECT CAST('abcdef' AS VARCHAR(2)) AS v"), Row("ab"))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c"), Row("ab"))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS v"), Row("ab"))
+
+      // Multi-byte characters: length is in characters, not octets.
+      // scalastyle:off nonascii
+      checkAnswer(sql("SELECT CAST('你好' AS VARCHAR(2)) AS v"), Row("你好"))
+      checkAnswer(sql("SELECT CAST('你好啊' AS VARCHAR(2)) AS v"), Row("你好"))
+      // scalastyle:on nonascii
+
+      // ISO 6.13 numeric-to-character CAST still errors when the literal does not fit.
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT CAST(12345 AS VARCHAR(4))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4")
+      )
+      checkAnswer(sql("SELECT CAST(12345 AS VARCHAR(5)) AS v"), Row("12345"))
+      checkAnswer(sql("SELECT try_cast(12345 AS VARCHAR(4)) AS v"), Row(null))
+
+      // LCT must wrap the inner CAST, not retarget it (truncation / overflow stay).
+      checkAnswer(
+        sql("SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("""SELECT CASE WHEN true THEN CAST('abcdef' AS VARCHAR(2))
+          |ELSE CAST('x' AS VARCHAR(4)) END AS c""".stripMargin),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))"),
+        Row(true))
+      checkAnswer(
+        sql("""SELECT coalesce(
+          |  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(try_cast(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5))) AS c"),
+        Row("x"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql("SELECT coalesce(CAST(12345 AS VARCHAR(4)), CAST('x' AS VARCHAR(5)))").collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "4")
+      )
+
+      // CAST CHAR to VARCHAR keeps the pad; CAST VARCHAR to CHAR pads to the target.
+      checkAnswer(
+        sql("SELECT concat('<', CAST(CAST('a' AS CHAR(2)) AS VARCHAR(2)), '>')"),
+        Row("<a >"))
+      checkAnswer(
+        sql("SELECT concat('<', CAST(CAST('a' AS VARCHAR(2)) AS CHAR(4)), '>')"),
+        Row("<a   >"))
+    }
+  }
+
+  test("SPARK-58797: store assignment with standardSemantics and charVarcharAsString") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+      val wide = new StructType().add("c", CharType(10))
+      val df = spark.createDataFrame(java.util.Arrays.asList(Row("spark")), wide)
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          df.to(new StructType().add("c", CharType(3))).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+      withTable("std_and_as_string") {
+        sql("CREATE TABLE std_and_as_string (v VARCHAR(2)) USING parquet")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_and_as_string VALUES ('abc')")
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "2"))
+      }
+    }
+  }
+
+  test("SPARK-58798: least common type for COALESCE/CASE with CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), cast('world' AS VARCHAR(10))) AS c")
+        .schema.head.dataType === VarcharType(10))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), cast('world!' AS CHAR(6))) AS c")
+        .schema.head.dataType === VarcharType(6))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS CHAR(5)), cast('world!' AS CHAR(6))) AS c")
+        .schema.head.dataType === CharType(6))
+      assert(sql(
+        "SELECT coalesce(cast('hello' AS VARCHAR(5)), 'world') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        """SELECT CASE WHEN true THEN cast('a' AS CHAR(2))
+          |ELSE cast('bb' AS CHAR(4)) END AS c""".stripMargin)
+        .schema.head.dataType === CharType(4))
+      // LCT(NULL, T) = T
+      assert(sql("SELECT coalesce(null, cast('a' AS CHAR(5))) AS c")
+        .schema.head.dataType === CharType(5))
+      // SPARK-58798 intent: LCT widen nests Cast. Inner CAST('abcdef' AS VARCHAR(2)/CHAR(2))
+      // truncates to "ab"; retargeting the inner Cast to length 4 would yield "abcd".
+      checkAnswer(
+        sql("SELECT coalesce(cast('abcdef' AS VARCHAR(2)), cast('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(cast('abcdef' AS CHAR(2)), cast('x' AS CHAR(4))) AS c"),
+        Row("ab  "))
+    }
+  }
+
+  test("SPARK-60036: collation-only LCT copy keeps USER_SPECIFIED_CAST") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // VARCHAR length is unchanged; only the STRING field collation changes, so
+      // changeType uses Cast.copy. Without copying USER_SPECIFIED_CAST, the
+      // VARCHAR(2) field would raise EXCEED_LIMIT_LENGTH instead of truncating.
+      val df = sql(
+        """SELECT coalesce(
+          |  CAST(named_struct('v', 'abcdef', 's', 'foo')
+          |    AS STRUCT<v VARCHAR(2), s STRING>),
+          |  named_struct('v', CAST('xy' AS VARCHAR(2)),
+          |    's', collate('bar', 'UTF8_LCASE'))
+          |) AS c""".stripMargin)
+      assert(df.schema.head.dataType === StructType(Seq(
+        StructField("v", VarcharType(2)),
+        StructField("s", StringType("UTF8_LCASE")))))
+      checkAnswer(df, Row(Row("ab", "foo")))
+    }
+  }
+
+  test("SPARK-58799: transforming string functions return STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT lower(cast('AB' AS VARCHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT cast('a' AS CHAR(1)) || cast('b' AS VARCHAR(1)) AS c")
+        .schema.head.dataType === StringType)
+      // Pads from CHAR participate in the concatenated value.
+      checkAnswer(
+        sql("SELECT cast('he' AS CHAR(4)) || cast('llo' AS CHAR(3)) AS c"),
+        Row("he  llo"))
+      // Collated CHAR must promote to the same collation, not UTF8_BINARY STRING.
+      assert(sql(
+        """SELECT concat(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === StringType("UTF8_LCASE"))
+      checkAnswer(
+        sql("""SELECT concat(
+          |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  cast('b' AS CHAR(3) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("a  b  "))
+      assert(sql(
+        """SELECT elt(
+          |  1,
+          |  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+          |  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === StringType("UTF8_LCASE"))
+      checkAnswer(
+        sql("""SELECT elt(
+          |  1,
+          |  cast('ab' AS CHAR(5) COLLATE UTF8_LCASE),
+          |  cast('x' AS CHAR(1) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab   "))
+      assert(sql("SELECT substr(cast('hello' AS VARCHAR(5)), 1, 2) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT upper(coalesce(cast('a' AS CHAR(2)), cast('b' AS CHAR(4)))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58798: LCT preserves collation on CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val c1 = CharType(2, "UTF8_LCASE")
+      val c2 = CharType(4, "UTF8_LCASE")
+      assert(StringHelper.tightestCommonString(c1, c2).contains(CharType(4, "UTF8_LCASE")))
+      val v1 = VarcharType(3, "UTF8_LCASE")
+      val v2 = VarcharType(5, "UTF8_LCASE")
+      assert(StringHelper.tightestCommonString(v1, v2).contains(VarcharType(5, "UTF8_LCASE")))
+      assert(StringHelper.tightestCommonString(c1, v2).contains(VarcharType(5, "UTF8_LCASE")))
+    }
+  }
+
+  test("SPARK-58799: regexp/mask/split return STRING under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT regexp_replace(cast('ab' AS CHAR(2)), 'a', 'x') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT regexp_extract(cast('ab' AS VARCHAR(2)), '(a)', 1) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT split(cast('a,b' AS CHAR(3)), ',') AS c")
+        .schema.head.dataType === ArrayType(StringType, containsNull = false))
+      assert(sql("SELECT mask(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58796: preserve vs standardSemantics result-type matrix") {
+    // preserve-only: transforming ops may keep Char/Varchar (leaky experimental path).
+    withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === CharType(2))
+    }
+    // standardSemantics: transforming ops return STRING even if preserve is also on.
+    withSQLConf(
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      assert(sql("SELECT upper(cast('ab' AS CHAR(2))) AS c")
+        .schema.head.dataType === StringType)
+    }
+  }
+
+  test("SPARK-58797: standardSemantics wins over charVarcharAsString") {
+    withSQLConf(
+        SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(df.schema.head.dataType === CharType(5))
+      checkAnswer(df, Row("ab   "))
+    }
+  }
+
+  test("SPARK-58796: createDataFrame allows CHAR/VARCHAR when standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val df = spark.range(1).map(_.toString).toDF()
+      val schema = new StructType().add("id", CharType(5))
+      val created = spark.createDataFrame(df.collectAsList(), schema)
+      assert(created.schema.head.dataType === CharType(5))
+      checkAnswer(created, Row("0    "))
+
+      // RowEncoder must retain a declared collation on the constrained type, not rebuild
+      // CharType(length) / VarcharType(length) with the default collation.
+      val collated = new StructType()
+        .add("c", CharType(5, "UTF8_LCASE"))
+        .add("v", VarcharType(5, "UTF8_LCASE"))
+      val collatedDf = spark.createDataFrame(
+        java.util.Arrays.asList(Row("ab", "cd")), collated)
+      assert(collatedDf.schema("c").dataType === CharType(5, "UTF8_LCASE"))
+      assert(collatedDf.schema("v").dataType === VarcharType(5, "UTF8_LCASE"))
+      checkAnswer(collatedDf, Row("ab   ", "cd"))
+    }
+  }
+
+  test("SPARK-58803: Dataset/encoder/UDF CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // createDataFrame / RowEncoder write-side: pad CHAR, reject oversize.
+      val charSchema = new StructType().add("c", CharType(3))
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("ab")), charSchema),
+        Row("ab "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row("abcd")), charSchema).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+      val varcharSchema = new StructType().add("v", VarcharType(3))
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("ab")), varcharSchema),
+        Row("ab"))
+      // Oversize by trailing blanks only: trim just enough to fit the limit.
+      checkAnswer(
+        spark.createDataFrame(java.util.Arrays.asList(Row("abc ")), varcharSchema),
+        Row("abc"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataFrame(java.util.Arrays.asList(Row("abcd")), varcharSchema).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // Explicit Encoders.CHAR / VARCHAR: typed Dataset write-side checks.
+      val charDs = spark.createDataset(Seq("ab"))(Encoders.CHAR(4))
+      assert(charDs.schema.head.dataType === CharType(4))
+      checkAnswer(charDs.toDF(), Row("ab  "))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          spark.createDataset(Seq("abcde"))(Encoders.VARCHAR(3)).collect()
+        },
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // UDF register: return type stays CHAR/VARCHAR; write-side pad / length apply.
+      spark.udf.register("std_char_udf", () => "B", CharType(3))
+      spark.udf.register("std_varchar_udf", (x: String) => x, VarcharType(3))
+      val charUdf = sql("SELECT std_char_udf() AS c")
+      assert(charUdf.schema.head.dataType === CharType(3))
+      checkAnswer(charUdf, Row("B  "))
+      val varcharUdf = sql("SELECT std_varchar_udf('ab') AS v")
+      assert(varcharUdf.schema.head.dataType === VarcharType(3))
+      checkAnswer(varcharUdf, Row("ab"))
+      checkError(
+        exception = intercept[SparkException] {
+          sql("SELECT std_varchar_udf('abcd')").collect()
+        }.getCause.asInstanceOf[SparkRuntimeException],
+        condition = "EXCEED_LIMIT_LENGTH",
+        parameters = Map("limit" -> "3"))
+
+      // Java udf(..., returnType) path and Dataset.encoder from CHAR result schema.
+      val javaUdf = functions.udf(
+        new org.apache.spark.sql.api.java.UDF0[String] {
+          override def call(): String = "a"
+        },
+        CharType(5))
+      val javaUdfDf = spark.range(1).select(javaUdf().as("c"))
+      assert(javaUdfDf.schema.head.dataType === CharType(5))
+      checkAnswer(javaUdfDf, Row("a    "))
+      assert(javaUdfDf.encoder.schema.head.dataType === CharType(5))
+
+      // Dataset.to: CHAR/VARCHAR target schema allowed; Cast applies store assignment.
+      withTable("std_cv_to") {
+        sql("CREATE TABLE std_cv_to (c CHAR(10), v VARCHAR(255)) USING parquet")
+        sql("INSERT INTO std_cv_to VALUES ('spark', 'awesome')")
+        val df = sql("SELECT * FROM std_cv_to")
+        assert(df.schema("c").dataType === CharType(10))
+        assert(df.schema("v").dataType === VarcharType(255))
+        val reordered = StructType.fromDDL("v VARCHAR(255), c CHAR(10)")
+        val toDf = df.to(reordered)
+        assert(toDf.schema.map(_.dataType) === Seq(VarcharType(255), CharType(10)))
+        checkAnswer(toDf, Row("awesome", "spark     "))
+        // Narrowing CHAR length is store assignment and must enforce length.
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            df.select($"c").to(new StructType().add("c", CharType(3))).collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "3"))
+      }
+
+      // DataFrameReader / DataStreamReader user schemas keep CHAR/VARCHAR.
+      val readerSchema = new StructType().add("id", CharType(5))
+      val csvInput = spark.range(1).map(_.toString)
+      val csvDf = spark.read.schema(readerSchema).csv(csvInput)
+      assert(csvDf.schema.head.dataType === CharType(5))
+      checkAnswer(csvDf, Row("0    "))
+      val csvDfDdl = spark.read.schema("id VARCHAR(5)").csv(csvInput)
+      assert(csvDfDdl.schema.head.dataType === VarcharType(5))
+      withTempPath { dir =>
+        spark.range(1).write.save(dir.toString)
+        val streamDf = spark.readStream.schema(readerSchema).load(dir.toString)
+        assert(streamDf.schema.head.dataType === CharType(5))
+        val streamDdl = spark.readStream.schema("id VARCHAR(5)").load(dir.toString)
+        assert(streamDdl.schema.head.dataType === VarcharType(5))
+      }
+    }
+  }
+
+  test("SPARK-58794: promotion unifies CHAR/VARCHAR with STRING at plain-string inputs") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_promote") {
+        sql("CREATE TABLE std_promote (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO std_promote VALUES ('ab', 'ab')")
+
+        // Expressions requiring all their string inputs to share one type must accept a
+        // CHAR/VARCHAR argument alongside a STRING one by promoting it to STRING.
+        Seq(
+          "overlay(c PLACING 'x' FROM 1)" -> "xb   ",
+          "overlay(v PLACING 'x' FROM 1)" -> "xb",
+          "string_agg(c, '-')" -> "ab   ",
+          "listagg(c, '-')" -> "ab   ",
+          "elt(1, c, 'x')" -> "ab   ",
+          // right() is RuntimeReplaceable; its literal branches must agree with the substring
+          // branch, which promotion has already reduced to STRING.
+          "right(c, 2)" -> "  ",
+          "left(c, 2)" -> "ab").foreach { case (expr, expected) =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === StringType, s"$expr should return STRING")
+          checkAnswer(df, Row(expected))
+        }
+
+        // Transforming expressions must not inherit the input's length constraint: each of these
+        // produces a value whose length differs from the CHAR(5) input.
+        Seq(
+          "reverse(c)" -> "   ba",
+          "hex(c)" -> "6162202020",
+          "array_join(array(c, c), '-')" -> "ab   -ab   ").foreach { case (expr, expected) =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === StringType, s"$expr should return STRING")
+          checkAnswer(df, Row(expected))
+        }
+
+        // Promotion must not reach pass-through / least-common-type sites, which preserve
+        // CHAR/VARCHAR.
+        Seq(
+          "c", "coalesce(c, c)", "case when true then c else c end", "max(c)",
+          "element_at(array(c), 1)", "transform(array(c), x -> x)[0]",
+          "first_value(c) over (order by 1)").foreach { expr =>
+          val df = sql(s"SELECT $expr AS r FROM std_promote")
+          assert(df.schema.head.dataType === CharType(5), s"$expr should stay CHAR(5)")
+        }
+
+        // reverse() on non-string inputs is unaffected by the promotion.
+        assert(sql("SELECT reverse(array(1, 2)) AS r").schema.head.dataType ===
+          ArrayType(IntegerType, containsNull = false))
+      }
+    }
+  }
+
+  // Pass-through and container functions that may keep CHAR(n)/VARCHAR(n): aggregates
+  // and ordering that return an input unchanged, null-handling, element access,
+  // array/map/struct constructors, and collection rearrangements that keep element types.
+  // Legitimacy is still per shape: reverse(array(c)) may keep CHAR, reverse(c) must not.
+  private val charVarcharPassThroughFunctions = Set(
+    "any_value", "approx_top_k", "approx_top_k_accumulate", "array", "array_agg", "array_compact",
+    "array_distinct", "array_max", "array_min", "array_repeat", "array_sort", "arrays_zip",
+    "coalesce", "collect_list", "collect_set", "collect_union", "concat", "explode",
+    "explode_outer", "filter", "first", "first_value", "flatten", "get", "greatest", "ifnull",
+    "lag", "last", "last_value", "lead", "least", "map", "map_concat", "map_entries",
+    "map_filter", "map_keys", "map_values", "map_zip_with", "max", "max_by", "measure", "min",
+    "min_by", "mode", "named_struct", "nth_value", "nullif", "nullifzero", "nvl", "nvl2",
+    "reverse", "shuffle", "sort_array", "struct", "transform", "transform_keys",
+    "transform_values", "trim_array", "when", "zip_with")
+
+  // String-transforming shapes of otherwise pass-through functions. These must reduce to
+  // unconstrained STRING even though the same function keeps CHAR on collection inputs.
+  private val charVarcharTransformingCalls = Set(
+    "concat(c)", "concat(c, c)", "concat(c, c, c)", "concat(c, 'x')", "concat('x', c)",
+    "reverse(c)", "transform(array(c), x -> reverse(x))")
+
+  private val inventoryScalarShapes = Seq(
+    "%s(c)", "%s(c, c)", "%s(c, 'x')", "%s('x', c)", "%s(c, 1)", "%s(array(c))",
+    "%s(array(c), '-')")
+
+  private val inventoryNestedShapes = Seq(
+    "%s(c, c, c)", "%s(array(array(c)))", "%s(named_struct('x', c))",
+    "%s(map(c, 1))", "%s(map(1, c))")
+
+  // HOF lambdas and window OVER are the shapes the scalar/nested templates
+  // never typecheck. Nested already has "%s(c, c, c)" (translate, and overlay /
+  // split_part / substring_index via ANSI cast of the third arg to INT) and
+  // scalar already has "%s('x', c)" (format_string / printf). The other
+  // templates here add literal argument positions (translate's from/to,
+  // overlay / split_part / substring_index's count) and a format string that
+  // actually consumes c ('%%s' survives String.format as '%s').
+  private val inventoryGatedShapes = Seq(
+    "%s(c, 'x', 1)", "%s(c, '-', 1)", "%s(c, c, 1)", "%s(c, 'ab', 'xy')",
+    "%s('%%s', c)", "%s(array(c), x -> x)", "%s(array(c), x -> reverse(x))",
+    "%s(c) OVER (ORDER BY 1)", "%s(c, 1) OVER (ORDER BY 1)")
+
+  // These must typecheck (not Try.toOption), including on UTF8_LCASE:
+  // StringTypeNonCSAICollation rejects only case-sensitive accent-insensitive
+  // collations (e.g. UNICODE_AI), not UTF8_LCASE.
+  private val requiredTransformingCalls = Seq(
+    "translate(c, 'ab', 'xy')",
+    "overlay(c, 'x', 1)",
+    "overlay(c PLACING 'x' FROM 1)",
+    "format_string('%s', c)",
+    "printf('%s', c)",
+    "split_part(c, '-', 1)",
+    "substring_index(c, '-', 1)",
+    "transform(array(c), x -> reverse(x))[0]")
+
+  private val requiredPassThroughCalls = Seq(
+    "transform(array(c), x -> x)[0]",
+    "filter(array(c), x -> true)[0]",
+    "lag(c) OVER (ORDER BY 1)",
+    "lead(c) OVER (ORDER BY 1)",
+    "nth_value(c, 1) OVER (ORDER BY 1)",
+    "first_value(c) OVER (ORDER BY 1)")
+
+  private def assertNoInventoriedCharVarcharLeaks(argumentShapes: Seq[String]): Unit = {
+    val (passThroughLeaks, transformingLeaks) =
+      FunctionRegistry.functionSet.map(_.funcName).toSeq.sorted.flatMap { name =>
+        argumentShapes.map(_.format(name)).flatMap { call =>
+          // Most shapes do not typecheck for a given function; those are simply not evidence.
+          val keepsCharVarchar =
+            Try(sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType)
+              .toOption
+              .exists(CharVarcharUtils.hasCharVarchar)
+          Option.when(keepsCharVarchar &&
+            (!charVarcharPassThroughFunctions.contains(name) ||
+              charVarcharTransformingCalls.contains(call)))((name, call))
+        }
+      }.partition { case (_, call) => !charVarcharTransformingCalls.contains(call) }
+
+    assert(passThroughLeaks.isEmpty,
+      "these inventoried calls returned a CHAR/VARCHAR type; if they legitimately pass through " +
+        "their input type, add the function name to charVarcharPassThroughFunctions: " +
+        passThroughLeaks.map(_._2).mkString(", "))
+    assert(transformingLeaks.isEmpty,
+      "these transforming calls returned a CHAR/VARCHAR type; fix the expression to return " +
+        "plain STRING: " + transformingLeaks.map(_._2).mkString(", "))
+  }
+
+  private def assertRequiredInventoryCalls(
+      transforming: Seq[String],
+      passThrough: Seq[String]): Unit = {
+    transforming.foreach { call =>
+      val dt = sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType
+      assert(!CharVarcharUtils.hasCharVarchar(dt),
+        s"$call typechecked but returned $dt; expected plain STRING")
+    }
+    passThrough.foreach { call =>
+      val dt = sql(s"SELECT $call AS r FROM std_inventory").schema.head.dataType
+      assert(CharVarcharUtils.hasCharVarchar(dt),
+        s"$call typechecked but returned $dt; expected CHAR/VARCHAR")
+    }
+  }
+
+  private def withInventoryCol(colDdl: String)(body: => Unit): Unit = {
+    withTable("std_inventory") {
+      sql(s"CREATE TABLE std_inventory ($colDdl) USING parquet")
+      body
+    }
+  }
+
+  test("SPARK-58794: inventoried shapes do not leak CHAR/VARCHAR under standardSemantics") {
+    withInventoryCol("c CHAR(5)") {
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        assertNoInventoriedCharVarcharLeaks(inventoryScalarShapes)
+      }
+    }
+  }
+
+  test("SPARK-59016: nested inventoried shapes do not leak CHAR/VARCHAR") {
+    withInventoryCol("c CHAR(5)") {
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        assertNoInventoriedCharVarcharLeaks(inventoryNestedShapes)
+      }
+    }
+  }
+
+  test("SPARK-59016: gated inventoried shapes do not leak CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        "c CHAR(5)",
+        "c VARCHAR(5)",
+        "c CHAR(5) COLLATE UTF8_LCASE",
+        "c VARCHAR(5) COLLATE UNICODE").foreach { colDdl =>
+        withInventoryCol(colDdl) {
+          assertNoInventoriedCharVarcharLeaks(inventoryGatedShapes)
+        }
+      }
+    }
+  }
+
+  test("SPARK-59016: typecheck-gated transforming calls return STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq(
+        "c CHAR(5)",
+        "c VARCHAR(5)",
+        "c CHAR(5) COLLATE UNICODE",
+        "c CHAR(5) COLLATE UTF8_LCASE").foreach { colDdl =>
+        withInventoryCol(colDdl) {
+          assertRequiredInventoryCalls(
+            requiredTransformingCalls, requiredPassThroughCalls)
+        }
+      }
+    }
+  }
+
+  test("SPARK-58794: collated mixed-length LCT ignores collation strength for length") {
+    val mixedLength =
+      """SELECT coalesce(
+        |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+        |  cast('bb' AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin
+    val mixedStrength =
+      """SELECT coalesce(
+        |  cast('a' AS CHAR(2) COLLATE UTF8_LCASE),
+        |  cast(1 AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin
+
+    Seq(
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true").foreach { case (key, value) =>
+      withSQLConf(key -> value) {
+        assert(sql(mixedLength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
+          s"$key=$value same-strength mixed CHAR lengths")
+        assert(sql(mixedStrength).schema.head.dataType === CharType(4, "UTF8_LCASE"),
+          s"$key=$value Implicit CHAR(2) vs Default CHAR(4) must widen, not narrow")
+        // Mixed strength must still pad the Implicit CHAR(2) to CHAR(4), not keep length 2.
+        checkAnswer(sql(mixedStrength), Row("a   "))
+      }
+    }
+  }
+
+  test("SPARK-58794: typed CHAR Literal is re-padded when LCT widens the length") {
+    // CollationTypeCoercion.changeType used to `copy(dataType)` on Literal, which would
+    // leave CHAR(2) "a " as a CHAR(4) value without the extra pad. SQL CAST is a Cast
+    // node so goldens do not cover this; Literal.create does.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val c2 = Column(Literal.create("a", CharType(2, "UTF8_LCASE")))
+      val c4 = Column(Literal.create("bb", CharType(4, "UTF8_LCASE")))
+      val coalesced = functions.coalesce(c2, c4)
+      val df = spark.range(1).select(coalesced.as("c"))
+      assert(df.schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      checkAnswer(df, Row("a   "))
+    }
+  }
+
+  test("SPARK-58794: CHAR/VARCHAR vs non-string follow STRING for compare and COALESCE") {
+    // Comparisons promote the string side to the other atomic type; COALESCE uses the same
+    // STRING promotion (and the same BOOLEAN path). CHAR/VARCHAR extend StringType, so they must
+    // match the STRING analogue on schema, values, and analysis errors. Exact-length CHAR keeps
+    // padding from confounding comparisons with the unpadded STRING value.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      def followString(cvSql: String, strSql: String): Unit = {
+        val strResult = Try {
+          val df = sql(strSql)
+          (df.schema.map(_.dataType), df.collect().toSeq)
+        }
+        val cvResult = Try {
+          val df = sql(cvSql)
+          (df.schema.map(_.dataType), df.collect().toSeq)
+        }
+        (strResult, cvResult) match {
+          case (scala.util.Success((st, sr)), scala.util.Success((ct, cr))) =>
+            assert(ct === st, s"schema:\n  $cvSql -> $ct\n  $strSql -> $st")
+            assert(cr === sr, s"rows:\n  $cvSql -> $cr\n  $strSql -> $sr")
+          case (scala.util.Failure(eStr: SparkThrowable),
+              scala.util.Failure(eCv: SparkThrowable)) =>
+            assert(eCv.getCondition === eStr.getCondition,
+              s"$cvSql vs $strSql: ${eCv.getCondition} != ${eStr.getCondition}")
+          case (s, c) =>
+            fail(s"$cvSql vs $strSql: STRING success=${s.isSuccess} CV success=${c.isSuccess}")
+        }
+      }
+
+      val combos = Seq(
+        ("cast('123' AS CHAR(3))", "cast('123' AS VARCHAR(3))", "cast('123' AS STRING)", "123"),
+        ("cast('1.5' AS CHAR(3))", "cast('1.5' AS VARCHAR(3))", "cast('1.5' AS STRING)", "1.5"),
+        ("cast('2020-01-02' AS CHAR(10))", "cast('2020-01-02' AS VARCHAR(10))",
+          "cast('2020-01-02' AS STRING)", "date'2020-01-02'"),
+        ("cast('2020-01-02 03:04:05' AS CHAR(19))", "cast('2020-01-02 03:04:05' AS VARCHAR(19))",
+          "cast('2020-01-02 03:04:05' AS STRING)", "timestamp'2020-01-02 03:04:05'"),
+        ("cast('true' AS CHAR(4))", "cast('true' AS VARCHAR(4))", "cast('true' AS STRING)", "true"),
+        // Padded CHAR vs the same padded STRING / VARCHAR bytes.
+        ("cast('123' AS CHAR(5))", "cast('123  ' AS VARCHAR(5))", "cast('123  ' AS STRING)", "123"))
+
+      val templates: Seq[(String, String) => String] = Seq(
+        (cv, other) => s"SELECT typeof(coalesce($cv, $other))",
+        (cv, other) => s"SELECT coalesce($cv, $other)",
+        (cv, other) => s"SELECT $cv = $other",
+        (cv, other) => s"SELECT $cv < $other",
+        (cv, other) => s"SELECT $cv IN ($other)")
+
+      for ((charExpr, varcharExpr, stringExpr, other) <- combos) {
+        for (mk <- templates) {
+          followString(mk(charExpr, other), mk(stringExpr, other))
+          followString(mk(varcharExpr, other), mk(stringExpr, other))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58794: ImplicitTypeCasts promotes CHAR/VARCHAR to STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      def analyzed(sqlText: String): LogicalPlan = sql(sqlText).queryExecution.analyzed
+      def exprs(plan: LogicalPlan): Seq[Expression] =
+        plan.flatMap(_.expressions.flatMap(e => e +: e.collect { case c => c }))
+
+      val upper = exprs(analyzed("SELECT upper(cast('ab' AS CHAR(2)))"))
+        .collect { case u: Upper => u }.head
+      assert(upper.child.dataType === StringType)
+
+      val concat = exprs(analyzed(
+        "SELECT concat(cast('a' AS CHAR(2)), cast('b' AS CHAR(3)))"))
+        .collect { case c: Concat => c }.head
+      assert(concat.children.forall(_.dataType == StringType))
+
+      val arrayJoin = exprs(analyzed(
+        "SELECT array_join(array(cast('ab' AS CHAR(5))), '-')"))
+        .collect { case a: ArrayJoin => a }.head
+      assert(arrayJoin.array.dataType === ArrayType(StringType, containsNull = false))
+
+      val stringToMap = exprs(analyzed("SELECT str_to_map(cast('a:1' AS CHAR(5)))"))
+        .collect { case s: StringToMap => s }.head
+      assert(stringToMap.first.dataType === StringType)
+      assert(stringToMap.dataType === MapType(StringType, StringType, valueContainsNull = true))
+    }
+  }
+
+  test("SPARK-58794: parameterized CHAR/VARCHAR lengths under standardSemantics") {
+    // Length positions accept parameter markers (`integerValue` -> `parameterMarker`). Under
+    // standardSemantics the bound type stays first-class: CAST keeps CHAR/VARCHAR, pads and
+    // enforces length, and DDL schemas retain the substituted n.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charDf = spark.sql("SELECT cast('ab' AS CHAR(:n)) AS c", Map("n" -> 5))
+      assert(charDf.schema.head.dataType === CharType(5))
+      checkAnswer(
+        spark.sql("SELECT concat('<', cast('ab' AS CHAR(:n)), '>')", Map("n" -> 5)),
+        Row("<ab   >"))
+
+      val varcharDf = spark.sql("SELECT cast('hello' AS VARCHAR(?)) AS c", Array(5))
+      assert(varcharDf.schema.head.dataType === VarcharType(5))
+      checkAnswer(
+        spark.sql("SELECT cast('abcdef' AS VARCHAR(?))", Array(2)),
+        Row("ab"))
+
+      withTable("param_varchar", "param_char") {
+        spark.sql(
+          "CREATE TABLE param_varchar (c VARCHAR(:n)) USING parquet", Map("n" -> 7))
+        assert(spark.table("param_varchar").schema.head.dataType === VarcharType(7))
+        spark.sql("CREATE TABLE param_char (c CHAR(?)) USING parquet", Array(4))
+        assert(spark.table("param_char").schema.head.dataType === CharType(4))
+      }
+
+      // Non-integral / negative lengths fail when substituted into the length position.
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> -1))
+        },
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'-'", "hint" -> ""),
+        context = ExpectedContext(
+          fragment = "SELECT cast('a' AS CHAR(:n))",
+          start = 0,
+          stop = 27))
+      checkError(
+        exception = intercept[ParseException] {
+          spark.sql("SELECT cast('a' AS CHAR(:n))", Map("n" -> 1.5))
+        },
+        condition = "PARSE_SYNTAX_ERROR",
+        parameters = Map("error" -> "'1.5D'", "hint" -> ""),
+        context = ExpectedContext(
+          fragment = "SELECT cast('a' AS CHAR(:n))",
+          start = 0,
+          stop = 27))
+    }
+  }
+
+  test("SPARK-58942: CHAR column vs string literal under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("contacts", "contacts_by_code") {
+        sql("CREATE TABLE contacts (code CHAR(4), name VARCHAR(10)) USING parquet")
+        sql("INSERT INTO contacts VALUES ('ab', 'Ada')")
+        // A predicate on a CHAR partition column goes through partition pruning instead of a
+        // scan filter, so check the same predicates against a table partitioned by the column.
+        sql("CREATE TABLE contacts_by_code (name VARCHAR(10), code CHAR(4)) USING parquet " +
+          "PARTITIONED BY (code)")
+        sql("INSERT INTO contacts_by_code VALUES ('Ada', 'ab')")
+        Seq("contacts", "contacts_by_code").foreach { t =>
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab'"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code = 'ab  '"), Row("Ada"))
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab', 'cd')"), Seq.empty)
+          checkAnswer(sql(s"SELECT name FROM $t WHERE code IN ('ab  ', 'cd')"), Row("Ada"))
+        }
+        checkAnswer(
+          sql("SELECT name FROM contacts WHERE code COLLATE UTF8_BINARY_RTRIM = " +
+            "'ab' COLLATE UTF8_BINARY_RTRIM"),
+          Row("Ada"))
+      }
+    }
+  }
+
+  test("SPARK-58794: language surfaces keep CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // CTAS / CREATE VIEW inherit projected CHAR/VARCHAR.
+      withTable("std_src", "std_ctas") {
+        sql("CREATE TABLE std_src (c CHAR(5), v VARCHAR(5)) USING parquet")
+        sql("INSERT INTO std_src VALUES ('ab', 'ab')")
+        sql("CREATE TABLE std_ctas USING parquet AS SELECT c, v FROM std_src")
+        assert(spark.table("std_ctas").schema.map(_.dataType) ===
+          Seq(CharType(5), VarcharType(5)))
+        checkAnswer(
+          sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ctas"),
+          Row("<ab   >", "<ab>"))
+        val cteDf = sql(
+          "WITH t AS (SELECT c, v FROM std_src) SELECT typeof(c), typeof(v) FROM t")
+        checkAnswer(cteDf, Row("char(5)", "varchar(5)"))
+      }
+      withTable("std_view_src") {
+        withView("std_cv_view", "std_cv_view_v") {
+          sql("CREATE TABLE std_view_src (c CHAR(4), v VARCHAR(4)) USING parquet")
+          sql("INSERT INTO std_view_src VALUES ('xy', 'ab')")
+          sql("CREATE VIEW std_cv_view AS SELECT c FROM std_view_src")
+          sql("CREATE VIEW std_cv_view_v AS SELECT v FROM std_view_src")
+          assert(spark.table("std_cv_view").schema.head.dataType === CharType(4))
+          assert(spark.table("std_cv_view_v").schema.head.dataType === VarcharType(4))
+          checkAnswer(
+            sql("SELECT concat('<', c, '>') FROM std_cv_view"), Row("<xy  >"))
+          checkAnswer(sql("SELECT v FROM std_cv_view_v"), Row("ab"))
+        }
+      }
+
+      // ALTER COLUMN equal-length CHAR/VARCHAR remains supported with first-class types.
+      // VARCHAR widen / CHAR->VARCHAR are allowed by CheckAnalysis on V2 tables
+      // (see DSV2CharVarcharDDLTestSuite); V1 file-source ALTER only evolves collation
+      // (same StringConstraint), so length changes stay rejected there.
+      withTable("std_alter") {
+        sql("CREATE TABLE std_alter (c CHAR(4), v VARCHAR(4)) USING parquet")
+        sql("ALTER TABLE std_alter CHANGE COLUMN c TYPE CHAR(4)")
+        sql("ALTER TABLE std_alter CHANGE COLUMN v TYPE VARCHAR(4)")
+        assert(spark.table("std_alter").schema.map(_.dataType) ===
+          Seq(CharType(4), VarcharType(4)))
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_alter CHANGE COLUMN c TYPE CHAR(5)")
+        }
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_alter CHANGE COLUMN v TYPE VARCHAR(5)")
+        }
+      }
+
+      // Session variables: DECLARE / SET keep the type and apply CAST assignment.
+      sql("DECLARE OR REPLACE VARIABLE std_char_var CHAR(4)")
+      sql("DECLARE OR REPLACE VARIABLE std_varchar_var VARCHAR(4)")
+      try {
+        sql("SET VARIABLE std_char_var = 'ab'")
+        val charVarDf = sql("SELECT std_char_var AS c")
+        assert(charVarDf.schema.head.dataType === CharType(4))
+        checkAnswer(sql("SELECT concat('<', std_char_var, '>')"), Row("<ab  >"))
+        // Oversize by trailing blanks only is trimmed to fit CHAR(n).
+        sql("SET VARIABLE std_char_var = 'abcd '")
+        checkAnswer(sql("SELECT concat('<', std_char_var, '>')"), Row("<abcd>"))
+        intercept[SparkRuntimeException] {
+          sql("SET VARIABLE std_char_var = 'abcde'").collect()
+        }
+
+        sql("SET VARIABLE std_varchar_var = 'ab'")
+        val varcharVarDf = sql("SELECT std_varchar_var AS v")
+        assert(varcharVarDf.schema.head.dataType === VarcharType(4))
+        checkAnswer(sql("SELECT concat('<', std_varchar_var, '>')"), Row("<ab>"))
+        // Oversize by trailing blanks only is trimmed to fit.
+        sql("SET VARIABLE std_varchar_var = 'abcd '")
+        checkAnswer(sql("SELECT std_varchar_var"), Row("abcd"))
+        intercept[SparkRuntimeException] {
+          sql("SET VARIABLE std_varchar_var = 'abcde'").collect()
+        }
+      } finally {
+        sql("DROP TEMPORARY VARIABLE IF EXISTS std_char_var")
+        sql("DROP TEMPORARY VARIABLE IF EXISTS std_varchar_var")
+      }
+
+      // SQL scripting local variables keep CHAR/VARCHAR inside a compound statement.
+      val localVarScript =
+        """
+          |BEGIN
+          |  DECLARE c CHAR(4);
+          |  DECLARE v VARCHAR(4);
+          |  SET c = 'ab';
+          |  SET v = 'cd';
+          |  SELECT typeof(c), concat('<', c, '>'), typeof(v), concat('<', v, '>');
+          |END
+          |""".stripMargin
+      val localVarDf = sql(localVarScript)
+      assert(localVarDf.schema.map(_.dataType) ===
+        Seq(StringType, StringType, StringType, StringType))
+      checkAnswer(localVarDf, Row("char(4)", "<ab  >", "varchar(4)", "<cd>"))
+      // Trailing-blank trim on local SET into CHAR/VARCHAR.
+      checkAnswer(
+        sql(
+          """
+            |BEGIN
+            |  DECLARE c CHAR(4);
+            |  DECLARE v VARCHAR(4);
+            |  SET c = 'abcd ';
+            |  SET v = 'abcd ';
+            |  SELECT concat('<', c, '>'), v;
+            |END
+            |""".stripMargin),
+        Row("<abcd>", "abcd"))
+      intercept[SparkRuntimeException] {
+        sql(
+          """
+            |BEGIN
+            |  DECLARE c CHAR(4);
+            |  SET c = 'abcde';
+            |END
+            |""".stripMargin).collect()
+      }
+      intercept[SparkRuntimeException] {
+        sql(
+          """
+            |BEGIN
+            |  DECLARE v VARCHAR(4);
+            |  SET v = 'abcde';
+            |END
+            |""".stripMargin).collect()
+      }
+
+      // Cursor FETCH INTO CHAR/VARCHAR locals applies store assignment (pad / length).
+      withSQLConf(SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true") {
+        val cursorScript =
+          """
+            |BEGIN
+            |  DECLARE fetched_c CHAR(4);
+            |  DECLARE fetched_v VARCHAR(4);
+            |  DECLARE cur CURSOR FOR
+            |    SELECT cast('ab' AS CHAR(4)) AS c, cast('cd' AS VARCHAR(4)) AS v;
+            |  OPEN cur;
+            |  FETCH cur INTO fetched_c, fetched_v;
+            |  SELECT typeof(fetched_c), concat('<', fetched_c, '>'),
+            |         typeof(fetched_v), concat('<', fetched_v, '>');
+            |  CLOSE cur;
+            |END
+            |""".stripMargin
+        checkAnswer(
+          sql(cursorScript),
+          Row("char(4)", "<ab  >", "varchar(4)", "<cd>"))
+
+        // FETCH plain STRING into CHAR pads via assignment cast.
+        checkAnswer(
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched CHAR(4);
+              |  DECLARE cur CURSOR FOR SELECT 'ab' AS c;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched;
+              |  SELECT typeof(fetched), concat('<', fetched, '>');
+              |  CLOSE cur;
+              |END
+              |""".stripMargin),
+          Row("char(4)", "<ab  >"))
+
+        // FETCH into a wider CHAR pads; trailing blanks trim into a shorter target.
+        checkAnswer(
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched CHAR(5);
+              |  DECLARE cur CURSOR FOR SELECT cast('xy' AS CHAR(2)) AS c;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched;
+              |  SELECT concat('<', fetched, '>');
+              |  CLOSE cur;
+              |END
+              |""".stripMargin),
+          Row("<xy   >"))
+        checkAnswer(
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched_c CHAR(4);
+              |  DECLARE fetched_v VARCHAR(4);
+              |  DECLARE cur CURSOR FOR
+              |    SELECT cast('abcd ' AS CHAR(5)) AS c, cast('abcd ' AS VARCHAR(5)) AS v;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched_c, fetched_v;
+              |  SELECT concat('<', fetched_c, '>'), fetched_v;
+              |  CLOSE cur;
+              |END
+              |""".stripMargin),
+          Row("<abcd>", "abcd"))
+        intercept[SparkRuntimeException] {
+          sql(
+            """
+              |BEGIN
+              |  DECLARE fetched VARCHAR(2);
+              |  DECLARE cur CURSOR FOR SELECT cast('abcd' AS VARCHAR(4)) AS v;
+              |  OPEN cur;
+              |  FETCH cur INTO fetched;
+              |  CLOSE cur;
+              |END
+              |""".stripMargin).collect()
+        }
+      }
+
+      // SQL FUNCTION params/RETURNS apply store assignment (pad, blank-trim, overflow).
+      sql("CREATE OR REPLACE TEMPORARY FUNCTION std_char_fn() RETURNS CHAR(3) RETURN 'a'")
+      sql(
+        """CREATE OR REPLACE TEMPORARY FUNCTION std_varchar_ret()
+          |RETURNS VARCHAR(3) RETURN 'ab'""".stripMargin)
+      sql(
+        """CREATE OR REPLACE TEMPORARY FUNCTION std_char_param(x CHAR(3))
+          |RETURNS CHAR(3) RETURN x""".stripMargin)
+      sql(
+        """CREATE OR REPLACE TEMPORARY FUNCTION std_varchar_param(x VARCHAR(3))
+          |RETURNS VARCHAR(3) RETURN x""".stripMargin)
+      try {
+        val fnDf = sql("SELECT std_char_fn() AS c")
+        assert(fnDf.schema.head.dataType === CharType(3))
+        checkAnswer(sql("SELECT concat('<', std_char_fn(), '>')"), Row("<a  >"))
+        val retVarcharDf = sql("SELECT std_varchar_ret() AS v")
+        assert(retVarcharDf.schema.head.dataType === VarcharType(3))
+        checkAnswer(retVarcharDf, Row("ab"))
+
+        // STRING -> CHAR(n) param: pad; trailing blanks trim; non-blank overflow errors.
+        val charParamDf = sql("SELECT std_char_param('a') AS c")
+        assert(charParamDf.schema.head.dataType === CharType(3))
+        checkAnswer(sql("SELECT concat('<', std_char_param('a'), '>')"), Row("<a  >"))
+        checkAnswer(
+          sql("SELECT concat('<', std_char_param('abc '), '>')"),
+          Row("<abc>"))
+        intercept[SparkRuntimeException] {
+          sql("SELECT std_char_param('abcd')").collect()
+        }
+
+        val paramDf = sql("SELECT std_varchar_param('ab') AS v")
+        assert(paramDf.schema.head.dataType === VarcharType(3))
+        checkAnswer(paramDf, Row("ab"))
+        checkAnswer(sql("SELECT std_varchar_param('abc ')"), Row("abc"))
+        intercept[SparkRuntimeException] {
+          sql("SELECT std_varchar_param('abcd')").collect()
+        }
+      } finally {
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_ret")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_char_param")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS std_varchar_param")
+      }
+    }
+  }
+
+  test("SPARK-58814: major formats preserve CHAR/VARCHAR schemas and values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("parquet", "orc").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              val input = spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(3)) AS v",
+                "named_struct('c', cast('z' AS CHAR(2))) AS s",
+                "array(cast('q' AS VARCHAR(2))) AS a",
+                "map(cast('k' AS CHAR(2)), cast('v' AS VARCHAR(2))) AS m")
+              input.write.mode("overwrite").format(format).save(path)
+
+              val vectorizedReaderModes = if (format == "orc") Seq(true, false) else Seq(true)
+              vectorizedReaderModes.foreach { vectorizedReaderEnabled =>
+                withSQLConf(
+                    SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                      vectorizedReaderEnabled.toString) {
+                  val readBack = spark.read.format(format).load(path)
+                  assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema),
+                    s"$format $sourceVersion lost CHAR/VARCHAR schema")
+                  checkAnswer(
+                    readBack.selectExpr(
+                      "concat('<', c, '>')",
+                      "v",
+                      "concat('<', s.c, '>')",
+                      "a",
+                      "m"),
+                    Row("<ab  >", "xy", "<z >", Seq("q"), Map("k " -> "v")))
+
+                  withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+                    val readOff = spark.read.format(format).load(path)
+                    assert(DataType.equalsIgnoreNullability(
+                      readOff.schema,
+                      CharVarcharUtils.replaceCharVarcharWithString(input.schema)))
+                  }
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true",
+                      SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+                    assert(DataType.equalsIgnoreNullability(
+                      spark.read.format(format).load(path).schema,
+                      input.schema))
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      Seq("parquet", "orc", "csv").foreach { format =>
+        Seq("v1" -> format, "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+          withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> useV1List) {
+            withTempPath { dir =>
+              Seq("ab").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              val charDf = spark.read.schema("c CHAR(4)").format(format)
+                .load(dir.getCanonicalPath)
+              checkAnswer(charDf.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+            }
+            withTempPath { dir =>
+              Seq("abcdef").toDF("c").write.format(format).save(dir.getCanonicalPath)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(s"$format $sourceVersion $typ: ") {
+                  // CSV's default PERMISSIVE mode treats a length overflow as a corrupt
+                  // field (null). FAILFAST surfaces EXCEED_LIMIT_LENGTH, matching from_csv.
+                  val reader = spark.read.schema(s"c $typ(4)").format(format)
+                  if (format == "csv") {
+                    val csvDf = reader.option("mode", "FAILFAST")
+                      .load(dir.getCanonicalPath)
+                    assertParseExceedLimitError(csvDf.collect(), expectedLimit = "4")
+                  } else {
+                    val readDf = reader.load(dir.getCanonicalPath)
+                    checkError(
+                      exception = intercept[SparkRuntimeException] {
+                        readDf.collect()
+                      },
+                      condition = "EXCEED_LIMIT_LENGTH",
+                      parameters = Map("limit" -> "4"))
+                  }
+                }
+              }
+            }
+
+            val table = s"std_${format}_${sourceVersion}_assignment"
+            withTable(table) {
+              sql(s"CREATE TABLE $table (c CHAR(4), v VARCHAR(4)) USING $format")
+              sql(s"INSERT INTO $table VALUES ('ab', 'xy')")
+              assert(spark.table(table).schema.map(_.dataType) ===
+                Seq(CharType(4), VarcharType(4)))
+              checkAnswer(
+                sql(s"SELECT concat('<', c, '>'), v FROM $table"),
+                Row("<ab  >", "xy"))
+              checkError(
+                exception = intercept[SparkRuntimeException] {
+                  sql(s"INSERT INTO $table VALUES ('abcde', 'xy')").collect()
+                },
+                condition = "EXCEED_LIMIT_LENGTH",
+                parameters = Map("limit" -> "4"))
+            }
+          }
+        }
+      }
+
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key -> vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "named_struct('c', 'abcdef') AS s",
+                "array('abcdef') AS a",
+                "map('abcdef', 'ok') AS mk",
+                "map('ok', 'abcdef') AS mv")
+                .write.mode("overwrite").orc(path)
+              val readBack = spark.read.schema(
+                """s STRUCT<c: CHAR(4)>,
+                  |a ARRAY<VARCHAR(4)>,
+                  |mk MAP<CHAR(4), VARCHAR(4)>,
+                  |mv MAP<CHAR(4), VARCHAR(4)>""".stripMargin).orc(path)
+              Seq("s.c", "a", "mk", "mv").foreach { field =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $field: ") {
+                  checkError(
+                    exception = intercept[SparkRuntimeException] {
+                      readBack.selectExpr(field).collect()
+                    },
+                    condition = "EXCEED_LIMIT_LENGTH",
+                    parameters = Map("limit" -> "4"))
+                }
+              }
+            }
+            // Spark ORC files store CHAR/VARCHAR as STRING plus spark.sql.catalyst.type metadata.
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              val input = Dataset.ofRows(spark, Project(Seq(
+                Alias(Literal(UTF8String.fromString("ab"), CharType(4)), "c")(),
+                Alias(Literal(UTF8String.fromString("xy"), VarcharType(4)), "v")()),
+                OneRowRelation()))
+              input.write.mode("overwrite").orc(path)
+              val readBack = spark.read.orc(path)
+              assert(readBack.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+              checkAnswer(
+                readBack.selectExpr("concat('<', c, '>')", "v"),
+                Row("<ab  >", "xy"))
+            }
+
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("v").write.mode("overwrite").orc(path)
+              val table = "std_orc_view_source"
+              val view = "std_orc_view"
+              withTable(table) {
+                withView(view) {
+                  sql(s"CREATE TABLE $table (v VARCHAR(4)) USING orc LOCATION '$path'")
+                  sql(s"CREATE VIEW $view AS SELECT v FROM $table")
+                  // The view was created under standard semantics, but the caller session does not
+                  // use them.
+                  withSQLConf(
+                      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+                      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+                    withClue(
+                        s"ORC view $sourceVersion vectorized=$vectorizedReaderEnabled: ") {
+                      checkError(
+                        exception = intercept[SparkRuntimeException] {
+                          sql(s"SELECT * FROM $view").collect()
+                        },
+                        condition = "EXCEED_LIMIT_LENGTH",
+                        parameters = Map("limit" -> "4"))
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // First-class types off: CAST CHAR is STRING before the writer, so ORC does not stamp CHAR.
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          spark.range(1).selectExpr("cast('ab' AS CHAR(4)) AS c")
+            .write.mode("overwrite").orc(path)
+          assert(spark.read.orc(path).schema.head.dataType === StringType)
+        }
+      }
+      // ORC stamps collated unbounded STRING as plain "string"; the inferred type is the
+      // same as Avro, which omits the catalyst property on unbounded STRING.
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).selectExpr("cast('ab' AS STRING COLLATE UTF8_LCASE) AS c")
+          .write.mode("overwrite").orc(path)
+        assert(spark.read.orc(path).schema.head.dataType === StringType)
+      }
+
+      // Avro conversion stamps CHAR/VARCHAR (including nested fields and CHAR map keys).
+      // The avro data source lives in connector/avro; sql/core still owns toAvroType,
+      // serializer, and deserializer, so round-trip CHAR/VARCHAR here with a DataFileWriter.
+      val converters = org.apache.spark.sql.avro.SchemaConverters
+      Seq(CharType(5), VarcharType(7)).foreach { dt =>
+        val avro = converters.toAvroType(dt, nullable = false)
+        val back = converters.toSqlType(avro).dataType
+        assert(back === dt, s"Avro round-trip lost $dt, got $back")
+      }
+      val nestedSchema = new StructType()
+        .add("c", CharType(4))
+        .add("s", new StructType().add("f", VarcharType(3)))
+        .add("m", MapType(CharType(2), VarcharType(3)))
+      val nestedAvro = converters.toAvroType(nestedSchema, nullable = false)
+      assert(converters.toSqlType(nestedAvro).dataType === nestedSchema)
+      val badStamp = org.apache.avro.SchemaBuilder.builder().stringType()
+      badStamp.addProp("spark.sql.catalyst.type", "int")
+      val badStampErr = intercept[Exception] {
+        converters.toSqlType(badStamp)
+      }
+      assert(badStampErr.getMessage.contains("STRING subtype") ||
+        Option(badStampErr.getCause).exists(_.getMessage.contains("STRING subtype")))
+      // Flag-off replace happens before Avro sees the type, so CHAR is not stamped.
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val replaced = CharVarcharUtils.replaceCharVarcharWithString(CharType(4))
+        assert(replaced === StringType)
+        val replacedAvro = converters.toAvroType(replaced, nullable = false)
+        assert(replacedAvro.getProp("spark.sql.catalyst.type") === null)
+        assert(converters.toSqlType(replacedAvro).dataType === StringType)
+      }
+
+      withTempPath { file =>
+        val ser = new org.apache.spark.sql.avro.AvroSerializer(
+          nestedSchema, nestedAvro, nullable = false)
+        // File-scan deserializers do not assign CHAR padding; values are stored padded.
+        val row = org.apache.spark.sql.catalyst.InternalRow(
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab  "),
+          org.apache.spark.sql.catalyst.InternalRow(
+            org.apache.spark.unsafe.types.UTF8String.fromString("xy")),
+          new org.apache.spark.sql.catalyst.util.ArrayBasedMapData(
+            new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
+              org.apache.spark.unsafe.types.UTF8String.fromString("k "))),
+            new org.apache.spark.sql.catalyst.util.GenericArrayData(Array(
+              org.apache.spark.unsafe.types.UTF8String.fromString("v")))))
+        val record = ser.serialize(row)
+          .asInstanceOf[org.apache.avro.generic.GenericRecord]
+        val writer = new org.apache.avro.file.DataFileWriter(
+          new org.apache.avro.generic.GenericDatumWriter[org.apache.avro.generic.GenericRecord](
+            nestedAvro))
+        writer.create(nestedAvro, file)
+        writer.append(record)
+        writer.close()
+        val reader = new org.apache.avro.file.DataFileReader(
+          file,
+          new org.apache.avro.generic.GenericDatumReader[org.apache.avro.generic.GenericRecord]())
+        try {
+          assert(converters.toSqlType(reader.getSchema).dataType === nestedSchema)
+          val deser = new org.apache.spark.sql.avro.AvroDeserializer(
+            nestedAvro, nestedSchema, "CORRECTED", false, "", -1)
+          val back = deser.deserialize(reader.next()).get
+            .asInstanceOf[org.apache.spark.sql.catalyst.InternalRow]
+          assert(back.getUTF8String(0).toString === "ab  ")
+          val nestedField = back.getStruct(1, 1)
+          assert(nestedField.getUTF8String(0).toString === "xy")
+          val mapData = back.getMap(2)
+          assert(mapData.numElements() === 1)
+          assert(mapData.keyArray().getUTF8String(0).toString === "k ")
+          assert(mapData.valueArray().getUTF8String(0).toString === "v")
+        } finally {
+          reader.close()
+        }
+      }
+
+      // SPARK-60242: from_avro-equivalent decode assigns CHAR/VARCHAR STRING values.
+      // File-scan deserializers (default) and to_avro encoding do not.
+      Seq(CharType(4), VarcharType(4)).foreach { dt =>
+        val avro = converters.toAvroType(dt, nullable = false)
+        val fromAvroDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = true,
+          charVarcharStandardSemanticsOverride = None)
+        val scanDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+          avro, dt, "CORRECTED", false, "", -1)
+        val padded = dt match {
+          case _: CharType => "ab  "
+          case _ => "ab"
+        }
+        assert(
+          fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === padded,
+          s"from_avro-equivalent decode should assign $dt")
+        assert(
+          scanDeser.deserialize(new org.apache.avro.util.Utf8("ab")).get.toString === "ab",
+          s"file-scan decode should not assign $dt")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            fromAvroDeser.deserialize(new org.apache.avro.util.Utf8("abcde"))
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+        val ser = new org.apache.spark.sql.avro.AvroSerializer(dt, avro, nullable = false)
+        val encoded = ser.serialize(
+          org.apache.spark.unsafe.types.UTF8String.fromString("ab"))
+          .asInstanceOf[org.apache.avro.util.Utf8]
+        assert(encoded.toString === "ab", s"to_avro-equivalent encode should not assign $dt")
+      }
+
+      val enumSchema = org.apache.avro.Schema.createEnum(
+        "Spark60242Enum", "", "", java.util.Arrays.asList("ab", "cd"))
+      val enumVal = new org.apache.avro.generic.GenericData.EnumSymbol(enumSchema, "ab")
+      val enumDeser = new org.apache.spark.sql.avro.AvroDeserializer(
+        enumSchema, CharType(4), "CORRECTED", false, "", -1,
+        applyCharVarcharAssignment = true,
+        charVarcharStandardSemanticsOverride = None)
+      assert(
+        enumDeser.deserialize(enumVal).get.toString === "ab",
+        "ENUM symbols must not be CHAR-padded")
+
+      val mapDt = MapType(CharType(2), IntegerType)
+      val mapAvro = converters.toAvroType(mapDt, nullable = false)
+      val shortKeyMap = new java.util.HashMap[AnyRef, AnyRef]()
+      shortKeyMap.put(new org.apache.avro.util.Utf8("a"), Integer.valueOf(1))
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        val captured = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1,
+          applyCharVarcharAssignment = false,
+          charVarcharStandardSemanticsOverride = Some(true))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            captured.deserialize(shortKeyMap)
+          },
+          condition = "UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY",
+          sqlState = "0A000",
+          parameters = Map("key" -> "'a'", "dataType" -> "\"CHAR(2)\""))
+        val live = new org.apache.spark.sql.avro.AvroDeserializer(
+          mapAvro, mapDt, "CORRECTED", false, "", -1)
+        val liveMap = live.deserialize(shortKeyMap).get
+          .asInstanceOf[org.apache.spark.sql.catalyst.util.MapData]
+        assert(liveMap.keyArray().getUTF8String(0).toString === "a")
+      }
+
+      // JSON has no embedded schema, so a user-specified schema supplies the logical type.
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).selectExpr("cast(id AS STRING) AS c").write.mode("overwrite")
+          .json(s"$path/json")
+        val jsonDf = spark.read.schema("c CHAR(5)").json(s"$path/json")
+        assert(jsonDf.schema.head.dataType === CharType(5))
+        checkAnswer(jsonDf.selectExpr("concat('<', c, '>')"), Row("<0    >"))
+      }
+    }
+  }
+
+  test("SPARK-58814: preserve-only ORC CHAR/VARCHAR inference and STRING values") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      Seq("v1" -> "orc", "v2" -> "").foreach { case (sourceVersion, useV1List) =>
+        Seq(true, false).foreach { vectorizedReaderEnabled =>
+          withSQLConf(
+              SQLConf.USE_V1_SOURCE_LIST.key -> useV1List,
+              SQLConf.ORC_VECTORIZED_READER_ENABLED.key ->
+                vectorizedReaderEnabled.toString) {
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              spark.range(1).selectExpr(
+                "cast('ab' AS CHAR(4)) AS c",
+                "cast('xy' AS VARCHAR(4)) AS v")
+                .write.mode("overwrite").orc(path)
+              val inferred = spark.read.orc(path)
+              withClue(s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled infer: ") {
+                assert(inferred.schema.map(_.dataType) === Seq(CharType(4), VarcharType(4)))
+                checkAnswer(
+                  inferred.selectExpr("concat('<', c, '>')", "v"),
+                  Row("<ab  >", "xy"))
+              }
+            }
+            withTempPath { dir =>
+              val path = dir.getCanonicalPath
+              Seq("abcdef").toDF("c").write.mode("overwrite").orc(path)
+              Seq("CHAR", "VARCHAR").foreach { typ =>
+                withClue(
+                    s"ORC $sourceVersion vectorized=$vectorizedReaderEnabled $typ: ") {
+                  val readDf = spark.read.schema(s"c $typ(4)").orc(path)
+                  assert(readDf.schema.head.dataType ===
+                    (if (typ == "CHAR") CharType(4) else VarcharType(4)))
+                  // Collect InternalRows so CHAR does not hit SafeProjection write-side
+                  // checks. This pins that ORC did not truncate the stored STRING.
+                  val values = readDf.queryExecution.toRdd.map(_.getUTF8String(0).toString)
+                    .collect()
+                  assert(values === Array("abcdef"))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58802: single-pass resolver agrees with fixed-point under standardSemantics") {
+    // Dual run defaults to on under tests, but pin it explicitly so this coverage cannot be
+    // silently lost: the HybridAnalyzer compares output schema and normalized plan across the
+    // two analyzers and fails with HYBRID_ANALYZER_EXCEPTION on any divergence. Resolver has no
+    // Char/Varchar-specific logic; it inherits Expression.dataType and shared TypeCoercion, so
+    // this matrix is the proof that least common type, CAST, and promotion stay aligned.
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "true",
+        SQLConf.ANALYZER_DUAL_RUN_SAMPLE_RATE.key -> "1.0",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_EXPOSE_RESOLVER_GUARD_FAILURE.key -> "true") {
+      def sql(sqlText: String): DataFrame = {
+        val parsed = spark.sessionState.sqlParser.parsePlan(sqlText)
+        val unsupportedReason =
+          new ResolverGuard(spark.sessionState.catalogManager).apply(parsed).planUnsupportedReason
+        assert(
+          unsupportedReason.isEmpty,
+          s"ResolverGuard skipped dual-run for [$sqlText]: $unsupportedReason")
+        spark.sql(sqlText)
+      }
+
+      // CAST / try_cast introduce the type.
+      assert(sql("SELECT CAST('ab' AS CHAR(5)) AS c").schema.head.dataType === CharType(5))
+      assert(sql("SELECT CAST('hello' AS VARCHAR(5)) AS c").schema.head.dataType ===
+        VarcharType(5))
+      assert(sql("SELECT try_cast('abcdef' AS CHAR(2)) AS c").schema.head.dataType ===
+        CharType(2))
+      checkAnswer(sql("SELECT try_cast('abcdef' AS VARCHAR(2)) AS c"), Row("ab"))
+      checkAnswer(
+        sql("SELECT coalesce(CAST('abcdef' AS VARCHAR(2)), CAST('x' AS VARCHAR(4))) AS c"),
+        Row("ab"))
+      checkAnswer(
+        sql("SELECT CAST('abcdef' AS VARCHAR(2)) IN (CAST('ab' AS VARCHAR(4)))"),
+        Row(true))
+      checkAnswer(
+        sql("""SELECT coalesce(
+          |  CAST('abcdef' AS VARCHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('x' AS VARCHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin),
+        Row("ab"))
+
+      // Least common type: COALESCE / CASE / NULL / CHAR+VARCHAR / CHAR+STRING.
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS VARCHAR(3)), CAST('bb' AS VARCHAR(7))) AS c")
+        .schema.head.dataType === VarcharType(7))
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(2)), CAST('bb' AS VARCHAR(4))) AS c")
+        .schema.head.dataType === VarcharType(4))
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(2)), 'bb') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql(
+        "SELECT coalesce(CAST('a' AS CHAR(5)), CAST(NULL AS CHAR(5))) AS c")
+        .schema.head.dataType === CharType(5))
+      assert(sql(
+        "SELECT CASE WHEN true THEN CAST('a' AS CHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
+        .schema.head.dataType === CharType(4))
+      assert(sql(
+        "SELECT CASE WHEN false THEN CAST('a' AS VARCHAR(2)) ELSE CAST('bb' AS CHAR(4)) END AS c")
+        .schema.head.dataType === VarcharType(4))
+
+      // IN-list common type (side condition uses LCT; result is boolean).
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2)) IN (CAST('a ' AS CHAR(2)), CAST('bbb' AS VARCHAR(3)))"),
+        Row(true))
+
+      // Transforming operators return STRING.
+      assert(sql("SELECT upper(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT lower(CAST('AB' AS VARCHAR(2))) AS c").schema.head.dataType ===
+        StringType)
+      assert(sql("SELECT CAST('a' AS CHAR(1)) || CAST('b' AS VARCHAR(1)) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT concat(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(3))) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT substr(CAST('hello' AS VARCHAR(5)), 1, 2) AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT trim(CAST('ab  ' AS CHAR(4))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT regexp_replace(CAST('ab' AS CHAR(2)), 'a', 'x') AS c")
+        .schema.head.dataType === StringType)
+      assert(sql("SELECT mask(CAST('ab' AS CHAR(2))) AS c").schema.head.dataType === StringType)
+      assert(sql("SELECT split(CAST('a,b' AS CHAR(3)), ',') AS c").schema.head.dataType ===
+        ArrayType(StringType, containsNull = false))
+      // Promotion after least common type: coalesce stays CHAR, upper widens to STRING.
+      assert(sql(
+        "SELECT upper(coalesce(CAST('a' AS CHAR(2)), CAST('b' AS CHAR(4)))) AS c")
+        .schema.head.dataType === StringType)
+
+      // Set-operation LCT.
+      val union = sql(
+        """SELECT CAST('a' AS VARCHAR(3)) AS c
+          |UNION ALL
+          |SELECT CAST('abcd' AS VARCHAR(8)) AS c""".stripMargin)
+      assert(union.schema.head.dataType === VarcharType(8))
+      checkAnswer(union, Seq(Row("a"), Row("abcd")))
+
+      val intersect = sql(
+        """SELECT CAST('ab' AS CHAR(2)) AS c
+          |INTERSECT
+          |SELECT CAST('ab' AS CHAR(4)) AS c""".stripMargin)
+      assert(intersect.schema.head.dataType === CharType(4))
+      checkAnswer(intersect, Seq(Row("ab  ")))
+
+      // Nested types keep CHAR/VARCHAR through analysis.
+      assert(sql("SELECT array(CAST('a' AS CHAR(2)), CAST('bb' AS CHAR(3))) AS c")
+        .schema.head.dataType === ArrayType(CharType(3), containsNull = false))
+      assert(sql("SELECT struct(CAST('a' AS CHAR(2)) AS f) AS c")
+        .schema.head.dataType ===
+        StructType(Seq(StructField("f", CharType(2), nullable = false))))
+
+      // Collated mixed-length LCT (the CollationTypeCoercion equal-strength and
+      // mixed-strength paths). Set ops have a separate resolver path.
+      assert(sql(
+        """SELECT coalesce(
+          |  CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  CAST('bb' AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      assert(sql(
+        """SELECT coalesce(
+          |  CAST('a' AS CHAR(2) COLLATE UTF8_LCASE),
+          |  CAST(1 AS CHAR(4) COLLATE UTF8_LCASE)) AS c""".stripMargin)
+        .schema.head.dataType === CharType(4, "UTF8_LCASE"))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) = " +
+          "CAST('a' AS CHAR(4) COLLATE UTF8_LCASE)"),
+        Row(true))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) IN " +
+          "(CAST('a' AS CHAR(4) COLLATE UTF8_LCASE))"),
+        Row(true))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) = " +
+          "CAST('a' AS VARCHAR(2) COLLATE UTF8_LCASE)"),
+        Row(false))
+      checkAnswer(
+        sql("SELECT CAST('a' AS CHAR(2) COLLATE UTF8_LCASE) IN " +
+          "(CAST('a' AS VARCHAR(2) COLLATE UTF8_LCASE))"),
+        Row(false))
+
+      val mixedCharUnion = sql(
+        """SELECT CAST('a' AS CHAR(2)) AS c
+          |UNION ALL
+          |SELECT CAST('bb' AS CHAR(4)) AS c""".stripMargin)
+      assert(mixedCharUnion.schema.head.dataType === CharType(4))
+      checkAnswer(mixedCharUnion, Seq(Row("a   "), Row("bb  ")))
+
+      // Bare column references keep the declared type through dual-run analysis.
+      withTable("char_varchar_dual_run") {
+        spark.sql("CREATE TABLE char_varchar_dual_run (c CHAR(5), v VARCHAR(5)) USING parquet")
+        spark.sql("INSERT INTO char_varchar_dual_run VALUES ('ab', 'ab')")
+        val df = sql("SELECT c, v FROM char_varchar_dual_run")
+        assert(df.schema("c").dataType === CharType(5))
+        assert(df.schema("v").dataType === VarcharType(5))
+        checkAnswer(df, Row("ab   ", "ab"))
+      }
     }
   }
 
@@ -1010,6 +2834,1224 @@ class BasicCharVarcharTestSuite extends SharedSparkSession {
       }
     }
   }
+
+  test("SPARK-59001: empty CHAR/VARCHAR partition values become null like STRING") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // CHAR(n>0) pads '' to spaces; CHAR(0) is the empty CHAR that empty2null should treat
+      // the same as VARCHAR/STRING.
+      Seq("CHAR(0)", "VARCHAR(5)").foreach { typ =>
+        withTempPath { path =>
+          sql(s"SELECT 0 AS id, CAST('' AS $typ) AS p UNION ALL SELECT 1, CAST(NULL AS $typ)")
+            .write.mode("overwrite").partitionBy("p").parquet(path.getCanonicalPath)
+          val df = spark.read.parquet(path.getCanonicalPath)
+          checkAnswer(df.where("p IS NULL").select("id"), Seq(Row(0), Row(1)))
+          val dirs = path.listFiles().filterNot(
+            f => f.getName.startsWith(".") || f.getName.startsWith("_"))
+          assert(dirs.length === 1, dirs.map(_.getName).mkString(","))
+        }
+      }
+    }
+  }
+
+  test("SPARK-59001: text datasource accepts CHAR/VARCHAR as a string family type") {
+    Seq("text", "").foreach { useV1SourceList =>
+      withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.USE_V1_SOURCE_LIST.key -> useV1SourceList) {
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT CAST('ab' AS CHAR(4)) AS value").write.mode("overwrite").text(path)
+          val df = spark.read.schema("value CHAR(4)").text(path)
+          assert(df.schema.head.dataType === CharType(4))
+          checkAnswer(df.selectExpr("concat('<', value, '>')"), Row("<ab  >"))
+        }
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT CAST('cd' AS VARCHAR(5)) AS value").write.mode("overwrite").text(path)
+          val df = spark.read.schema("value VARCHAR(5)").text(path)
+          assert(df.schema.head.dataType === VarcharType(5))
+          checkAnswer(df, Row("cd"))
+        }
+        // Oversize non-blank text values fail on scan, matching parquet/orc/avro.
+        Seq("CHAR", "VARCHAR").foreach { typ =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql("SELECT 'abcdef' AS value").write.mode("overwrite").text(path)
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                spark.read.schema(s"value $typ(2)").text(path).collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: from_json/csv/xml honor CHAR/VARCHAR under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // CHAR padding is part of the STRING value after CAST. Parsers do not rtrim it.
+      // from_json on padded CHAR must match the same document as STRING with trailing spaces.
+      checkAnswer(
+        sql("""SELECT from_json(CAST('{"a":1}' AS CHAR(12)), 'a INT')"""),
+        sql("""SELECT from_json('{"a":1}     ', 'a INT')"""))
+      // XML ignores trailing whitespace, so a padded CHAR document still parses.
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  CAST('<ROW><a>1</a></ROW>' AS CHAR(30)),
+            |  'a INT')""".stripMargin),
+        Row(Row(1)))
+      // Malformed padded CHAR documents keep the full pad in the corrupt record.
+      // Reinstating rtrim would drop those trailing spaces from _unparsed.
+      checkAnswer(
+        sql(
+          """SELECT from_json(
+            |  CAST('{"a":' AS CHAR(12)),
+            |  'a INT, _unparsed STRING',
+            |  map('columnNameOfCorruptRecord', '_unparsed'))""".stripMargin),
+        Row(Row(null, "{\"a\":       ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  CAST('<ROW>' AS CHAR(10)),
+            |  'a INT, _unparsed STRING',
+            |  map('columnNameOfCorruptRecord', '_unparsed'))""".stripMargin),
+        Row(Row(null, "<ROW>     ")))
+      // With a space delimiter, CHAR padding tokenizes into extra empty fields.
+      checkAnswer(
+        sql(
+          """SELECT schema_of_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  map('delimiter', ' '))""".stripMargin),
+        Row("STRUCT<_c0: INT, _c1: STRING, _c2: STRING>"))
+      checkAnswer(
+        sql(
+          """SELECT from_csv(
+            |  CAST('1' AS CHAR(3)),
+            |  '_c0 INT',
+            |  map('delimiter', ' '))""".stripMargin),
+        Row(Row(1)))
+      checkError(
+        exception = intercept[SparkException] {
+          sql(
+            """SELECT from_csv(
+              |  CAST('1' AS CHAR(3)),
+              |  '_c0 INT',
+              |  map('delimiter', ' ', 'mode', 'FAILFAST'))""".stripMargin).collect()
+        },
+        condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+        parameters = Map("badRecord" -> "[1]", "failFastMode" -> "FAILFAST"))
+      Seq(
+        "CAST('1 ' AS VARCHAR(2))",
+        "CAST('1 ' AS STRING)").foreach { input =>
+        checkAnswer(
+          sql(s"SELECT schema_of_csv($input, map('delimiter', ' '))"),
+          Row("STRUCT<_c0: INT, _c1: STRING>"))
+      }
+      // Default comma delimiter: padding lands on the unquoted last field.
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1' AS CHAR(3)))"),
+        Row("STRUCT<_c0: DOUBLE>"))
+      checkAnswer(
+        sql("SELECT from_csv(CAST('1,2' AS CHAR(5)), 'a INT, b INT')"),
+        Row(Row(1, null)))
+      checkAnswer(
+        sql("SELECT from_csv(CAST('1,ab' AS CHAR(6)), 'a INT, b STRING')"),
+        Row(Row(1, "ab  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_csv(
+            |  CAST('1,2' AS CHAR(5)),
+            |  'a INT, b INT',
+            |  map('ignoreTrailingWhiteSpace', 'true'))""".stripMargin),
+        Row(Row(1, 2)))
+      withTable("csv_char_doc") {
+        sql("CREATE TABLE csv_char_doc(c CHAR(5)) USING parquet")
+        sql("INSERT INTO csv_char_doc VALUES ('1,2')")
+        checkAnswer(
+          sql("SELECT from_csv(c, 'a INT, b INT') FROM csv_char_doc"),
+          Row(Row(1, null)))
+      }
+
+      val jsonChar = sql("""SELECT from_json('{"a": "str"}', 'a CHAR(5)')""")
+      val jsonCharType = jsonChar.schema.head.dataType.asInstanceOf[StructType]
+      assert(jsonCharType.head.dataType === CharType(5))
+      checkAnswer(jsonChar, Row(Row("str  ")))
+
+      val jsonVarchar = sql("""SELECT from_json('{"a": "ab"}', 'a VARCHAR(5)')""")
+      val jsonVarcharType = jsonVarchar.schema.head.dataType.asInstanceOf[StructType]
+      assert(jsonVarcharType.head.dataType === VarcharType(5))
+      checkAnswer(jsonVarchar, Row(Row("ab")))
+
+      // Default PERMISSIVE mode returns a parsed struct whose failed field is null.
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"""SELECT from_json('{"a": "abcdef"}', 'a $dataType')"""),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"""SELECT from_json(
+             |  '{"a": "abcdef"}',
+             |  'a $dataType',
+             |  map('mode', 'FAILFAST'))""".stripMargin)
+      }
+
+      checkAnswer(sql("SELECT from_csv('str', 'a CHAR(5)')"), Row(Row("str  ")))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(sql(s"SELECT from_csv('abcdef', 'a $dataType')"), Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_csv('abcdef', 'a $dataType', map('mode', 'FAILFAST'))")
+      }
+
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><a>str</a></ROW>', 'a CHAR(5)')"),
+        Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><a></a></ROW>',
+            |  'a CHAR(5)',
+            |  map('nullValue', 'NULL'))""".stripMargin),
+        Row(Row("     ")))
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { dataType =>
+        checkAnswer(
+          sql(s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType')"),
+          Row(Row(null)))
+        assertParseExceedLimit(
+          s"SELECT from_xml('<ROW><a>abcdef</a></ROW>', 'a $dataType', " +
+            "map('mode', 'FAILFAST'))")
+      }
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(Map("ab" -> 1))))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(4), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>str</other></ROW>',
+            |  'xs_any CHAR(5)',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row("str  ")))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><first>a</first><second>bc</second></ROW>',
+            |  'xs_any ARRAY<CHAR(5)>',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(Seq("a    ", "bc   "))))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>abcdef</other></ROW>',
+            |  'xs_any CHAR(5)',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(null)))
+      checkAnswer(
+        sql(
+          """SELECT from_xml(
+            |  '<ROW><other>abcdef</other></ROW>',
+            |  'xs_any ARRAY<CHAR(5)>',
+            |  map('wildcardColName', 'xs_any'))""".stripMargin),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><other>abcdef</other></ROW>',
+          |  'xs_any CHAR(5)',
+          |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><other>abcdef</other></ROW>',
+          |  'xs_any ARRAY<CHAR(5)>',
+          |  map('wildcardColName', 'xs_any', 'mode', 'FAILFAST'))""".stripMargin)
+      withTempPath { path =>
+        Seq("<ROW><m><ab>1</ab></m></ROW>").toDS().write.text(path.getCanonicalPath)
+        val xmlDataFrame = spark.read
+          .option("rowTag", "ROW")
+          .schema("m MAP<CHAR(2), INT>")
+          .xml(path.getCanonicalPath)
+        assert(
+          xmlDataFrame.schema("m").dataType ===
+            MapType(CharType(2), IntegerType, valueContainsNull = true))
+        checkAnswer(xmlDataFrame, Row(Map("ab" -> 1)))
+      }
+      withTempPath { path =>
+        Seq("""{"c":"ab"}""").toDS().write.text(path.getCanonicalPath)
+        val jsonDataFrame = spark.read.schema("c CHAR(4)").json(path.getCanonicalPath)
+        assert(jsonDataFrame.schema("c").dataType === CharType(4))
+        checkAnswer(jsonDataFrame, Row("ab  "))
+      }
+      withTempPath { path =>
+        Seq("abcdef").toDS().write.text(path.getCanonicalPath)
+        val csvOverflow = spark.read.schema("c VARCHAR(4)").csv(path.getCanonicalPath)
+        assert(csvOverflow.schema("c").dataType === VarcharType(4))
+        checkAnswer(csvOverflow, Row(null))
+      }
+
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS VARCHAR(20)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("SELECT schema_of_csv(CAST('1,abc' AS VARCHAR(20)))"),
+        Row("STRUCT<_c0: INT, _c1: STRING>"))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS VARCHAR(40)))"),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("""SELECT length(CAST('{"a":1}' AS CHAR(20)))"""),
+        Row(20))
+      checkAnswer(
+        sql("""SELECT schema_of_json(CAST('{"a":1}' AS CHAR(20)))"""),
+        Row("STRUCT<a: BIGINT>"))
+      checkAnswer(
+        sql("SELECT length(CAST('1' AS CHAR(3)))"),
+        Row(3))
+      checkAnswer(
+        sql("SELECT length(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
+        Row(30))
+      checkAnswer(
+        sql("SELECT schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30)))"),
+        Row("STRUCT<a: BIGINT>"))
+      Seq(
+        "schema_of_json(CAST('{\"a\":1}' AS CHAR(20) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>",
+        "schema_of_csv(CAST('1' AS CHAR(3) COLLATE SR_AI), map('delimiter', ' '))" ->
+          "STRUCT<_c0: INT, _c1: STRING, _c2: STRING>",
+        "schema_of_xml(CAST('<ROW><a>1</a></ROW>' AS CHAR(30) COLLATE SR_AI))" ->
+          "STRUCT<a: BIGINT>").foreach { case (expression, expected) =>
+        checkAnswer(sql(s"SELECT $expression"), Row(expected))
+      }
+    }
+  }
+
+  test("SPARK-60103: XML CHAR/VARCHAR map keys are not padded or trimmed") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<CHAR(2), INT>').m"),
+        Row(Map("ab" -> 1)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab></m></ROW>', 'm MAP<VARCHAR(3), INT>').m"),
+        Row(Map("ab" -> 1)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>').m""".stripMargin),
+        Row(Map("ab" -> 1, "AB" -> 2)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
+          |  'm MAP<CHAR(2), INT>').m""".stripMargin),
+        Row(Map("ab" -> 2)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><outer><xy>1</xy></outer></m></ROW>',
+          |  'm MAP<STRING, MAP<CHAR(2), INT>>').m""".stripMargin),
+        Row(Map("outer" -> Map("xy" -> 1))))
+
+      // A key that fails length-check still lets later struct fields parse.
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><a>1</a></m><tail>2</tail></ROW>',
+          |  'm MAP<CHAR(2), INT>, tail INT')""".stripMargin),
+        Row(Row(null, 2)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><outer><z>1</z></outer></m><tail>2</tail></ROW>',
+          |  'm MAP<STRING, MAP<CHAR(2), INT>>, tail INT')""".stripMargin),
+        Row(Row(null, 2)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><outer><z>1</z></outer></m></ROW>',
+          |  'm MAP<STRING, MAP<CHAR(2), INT>>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "z",
+        dataTypeSql = "CHAR(2)")
+
+      // ARRAY<MAP<...>> uses convertField's MapType arm; a short key must still keep tail.
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><a>1</a></m><m><ab>2</ab></m><tail>9</tail></ROW>',
+          |  'm ARRAY<MAP<CHAR(2), INT>>, tail INT')""".stripMargin),
+        Row(Row(Seq(Map("ab" -> 2)), 9)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a></m><m><ab>2</ab></m></ROW>',
+          |  'm ARRAY<MAP<CHAR(2), INT>>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(2)")
+
+      // Default valueTag is "_VALUE" (6 characters). Text-only elements are malformed
+      // records (convertField), so use mixed content to reach convertMap.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><ab>1</ab>xy</m></ROW>', 'm MAP<CHAR(2), STRING>')"),
+        Row(Row(null)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><ab>1</ab>xy</m></ROW>',
+          |  'm MAP<CHAR(2), STRING>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "_VALUE",
+        dataTypeSql = "CHAR(2)")
+
+      // Too-short CHAR, CHAR overflow, and VARCHAR overflow are not EXCEED_LIMIT_LENGTH.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><a>1</a></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><abc>1</abc></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><abcd>1</abcd></m></ROW>', 'm MAP<VARCHAR(3), INT>')"),
+        Row(Row(null)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><a>1</a></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(2)")
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><abc>1</abc></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "abc",
+        dataTypeSql = "CHAR(2)")
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m><abcd>1</abcd></m></ROW>',
+          |  'm MAP<VARCHAR(3), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "abcd",
+        dataTypeSql = "VARCHAR(3)")
+
+      // A name longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error, as for JSON object names.
+      val longName = "a" * 200
+      assertUnsupportedXmlMapKey(
+        s"""SELECT from_xml(
+          |  '<ROW><m><$longName>1</$longName></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(2)")
+
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m a="1"><bc>2</bc></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', ''))""".stripMargin),
+        Row(Row(null)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m ab="1"><cd>2</cd></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('attributePrefix', ''))""".stripMargin),
+        Row(Row(Map("ab" -> 1, "cd" -> 2))))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m abc="1"><cd>2</cd></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', ''))""".stripMargin),
+        Row(Row(null)))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m abc="1"><cd>2</cd></m></ROW>',
+          |  'm MAP<VARCHAR(2), INT>',
+          |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
+        key = "abc",
+        dataTypeSql = "VARCHAR(2)")
+
+      // Default attributePrefix "_" is part of the key: local name ab is key _ab.
+      // Attribute-only elements are SQL NULL (convertField EndElement), so include a child.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m ab=\"1\"><xy>2</xy></m></ROW>', 'm MAP<CHAR(2), INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m ab=\"1\"><xyz>2</xyz></m></ROW>', 'm MAP<CHAR(3), INT>')"),
+        Row(Row(Map("_ab" -> 1, "xyz" -> 2))))
+      assertUnsupportedXmlMapKey(
+        """SELECT from_xml(
+          |  '<ROW><m ab="1"><xy>2</xy></m></ROW>',
+          |  'm MAP<CHAR(2), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        key = "_ab",
+        dataTypeSql = "CHAR(2)")
+
+      // MAP<STRING> empty, attribute-only, and text-only elements stay SQL NULL, matching
+      // convertField on master. ARRAY<MAP> empty elements are null entries, not {}.
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m></m></ROW>', 'm MAP<STRING, INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m a=\"1\"></m></ROW>', 'm MAP<STRING, INT>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m>xy</m></ROW>', 'm MAP<STRING, STRING>')"),
+        Row(Row(null)))
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m></m><tail>9</tail></ROW>',
+          |  'm ARRAY<MAP<STRING, INT>>, tail INT')""".stripMargin),
+        Row(Row(Seq(null), 9)))
+
+      withTempPath { path =>
+        Seq(
+          """<ROWS><ROW><m><ab>1</ab></m></ROW><ROW><m><a>1</a></m></ROW></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val schema = "m MAP<CHAR(2), INT>"
+        val permissive = spark.read
+          .option("rowTag", "ROW")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row(Map("ab" -> 1)), Row(null)))
+        val failFast = spark.read
+          .option("rowTag", "ROW")
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        assertUnsupportedXmlMapKeyError(failFast.collect(), key = "a", dataTypeSql = "CHAR(2)")
+        val ignoreCorrupt = spark.read
+          .option("rowTag", "ROW")
+          .option("ignoreCorruptFiles", "true")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(ignoreCorrupt, Seq(Row(Map("ab" -> 1)), Row(null)))
+      }
+
+      withTempPath { path =>
+        Seq(
+          """<ROWS><ROW><m><a>1</a></m></ROW><ROW><m><ab>2</ab></m></ROW></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val arraySchema = "m ARRAY<MAP<CHAR(2), INT>>"
+        val arrayPermissive = spark.read
+          .option("rowTag", "ROW")
+          .schema(arraySchema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(arrayPermissive, Seq(Row(null), Row(Seq(Map("ab" -> 2)))))
+      }
+
+      // format("xml").load() skips INVALID_XML_MAP_KEY_TYPE. Non-string keys must stay a
+      // malformed record (MatchError), not a mistyped map that fails with ClassCastException.
+      withTempPath { path =>
+        Seq("""<ROWS><ROW><m><a>x</a></m></ROW></ROWS>""")
+          .toDS().write.text(path.getCanonicalPath)
+        val intKeySchema = "m MAP<INT, STRING>"
+        val permissiveInt = spark.read
+          .format("xml")
+          .option("rowTag", "ROW")
+          .schema(intKeySchema)
+          .load(path.getCanonicalPath)
+        checkAnswer(permissiveInt, Seq(Row(null)))
+        val failFastInt = spark.read
+          .format("xml")
+          .option("rowTag", "ROW")
+          .option("mode", "FAILFAST")
+          .schema(intKeySchema)
+          .load(path.getCanonicalPath)
+        val error = intercept[Exception] { failFastInt.collect() }
+        val causes = Iterator.iterate[Throwable](error)(_.getCause).takeWhile(_ != null)
+        assert(
+          !causes.exists(_.isInstanceOf[ClassCastException]),
+          s"MAP<INT, STRING> XML read must not ClassCastException: $error")
+      }
+
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><ab>1</ab><ab>2</ab></m></ROW>',
+            |  'm MAP<VARCHAR(2), INT>').m""".stripMargin),
+          Row(Map("ab" -> 2)))
+      }
+
+      // Value overflow still uses EXCEED_LIMIT_LENGTH. A last-win duplicate whose winning
+      // value overflows nulls the map, matching the non-duplicate case.
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><ab>x</ab><ab>abcdef</ab></m></ROW>',
+          |  'm MAP<CHAR(2), CHAR(2)>')""".stripMargin),
+        Row(Row(null)))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><m><ab>x</ab><ab>abcdef</ab></m></ROW>',
+          |  'm MAP<CHAR(2), CHAR(2)>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        expectedLimit = "2")
+
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
+            |  'm MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin),
+          Row(Map("ab" -> 1, "AB" -> 2)))
+      }
+    }
+
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkAnswer(
+        sql("SELECT from_xml('<ROW><m><a>1</a></m></ROW>', 'm MAP<CHAR(3), INT>')"),
+        Row(Row(Map("a  " -> 1))))
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><m><abcd>1</abcd></m></ROW>',
+          |  'm MAP<CHAR(3), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        expectedLimit = "3")
+      assertParseExceedLimit(
+        """SELECT from_xml(
+          |  '<ROW><m><abcd>1</abcd></m></ROW>',
+          |  'm MAP<VARCHAR(3), INT>',
+          |  map('mode', 'FAILFAST'))""".stripMargin,
+        expectedLimit = "3")
+    }
+  }
+
+  test("SPARK-60103: XML map value overflow keeps siblings") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(5)", "VARCHAR(5)").foreach { valueType =>
+        val xml = "<ROW><m><xy>abcdef</xy></m><tail>9</tail></ROW>"
+        val schema = s"m MAP<CHAR(2), $valueType>, tail INT"
+        withClue(valueType) {
+          checkAnswer(sql(s"SELECT from_xml('$xml', '$schema')"), Row(Row(null, 9)))
+          assertParseExceedLimit(
+            s"SELECT from_xml('$xml', '$schema', map('mode', 'FAILFAST'))",
+            expectedLimit = "5")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: nested XML attribute failures preserve parser position") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("STRUCT<c CHAR(2), v INT>", "ARRAY<STRUCT<c VARCHAR(2), v INT>>")
+        .foreach { nestedType =>
+          val xml = "<ROW><nested c=\"abc\"><v>1</v></nested><tail>9</tail></ROW>"
+          val schema = s"nested $nestedType, tail INT"
+          val permissiveQuery =
+            s"""SELECT from_xml(
+               |  '$xml',
+               |  '$schema',
+               |  map('attributePrefix', ''))""".stripMargin
+          checkAnswer(sql(permissiveQuery), Row(Row(null, 9)))
+          assertParseExceedLimit(
+            s"""SELECT from_xml(
+               |  '$xml',
+               |  '$schema',
+               |  map('attributePrefix', '', 'mode', 'FAILFAST'))""".stripMargin,
+            expectedLimit = "2")
+        }
+    }
+  }
+
+  test("SPARK-60108: JSON CHAR/VARCHAR map keys are not padded or trimmed") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Exact CHAR and within-limit VARCHAR names are accepted as-is: the trailing space in
+      // "ab " is preserved for CHAR(3) and not trimmed for VARCHAR(3).
+      checkAnswer(
+        sql("""SELECT from_json('{"ab ": 1}', 'MAP<CHAR(3), INT>')"""),
+        Row(Map("ab " -> 1)))
+      checkAnswer(
+        sql("""SELECT from_json('{"ab": 1}', 'MAP<VARCHAR(3), INT>')"""),
+        Row(Map("ab" -> 1)))
+      // Binary-distinct names ("ab" vs "ab ") are both kept.
+      checkAnswer(
+        sql("""SELECT map_entries(from_json('{"ab": 1, "ab ": 2}', 'MAP<VARCHAR(3), INT>'))"""),
+        Row(Seq(Row("ab", 1), Row("ab ", 2))))
+      // Duplicate names are kept, exactly as for STRING keys; mapKeyDedupPolicy is not applied.
+      // checkAnswer alone would collapse the duplicates when it builds a Scala Map, so pin the
+      // behavior with size and map_entries.
+      checkAnswer(
+        sql("""SELECT size(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
+        Row(2))
+      checkAnswer(
+        sql("""SELECT map_entries(from_json('{"abc": 1, "abc": 2}', 'MAP<CHAR(3), INT>'))"""),
+        Row(Seq(Row("abc", 1), Row("abc", 2))))
+      // Length counts characters (code points), not UTF-16 units or bytes: one non-BMP code
+      // point is exactly CHAR(1) and is kept verbatim, and the same name is rejected by CHAR(2).
+      // scalastyle:off nonascii (the \u escape is decoded before the nonascii check runs)
+      val nonBmp = "\uD83D\uDE00" // U+1F600, one code point stored as a UTF-16 surrogate pair
+      // scalastyle:on nonascii
+      checkAnswer(
+        sql(s"""SELECT map_keys(from_json('{"$nonBmp": 1}', 'MAP<CHAR(1), INT>'))[0]"""),
+        Row(nonBmp))
+      checkAnswer(sql(s"""SELECT from_json('{"$nonBmp": 1}', 'MAP<CHAR(2), INT>')"""), Row(null))
+
+      // Length-0 boundary: CHAR(0)/VARCHAR(0) accept only the empty-string name, and any
+      // non-empty name is rejected (the empty key is still kept as a real map entry).
+      checkAnswer(
+        sql("""SELECT from_json('{"": 1}', 'MAP<CHAR(0), INT>')"""),
+        Row(Map("" -> 1)))
+      checkAnswer(
+        sql("""SELECT from_json('{"": 1}', 'MAP<VARCHAR(0), INT>')"""),
+        Row(Map("" -> 1)))
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(0), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<VARCHAR(0), INT>')"""), Row(null))
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<CHAR(0), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "CHAR(0)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<VARCHAR(0), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "VARCHAR(0)")
+
+      // A key longer than the 128-character echo cap is truncated with a trailing "..." in the
+      // error so a huge JSON object name does not bloat the message.
+      val longKey = "a" * 200
+      assertUnsupportedJsonMapKey(
+        s"""SELECT from_json('{"$longKey": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "a" * 128 + "...",
+        dataTypeSql = "CHAR(3)")
+
+      // Valid keys inside nested containers.
+      checkAnswer(
+        sql("""SELECT from_json('{"outer": {"xy ": 1}}',
+          |  'MAP<STRING, MAP<CHAR(3), INT>>')""".stripMargin),
+        Row(Map("outer" -> Map("xy " -> 1))))
+      checkAnswer(
+        sql("""SELECT from_json('[{"ab ": 1}]', 'ARRAY<MAP<CHAR(3), INT>>')"""),
+        Row(Seq(Map("ab " -> 1))))
+
+      // A rejected key makes the row a bad record: null in PERMISSIVE (not EXCEED_LIMIT_LENGTH),
+      // and in FAILFAST the UNSUPPORTED_JSON_CHAR_VARCHAR_MAP_KEY cause is surfaced.
+      checkAnswer(sql("""SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>')"""), Row(null))
+      checkAnswer(sql("""SELECT from_json('{"ab ": 1}', 'MAP<VARCHAR(2), INT>')"""), Row(null))
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"abcd": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "abcd",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"abcd": 1}', 'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST'))""",
+        key = "abcd",
+        dataTypeSql = "VARCHAR(3)")
+      // A rejected key inside a nested container is surfaced too (not swallowed).
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('{"outer": {"a": 1}}',
+          |  'MAP<STRING, MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+      assertUnsupportedJsonMapKey(
+        """SELECT from_json('[{"a": 1}]',
+          |  'ARRAY<MAP<CHAR(3), INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+
+      // The DataFrame functions.from_json path constructs JsonToStructs the same way and must
+      // behave identically: accepted key kept, rejected key null in PERMISSIVE and surfaced in
+      // FAILFAST.
+      checkAnswer(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"ab ": 1}"""), "MAP<CHAR(3), INT>", Map.empty[String, String])),
+        Row(Map("ab " -> 1)))
+      checkAnswer(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"a": 1}"""), "MAP<CHAR(3), INT>", Map.empty[String, String])),
+        Row(null))
+      assertUnsupportedJsonMapKeyError(
+        spark.range(1).select(
+          functions.from_json(
+            functions.lit("""{"a": 1}"""),
+            "MAP<CHAR(3), INT>",
+            Map("mode" -> "FAILFAST"))).collect(),
+        key = "a",
+        dataTypeSql = "CHAR(3)")
+
+      // SPARK-60108: a rejected key must not corrupt a sibling field of an enclosing struct.
+      // The map becomes null but the following `tail` field is still parsed, and an inner name
+      // ("tail") is not mistaken for the outer field. This holds in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val schema = "m MAP<CHAR(3), INT>, tail INT"
+          checkAnswer(
+            sql(s"""SELECT from_json('{"m":{"a":1},"tail":1}', '$schema')"""),
+            Row(Row(null, 1)))
+          checkAnswer(
+            sql(s"""SELECT from_json('{"m":{"a":1,"tail":5},"tail":1}', '$schema')"""),
+            Row(Row(null, 1)))
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json('{"m":{"a":1},"tail":1}', '$schema',
+               |  map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+
+      // A rejected key whose value is an object or array exercises skipChildren(): the entire
+      // nested value is consumed so the map is nulled and the sibling `tail` field survives, and
+      // in FAILFAST the key is still surfaced. This holds in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          checkAnswer(
+            sql("""SELECT from_json('{"m":{"a":{"x":1}},"tail":2}',
+              |  'm MAP<CHAR(3), STRUCT<x: INT>>, tail INT')""".stripMargin),
+            Row(Row(null, 2)))
+          checkAnswer(
+            sql("""SELECT from_json('{"m":{"a":[1,2,3]},"tail":2}',
+              |  'm MAP<CHAR(3), ARRAY<INT>>, tail INT')""".stripMargin),
+            Row(Row(null, 2)))
+          assertUnsupportedJsonMapKey(
+            """SELECT from_json('{"a":{"x":1}}',
+              |  'MAP<CHAR(3), STRUCT<x: INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+          assertUnsupportedJsonMapKey(
+            """SELECT from_json('{"a":[1,2,3]}',
+              |  'MAP<CHAR(3), ARRAY<INT>>', map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+
+      // SPARK-60108: a value that fails non-partially inside a CHAR/VARCHAR-keyed map (here an
+      // array element that is not an INT) must not let the map loop resume on a non-field token
+      // and NPE in the key check. The key "k" is a valid CHAR(1), so the key check is a no-op and
+      // the result must match the STRING-keyed baseline, in both partial-results modes.
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val json = """{"m":{"k":["x",2]},"tail":1}"""
+          val stringBaseline =
+            sql(s"SELECT from_json('$json', 'm MAP<STRING, ARRAY<INT>>, tail INT')")
+              .collect().toSeq
+          checkAnswer(
+            sql(s"SELECT from_json('$json', 'm MAP<CHAR(1), ARRAY<INT>>, tail INT')"),
+            stringBaseline)
+        }
+      }
+
+      // SPARK-60108: in PERMISSIVE mode a rejected key inside an array of maps nulls the whole
+      // array (array containment), dropping the otherwise-valid first element.
+      checkAnswer(
+        sql("""SELECT from_json('[{"abc":1},{"a":2}]', 'ARRAY<MAP<CHAR(3), INT>>')"""),
+        Row(null))
+
+      // multiLine + streaming top-level array: a bad key in one element must not add spurious
+      // rows. Two elements in, two rows out, with the bad element reported in _corrupt_record.
+      withTempPath { file =>
+        val document = """[{"m":{"a":1}},{"m":{"abc":2}}]"""
+        java.nio.file.Files.write(file.toPath,
+          document.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+        val df = spark.read
+          .schema("m MAP<CHAR(3), INT>, _corrupt_record STRING")
+          .option("multiLine", true)
+          .option("enableStreamingTopLevelArray", true)
+          .json(file.getCanonicalPath)
+        checkAnswer(df, Seq(Row(null, document), Row(Map("abc" -> 2), null)))
+      }
+
+      withTempPath { path =>
+        Seq("""{"m":{"ab ":1}}""", """{"m":{"a":1}}""").toDS()
+          .repartition(1)
+          .write.text(path.getCanonicalPath)
+        val schema = "m MAP<CHAR(3), INT>"
+        val permissive = spark.read.schema(schema).json(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row(Map("ab " -> 1)), Row(null)))
+        val failFast = spark.read.option("mode", "FAILFAST").schema(schema)
+          .json(path.getCanonicalPath)
+        assertUnsupportedJsonMapKeyError(failFast.collect(), key = "a", dataTypeSql = "CHAR(3)")
+      }
+
+      // SPARK-60108: a catalog JSON table keeps its MAP<CHAR(n), _> key type to the scan under
+      // standard semantics, so the scan runs the same key check (an off-width key is a bad
+      // record, nulled by the default PERMISSIVE mode) and, unlike `from_json`, rebuilds the map
+      // read-side, so `mapKeyDedupPolicy` applies and a duplicate name raises DUPLICATED_MAP_KEY
+      // under the default EXCEPTION policy.
+      withTable("t_spark_60108") {
+        withTempPath { path =>
+          Seq("""{"m":{"ab ":1}}""", """{"m":{"a":1}}""").toDS()
+            .repartition(1).write.text(path.getCanonicalPath)
+          sql(s"""CREATE TABLE t_spark_60108 (m MAP<CHAR(3), INT>)
+                 |USING json OPTIONS (path '${path.getCanonicalPath}')""".stripMargin)
+          checkAnswer(spark.table("t_spark_60108"), Seq(Row(Map("ab " -> 1)), Row(null)))
+        }
+      }
+      withTable("t_spark_60108_dup") {
+        withTempPath { path =>
+          Seq("""{"m":{"abc":1,"abc":2}}""").toDS()
+            .repartition(1).write.text(path.getCanonicalPath)
+          sql(s"""CREATE TABLE t_spark_60108_dup (m MAP<CHAR(3), INT>)
+                 |USING json OPTIONS (path '${path.getCanonicalPath}')""".stripMargin)
+          val error = intercept[Exception](spark.table("t_spark_60108_dup").collect())
+          val cause = Iterator.iterate[Throwable](error)(_.getCause)
+            .takeWhile(_ != null)
+            .collectFirst {
+              case e: SparkRuntimeException if e.getCondition == "DUPLICATED_MAP_KEY" => e
+            }
+            .getOrElse(fail("expected DUPLICATED_MAP_KEY cause", error))
+          checkError(
+            exception = cause,
+            condition = "DUPLICATED_MAP_KEY",
+            parameters = Map(
+              "key" -> "abc",
+              "mapKeyDedupPolicy" -> "\"spark.sql.mapKeyDedupPolicy\""))
+        }
+      }
+
+      // mapKeyDedupPolicy is not applied: EXCEPTION does not raise DUPLICATED_MAP_KEY, the
+      // duplicate names are simply kept, like STRING keys in JSON (XML, in contrast, keeps the
+      // last, matching STRING keys in XML).
+      withSQLConf(
+          SQLConf.MAP_KEY_DEDUP_POLICY.key -> SQLConf.MapKeyDedupPolicy.EXCEPTION.toString) {
+        checkAnswer(
+          sql("""SELECT map_entries(from_json('{"abc": 1, "abc": 2}', 'MAP<VARCHAR(3), INT>'))"""),
+          Row(Seq(Row("abc", 1), Row("abc", 2))))
+      }
+
+      // Collation is not consulted: binary-distinct names are both kept, and the collation is
+      // reported in the error message rather than dropped.
+      withSQLConf(SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+        checkAnswer(
+          sql("""SELECT map_entries(from_json('{"ab": 1, "AB": 2}',
+            |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>'))""".stripMargin),
+          Row(Seq(Row("ab", 1), Row("AB", 2))))
+        assertUnsupportedJsonMapKey(
+          """SELECT from_json('{"abc": 1}',
+            |  'MAP<VARCHAR(2) COLLATE UTF8_LCASE, INT>', map('mode', 'FAILFAST'))""".stripMargin,
+          key = "abc",
+          dataTypeSql = "VARCHAR(2) COLLATE UTF8_LCASE")
+      }
+    }
+
+    // The flag has PERSISTED binding, so a view created under standard semantics keeps the
+    // key check when queried from a session with the flag off (SPARK-60108, review follow-up).
+    withView("v_spark_60108") {
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        sql("""CREATE VIEW v_spark_60108 AS
+          |SELECT from_json('{"a": 1}', 'MAP<CHAR(3), INT>', map('mode', 'FAILFAST')) AS m"""
+          .stripMargin)
+      }
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+        assertUnsupportedJsonMapKeyError(
+          sql("SELECT * FROM v_spark_60108").collect(), key = "a", dataTypeSql = "CHAR(3)")
+      }
+    }
+
+    // With the flag off the new key check is not applied: a name that FAILFAST rejects under
+    // standard semantics is accepted, and from_json leaves the raw object name in place. (Any
+    // CHAR padding seen when the result is collected comes from the CHAR encoder, not from_json,
+    // so to_json is used here to observe exactly what from_json produced.)
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+      checkAnswer(
+        sql("""SELECT to_json(from_json('{"a": 1}',
+          |  'MAP<CHAR(3), INT>', map('mode', 'FAILFAST')))""".stripMargin),
+        Row("""{"a":1}"""))
+      checkAnswer(
+        sql("""SELECT to_json(from_json('{"abcd": 1}',
+          |  'MAP<VARCHAR(3), INT>', map('mode', 'FAILFAST')))""".stripMargin),
+        Row("""{"abcd":1}"""))
+    }
+  }
+
+  test("SPARK-60229: from_json(to_json) keeps CHAR/VARCHAR map key check") {
+    Seq(
+      ("CHAR(3)", "a", "t_spark_60229_char"),
+      ("VARCHAR(3)", "abcd", "t_spark_60229_varchar")
+    ).foreach { case (keyType, badKey, viewName) =>
+      withView(viewName) {
+        withSQLConf(
+            SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+            SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true") {
+          sql(s"""CREATE TEMPORARY VIEW $viewName AS
+            |SELECT from_json('{"$badKey":1}', 'MAP<$keyType, INT>') AS m""".stripMargin)
+        }
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+          checkAnswer(
+            sql(s"SELECT from_json(to_json(m), 'MAP<$keyType, INT>') FROM $viewName"),
+            Row(null))
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json(to_json(m), 'MAP<$keyType, INT>', map('mode', 'FAILFAST'))
+               |FROM $viewName""".stripMargin,
+            key = badKey,
+            dataTypeSql = keyType)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60229: nested struct map key rejection does not steal sibling fields") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val schema = "s STRUCT<m MAP<CHAR(3), INT>, tail INT>, tail INT"
+      // Inner tail after the map: without draining s, the parent can take inner tail=5
+      // and then hit s's END_OBJECT, never seeing outer tail=1.
+      val jsonAfter = """{"s":{"m":{"a":1},"tail":5},"tail":1}"""
+      // Inner tail after an already-parsed outer tail: without draining s, inner
+      // tail=5 overwrites the sibling that was already 1.
+      val jsonBefore = """{"tail":1,"s":{"m":{"a":1},"tail":5}}"""
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val expected = if (partial) {
+            Row(Row(Row(null, 5), 1))
+          } else {
+            Row(Row(null, 1))
+          }
+          Seq(jsonAfter, jsonBefore).foreach { json =>
+            checkAnswer(sql(s"SELECT from_json('$json', '$schema')"), expected)
+            assertUnsupportedJsonMapKey(
+              s"""SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))""",
+              key = "a",
+              dataTypeSql = "CHAR(3)")
+          }
+        }
+      }
+
+      // A failing array element must not leak inner field names to the parent, and
+      // later siblings must still be parsed.
+      val arrayJson = """{"tail":1,"arr":[{"m":{"a":1},"tail":5}],"after":2}"""
+      val arraySchema =
+        "tail INT, arr ARRAY<STRUCT<m MAP<CHAR(3), INT>, tail INT>>, after INT"
+      Seq(true, false).foreach { partial =>
+        withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+          val expected = if (partial) {
+            Row(Row(1, Seq(Row(null, 5)), 2))
+          } else {
+            Row(Row(1, null, 2))
+          }
+          checkAnswer(sql(s"SELECT from_json('$arrayJson', '$arraySchema')"), expected)
+          assertUnsupportedJsonMapKey(
+            s"""SELECT from_json('$arrayJson', '$arraySchema',
+               |  map('mode', 'FAILFAST'))""".stripMargin,
+            key = "a",
+            dataTypeSql = "CHAR(3)")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: JSON map value overflow keeps EXCEED_LIMIT_LENGTH") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val json = """{"m":{"k":"abcdef"},"tail":1}"""
+      val goodJson = """{"m":{"k":"ab"},"tail":2}"""
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { valueType =>
+        val schema = s"m MAP<STRING, $valueType>, tail INT"
+        val fromJson = s"SELECT from_json('$json', '$schema')"
+        Seq(true, false).foreach { partial =>
+          withSQLConf(SQLConf.JSON_ENABLE_PARTIAL_RESULTS.key -> partial.toString) {
+            withClue(s"$valueType partial=$partial") {
+              // SPARK-60229: a nested map value failure consumes the map object, so
+              // sibling `tail` is parsed in both partial-results modes.
+              checkAnswer(sql(fromJson), Row(Row(null, 1)))
+              assertParseExceedLimit(
+                s"SELECT from_json('$json', '$schema', map('mode', 'FAILFAST'))",
+                expectedLimit = "2")
+
+              withTempPath { path =>
+                Seq(json, goodJson).toDS()
+                  .repartition(1)
+                  .write.text(path.getCanonicalPath)
+                val fileSchema = schema
+                val permissive = spark.read.schema(fileSchema).json(path.getCanonicalPath)
+                checkAnswer(permissive, Seq(Row(null, 1), Row(Map("k" -> "ab"), 2)))
+                val failFast = spark.read
+                  .option("mode", "FAILFAST")
+                  .schema(fileSchema)
+                  .json(path.getCanonicalPath)
+                assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: XML rowTag attribute overflow uses parse mode") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR(2)", "VARCHAR(2)").foreach { attrType =>
+        withTempPath { path =>
+          Seq(
+            """<ROWS><ROW c="abcdef"><v>1</v></ROW><ROW c="ok"><v>2</v></ROW></ROWS>"""
+          ).toDS().write.text(path.getCanonicalPath)
+          val schema = s"c $attrType, v INT"
+          withClue(attrType) {
+            val permissive = spark.read
+              .option("rowTag", "ROW")
+              .option("attributePrefix", "")
+              .schema(schema)
+              .xml(path.getCanonicalPath)
+            checkAnswer(permissive, Seq(Row(null, 1), Row("ok", 2)))
+            val failFast = spark.read
+              .option("rowTag", "ROW")
+              .option("attributePrefix", "")
+              .option("mode", "FAILFAST")
+              .schema(schema)
+              .xml(path.getCanonicalPath)
+            assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-59274: mixed XML rowTag attributes keep valid siblings") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val xml = """<ROW good="ok" bad="abcdef"/>"""
+      val schema = "good CHAR(2), bad VARCHAR(2)"
+      val opts = "map('attributePrefix', '')"
+      checkAnswer(
+        sql(s"SELECT from_xml('$xml', '$schema', $opts)"),
+        Row(Row("ok", null)))
+      assertParseExceedLimit(
+        s"SELECT from_xml('$xml', '$schema', map('attributePrefix', '', 'mode', 'FAILFAST'))",
+        expectedLimit = "2")
+      withTempPath { path =>
+        Seq(
+          """<ROWS><ROW good="ok" bad="abcdef"/><ROW good="ab" bad="cd"/></ROWS>"""
+        ).toDS().write.text(path.getCanonicalPath)
+        val permissive = spark.read
+          .option("rowTag", "ROW")
+          .option("attributePrefix", "")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        checkAnswer(permissive, Seq(Row("ok", null), Row("ab", "cd")))
+        val failFast = spark.read
+          .option("rowTag", "ROW")
+          .option("attributePrefix", "")
+          .option("mode", "FAILFAST")
+          .schema(schema)
+          .xml(path.getCanonicalPath)
+        assertParseExceedLimitError(failFast.collect(), expectedLimit = "2")
+      }
+    }
+  }
+
+  test("SPARK-59274: ordinary STRING map duplicate behavior is unchanged") {
+    Seq("false", "true").foreach { standardSemantics =>
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> standardSemantics) {
+        checkAnswer(
+          sql(
+            """SELECT size(m), map_entries(m)
+              |FROM (
+              |  SELECT from_json('{"a":1,"a":2}', 'MAP<STRING, INT>') AS m
+              |)""".stripMargin),
+          Row(2, Seq(Row("a", 1), Row("a", 2))))
+        checkAnswer(
+          sql("""SELECT from_xml(
+            |  '<ROW><m><a>1</a><a>2</a></m></ROW>',
+            |  'm MAP<STRING, INT>').m""".stripMargin),
+          Row(Map("a" -> 2)))
+      }
+    }
+  }
+
+  test("SPARK-59274: collated XML CHAR/VARCHAR map keys last-win on exact names") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.ALLOW_COLLATIONS_IN_MAP_KEYS.key -> "true") {
+      checkAnswer(
+        sql("""SELECT from_xml(
+          |  '<ROW><m><ab>1</ab><AB>2</AB></m></ROW>',
+          |  'm MAP<CHAR(2) COLLATE UTF8_LCASE, INT>').m""".stripMargin),
+        Row(Map("ab" -> 1, "AB" -> 2)))
+    }
+  }
+
+  test("SPARK-60243: charAsVarchar still rewrites DDL under standardSemantics") {
+    // charAsVarchar is a CREATE/ALTER rewrite; standardSemantics does not disable it.
+    // CAST remains first-class CHAR even when both flags are on.
+    withSQLConf(
+        SQLConf.CHAR_AS_VARCHAR.key -> "true",
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val castDf = sql("SELECT CAST('ab' AS CHAR(5)) AS c")
+      assert(castDf.schema.head.dataType === CharType(5))
+      checkAnswer(castDf.selectExpr("concat('<', c, '>')"), Row("<ab   >"))
+
+      withTable("std_char_as_varchar") {
+        sql("CREATE TABLE std_char_as_varchar (c CHAR(5)) USING parquet")
+        assert(spark.table("std_char_as_varchar").schema.head.dataType === VarcharType(5))
+        sql("INSERT INTO std_char_as_varchar VALUES ('ab')")
+        checkAnswer(spark.table("std_char_as_varchar"), Row("ab"))
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_char_as_varchar VALUES ('abcdef')")
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "5"))
+      }
+    }
+  }
+
+  test("SPARK-60243: standardSemantics ignores readSideCharPadding=false") {
+    // The override warning is once-per-JVM (AtomicBoolean). Reset immediately before
+    // the padded scan so setup statements do not consume it.
+    val warned = readSidePaddingOverrideWarned()
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT 'ab' AS c").write.mode("overwrite").parquet(path)
+        withTable("std_read_pad_override") {
+          sql(s"CREATE TABLE std_read_pad_override (c CHAR(4)) USING parquet LOCATION '$path'")
+          warned.set(false)
+          val logAppender = new LogAppender("readSideCharPadding override warning")
+          withLogAppender(logAppender) {
+            checkAnswer(
+              sql("SELECT concat('<', c, '>') FROM std_read_pad_override"),
+              Row("<ab  >"))
+          }
+          assert(logAppender.loggingEvents.exists { e =>
+            val msg = e.getMessage.getFormattedMessage
+            e.getLevel == Level.WARN &&
+              msg.contains(SQLConf.READ_SIDE_CHAR_PADDING.key) &&
+              msg.contains(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key)
+          })
+        }
+      }
+    }
+  }
+
+  test("SPARK-60243: deep nested CHAR/VARCHAR file round-trips under standardSemantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val nestedTypes = Seq(
+        ("CHAR(4)", CharType(4), "c", "<ab  >", "<xy  >"),
+        ("VARCHAR(4)", VarcharType(4), "v", "<ab>", "<xy>"))
+      Seq("parquet", "orc").foreach { fmt =>
+        nestedTypes.foreach { case (ddl, dt, field, arrExpected, structExpected) =>
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(array(cast('ab' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType === ArrayType(ArrayType(dt)), s"$fmt $ddl array")
+            checkAnswer(df.selectExpr("concat('<', a[0][0], '>')"), Row(arrExpected))
+          }
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            sql(s"SELECT array(named_struct('$field', cast('xy' AS $ddl))) AS a")
+              .write.mode("overwrite").format(fmt).save(path)
+            val df = spark.read.format(fmt).load(path)
+            assert(df.schema.head.dataType ===
+              ArrayType(StructType(Seq(StructField(field, dt, nullable = true)))),
+              s"$fmt $ddl struct")
+            checkAnswer(
+              df.selectExpr(s"concat('<', a[0].$field, '>')"),
+              Row(structExpected))
+          }
+        }
+      }
+    }
+  }
+
+  private def readSidePaddingOverrideWarned(): AtomicBoolean = {
+    val field = ApplyCharTypePadding.getClass.getDeclaredField("readSidePaddingOverrideWarned")
+    field.setAccessible(true)
+    field.get(ApplyCharTypePadding).asInstanceOf[AtomicBoolean]
+  }
 }
 
 class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSparkSession {
@@ -1035,6 +4077,115 @@ class FileSourceCharVarcharTestSuite extends CharVarcharTestSuite with SharedSpa
           sql("SELECT '123456' as col").write.format(format).save(dir.toString)
           sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
           checkAnswer(sql("select * from t"), Row("123456"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60243: read-side overflow on pre-existing CHAR/VARCHAR partitions") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      Seq("CHAR", "VARCHAR").foreach { typ =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql("SELECT 1 AS id, 'abcdef' AS p")
+            .write.mode("overwrite").partitionBy("p").format(format).save(path)
+          withTable("std_part_oversize") {
+            sql(
+              s"""CREATE TABLE std_part_oversize (id INT, p $typ(2))
+                 |USING $format LOCATION '$path'""".stripMargin)
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                sql("SELECT * FROM std_part_oversize").collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2"))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-58801: standardSemantics scan pads CHAR and errors on oversize") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col CHAR(3)) using $format LOCATION '$dir'")
+          checkAnswer(sql("SELECT * FROM t"), Row("12 "))
+        }
+      }
+      Seq("CHAR", "VARCHAR").foreach { typ =>
+        withTempPath { dir =>
+          withTable("t") {
+            sql("SELECT '123456' as col").write.format(format).save(dir.toString)
+            sql(s"CREATE TABLE t (col $typ(2)) using $format LOCATION '$dir'")
+            checkError(
+              exception = intercept[SparkRuntimeException] {
+                sql("SELECT * FROM t").collect()
+              },
+              condition = "EXCEED_LIMIT_LENGTH",
+              parameters = Map("limit" -> "2")
+            )
+          }
+        }
+      }
+      // An oversized value consisting only of trailing blanks is trimmed successfully.
+      withTempPath { dir =>
+        withTable("t") {
+          sql("SELECT '12  ' as col").write.format(format).save(dir.toString)
+          sql(s"CREATE TABLE t (col VARCHAR(2)) using $format LOCATION '$dir'")
+          checkAnswer(sql("SELECT * FROM t"), Row("12"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-58794: EXTERNAL TABLE CHAR/VARCHAR pad, assignment, and oversize") {
+    // External file tables use the same store assignment on write and pad +
+    // length-check on scan. Hive TRANSFORM uses the same assignment via Project
+    // (SPARK-60090); covered in BaseScriptTransformationSuite,
+    // SparkScriptTransformationSuite, and HiveScriptTransformationSuite.
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // Pre-existing short file values: CHAR pads on scan; types stay first-class.
+        sql("SELECT 'ab' AS c, 'cd' AS v").write.format(format).save(path)
+        withTable("std_ext") {
+          sql(
+            s"""CREATE EXTERNAL TABLE std_ext (c CHAR(5), v VARCHAR(5))
+               |USING $format LOCATION '$path'""".stripMargin)
+          assert(spark.table("std_ext").schema.map(_.dataType) ===
+            Seq(CharType(5), VarcharType(5)))
+          checkAnswer(
+            sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ext"),
+            Row("<ab   >", "<cd>"))
+
+          // INSERT into EXTERNAL applies write-side assignment (pad / length).
+          sql("INSERT INTO std_ext VALUES ('x', 'yz')")
+          checkAnswer(
+            sql("SELECT concat('<', c, '>'), concat('<', v, '>') FROM std_ext " +
+              "WHERE c LIKE 'x%'"),
+            Row("<x    >", "<yz>"))
+          intercept[SparkRuntimeException] {
+            sql("INSERT INTO std_ext VALUES ('too-long', 'ok')").collect()
+          }
+        }
+      }
+      // Bypass-writer oversize non-blank values fail on scan.
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        sql("SELECT 'abcdef' AS c").write.format(format).save(path)
+        withTable("std_ext_oversize") {
+          sql(
+            s"""CREATE EXTERNAL TABLE std_ext_oversize (c CHAR(3))
+               |USING $format LOCATION '$path'""".stripMargin)
+          checkError(
+            exception = intercept[SparkRuntimeException] {
+              sql("SELECT * FROM std_ext_oversize").collect()
+            },
+            condition = "EXCEED_LIMIT_LENGTH",
+            parameters = Map("limit" -> "3")
+          )
         }
       }
     }
@@ -1171,6 +4322,27 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
       .set(SQLConf.DEFAULT_CATALOG.key, "testcat")
   }
 
+  test("SPARK-58794: VARCHAR widen and CHAR->VARCHAR under standardSemantics") {
+    // V2 CheckAnalysis allows length-preserving CHAR->VARCHAR and VARCHAR widen;
+    // V1 file-source ALTER does not (collation-only evolution).
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTable("std_v2_alter") {
+        sql(s"CREATE TABLE std_v2_alter (c CHAR(4), v VARCHAR(4)) USING $format")
+        sql("ALTER TABLE std_v2_alter CHANGE COLUMN v TYPE VARCHAR(5)")
+        assert(spark.table("std_v2_alter").schema("v").dataType === VarcharType(5))
+        sql("ALTER TABLE std_v2_alter CHANGE COLUMN c TYPE VARCHAR(5)")
+        assert(spark.table("std_v2_alter").schema.map(_.dataType) ===
+          Seq(VarcharType(5), VarcharType(5)))
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_v2_alter CHANGE COLUMN v TYPE VARCHAR(4)")
+        }
+        intercept[AnalysisException] {
+          sql("ALTER TABLE std_v2_alter CHANGE COLUMN c TYPE CHAR(5)")
+        }
+      }
+    }
+  }
+
   test("char/varchar type values length check: partitioned columns of other types") {
     Seq("CHAR(5)", "VARCHAR(5)").foreach { typ =>
       withTable("t") {
@@ -1223,6 +4395,99 @@ class DSV2CharVarcharTestSuite extends CharVarcharTestSuite
         sql(s"CREATE TABLE t(m MAP<INT, STRUCT<n_c: $typ, n_i: INT>>) USING $format")
         val inputDF = sql("SELECT map(1, named_struct('n_i', 1, 'n_c', '123456')) AS m")
         assertLengthCheckFailure(() => inputDF.writeTo("t").append())
+      }
+    }
+  }
+
+  private def withPrunedV2CharRelation(body: (DataFrame, DataSourceV2Relation) => Unit): Unit = {
+    withTable("std_v2_prune") {
+      sql(s"CREATE TABLE std_v2_prune (c CHAR(5), extra INT) USING $format")
+      sql("INSERT INTO std_v2_prune VALUES ('ab', 1)")
+      val df = sql("SELECT c FROM std_v2_prune")
+      val rel = df.queryExecution.analyzed.collect {
+        case r: DataSourceV2Relation => r
+      }.head
+      body(df, rel)
+    }
+  }
+
+  private def attrsFromCharReadSchema(rel: DataSourceV2Relation) =
+    PushDownUtils.toOutputAttrs(new StructType().add("c", CharType(5)), rel)
+
+  private def assertPrunedScanCharMarker(df: DataFrame, expectMarker: Boolean): Unit = {
+    val scans = df.queryExecution.optimizedPlan.collect {
+      case s: DataSourceV2ScanRelation => s
+    }
+    assert(scans.nonEmpty)
+    scans.foreach { s =>
+      s.output.filter(_.name == "c").foreach { a =>
+        val raw = CharVarcharUtils.getRawType(a.metadata)
+        if (expectMarker) {
+          assert(raw.isDefined, s"pruned scan ${a.name} dropped the CHAR breadcrumb")
+        } else {
+          assert(raw.isEmpty, s"pruned scan ${a.name} re-stamped the CHAR breadcrumb")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59016: V2 column prune does not re-stamp CHAR padding breadcrumb") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "ApplyCharTypePadding should have cleaned the relation breadcrumb")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must not re-stamp CHAR metadata on a padded relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: standard-semantics V2 prune still pads with read-side padding off") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "standard semantics should still pad and clean when read-side padding is off")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must drop the marker on a cleaned standard-semantics relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: default-mode padded V2 prune does not re-stamp CHAR breadcrumb") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "true") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isEmpty,
+          "default read-side padding should have cleaned the relation breadcrumb")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isEmpty,
+          "toOutputAttrs must drop the marker on a padded default-mode relation")
+        assertPrunedScanCharMarker(df, expectMarker = false)
+        checkAnswer(df, Row("ab   "))
+      }
+    }
+  }
+
+  test("SPARK-59016: unpadded default-mode V2 prune keeps CHAR breadcrumb") {
+    withSQLConf(
+        SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false",
+        SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+      withPrunedV2CharRelation { (df, rel) =>
+        val cAttr = rel.output.find(_.name == "c").get
+        assert(CharVarcharUtils.getRawType(cAttr.metadata).isDefined,
+          "disabled read-side padding should leave the relation stamped")
+        assert(CharVarcharUtils.getRawType(attrsFromCharReadSchema(rel).head.metadata).isDefined,
+          "toOutputAttrs must keep the marker on a still-stamped relation")
+        assertPrunedScanCharMarker(df, expectMarker = true)
       }
     }
   }

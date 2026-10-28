@@ -17,16 +17,16 @@
 
 
 from pyspark.errors import PySparkTypeError, PySparkValueError
-from pyspark.testing.connectutils import should_test_connect
 from pyspark.sql.tests.connect.test_connect_basic import SparkConnectSQLTestCase
+from pyspark.testing.connectutils import should_test_connect
 
 if should_test_connect:
-    from pyspark.sql import functions as SF
-    from pyspark.sql.connect import functions as CF
     from pyspark.errors.exceptions.connect import (
         AnalysisException,
         SparkConnectException,
     )
+    from pyspark.sql import functions as SF
+    from pyspark.sql.connect import functions as CF
 
 
 class SparkConnectStatTests(SparkConnectSQLTestCase):
@@ -550,7 +550,7 @@ class SparkConnectStatTests(SparkConnectSQLTestCase):
             exception=pe.exception,
             errorClass="NOT_EXPECTED_TYPE",
             messageParameters={
-                "expected_type": "bool, float, int or str",
+                "expected_type": "bool, date, Decimal, float, int, None or str",
                 "arg_name": "value",
                 "arg_type": "bytes",
             },

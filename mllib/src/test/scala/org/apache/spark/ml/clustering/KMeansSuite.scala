@@ -70,6 +70,14 @@ class KMeansSuite extends MLTest with DefaultReadWriteTest with PMMLReadWriteTes
     assert(copiedModel.hasSummary)
   }
 
+  test("KMeansModel estimated size") {
+    val model = new KMeans().setK(2).fit(dataset)
+    val maxSize = 1024 * 16
+    assert(
+      model.estimatedSize < maxSize,
+      s"Estimation (${model.estimatedSize}) should be less than $maxSize")
+  }
+
   test("KMeans validate input dataset") {
     testInvalidWeights(new KMeans().setWeightCol("weight").fit(_))
     testInvalidVectors(new KMeans().fit(_))

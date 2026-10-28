@@ -896,6 +896,68 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
     assert(!mapFilter2_1.semanticEquals(mapFilter2_3))
   }
 
+  test("SPARK-60508: semanticEquals between higher-order functions capturing lambda variables") {
+    val ys = Literal.create(Seq(1, 2, 3, 4, 5), ArrayType(IntegerType, containsNull = true))
+    // Variables of an enclosing lambda function with the same data type and nullability, like
+    // `x1` and `x2` of `zip_with(xs1, xs2, (x1, x2) -> ...)`.
+    val x1 = NamedLambdaVariable("x1", IntegerType, nullable = true)
+    val x2 = NamedLambdaVariable("x2", IntegerType, nullable = true)
+
+    // Every call binds fresh lambda variables, so the functions below differ in the exprIds of
+    // their own variables, which `semanticEquals` ignores, unlike the variables they capture.
+    val filter1 = filter(ys, y => y > x1)
+    assert(filter1.semanticEquals(filter(ys, y => y > x1)))
+    assert(!filter1.semanticEquals(filter(ys, y => y > x2)))
+
+    val nested1 = transform(ys, y => filter(ys, z => z > y + x1))
+    assert(nested1.semanticEquals(transform(ys, y => filter(ys, z => z > y + x1))))
+    assert(!nested1.semanticEquals(transform(ys, y => filter(ys, z => z > y + x2))))
+    assert(!nested1.semanticEquals(transform(ys, y => filter(ys, z => z > z + x1))))
+
+    // The optimizer works on a fresh copy of the plan, where every occurrence of a lambda variable
+    // has its own value.
+    Seq(filter1, nested1).foreach { e =>
+      val copied = e.freshCopyIfContainsStatefulExpression()
+      assert(copied.semanticEquals(e))
+      assert(copied.semanticHash() == e.semanticHash())
+    }
+
+    // Canonicalizing the enclosing function numbers its own variables too, without colliding with
+    // the variables of the nested functions.
+    def zipWith(f: (Expression, Expression) => Expression): Expression =
+      ZipWith(ys, ys, createLambda(IntegerType, true, IntegerType, true, f)).bind(validateBinding)
+    val zip1 = zipWith((a, b) => If(a > b, filter(ys, y => y > a), filter(ys, y => y > b)))
+    assert(zip1.semanticEquals(
+      zipWith((a, b) => If(a > b, filter(ys, y => y > a), filter(ys, y => y > b)))))
+    assert(!zip1.semanticEquals(
+      zipWith((a, b) => If(a > b, filter(ys, y => y > b), filter(ys, y => y > a)))))
+    assert(!zipWith((a, _) => transform(ys, y => y + a)).semanticEquals(
+      zipWith((_, _) => transform(ys, y => y + y))))
+    assert(zip1.canonicalized.references.isEmpty)
+
+    // The canonical exprIds of the variables bound by each lambda function, outermost first.
+    def canonicalIds(e: Expression): Seq[Seq[ExprId]] = e.canonicalized.collect {
+      case f: LambdaFunction => f.arguments.map(_.exprId)
+    }
+
+    // A free variable never equals a renamed bound variable, even with the same name and exprId.
+    val Seq(abIds) = canonicalIds(zipWith((a, _) => a + x1))
+    assert(canonicalIds(zipWith((_, b) => x1 + b)) == Seq(abIds))
+    val Seq(noneA, noneB) =
+      abIds.map(id => NamedLambdaVariable("none", IntegerType, nullable = true, exprId = id))
+    assert(!zipWith((a, _) => a + noneB).semanticEquals(zipWith((_, b) => noneA + b)))
+
+    // A free variable keeps its exprId, even when it is the canonical exprId of a variable bound
+    // by a nested function, like `y` below.
+    val Seq(_, Seq(yId)) = canonicalIds(zipWith((_, _) => filter(ys, y => y > x1)))
+    val x = NamedLambdaVariable("x", IntegerType, nullable = true, exprId = yId)
+    val zip2 = zipWith((_, _) => filter(ys, y => y > x))
+    assert(canonicalIds(zip2).last == Seq(yId))
+    assert(zip2.canonicalized.collect {
+      case l: NamedLambdaVariable if l.name == "x" => l.exprId
+    } == Seq(yId))
+  }
+
   test("SPARK-36740: ArraySort should handle NaN greater than non-NaN value") {
     checkEvaluation(arraySort(
       Literal.create(Seq(Double.NaN, 1d, 2d, null), ArrayType(DoubleType))),
@@ -939,6 +1001,16 @@ class HigherOrderFunctionsSuite extends SparkFunSuite with ExpressionEvalHelper 
         "expectedType" -> toSQLType(IntegerType),
         "actualType" -> toSQLType(StringType)
       )))
+  }
+
+  test("NamedLambdaVariable is stateful and produces a fresh copy") {
+    val lv = NamedLambdaVariable("x", IntegerType, nullable = false)
+    assert(lv.stateful, "NamedLambdaVariable.stateful should be true")
+    val copy = lv.freshCopyIfContainsStatefulExpression()
+    assert(copy ne lv,
+      "freshCopyIfContainsStatefulExpression should return a new instance for NamedLambdaVariable")
+    assert(copy.asInstanceOf[NamedLambdaVariable].value ne lv.value,
+      "fresh copy should have an independent AtomicReference value")
   }
 }
 

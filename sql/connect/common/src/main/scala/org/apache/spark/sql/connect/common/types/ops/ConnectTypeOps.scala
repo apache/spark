@@ -23,7 +23,7 @@ import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder, LocalTimeEncoder}
 import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
-import org.apache.spark.sql.connect.client.arrow.types.ops.{TimestampLTZNanosConnectOps, TimestampNTZNanosConnectOps, TimeTypeConnectOps}
+import org.apache.spark.sql.connect.client.arrow.types.ops.{TimestampLTZNanosTypeConnectOps, TimestampNTZNanosTypeConnectOps, TimeTypeConnectOps}
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
@@ -97,8 +97,8 @@ object ConnectTypeOps {
   /** DataType-keyed dispatch for proto conversions. */
   def apply(dt: DataType): Option[ConnectTypeOps] = dt match {
     case tt: TimeType => Some(new TimeTypeConnectOps(tt))
-    case t: TimestampNTZNanosType => Some(new TimestampNTZNanosConnectOps(t))
-    case t: TimestampLTZNanosType => Some(new TimestampLTZNanosConnectOps(t))
+    case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeConnectOps(t))
+    case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeConnectOps(t))
     // Add new framework types here
     case _ => None
   }
@@ -122,13 +122,9 @@ object ConnectTypeOps {
     kindCase match {
       case proto.DataType.KindCase.TIME => Some(new TimeTypeConnectOps(TimeType()))
       case proto.DataType.KindCase.TIMESTAMP_NTZ_NANOS =>
-        Some(
-          new TimestampNTZNanosConnectOps(
-            TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION)))
+        Some(new TimestampNTZNanosTypeConnectOps(TimestampNTZNanosType()))
       case proto.DataType.KindCase.TIMESTAMP_LTZ_NANOS =>
-        Some(
-          new TimestampLTZNanosConnectOps(
-            TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION)))
+        Some(new TimestampLTZNanosTypeConnectOps(TimestampLTZNanosType()))
       // Add new framework proto kinds here - single registration for all KindCase lookups
       case _ => None
     }
@@ -165,11 +161,11 @@ object ConnectTypeOps {
   /** Encoder-keyed dispatch for Arrow serialization. */
   def forEncoder(enc: AgnosticEncoder[_]): Option[ConnectTypeOps] =
     enc match {
-      case LocalTimeEncoder => Some(new TimeTypeConnectOps(TimeType()))
+      case LocalTimeEncoder(precision) => Some(new TimeTypeConnectOps(TimeType(precision)))
       case e: LocalDateTimeNanosEncoder =>
-        Some(new TimestampNTZNanosConnectOps(TimestampNTZNanosType(e.precision)))
+        Some(new TimestampNTZNanosTypeConnectOps(TimestampNTZNanosType(e.precision)))
       case e: InstantNanosEncoder =>
-        Some(new TimestampLTZNanosConnectOps(TimestampLTZNanosType(e.precision)))
+        Some(new TimestampLTZNanosTypeConnectOps(TimestampLTZNanosType(e.precision)))
       // Add new framework encoders here
       case _ => None
     }
@@ -178,8 +174,8 @@ object ConnectTypeOps {
   def forDataType(dt: DataType): Option[ConnectTypeOps] =
     dt match {
       case tt: TimeType => Some(new TimeTypeConnectOps(tt))
-      case t: TimestampNTZNanosType => Some(new TimestampNTZNanosConnectOps(t))
-      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosConnectOps(t))
+      case t: TimestampNTZNanosType => Some(new TimestampNTZNanosTypeConnectOps(t))
+      case t: TimestampLTZNanosType => Some(new TimestampLTZNanosTypeConnectOps(t))
       // Add new framework types here
       case _ => None
     }

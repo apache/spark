@@ -290,7 +290,8 @@ case class Mask(
    * Returns the [[DataType]] of the result of evaluating this expression. It is invalid to query
    * the dataType of an unresolved expression (i.e., when `resolved` == false).
    */
-  override def dataType: DataType = input.dataType
+  override def dataType: DataType =
+    input.dataType
 
   /**
    * Returns a Seq of the children of this node. Children should not change. Immutability required
@@ -319,6 +320,7 @@ object Mask {
   val MASKED_DIGIT = 'n'
   // This value helps to retain original value in the input by ignoring the replacement rules
   val MASKED_IGNORE = null
+  private val IGNORE_CODE_POINT = -1
 
   def transformInput(
       input: Any,
@@ -330,29 +332,47 @@ object Mask {
     val transformedString = if (input == null) {
       null
     } else {
-      input.toString.map {
-        transformChar(_, maskUpper, maskLower, maskDigit, maskOther).toChar
+      val upper = replacementCodePoint(maskUpper)
+      val lower = replacementCodePoint(maskLower)
+      val digit = replacementCodePoint(maskDigit)
+      val other = replacementCodePoint(maskOther)
+      val str = input.toString
+      val sb = new java.lang.StringBuilder(str.length)
+      var i = 0
+      while (i < str.length) {
+        val codePoint = str.codePointAt(i)
+        sb.appendCodePoint(transformCodePoint(codePoint, upper, lower, digit, other))
+        i += Character.charCount(codePoint)
       }
+      sb.toString
     }
     org.apache.spark.unsafe.types.UTF8String.fromString(transformedString)
   }
 
-  private def transformChar(
-      c: Char,
-      maskUpper: Any,
-      maskLower: Any,
-      maskDigit: Any,
-      maskOther: Any): Int = {
+  private def replacementCodePoint(option: Any): Int = {
+    if (option != MASKED_IGNORE) {
+      option.asInstanceOf[UTF8String].toString.codePointAt(0)
+    } else {
+      IGNORE_CODE_POINT
+    }
+  }
 
-    def maskedChar(c: Char, option: Any): Char = {
-      if (option != MASKED_IGNORE) option.asInstanceOf[UTF8String].toString.charAt(0) else c
+  private def transformCodePoint(
+      codePoint: Int,
+      maskUpper: Int,
+      maskLower: Int,
+      maskDigit: Int,
+      maskOther: Int): Int = {
+
+    def maskedCodePoint(replacement: Int): Int = {
+      if (replacement != IGNORE_CODE_POINT) replacement else codePoint
     }
 
-    Character.getType(c) match {
-      case Character.UPPERCASE_LETTER => maskedChar(c, maskUpper)
-      case Character.LOWERCASE_LETTER => maskedChar(c, maskLower)
-      case Character.DECIMAL_DIGIT_NUMBER => maskedChar(c, maskDigit)
-      case _ => maskedChar(c, maskOther)
+    Character.getType(codePoint) match {
+      case Character.UPPERCASE_LETTER => maskedCodePoint(maskUpper)
+      case Character.LOWERCASE_LETTER => maskedCodePoint(maskLower)
+      case Character.DECIMAL_DIGIT_NUMBER => maskedCodePoint(maskDigit)
+      case _ => maskedCodePoint(maskOther)
     }
   }
 }

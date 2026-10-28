@@ -41,8 +41,8 @@ import org.apache.spark.sql.classic.ClassicConversions.castToImpl
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connector.catalog.TableProvider
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.QueryExecution
-import org.apache.spark.sql.execution.command.DataWritingCommand
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan}
+import org.apache.spark.sql.execution.command.{DataWritingCommand, DataWritingCommandExec}
 import org.apache.spark.sql.execution.datasources.csv.CSVFileFormat
 import org.apache.spark.sql.execution.datasources.jdbc.JdbcRelationProvider
 import org.apache.spark.sql.execution.datasources.json.JsonFileFormat
@@ -336,19 +336,26 @@ case class DataSource(
     }
   }
 
-  /** Returns a sink that can be used to continually write data. */
-  def createSink(outputMode: OutputMode): Sink = {
+  /** Returns a sink that can be used to continually write data of the given schema. */
+  def createSink(outputMode: OutputMode, schema: StructType): Sink = {
     providingInstance() match {
       case s: StreamSinkProvider =>
         s.createSink(sparkSession.sqlContext, caseInsensitiveOptions, partitionColumns, outputMode)
 
       case fileFormat: FileFormat =>
+        disallowWritingIntervals(schema, fileFormat.toString, forbidAnsiIntervals = false)
+        // Like batch writes, check empty schemas only when writing to a path, not to a table.
+        if (catalogTable.isEmpty) {
+          DataSource.validateSchema(fileFormat.toString, schema, conf)
+        }
         val path = makeQualified(new Path(caseInsensitiveOptions.getOrElse("path", {
           throw QueryExecutionErrors.dataPathNotSpecifiedError()
         }))).toString
         if (outputMode != OutputMode.Append) {
           throw QueryCompilationErrors.dataSourceOutputModeUnsupportedError(className, outputMode)
         }
+        PartitioningUtils.validatePartitionColumn(
+          schema, partitionColumns, conf.caseSensitiveAnalysis)
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
       case _ =>
@@ -530,11 +537,15 @@ case class DataSource(
    * @param outputColumnNames The original output column names of the input query plan. The
    *                          optimizer may not preserve the output column's names' case, so we need
    *                          this parameter instead of `data.output`.
+   * @param beforeWrite Called right before writing. For a [[FileFormat]], it runs after the driver
+   *                    side checks of the write. For a [[CreatableRelationProvider]], it runs
+   *                    before `createRelation`, which checks the write itself.
    */
   def writeAndRead(
       mode: SaveMode,
       data: LogicalPlan,
-      outputColumnNames: Seq[String]): BaseRelation = {
+      outputColumnNames: Seq[String],
+      beforeWrite: () => Unit = () => ()): BaseRelation = {
     val outputColumns = DataWritingCommand.logicalPlanOutputWithNames(data, outputColumnNames)
     providingInstance() match {
       case dataSource: CreatableRelationProvider =>
@@ -544,13 +555,26 @@ case class DataSource(
               dataSource.toString, StructField(attr.toString, attr.dataType))
           }
         }
+        beforeWrite()
         dataSource.createRelation(
           sparkSession.sqlContext, mode, caseInsensitiveOptions, Dataset.ofRows(sparkSession, data))
       case format: FileFormat =>
         disallowWritingIntervals(
           outputColumns.toStructType.asNullable, format.toString, forbidAnsiIntervals = false)
         val cmd = planForWritingFileFormat(format, mode, data)
-        QueryExecution.runCommand(sparkSession, cmd, "file source write")
+        cmd.setTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB, beforeWrite)
+        // An extension can replace the command in the physical plan (e.g. with a native writer),
+        // and then nothing calls `beforeWrite` during the write. Call it before such a write.
+        val callBeforeWriteIfReplaced = (plan: SparkPlan) => {
+          val runsCommand = plan.exists {
+            case DataWritingCommandExec(c, _) =>
+              c.getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).isDefined
+            case _ => false
+          }
+          if (!runsCommand) beforeWrite()
+        }
+        QueryExecution.runCommand(
+          sparkSession, cmd, "file source write", beforeExecution = callBeforeWriteIfReplaced)
         // Replace the schema with that of the DataFrame we just wrote out to avoid re-inferring
         copy(userSpecifiedSchema = Some(outputColumns.toStructType.asNullable)).resolveRelation()
       case _ => throw SparkException.internalError(
@@ -889,7 +913,7 @@ object DataSource extends Logging {
   def validateSchema(formatName: String, schema: StructType, conf: SQLConf): Unit = {
     val shouldAllowEmptySchema = conf.getConf(SQLConf.ALLOW_EMPTY_SCHEMAS_FOR_WRITES)
     def hasEmptySchema(schema: StructType): Boolean = {
-      schema.size == 0 || schema.exists {
+      schema.isEmpty || schema.exists {
         case StructField(_, b: StructType, _, _) => hasEmptySchema(b)
         case _ => false
       }

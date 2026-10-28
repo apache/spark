@@ -34,6 +34,11 @@ import org.apache.spark.sql.types._
 
     _FUNC_(DISTINCT expr[, expr...]) - Returns the number of rows for which the supplied expression(s) are unique and non-null.
   """,
+  arguments = """
+    Arguments:
+      * expr - One or more expressions. A row is counted only when all supplied
+          expressions are non-null. Use `*` to count all rows, including rows with nulls.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(*) FROM VALUES (NULL), (5), (5), (20) AS tab(col);

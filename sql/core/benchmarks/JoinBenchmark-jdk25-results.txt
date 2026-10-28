@@ -2,81 +2,81 @@
 Join Benchmark
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Join w long:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w long wholestage off                         2267           2278          16          9.3         108.1       1.0X
-Join w long wholestage on                           912            928          19         23.0          43.5       2.5X
+Join w long wholestage off                         2339           2381          60          9.0         111.5       1.0X
+Join w long wholestage on                          1106           1134          29         19.0          52.7       2.1X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Join w long duplicated:                   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w long duplicated wholestage off              2169           2177          11          9.7         103.4       1.0X
-Join w long duplicated wholestage on               1101           1125          16         19.1          52.5       2.0X
+Join w long duplicated wholestage off              2065           2067           3         10.2          98.5       1.0X
+Join w long duplicated wholestage on               1040           1079          24         20.2          49.6       2.0X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Join w 2 ints:                            Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 ints wholestage off                     193731         194139         577          0.1        9237.8       1.0X
-Join w 2 ints wholestage on                      192421         193110         576          0.1        9175.3       1.0X
+Join w 2 ints wholestage off                     194788         195007         309          0.1        9288.2       1.0X
+Join w 2 ints wholestage on                      190194         191262         655          0.1        9069.2       1.0X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Join w 2 longs:                           Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 longs wholestage off                      3577           3582           7          5.9         170.6       1.0X
-Join w 2 longs wholestage on                       2104           2112           6         10.0         100.3       1.7X
+Join w 2 longs wholestage off                      3558           3580          31          5.9         169.7       1.0X
+Join w 2 longs wholestage on                       2138           2183          41          9.8         102.0       1.7X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 Join w 2 longs duplicated:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-Join w 2 longs duplicated wholestage off           9580           9585           7          2.2         456.8       1.0X
-Join w 2 longs duplicated wholestage on            6164           6189          32          3.4         293.9       1.6X
+Join w 2 longs duplicated wholestage off           9084           9125          58          2.3         433.2       1.0X
+Join w 2 longs duplicated wholestage on            5601           5649          39          3.7         267.1       1.6X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 outer join w long:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-outer join w long wholestage off                   1662           1667           6         12.6          79.3       1.0X
-outer join w long wholestage on                    1061           1081          15         19.8          50.6       1.6X
+outer join w long wholestage off                   1730           1738          10         12.1          82.5       1.0X
+outer join w long wholestage on                    1037           1040           2         20.2          49.4       1.7X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 semi join w long:                         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-semi join w long wholestage off                    1199           1204           7         17.5          57.2       1.0X
-semi join w long wholestage on                      678            692          12         30.9          32.3       1.8X
+semi join w long wholestage off                    1076           1078           4         19.5          51.3       1.0X
+semi join w long wholestage on                      577            598          24         36.3          27.5       1.9X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 sort merge join:                          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-sort merge join wholestage off                      554            566          17          3.8         264.3       1.0X
-sort merge join wholestage on                       467            489          18          4.5         222.8       1.2X
+sort merge join wholestage off                      509            517          11          4.1         242.6       1.0X
+sort merge join wholestage on                       477            484          11          4.4         227.4       1.1X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 sort merge join with duplicates:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------------
-sort merge join with duplicates wholestage off           1056           1059           4          2.0         503.7       1.0X
-sort merge join with duplicates wholestage on             927            947          21          2.3         441.8       1.1X
+sort merge join with duplicates wholestage off           1065           1067           3          2.0         507.9       1.0X
+sort merge join with duplicates wholestage on             909            942          20          2.3         433.7       1.2X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 shuffle hash join:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-shuffle hash join wholestage off                    526            538          17          8.0         125.4       1.0X
-shuffle hash join wholestage on                     411            430          16         10.2          98.0       1.3X
+shuffle hash join wholestage off                    557            570          19          7.5         132.7       1.0X
+shuffle hash join wholestage on                     401            428          30         10.5          95.5       1.4X
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 broadcast nested loop join:                Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 -------------------------------------------------------------------------------------------------------------------------
-broadcast nested loop join wholestage off          24826          24862          51          0.8        1183.8       1.0X
-broadcast nested loop join wholestage on           18286          18488         194          1.1         872.0       1.4X
+broadcast nested loop join wholestage off          26989          27425         617          0.8        1286.9       1.0X
+broadcast nested loop join wholestage on           19607          19657          36          1.1         935.0       1.4X
 
 

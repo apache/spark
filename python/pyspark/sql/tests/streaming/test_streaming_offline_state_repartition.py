@@ -27,7 +27,7 @@ from pyspark.sql.tests.pandas.helper.helper_pandas_transform_with_state import (
     SimpleStatefulProcessorWithInitialStateFactory,
     StatefulProcessorCompositeTypeFactory,
 )
-from pyspark.sql.types import LongType, StringType, StructType, StructField
+from pyspark.sql.types import LongType, StringType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import (
     have_pandas,

@@ -16,68 +16,52 @@
 #
 
 # mypy: disable-error-code="override"
-from pyspark.errors.exceptions.base import (
-    SessionNotSameException,
-    PySparkIndexError,
-)
-from pyspark.resource import ResourceProfile
-from pyspark.sql.connect.logging import logger
-
+import copy
+import functools
+import json
+import os
+import random
+import sys
+import uuid
+import warnings
+from collections.abc import Iterable
 from typing import (
+    TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Iterator,
     List,
     NoReturn,
     Optional,
-    Tuple,
-    Union,
     Sequence,
-    TYPE_CHECKING,
-    overload,
-    Callable,
-    cast,
+    Tuple,
     Type,
+    Union,
+    cast,
+    overload,
 )
 
-import copy
-import os
-import sys
-import random
 import pyarrow as pa
-import json
-import warnings
-from collections.abc import Iterable
-import functools
 
+import pyspark.sql.connect.plan as plan
 from pyspark import _NoValue
 from pyspark._globals import _NoValueType
-from pyspark.util import is_remote_only
-from pyspark.sql.types import Row, StructType, _create_row
-from pyspark.sql.dataframe import (
-    DataFrame as ParentDataFrame,
-    DataFrameNaFunctions as ParentDataFrameNaFunctions,
-    DataFrameStatFunctions as ParentDataFrameStatFunctions,
-)
-
 from pyspark.errors import (
-    PySparkTypeError,
     PySparkAttributeError,
-    PySparkValueError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
 )
-from pyspark.util import PythonEvalType
+from pyspark.errors.exceptions.base import (
+    PySparkIndexError,
+    SessionNotSameException,
+)
+from pyspark.resource import ResourceProfile
 from pyspark.serializers import CPickleSerializer
-from pyspark.storagelevel import StorageLevel
-import pyspark.sql.connect.plan as plan
-from pyspark.sql.conversion import ArrowTableToRowsConversion
-from pyspark.sql.connect.group import GroupedData
-from pyspark.sql.connect.merge import MergeIntoWriter
-from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
-from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
-from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.column import Column
+from pyspark.sql.connect.column import Column as ConnectColumn
 from pyspark.sql.connect.expressions import (
     ColumnReference,
     DirectShufflePartitionID,
@@ -87,26 +71,44 @@ from pyspark.sql.connect.expressions import (
     UnresolvedStar,
 )
 from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
+from pyspark.sql.connect.group import GroupedData
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.merge import MergeIntoWriter
+from pyspark.sql.connect.readwriter import DataFrameWriter, DataFrameWriterV2
+from pyspark.sql.connect.streaming.readwriter import DataStreamWriter
+from pyspark.sql.conversion import ArrowTableToRowsConversion
+from pyspark.sql.dataframe import (
+    DataFrame as ParentDataFrame,
+)
+from pyspark.sql.dataframe import (
+    DataFrameNaFunctions as ParentDataFrameNaFunctions,
+)
+from pyspark.sql.dataframe import (
+    DataFrameStatFunctions as ParentDataFrameStatFunctions,
+)
 from pyspark.sql.pandas.functions import _validate_vectorized_udf  # type: ignore[attr-defined]
+from pyspark.sql.pandas.types import from_arrow_schema, to_arrow_schema
 from pyspark.sql.table_arg import TableArg
+from pyspark.sql.types import Row, StructType, _create_row
+from pyspark.storagelevel import StorageLevel
+from pyspark.util import PythonEvalType, is_remote_only
 
 if TYPE_CHECKING:
+    from pyspark.core.rdd import RDD
+    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.connect._typing import (
+        ArrowMapIterFunction,
         ColumnOrName,
         ColumnOrNameOrOrdinal,
         LiteralType,
-        PrimitiveType,
         OptionalPrimitiveType,
         PandasMapIterFunction,
-        ArrowMapIterFunction,
+        PrimitiveType,
     )
-    from pyspark.core.rdd import RDD
-    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
-    from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
     from pyspark.sql.metrics import ExecutionInfo
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
     from pyspark.sql.plot import PySparkPlotAccessor
 
 
@@ -137,7 +139,7 @@ class DataFrame(ParentDataFrame):
         if self._session is None:
             raise PySparkRuntimeError(
                 errorClass="NO_ACTIVE_SESSION",
-                messageParameters={"operator": "__init__"},
+                messageParameters={},
             )
 
         # Check whether _repr_html is supported or not, we use it to avoid calling RPC twice
@@ -994,6 +996,72 @@ class DataFrame(ParentDataFrame):
                 columnNames=[columnName],
                 columns=[self[columnName]],
                 metadata=[json.dumps(metadata)],
+            ),
+            session=self._session,
+        )
+
+    def binBy(
+        self,
+        rangeStart: "ColumnOrName",
+        rangeEnd: "ColumnOrName",
+        binWidth: Column,
+        distributeUniform: Union[List["ColumnOrName"], Tuple["ColumnOrName", ...]],
+        *,
+        alignTo: Optional[Column] = None,
+        binStartName: Optional[str] = None,
+        binEndName: Optional[str] = None,
+        binDistributeRatioName: Optional[str] = None,
+    ) -> ParentDataFrame:
+        expressions = {"binWidth": binWidth}
+        if alignTo is not None:
+            expressions["alignTo"] = alignTo
+        for arg_name, expression in expressions.items():
+            if not isinstance(expression, Column):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "Column",
+                        "arg_type": type(expression).__name__,
+                    },
+                )
+
+        if not isinstance(distributeUniform, (list, tuple)):
+            raise PySparkTypeError(
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "distributeUniform",
+                    "expected_type": "list or tuple",
+                    "arg_type": type(distributeUniform).__name__,
+                },
+            )
+        aliases = {
+            "binStartName": binStartName,
+            "binEndName": binEndName,
+            "binDistributeRatioName": binDistributeRatioName,
+        }
+        for arg_name, name in aliases.items():
+            if name is not None and not isinstance(name, str):
+                raise PySparkTypeError(
+                    errorClass="NOT_EXPECTED_TYPE",
+                    messageParameters={
+                        "arg_name": arg_name,
+                        "expected_type": "str",
+                        "arg_type": type(name).__name__,
+                    },
+                )
+
+        return DataFrame(
+            plan.BinBy(
+                child=self._plan,
+                range_start=F._to_col(rangeStart),
+                range_end=F._to_col(rangeEnd),
+                bin_width=F._to_col(binWidth),
+                distribute_uniform=[F._to_col(col) for col in distributeUniform],
+                align_to=F._to_col(alignTo) if alignTo is not None else None,
+                bin_start_name=binStartName,
+                bin_end_name=binEndName,
+                bin_distribute_ratio_name=binDistributeRatioName,
             ),
             session=self._session,
         )
@@ -1958,6 +2026,21 @@ class DataFrame(ParentDataFrame):
         attrs.update(self.columns)
         return sorted(attrs)
 
+    def _check_timestamp_nanos_map_key(self, schema: StructType) -> None:
+        # SPARK-57462: a nanosecond timestamp used as a map key collapses to a single microsecond
+        # datetime.datetime when Arrow rows are turned into Python dicts, dropping entries that
+        # differ only below a microsecond. Reject such a schema up front -- matching the classic
+        # DataFrame's guard -- rather than silently dropping map entries.
+        from pyspark.errors import PySparkTypeError
+        from pyspark.sql.types import _first_timestamp_nanos_map_key_type
+
+        key_type = _first_timestamp_nanos_map_key_type(schema)
+        if key_type is not None:
+            raise PySparkTypeError(
+                errorClass="TIMESTAMP_NANOS_PYTHON_MAP_KEY",
+                messageParameters={"type": key_type.simpleString()},
+            )
+
     def collect(self) -> List[Row]:
         table, schema = self._to_table()
 
@@ -1967,6 +2050,8 @@ class DataFrame(ParentDataFrame):
         schema = schema or schema2
 
         assert schema is not None and isinstance(schema, StructType)
+
+        self._check_timestamp_nanos_map_key(schema)
 
         return ArrowTableToRowsConversion.convert(
             table, schema, binary_as_bytes=self._get_binary_as_bytes()
@@ -2221,6 +2306,7 @@ class DataFrame(ParentDataFrame):
         return self.storageLevel != StorageLevel.NONE
 
     def toLocalIterator(self, prefetchPartitions: bool = False) -> Iterator[Row]:
+        self._check_timestamp_nanos_map_key(self.schema)
         query = self._plan.to_proto(self._session.client)
         binary_as_bytes = self._get_binary_as_bytes()
 
@@ -2243,9 +2329,9 @@ class DataFrame(ParentDataFrame):
     def pandas_api(
         self, index_col: Optional[Union[str, List[str]]] = None
     ) -> "PandasOnSparkDataFrame":
-        from pyspark.pandas.namespace import _get_index_map
         from pyspark.pandas.frame import DataFrame as PandasOnSparkDataFrame
         from pyspark.pandas.internal import InternalFrame
+        from pyspark.pandas.namespace import _get_index_map
 
         index_spark_columns, index_names = _get_index_map(self, index_col)
         internal = InternalFrame(
@@ -2332,7 +2418,7 @@ class DataFrame(ParentDataFrame):
             for f in schema.fields
         ]
 
-        def foreach_partition_func(itr: Iterable[pa.RecordBatch]) -> Iterable[pa.RecordBatch]:
+        def foreach_partition_func(itr: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
             def flatten() -> Iterator[Row]:
                 for table in itr:
                     columnar_data = [
@@ -2398,26 +2484,41 @@ class DataFrame(ParentDataFrame):
         return DataFrame(plan.Offset(child=self._plan, offset=num), session=self._session)
 
     def checkpoint(self, eager: bool = True) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=False, eager=eager)
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=False,
+            eager=eager,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
-        assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        return checkpointed
+        returned_relation_id = properties["checkpoint_command_result"]
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(returned_relation_id, self._session),
+            session=self._session,
+        )
 
     def localCheckpoint(
         self, eager: bool = True, storageLevel: Optional[StorageLevel] = None
     ) -> ParentDataFrame:
-        cmd = plan.Checkpoint(child=self._plan, local=True, eager=eager, storage_level=storageLevel)
+        relation_id = str(uuid.uuid4())
+        cmd = plan.Checkpoint(
+            child=self._plan,
+            local=True,
+            eager=eager,
+            storage_level=storageLevel,
+            relation_id=relation_id,
+        )
         _, properties, self._execution_info = self._session.client.execute_command(
             cmd.command(self._session.client)
         )
-        assert "checkpoint_command_result" in properties
-        checkpointed = properties["checkpoint_command_result"]
-        assert isinstance(checkpointed._plan, plan.CachedRemoteRelation)
-        return checkpointed
+        returned_relation_id = properties["checkpoint_command_result"]
+        return DataFrame(
+            plan=plan.CachedRemoteRelation(returned_relation_id, self._session),
+            session=self._session,
+        )
 
     def toJSON(self) -> ParentDataFrame:
         return self.select(F.to_json(F.struct(F.col("*"))).alias("value"))
@@ -2505,13 +2606,14 @@ class DataFrameStatFunctions(ParentDataFrameStatFunctions):
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.util import is_remote_only
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.dataframe
+    from pyspark.sql import SparkSession as PySparkSession
     from pyspark.testing.utils import have_pandas, have_pyarrow
+    from pyspark.util import is_remote_only
 
     # It inherits docstrings but doctests cannot detect them so we run
     # the parent classe's doctests here directly.
@@ -2533,6 +2635,7 @@ def _test() -> None:
         del pyspark.sql.dataframe.DataFrame.mapInArrow.__doc__
     else:
         import pyarrow as pa
+
         from pyspark.loose_version import LooseVersion
 
         if LooseVersion(pa.__version__) < LooseVersion("21.0.0"):

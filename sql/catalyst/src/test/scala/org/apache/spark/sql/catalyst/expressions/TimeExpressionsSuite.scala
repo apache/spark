@@ -59,6 +59,20 @@ class TimeExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       parameters = Map("input" -> "'100:50'", "format" -> "'mm:HH'"))
   }
 
+  test("SPARK-58296: to_time reports TimeType even when a foldable format is NULL") {
+    // A foldable format that evaluates to NULL must not change the output type: to_time
+    // still produces a TIME, matching the non-null and no-format branches. Before the fix
+    // the replacement fell back to the format argument's own type (STRING/NULL).
+    assert(new ToTime(Literal("00:00:00"), Literal.create(null, StringType)).dataType ===
+      TimeType())
+    assert(new ToTime(Literal("00:00:00"), Literal.create(null)).dataType === TimeType())
+    // The value is still NULL; assert type and value together for this exact case.
+    checkEvaluation(new ToTime(Literal("00:00:00"), Literal.create(null, StringType)), null)
+    // Sanity: the branches that were already correct.
+    assert(new ToTime(Literal("00:00:00")).dataType === TimeType())
+    assert(new ToTime(Literal("00:00:00"), Literal("HH:mm:ss")).dataType === TimeType())
+  }
+
   test("HourExpressionBuilder") {
     // Empty expressions list
     checkError(

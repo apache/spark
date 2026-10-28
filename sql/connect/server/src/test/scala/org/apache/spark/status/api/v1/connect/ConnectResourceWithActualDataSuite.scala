@@ -25,6 +25,7 @@ import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.connect.SparkConnectServerTest
+import org.apache.spark.sql.connect.service.SparkListenerConnectSessionStarted
 import org.apache.spark.sql.connect.ui.ExecutionState
 import org.apache.spark.util.Utils
 
@@ -73,6 +74,9 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
   private def enc(s: String): String =
     java.net.URLEncoder.encode(s, java.nio.charset.StandardCharsets.UTF_8)
 
+  private def encodeUserId(s: String): String =
+    org.apache.spark.sql.connect.ui.ConnectUiUtils.encodeUserId(s)
+
   test("Connect REST API exposes sessions and operations") {
     // Run a real query through a Connect session; this posts the session/operation listener
     // events that the SparkConnectServerListener writes into the KVStore.
@@ -95,8 +99,11 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
       assert(op.get.userId === defaultUserId)
       assert(ExecutionState.values.map(_.toString).contains(op.get.state))
 
-      val one = JsonMethods.parse(getOk(s"/sessions/$defaultSessionId")).extract[TestSessionData]
+      val one = JsonMethods
+        .parse(getOk(s"/sessions/$defaultSessionId?userId=${encodeUserId(defaultUserId)}"))
+        .extract[TestSessionData]
       assert(one.sessionId === defaultSessionId)
+      assert(one.userId === defaultUserId)
 
       val oneOp = JsonMethods
         .parse(getOk(s"/operations/detail?jobTag=${enc(op.get.jobTag)}"))
@@ -104,6 +111,25 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
       assert(oneOp.operationId === op.get.operationId)
       assert(oneOp.jobTag === op.get.jobTag)
     }
+  }
+
+  test("SPARK-58097: session with an empty user id is addressable via an empty userId token") {
+    // An empty user id is valid (the protobuf default), and its base64url token is the empty
+    // string. The JVM client rejects it, so post the event directly to populate the store.
+    val sessionId = java.util.UUID.randomUUID.toString
+    spark.sparkContext.listenerBus.post(
+      SparkListenerConnectSessionStarted(sessionId, "", System.currentTimeMillis()))
+    spark.sparkContext.listenerBus.waitUntilEmpty(eventuallyTimeout.toMillis)
+
+    eventuallyWithTimeout {
+      val one = JsonMethods
+        .parse(getOk(s"/sessions/$sessionId?userId="))
+        .extract[TestSessionData]
+      assert(one.sessionId === sessionId)
+      assert(one.userId === "")
+    }
+    // An absent userId parameter is still rejected.
+    assert(get(new URI(s"$baseUrl/sessions/$sessionId").toURL)._1 === 400)
   }
 
   test("SPARK-57941: operation with a user id containing '/' is fetchable via the jobTag query") {
@@ -130,7 +156,10 @@ class ConnectResourceWithActualDataSuite extends SparkConnectServerTest {
   }
 
   test("Connect REST API returns 404 for unknown ids") {
-    assert(get(new URI(s"$baseUrl/sessions/does-not-exist").toURL)._1 === 404)
+    assert(
+      get(
+        new URI(
+          s"$baseUrl/sessions/does-not-exist?userId=${encodeUserId("nobody")}").toURL)._1 === 404)
     assert(get(new URI(s"$baseUrl/operations/detail?jobTag=does-not-exist").toURL)._1 === 404)
   }
 

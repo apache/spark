@@ -18,8 +18,9 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final}
-import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Complete, Final, PartialMerge}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEShuffleReadExec}
 import org.apache.spark.sql.execution.aggregate.{BaseAggregateExec, HashAggregateExec, SortAggregateExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
@@ -191,6 +192,89 @@ class CombineAdjacentAggregationSuite extends QueryTest
     }
   }
 
+  test("Combine adjacent partial merge and final hash aggregates") {
+    withTempView("t") {
+      spark.range(20).selectExpr("id % 3 as k", "id % 7 as v").createOrReplaceTempView("t")
+      val query = "SELECT k, count(*) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k"
+      val finalAgg = withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        collect(sql(query).queryExecution.executedPlan) {
+          case agg: HashAggregateExec if agg.child.isInstanceOf[HashAggregateExec] => agg
+        }.head
+      }
+      val partialAgg = finalAgg.child.asInstanceOf[HashAggregateExec]
+      val partialMergeInput = InputAdapter(partialAgg)
+      val partialMergeAgg = partialAgg.copy(
+        requiredChildDistributionExpressions = Some(partialAgg.groupingExpressions),
+        isStreaming = true,
+        numShufflePartitions = Some(5),
+        initialInputBufferOffset = finalAgg.initialInputBufferOffset,
+        aggregateExpressions = partialAgg.aggregateExpressions.map(_.copy(mode = PartialMerge)),
+        child = partialMergeInput)
+      partialMergeAgg.copyTagsFrom(partialAgg)
+      val finalOverPartialMerge = finalAgg.copy(child = partialMergeAgg)
+      finalOverPartialMerge.copyTagsFrom(finalAgg)
+
+      val combined = CombineAdjacentAggregation(finalOverPartialMerge)
+        .asInstanceOf[HashAggregateExec]
+      assert(combined.aggregateExpressions.forall(_.mode == Final))
+      assert(combined.requiredChildDistributionExpressions ==
+        finalAgg.requiredChildDistributionExpressions)
+      assert(combined.isStreaming == partialMergeAgg.isStreaming)
+      assert(combined.numShufflePartitions == partialMergeAgg.numShufflePartitions)
+      assert(combined.groupingExpressions == partialMergeAgg.groupingExpressions)
+      assert(combined.aggregateAttributes == finalAgg.aggregateAttributes)
+      assert(combined.resultExpressions == finalAgg.resultExpressions)
+      assert(combined.initialInputBufferOffset == partialMergeAgg.initialInputBufferOffset)
+      assert(combined.child == partialMergeInput)
+      assert(finalOverPartialMerge.executeCollect().map(_.copy()).toSet ==
+        combined.executeCollect().map(_.copy()).toSet)
+
+      val filteredPartialMerge = partialMergeAgg.copy(
+        aggregateExpressions = partialMergeAgg.aggregateExpressions.zipWithIndex.map {
+          case (agg, 0) => agg.copy(filter = Some(Literal.TrueLiteral))
+          case (agg, _) => agg
+        })
+      filteredPartialMerge.copyTagsFrom(partialAgg)
+      val finalOverFilteredPartialMerge = finalAgg.copy(child = filteredPartialMerge)
+      finalOverFilteredPartialMerge.copyTagsFrom(finalAgg)
+      assert(collect(CombineAdjacentAggregation(finalOverFilteredPartialMerge)) {
+        case agg: HashAggregateExec => agg
+      }.size == 3)
+    }
+  }
+
+  test("Combined aggregate retains its distribution requirement under AQE") {
+    import testImplicits._
+
+    withTempView("t") {
+      spark.sparkContext.parallelize(
+        (1 to 10).map(i => (if (i > 4) 5 else i, i.toString)), 3)
+        .toDF("k", "v").createOrReplaceTempView("t")
+
+      withSQLConf(
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+          SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_ENABLED.key -> "true",
+          SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+          SQLConf.SHUFFLE_PARTITIONS.key -> "5",
+          SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "150") {
+        val df = sql(
+          "SELECT k, count(*) FROM (SELECT /*+ REBALANCE(k) */ * FROM t) GROUP BY k")
+        checkAnswer(df, Seq(Row(1, 1), Row(2, 1), Row(3, 1), Row(4, 1), Row(5, 6)))
+        assert(collect(df.queryExecution.executedPlan) {
+          case agg: HashAggregateExec => agg
+        }.size == 1)
+        val partitionSpecs = collect(df.queryExecution.executedPlan) {
+          case read: AQEShuffleReadExec => read
+        }.flatMap(_.partitionSpecs)
+        assert(partitionSpecs.nonEmpty)
+        assert(partitionSpecs.forall(!_.isInstanceOf[PartialReducerPartitionSpec]))
+      }
+    }
+  }
+
   test("Do not combine when a shuffle sits between the partial and final aggregate") {
     withTempView("t") {
       spark.range(20).selectExpr("id % 3 as k", "id % 7 as v")
@@ -282,26 +366,34 @@ class CombineAdjacentAggregationSuite extends QueryTest
     }
   }
 
-  test("Default value falls back to spark.sql.execution.replaceHashWithSortAgg") {
+  test("combineAdjacentAggregation is independent of replaceHashWithSortAgg") {
     withTempView("t") {
       spark.range(20).selectExpr("id % 3 as k", "id % 7 as v")
         .createOrReplaceTempView("t")
       val query = "SELECT k, count(*) FROM (SELECT /*+ repartition(k) */ * FROM t) GROUP BY k"
 
-      // `spark.sql.execution.combineAdjacentAggregation` is unset here, so it falls back to
-      // `spark.sql.execution.replaceHashWithSortAgg`.
-      withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false") {
-        assert(numAggregates(query) == 2)
-      }
-      withSQLConf(SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true") {
+      // `spark.sql.execution.combineAdjacentAggregation` has its own default and does not fall
+      // back to `spark.sql.execution.replaceHashWithSortAgg`, so each can be toggled on its own.
+      // Combining is driven solely by `combineAdjacentAggregation` here: the partial and final
+      // aggregates are adjacent (the input is already partitioned by `k`), so enabling it merges
+      // them into one, regardless of `replaceHashWithSortAgg`.
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
         assert(numAggregates(query) == 1)
       }
+      withSQLConf(SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
+        assert(numAggregates(query) == 2)
+      }
 
-      // An explicit value overrides the fallback.
+      // `replaceHashWithSortAgg` alone does not affect the aggregate count of this query.
       withSQLConf(
           SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "true",
           SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "false") {
         assert(numAggregates(query) == 2)
+      }
+      withSQLConf(
+          SQLConf.REPLACE_HASH_WITH_SORT_AGG_ENABLED.key -> "false",
+          SQLConf.COMBINE_ADJACENT_AGGREGATION_ENABLED.key -> "true") {
+        assert(numAggregates(query) == 1)
       }
     }
   }

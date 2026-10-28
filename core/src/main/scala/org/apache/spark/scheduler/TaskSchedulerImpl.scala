@@ -162,6 +162,60 @@ private[spark] class TaskSchedulerImpl(
     executorIdToRunningTaskIds.toMap.transform((_, v) => v.size)
   }
 
+  /**
+   * The number of outstanding tasks for the given resource profile that belong to work OTHER than
+   * the stages in `excludeStageIds`. "Outstanding" is the not-yet-completed demand of each task set
+   * -- running plus enqueued (`numTasks - tasksSuccessful`) -- not just the tasks actively running,
+   * so a neighbor's queued backlog is charged against capacity too. Used by the pipelined-group
+   * slot admission check (see DAGScheduler): it compares the group's demand against the slots left
+   * free after accounting for everything else in the SAME resource profile, so it excludes the
+   * group's own members (whose tasks would otherwise be charged against the group's own admission).
+   *
+   * Computed from the TaskSetManagers so it is resource-profile-scoped, skips zombie (superseded)
+   * attempts so a retried stage is not double-counted, and is taken under a single lock so the
+   * count is one consistent snapshot (both the per-profile total and the excluded members are read
+   * together).
+   */
+  private[scheduler] def outstandingTasksForOtherWorkInProfile(
+      resourceProfileId: Int, excludeStageIds: Set[Int]): Int = synchronized {
+    taskSetsByStageIdAndAttempt.iterator.flatMap { case (stageId, attempts) =>
+      if (excludeStageIds.contains(stageId)) {
+        Iterator.empty
+      } else {
+        attempts.valuesIterator
+          // Skip zombie attempts (superseded by a retry/kill): a stage can have both a zombie and a
+          // live attempt in this map at once, and the live attempt already re-runs the zombie's
+          // outstanding tasks -- counting both would double-count that stage's demand. Matches the
+          // !isZombie filtering used elsewhere on this map.
+          .filter(tsm => !tsm.isZombie && tsm.taskSet.resourceProfileId == resourceProfileId)
+          .map(tsm => math.max(0, tsm.numTasks - tsm.tasksSuccessful))
+      }
+    }.sum
+  }
+
+  /**
+   * Whether any live task set belongs to a pipelined group (see `TaskSet.isPipelined`). Such a
+   * group's shuffle data is transient and lives only on its executors, so a caller about to
+   * disturb the executors needs to know that a group is running.
+   *
+   * Zombie (superseded) attempts are skipped: their tasks are no longer scheduled, so a stale
+   * pipelined attempt left in the map must not make the scheduler look like it still has a
+   * pipelined group in flight. Matches the !isZombie filtering used elsewhere on this map.
+   *
+   * Best-effort: this reports what the TASK scheduler currently holds, which is narrower than "a
+   * pipelined job is active". It is false before the group's first task set is submitted, and
+   * false again once the last member's TaskSetManager has gone zombie but the DAGScheduler has
+   * not yet processed the final completion event.
+   *
+   * Synchronized like every other access to this map, so it is safe to call from any thread --
+   * including off the DAGScheduler event loop (e.g. SparkContext, on a user thread).
+   */
+  private[spark] def hasPipelinedTaskSets: Boolean = synchronized {
+    taskSetsByStageIdAndAttempt.values.exists(_.values.exists { tsm =>
+      !tsm.isZombie && tsm.taskSet.isPipelined
+    })
+  }
+
   // The set of executors we have on each host; this is used to compute hostsAlive, which
   // in turn is used to decide when we can attain data locality on a given host
   protected val hostToExecutors = new HashMap[String, HashSet[String]]
@@ -489,7 +543,7 @@ private[spark] class TaskSchedulerImpl(
       availWorkerResources: ExecutorResourcesAmounts): Option[Map[String, Map[String, Long]]] = {
     val rpId = taskSet.taskSet.resourceProfileId
     val taskSetProf = sc.resourceProfileManager.resourceProfileFromId(rpId)
-    // check if the ResourceProfile has cpus first since that is common case. Both values are in
+    // check if the ResourceProfile has cpus first since that is the common case. Both values are in
     // the internal exact BigDecimal representation, so this comparison is exact regardless of
     // whether spark.task.cpus is fractional (e.g. 0.2).
     if (availCpus < taskCpus) return None
@@ -554,7 +608,7 @@ private[spark] class TaskSchedulerImpl(
     val shuffledOffers = shuffleOffers(filteredOffers)
     // Build a list of tasks to assign to each worker.
     // Note the size estimate here might be off with different ResourceProfiles but should be
-    // close estimate. It is only a capacity hint, so cap it: with a tiny fractional
+    // a close estimate. It is only a capacity hint, so cap it: with a tiny fractional
     // spark.task.cpus the exact slot count can be huge and would preallocate a giant buffer.
     val tasks = shuffledOffers.map { o =>
       val sizeHint =
@@ -981,7 +1035,8 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     ThreadUtils.shutdown(starvationTimer)
-    ThreadUtils.shutdown(abortTimer)
+    // Discard pending abort tasks, delayed by `UNSCHEDULABLE_TASKSET_TIMEOUT`, without waiting.
+    abortTimer.shutdownNow()
   }
 
   override def defaultParallelism(): Int = backend.defaultParallelism()
@@ -1005,8 +1060,11 @@ private[spark] class TaskSchedulerImpl(
         executorsPendingDecommission(executorId) =
           ExecutorDecommissionState(clock.getTimeMillis(), decommissionInfo.workerHost)
       }
+      // This reaches TaskSetManager.recomputeLocality(), and TaskSetManagers are not thread
+      // safe, so it must be called while holding the lock, like rootPool.executorLost() is.
+      rootPool.executorDecommission(executorId)
     }
-    rootPool.executorDecommission(executorId)
+    // Call backend.reviveOffers() without holding the lock on this to prevent deadlock
     backend.reviveOffers()
   }
 

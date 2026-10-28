@@ -388,13 +388,19 @@ private[sql] object HoursTransform {
 }
 
 private[sql] final case class LiteralValue[T](value: T, dataType: DataType) extends Literal[T] {
-  override def toString: String = dataType match {
-    case StringType => s"'${s"$value".replace("'", "''")}'"
-    case BinaryType =>
-      assert(value.isInstanceOf[Array[Byte]])
-      val bytes = value.asInstanceOf[Array[Byte]]
-      "0x" + HexFormat.of().withUpperCase().formatHex(bytes)
-    case _ => s"$value"
+  override def toString: String = {
+    if (value == null) {
+      "NULL"
+    } else {
+      dataType match {
+        case StringType => s"'${s"$value".replace("'", "''")}'"
+        case BinaryType =>
+          assert(value.isInstanceOf[Array[Byte]])
+          val bytes = value.asInstanceOf[Array[Byte]]
+          "0x" + HexFormat.of().withUpperCase().formatHex(bytes)
+        case _ => s"$value"
+      }
+    }
   }
 }
 

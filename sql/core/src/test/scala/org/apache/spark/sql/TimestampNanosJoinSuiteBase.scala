@@ -19,7 +19,11 @@ package org.apache.spark.sql
 
 import java.time.{Instant, LocalDateTime}
 
+import scala.jdk.CollectionConverters._
+
 import org.apache.spark.SparkConf
+import org.apache.spark.sql.catalyst.expressions.EqualTo
+import org.apache.spark.sql.catalyst.plans.logical.Join
 import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
@@ -112,6 +116,27 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
         s"Executed plan:\n$plan")
   }
 
+  /**
+   * Asserts that the equi-join key in `df`'s analyzed plan was coerced to `expected` on BOTH sides
+   * (type coercion inserts a `Cast` around the narrower side). This pins that a mixed-precision or
+   * micro-vs-nanos join actually widens the key via `findWiderDateTimeType` rather than, say,
+   * comparing at the narrower precision and dropping the distinguishing digit.
+   */
+  protected def assertJoinKeyType(df: DataFrame, expected: DataType): Unit = {
+    val equalTos = df.queryExecution.analyzed.collect { case j: Join => j.condition }.flatten
+      .flatMap(_.collect { case e: EqualTo => e })
+    assert(equalTos.nonEmpty,
+      s"No EqualTo join condition found in analyzed plan:\n${df.queryExecution.analyzed}")
+    equalTos.foreach { e =>
+      assert(e.left.dataType == expected && e.right.dataType == expected,
+        s"Join key not coerced to $expected: ${e.left.dataType} === ${e.right.dataType}")
+    }
+  }
+
+  private def cgLabel(cgConf: Seq[(String, String)]): String =
+    if (cgConf.contains(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true")) "codegen on"
+    else "codegen off"
+
   // ---- relation builders: key column "k" of the given nanos type + an Int id column ----
 
   private def ntzLeft(p: Int): DataFrame =
@@ -150,6 +175,45 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
         Row(null, 40))),
       new StructType().add("k", TimestampLTZNanosType(p)).add("rid", IntegerType))
 
+  // Microsecond-typed sides (TIMESTAMP_NTZ / TIMESTAMP): whole-microsecond keys (nanosWithinMicro
+  // implicitly 0). Joining these against a nanos side widens the key to the nanos type, so only a
+  // nanos row whose sub-microsecond remainder is also 0 can match. lid=1 (a whole micro) matches
+  // the nanos .000000000 row; lid=2 is another whole micro with no match; lid=4 is a NULL key.
+  private def ntzMicroLeft(): DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(LocalDateTime.parse("2020-01-01T00:00:00"), 1),
+        Row(LocalDateTime.parse("2020-01-01T00:00:01"), 2),
+        Row(null, 4))),
+      new StructType().add("k", TimestampNTZType).add("lid", IntegerType))
+
+  private def ltzMicroLeft(): DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Instant.parse("2020-01-01T00:00:00Z"), 1),
+        Row(Instant.parse("2020-01-01T00:00:01Z"), 2),
+        Row(null, 4))),
+      new StructType().add("k", TimestampType).add("lid", IntegerType))
+
+  // Nanos right side for the micro-vs-nanos join: rid=10 is exactly on a microsecond boundary
+  // (.000000000, matches the micro lid=1); rid=20 shares that microsecond but carries a 500ns
+  // remainder, so it must NOT match the micro key (the widened key keeps the sub-micro bit).
+  private def ntzNanosRightForMicro(p: Int): DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(LocalDateTime.parse("2020-01-01T00:00:00.000000000"), 10),
+        Row(LocalDateTime.parse("2020-01-01T00:00:00.000000500"), 20),
+        Row(null, 40))),
+      new StructType().add("k", TimestampNTZNanosType(p)).add("rid", IntegerType))
+
+  private def ltzNanosRightForMicro(p: Int): DataFrame =
+    spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Instant.parse("2020-01-01T00:00:00.000000000Z"), 10),
+        Row(Instant.parse("2020-01-01T00:00:00.000000500Z"), 20),
+        Row(null, 40))),
+      new StructType().add("k", TimestampLTZNanosType(p)).add("rid", IntegerType))
+
   // Expected join outputs (order-insensitive). Selected as (lid, rid) so each row is identifiable.
   // INNER: only the fully-equal sub-microsecond pair (500ns == 500ns).
   private val expectedInner: Seq[Row] = Seq(Row(1, 10))
@@ -159,6 +223,12 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
   private val expectedLeftOuter: Seq[Row] =
     Seq(Row(1, 10), Row(2, null), Row(3, null), Row(4, null))
 
+  // micro-vs-nanos: only the whole-microsecond left row (lid=1) matches the nanos .000000000 row
+  // (rid=10). The nanos .000000500 row (rid=20) shares the microsecond but must NOT match, and the
+  // NULL key (lid=4) never matches.
+  private val expectedMicroInner: Seq[Row] = Seq(Row(1, 10))
+  private val expectedMicroLeftOuter: Seq[Row] = Seq(Row(1, 10), Row(2, null), Row(4, null))
+
   // ==========================================================================================
   // NTZ: inner + left-outer over a sub-microsecond key, every strategy x codegen mode x p.
   // ==========================================================================================
@@ -166,14 +236,8 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
     (stratName, execClass, stratConf) <- joinStrategies
     cgConf <- codegenModes
   } {
-    val cgName = if (cgConf.exists(_ == (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"))) {
-      "codegen on"
-    } else {
-      "codegen off"
-    }
-
     test(s"NTZ nanos join distinguishes the sub-microsecond remainder - " +
-      s"$stratName - $cgName") {
+      s"$stratName - ${cgLabel(cgConf)}") {
       withSQLConf((stratConf ++ cgConf): _*) {
         Seq(7, 8, 9).foreach { p =>
           val left = ntzLeft(p)
@@ -200,14 +264,8 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
     (stratName, execClass, stratConf) <- joinStrategies
     cgConf <- codegenModes
   } {
-    val cgName = if (cgConf.exists(_ == (SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"))) {
-      "codegen on"
-    } else {
-      "codegen off"
-    }
-
     test(s"LTZ nanos join distinguishes the sub-microsecond remainder - " +
-      s"$stratName - $cgName") {
+      s"$stratName - ${cgLabel(cgConf)}") {
       withSQLConf((stratConf ++ cgConf): _*) {
         Seq(7, 8, 9).foreach { p =>
           val left = ltzLeft(p)
@@ -222,6 +280,181 @@ abstract class TimestampNanosJoinSuiteBase extends SharedSparkSession with Adapt
             .select(left("lid"), right("rid"))
           assertJoinUsed(leftOuter, execClass)
           checkAnswer(leftOuter, expectedLeftOuter)
+        }
+      }
+    }
+  }
+
+  // Mixed-precision pairs. Both sides carry a nanos type but at DIFFERENT precisions; the join key
+  // is widened to the higher precision (findWiderDateTimeType). Because every remainder is a
+  // multiple of 100ns (exact at every p in [7, 9]), the same inputs and expected rows hold for
+  // each pair, and the sub-microsecond equal/distinct relationship is preserved after widening.
+  private val mixedPrecisionPairs: Seq[(Int, Int)] = Seq((7, 9), (7, 8), (8, 9))
+
+  // ==========================================================================================
+  // NTZ mixed precision: p_left != p_right, key widens to max(p_left, p_right).
+  // ==========================================================================================
+  for {
+    (stratName, execClass, stratConf) <- joinStrategies
+    cgConf <- codegenModes
+  } {
+    test(s"NTZ nanos join across mixed precisions widens key - $stratName - ${cgLabel(cgConf)}") {
+      withSQLConf((stratConf ++ cgConf): _*) {
+        mixedPrecisionPairs.foreach { case (pl, pr) =>
+          val left = ntzLeft(pl)
+          val right = ntzRight(pr)
+          val wider = TimestampNTZNanosType(math.max(pl, pr))
+
+          val inner = left.join(right, left("k") === right("k"), "inner")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(inner, execClass)
+          assertJoinKeyType(inner, wider)
+          checkAnswer(inner, expectedInner)
+
+          val leftOuter = left.join(right, left("k") === right("k"), "left_outer")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(leftOuter, execClass)
+          checkAnswer(leftOuter, expectedLeftOuter)
+        }
+      }
+    }
+  }
+
+  // ==========================================================================================
+  // LTZ mixed precision: p_left != p_right, key widens to max(p_left, p_right).
+  // ==========================================================================================
+  for {
+    (stratName, execClass, stratConf) <- joinStrategies
+    cgConf <- codegenModes
+  } {
+    test(s"LTZ nanos join across mixed precisions widens key - $stratName - ${cgLabel(cgConf)}") {
+      withSQLConf((stratConf ++ cgConf): _*) {
+        mixedPrecisionPairs.foreach { case (pl, pr) =>
+          val left = ltzLeft(pl)
+          val right = ltzRight(pr)
+          val wider = TimestampLTZNanosType(math.max(pl, pr))
+
+          val inner = left.join(right, left("k") === right("k"), "inner")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(inner, execClass)
+          assertJoinKeyType(inner, wider)
+          checkAnswer(inner, expectedInner)
+
+          val leftOuter = left.join(right, left("k") === right("k"), "left_outer")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(leftOuter, execClass)
+          checkAnswer(leftOuter, expectedLeftOuter)
+        }
+      }
+    }
+  }
+
+  // ==========================================================================================
+  // Microsecond timestamp JOIN nanosecond timestamp: the key widens from the micro type to the
+  // nanos type, and only a whole-microsecond (zero-remainder) nanos row can match the micro key.
+  // ==========================================================================================
+  for {
+    (stratName, execClass, stratConf) <- joinStrategies
+    cgConf <- codegenModes
+  } {
+    test(s"NTZ micro join nanos widens to the nanos key - $stratName - ${cgLabel(cgConf)}") {
+      withSQLConf((stratConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ntzMicroLeft()
+          val right = ntzNanosRightForMicro(p)
+          val wider = TimestampNTZNanosType(p)
+
+          val inner = left.join(right, left("k") === right("k"), "inner")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(inner, execClass)
+          assertJoinKeyType(inner, wider)
+          checkAnswer(inner, expectedMicroInner)
+
+          val leftOuter = left.join(right, left("k") === right("k"), "left_outer")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(leftOuter, execClass)
+          checkAnswer(leftOuter, expectedMicroLeftOuter)
+        }
+      }
+    }
+
+    test(s"LTZ micro join nanos widens to the nanos key - $stratName - ${cgLabel(cgConf)}") {
+      withSQLConf((stratConf ++ cgConf): _*) {
+        Seq(7, 8, 9).foreach { p =>
+          val left = ltzMicroLeft()
+          val right = ltzNanosRightForMicro(p)
+          val wider = TimestampLTZNanosType(p)
+
+          val inner = left.join(right, left("k") === right("k"), "inner")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(inner, execClass)
+          assertJoinKeyType(inner, wider)
+          checkAnswer(inner, expectedMicroInner)
+
+          val leftOuter = left.join(right, left("k") === right("k"), "left_outer")
+            .select(left("lid"), right("rid"))
+          assertJoinUsed(leftOuter, execClass)
+          checkAnswer(leftOuter, expectedMicroLeftOuter)
+        }
+      }
+    }
+  }
+
+  // The as-of join orders candidates by an internal timestamp subtraction, which stays allowed for
+  // nanosecond keys even though user-written nanosecond subtraction is rejected.
+  test("DataFrame as-of join over nanosecond keys") {
+    Seq[(DataType, String => Any)](
+      TimestampNTZNanosType(9) -> (s => LocalDateTime.parse(s)),
+      TimestampLTZNanosType(9) -> (s => Instant.parse(s + "Z"))).foreach { case (keyType, key) =>
+      val schema = new StructType().add("k", keyType).add("k2", keyType).add("v", IntegerType)
+      def df(rows: (String, Int)*): classic.DataFrame = spark.createDataFrame(
+        rows.map { case (k, v) => Row(key(k), key(k), v) }.asJava, schema)
+      val left = df("2020-01-01T00:00:01.000000500" -> 1)
+      val right = df("2020-01-01T00:00:00.000000100" -> 10, "2020-01-01T00:00:03.000000200" -> 20)
+      def asOf(l: Column, r: Column, joinExprs: Column, direction: String): classic.DataFrame =
+        left.joinAsOf(right, l, r, joinExprs, joinType = "inner", tolerance = null,
+          allowExactMatches = true, direction = direction)
+      // (left key, right rows, expected right value for backward / forward / nearest). The last two
+      // need the exact distance: their candidates differ from the left key below a microsecond.
+      val cases = Seq(
+        ("00:00:01.000000500", Seq("00:00:00.000000100" -> 10, "00:00:03.000000200" -> 20),
+          (10, 20, 10)),
+        ("00:00:00.000001900", Seq("00:00:00.000001100" -> 1, "00:00:00.000001800" -> 2,
+          "00:00:00.000002300" -> 3, "00:00:00.000002900" -> 4), (2, 3, 2)),
+        ("00:00:00.000000999", Seq("00:00:00.000000000" -> 1, "00:00:00.000001001" -> 2),
+          (1, 2, 2)))
+      Seq("false", "true").foreach { singlePass =>
+        withSQLConf(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass,
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+            SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+          for {
+            sortMerge <- Seq("false", "true")
+            (leftKey, rightRows, (backward, forward, nearest)) <- cases
+            (direction, expected) <-
+              Seq("backward" -> backward, "forward" -> forward, "nearest" -> nearest)
+          } withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge) {
+            val l = df(s"2020-01-01T$leftKey" -> 0)
+            val r = df(rightRows.map { case (k, v) => s"2020-01-01T$k" -> v }: _*)
+            // The single-pass analyzer cannot resolve the deserializer `checkToRDD` adds.
+            QueryTest.checkAnswer(
+              df = l.joinAsOf(r, l("k"), r("k"), usingColumns = Seq.empty, joinType = "inner",
+                tolerance = null, allowExactMatches = true, direction = direction)
+                .select(r("v")),
+              expectedAnswer = Seq(Row(expected)),
+              checkToRDD = false)
+          }
+          // A nanosecond subtraction in an as-of key or in the join condition is still rejected.
+          Seq(
+            () => asOf(left("k") - left("k2"), right("k") - right("k2"), null, "nearest"),
+            () => asOf(left("k") - left("k2"), right("k") - right("k2"), null, "backward"),
+            () => asOf(left("k"), right("k"),
+              left("k") - right("k") < functions.expr("INTERVAL 5 SECONDS"), "backward")
+          ).foreach { join =>
+            val e = intercept[AnalysisException](join())
+            assert(e.getCondition == "UNSUPPORTED_FEATURE.TIMESTAMP_NANOS_SUBTRACTION")
+          }
         }
       }
     }

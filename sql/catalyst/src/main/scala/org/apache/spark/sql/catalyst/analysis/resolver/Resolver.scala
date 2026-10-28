@@ -55,7 +55,6 @@ import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.util.EvaluateUnresolvedInlineTable
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.internal.SQLConf
 
 /**
  * The Resolver implements a single-pass bottom-up analysis algorithm in the Catalyst.
@@ -118,6 +117,7 @@ class Resolver(
   private val filterResolver = new FilterResolver(this, expressionResolver)
   private val sortResolver = new SortResolver(this, expressionResolver)
   private val joinResolver = new JoinResolver(this, expressionResolver)
+  private val asOfJoinResolver = new AsOfJoinResolver(this, expressionResolver)
   private val havingResolver = new HavingResolver(this, expressionResolver)
 
   /**
@@ -265,6 +265,8 @@ class Resolver(
         unresolvedPlan match {
           case unresolvedJoin: Join =>
             joinResolver.resolve(unresolvedJoin)
+          case unresolvedAsOfJoin: AsOfJoin =>
+            asOfJoinResolver.resolve(unresolvedAsOfJoin)
           case unresolvedWith: UnresolvedWith =>
             resolveWith(unresolvedWith)
           case withCte: WithCTE =>
@@ -360,21 +362,21 @@ class Resolver(
    */
   private def resolveWith(unresolvedWith: UnresolvedWith): LogicalPlan = {
     for (cteRelation <- unresolvedWith.cteRelations) {
-      val (cteName, ctePlan, _) = cteRelation
-
       expressionIdAssigner.pushMapping()
       scopes.pushScope()
       cteRegistry.pushScope()
 
       val resolvedCtePlan = try {
-        resolve(ctePlan)
+        resolve(cteRelation.plan)
       } finally {
         cteRegistry.popScope()
         scopes.popScope()
         expressionIdAssigner.popMapping()
       }
 
-      cteRegistry.currentScope.registerCte(cteName, CTERelationDef(resolvedCtePlan))
+      cteRegistry.currentScope.registerCte(
+        cteRelation.name,
+        CTERelationDef(resolvedCtePlan, materialized = cteRelation.materialized))
     }
 
     cteRegistry.pushScope()
@@ -637,6 +639,9 @@ class Resolver(
    * Note: By default if all the inline table expressions can be evaluated eagerly, the parser
    * would produce a [[LocalRelation]] and the analysis would just skip this step and go straight
    * to `resolveLocalRelation` (SPARK-48967, SPARK-49269).
+   *
+   * Inline tables with expressions that are evaluated when the query runs, such as `rand()`,
+   * become an [[Expand]], which only the fixed-point Analyzer supports.
    */
   private def resolveInlineTable(unresolvedInlineTable: UnresolvedInlineTable): LogicalPlan = {
     val withResolvedExpressions = UnresolvedInlineTable(
@@ -651,6 +656,13 @@ class Resolver(
 
     val resolvedRelation = EvaluateUnresolvedInlineTable
       .evaluateUnresolvedInlineTable(withResolvedExpressions)
+
+    resolvedRelation match {
+      case _: Expand =>
+        throw new ExplicitlyUnsupportedResolverFeature(
+          "VALUES lists with expressions that are evaluated when the query runs")
+      case _ =>
+    }
 
     resolve(resolvedRelation)
   }
@@ -807,7 +819,7 @@ class Resolver(
     if (operator.children.nonEmpty) {
       val missingInput = operator.missingInput
       if (missingInput.nonEmpty) {
-        throwMissingAttributesError(operator, missingInput)
+        Resolver.throwMissingAttributesError(operator, missingInput)
       }
     }
   }
@@ -828,42 +840,6 @@ class Resolver(
     }
   }
 
-  private def throwMissingAttributesError(
-      operator: LogicalPlan,
-      missingInput: AttributeSet): Nothing = {
-    val inputSet = operator.inputSet
-
-    val inputAttributesByName = new IdentifierMap[Attribute]
-    for (attribute <- inputSet) {
-      inputAttributesByName.put(attribute.name, attribute)
-    }
-
-    val attributesWithSameName = missingInput.filter { missingAttribute =>
-      inputAttributesByName.contains(missingAttribute.name)
-    }
-
-    if (attributesWithSameName.nonEmpty) {
-      operator.failAnalysis(
-        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_APPEAR_IN_OPERATION",
-        messageParameters = Map(
-          "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
-          "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields),
-          "operation" -> makeCommaSeparatedExpressionString(attributesWithSameName.toSeq)
-        )
-      )
-    } else {
-      operator.failAnalysis(
-        errorClass = "MISSING_ATTRIBUTES.RESOLVED_ATTRIBUTE_MISSING_FROM_INPUT",
-        messageParameters = Map(
-          "missingAttributes" -> makeCommaSeparatedExpressionString(missingInput.toSeq),
-          "input" -> makeCommaSeparatedExpressionString(inputSet.toSeq),
-          "operator" -> operator.simpleString(SQLConf.get.maxToStringFields)
-        )
-      )
-    }
-  }
-
   private def throwSinglePassFailedToResolveOperator(operator: LogicalPlan): Nothing =
     throw SparkException.internalError(
       msg = s"Failed to resolve operator in single-pass: $operator",
@@ -871,7 +847,7 @@ class Resolver(
       summary = operator.origin.context.summary()
     )
 
-  private def throwUnsupportedExprForOperator(
+  private[resolver] def throwUnsupportedExprForOperator(
       operator: LogicalPlan,
       invalidExpressions: Seq[Expression]): Nothing = {
     throw new AnalysisException(
@@ -889,6 +865,30 @@ class Resolver(
 }
 
 object Resolver {
+
+  /**
+   * Fails with `MISSING_ATTRIBUTES` because `operator` references attributes its child does not
+   * produce.
+   */
+  def throwMissingAttributesError(
+      operator: LogicalPlan,
+      missingInput: AttributeSet): Nothing = {
+    val inputAttributesByName = new IdentifierMap[Attribute]
+    for (attribute <- operator.inputSet) {
+      inputAttributesByName.put(attribute.name, attribute)
+    }
+
+    val attributesWithSameName = missingInput.filter { missingAttribute =>
+      inputAttributesByName.contains(missingAttribute.name)
+    }.toSeq
+
+    throw QueryCompilationErrors.missingAttributesError(
+      operator = operator,
+      missingInput = missingInput.toSeq,
+      input = operator.inputSet.toSeq,
+      attributesWithSameName = attributesWithSameName
+    )
+  }
 
   /**
    * Create a new instance of the [[RelationResolution]].

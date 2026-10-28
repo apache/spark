@@ -49,9 +49,11 @@ private class HttpSecurityFilter(
     val hres = res.asInstanceOf[HttpServletResponse]
     hres.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
 
+    val isProxyRequest = hreq.getContextPath == "/proxy"
+
     val cspNonce = CspNonce.generate()
     try {
-      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED)) {
+      if (conf.get(UI_CONTENT_SECURITY_POLICY_ENABLED) && !isProxyRequest) {
         // Use CSP frame-ancestors as the primary clickjacking protection mechanism.
         // X-Frame-Options ALLOW-FROM is deprecated and ignored by modern browsers
         // (Chrome, Firefox, Edge, Safari), so frame-ancestors is used instead.

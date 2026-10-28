@@ -16,27 +16,34 @@
 #
 
 from abc import ABCMeta, abstractmethod
-from typing import Any, Generic, Optional, List, Type, TypeVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Generic, List, Optional, Type, TypeVar
 
 from pyspark import since
+from pyspark.ml.base import (
+    Estimator,
+    Model,
+    PredictionModel,
+    Predictor,
+    Transformer,
+    _PredictorParams,
+)
+from pyspark.ml.common import _java2py, _py2java, inherit_doc
+from pyspark.ml.param import Param, Params
 from pyspark.ml.util import (
-    try_remote_transform_relation,
+    _jvm,
     try_remote_call,
-    try_remote_fit,
     try_remote_del,
-    try_remote_return_java_class,
+    try_remote_fit,
     try_remote_intercept,
+    try_remote_return_java_class,
+    try_remote_transform_relation,
 )
 from pyspark.sql import DataFrame, is_remote
-from pyspark.ml import Estimator, Predictor, PredictionModel, Transformer, Model
-from pyspark.ml.base import _PredictorParams
-from pyspark.ml.param import Param, Params
-from pyspark.ml.util import _jvm
-from pyspark.ml.common import inherit_doc, _java2py, _py2java
 
 if TYPE_CHECKING:
+    from py4j.java_gateway import JavaClass, JavaObject
+
     from pyspark.ml._typing import ParamMap
-    from py4j.java_gateway import JavaObject, JavaClass
 
 
 T = TypeVar("T")
@@ -59,10 +66,9 @@ class JavaWrapper:
         try:
             from pyspark.core.context import SparkContext
 
-            if SparkContext._active_spark_context and self._java_obj is not None:
-                SparkContext._active_spark_context._gateway.detach(  # type: ignore[union-attr]
-                    self._java_obj
-                )
+            sc = SparkContext._active_spark_context
+            if sc is not None and sc._gateway is not None and self._java_obj is not None:
+                sc._gateway.detach(self._java_obj)
         except Exception:
             pass
 

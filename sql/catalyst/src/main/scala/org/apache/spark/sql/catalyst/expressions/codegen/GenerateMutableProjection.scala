@@ -128,8 +128,9 @@ object GenerateMutableProjection extends CodeGenerator[Seq[Expression], MutableP
           return (InternalRow) mutableRow;
         }
 
-        public java.lang.Object apply(java.lang.Object _i) {
-          InternalRow ${ctx.INPUT_ROW} = (InternalRow) _i;
+        ${CodeGenerator.function1ApplyBridge(ctx.INPUT_ROW)}
+
+        public InternalRow apply(InternalRow ${ctx.INPUT_ROW}) {
           $evalSubexpr
           $allProjections
           // copy all the results into MutableRow

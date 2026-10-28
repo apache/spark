@@ -44,12 +44,12 @@ import org.apache.spark.sql.types.{LongType, StructField, StructType}
  */
 class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSession {
 
+  import testImplicits._
+
   private def targetIdentifier = fullyQualifiedIdentifier("target")
 
   /** Source change feed with data columns `(id, name, version)`. */
   private def sourceDf = {
-    val session = spark
-    import session.implicits._
     val stream = MemoryStream[(Int, String, Long)]
     stream.addData((1, "alice", 1L))
     stream.toDF().toDF("id", "name", "version")
@@ -76,7 +76,9 @@ class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
         deleteCondition = None,
         storedAsScdType = ScdType.Type2)))
     val graph = ctx.resolveToDataflowGraph()
-    graph.auxiliaryTableSpecs(targetIdentifier).asInstanceOf[AutoCdcAuxiliaryTableSpec]
+    val inferredSchemas = graph.inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)
+    graph.auxiliaryTableSpecs(inferredSchemas)(targetIdentifier)
+      .asInstanceOf[AutoCdcAuxiliaryTableSpec]
   }
 
   /** The SCD2 target (inferred) schema for the default single-flow graph. */
@@ -97,7 +99,8 @@ class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
         columnSelection = None,
         deleteCondition = None,
         storedAsScdType = ScdType.Type2)))
-    ctx.resolveToDataflowGraph().inferredSchema(targetIdentifier)
+    ctx.resolveToDataflowGraph()
+      .inferSchemas(spark.sessionState.conf.caseSensitiveAnalysis)(targetIdentifier)
   }
 
   test("SCD2 aux schema is the full target schema plus the deleted-by-batch-id marker") {
@@ -139,7 +142,7 @@ class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
     assert(spec.properties(AutoCdcAuxiliaryTable.scdTypePropertyKey) == ScdType.Type2.label)
     assert(spec.expectedKeyFields.map(_.name) == Seq("id"))
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(
+      AutoCdcAuxiliaryTable.parseColumnNames(
         spec.properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty)).contains(Seq("id")))
     assert(spec.identifier == AutoCdcAuxiliaryTable.identifier(targetIdentifier))
     assert(spec.targetTableIdentifier == targetIdentifier)
@@ -149,7 +152,7 @@ class AutoCdcScd2AuxiliaryTableSpecSuite extends PipelineTest with SharedSparkSe
     val spec = scd2AuxSpec(keys = Seq("id", "name"))
     assert(spec.expectedKeyFields.map(_.name) == Seq("id", "name"))
     assert(
-      AutoCdcAuxiliaryTable.parseKeyColumnNames(
+      AutoCdcAuxiliaryTable.parseColumnNames(
         spec.properties(AutoCdcAuxiliaryTable.keyColumnNamesProperty)).contains(Seq("id", "name")))
     // Both keys survive into the aux schema.
     assert(spec.schema.fieldNames.contains("id"))

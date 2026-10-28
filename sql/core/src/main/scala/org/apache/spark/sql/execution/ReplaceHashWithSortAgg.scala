@@ -54,7 +54,7 @@ object ReplaceHashWithSortAgg extends Rule[SparkPlan] {
    * Replace [[HashAggregateExec]] and [[ObjectHashAggregateExec]] with [[SortAggregateExec]].
    */
   private def replaceHashAgg(plan: SparkPlan): SparkPlan = {
-    plan.transformDown {
+    plan.transformUp {
       case hashAgg: BaseAggregateExec if isHashBasedAggWithKeys(hashAgg) =>
         val sortAgg = hashAgg.toSortAggregate
         if (SortOrder.orderingSatisfies(

@@ -83,6 +83,19 @@ trait GraphValidations extends Logging {
     case _ => false
   }
 
+  /** Rejects any AutoCDC flow with an ignore-null selection, since neither SCD type supports it. */
+  protected[graph] def validateNoAutoCdcIgnoreNullSelection(): Unit = {
+    resolvedFlows
+      .collectFirst {
+        case f: AutoCdcMergeFlow if f.changeArgs.ignoreNullSelection.isDefined => f
+      }
+      .foreach { flow =>
+        throw new UnsupportedOperationException(
+          s"AutoCDC flow ${flow.displayName} specifies ignore-null updates, which are not yet " +
+            "supported.")
+      }
+  }
+
   /**
    * Validate that each resolved flow is correctly either a streaming flow or non-streaming flow,
    * depending on the flow type (ex. once flow vs non-once flow) and the dataset type the flow
@@ -252,7 +265,7 @@ trait GraphValidations extends Logging {
       }
   }
 
-  protected def validateUserSpecifiedSchemas(): Unit = {
+  protected def validateUserSpecifiedSchemas(sessionCaseSensitive: Boolean): Unit = {
     // Look up tables by their destination identifier, not by the flow's own identifier. The two
     // coincide only for an implicit/default flow (whose identifier equals its destination
     // table's); for a named flow (e.g. `CREATE FLOW <name> AS AUTO CDC INTO <target>`) they
@@ -262,8 +275,10 @@ trait GraphValidations extends Logging {
       // schema of all incoming flows. This must be equivalent to the declared schema.
       val inferredSchema = SchemaInferenceUtils
         .inferSchemaFromFlows(
+          tableIdentifier = t.identifier,
           flowsTo(t.identifier).map(f => resolvedFlow(f.identifier)),
-          userSpecifiedSchema = t.specifiedSchema
+          userSpecifiedSchema = t.specifiedSchema,
+          sessionCaseSensitive = sessionCaseSensitive
         )
 
       t.specifiedSchema.foreach { ss =>

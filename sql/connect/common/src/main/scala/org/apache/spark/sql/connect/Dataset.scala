@@ -220,7 +220,11 @@ class Dataset[T] private[sql] (
 
   /** @inheritdoc */
   def explain(mode: String): Unit = {
-    val protoMode = mode.trim.toLowerCase(util.Locale.ROOT) match {
+    explain(parseExplainMode(mode))
+  }
+
+  private def parseExplainMode(mode: String): proto.AnalyzePlanRequest.Explain.ExplainMode = {
+    mode.trim.toLowerCase(util.Locale.ROOT) match {
       case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
       case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
       case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
@@ -228,7 +232,6 @@ class Dataset[T] private[sql] (
       case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
       case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
     }
-    explain(protoMode)
   }
 
   private def explain(mode: proto.AnalyzePlanRequest.Explain.ExplainMode): Unit = {
@@ -242,16 +245,8 @@ class Dataset[T] private[sql] (
   }
 
   private[connect] def explainString(mode: String): String = {
-    val protoMode = mode.trim.toLowerCase(util.Locale.ROOT) match {
-      case "simple" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_SIMPLE
-      case "extended" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_EXTENDED
-      case "codegen" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_CODEGEN
-      case "cost" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_COST
-      case "formatted" => proto.AnalyzePlanRequest.Explain.ExplainMode.EXPLAIN_MODE_FORMATTED
-      case _ => throw new IllegalArgumentException("Unsupported explain mode: " + mode)
-    }
     sparkSession
-      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(protoMode))
+      .analyze(plan, proto.AnalyzePlanRequest.AnalyzeCase.EXPLAIN, Some(parseExplainMode(mode)))
       .getExplain
       .getExplainString
   }
@@ -677,6 +672,63 @@ class Dataset[T] private[sql] (
       cols,
       proto.Aggregate.GroupType.GROUP_TYPE_GROUPING_SETS,
       groupingSets = Some(groupingSetMsgs))
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column]): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column): DataFrame = {
+    binBy(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidth = binWidth,
+      distributeUniform = distributeUniform,
+      alignTo = alignTo,
+      binStartName = null,
+      binEndName = null,
+      binDistributeRatioName = null)
+  }
+
+  /** @inheritdoc */
+  def binBy(
+      rangeStart: Column,
+      rangeEnd: Column,
+      binWidth: Column,
+      distributeUniform: Array[Column],
+      alignTo: Column,
+      binStartName: String,
+      binEndName: String,
+      binDistributeRatioName: String): DataFrame = {
+    val columns = Seq(rangeStart, rangeEnd, binWidth) ++ distributeUniform ++ Option(alignTo)
+    sparkSession.newDataFrame(columns) { builder =>
+      val binBy = builder.getBinByBuilder
+        .setInput(plan.getRoot)
+        .setRangeStart(toExpr(rangeStart))
+        .setRangeEnd(toExpr(rangeEnd))
+        .setBinWidth(toExpr(binWidth))
+      Option(alignTo).foreach(origin => binBy.setAlignTo(toExpr(origin)))
+      distributeUniform.foreach(column => binBy.addDistributeUniform(toExpr(column)))
+      Option(binStartName).foreach(binBy.setBinStartName)
+      Option(binEndName).foreach(binBy.setBinEndName)
+      Option(binDistributeRatioName).foreach(binBy.setBinDistributeRatioName)
+    }
   }
 
   /** @inheritdoc */

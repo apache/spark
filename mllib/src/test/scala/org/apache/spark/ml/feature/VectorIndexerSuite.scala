@@ -271,6 +271,13 @@ class VectorIndexerSuite extends MLTest with DefaultReadWriteTest with Logging {
       testTransformerByGlobalCheckFunc[FeatureData](points, model1, "indexed") { rows =>
         assert(rows.map(_(0)) == expected)
       }
+      model1.set(model1.handleInvalid, "keep")
+      testTransformerByGlobalCheckFunc[FeatureData](pointsTestInvalid, model1, "indexed") { rows =>
+        assert(rows.map(_(0)) == expected ++ Array(
+          Vectors.dense(2.0, 2.0, 0.0),
+          Vectors dense(0.0, 4.0, 2.0),
+          Vectors.dense(1.0, 3.0, 3.0)))
+      }
       val vectorIndexer2 = getIndexer.setMaxCategories(4).setHandleInvalid("keep")
       val model2 = vectorIndexer2.fit(points)
       testTransformerByGlobalCheckFunc[FeatureData](pointsTestInvalid, model2, "indexed") { rows =>

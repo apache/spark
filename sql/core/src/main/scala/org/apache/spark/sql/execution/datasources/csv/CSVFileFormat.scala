@@ -57,8 +57,6 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       options: Map[String, String],
       files: Seq[FileStatus]): Option[StructType] = {
     val parsedOptions = getCsvOptions(sparkSession, options)
-    // The v1 file format routes archives to `readArchive` (see `buildReader`), so archive schema
-    // inference is supported here.
     CSVDataSource(parsedOptions)
       .inferSchema(sparkSession, files, parsedOptions, supportsArchiveScan = true)
   }
@@ -144,7 +142,8 @@ case class CSVFileFormat() extends TextBasedFileFormat with DataSourceRegister {
       // archive reads are enabled; otherwise the file is parsed directly.
       if (parsedOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(file.toPath)) {
         CSVDataSource(parsedOptions).readArchive(
-          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex)
+          conf, file, () => newParser(), getHeaderChecker, requiredSchema, ignoredPathSegmentRegex,
+          parsedOptions.archivePathFilterPattern)
       } else {
         val parser = newParser()
         val headerChecker = getHeaderChecker(file.start == 0, s"CSV file: ${file.urlEncodedPath}")

@@ -15,27 +15,34 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import datetime
+import logging
 import os
 import shutil
 import tempfile
-import unittest
-import logging
 import time
+import unittest
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Iterator, Optional
 
 from pyspark.errors import (
-    PySparkAttributeError,
-    PythonException,
-    PySparkTypeError,
     AnalysisException,
-    PySparkPicklingError,
     IllegalArgumentException,
+    PySparkAttributeError,
+    PySparkNotImplementedError,
+    PySparkPicklingError,
+    PySparkTypeError,
+    PythonException,
 )
-from pyspark.util import PythonEvalType
+from pyspark.logger import PySparkLogger
 from pyspark.sql.functions import (
+    AnalyzeArgument,
+    AnalyzeResult,
+    OrderingColumn,
+    PartitioningColumn,
+    SelectedColumn,
+    SkipRestOfInputTableException,
     array,
     col,
     create_map,
@@ -43,16 +50,11 @@ from pyspark.sql.functions import (
     named_struct,
     udf,
     udtf,
-    AnalyzeArgument,
-    AnalyzeResult,
-    OrderingColumn,
-    PartitioningColumn,
-    SelectedColumn,
-    SkipRestOfInputTableException,
 )
 from pyspark.sql.types import (
     ArrayType,
     BooleanType,
+    CharType,
     DataType,
     IntegerType,
     LongType,
@@ -64,7 +66,7 @@ from pyspark.sql.types import (
     StructType,
     VariantVal,
 )
-from pyspark.logger import PySparkLogger
+from pyspark.sql.utils import is_remote
 from pyspark.testing import assertDataFrameEqual, assertSchemaEqual
 from pyspark.testing.objects import ExamplePoint, ExamplePointUDT
 from pyspark.testing.sqlutils import ReusedSQLTestCase
@@ -74,7 +76,7 @@ from pyspark.testing.utils import (
     pandas_requirement_message,
     pyarrow_requirement_message,
 )
-from pyspark.util import is_remote_only
+from pyspark.util import PythonEvalType, is_remote_only
 
 
 class BaseUDTFTestsMixin:
@@ -85,6 +87,60 @@ class BaseUDTFTestsMixin:
 
         func = udtf(TestUDTF, returnType="c1: string, c2: string")
         assertDataFrameEqual(func(), [Row(c1="hello", c2="world")])
+
+    def test_udtf_char_varchar_return_type(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        schema = StructType([StructField("c", CharType(3))])
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            udtf(TestUDTF, returnType=schema)()
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDTF return types",
+                "data_type": schema.simpleString(),
+            },
+        )
+
+    def test_udtf_char_varchar_return_type_ddl(self):
+        class TestUDTF:
+            def eval(self):
+                yield ("a",)
+
+        def invoke():
+            return udtf(TestUDTF, returnType="c: char(3)")()
+
+        if is_remote():
+            with self.assertRaises(AnalysisException) as pe:
+                invoke().collect()
+            self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
+        else:
+            with self.assertRaises(PySparkNotImplementedError) as pe:
+                invoke()
+            self.check_error(
+                exception=pe.exception,
+                errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                messageParameters={
+                    "feature": "Python UDTF return types",
+                    "data_type": "struct<c:char(3)>",
+                },
+            )
+
+    def test_udtf_char_varchar_analyze_schema(self):
+        class TestUDTF:
+            @staticmethod
+            def analyze(*args):
+                return AnalyzeResult(StructType([StructField("c", CharType(3))]))
+
+            def eval(self, *args):
+                yield ("a",)
+
+        with self.assertRaises(AnalysisException) as pe:
+            udtf(TestUDTF)().collect()
+        self.assertEqual(pe.exception.getCondition(), "CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON")
 
     def test_udtf_yield_single_row_col(self):
         class TestUDTF:
@@ -1999,6 +2055,25 @@ class BaseUDTFTestsMixin:
         with self.assertRaisesRegex(AnalysisException, "Failed to analyze."):
             func().collect()
 
+    def test_udtf_analyze_traceback_with_locals(self):
+        with self.sql_conf({"spark.sql.execution.pyspark.udf.tracebackWithLocals.enabled": True}):
+
+            class TestUDTF:
+                @staticmethod
+                def analyze() -> AnalyzeResult:
+                    local_marker = 1
+                    if local_marker:
+                        raise ValueError("boom")
+                    return AnalyzeResult(StructType().add("x", StringType()))
+
+                def eval(self):
+                    yield ("x",)
+
+            func = udtf(TestUDTF)
+
+            with self.assertRaisesRegex(AnalysisException, "local_marker = 1"):
+                func().collect()
+
     def test_udtf_with_analyze_null_literal(self):
         class TestUDTF:
             @staticmethod
@@ -3710,6 +3785,27 @@ class LegacyUDTFArrowTestsMixin(BaseUDTFTestsMixin):
                     PythonException, "Exception thrown when converting pandas.Series"
                 ):
                     udtf(TestUDTF, returnType=ret_type)().collect()
+
+    def test_udtf_lateral_join_with_output_batch_slicing(self):
+        # Each output batch is joined with one input row, so it must not be sliced by the
+        # configs below.
+        @udtf(returnType="x: int")
+        class TestUDTF:
+            def eval(self, n: int):
+                for i in range(5):
+                    yield (n * 10 + i,)
+
+        self.spark.udtf.register("test_udtf_slicing", TestUDTF)
+        expected = [Row(id=n, x=n * 10 + i) for n in range(3) for i in range(5)]
+        for conf in [
+            {"spark.sql.execution.arrow.maxRecordsPerOutputBatch": "3"},
+            {"spark.sql.execution.arrow.maxBytesPerOutputBatch": "3"},
+        ]:
+            with self.subTest(conf=conf), self.sql_conf(conf):
+                df = self.spark.sql(
+                    "SELECT t.id, u.x FROM range(0, 3, 1, 1) t, LATERAL test_udtf_slicing(t.id) u"
+                )
+                assertDataFrameEqual(df, expected)
 
 
 class LegacyUDTFArrowTests(LegacyUDTFArrowTestsMixin, ReusedSQLTestCase):

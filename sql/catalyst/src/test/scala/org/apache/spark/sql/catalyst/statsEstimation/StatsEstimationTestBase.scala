@@ -46,7 +46,7 @@ trait StatsEstimationTestBase extends SparkFunSuite {
 
   def getColSize(attribute: Attribute, colStat: ColumnStat): Long = attribute.dataType match {
     // For UTF8String: base + offset + numBytes
-    case StringType => colStat.avgLen.getOrElse(attribute.dataType.defaultSize.toLong) + 8 + 4
+    case _: StringType => colStat.avgLen.getOrElse(attribute.dataType.defaultSize.toLong) + 8 + 4
     case _ => colStat.avgLen.getOrElse(attribute.dataType.defaultSize)
   }
 

@@ -1139,6 +1139,40 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     }
   }
 
+  test("SPARK-60474: stop should not wait for pending abort timer tasks") {
+    // Keep the abort timer task pending much longer than the 30s grace period of
+    // `ThreadUtils.shutdown`
+    taskScheduler = setupSchedulerWithMockTaskSetExcludelist(
+      config.UNSCHEDULABLE_TASKSET_TIMEOUT.key -> "1h")
+
+    // We have only 1 task remaining with 1 executor
+    val taskSet = FakeTask.createTaskSet(numTasks = 1)
+    taskScheduler.submitTasks(taskSet)
+    val tsm = stageToMockTaskSetManager(0)
+
+    // submit an offer with one executor
+    val firstTaskAttempts = taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten
+
+    // Fail the running task
+    val failedTask = firstTaskAttempts.head
+    failTask(failedTask.taskId, TaskState.FAILED, UnknownReason, tsm)
+    when(tsm.taskSetExcludelistHelperOpt.get.isExecutorExcludedForTask(
+      "executor0", failedTask.index)).thenReturn(true)
+
+    // make an offer on the excluded executor. We won't schedule anything, and start the abort
+    // timer for the task set
+    assert(taskScheduler.resourceOffers(IndexedSeq(
+      WorkerOffer("executor0", "host0", 1)
+    )).flatten.isEmpty)
+    assert(taskScheduler.unschedulableTaskSetToExpiryTime.contains(tsm))
+
+    val startTime = System.nanoTime()
+    taskScheduler.stop()
+    assert(System.nanoTime() - startTime < 10.seconds.toNanos)
+  }
+
   /**
    * Helper for performance tests.  Takes the explicitly excluded nodes and executors; verifies
    * that the excluded are used efficiently to ensure scheduling is not O(numPendingTasks).
@@ -2806,6 +2840,144 @@ class TaskSchedulerImplSuite extends SparkFunSuite with LocalSparkContext
     val tsm = taskScheduler.createTaskSetManager(taskSet, 1)
 
     assert(!tsm.isInstanceOf[StructuredStreamingIdAwareSchedulerLogging])
+  }
+
+  test("outstandingTasksForOtherWorkInProfile counts running + enqueued, excludes given stages, " +
+      "and is resource-profile-scoped") {
+    // Backs the pipelined-group slot admission check (DAGScheduler): it must report the OUTSTANDING
+    // (running + enqueued, i.e. numTasks - tasksSuccessful) task demand of OTHER work in a given
+    // resource profile, excluding the group's own member stages.
+    val taskScheduler = setupScheduler()
+    // Only 3 total cores, but each stage has 4 tasks -> some tasks launch, the rest stay enqueued.
+    val workerOffers = IndexedSeq(
+      new WorkerOffer("executor0", "host0", 2),
+      new WorkerOffer("executor1", "host1", 1))
+
+    // Stage 0 and stage 1 both in the DEFAULT profile, 4 tasks each (8 total) but only 3 cores, so
+    // 3 launch and 5 remain enqueued. Distinct stageIds let us exclude one and count the other.
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 0))
+    taskScheduler.submitTasks(FakeTask.createTaskSet(4, stageId = 1, stageAttemptId = 0))
+    val launched = taskScheduler.resourceOffers(workerOffers).flatten
+    assert(launched.length === 3, "only three tasks can run (3 cores); the other five are enqueued")
+
+    val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+    // Nothing excluded: all 8 tasks are outstanding (3 running + 5 enqueued) though only 3 run.
+    // The old running-only count would have reported 3 here; outstanding demand is what can hang a
+    // co-scheduled group, so it must be 8.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set.empty) === 8)
+    // Exclude stage 0 (as if it were the group's own member): only stage 1's 4 tasks remain.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 4)
+    // Exclude both: zero "other" tasks.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0, 1)) === 0)
+    // A DIFFERENT (non-existent here) resource profile has no outstanding tasks -- other-profile
+    // load must not be charged against this profile (RP-scoping).
+    val otherRpId = defaultRp + 12345
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(otherRpId, Set.empty) === 0,
+      "tasks in the default profile must not be counted against a different profile")
+  }
+
+  test("outstandingTasksForOtherWorkInProfile does not double-count a zombie + live attempt") {
+    // A retried/killed stage can have both a zombie (superseded) attempt and a live attempt in the
+    // map at once; the live attempt re-runs the zombie's outstanding tasks, so only the live
+    // attempt's demand should count. Counting both would inflate occupancy and could spuriously
+    // fail a pipelined group with CONCURRENT_SCHEDULER_INSUFFICIENT_SLOT.
+    val taskScheduler = setupScheduler()
+    val defaultRp = ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID
+
+    // Attempt 0 of stage 0: 4 tasks, none started. Mark it zombie (as if superseded).
+    val attempt0 = FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 0)
+    taskScheduler.submitTasks(attempt0)
+    taskScheduler.taskSetManagerForAttempt(0, 0).get.isZombie = true
+
+    // Attempt 1 of the SAME stage: the live retry, also 4 tasks.
+    val attempt1 = FakeTask.createTaskSet(4, stageId = 0, stageAttemptId = 1)
+    taskScheduler.submitTasks(attempt1)
+
+    // Both attempts are in the map, but only the live attempt's 4 tasks are outstanding -- not 8.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set.empty) === 4,
+      "a zombie attempt must not be counted alongside its live retry")
+    // Excluding the stage (as the group's own member) drops both attempts.
+    assert(taskScheduler.outstandingTasksForOtherWorkInProfile(defaultRp, Set(0)) === 0)
+  }
+
+  /**
+   * A TaskSet marked as a pipelined-group member. FakeTask.createTaskSet always leaves
+   * `isPipelined` at its default (false), so build the TaskSet directly here.
+   */
+  private def pipelinedTaskSet(numTasks: Int, stageId: Int, stageAttemptId: Int = 0): TaskSet = {
+    val tasks = Array.tabulate[Task[_]](numTasks)(i => new FakeTask(stageId, i, Nil))
+    new TaskSet(tasks, stageId, stageAttemptId, priority = 0, null,
+      ResourceProfile.DEFAULT_RESOURCE_PROFILE_ID, None, isPipelined = true)
+  }
+
+  test("SPARK-58913: hasPipelinedTaskSets is true only while a pipelined-group member is live") {
+    val taskScheduler = setupScheduler()
+    assert(!taskScheduler.hasPipelinedTaskSets, "no task set has been submitted yet")
+
+    // A regular task set leaves isPipelined at false and must not register as a group member.
+    taskScheduler.submitTasks(FakeTask.createTaskSet(2, stageId = 0, stageAttemptId = 0))
+    assert(!taskScheduler.hasPipelinedTaskSets,
+      "a regular task set is not a pipelined-group member")
+
+    // One pipelined member anywhere in the map is enough, even next to regular task sets.
+    taskScheduler.submitTasks(pipelinedTaskSet(2, stageId = 1))
+    assert(taskScheduler.hasPipelinedTaskSets,
+      "a live pipelined task set must be reported even alongside regular ones")
+  }
+
+  test("SPARK-58913: hasPipelinedTaskSets ignores zombie attempts") {
+    // A zombie (superseded by a retry/kill) attempt no longer schedules tasks, so a stale pipelined
+    // attempt left in the map must not make the scheduler look like a group is still in flight.
+    val taskScheduler = setupScheduler()
+    taskScheduler.submitTasks(pipelinedTaskSet(2, stageId = 0, stageAttemptId = 0))
+    assert(taskScheduler.hasPipelinedTaskSets)
+
+    taskScheduler.taskSetManagerForAttempt(0, 0).get.isZombie = true
+    assert(!taskScheduler.hasPipelinedTaskSets,
+      "a zombie pipelined attempt must not count as a live group member")
+
+    // The live retry of the same stage is a group member again.
+    taskScheduler.submitTasks(pipelinedTaskSet(2, stageId = 0, stageAttemptId = 1))
+    assert(taskScheduler.hasPipelinedTaskSets,
+      "the live retry attempt must be reported even though the zombie attempt is skipped")
+  }
+
+  test("SPARK-58913: hasPipelinedTaskSets is false once every member's task set has finished") {
+    // The task scheduler drops a task set once it finishes, so the flag goes false at that point
+    // even though the job that owns the group is not done yet (the DAGScheduler has still to
+    // process the final completion). This is the documented narrowing of the task-scheduler view.
+    val taskScheduler = setupScheduler()
+    taskScheduler.submitTasks(pipelinedTaskSet(1, stageId = 0, stageAttemptId = 0))
+    assert(taskScheduler.hasPipelinedTaskSets)
+
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    taskScheduler.taskSetFinished(tsm)
+    assert(!taskScheduler.hasPipelinedTaskSets,
+      "a finished task set is no longer held by the task scheduler")
+  }
+
+  test("error() with no active task sets reports a cluster manager failure") {
+    val taskScheduler = setupScheduler()
+    // No task set has been submitted, so `error` cannot abort anything and throws instead.
+    checkError(
+      exception = intercept[SparkException] {
+        taskScheduler.error("Master removed our application: FAILED")
+      },
+      condition = "CLUSTER_MANAGER_APPLICATION_FAILURE",
+      sqlState = Some("56000"),
+      parameters = Map("message" -> "Master removed our application: FAILED"))
+  }
+
+  test("error() with an active task set aborts it instead of throwing") {
+    val taskScheduler = setupScheduler()
+    taskScheduler.submitTasks(FakeTask.createTaskSet(1))
+    val tsm = taskScheduler.taskSetManagerForAttempt(0, 0).get
+    taskScheduler.error("Master removed our application: FAILED")
+    assert(tsm.isZombie)
+    // The zombie flag cannot show whether the reason survived the trip, so assert that the
+    // DAGScheduler was notified with the message verbatim.
+    assert(failedTaskSet)
+    assert(failedTaskSetReason === "Master removed our application: FAILED")
   }
 
 }

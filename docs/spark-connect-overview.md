@@ -111,17 +111,19 @@ latest release in  the release drop down at the top of the page. Then choose you
 
 Now extract the Spark package you just downloaded on your computer, for example:
 
-{% highlight bash %}
+```bash
 tar -xvf spark-{{site.SPARK_VERSION_SHORT}}-bin-hadoop3.tgz
-{% endhighlight %}
+```
 
 In a terminal window, go to the `spark` folder in the location where you extracted
 Spark before and run the `start-connect-server.sh` script to start Spark server with
 Spark Connect, like in this example:
 
-{% highlight bash %}
+```bash
 ./sbin/start-connect-server.sh
-{% endhighlight %}
+```
+
+Alternatively, `./bin/spark-connect-shell` starts an interactive Scala shell with the Connect server hosted inside the shell process itself.
 
 Make sure to use the same version  of the package as the Spark version you
 downloaded previously. In this example, Spark {{site.SPARK_VERSION_SHORT}} with Scala 2.13.
@@ -277,6 +279,72 @@ The connection may also be programmatically created using _SparkSession#builder_
 </div>
 </div>
 
+## Faster local iteration with a persistent Connect server
+
+When you develop or test locally with
+
+```python
+from pyspark.sql import SparkSession
+spark = SparkSession.builder.remote("local[*]").getOrCreate()
+```
+
+PySpark boots a fresh in-process Spark Connect server that lives only as long as that Python
+process. Every `python script.py` invocation (or every new test worker process) therefore re-pays
+the one-time startup cost -- JVM warmup, `SparkContext` construction, and Connect server boot --
+which can take a few seconds and makes a quick edit/run loop feel slow.
+
+To amortize that cost across runs, start one persistent local Spark Connect server and point
+every run at it:
+
+```bash
+# Start once; it stays up across runs. (--master is optional; it defaults to local[*].)
+$SPARK_HOME/sbin/start-connect-server.sh --master "local[*]"
+
+# Every run reconnects instead of booting a new server.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("sc://localhost:15002").getOrCreate()'
+
+# Stop it when you are done.
+$SPARK_HOME/sbin/stop-connect-server.sh
+```
+
+Alternatively, on POSIX systems PySpark can manage this persistent server for you. With
+`SPARK_LOCAL_CONNECT_REUSE=1` set (or `spark.local.connect.reuse=true` on the builder),
+`SparkSession.builder.remote("local[*]").getOrCreate()` starts a persistent server through
+`sbin/start-connect-server.sh` on the first run and reconnects to it on later runs, so scripts
+keep the plain `local[*]` URL:
+
+```bash
+export SPARK_LOCAL_CONNECT_REUSE=1
+
+# The first run starts the server; later runs reconnect to it.
+python -c 'from pyspark.sql import SparkSession; SparkSession.builder.remote("local[*]").getOrCreate()'
+
+# Stop the managed server when you are done.
+python -m pyspark.sql.connect.local_server --stop
+```
+
+The managed server is an ordinary `spark-daemon.sh` daemon, but it runs with a per-user pid
+directory and ident string so it cannot collide with a server you started by hand -- which also
+means a plain `sbin/stop-connect-server.sh` does not find it. The `--stop` command signals the
+recorded server and cleans up the discovery file; killing the server's pid directly also works,
+and the next run notices the dead server and starts a fresh one.
+
+This managed-server workflow is experimental. The `--stop` command and the discovery file
+location and format may change in a future release, for example if local server management is
+folded into a unified `spark connect` CLI.
+
+The connection details (host, port, auth token, pid, Spark version) are recorded in a discovery
+file in a private per-user directory; set `SPARK_LOCAL_CONNECT_DISCOVERY` to override its
+location. A run reconnects only to a server whose Spark version matches. After upgrading Spark,
+the server from the previous version cannot be reused and the next run fails with an error asking
+you to stop it; run the `--stop` command above and rerun to start a fresh server.
+
+Each run connects as its own Connect session, so session-local state -- temp views, runtime SQL
+configurations, and session artifacts -- is fresh on every run and never leaks between runs. State
+backed by the shared `SparkContext` (the persistent catalog/warehouse, global temp views, and
+cached datasets) *is* shared across runs, so namespace per-run databases or clear that state
+yourself if your runs must be fully isolated.
+
 ## Use Spark Connect in standalone applications
 
 <div class="codetabs">
@@ -371,7 +439,7 @@ one may implement their own class extending `ClassFinder` for customized search 
 </div>
 
 For more information on application development with Spark Connect as well as extending Spark Connect
-with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html). 
+with custom functionality, see [Application Development with Spark Connect](app-dev-spark-connect.html).
 # Client application authentication
 
 While Spark Connect does not have built-in authentication, it is designed to
@@ -413,3 +481,81 @@ APIs such as [SparkContext](api/scala/org/apache/spark/SparkContext.html)
 and [RDD](api/scala/org/apache/spark/rdd/RDD.html) are unsupported in Spark Connect.
 
 Support for more APIs is planned for upcoming Spark releases.
+
+# Routing through a shared ingress or reverse proxy
+
+When several services share a single hostname behind a Kubernetes Ingress (or another
+reverse proxy), it is tempting to give each service a URL path prefix (for example
+`sc://host/sparkConnect`) and route on that path. This does not work for gRPC: the
+gRPC method name *is* the HTTP/2 `:path` (`/spark.connect.SparkConnectService/ExecutePlan`),
+so a connection string cannot carry a separate routing path. Prepending a prefix to the
+`:path` produces an unknown method and the server responds with `UNIMPLEMENTED`, unless the
+proxy is configured to strip the prefix back off before forwarding, a two-sided contract
+that is not part of gRPC's design.
+
+The routing dimension that *is* free is the HTTP/2 `:authority` (the virtual host). Set it
+to a routing tag with the `grpc.default_authority` channel option, and route on it at the
+proxy (for example, an Ingress `host:` rule). The client still dials the shared hostname
+(`default_authority` only overrides the `:authority` header used for routing, not the address
+it connects to), and the gRPC method `:path` is never touched, so no path rewrite is needed.
+This is the approach the gRPC maintainers recommend for this scenario
+([grpc/grpc#14900](https://github.com/grpc/grpc/issues/14900)).
+
+The example below uses the Python client, which exposes gRPC channel options directly:
+
+{% highlight python %}
+from pyspark.sql.connect.session import SparkSession
+from pyspark.sql.connect.client import DefaultChannelBuilder
+
+cb = DefaultChannelBuilder("sc://myhost.com:443")
+cb.setChannelOption("grpc.default_authority", "sparkconnect")  # routing tag
+spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
+{% endhighlight %}
+
+A corresponding Kubernetes Ingress routes on that tag and keeps the service at path `/`
+(no subpath, no rewrite). Note the routing tag must be a lowercase
+[RFC 1123](https://datatracker.ietf.org/doc/html/rfc1123) name, since a Kubernetes Ingress
+`host:` requires one:
+
+{% highlight yaml %}
+spec:
+  rules:
+  - host: sparkconnect            # matches grpc.default_authority
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: spark-connect-server
+            port: { number: 15002 }
+{% endhighlight %}
+
+**Over TLS**, gRPC uses the `:authority` as the certificate-verification name by default,
+so overriding it with a routing tag would fail verification (the tag is not in the server
+certificate's SAN). Keep the two names separate: set `grpc.ssl_target_name_override` to the
+real server hostname (used for certificate verification and SNI) and `grpc.default_authority`
+to the routing tag.
+
+{% highlight python %}
+cb = DefaultChannelBuilder("sc://myhost.com:443/;use_ssl=true")
+cb.setChannelOption("grpc.ssl_target_name_override", "myhost.com")  # certificate verification / SNI
+cb.setChannelOption("grpc.default_authority", "sparkconnect")       # routing tag
+spark = SparkSession.builder.channelBuilder(cb).getOrCreate()
+{% endhighlight %}
+
+`use_ssl=true` verifies the server certificate against the system's trusted CA store. If your
+gateway's certificate is issued by a CA the client does not trust by default (a self-signed or
+internal CA), make that CA trusted on the client side (for example, via
+`GRPC_DEFAULT_SSL_ROOTS_FILE_PATH`) rather than through the connection string. Configuring the
+proxy's own TLS (which certificate it presents for which hostname) is part of your ingress
+setup and is out of scope here.
+
+Two notes on `grpc.ssl_target_name_override`:
+gRPC documents it as testing-oriented because its typical misuse is to *mask* a certificate
+name mismatch (verifying against a name the server does not actually present, which defeats
+hostname verification). Here it is set to the real, verified hostname, so the certificate is
+still checked correctly; it only prevents the routing tag from being used as the verification
+name. If you prefer to avoid the option entirely, issue the server certificate with the routing
+tag included in its SAN; then `grpc.default_authority` alone is sufficient and no override is
+needed.

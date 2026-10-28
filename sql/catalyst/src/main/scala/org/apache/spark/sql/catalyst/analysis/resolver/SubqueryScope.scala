@@ -70,12 +70,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  *        WHERE t3.b > t2.b AND t3.c > t1.c
  *   ) AND t2.b > t1.b
  * }}}
- *   We get the [[outerScopeLevel]] map for the outer references during attributes resolution
+ *   We record the outer scope level for the outer references during attributes resolution
  *   which indicates how many subquery levels we need to go up to find the attribute reference.
- *   We need the outerScopeLevel map when resolving the subquery expressions, where we collect
- *   the outer references and wrap the ones cannot be resolved in the current subquery scope or
- *   its parent scopes with [[OuterScopeReference]]. More details can be found in
- *   `SubqueryExpressionResolver.processOuterReferences`.
+ *   Only one level of correlation is currently supported, so the query above is not supported
+ *   and the subquery expression's `outerAttrs` are simply the outer references collected from
+ *   the resolved subquery plan.
  *
  * Notes:
  *  - Spark only supports outer aggregates in the subqueries inside `HAVING`;

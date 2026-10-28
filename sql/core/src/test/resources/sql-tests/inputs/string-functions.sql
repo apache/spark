@@ -371,3 +371,10 @@ select instr(null, 'b', 1);
 select instr('a', null, 1);
 select instr('a', 'b', cast(null as int), 2);
 select instr(null, null, cast(null as int), cast(null as int));
+
+-- normalize
+select normalize('hello');
+select normalize('hello', 'NFD');
+select normalize('ﬁ', 'NFKC');
+select normalize(null, 'NFC');
+select normalize('hello', 'not_a_form');

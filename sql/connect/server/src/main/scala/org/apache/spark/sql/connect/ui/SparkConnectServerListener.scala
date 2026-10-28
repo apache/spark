@@ -180,7 +180,7 @@ private[connect] class SparkConnectServerListener(
     updateLiveStore(executionData) { executionData =>
       executionData.state = ExecutionState.STARTED
     }
-    Option(sessionList.get(e.sessionId)) match {
+    Option(sessionList.get(SessionInfo.uniqueId(e.userId, e.sessionId))) match {
       case Some(sessionData) =>
         updateLiveStore(sessionData) { sessionData => sessionData.totalExecution += 1 }
       case None =>
@@ -282,7 +282,7 @@ private[connect] class SparkConnectServerListener(
 
   private def onSessionClosed(e: SparkListenerConnectSessionClosed) = {
     sessionList.compute(
-      e.sessionId,
+      SessionInfo.uniqueId(e.userId, e.sessionId),
       (_, sessionData) => {
         if (sessionData != null) {
           updateStoreWithTriggerEnabled(sessionData) { sessionData =>
@@ -319,11 +319,11 @@ private[connect] class SparkConnectServerListener(
 
   private def getOrCreateSession(
       sessionId: String,
-      userName: String,
+      userId: String,
       startTime: Long): LiveSessionData = {
     sessionList.computeIfAbsent(
-      sessionId,
-      _ => new LiveSessionData(sessionId, startTime, userName))
+      SessionInfo.uniqueId(userId, sessionId),
+      _ => new LiveSessionData(sessionId, startTime, userId))
   }
 
   private def getOrCreateExecution(
@@ -369,7 +369,9 @@ private[connect] class SparkConnectServerListener(
       j.finishTimestamp != 0L
     }
 
-    toDelete.foreach { j => kvstore.delete(j.getClass, j.sessionId) }
+    toDelete.foreach { j =>
+      kvstore.delete(j.getClass, SessionInfo.uniqueId(j.userId, j.sessionId))
+    }
   }
 
   /**
@@ -431,14 +433,14 @@ private[connect] class LiveExecutionData(
 private[connect] class LiveSessionData(
     val sessionId: String,
     val startTimestamp: Long,
-    val userName: String)
+    val userId: String)
     extends LiveEntity {
 
   var finishTimestamp: Long = 0L
   var totalExecution: Int = 0
 
   override protected def doUpdate(): Any = {
-    new SessionInfo(sessionId, startTimestamp, userName, finishTimestamp, totalExecution)
+    new SessionInfo(sessionId, startTimestamp, userId, finishTimestamp, totalExecution)
   }
   def totalTime: Long = {
     if (finishTimestamp == 0L) {

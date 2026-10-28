@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoStatement, LogicalPlan, SupervisingCommand, V2WriteCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -179,16 +179,9 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
       case p1 =>
         stop = p1.isInstanceOf[ParameterizedQuery]
-        // `InsertIntoStatement.table` and `V2WriteCommand.table` are non-child LogicalPlan
-        // slots, so the standard `resolveOperatorsDown` traversal never visits parameter
-        // markers inside them. Recurse explicitly so `INSERT ... IDENTIFIER(:p)` and
-        // `INSERT INTO IDENTIFIER(:p) REPLACE WHERE ...` resolve under the legacy
-        // parameter-substitution mode (SPARK-46625). The parser places the placeholder only in
-        // `InsertIntoStatement.table`; the `V2WriteCommand` trait match keeps the rule
-        // consistent for any analyzer-built node in the same shape.
+        // V2WriteCommand.table is a non-child LogicalPlan slot, so recurse explicitly when it
+        // contains parameter markers.
         val withBoundTable = p1 match {
-          case i: InsertIntoStatement if i.table.containsPattern(PARAMETER) =>
-            i.copy(table = bind(i.table)(f))
           case w: V2WriteCommand if w.table.containsPattern(PARAMETER) =>
             bind(w.table)(f) match {
               case nr: NamedRelation => w.withNewTable(nr)

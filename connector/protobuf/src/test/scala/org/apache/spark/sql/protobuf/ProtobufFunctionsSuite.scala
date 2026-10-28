@@ -27,6 +27,7 @@ import org.json4s.jackson.JsonMethods
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.functions.{array, lit, map, struct, typedLit}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.protobuf.protos.Proto2Messages.Proto2AllTypes
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos._
 import org.apache.spark.sql.protobuf.protos.SimpleMessageProtos.SimpleMessageRepeated.NestedEnum
@@ -721,6 +722,75 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           === inputDf.select("durationMsg.key").first().get(0))
         assert(fromProtoDf.select("durationMsg.duration").first().get(0)
           === inputDf.select("durationMsg.duration").first().get(0))
+    }
+  }
+
+  test("convert.timestamp.duration.to.native=false keeps Timestamp/Duration as struct") {
+    // Build a proto payload the normal way (native Timestamp/Duration on the write side),
+    // then read it back with the conversion disabled and assert both fields deserialize as
+    // struct<seconds: bigint, nanos: int> -- the raw proto shape -- instead of TimestampType /
+    // DayTimeIntervalType.
+    val tsSchema = StructType(
+      StructField("timeStampMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("stmp", TimestampType, nullable = true) :: Nil
+        ), nullable = true) :: Nil)
+    val ts = Timestamp.valueOf("2016-05-09 10:12:43.999")
+    val tsInput = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", ts)))),
+      tsSchema)
+
+    val expectedStruct = StructType(
+      StructField("seconds", LongType, nullable = true) ::
+        StructField("nanos", IntegerType, nullable = true) :: Nil)
+
+    checkWithFileAndClassName("timeStampMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = tsInput
+          .select(to_protobuf_wrapper($"timeStampMsg", name, descFilePathOpt) as Symbol("to_proto"))
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt,
+            Map("convert.timestamp.duration.to.native" -> "false")) as Symbol("timeStampMsg"))
+
+        val stmpField = fromProtoDf.schema("timeStampMsg").dataType
+          .asInstanceOf[StructType]("stmp")
+        assert(stmpField.dataType === expectedStruct)
+        // Derive the expected epoch from the input Timestamp so the assertion is independent
+        // of the JVM default time zone (Timestamp.valueOf parses in the local zone).
+        val row = fromProtoDf.select("timeStampMsg.stmp.seconds", "timeStampMsg.stmp.nanos").first()
+        assert(row.getLong(0) === ts.getTime / 1000)
+        assert(row.getInt(1) === 999000000)
+    }
+
+    val durSchema = StructType(
+      StructField("durationMsg",
+        StructType(
+          StructField("key", StringType, nullable = true) ::
+            StructField("duration", DayTimeIntervalType.defaultConcreteType, nullable = true) ::
+            Nil
+        ), nullable = true) :: Nil)
+    val durInput = spark.createDataFrame(
+      spark.sparkContext.parallelize(Seq(
+        Row(Row("key1", Duration.ofSeconds(4).plusNanos(500000000))))),
+      durSchema)
+
+    checkWithFileAndClassName("durationMsg") {
+      case (name, descFilePathOpt) =>
+        val toProtoDf = durInput
+          .select(to_protobuf_wrapper($"durationMsg", name, descFilePathOpt) as Symbol("to_proto"))
+        val fromProtoDf = toProtoDf
+          .select(from_protobuf_wrapper($"to_proto", name, descFilePathOpt,
+            Map("convert.timestamp.duration.to.native" -> "false")) as Symbol("durationMsg"))
+
+        val durField = fromProtoDf.schema("durationMsg").dataType
+          .asInstanceOf[StructType]("duration")
+        assert(durField.dataType === expectedStruct)
+        val row = fromProtoDf.select("durationMsg.duration.seconds", "durationMsg.duration.nanos")
+          .first()
+        assert(row.getLong(0) === 4L)
+        assert(row.getInt(1) === 500000000)
     }
   }
 
@@ -1505,6 +1575,30 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
     }
   }
 
+  test("deeply nested Any-in-Any is rejected as malformed instead of overflowing the stack") {
+    checkWithFileAndClassName("ProtoWithAny") { case (name, descFilePathOpt) =>
+      // Each nested Any level is re-parsed by JsonFormat with a fresh protobuf recursion
+      // limit; without a cross-level budget a deeply nested record overflows the executor
+      // stack with StackOverflowError, which PERMISSIVE mode cannot recover from.
+      var nested = AnyProto.pack(SimpleMessage.newBuilder().setId(1).build())
+      (0 until 2000).foreach(_ => nested = AnyProto.pack(nested))
+      val deeplyNested = ProtoWithAny.newBuilder()
+        .setEventName("deeply-nested")
+        .setDetails(nested)
+        .build()
+        .toByteArray
+      val inputDF = Seq(deeplyNested).toDF("binary")
+
+      val options = Map(
+        ProtobufOptions.CONVERT_ANY_FIELDS_TO_JSON_CONFIG -> "true",
+        "mode" -> "PERMISSIVE")
+      val dfJson = inputDF.select(
+        from_protobuf_wrapper($"binary", name, descFilePathOpt, options).as("proto"))
+      // The record is treated as malformed (null in PERMISSIVE mode) and the task survives.
+      assert(dfJson.collect()(0).getStruct(0) == null)
+    }
+  }
+
   test("test explicitly set zero values - proto3") {
     // All fields explicitly zero. Message, map, repeated, and oneof fields
     // are left unset, as null is their zero value.
@@ -2046,11 +2140,10 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
             )
           }
         } else {
-          if (defaults == "false") {
-            checkAnswer(parsedExplicitZero, expectedEmpty)
-          } else {
-            checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
-          }
+          // When unwrapping, a present wrapper carries a value even if it is the inner scalar's
+          // default, so an explicit zero unwraps to 0 regardless of emit.default.values (which
+          // only governs bare proto3 scalars, not a wrapper message's presence).
+          checkAnswer(parsedExplicitZero, Seq((0)).toDF("int32_val"))
         }
 
         // For nonzero, we should get back the number or wrapped version regardless
@@ -2076,6 +2169,35 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
           )
         }
       }
+    }
+  }
+
+  test("well known wrappers with empty container elements unwrap to defaults") {
+    // A repeated/map field of unwrapped wrappers uses a non-null container
+    // (containsNull = false / valueContainsNull = false). A present-but-empty wrapper element
+    // must unwrap to the inner scalar's default, not null -- a null in a non-null container
+    // crashes downstream. Other container-wrapper tests only use non-empty elements, so this
+    // covers the empty-element case for both a repeated and a map field.
+    val message = spark.range(1).select(
+      lit(
+        WellKnownWrapperTypes.newBuilder()
+          .addInt32List(Int32Value.getDefaultInstance) // empty element -> 0
+          .addInt32List(Int32Value.of(7))
+          .putWktMap(1, StringValue.getDefaultInstance) // empty value -> ""
+          .build().toByteArray
+      ).as("raw_proto"))
+
+    val opt = Map("unwrap.primitive.wrapper.types" -> "true")
+    checkWithFileAndClassName("WellKnownWrapperTypes") { case (name, descFilePathOpt) =>
+      val parsed = message.select(
+        from_protobuf_wrapper($"raw_proto", name, descFilePathOpt, opt).as("proto"))
+
+      checkAnswer(
+        parsed.select("proto.int32_list"),
+        spark.range(1).select(typedLit(List(0, 7)).as("int32_list")))
+      checkAnswer(
+        parsed.select("proto.wkt_map"),
+        spark.range(1).select(typedLit(Map(1 -> "")).as("wkt_map")))
     }
   }
 
@@ -2367,5 +2489,85 @@ class ProtobufFunctionsSuite extends SharedSparkSession with ProtobufTestBase
       functions.from_protobuf($"value", messageName, testFileDesc, options) as Symbol("sample"))
     assert(expectedDf.schema === fromProtoDf.schema)
     checkAnswer(fromProtoDf, expectedDf)
+  }
+
+  test("descriptor cache: repeated builds on the same bytes share the cached parse") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    val first = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    val second = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    // Same descriptor instance (from the shared parse), not a rebuilt copy.
+    assert(first.descriptor eq second.descriptor)
+    val repeated = ProtobufUtils.buildDescriptor("RepeatedMessage", Some(testFileDesc))
+    assert(repeated.descriptor ne first.descriptor)
+    // Distinct message names on the same bytes still share one parse.
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: distinct bytes are parsed and cached separately") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    // Derive a second, genuinely distinct descriptor set from the same source rather than relying
+    // on testFileDesc vs proto2FileDesc being different bytes: under SBT both point at one combined
+    // descriptor file, so they hash to the same cache key. proto2_messages.proto has no imports, so
+    // its single-file set parses standalone and is distinct from the full combined set either way.
+    val proto2Standalone = descriptorSetWithoutImports(proto2FileDesc, "FoobarWithRequiredFieldBar")
+    val basic = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    val proto2 = ProtobufUtils.buildDescriptor("FoobarWithRequiredFieldBar", Some(proto2Standalone))
+    assert(proto2.descriptor ne basic.descriptor)
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 2)
+  }
+
+  test("descriptor cache: buildTypeRegistry shares the parse with buildDescriptor") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+    // The other entry point reuses the same parse rather than adding an entry.
+    ProtobufUtils.buildTypeRegistry(testFileDesc)
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: the extensions-enabled flag is honored per call") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    val extConf = SQLConf.PROTOBUF_EXTENSIONS_SUPPORT_ENABLED
+    // The flag is read per build, so a shared cached parse still yields the flag-correct result.
+    withSQLConf(extConf.key -> "false") {
+      val disabled = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      assert(disabled.extensionRegistry eq com.google.protobuf.ExtensionRegistry.getEmptyRegistry)
+    }
+    withSQLConf(extConf.key -> "true") {
+      val enabled = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      assert(enabled.extensionRegistry ne com.google.protobuf.ExtensionRegistry.getEmptyRegistry)
+    }
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: disabled (size 0) reparses every time and caches nothing") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    withSQLConf(SQLConf.PROTOBUF_DESCRIPTOR_CACHE_SIZE.key -> "0") {
+      val first = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      val second = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+      // Each call reparses, so the descriptors come from different graphs.
+      assert(first.descriptor ne second.descriptor)
+      assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 0)
+    }
+  }
+
+  test("descriptor cache: an unknown message name surfaces the domain exception") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    // The parse succeeds; only the message lookup fails, so the parse stays cached below.
+    intercept[AnalysisException] {
+      ProtobufUtils.buildDescriptor("NoSuchMessage", Some(testFileDesc))
+    }
+    val good = ProtobufUtils.buildDescriptor("BasicMessage", Some(testFileDesc))
+    assert(good.descriptor != null)
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 1)
+  }
+
+  test("descriptor cache: a failed parse is not cached") {
+    ProtobufUtils.clearDescriptorCacheForTesting()
+    intercept[AnalysisException] {
+      ProtobufUtils.buildTypeRegistry(Array[Byte](1, 2, 3, 4))
+    }
+    // A failed parse leaves the cache empty.
+    assert(ProtobufUtils.fileDescriptorCacheSizeForTesting() == 0)
   }
 }

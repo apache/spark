@@ -54,3 +54,17 @@ SELECT k, regr_intercept(y, x) FROM testRegression WHERE x IS NOT NULL AND y IS 
 -- SPARK-55969: regr_r2 should treat first param as dependent variable
 SELECT regr_r2(k, x) FROM testRegression where k=2;
 SELECT regr_r2(y, k) FROM testRegression where k=2;
+
+-- SPARK-58213: corr should return NULL for constant columns (zero variance)
+CREATE OR REPLACE TEMPORARY VIEW testCorrConstant AS SELECT * FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y);
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM testCorrConstant;
+DROP VIEW testCorrConstant;
+
+-- x-constant (y varies): corr should return NULL
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM VALUES
+(1, 1), (1, 2), (1, 3) AS t(x, y);
+
+-- y-constant (x varies): corr should return NULL
+SELECT corr(CAST(x AS DOUBLE), CAST(y AS DOUBLE)) FROM VALUES
+(1, 1), (2, 1), (3, 1) AS t(x, y);

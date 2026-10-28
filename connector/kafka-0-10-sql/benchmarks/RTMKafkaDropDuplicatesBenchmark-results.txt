@@ -1,0 +1,21 @@
+================================================================================================
+RTM vs MBM Kafka dropDuplicates latency
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.15+6-Ubuntu-0ubuntu120.04 on Linux 5.4.0-1161-aws-fips
+Intel(R) Xeon(R) 6975P-C
+
+Kafka-to-Kafka dropDuplicates e2e latency in milliseconds
+RTM trigger=RealTime(5m) MBM trigger=ProcessingTime(0ms)
+modeOrder=RTM,MBM observationWindow=1800s warmupFiltered=600s recordsPerSecond=1000
+master=local-cluster[3, 5, 2048] inputPartitions=5 shufflePartitions=5
+stateStore=RocksDB checkpointFormatVersion=2 changelogCheckpointing=true trackTotalNumberOfRows=false
+workload=dropDuplicates(key), 80% fresh keys, 20% guaranteed duplicates; samples are unique rows
+
+Mode   obsBatch   produced sourceRows   sinkRows    samples   tailMs         p0        p50        p90        p95        p99       p100
+--------------------------------------------------------------------------------------------------------------------------------------
+RTM           5    1799948    1799948    1439959     959870        0       36.0      100.0      122.0      127.0      136.0      400.0
+MBM        7069    1799998    1799998    1439999     959996        0      142.0      309.0      412.0      433.0      503.0      735.0
+
+MBM / RTM ratio over each mode's emitted samples (>1 means RTM has lower latency)
+ratio                                                                     3.94x      3.09x      3.38x      3.41x      3.70x      1.84x

@@ -33,7 +33,7 @@ import org.apache.spark.sql.columnar.SimpleMetricsCachedBatch
  * The batch contains:
  *  - `numRows`: Number of rows in this batch
  *  - `arrowData`: One encapsulated Arrow RecordBatch message (with optional compression)
- *  - `stats`: Per-column statistics for partition pruning (upperBound, lowerBound, nullCount, etc.)
+ *  - `stats`: Per-column statistics for partition pruning (lowerBound, upperBound, nullCount, etc.)
  *
  * This format enables:
  *  - Zero-copy columnar reads when output is ColumnarBatch with ArrowColumnVector
@@ -42,8 +42,9 @@ import org.apache.spark.sql.columnar.SimpleMetricsCachedBatch
  *
  * @param numRows Number of rows in this cached batch
  * @param arrowData One encapsulated Arrow RecordBatch message
- * @param stats Per-column statistics as InternalRow (5 fields per column:
- *              upperBound, lowerBound, nullCount, rowCount, sizeInBytes)
+ * @param stats Per-column statistics as InternalRow (5 fields per column, in the
+ *              `ColumnStats.collectedStatistics` order:
+ *              lowerBound, upperBound, nullCount, count, sizeInBytes)
  */
 case class ArrowCachedBatch(
     numRows: Int,

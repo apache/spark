@@ -18,14 +18,15 @@
 import dataclasses
 import json
 import sys
-from typing import Optional, TypeAlias, Union, IO, Any
+from decimal import Decimal
+from typing import IO, Any, Optional, TypeAlias, Union
 
 from pyspark.errors import PySparkValueError
-from pyspark.serializers import read_bool, read_int, read_long, SpecialLengths
+from pyspark.messages import ZeroCopyByteStream
+from pyspark.serializers import SpecialLengths, read_bool, read_int, read_long
 from pyspark.taskcontext import BarrierTaskContext, ResourceInformation, TaskContext
 from pyspark.util import PythonEvalType
 from pyspark.worker_util import utf8_deserializer
-from pyspark.messages import ZeroCopyByteStream
 
 
 @dataclasses.dataclass
@@ -43,7 +44,7 @@ class TaskContextInfo:
     attempt_number: int
     task_attempt_id: int
     cpus: int
-    cpu_amount: float
+    cpu_amount: Decimal
     resources: dict[str, ResourceInfo]
     local_properties: dict[str, str]
 
@@ -59,7 +60,7 @@ class TaskContextInfo:
             attempt_number=task_context_json["attemptNumber"],
             task_attempt_id=task_context_json["taskAttemptId"],
             cpus=task_context_json["cpus"],
-            cpu_amount=float(task_context_json["cpuAmount"]),
+            cpu_amount=Decimal(task_context_json["cpuAmount"]),
             resources={
                 k: cls.ResourceInfo(name=v["name"], addresses=v["addresses"])
                 for k, v in task_context_json["resources"].items()

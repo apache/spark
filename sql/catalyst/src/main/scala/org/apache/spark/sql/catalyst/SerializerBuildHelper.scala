@@ -293,7 +293,11 @@ object SerializerBuildHelper {
     val nonNullOutput = CreateNamedStruct(fields.flatMap { case(fieldName, fieldExpr) =>
       argumentsForFieldSerializer(fieldName, fieldExpr)
     })
-    if (inputObject.nullable) {
+    // An empty struct has no field serializers that evaluate `inputObject`, so check it for null
+    // even when it is not nullable. Otherwise, the serializer would not refer to the input object,
+    // which `ExpressionEncoder` requires, and would skip its validation, e.g., the not-null and
+    // external type checks of a `Row` field.
+    if (inputObject.nullable || fields.isEmpty) {
       val nullOutput = expressions.Literal.create(null, nonNullOutput.dataType)
       expressions.If(IsNull(inputObject), nullOutput, nonNullOutput)
     } else {
@@ -358,8 +362,8 @@ object SerializerBuildHelper {
         messageParameters = scala.collection.immutable.Map.empty)
     case g: GeographyEncoder => createSerializerForGeographyType(input, g.dt)
     case g: GeometryEncoder => createSerializerForGeometryType(input, g.dt)
-    case CharEncoder(length) => createSerializerForChar(input, length)
-    case VarcharEncoder(length) => createSerializerForVarchar(input, length)
+    case CharEncoder(dt) => createSerializerForChar(input, dt.length)
+    case VarcharEncoder(dt) => createSerializerForVarchar(input, dt.length)
     case StringEncoder => createSerializerForString(input)
     case ScalaDecimalEncoder(dt) => createSerializerForBigDecimal(input, dt)
     case JavaDecimalEncoder(dt, false) => createSerializerForBigDecimal(input, dt)

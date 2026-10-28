@@ -375,6 +375,14 @@ logging into the data sources.
     <td>read</td>
   </tr>
   <tr>
+    <td><code>preferTimestampNanos</code></td>
+    <td>false</td>
+    <td>
+      When the option is set to <code>true</code>, a driver TIMESTAMP column that reports a sub-microsecond fractional-second scale (7-9) is inferred as one of the nanosecond-capable timestamp types (<code>TIMESTAMP_NTZ(p)</code> when <code>preferTimestampNTZ</code> is also <code>true</code>, otherwise <code>TIMESTAMP_LTZ(p)</code>). Otherwise such columns keep the historical microsecond mapping. This option only takes effect when the <code>spark.sql.timestampNanosTypes.enabled</code> preview flag is enabled; when that flag is off, setting this option alone leaves the inferred schema unchanged.
+    </td>
+    <td>read</td>
+  </tr>
+  <tr>
     <td><code>hint</code></td>
     <td>(none)</td>
     <td>
@@ -1630,6 +1638,11 @@ as the activated JDBC Driver.
       <td>geometry</td>
       <td>BinaryType</td>
       <td></td>
+    </tr>
+    <tr>
+      <td>json</td>
+      <td>StringType</td>
+      <td>Unparsed JSON text</td>
     </tr>
     <tr>
       <td>rowversion</td>

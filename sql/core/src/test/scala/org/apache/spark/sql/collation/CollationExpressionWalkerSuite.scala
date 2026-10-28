@@ -34,7 +34,6 @@ import org.apache.spark.util.Utils
  *  collations
  */
 class CollationExpressionWalkerSuite extends SharedSparkSession {
-  import testImplicits._
 
   // Trait to distinguish different cases for generation
   sealed trait CollationType
@@ -381,9 +380,13 @@ class CollationExpressionWalkerSuite extends SharedSparkSession {
       "sha1",
       "unbase64",
       "base64",
+      "to_base32",
+      "from_base32",
       "sha2",
       "sha",
       "crc32",
+      "xxh3_64",
+      "xxh3_128",
       "ascii",
       "time_trunc",
       // The result/sketch embeds the original item value, which now preserves the
@@ -391,7 +394,11 @@ class CollationExpressionWalkerSuite extends SharedSparkSession {
       "approx_top_k",
       "approx_top_k_accumulate",
       "approx_top_k_combine",
-      "approx_top_k_estimate"
+      "approx_top_k_estimate",
+      // The variant object embeds the key string, which preserves the input case for collated
+      // strings, so the result is not comparable across collations.
+      "variant_from_arrays",
+      "variant_from_entries"
     )
 
     logInfo("Total number of expression: " + expressionCounter)

@@ -237,8 +237,10 @@ object AgnosticEncoders {
   // Nullable leaf encoders
   case object NullEncoder extends LeafEncoder[java.lang.Void](NullType)
   case object StringEncoder extends LeafEncoder[String](StringType)
-  case class CharEncoder(length: Int) extends LeafEncoder[String](CharType(length))
-  case class VarcharEncoder(length: Int) extends LeafEncoder[String](VarcharType(length))
+  // Carry the full constrained type (length + collation), matching GeographyEncoder /
+  // GeometryEncoder. Reconstructing from length alone would drop a declared collation.
+  case class CharEncoder(dt: CharType) extends LeafEncoder[String](dt)
+  case class VarcharEncoder(dt: VarcharType) extends LeafEncoder[String](dt)
   case object BinaryEncoder extends LeafEncoder[Array[Byte]](BinaryType)
   case object ScalaBigIntEncoder extends LeafEncoder[BigInt](DecimalType.BigIntDecimal)
   case object JavaBigIntEncoder extends LeafEncoder[JBigInt](DecimalType.BigIntDecimal)
@@ -265,7 +267,9 @@ object AgnosticEncoders {
       extends LeafEncoder[LocalDateTime](TimestampNTZNanosType(precision))
   case class InstantNanosEncoder(precision: Int)
       extends LeafEncoder[Instant](TimestampLTZNanosType(precision))
-  case object LocalTimeEncoder extends LeafEncoder[LocalTime](TimeType())
+  // Carries the precision, so `RowEncoder` maps `TimeType(p)` to an encoder of the same type.
+  // Otherwise, deserializing an array of `TIME(p)` fails to up-cast the elements to `TIME(6)`.
+  case class LocalTimeEncoder(precision: Int) extends LeafEncoder[LocalTime](TimeType(precision))
 
   case class SparkDecimalEncoder(dt: DecimalType) extends LeafEncoder[Decimal](dt)
   case class ScalaDecimalEncoder(dt: DecimalType) extends LeafEncoder[BigDecimal](dt)
@@ -291,6 +295,7 @@ object AgnosticEncoders {
     GeometryEncoder(GeometryType(Geometry.DEFAULT_SRID))
   val DEFAULT_GEOGRAPHY_ENCODER: GeographyEncoder =
     GeographyEncoder(GeographyType(Geography.DEFAULT_SRID))
+  val DEFAULT_LOCAL_TIME_ENCODER: LocalTimeEncoder = LocalTimeEncoder(TimeType.DEFAULT_PRECISION)
 
   /**
    * Encoder that transforms external data into a representation that can be further processed by

@@ -40,7 +40,7 @@ import os
 import sys
 from typing import List, Tuple
 
-from pyspark import SparkContext, Accumulator, Broadcast, RDD
+from pyspark import RDD, Accumulator, Broadcast, SparkContext
 from pyspark.streaming import StreamingContext
 
 

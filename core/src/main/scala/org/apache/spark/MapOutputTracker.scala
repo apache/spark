@@ -799,7 +799,7 @@ private[spark] class MapOutputTrackerMaster(
     conf: SparkConf,
     private[spark] val broadcastManager: BroadcastManager,
     private[spark] val isLocal: Boolean)
-  extends MapOutputTracker(conf) {
+  extends MapOutputTracker(conf) with ShuffleOutputTrackerMaster {
 
   // The size at which we use Broadcast to send the map output statuses to the executors
   private val minSizeForBroadcast = conf.get(SHUFFLE_MAPOUTPUT_MIN_SIZE_FOR_BROADCAST).toInt
@@ -943,6 +943,10 @@ private[spark] class MapOutputTrackerMaster(
     }
   }
 
+  // ShuffleOutputTrackerMaster: a regular shuffle has no per-job registration, so jobId is ignored.
+  override def registerShuffle(shuffleId: Int, numMaps: Int, numReduces: Int, jobId: Int): Unit =
+    registerShuffle(shuffleId, numMaps, numReduces)
+
   def updateMapOutput(shuffleId: Int, mapId: Long, bmAddress: BlockManagerId): Unit = {
     shuffleStatuses.get(shuffleId) match {
       case Some(shuffleStatus) =>
@@ -1030,7 +1034,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Unregister shuffle data */
-  def unregisterShuffle(shuffleId: Int): Unit = {
+  override def unregisterShuffle(shuffleId: Int): Unit = {
     shuffleStatuses.remove(shuffleId).foreach { shuffleStatus =>
       shuffleStatus.invalidateSerializedMapOutputStatusCache()
       shuffleStatus.invalidateSerializedMergeOutputStatusCache()
@@ -1077,7 +1081,7 @@ private[spark] class MapOutputTrackerMaster(
   }
 
   /** Check if the given shuffle is being tracked */
-  def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
+  override def containsShuffle(shuffleId: Int): Boolean = shuffleStatuses.contains(shuffleId)
 
   def getNumAvailableOutputs(shuffleId: Int): Int = {
     shuffleStatuses.get(shuffleId).map(_.numAvailableMapOutputs).getOrElse(0)
