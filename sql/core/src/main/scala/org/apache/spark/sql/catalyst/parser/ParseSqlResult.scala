@@ -68,10 +68,13 @@ object ParseSqlResult {
   def fromSql(sql: String): String = {
     val split = parser.get().splitStatementsWithPositions(sql)
     val statements = split.completeStatements ++ split.partialStatement
-    compact(render(JArray(statements.map(parseStatement(sql, _)).toList)))
+    val starts = charStarts(sql, statements)
+    compact(render(JArray(statements.zip(starts).map {
+      case (segment, start) => parseStatement(segment, start)
+    }.toList)))
   }
 
-  private def parseStatement(batch: String, segment: PositionedSqlStatement): JObject = {
+  private def parseStatement(segment: PositionedSqlStatement, charStart: Int): JObject = {
     val sql = segment.statement
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
@@ -87,25 +90,25 @@ object ParseSqlResult {
       }
       CurrentOrigin.withOrigin(origin) {
         val plan = parser.get().parsePlan(sql)
-        successJson(plan, batch, segment)
+        successJson(plan, segment, charStart)
       }
     } catch {
       // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
-        errorJson(e, batch, segment)
+        errorJson(e, segment, charStart)
       case e: SqlScriptingException =>
-        errorJson(e, batch, segment)
+        errorJson(e, segment, charStart)
     }
   }
 
   /** Build success JSON from an already-parsed unresolved plan. */
   private def successJson(
       plan: LogicalPlan,
-      batch: String,
-      segment: PositionedSqlStatement): JObject = {
+      segment: PositionedSqlStatement,
+      charStart: Int): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
-    fields += "start" -> JInt(charStart(batch, segment))
+    fields += "start" -> JInt(charStart)
     fields += "length" -> JInt(charLength(segment))
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
@@ -131,10 +134,26 @@ object ParseSqlResult {
     JObject(fields.toList)
   }
 
-  /** 1-based Unicode code-point offset of `segment` in `batch`. */
-  private def charStart(batch: String, segment: PositionedSqlStatement): Int = {
-    val utf16 = math.max(0, math.min(segment.start, batch.length))
-    batch.codePointCount(0, utf16) + 1
+  /**
+   * 1-based Unicode code-point starts for `statements` in `batch`. Statements
+   * are in ascending UTF-16 start order, so one left-to-right pass is enough:
+   * each count covers only the gap since the previous start.
+   */
+  private def charStarts(
+      batch: String,
+      statements: Seq[PositionedSqlStatement]): Seq[Int] = {
+    var utf16 = 0
+    var codePoints = 0
+    statements.map { segment =>
+      val startUtf16 = math.max(0, math.min(segment.start, batch.length))
+      if (startUtf16 >= utf16) {
+        codePoints += batch.codePointCount(utf16, startUtf16)
+      } else {
+        codePoints = batch.codePointCount(0, startUtf16)
+      }
+      utf16 = startUtf16
+      codePoints + 1
+    }
   }
 
   /** Unicode code-point length of the trimmed statement text. */
@@ -190,8 +209,8 @@ object ParseSqlResult {
 
   private def errorJson(
       e: SparkThrowable with Throwable,
-      batch: String,
-      segment: PositionedSqlStatement): JObject = {
+      segment: PositionedSqlStatement,
+      charStart: Int): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
     val origin = e match {
@@ -206,7 +225,7 @@ object ParseSqlResult {
       origin.toSeq.flatMap(queryContextField)
     }
     JObject(
-      "start" -> JInt(charStart(batch, segment)),
+      "start" -> JInt(charStart),
       "length" -> JInt(charLength(segment)),
       "parse_success" -> JBool(false),
       "error" -> rewriteErrorCharIndexes(

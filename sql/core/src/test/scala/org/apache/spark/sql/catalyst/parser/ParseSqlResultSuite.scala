@@ -280,5 +280,23 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(literalCtx \ "fragment" === JString("DATE 'bad'"))
     assert(literalStart.toInt === literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
     assert(literalStop.toInt === literalSql.codePointCount(0, literalSql.length))
+
+    val failedAfterEmoji = s"SELECT '$emoji'; SELECT '$emoji' FRUM t"
+    val failed = objs(failedAfterEmoji)
+    assert(failed.map(_ \ "parse_success") === Seq(JBool(true), JBool(false)))
+    val JInt(failedStart) = failed(1) \ "start"
+    val JInt(failedLength) = failed(1) \ "length"
+    assert((failedStart.toInt, failedLength.toInt) === (13, 17))
+    assert(sliceByCodePoints(failedAfterEmoji, failedStart.toInt, failedLength.toInt) ===
+      s"SELECT '$emoji' FRUM t")
+
+    val scriptSql = s"BEGIN SELECT '$emoji'; lbl_begin: BEGIN SELECT 1; END lbl_end; END"
+    val script = obj(scriptSql)
+    assert(script \ "error" \ "errorClass" === JString("LABELS_MISMATCH"))
+    val scriptCtx = (script \ "error" \ "queryContext")(0)
+    val JInt(scriptStart) = scriptCtx \ "startIndex"
+    val JInt(scriptStop) = scriptCtx \ "stopIndex"
+    assert(scriptCtx \ "fragment" === JString("lbl_begin:"))
+    assert((scriptStart.toInt, scriptStop.toInt) === (19, 28))
   }
 }
