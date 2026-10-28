@@ -537,7 +537,8 @@ case class EnsureRequirements(
       if (specOpt.isEmpty) return None
       specOpt.get
     }
-    if (Seq(left, right).zip(specs).exists { case (p, s) => isBuiltFromReducedScan(p, s) }) {
+    if (Seq(left, right).zip(specs).exists { case (p, s) => isBuiltFromReducedScan(p, s) } ||
+        Seq(left, right).exists(hasReducedScanOutsideJoin)) {
       return None
     }
 
@@ -837,12 +838,32 @@ case class EnsureRequirements(
   }
 
   /**
-   * Whether `spec` uses a partition expression of a scan below `plan` whose splits an inner join
-   * already reduced at that position. Such a scan reports its own partition transform there but
-   * values of the reduced transform, so a spec built on that position describes a layout the scan
-   * does not have. Positions without a reducer still hold the scan's own values and are sound.
+   * Whether `spec` may be built on a partition expression of a scan below `plan` whose splits an
+   * inner join already reduced at that position. Such a scan reports its own partition transform
+   * there but values of the reduced transform, so a spec built on that position describes a layout
+   * the scan does not have. Positions without a reducer still hold the scan's own values and are
+   * sound. A spec expression that cannot be traced to one of those is treated as unsound.
    */
   private def isBuiltFromReducedScan(plan: SparkPlan, spec: KeyGroupedShuffleSpec): Boolean = {
+    // Each position of the scans that decide the layout above `plan`, with whether an inner join
+    // reduced it. An exchange re-partitions its input, so a scan below it no longer decides that
+    // layout. Only a nested join can hand a reduced scan's layout to a later join, which also keeps
+    // a re-run of this rule from matching the scans directly below an already planned join.
+    // `hasReducedScanOutsideJoin` covers those.
+    def positions(p: SparkPlan, belowJoin: Boolean): Seq[(Expression, Boolean)] = p match {
+      case _: ShuffleExchangeLike | _: BroadcastExchangeLike => Nil
+      case scan: BatchScanExec =>
+        reportedLayout(scan.spjParams).toSeq.flatMap { layout =>
+          val reducers = scan.spjParams.reducers.getOrElse(Seq.fill(layout.length)(None))
+          layout.zip(reducers).map { case (e, r) => (e, belowJoin && r.isDefined) }
+        }
+      case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) =>
+        join.children.flatMap(positions(_, belowJoin = true))
+      case other => other.children.flatMap(positions(_, belowJoin))
+    }
+    val scanPositions = positions(plan, belowJoin = false)
+    if (!scanPositions.exists(_._2)) return false
+
     // A `Project` between the joins can rename the column under the transform, so map the spec's
     // columns back through the aliases below `plan` before comparing them with the scan's. A
     // broadcast hash join also reports the streamed side's partitioning on its build keys, so map
@@ -862,28 +883,10 @@ case class EnsureRequirements(
     def unalias(e: Expression): Expression = e.transformUp {
       case a: Attribute if aliases.contains(a) => unalias(aliases(a))
     }
-    val specExpressions = spec.partitioning.expressions.map(unalias)
-    // An exchange re-partitions its input, so a scan below it no longer decides the layout above.
-    def existsAbove(p: SparkPlan)(f: PartialFunction[SparkPlan, Boolean]): Boolean = p match {
-      case _: ShuffleExchangeLike | _: BroadcastExchangeLike => false
-      case _ => f.applyOrElse(p, (_: SparkPlan) => false) || p.children.exists(existsAbove(_)(f))
-    }
-    // Only a nested join can hand a reduced scan's layout to a later join. Looking below a join
-    // also keeps a re-run of this rule over an already planned join from matching the scans
-    // directly below it. `hasReducedScanOutsideJoin` covers scans with no join above them.
-    existsAbove(plan) {
-      case join @ (_: SortMergeJoinExec | _: ShuffledHashJoinExec) => existsAbove(join) {
-        case scan: BatchScanExec =>
-          (reportedLayout(scan.spjParams), scan.spjParams.reducers) match {
-            case (Some(layout), Some(reducers)) =>
-              layout.zip(reducers).exists { case (e, r) =>
-                r.isDefined && specExpressions.exists(_.semanticEquals(e))
-              }
-            case _ => false
-          }
-        case _ => false
-      }
-      case _ => false
+    // Trust a spec expression only when it maps to a position no inner join reduced. One the
+    // mapping above cannot follow, e.g. a cast build key, falls back to a shuffle.
+    spec.partitioning.expressions.map(unalias).exists { e =>
+      !scanPositions.exists { case (p, reduced) => !reduced && p.semanticEquals(e) }
     }
   }
 

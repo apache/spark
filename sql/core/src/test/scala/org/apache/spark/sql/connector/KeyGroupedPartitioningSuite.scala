@@ -3815,6 +3815,110 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
     }
   }
 
+  test("SPARK-60232: re-running EnsureRequirements does not apply a reducer twice") {
+    Seq(ReducibleHoursFunction, ReducibleDaysFunction, ReducibleYearsFunction).foreach { f =>
+      catalog.createFunction(Identifier.of(Array.empty, f.name()), new UnboundReducibleFunction(f))
+    }
+    val cols = Array(Column.create("id", LongType), Column.create("ts", TimestampType))
+    Seq("qh" -> hours("ts"), "qd" -> days("ts"), "qy" -> years("ts")).foreach { case (t, p) =>
+      createTable(t, cols, Array(p))
+      sql(s"INSERT INTO testcat.ns.$t " +
+        "SELECT id, TIMESTAMP '2026-01-01 00:00:00' + id * INTERVAL '1' HOUR FROM range(72)")
+    }
+
+    withTempView("skewData1", "skewData2") {
+      spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 3 as key1", "id as value1")
+        .createOrReplaceTempView("skewData1")
+      spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 1 as key2", "id as value2")
+        .createOrReplaceTempView("skewData2")
+      val skewQuery = "SELECT key1 AS k, count(*) AS c " +
+        "FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1"
+      val expected = sql(skewQuery).collect().toSeq ++ (0L until 72L).map(i => Row(i, 1L))
+
+      // The re-run's inner join must not derive the hours-to-days reducer again and chain it after
+      // the one it pushed the first time, since floorDiv(h, 24) applied twice is wrong.
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        val df = sql(
+          s"""
+             |$skewQuery
+             |UNION ALL
+             |SELECT /*+ MERGE(qh, qd, qy) */ qh.id AS k, 1L AS c
+             |FROM testcat.ns.qh JOIN testcat.ns.qd ON qh.ts = qd.ts
+             |JOIN testcat.ns.qy ON qd.ts = qy.ts
+             |""".stripMargin)
+        checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("SPARK-60232: nested SPJ falls back when a broadcast build key cannot be traced") {
+    val longCols = Array(Column.create("id", LongType))
+    val intCols = Array(Column.create("id", IntegerType))
+    Seq("l12" -> 12, "l4" -> 4, "l3" -> 3).foreach { case (t, n) =>
+      createTable(t, longCols, Array(bucket(n, "id")))
+    }
+    Seq("lx", "ly").foreach(t => createTable(t, longCols, Array.empty))
+    createTable("lxi", intCols, Array.empty)
+    createTable("l3i", intCols, Array(bucket(3, "id")))
+    Seq("l12", "l4", "l3", "lx", "ly", "lxi", "l3i").foreach { t =>
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+
+    // Each query reaches the reduced l12 through a broadcast build key that maps back to no
+    // single unreduced position, so the outer join has to shuffle.
+    val longRows = (0L until 24L).map(i => Row(i, i, i))
+    val queries = Seq(
+      // A build key equated to two streamed keys.
+      """
+        |SELECT /*+ MERGE(l12, l4), BROADCAST(lx), MERGE(l3) */ l12.id, lx.id, l3.id
+        |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
+        |JOIN testcat.ns.lx ON lx.id = l12.id AND lx.id = l4.id
+        |JOIN testcat.ns.l3 ON lx.id = l3.id
+        |""".stripMargin -> longRows,
+      // A cast build key.
+      """
+        |SELECT /*+ MERGE(l12, l4), BROADCAST(lxi), MERGE(l3i) */ l12.id, lxi.id, l3i.id
+        |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
+        |JOIN testcat.ns.lxi ON l12.id = lxi.id
+        |JOIN testcat.ns.l3i ON lxi.id = l3i.id
+        |""".stripMargin -> (0 until 24).map(i => Row(i.toLong, i, i)),
+      // A build key that a broadcast inside the build side also uses.
+      """
+        |SELECT /*+ MERGE(l12, l4), BROADCAST(b), MERGE(l3) */ l12.id, b.id, l3.id
+        |FROM testcat.ns.l12 JOIN testcat.ns.l4 ON l12.id = l4.id
+        |JOIN (
+        |  SELECT /*+ BROADCAST(ly) */ lx.id AS xid, ly.id
+        |  FROM testcat.ns.lx JOIN testcat.ns.ly ON lx.id = ly.id) b ON l12.id = b.id
+        |JOIN testcat.ns.l3 ON b.id = l3.id
+        |""".stripMargin -> longRows)
+
+    Seq(true, false).foreach { aqe =>
+      withSQLConf(
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString,
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        queries.foreach { case (query, expected) =>
+          val df = sql(query)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 2,
+            "the outer join should fall back to shuffling both sides")
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
   test("SPARK-60232: nested SPJ keeps SPJ on an unreduced column with the same transform") {
     val cols = Array(Column.create("a", LongType), Column.create("b", LongType))
     createTable("pa", cols, Array(bucket(12, "a"), bucket(12, "b")))
