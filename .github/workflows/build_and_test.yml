@@ -72,8 +72,10 @@ on:
       codecov_token:
         description: The upload token of codecov.
         required: false
+# A post-merge build in a fork (a push to a post-merge-<branch> branch, see build_main.yml) builds
+# every commit like apache/spark does, so a newer commit does not cancel it.
 concurrency:
-  group: build-test-${{ github.workflow }}-${{ github.repository == 'apache/spark' && github.run_id || github.ref }}
+  group: build-test-${{ github.workflow }}-${{ (github.repository == 'apache/spark' || startsWith(github.ref_name, 'post-merge-')) && github.run_id || github.ref }}
   cancel-in-progress: true
 jobs:
   precondition:
@@ -81,12 +83,12 @@ jobs:
     # `ubuntu-slim` is lighter than `ubuntu-latest`.
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
-    env:
-      GITHUB_PREV_SHA: ${{ github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
       head_sha: ${{ steps.checkout.outputs.head_sha }}
+      # The commit to find the changes from (GITHUB_PREV_SHA of every job), see `change-base`.
+      prev_sha: ${{ steps.change-base.outputs.prev_sha }}
       image_docs_url: ${{ steps.infra-image-docs-outputs.outputs.image_docs_url }}
       image_docs_url_link: ${{ steps.infra-image-link.outputs.image_docs_url_link }}
       image_lint_url: ${{ steps.infra-image-lint-outputs.outputs.image_lint_url }}
@@ -103,8 +105,21 @@ jobs:
       uses: ./.github/actions/checkout-and-sync
       with:
         ref: ${{ inputs.branch }}
+    - name: Resolve the commit to find the changes from
+      id: change-base
+      run: |
+        # A post-merge build in a fork tests the changes of the pushed commit, like the build of a
+        # push to apache/spark. There, github.event.before is the previous commit pushed to the
+        # fork branch, not the parent of this one.
+        if [[ "${{ github.repository }}" != 'apache/spark' && "${{ github.ref_name }}" == post-merge-* ]]; then
+          echo "prev_sha=$(git rev-parse HEAD~1)" >> $GITHUB_OUTPUT
+        else
+          echo "prev_sha=${{ github.event.before }}" >> $GITHUB_OUTPUT
+        fi
     - name: Check all modules
       id: set-outputs
+      env:
+        GITHUB_PREV_SHA: ${{ steps.change-base.outputs.prev_sha }}
       run: |
         if [ -z "${{ inputs.jobs }}" ]; then
           pyspark_modules=`cd dev && python -c "import sparktestsupport.modules as m; print(','.join(m.name for m in m.all_modules if m.name.startswith('pyspark') and not m.name.startswith('pyspark-pandas') and not m.name == 'pyspark-periodic'))"`
@@ -113,7 +128,8 @@ jobs:
           pandas=`./dev/is-changed.py -m $pyspark_pandas_modules`
           pyspark_periodic=`./dev/is-changed.py -m pyspark-periodic`
           pyspark_connect_old_client="$pyspark"
-          if [[ "${{ github.repository }}" != 'apache/spark' ]]; then
+          # A post-merge build in a fork runs the same jobs as on apache/spark.
+          if [[ "${{ github.repository }}" != 'apache/spark' && "${{ github.ref_name }}" != post-merge-* ]]; then
             yarn=`./dev/is-changed.py -m yarn`
             kubernetes=`./dev/is-changed.py -m kubernetes`
             # The OIDC E2E job covers connector/credential-aws end to end on K8s, so it
@@ -348,7 +364,7 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -529,7 +545,7 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
@@ -617,7 +633,7 @@ jobs:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -759,7 +775,7 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -857,7 +873,7 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
       BRANCH: ${{ inputs.branch }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
@@ -886,9 +902,10 @@ jobs:
     # the binding policy was introduced. It must never grow: new configs must declare a binding
     # policy via .withBindingPolicy() instead of being added to the exceptions file. This step fails
     # if a PR adds entries to the file. It only runs on forks because PR builds run there, and the
-    # diff against apache/spark master is exactly the PR's change.
+    # diff against apache/spark master is exactly the PR's change. A post-merge build in a fork
+    # has no such diff.
     - name: Config binding policy exceptions check
-      if: github.repository != 'apache/spark'
+      if: github.repository != 'apache/spark' && !startsWith(github.ref_name, 'post-merge-')
       run: |
         EXCEPTIONS_FILE="sql/hive/src/test/resources/conf/binding-policy-exceptions/configs-without-binding-policy-exceptions"
         if [ ! -f "$EXCEPTIONS_FILE" ]; then
@@ -965,7 +982,7 @@ jobs:
       LANG: C.UTF-8
       PYSPARK_DRIVER_PYTHON: python3.12
       PYSPARK_PYTHON: python3.12
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
@@ -1131,7 +1148,7 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ needs.precondition.outputs.prev_sha }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true

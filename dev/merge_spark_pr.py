@@ -66,6 +66,11 @@ SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
+# Remote name which points to your fork of apache/spark on GitHub (optional). When set, every
+# commit this script pushes to PUSH_REMOTE_NAME is also pushed to the post-merge-<branch> branch of
+# the fork, so that its post-merge build runs in the fork instead of apache/spark. See "Post-merge
+# builds" in .github/workflows/README.md.
+POST_MERGE_FORK_REMOTE = os.environ.get("POST_MERGE_FORK_REMOTE", "")
 # ASF JIRA username
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
@@ -90,8 +95,9 @@ GITHUB_OAUTH_KEY = os.environ.get("GITHUB_OAUTH_KEY")
 # validation, and the local squash-merge and cherry-picks on the throwaway PR_TOOL_* branches so
 # conflicts and the computed merge hash stay realistic -- but every outbound effect is routed
 # through a DryRun* client (see Git/GitHub/Jira below) that logs a "DRY-RUN: would ..." line
-# instead of executing it: the git push to PUSH_REMOTE_NAME, the GitHub PR close/comment, and all
-# JIRA writes (component and fixVersion updates, assignment, and resolve/reopen transitions).
+# instead of executing it: the git pushes to PUSH_REMOTE_NAME and POST_MERGE_FORK_REMOTE, the
+# GitHub PR close/comment, and all JIRA writes (component and fixVersion updates, assignment, and
+# resolve/reopen transitions).
 DRY_RUN_ENV = bool(os.environ.get("DRY_RUN"))
 
 
@@ -759,8 +765,9 @@ class Git:
     check_script_up_to_date() shells out to git merge-base directly. ``run`` executes read-only
     and local commands (fetch, checkout, merge, commit, cherry-pick, rev-parse, config, branch
     bookkeeping); those are safe even in a dry run because the merge and cherry-picks happen on
-    the throwaway PR_TOOL_* branches that clean_up removes. ``push`` is the only command that
-    mutates the shared repo at PUSH_REMOTE_NAME, so it is the one method DryRunGit overrides;
+    the throwaway PR_TOOL_* branches that clean_up removes. ``push`` and ``push_post_merge`` are
+    the only commands that update a remote (the shared repo at PUSH_REMOTE_NAME and the
+    committer's fork at POST_MERGE_FORK_REMOTE), so they are the methods DryRunGit overrides;
     everything else it inherits and runs for real, keeping conflict detection and the computed
     merge hash realistic. main() constructs Git() normally and DryRunGit() for a dry run.
     """
@@ -775,12 +782,22 @@ class Git:
     def push(self, remote, local_ref, remote_ref):
         return self.run("git push %s %s:%s" % (remote, local_ref, remote_ref))
 
+    def push_post_merge(self, remote, local_ref, target_ref):
+        # Forced: the branch only holds the latest commit pushed to target_ref.
+        return self.run(
+            "git push --force %s %s:refs/heads/post-merge-%s" % (remote, local_ref, target_ref)
+        )
+
 
 class DryRunGit(Git):
-    """Logs the intended push instead of updating the remote; all other git runs for real."""
+    """Logs the intended pushes instead of updating the remotes; all other git runs for real."""
 
     def push(self, remote, local_ref, remote_ref):
         print("DRY-RUN: would push %s to %s:%s" % (local_ref, remote, remote_ref))
+        return ""
+
+    def push_post_merge(self, remote, local_ref, target_ref):
+        print("DRY-RUN: would push %s to %s:post-merge-%s" % (local_ref, remote, target_ref))
         return ""
 
 
@@ -822,6 +839,35 @@ def clean_up():
         for branch in list(filter(lambda x: x.startswith(BRANCH_PREFIX), branches)):
             print("Deleting local branch %s" % branch)
             git.run("git branch -D %s" % branch)
+
+
+def push_post_merge_build(local_ref, target_ref):
+    """Push `local_ref`, just pushed to `target_ref`, to POST_MERGE_FORK_REMOTE if it is set.
+
+    The fork then runs the post-merge build of the commit, and apache/spark links that run instead
+    of running the build itself (see .github/workflows/build_main.yml). Branches whose
+    build_main.yml predates this are not pushed. For them, and if this push fails, apache/spark
+    runs the post-merge build as usual.
+    """
+    if not POST_MERGE_FORK_REMOTE:
+        return
+    try:
+        workflow = git.run(["git", "show", "%s:.github/workflows/build_main.yml" % local_ref])
+    except subprocess.CalledProcessError:
+        workflow = ""
+    if "post-merge-" not in workflow:
+        print(
+            "%s does not run post-merge builds in forks; not pushing to %s."
+            % (target_ref, POST_MERGE_FORK_REMOTE)
+        )
+        return
+    try:
+        git.push_post_merge(POST_MERGE_FORK_REMOTE, local_ref, target_ref)
+    except Exception as e:
+        print_error(
+            "Exception while pushing to %s, so apache/spark runs the post-merge build: %s"
+            % (POST_MERGE_FORK_REMOTE, e)
+        )
 
 
 # merge the requested PR and return the merge hash
@@ -889,6 +935,8 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
     except Exception as e:
         clean_up()
         print_error("Exception while pushing: %s" % e)
+    else:
+        push_post_merge_build(target_branch_name, target_ref)
 
     merge_hash = git.run("git rev-parse %s" % target_branch_name).strip()
     clean_up()
@@ -950,6 +998,7 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
     except Exception as e:
         fail("Exception while pushing: %s" % e)
+    push_post_merge_build(pick_branch_name, pick_ref)
 
     pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
     clean_up()

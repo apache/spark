@@ -20,9 +20,11 @@
 name: 'Checkout and Sync'
 description: >-
   Check out apache/spark at a pinned ref and, on forks, squash-merge the fork
-  branch on top so the build tests the combined result. Callers must add a
-  bare 'actions/checkout' step before invoking this action so that the latest
-  action definition is present in the workspace.
+  branch on top so the build tests the combined result. A post-merge build in a
+  fork (a push to a post-merge-<branch> branch, see build_main.yml) instead
+  checks out the pushed commit as is. Callers must add a bare 'actions/checkout'
+  step before invoking this action so that the latest action definition is
+  present in the workspace.
 inputs:
   ref:
     description: 'Git ref to check out from apache/spark'
@@ -33,7 +35,9 @@ inputs:
     default: 'false'
 outputs:
   head_sha:
-    description: 'The apache/spark HEAD SHA checked out (before the fork merge)'
+    description: >-
+      The apache/spark HEAD SHA checked out (before the fork merge), or the
+      pushed commit for a post-merge build
     value: ${{ steps.resolve-sha.outputs.head_sha }}
 runs:
   using: 'composite'
@@ -42,8 +46,8 @@ runs:
       uses: actions/checkout@v7
       with:
         fetch-depth: 0
-        repository: apache/spark
-        ref: ${{ inputs.ref }}
+        repository: ${{ (github.repository != 'apache/spark' && startsWith(github.ref_name, 'post-merge-')) && github.repository || 'apache/spark' }}
+        ref: ${{ (github.repository != 'apache/spark' && startsWith(github.ref_name, 'post-merge-')) && github.sha || inputs.ref }}
     - name: Add GITHUB_WORKSPACE to git trust safe.directory
       if: inputs.set-safe-directory == 'true'
       shell: bash
@@ -53,7 +57,7 @@ runs:
       shell: bash
       run: echo "head_sha=$(git rev-parse HEAD)" >> $GITHUB_OUTPUT
     - name: Sync the current branch with the latest in Apache Spark
-      if: github.repository != 'apache/spark'
+      if: github.repository != 'apache/spark' && !startsWith(github.ref_name, 'post-merge-')
       shell: bash
       run: |
         echo "APACHE_SPARK_REF=$(git rev-parse HEAD)" >> $GITHUB_ENV

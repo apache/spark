@@ -25,13 +25,107 @@ on:
     - '**'
 
 jobs:
+  # A committer can run the post-merge build of a commit in their fork instead of here: with
+  # POST_MERGE_FORK_REMOTE set, dev/merge_spark_pr.py pushes the commit to the post-merge-<branch>
+  # branch of the fork, where build_and_test.yml builds it like it would here. This job looks for
+  # that run in the fork of the pusher. If it finds it, it links the run from a "Post-merge build"
+  # check, which update_build_status.yml keeps in sync, and the build is skipped here.
+  find-post-merge-build:
+    name: Find post-merge build in fork
+    if: github.repository == 'apache/spark'
+    runs-on: ubuntu-slim
+    permissions:
+      actions: read
+      checks: write
+    outputs:
+      found: ${{ steps.find.outputs.found }}
+    steps:
+      - name: Find post-merge build in fork
+        id: find
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const sha = context.sha
+            const branch = 'post-merge-' + context.ref.replace(/^refs\/heads\//, '')
+            const notFound = (reason) => {
+              console.log(reason + '; running the post-merge build here.')
+              core.setOutput('found', 'false')
+            }
+            // An account can own only one fork of apache/spark, but the fork can have any name.
+            let fork
+            try {
+              const result = await github.graphql(`
+                query($login: String!) {
+                  user(login: $login) {
+                    repositories(first: 100, isFork: true,
+                        orderBy: {field: PUSHED_AT, direction: DESC}) {
+                      nodes { name owner { login } parent { nameWithOwner } }
+                    }
+                  }
+                }`, { login: context.actor })
+              fork = result.user.repositories.nodes.find(r =>
+                r.parent && r.parent.nameWithOwner == 'apache/spark')
+            } catch (error) {
+              console.log(error)
+            }
+            if (!fork) {
+              return notFound('No fork of apache/spark found for ' + context.actor)
+            }
+            const owner = fork.owner.login
+            const repo = fork.name
+            // Without this branch, the pusher does not run post-merge builds in the fork.
+            try {
+              await github.rest.repos.getBranch({ owner, repo, branch })
+            } catch (error) {
+              return notFound(owner + '/' + repo + ' has no ' + branch + ' branch')
+            }
+            // The merge script pushes to the fork right after apache/spark, so the run can take a
+            // moment to show up.
+            let run
+            for (let attempt = 0; attempt < 12 && !run; attempt++) {
+              if (attempt > 0) {
+                await new Promise(resolve => setTimeout(resolve, 15000))
+              }
+              try {
+                const runs = await github.rest.actions.listWorkflowRuns({
+                  owner, repo, workflow_id: 'build_main.yml', branch, head_sha: sha
+                })
+                run = runs.data.workflow_runs.find(r => r.head_sha == sha)
+              } catch (error) {
+                console.log(error)
+              }
+            }
+            if (!run) {
+              return notFound('No run of ' + sha + ' on ' + owner + '/' + repo + ':' + branch)
+            }
+            console.log('Post-merge build: ' + run.html_url)
+            await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Post-merge build',
+              head_sha: sha,
+              status: 'queued',
+              details_url: run.html_url,
+              output: {
+                title: 'Post-merge build in ' + owner + '/' + repo,
+                summary: '[See the post-merge build](' + run.html_url + ') of this commit, '
+                  + 'which runs in the fork of the committer who pushed it.',
+                text: JSON.stringify({ owner, repo, run_id: run.id })
+              }
+            })
+            core.setOutput('found', 'true')
   call-build-and-test:
     permissions:
       packages: write
     name: Run
+    needs: find-post-merge-build
     # Skip pushes to `master` on forks: the "Sync fork" button mirrors
     # apache/spark and would otherwise re-run the full build on every sync.
+    # On apache/spark, skip the build when it runs in a fork (see above). If finding it fails, the
+    # build runs here.
     if: >-
-      github.repository == 'apache/spark'
-      || github.ref != 'refs/heads/master'
+      !cancelled()
+      && needs.find-post-merge-build.outputs.found != 'true'
+      && (github.repository == 'apache/spark' || github.ref != 'refs/heads/master')
     uses: ./.github/workflows/build_and_test.yml

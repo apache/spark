@@ -18,6 +18,15 @@ Workflows triggered by `on: pull_request` [count against the base repo's (i.e. t
 [base]: https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#pull-request-events-for-forked-repositories
 [important]: https://github.com/apache/spark/pull/32092
 
+#### Post-merge builds
+
+Every commit pushed to a branch of this repo, that is every merged PR and every backport, gets a post-merge build, and these builds take a large share of this repo's usage. A committer can run them in their fork instead:
+
+1. Enable GitHub Actions in the fork, as for PR builds.
+2. Set `POST_MERGE_FORK_REMOTE` to the git remote of the fork, e.g. `export POST_MERGE_FORK_REMOTE=origin`, when running `dev/merge_spark_pr.py`.
+
+The merge script then also pushes each commit to the `post-merge-<branch>` branch of the fork, where it is built with the same jobs as here. The `Build` workflow here finds that run, links it from a `Post-merge build` check on the commit, and skips its own build, and `update_build_status.yml` keeps the check in sync with the fork run. A branch whose workflows predate this, a failed push to the fork, or a run that cannot be found falls back to the build here.
+
 #### Downsides of avoiding the `pull_request` workflow trigger
 
 The [`pull_request` workflow trigger][prt] provides key benefits that make working with workflows easier, including:

@@ -429,3 +429,97 @@ jobs:
               core.setFailed('Failed to sync ' + failedPRs.size + ' PR(s), will retry next pass: #'
                 + [...failedPRs].join(', #'))
             }
+
+  update-post-merge:
+    name: Update post-merge build status
+    if: github.repository == 'apache/spark'
+    runs-on: ubuntu-slim
+    permissions:
+      actions: read
+      checks: write
+    steps:
+      - name: "Update post-merge build status"
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // When the post-merge build of a commit runs in the fork of the committer, build_main.yml
+            // links it from a "Post-merge build" check on the commit. Sync those checks from the fork
+            // runs, as the job above does for the Build check of each PR. Only commits pushed in the
+            // last day are synced, and a check that succeeded is not synced again.
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+            const pushRuns = await github.paginate(github.rest.actions.listWorkflowRuns, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: 'build_main.yml',
+              event: 'push',
+              created: '>=' + since,
+              per_page: 100
+            })
+            // PATCH /check-runs accepts only these conclusions; see the job above.
+            const conclusions = ['success', 'failure', 'neutral', 'cancelled', 'timed_out',
+              'action_required', 'skipped']
+            const failedShas = []
+            for (const sha of new Set(pushRuns.map(r => r.head_sha))) {
+              try {
+                const checks = await github.paginate(github.rest.checks.listForRef, {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: sha,
+                  check_name: 'Post-merge build',
+                  per_page: 100
+                })
+                for (const cr of checks) {
+                  if (cr.conclusion == 'success') {
+                    continue
+                  }
+                  let params
+                  try {
+                    params = JSON.parse(cr.output.text)
+                  } catch (error) {
+                    params = null
+                  }
+                  if (!params || !params.owner || !params.repo || !params.run_id) {
+                    console.error('Skipping post-merge check ' + cr.id + ' with unusable output')
+                    continue
+                  }
+                  let run
+                  try {
+                    run = (await github.rest.actions.getWorkflowRun(params)).data
+                  } catch (error) {
+                    if (error.status == 404) {
+                      console.error('The fork run of post-merge check ' + cr.id + ' is gone')
+                      continue
+                    }
+                    throw error
+                  }
+                  const body = {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    check_run_id: cr.id,
+                    details_url: run.html_url
+                  }
+                  if (run.status == 'completed') {
+                    body.status = 'completed'
+                    body.conclusion = conclusions.includes(run.conclusion)
+                      ? run.conclusion : 'failure'
+                  } else {
+                    body.status = run.status == 'in_progress' ? 'in_progress' : 'queued'
+                  }
+                  if (body.status == cr.status && body.conclusion == cr.conclusion) {
+                    continue
+                  }
+                  console.log(sha + ': ' + cr.status + ' (' + cr.conclusion + ') -> '
+                    + body.status + ' (' + body.conclusion + ')')
+                  await github.request('PATCH /repos/{owner}/{repo}/check-runs/{check_run_id}', body)
+                }
+              } catch (error) {
+                console.error('Syncing the post-merge build of ' + sha + ' failed; '
+                  + 'will retry next pass')
+                console.error(error)
+                failedShas.push(sha)
+              }
+            }
+            if (failedShas.length > 0) {
+              core.setFailed('Failed to sync the post-merge builds of ' + failedShas.join(', '))
+            }
