@@ -212,7 +212,7 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("a column cannot be altered to a FILE") {
+  test("a column cannot be altered to or from a FILE") {
     withTable("testcat.t") {
       sql("CREATE TABLE testcat.t (id INT, s STRING, f FILE EXTERNAL, v VOID)")
       Seq("s", "f", "v").foreach { column =>
@@ -237,6 +237,21 @@ class FileTypeRestrictionsSuite extends QueryTest with SharedSparkSession {
           fragment = "ALTER TABLE testcat.t ALTER COLUMN s TYPE FILE EXTERNAL",
           start = 0,
           stop = 54))
+      // Nor can a FILE column be altered to another type.
+      Seq("STRING" -> "\"STRING\"", "BINARY" -> "\"BINARY\"").foreach {
+        case (dataType, sqlType) =>
+          val query = s"ALTER TABLE testcat.t ALTER COLUMN f TYPE $dataType"
+          checkError(
+            exception = intercept[AnalysisException](sql(query)),
+            condition = "NOT_SUPPORTED_CHANGE_COLUMN",
+            parameters = Map(
+              "table" -> "`testcat`.`t`",
+              "originName" -> "`f`",
+              "originType" -> "\"FILE EXTERNAL\"",
+              "newName" -> "`f`",
+              "newType" -> sqlType),
+            context = ExpectedContext(fragment = query, start = 0, stop = query.length - 1))
+      }
     }
   }
 

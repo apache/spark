@@ -33,11 +33,12 @@ import org.apache.spark.annotation.Unstable
  *
  * FileType is planned to be physically stored as a struct with the following fields (see
  * `FileType.FIELDS`), but it deliberately does not extend [[StructType]]:
- *   - uri (STRING): the opaque URI to the file
+ *   - uri (STRING): the URI of the referenced file, which may be absolute or relative
  *   - offset (BIGINT): the start of the referenced byte range
- *   - size (BIGINT): the size of the file in bytes
- *   - content_type (STRING): the MIME/content type of the file
- *   - checksum (STRING): an algorithm-tagged integrity token for the file, e.g. "ETAG:{etag}"
+ *   - size (BIGINT): the length of the referenced byte range
+ *   - content_type (STRING): the MIME/content type of the referenced bytes
+ *   - checksum (STRING): an algorithm-tagged integrity token for the referenced bytes, e.g.
+ *     "MD5:{digest}", or "ETAG:{etag}" for the whole file
  *   - inline (BINARY): the referenced bytes stored inline in the value
  *
  * FileType may be EXTERNAL (simple references, lifecycle independent of the table) or UNKNOWN
