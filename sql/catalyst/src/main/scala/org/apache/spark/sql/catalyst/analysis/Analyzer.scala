@@ -675,6 +675,7 @@ class Analyzer(
       ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
+      ResolveInsertIntoSuppliedRelation ::
       ResolveRelations ::
       ResolveChangelogTable ::
       ResolvePartitionSpec ::
@@ -1368,11 +1369,21 @@ class Analyzer(
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
+      val sessionOverlay =
+        if (identifier.length == 1 || CatalogManager.isSessionQualifiedViewName(identifier)) {
+          relationResolution.lookupSuppliedRelation(
+            SuppliedRelationRegistry.sessionIdentity(identifier.last))
+        } else {
+          None
+        }
+      sessionOverlay.orElse {
       relationResolution.lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
+            val nameParts = ident.toQualifiedNameParts(catalog)
+            relationResolution.lookupSuppliedRelation(nameParts).orElse {
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
                 !catalog.isInstanceOf[ViewCatalog]) {
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
@@ -1427,8 +1438,10 @@ class Analyzer(
                   }
                 }
             }
+            }
           case _ => None
         }
+      }
       }
     }
 
@@ -1458,6 +1471,31 @@ class Analyzer(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
         insert.toInsertIntoStatement(target.toUnresolvedRelation)
+    }
+  }
+
+  /**
+   * Finish analysis of INSERT when the target is a caller-supplied overlay
+   * relation. [[InsertIntoStatement]] stays unresolved as a ParsedStatement.
+   */
+  object ResolveInsertIntoSuppliedRelation extends Rule[LogicalPlan] {
+    override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUp {
+      case i @ InsertIntoStatement(table, _, _, query, _, _, byName, _, _)
+          if query.resolved && SuppliedRelationRegistry.isSupplied(table) =>
+        EliminateSubqueryAliases(table) match {
+          case local: LocalRelation =>
+            val ident = local.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG)
+              .getOrElse(Nil)
+            val newQuery = TableOutputResolver.resolveOutputColumns(
+              ident.quoted,
+              local.output,
+              query,
+              byName,
+              conf,
+              FILL)
+            InsertIntoSuppliedRelation(local, newQuery)
+          case _ => i
+        }
     }
   }
 

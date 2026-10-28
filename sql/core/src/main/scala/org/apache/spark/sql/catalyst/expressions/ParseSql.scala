@@ -51,62 +51,123 @@ import org.apache.spark.unsafe.types.UTF8String
  * and inherits the invoker's current catalog, schema, and SQL path.
  * Optional named `current_catalog`, `current_schema`, and `current_path`
  * override that context for the duration of analysis. Optional named
- * `variables` and `relations` inject known session/procedure variables
- * and non-persisted relations so ANALYZE can resolve them.
+ * `variables`, `relations`, and `parameter_markers` inject known session /
+ * procedure variables, non-persisted relations, and typed parameter markers
+ * so ANALYZE can resolve them.
  */
 // scalastyle:off line.size.limit
 // scalastyle:off nonascii
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt[, mode[, current_catalog[, current_schema[, current_path[, variables[, relations]]]]]]) -
+  usage = """_FUNC_(sqlStmt[, mode[, current_catalog[, current_schema[, current_path[, variables[, relations[, parameter_markers]]]]]]]) -
     Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
-    returns a JSON array describing them (1-based UTF-16 code-unit `start` and UTF-16
-    code-unit `length`, parse success, Table 39 statement identifier/code, target and source
-    table references for lineage, select-list column names, and parameter markers).
-    `mode` is `PARSE` (default) or `ANALYZE` (case-insensitive). `PARSE` is unresolved.
-    `ANALYZE` also types selected columns and fully qualifies resolved relations and
-    routines, and reports analysis failures as JSON without aborting the batch.
-    `ANALYZE` inherits the invoker's current catalog, schema, and SQL path. Named
-    `current_catalog`, `current_schema`, and `current_path` override that context for
-    analysis only; omitted or NULL keeps the invoker value. Named `variables` is an array of
-    structs (`name`, `type`) for session or procedure variables not in the persisted schema.
-    Named `relations` is an array of structs (`name`, `schema`) whose `schema` is a DDL
-    column list, parsed like `from_json`. Omitted or NULL injects nothing.
-    Statement length excludes surrounding whitespace and the terminating semicolon.
-    Session parser extensions are not applied.
-    Requires spark.sql.function.parseSql.enabled=true. On syntax / parse error returns JSON
-    for that statement with `parse_success` false, source location, and a nested STANDARD
-    error object instead of throwing or stopping the remaining statements. Nested error
-    locations are statement-relative. An empty or closed-comment-only batch returns `[]`.""",
+    returns a JSON array describing them so callers can inspect SQL text (lineage, statement
+    kind, select-list types) without running the statements. Each object has 1-based
+    character `start` and character `length` (Unicode code points; an emoji is one
+    character), parse success, Table 39 statement identifier/code, target and source
+    table references, select-list column names, and parameter markers. Every parameter
+    may be passed by name (`sqlStmt => ...`, `mode => ...`).
+    `mode` is `PARSE` (default) or `ANALYZE` (case-insensitive). `PARSE` is unresolved and
+    does not need a catalog. `ANALYZE` needs an active session; it types selected columns,
+    fully qualifies resolved relations and routines, and reports analysis failures as JSON
+    without aborting the batch. `ANALYZE` inherits the invoker's current catalog, schema,
+    and SQL path. Named `current_catalog`, `current_schema`, and `current_path` override
+    that context for analysis only; omitted or NULL keeps the invoker value, which is
+    restored after the call. Named `variables` is an array of structs (`name`, `type`) for
+    session or procedure variables not in the persisted schema. Named `relations` is an
+    array of structs (`name`, `schema`) whose `schema` is a DDL column list, parsed like
+    `from_json`. Named `parameter_markers` is an array of structs (`name`, `type`) whose
+    `name` is `?` for positional markers or a simple identifier for named markers (`:p`).
+    Omitted or NULL injects nothing. `PARSE` ignores the catalog, overlay, and marker
+    arguments. Statement length excludes surrounding whitespace and the terminating
+    semicolon. Session parser extensions are not applied. The JSON contract may still
+    change while spark.sql.function.parseSql.enabled remains off by default. On syntax /
+    parse error returns JSON for that statement with `parse_success` false, source
+    location, and a nested STANDARD error object instead of throwing or stopping later
+    statements. Nested error locations are statement-relative. Unexpected internal
+    failures still fail the outer query. An empty or closed-comment-only batch returns
+    `[]`. NULL `sqlStmt` or `mode` returns NULL.""",
   arguments = """
     Arguments:
       * sqlStmt - A SQL batch string to split and parse.
-        An expression that evaluates to a string.
+        An expression that evaluates to a string. NULL returns NULL.
       * mode - Optional `PARSE` or `ANALYZE` (case-insensitive). Defaults to `PARSE`.
-        An expression that evaluates to a string.
+        An expression that evaluates to a string. NULL returns NULL. Any other value
+        fails the outer query with INVALID_PARAMETER_VALUE.PARSE_SQL_MODE.
       * current_catalog - Optional catalog name used as current catalog during `ANALYZE`.
-        NULL or omitted inherits the invoker session. Named argument only after `mode`.
+        NULL or omitted inherits the invoker session. Ignored in `PARSE`. The invoker
+        catalog, schema, and path are restored after analysis.
       * current_schema - Optional schema / namespace used as current schema during `ANALYZE`.
-        NULL or omitted inherits the invoker session.
+        NULL or omitted inherits the invoker session. Ignored in `PARSE`.
       * current_path - Optional SQL PATH used during `ANALYZE` (SET PATH grammar, or the
         string returned by `current_path()`). NULL or omitted inherits the invoker session.
+        Ignored in `PARSE`.
       * variables - Optional ARRAY<STRUCT<name STRING, type STRING>> of known variables
         for `ANALYZE` (for example `system.session.var` or `proc.parm1`). `type` is a DDL
         data type string as accepted by `from_json`. NULL or omitted injects none.
+        Ignored in `PARSE`. Session-shaped names (`v`, `session.v`, `system.session.v`)
+        resolve as `system.session.<name>`. Other names keep their identity. Looked up
+        after real SQL-script locals; a supplied session variable shadows a persisted
+        one without mutating it. Unqualified session names still follow the SQL path.
       * relations - Optional ARRAY<STRUCT<name STRING, schema STRING>> of known relations
-        for `ANALYZE`. `name` may be qualified (`catalog.schema.t`); it is not forced into
-        the session namespace. `schema` is a DDL column list (`a INT, b STRING`) as
-        accepted by `from_json`. NULL or omitted injects none.
+        (tables or views) for `ANALYZE`. `name` is a relation identity and may be
+        qualified (`catalog.schema.t`, `system.session.v`). `schema` is a DDL column list
+        (`a INT, b STRING`) as accepted by `from_json`. NULL or omitted injects none.
+        Ignored in `PARSE`. Session-shaped names canonicalize to `system.session.<name>`.
+        Other names follow ordinary relation qualification (one-part: analysis catalog
+        and schema). During ANALYZE the overlay eclipses the real object of that
+        identity: temp view, persistent table, or view; query source or DML target.
+        PATH still selects the identity of an unqualified SQL name.
+      * parameter_markers - Optional ARRAY<STRUCT<name STRING, type STRING>> of known
+        parameter markers for `ANALYZE`. `name` is `?` for each positional marker in
+        left-to-right order, or a simple identifier for `:name`. `type` is a DDL data
+        type string as accepted by `from_json`. NULL or omitted injects none.
+        Ignored in `PARSE`, which still reports marker names and `unnamed_count`
+        without binding types. Bound as typed NULLs so functions can type-check;
+        values are not executed. Named and unnamed markers cannot be mixed in one
+        statement.
   """,
   examples = """
     Examples:
       > SELECT _FUNC_('SELECT 1;SELECT 2');
        [{"start":1,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]},{"start":10,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]}]
       > SELECT get_json_object(_FUNC_('SELECT ''😀'';SELECT 2'), '$[1].start');
-       13
+       12
       > SELECT get_json_object(_FUNC_('SELEC'), '$[0].error.errorClass');
        PARSE_SYNTAX_ERROR
-      > SELECT get_json_object(_FUNC_('SELECT 1 AS a', 'ANALYZE'), '$[0].select_list[0].type');
-       INT
+      > SELECT get_json_object(_FUNC_('SELECT 1 AS a', 'ANALYZE'), '$[0].select_list[0].type.name');
+       int
+      > SELECT get_json_object(_FUNC_('SELECT a FROM missing_t', 'ANALYZE'), '$[0].analyze_success');
+       false
+      > SELECT get_json_object(_FUNC_('SELECT a FROM t', 'ANALYZE', relations => array(named_struct('name', 't', 'schema', 'a INT'))), '$[0].select_list[0].type.name');
+       int
+      > SELECT get_json_object(_FUNC_('SELECT system.session.v AS x', 'ANALYZE', variables => array(named_struct('name', 'v', 'type', 'INT'))), '$[0].select_list[0].type.name');
+       int
+      > SELECT get_json_object(_FUNC_('SELECT abs(?) AS x', 'ANALYZE', parameter_markers => array(named_struct('name', '?', 'type', 'INT'))), '$[0].select_list[0].type.name');
+       int
+      > SELECT get_json_object(_FUNC_('SELECT proc.parm1 AS x', 'ANALYZE', variables => array(named_struct('name', 'proc.parm1', 'type', 'STRING'))), '$[0].select_list[0].type.name');
+       string
+      > SELECT get_json_object(_FUNC_('SELECT :p AS x', 'ANALYZE', parameter_markers => array(named_struct('name', 'p', 'type', 'STRING'))), '$[0].select_list[0].type.name');
+       string
+  """,
+  note = """
+    Requires spark.sql.function.parseSql.enabled=true. The result type is STRING JSON.
+    ANALYZE needs an active session. Overlays exist only for that call: Spark does not
+    register temp views, mutate session variables, or install a SQL-script context.
+    A NULL array element or empty name/type/schema fails the outer query with
+    INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT. Invalid DDL types and names are recorded
+    as JSON (`analyze_success` false) and do not fail the outer query. Each JSON object
+    has `start` (1-based character offset in the batch), `length`, and
+    `parse_success`. Parse success also has `statement_identifier` /
+    `statement_code` (ISO/IEC 9075-2:2023 Table 39). ANALYZE adds
+    `analyze_success`. Optional fields are omitted when empty:
+    `target_table_references`, `source_table_references`, `function_references` (arrays
+    of name parts; ANALYZE qualifies persistent names, local temp views and temp
+    functions as `system.session`, builtins as `system.builtin`; CTE aliases in
+    scope are not listed as tables), `select_list` (`{name}` parts; ANALYZE adds
+    `type` as a DESCRIBE TABLE EXTENDED AS JSON type object), `parameter_markers` (`named`
+    and/or `unnamed_count`), and `error` (STANDARD format; nested locations are
+    statement-relative). Later statements are still processed after a per-statement
+    parse or analysis failure.
   """,
   group = "misc_funcs",
   since = "4.4.0")
@@ -119,7 +180,8 @@ case class ParseSql(
     currentSchema: Expression,
     currentPath: Expression,
     variables: Expression,
-    relations: Expression)
+    relations: Expression,
+    parameterMarkers: Expression)
   extends Expression
   with ImplicitCastInputTypes
   with CodegenFallback {
@@ -137,7 +199,8 @@ case class ParseSql(
       currentSchema,
       currentPath,
       ParseSql.nullVariables,
-      ParseSql.nullRelations)
+      ParseSql.nullRelations,
+      ParseSql.nullParameterMarkers)
 
   def this(
       sqlStmt: Expression,
@@ -151,7 +214,8 @@ case class ParseSql(
       currentSchema,
       Literal.create(null, StringType),
       ParseSql.nullVariables,
-      ParseSql.nullRelations)
+      ParseSql.nullRelations,
+      ParseSql.nullParameterMarkers)
 
   def this(sqlStmt: Expression, mode: Expression, currentCatalog: Expression) =
     this(
@@ -161,7 +225,8 @@ case class ParseSql(
       Literal.create(null, StringType),
       Literal.create(null, StringType),
       ParseSql.nullVariables,
-      ParseSql.nullRelations)
+      ParseSql.nullRelations,
+      ParseSql.nullParameterMarkers)
 
   def this(sqlStmt: Expression, mode: Expression) =
     this(
@@ -171,14 +236,17 @@ case class ParseSql(
       Literal.create(null, StringType),
       Literal.create(null, StringType),
       ParseSql.nullVariables,
-      ParseSql.nullRelations)
+      ParseSql.nullRelations,
+      ParseSql.nullParameterMarkers)
 
   def this(sqlStmt: Expression) = this(sqlStmt, Literal("PARSE"))
 
   override def prettyName: String = "parse_sql"
 
   override def children: Seq[Expression] =
-    Seq(sqlStmt, mode, currentCatalog, currentSchema, currentPath, variables, relations)
+    Seq(
+      sqlStmt, mode, currentCatalog, currentSchema, currentPath,
+      variables, relations, parameterMarkers)
 
   override def nullable: Boolean = sqlStmt.nullable || mode.nullable
 
@@ -191,7 +259,7 @@ case class ParseSql(
 
   override def inputTypes: Seq[AbstractDataType] =
     Seq.fill(5)(StringTypeWithCollation(supportsTrimCollation = true)) ++
-      Seq(ParseSql.variablesType, ParseSql.relationsType)
+      Seq(ParseSql.variablesType, ParseSql.relationsType, ParseSql.parameterMarkersType)
 
   // ANALYZE reads the session catalog, so results are not context-independent.
   override def contextIndependentFoldable: Boolean = false
@@ -244,7 +312,9 @@ case class ParseSql(
         variables = ParseSql.decodeNameSpecArray(
           variables.eval(input), "variables", "type"),
         relations = ParseSql.decodeNameSpecArray(
-          relations.eval(input), "relations", "schema"))
+          relations.eval(input), "relations", "schema"),
+        parameterMarkers = ParseSql.decodeNameSpecArray(
+          parameterMarkers.eval(input), "parameter_markers", "type"))
     } else {
       ParseSqlAnalyzeContext.empty
     }
@@ -263,7 +333,8 @@ case class ParseSql(
       currentSchema = newChildren(3),
       currentPath = newChildren(4),
       variables = newChildren(5),
-      relations = newChildren(6))
+      relations = newChildren(6),
+      parameterMarkers = newChildren(7))
 }
 
 object ParseSql extends ExpressionBuilder {
@@ -279,9 +350,13 @@ object ParseSql extends ExpressionBuilder {
 
   val relationsType: DataType = ArrayType(relationEntryType, containsNull = false)
 
+  val parameterMarkersType: DataType = variablesType
+
   def nullVariables: Expression = Literal.create(null, variablesType)
 
   def nullRelations: Expression = Literal.create(null, relationsType)
+
+  def nullParameterMarkers: Expression = Literal.create(null, parameterMarkersType)
 
   def apply(sqlStmt: Expression): ParseSql = new ParseSql(sqlStmt)
 
@@ -317,6 +392,7 @@ object ParseSql extends ExpressionBuilder {
       throw QueryExecutionErrors.invalidParseSqlContext(parameter, String.valueOf(other))
   }
 
+  // All eight parameters are named-invocation eligible, including required `sqlStmt`.
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
     InputParameter("sqlStmt"),
     InputParameter("mode", Some(Literal("PARSE"))),
@@ -324,10 +400,11 @@ object ParseSql extends ExpressionBuilder {
     InputParameter("current_schema", Some(Literal.create(null, StringType))),
     InputParameter("current_path", Some(Literal.create(null, StringType))),
     InputParameter("variables", Some(nullVariables)),
-    InputParameter("relations", Some(nullRelations)))))
+    InputParameter("relations", Some(nullRelations)),
+    InputParameter("parameter_markers", Some(nullParameterMarkers)))))
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    assert(expressions.size == 7)
+    assert(expressions.size == 8)
     ParseSql(
       expressions(0),
       expressions(1),
@@ -335,7 +412,8 @@ object ParseSql extends ExpressionBuilder {
       expressions(3),
       expressions(4),
       expressions(5),
-      expressions(6))
+      expressions(6),
+      expressions(7))
   }
 
   /** Register the builtin with a session function registry and the global builtin set. */

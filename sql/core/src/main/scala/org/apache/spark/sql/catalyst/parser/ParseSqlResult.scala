@@ -31,12 +31,18 @@ import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryContext}
+import org.apache.spark.sql.catalyst.trees.TreePattern.PARAMETER
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, PathElement}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
-import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
+import org.apache.spark.sql.execution.command.{
+  CreateViewCommand,
+  DescribeQueryCommand,
+  DescribeRelationJsonCommand,
+  ExplainCommand
+}
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{DataType, StructType}
@@ -65,10 +71,11 @@ case class ParseSqlAnalyzeContext(
     schema: Option[String] = None,
     path: Option[String] = None,
     variables: Seq[(String, String)] = Nil,
-    relations: Seq[(String, String)] = Nil) {
+    relations: Seq[(String, String)] = Nil,
+    parameterMarkers: Seq[(String, String)] = Nil) {
   def isEmpty: Boolean = {
     catalog.isEmpty && schema.isEmpty && path.isEmpty &&
-      variables.isEmpty && relations.isEmpty
+      variables.isEmpty && relations.isEmpty && parameterMarkers.isEmpty
   }
 }
 
@@ -91,9 +98,12 @@ object ParseSqlAnalyzeContext {
  * executors without a session, so only the stock parser is available under
  * distributed eval.
  *
- * Every statement object includes its 1-based UTF-16 code-unit `start` in the
- * original batch and its UTF-16 code-unit `length`, excluding surrounding
- * whitespace and the terminating semicolon. On success it also includes
+ * Every statement object includes its 1-based character `start` in the
+ * original batch and its character `length`, excluding surrounding
+ * whitespace and the terminating semicolon. Characters are Unicode code
+ * points (Spark SQL `length()` / UTF-8 strings): a supplementary-plane
+ * emoji is one character. ANTLR offsets are UTF-16; they are converted
+ * here. On success it also includes
  * `parse_success`, the statement
  * identifier/code (ISO/IEC 9075-2:2023 Table 39), and omits unused optional
  * fields (`target_table_references`, `source_table_references`,
@@ -119,13 +129,13 @@ object ParseSqlResult {
     val split = parser.get().splitStatementsWithPositions(sql)
     val statements = split.completeStatements ++ split.partialStatement
     val json = if (mode == ParseSqlMode.Analyze) {
-      analyzeBatch(statements, context)
+      analyzeBatch(sql, statements, context)
     } else {
       JArray(statements.map { segment =>
-        parsePlanOrError(segment) match {
+        parsePlanOrError(sql, segment) match {
           case ParseFailed(errorObj) => errorObj
           case Parsed(seg, plan) =>
-            successJson(plan, analyzed = None, analyzeError = None, None, seg)
+            successJson(plan, analyzed = None, analyzeError = None, None, sql, seg)
         }
       }.toList)
     }
@@ -143,9 +153,10 @@ object ParseSqlResult {
    * whatever parse and catalog qualification is already known.
    */
   private def analyzeBatch(
+      batch: String,
       statements: Seq[PositionedSqlStatement],
       context: ParseSqlAnalyzeContext): JArray = {
-    val parsed = statements.map(parsePlanOrError)
+    val parsed = statements.map(parsePlanOrError(batch, _))
     val session = ClassicSparkSession.getActiveSession
       .orElse(ClassicSparkSession.getDefaultSession)
       .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
@@ -153,7 +164,7 @@ object ParseSqlResult {
       withAnalyzeContext(session, context) { env =>
         JArray(parsed.map {
           case ParseFailed(errorObj) => errorObj
-          case Parsed(segment, plan) => analyzeJson(plan, segment, env)
+          case Parsed(segment, plan) => analyzeJson(plan, batch, segment, env)
         }.toList)
       }
     } catch {
@@ -161,13 +172,15 @@ object ParseSqlResult {
         JArray(parsed.map {
           case ParseFailed(errorObj) => errorObj
           case Parsed(segment, plan) =>
-            successJson(plan, None, Some(e), Some(session), segment)
+            successJson(plan, None, Some(e), Some(session), batch, segment)
         }.toList)
     }
   }
 
   /** Parsed plan, or parse-failure JSON for this statement. */
-  private def parsePlanOrError(segment: PositionedSqlStatement): ParsedStatement = {
+  private def parsePlanOrError(
+      batch: String,
+      segment: PositionedSqlStatement): ParsedStatement = {
     val sql = segment.statement
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
@@ -182,14 +195,15 @@ object ParseSqlResult {
       }
     } catch {
       case e: ParseException =>
-        ParseFailed(errorJson(e, segment))
+        ParseFailed(errorJson(e, batch, segment))
       case e: SqlScriptingException =>
-        ParseFailed(errorJson(e, segment))
+        ParseFailed(errorJson(e, batch, segment))
     }
   }
 
   private case class AnalyzeEnv(
-      session: ClassicSparkSession)
+      session: ClassicSparkSession,
+      parameterMarkers: Seq[(String, DataType)] = Nil)
 
   /**
    * Analyze `plan` with the active session catalog. Parse metadata is always
@@ -197,15 +211,17 @@ object ParseSqlResult {
    */
   private def analyzeJson(
       plan: LogicalPlan,
+      batch: String,
       segment: PositionedSqlStatement,
       env: AnalyzeEnv): JObject = {
     try {
+      val toAnalyze = bindSuppliedParameterMarkers(plan, env.parameterMarkers)
       val analyzed =
-        env.session.sessionState.executePlan(plan, CommandExecutionMode.SKIP).analyzed
-      successJson(plan, Some(analyzed), None, Some(env.session), segment)
+        env.session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
+      successJson(plan, Some(analyzed), None, Some(env.session), batch, segment)
     } catch {
       case e: SparkThrowable with Throwable =>
-        successJson(plan, None, Some(e), Some(env.session), segment)
+        successJson(plan, None, Some(e), Some(env.session), batch, segment)
     }
   }
 
@@ -218,8 +234,12 @@ object ParseSqlResult {
       context: ParseSqlAnalyzeContext)(f: AnalyzeEnv => T): T = {
     val parsedVars = context.variables.map(parseKnownVariable)
     val parsedRels = context.relations.map(parseKnownRelation)
-    if (context.isEmpty) {
-      f(AnalyzeEnv(session))
+    val parsedMarkers = context.parameterMarkers.map(parseKnownParameterMarker)
+    val env = AnalyzeEnv(session, parsedMarkers)
+    val needsSessionOverride = context.catalog.nonEmpty || context.schema.nonEmpty ||
+      context.path.nonEmpty || parsedVars.nonEmpty || parsedRels.nonEmpty
+    if (!needsSessionOverride) {
+      f(env)
     } else {
       val mgr = session.sessionState.catalogManager
       val conf = session.sessionState.conf
@@ -255,7 +275,7 @@ object ParseSqlResult {
         SuppliedVariableRegistry.create(parsedVars).runWith {
           SuppliedRelationRegistry
             .create(mgr, parsedRels)
-            .runWith(f(AnalyzeEnv(session)))
+            .runWith(f(env))
         }
       } finally {
         mgr.setCurrentCatalog(prevCatalog)
@@ -338,17 +358,78 @@ object ParseSqlResult {
     parts
   }
 
+  private def parseKnownParameterMarker(
+      spec: (String, String)): (String, DataType) = {
+    val (name, typeDdl) = spec
+    val dataType = try {
+      DataType.fromDDL(typeDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("parameter_markers", typeDdl)
+    }
+    val trimmed = name.trim
+    if (trimmed == "?") {
+      ("?", dataType)
+    } else {
+      val parts = parseKnownName(trimmed, "parameter_markers")
+      if (parts.length != 1) {
+        throw QueryExecutionErrors.invalidParseSqlContext("parameter_markers", name)
+      }
+      (parts.head, dataType)
+    }
+  }
+
+  /**
+   * Bind caller-supplied marker types using the same [[BindParameters]] rule as
+   * `sql(..., args)`, then analyze the bound plan.
+   */
+  private def bindSuppliedParameterMarkers(
+      plan: LogicalPlan,
+      markers: Seq[(String, DataType)]): LogicalPlan = {
+    if (markers.isEmpty || !plan.containsPattern(PARAMETER)) {
+      plan
+    } else {
+      val namedArgs = markers.collect {
+        case (name, dataType) if name != "?" =>
+          name -> Literal.create(null, dataType)
+      }
+      val posArgs = markers.collect {
+        case ("?", dataType) => Literal.create(null, dataType)
+      }
+      var usesNamed = false
+      var usesPos = false
+      plan.foreach { p =>
+        p.expressions.foreach { e =>
+          e.foreach {
+            case _: NamedParameter => usesNamed = true
+            case _: PosParameter => usesPos = true
+            case _ =>
+          }
+        }
+      }
+      val wrapped = if (usesNamed && namedArgs.nonEmpty) {
+        NameParameterizedQuery(plan, namedArgs.toMap)
+      } else if (usesPos && posArgs.nonEmpty) {
+        PosParameterizedQuery(plan, posArgs)
+      } else {
+        plan
+      }
+      BindParameters(wrapped)
+    }
+  }
+
   /** Build success JSON from an already-parsed unresolved plan. */
   private def successJson(
       plan: LogicalPlan,
       analyzed: Option[LogicalPlan],
       analyzeError: Option[SparkThrowable with Throwable],
       session: Option[ClassicSparkSession],
+      batch: String,
       segment: PositionedSqlStatement): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
-    fields += "start" -> JInt(segment.start + 1)
-    fields += "length" -> JInt(segment.length)
+    fields += "start" -> JInt(charStart(batch, segment))
+    fields += "length" -> JInt(charLength(segment))
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
@@ -389,8 +470,21 @@ object ParseSqlResult {
     JObject(fields.toList)
   }
 
+  /** 1-based Unicode code-point offset of `segment` in `batch`. */
+  private def charStart(batch: String, segment: PositionedSqlStatement): Int = {
+    val utf16 = math.max(0, math.min(segment.start, batch.length))
+    batch.codePointCount(0, utf16) + 1
+  }
+
+  /** Unicode code-point length of the trimmed statement text. */
+  private def charLength(segment: PositionedSqlStatement): Int = {
+    val text = segment.statement
+    if (text.isEmpty) 0 else text.codePointCount(0, text.length)
+  }
+
   private def errorJson(
       e: SparkThrowable with Throwable,
+      batch: String,
       segment: PositionedSqlStatement): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
@@ -406,8 +500,8 @@ object ParseSqlResult {
       origin.toSeq.flatMap(queryContextField)
     }
     JObject(
-      "start" -> JInt(segment.start + 1),
-      "length" -> JInt(segment.length),
+      "start" -> JInt(charStart(batch, segment)),
+      "length" -> JInt(charLength(segment)),
       "parse_success" -> JBool(false),
       "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
     )
@@ -512,6 +606,8 @@ object ParseSqlResult {
         visitPlan(i.table, scope, TableRefRole.Target)(f)
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case i: InsertIntoStatement =>
+        visitPlan(i.query, nextScope, TableRefRole.Source)(f)
+      case i: InsertIntoSuppliedRelation =>
         visitPlan(i.query, nextScope, TableRefRole.Source)(f)
       case c: CreateTableAsSelect =>
         visitPlan(c.name, scope, TableRefRole.Target)(f)
@@ -680,7 +776,7 @@ object ParseSqlResult {
       query.output.map { attr =>
         JObject(
           "name" -> partsToJArray(Seq(attr.name)),
-          "type" -> JString(attr.dataType.sql))
+          "type" -> DescribeRelationJsonCommand.jsonType(attr.dataType))
       }
     } else {
       collectSelectList(plan)
@@ -690,10 +786,27 @@ object ParseSqlResult {
   private def qualifyRelation(
       parts: Seq[String],
       session: ClassicSparkSession): Seq[String] = {
-    if (session.sessionState.catalog.isTempView(parts)) {
-      parts
-    } else {
-      qualifyWithCurrentNamespace(parts, session)
+    val catalog = session.sessionState.catalog
+    val resolver = session.sessionState.conf.resolver
+    val mgr = session.sessionState.catalogManager
+    val sessionIdent = SuppliedRelationRegistry.sessionIdentity(parts.last)
+    val overlaySession =
+      SuppliedRelationRegistry.lookup(sessionIdent, resolver).isDefined
+    parts match {
+      case Seq(name) if catalog.getRawTempView(name).isDefined =>
+        sessionIdent
+      case Seq(name) if overlaySession && mgr.isSystemSessionOnPath =>
+        sessionIdent
+      case _ if CatalogManager.isSessionQualifiedViewName(parts) &&
+          (catalog.isTempView(parts) || overlaySession) =>
+        sessionIdent
+      case _ if catalog.isTempView(parts) =>
+        parts match {
+          case Seq(db, name) => Seq(db, name)
+          case other => other
+        }
+      case _ =>
+        qualifyWithCurrentNamespace(parts, session)
     }
   }
 
@@ -703,7 +816,10 @@ object ParseSqlResult {
     val catalog = session.sessionState.catalog
     parts match {
       case Seq(name) if catalog.isTemporaryFunction(FunctionIdentifier(name)) =>
-        Seq(name)
+        Seq(
+          CatalogManager.SYSTEM_CATALOG_NAME,
+          CatalogManager.SESSION_NAMESPACE,
+          name)
       case Seq(name) if FunctionRegistry.builtin.functionExists(FunctionIdentifier(name)) =>
         FunctionRegistry.builtinFunctionIdentifier(name).nameParts
       case other =>
@@ -729,6 +845,7 @@ object ParseSqlResult {
     case WithCTE(child, _) => primaryQueryPlan(child)
     case UnresolvedInsert(_, _, _, query, _, _, _, _, _) =>
       primaryQueryPlan(query)
+    case i: InsertIntoSuppliedRelation => primaryQueryPlan(i.query)
     case i: InsertIntoStatement => primaryQueryPlan(i.query)
     case c: CreateTableAsSelect => primaryQueryPlan(c.query)
     case r: ReplaceTableAsSelect => primaryQueryPlan(r.query)

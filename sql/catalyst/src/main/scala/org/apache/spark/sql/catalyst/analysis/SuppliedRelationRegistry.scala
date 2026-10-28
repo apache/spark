@@ -17,19 +17,28 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.trees.TreeNodeTag
 import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.CatalogManager.{
+  SESSION_NAMESPACE,
+  SYSTEM_CATALOG_NAME
+}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.util.LexicalThreadLocal
 
 /**
  * A lexical registry of schema-only relations supplied by an analysis caller.
  *
- * Supplied relations are scoped to one analysis and are consulted after normal
- * temporary-view lookup, but before a persistent catalog lookup. Their names
- * are canonical catalog-qualified identities rather than session temp names.
+ * Supplied names are stored as canonical identities. During lookup, a match
+ * eclipses the real table or view of that identity (temp view, global temp
+ * view, persistent table, or persistent view) for that analysis only.
  */
 private[sql] object SuppliedRelationRegistry
   extends LexicalThreadLocal[Seq[(Seq[String], StructType)]] {
+
+  val IDENTITY_TAG: TreeNodeTag[Seq[String]] =
+    TreeNodeTag[Seq[String]]("suppliedRelationIdentity")
 
   def create(
       catalogManager: CatalogManager,
@@ -48,6 +57,15 @@ private[sql] object SuppliedRelationRegistry
     })
   }
 
+  def isSupplied(plan: LogicalPlan): Boolean = plan match {
+    case s: SubqueryAlias => isSupplied(s.child)
+    case other => other.getTagValue(IDENTITY_TAG).isDefined
+  }
+
+  def sessionIdentity(name: String): Seq[String] = {
+    Seq(SYSTEM_CATALOG_NAME, SESSION_NAMESPACE, name)
+  }
+
   private def sameName(
       left: Seq[String],
       right: Seq[String],
@@ -59,12 +77,22 @@ private[sql] object SuppliedRelationRegistry
 
   private def canonicalize(
       catalogManager: CatalogManager,
-      nameParts: Seq[String]): Seq[String] = nameParts match {
-    case Seq(name) =>
-      catalogManager.currentCatalog.name() +: catalogManager.currentNamespace.toSeq :+ name
-    case Seq(namespace, name) =>
-      catalogManager.currentCatalog.name() +: Seq(namespace, name)
-    case catalog +: identifier =>
-      catalog +: identifier
+      nameParts: Seq[String]): Seq[String] = {
+    if (CatalogManager.isSessionQualifiedViewName(nameParts)) {
+      sessionIdentity(nameParts.last)
+    } else if (nameParts.length == 2 &&
+        catalogManager.v1SessionCatalog.isGlobalTempViewDB(nameParts.head)) {
+      nameParts
+    } else {
+      nameParts match {
+        case Seq(name) =>
+          catalogManager.currentCatalog.name() +:
+            catalogManager.currentNamespace.toSeq :+ name
+        case Seq(namespace, name) =>
+          catalogManager.currentCatalog.name() +: Seq(namespace, name)
+        case catalog +: identifier =>
+          catalog +: identifier
+      }
+    }
   }
 }

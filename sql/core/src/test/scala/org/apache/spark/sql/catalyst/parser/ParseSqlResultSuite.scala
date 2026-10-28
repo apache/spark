@@ -35,6 +35,13 @@ class ParseSqlResultSuite extends SparkFunSuite {
       case other => fail(s"expected JSON array, got: $other")
     }
 
+  /** Slice `s` using 1-based Unicode code-point start and length. */
+  private def sliceByCodePoints(s: String, start: Int, length: Int): String = {
+    val begin = s.offsetByCodePoints(0, start - 1)
+    val end = s.offsetByCodePoints(begin, length)
+    s.substring(begin, end)
+  }
+
   private def obj(sql: String): JObject = objs(sql) match {
     case value :: Nil => value
     case other => fail(s"expected one statement, got ${other.size}: $other")
@@ -103,9 +110,9 @@ class ParseSqlResultSuite extends SparkFunSuite {
       val JInt(length) = statement \ "length"
       (start.toInt, length.toInt)
     }
-    assert(spans === Seq((1, 13), (16, 8)))
+    assert(spans === Seq((1, 11), (14, 8)))
     assert(spans.map { case (start, length) =>
-      unicodeSql.substring(start - 1, start - 1 + length)
+      sliceByCodePoints(unicodeSql, start, length)
     } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
 
     val nbsp = 0xA0.toChar
