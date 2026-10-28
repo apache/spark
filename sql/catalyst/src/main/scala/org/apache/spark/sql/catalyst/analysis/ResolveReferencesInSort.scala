@@ -75,7 +75,14 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
   }
 
   private def resolveReferencesInSort(sort: Sort): LogicalPlan = {
-    val resolvedBasic = sort.order.map(resolveExpressionByPlanOutput(_, sort.child))
+    // Keep the original name until functions are resolved: aggregate arguments use the
+    // Aggregate's input, whereas ordinary ORDER BY expressions prefer its output aliases.
+    val preserveColumnName = sort.child match {
+      case _: Aggregate | Filter(_, _: Aggregate) => true
+      case _ => false
+    }
+    val resolvedBasic = sort.order.map(
+      resolveExpressionByPlanOutput(_, sort.child, preserveColumnName = preserveColumnName))
     val resolvedWithAgg = sort.child match {
       case Filter(_, agg: Aggregate) => resolvedBasic.map(resolveColWithAgg(_, agg))
       case _ => resolvedBasic.map(resolveColWithAgg(_, sort.child))

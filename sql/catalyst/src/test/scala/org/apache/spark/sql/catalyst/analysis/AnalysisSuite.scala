@@ -251,6 +251,24 @@ class AnalysisSuite extends AnalysisTest with Matchers {
     checkAnalysis(plan2, expected2)
   }
 
+  test("SPARK-38951: aggregate arguments in ORDER BY ignore shadowing output aliases") {
+    val input = LocalRelation($"key".int, $"score".int)
+    val key = input.output.head
+    val score = input.output(1)
+    val selected = min(score).as("score")
+    val ordering = max(score).as("max(score)")
+    val expected = input.groupBy(key)(selected, ordering)
+      .orderBy(ordering.toAttribute.asc)
+      .select(selected.toAttribute)
+
+    Seq(max($"score"), UnresolvedFunction("max", Seq($"score"), isDistinct = false)).foreach {
+      aggregate =>
+        val plan = input.groupBy($"key")(min($"score").as("score"))
+          .orderBy(aggregate.asc)
+        checkAnalysis(plan, expected)
+    }
+  }
+
   test("resolve relations") {
     assertAnalysisError(UnresolvedRelation(TableIdentifier("tAbLe")), Seq())
     checkAnalysisWithoutViewWrapper(UnresolvedRelation(TableIdentifier("TaBlE")), testRelation)

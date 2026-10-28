@@ -1399,6 +1399,60 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
     }
   }
 
+  gridTest("ORDER BY aggregates resolve input columns before output aliases")(
+    Seq(false, true)) { singlePassEnabled =>
+    withSQLConf(
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+      def checkQuery(sqlText: String, expectedAnswer: Seq[Row]): Unit = {
+        val df = sql(sqlText)
+        assert(df.queryExecution.analyzed.resolved)
+        // The single-pass analyzer does not support the encoder plans created by checkAnswer.
+        withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+
+      val input =
+        """FROM VALUES ('a', 1), ('a', 10), ('b', 2), ('b', 3), ('c', 4), ('c', 5)
+          |  AS scores(team, score)
+          |GROUP BY team
+          |""".stripMargin
+      val query = "SELECT team, min(score) AS score\n" + input
+      val orderedByMax = Seq(Row("b", 2), Row("c", 4), Row("a", 1))
+      val orderedByAlias = Seq(Row("a", 1), Row("b", 2), Row("c", 4))
+
+      checkQuery(query + "ORDER BY max(score)", orderedByMax)
+      checkQuery(query + "ORDER BY max(scores.score)", orderedByMax)
+      checkQuery(query + "ORDER BY min(score)", orderedByAlias)
+      checkQuery(query + "ORDER BY score", orderedByAlias)
+      checkQuery(query + "ORDER BY abs(score)", orderedByAlias)
+      checkQuery(query + "ORDER BY max(score) - score, team", orderedByMax)
+      checkQuery(
+        query + "HAVING min(score) > 1 ORDER BY max(score)",
+        Seq(Row("b", 2), Row("c", 4)))
+      checkQuery(query + "HAVING max(score) > 4", Seq(Row("a", 1), Row("c", 4)))
+      checkQuery(
+        "SELECT team, min(score) > 0 AS score\n" + input + "ORDER BY sum(score)",
+        Seq(Row("b", true), Row("c", true), Row("a", true)))
+      checkQuery(
+        """SELECT team, min(score) AS score
+          |FROM VALUES
+          |  ('a', named_struct('value', 1)), ('a', named_struct('value', 10)),
+          |  ('b', named_struct('value', 2)), ('b', named_struct('value', 3)),
+          |  ('c', named_struct('value', 4)), ('c', named_struct('value', 5))
+          |  AS scores(team, score)
+          |GROUP BY team
+          |ORDER BY max(score.value)""".stripMargin,
+        Seq(Row("b", Row(2)), Row("c", Row(4)), Row("a", Row(1))))
+
+    }
+  }
+
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
     // If ANSI mode is on, Spark disallows comparing Int with Boolean.
     if (!conf.ansiEnabled) {

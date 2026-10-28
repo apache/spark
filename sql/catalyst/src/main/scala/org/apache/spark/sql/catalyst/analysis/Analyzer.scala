@@ -3267,22 +3267,48 @@ class Analyzer(
           Filter(newExprs.head, newChild)
         })
 
-      case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
-        resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
-          val newSortOrder = s.order.zip(newExprs).map {
-            case (sortOrder, expr) => sortOrder.copy(child = expr)
-          }
-          s.copy(order = newSortOrder, child = newChild)
-        })
+      case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved =>
+        resolveSortWithAggregate(s, agg, identity)
 
       case s @ Sort(_, _, f @ Filter(cond, agg: Aggregate), _)
-          if agg.resolved && cond.resolved && s.order.forall(_.resolved) =>
-        resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
-          val newSortOrder = s.order.zip(newExprs).map {
+          if agg.resolved && cond.resolved =>
+        resolveSortWithAggregate(s, agg, newChild => f.copy(child = newChild))
+    }
+
+    private def resolveSortWithAggregate(
+        sort: Sort,
+        agg: Aggregate,
+        buildChild: Aggregate => LogicalPlan): LogicalPlan = {
+      // ORDER BY initially prefers output aliases, but aggregate arguments must use the input.
+      // Resolve their original names before checking types, aggregate matching, and coercion.
+      val order = sort.order.map { expression =>
+        expression.transformDown {
+          case ae: AggregateExpression =>
+            ae.transformDown {
+              case t: TempResolvedColumn => withOrigin(t.origin) {
+                resolveExpressionByPlanOutput(UnresolvedAttribute(t.nameParts), agg.child) match {
+                  case _: UnresolvedAttribute => t
+                  case input => t.copy(child = input)
+                }
+              }
+            }
+        }.asInstanceOf[SortOrder]
+      }
+      if (order.forall(_.resolved)) {
+        val resolvedOrder = order.map(_.transformDown {
+          case t: TempResolvedColumn if t.child.references.subsetOf(agg.outputSet) => t.child
+        }.asInstanceOf[SortOrder])
+        resolveOperatorWithAggregate(resolvedOrder.map(_.child), agg, (newExprs, newChild) => {
+          val newSortOrder = order.zip(newExprs).map {
             case (sortOrder, expr) => sortOrder.copy(child = expr)
           }
-          s.copy(order = newSortOrder, child = f.copy(child = newChild))
+          sort.copy(order = newSortOrder, child = buildChild(newChild))
         })
+      } else {
+        // Keep temporary columns until every function resolves, so lateral alias resolution
+        // cannot insert a Project between Sort and Aggregate before aggregate extraction.
+        sort.copy(order = order)
+      }
     }
 
     /**

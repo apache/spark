@@ -898,6 +898,11 @@ class ExpressionResolver(
     val viewResolutionContext = resolver.getViewResolver.getViewResolutionContext
     val extractValueExtractionKey =
       expressionResolutionContext.parentContext.flatMap(_.extractValueExtractionKey)
+    // Aggregate functions in ORDER BY consume the Aggregate's input, while other references,
+    // including window aggregate arguments, prefer its output aliases.
+    val resolvingAggregateInputInSort = traversals.current.isSortOnTopOfAggregate &&
+      expressionResolutionContext.resolvingTreeUnderAggregateExpression &&
+      expressionResolutionContext.windowFunctionNestednessLevel != 1
 
     scopes.resolveMultipartName(
       multipartName = multipartName,
@@ -909,7 +914,8 @@ class ExpressionResolver(
         canResolveNameByHiddenOutput = canResolveNameByHiddenOutput,
         canResolveNameByHiddenOutputInSubquery =
           subqueryRegistry.currentScope.aggregateExpressionsExtractor.isDefined,
-        shouldPreferHiddenOutput = traversals.current.isFilterOnTopOfAggregate,
+        shouldPreferHiddenOutput =
+          traversals.current.isFilterOnTopOfAggregate || resolvingAggregateInputInSort,
         canReferenceAggregatedAccessOnlyAttributes =
           expressionResolutionContext.resolvingTreeUnderAggregateExpression,
         resolvingView = viewResolutionContext.isDefined,
