@@ -288,7 +288,10 @@ public class V2ExpressionSQLBuilder {
   }
 
   protected String inputToSQL(Expression input) {
-    if (input.children().length > 1) {
+    // NOT is unary, so the arity check alone misses it. Its lower precedence requires
+    // parentheses in comparisons and the IS NULL checks synthesized for null-safe equality.
+    if (input.children().length > 1 ||
+        (input instanceof GeneralScalarExpression e && e.name().equals("NOT"))) {
       return "(" + build(input) + ")";
     } else {
       return build(input);

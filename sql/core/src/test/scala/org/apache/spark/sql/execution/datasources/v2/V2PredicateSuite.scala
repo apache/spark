@@ -105,6 +105,52 @@ class V2PredicateSuite extends SparkFunSuite {
     assert(PredicateUtils.toV1(predicate1).get.toV2 == predicate1)
   }
 
+  for ((left, right, leftSql, rightSql) <- Seq(
+      (new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("a")))),
+        ref("b"), "(NOT (a))", "b"),
+      (ref("a"), new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("b")))),
+        "a", "(NOT (b))"),
+      (new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("a")))),
+        new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("b")))),
+        "(NOT (a))", "(NOT (b))"))) {
+    test(s"comparisons preserve NOT operand precedence: $leftSql, $rightSql") {
+      val comparison = new Predicate("<=>", Array[Expression](left, right))
+      assert(comparison.describe() ==
+        s"(($leftSql IS NOT NULL AND $rightSql IS NOT NULL AND $leftSql = $rightSql) " +
+          s"OR ($leftSql IS NULL AND $rightSql IS NULL))")
+      assert(new Predicate("=", Array[Expression](left, right)).describe() ==
+        s"$leftSql = $rightSql")
+    }
+  }
+
+  test("comparisons with NOT preserve three-valued logic") {
+    def evaluate(sql: String, a: java.lang.Boolean, b: java.lang.Boolean): Any = {
+      CatalystSqlParser.parseExpression(sql).transform {
+        case attr: UnresolvedAttribute =>
+          CatalystLiteral.create(if (attr.name == "a") a else b, BooleanType)
+      }.eval()
+    }
+
+    val values = Seq[java.lang.Boolean](true, false, null)
+    val notA = new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("a"))))
+    val notB = new Not(new Predicate("BOOLEAN_EXPRESSION", Array[Expression](ref("b"))))
+    for {
+      (left, right, leftSql, rightSql) <- Seq(
+        (notA, ref("b"), "(NOT a)", "b"),
+        (ref("a"), notB, "a", "(NOT b)"),
+        (notA, notB, "(NOT a)", "(NOT b)"))
+      operator <- Seq("<=>", "=", "<>", "<", "<=", ">", ">=")
+      a <- values
+      b <- values
+    } {
+      val predicate = new Predicate(operator, Array[Expression](left, right))
+      val expected = s"$leftSql $operator $rightSql"
+      withClue(s"${predicate.describe()}, a=$a, b=$b: ") {
+        assert(evaluate(predicate.describe(), a, b) == evaluate(expected, a, b))
+      }
+    }
+  }
+
   test("EqualNullSafe") {
     val predicate1 = new Predicate("<=>", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
     val predicate2 = new Predicate("<=>", Array[Expression](ref("a"), LiteralValue(1, IntegerType)))
