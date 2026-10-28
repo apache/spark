@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ArrayData, GenericAr
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // This file defines all the expressions to extract values out of complex types.
@@ -592,10 +593,13 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       val l = v.asInstanceOf[Long]
       (l ^ (l >>> 32)).toInt
-    case FloatType => java.lang.Float.floatToIntBits(v.asInstanceOf[Float])
+    // Mix floating-point bits before masking, and normalize zeros to match SQL equality.
+    case FloatType =>
+      val f = v.asInstanceOf[Float]
+      Murmur3_x86_32.hashInt(if (f == 0.0f) 0 else java.lang.Float.floatToIntBits(f), 42)
     case DoubleType =>
-      val l = java.lang.Double.doubleToLongBits(v.asInstanceOf[Double])
-      (l ^ (l >>> 32)).toInt
+      val d = v.asInstanceOf[Double]
+      Murmur3_x86_32.hashLong(if (d == 0.0d) 0L else java.lang.Double.doubleToLongBits(d), 42)
     case _ => v.hashCode()
   }
 
@@ -605,9 +609,12 @@ trait GetMapValueUtil extends BinaryExpression with ImplicitCastInputTypes {
     case ByteType | ShortType | IntegerType | DateType | _: YearMonthIntervalType => s"$v"
     case LongType | TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
       s"(int)($v ^ ($v >>> 32))"
-    case FloatType => s"Float.floatToIntBits($v)"
+    case FloatType =>
+      s"${classOf[Murmur3_x86_32].getName}.hashInt(" +
+        s"$v == 0.0f ? 0 : Float.floatToIntBits($v), 42)"
     case DoubleType =>
-      s"(int)(Double.doubleToLongBits($v) ^ (Double.doubleToLongBits($v) >>> 32))"
+      s"${classOf[Murmur3_x86_32].getName}.hashLong(" +
+        s"$v == 0.0d ? 0L : Double.doubleToLongBits($v), 42)"
     case _ => s"$v.hashCode()"
   }
 
