@@ -34,7 +34,7 @@ case class MapInPandasExec(
     override val profile: Option[ResourceProfile])
   extends MapInBatchExec {
 
-  override protected val pythonEvalType: Int = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
+  override protected def pythonEvalType: Int = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
 
   override protected def withNewChildInternal(newChild: SparkPlan): MapInPandasExec =
     copy(child = newChild)

@@ -38,6 +38,7 @@ private[python] object PythonUDFTiming {
   private def isSupported(evalType: Int, conf: SQLConf): Boolean = {
     evalType match {
       case PythonEvalType.SQL_ARROW_BATCHED_UDF => !conf.legacyPandasConversionUDF
+      case PythonEvalType.SQL_MAP_PANDAS_ITER_UDF => true
       case _ => false
     }
   }
