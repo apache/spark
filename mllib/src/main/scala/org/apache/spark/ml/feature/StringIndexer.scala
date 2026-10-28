@@ -307,8 +307,8 @@ class StringIndexerModel (
   // For ml connect only
   private[ml] def this() = this("", Array.empty[Array[String]])
 
-  @deprecated("`labels` is deprecated and will be removed in the future. Use `labelsArray` " +
-    "instead.", "3.0.0")
+  @deprecated("`labels` is deprecated and will be removed in the future completely. " +
+    "Use `labelsArray` instead.", "3.0.0")
   @Since("1.5.0")
   def labels: Array[String] = {
     require(labelsArray.length == 1, "This StringIndexerModel is fit on multiple columns. " +
