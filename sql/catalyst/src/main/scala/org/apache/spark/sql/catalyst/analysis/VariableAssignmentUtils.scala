@@ -17,8 +17,8 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.expressions.VariableReference
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLId
+import org.apache.spark.sql.catalyst.expressions.VariableReference
 import org.apache.spark.sql.errors.QueryCompilationErrors.duplicateAssignmentsError
 
 /** Validation for scalar SQL variable assignments. */
