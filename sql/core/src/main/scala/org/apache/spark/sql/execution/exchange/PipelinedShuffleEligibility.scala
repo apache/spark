@@ -27,6 +27,7 @@ import org.apache.spark.sql.execution.{CoalesceExec, CollectLimitExec, CollectTa
 import org.apache.spark.sql.execution.adaptive.QueryStageExec
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.joins.CartesianProductExec
+import org.apache.spark.sql.execution.python.AttachDistributedSequenceExec
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -49,6 +50,9 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
   def isUnsupportedConsumer(plan: SparkPlan): Boolean = plan match {
     case _: CoalesceExec | _: CartesianProductExec | _: DeserializeToObjectExec |
         _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true
+    // Caching can persist a shuffle reader before zipWithIndex submits its counting job.
+    // Use cache intent so eligibility does not depend on a mutable pandas-on-Spark setting.
+    case a: AttachDistributedSequenceExec if a.cache => true
     case _ => false
   }
 

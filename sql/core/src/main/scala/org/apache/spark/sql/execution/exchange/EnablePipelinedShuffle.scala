@@ -72,6 +72,10 @@ import org.apache.spark.sql.execution.SparkPlan
  *         submission (`classifyJobShuffleShape`'s pipelined-below-regular rejection). (`.collect()`
  *         on a limit takes `executeTake` and never hits `doExecute`; `.write` / `.toLocalIterator`
  *         / a non-root position do.)
+ *       - `AttachDistributedSequenceExec(cache = true)`: distributed-sequence index construction
+ *         can persist or locally checkpoint its child RDD before its counting job. Keep child
+ *         shuffles regular because persistence can skip channel readers.
+ *         Uncached indexing and cached shuffle-free inputs feeding a shuffle remain supported.
  */
 object EnablePipelinedShuffle extends Rule[SparkPlan] {
 
@@ -110,7 +114,7 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
     if (readsShuffleThroughUnsupportedConsumer(plan)) {
       logDebug("EnablePipelinedShuffle: a shuffle is read through an operator the channel " +
         "transport cannot serve (coalesce / cartesian product / a limit operator that builds a " +
-        "hidden shuffle); leaving the plan regular.")
+        "hidden shuffle / cached distributed sequence); leaving the plan regular.")
       return plan
     }
 
@@ -127,8 +131,8 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
    * True if any [[ShuffleExchangeExec]] in `plan` is read by an operator the channel transport
    * cannot serve. The unsupported operators (see class doc for why each is fatal) are
    * `CoalesceExec`, `CartesianProductExec`, and the limit operators `CollectLimitExec` /
-   * `CollectTailExec` / `TakeOrderedAndProjectExec`. For each such operator anywhere in the plan,
-   * check whether a shuffle is reachable below it.
+   * `CollectTailExec` / `TakeOrderedAndProjectExec`, plus cached `AttachDistributedSequenceExec`.
+   * For each such operator anywhere in the plan, check whether a shuffle is reachable below it.
    *
    * The reachability walk descends through EVERY child of a non-exchange node -- not only unary
    * children -- so a shuffle behind a `UnionExec`/join (a `BinaryExecNode`) beneath the operator
