@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.catalog.{CatalogDatabase, InMemoryCatalog, 
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Literal => ExprLiteral}
 import org.apache.spark.sql.catalyst.optimizer.{ConstantFolding, Optimizer}
-import org.apache.spark.sql.catalyst.parser.{CatalystSqlParser, ParseException}
+import org.apache.spark.sql.catalyst.parser.{AstBuilder, CatalystSqlParser, ParseException}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.PLAN_EXPRESSION
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Column, DefaultCatalogManager, DefaultValue, FunctionCatalog, Identifier, TableCatalog, TableCatalogCapability}
@@ -324,6 +324,14 @@ object ResolveDefaultColumns extends QueryErrorsBase
     coerceDefaultValue(analyzed, dataType, statementType, colName, defaultSQL)
   }
 
+  // Literal.sql always escapes strings, independently of the session's parser configuration.
+  // Override only that policy so other settings, such as the time zone, remain session-dependent.
+  private lazy val existenceDefaultParser = new CatalystSqlParser {
+    override val astBuilder: AstBuilder = new AstBuilder {
+      override protected def escapedStringLiterals: Boolean = false
+    }
+  }
+
   /**
    * Analyze EXISTS_DEFAULT value.  EXISTS_DEFAULT value was created from CURRENT_DEFAQULT
    * via [[analyze]] and thus this can skip most of those steps.
@@ -331,8 +339,8 @@ object ResolveDefaultColumns extends QueryErrorsBase
   private def analyzeExistenceDefaultValue(field: StructField): Expression = {
     val defaultSQL = field.metadata.getString(EXISTS_DEFAULT_COLUMN_METADATA_KEY)
 
-    // Parse the expression.
-    val resolvedExpr = Try(Literal.fromSQL(defaultSQL)) match {
+    val parsedExpr = Try(Literal.fromSQL(defaultSQL, existenceDefaultParser))
+    val resolvedExpr = parsedExpr match {
       case Success(literal) =>
         val expr = literal match {
           // EXISTS_DEFAULT will have a cast from analyze() due to coerceDefaultValue
@@ -351,6 +359,9 @@ object ResolveDefaultColumns extends QueryErrorsBase
         expr match {
           case _: ExprLiteral => expr
           case c: Cast if c.resolved => expr
+          case c @ Collate(_: ExprLiteral, _: UnresolvedCollation) =>
+            // Resolve the collation without reparsing the canonical string in the session conf.
+            analyze(field.name, field.dataType, c, defaultSQL, "")
           case _ =>
             fallbackResolveExistenceDefaultValue(field)
         }

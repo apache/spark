@@ -358,7 +358,11 @@ object Literal {
    * Inverse of [[Literal.sql]]
    */
   def fromSQL(sql: String): Expression = {
-    CatalystSqlParser.parseExpression(sql).transformUp {
+    fromSQL(sql, CatalystSqlParser)
+  }
+
+  private[sql] def fromSQL(sql: String, parser: CatalystSqlParser): Expression = {
+    parser.parseExpression(sql).transformUp {
       case u: UnresolvedFunction =>
         assert(u.nameParts.length == 1)
         assert(!u.isDistinct)

@@ -2063,6 +2063,31 @@ class InsertSuite extends DataSourceTest with SharedSparkSession {
     }
   }
 
+  test("String existence defaults preserve escaped literals") {
+    for (escaped <- Seq(false, true); vectorized <- Seq(false, true)) {
+      withSQLConf(
+        SQLConf.ESCAPED_STRING_LITERALS.key -> escaped.toString,
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized.toString) {
+        withTable("t") {
+          sql("create table t(i int) using parquet")
+          sql("insert into t values(1)")
+          sql("alter table t add columns (" +
+            "s string default concat('a', chr(92), chr(39), 'b'), " +
+            "n string default concat('a', chr(92), 'n', 'b'))")
+          sql("insert into t values(2, default, default)")
+
+          for (readEscaped <- Seq(false, true)) {
+            withSQLConf(SQLConf.ESCAPED_STRING_LITERALS.key -> readEscaped.toString) {
+              checkAnswer(
+                sql("select i, s, n from t"),
+                Seq(Row(1, "a\\'b", "a\\nb"), Row(2, "a\\'b", "a\\nb")))
+            }
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-39985 Enable implicit DEFAULT column values in inserts from DataFrames") {
     // Negative test: explicit column "default" references are not supported in write operations
     // from DataFrames: since the operators are resolved one-by-one, any .select referring to
