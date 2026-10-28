@@ -2647,6 +2647,171 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         for combo in combos:
             self.assertEqual(combo[0], "string")
 
+    def test_annotation_category_map_and_array(self):
+        # dict/Dict/Mapping -> "map", list/List/Sequence -> "array": bare, subscripted,
+        # typing.-qualified or stringized (SPARK-55219).
+        import ast as _ast
+
+        from pyspark.sql.transpile import _annotation_category
+
+        for ann, expected in [
+            ("dict", "map"),
+            ("Dict", "map"),
+            ("Mapping", "map"),
+            ("dict[str, str]", "map"),
+            ("Mapping[str, str]", "map"),
+            ("typing.Dict[str, str]", "map"),
+            ('"dict"', "map"),
+            ('"dict[str, str]"', "map"),
+            ('"typing.Dict[str, str]"', "map"),
+            ("list", "array"),
+            ("List", "array"),
+            ("Sequence", "array"),
+            ("list[int]", "array"),
+            ("Sequence[int]", "array"),
+            ("typing.List[int]", "array"),
+            ('"list"', "array"),
+            ('"list[int]"', "array"),
+            ("set", None),
+            ("torch.float", None),
+        ]:
+            with self.subTest(ann=ann):
+                fn = _ast.parse(f"def f(a: {ann}): ...").body[0]
+                self.assertEqual(_annotation_category(fn.args.args[0].annotation), expected)
+
+    def test_param_category_combos_pins_map_and_array(self):
+        # A pinned map/array param does not double the combos like an untyped one.
+        import ast as _ast
+
+        from pyspark.sql.transpile import _param_category_combos
+
+        fn = _ast.parse("def f(a: dict, b): return b").body[0]
+        self.assertEqual(
+            _param_category_combos(fn, ["a", "b"]),
+            [{0: "map", 1: "numeric"}, {0: "map", 1: "string"}],
+        )
+        fn = _ast.parse("def f(a: list, b: dict): return b").body[0]
+        self.assertEqual(_param_category_combos(fn, ["a", "b"]), [{0: "array", 1: "map"}])
+
+    def test_udf_transpile_map_and_array_input_categories(self):
+        # The option lowers against a matching MapType/ArrayType column and is pruned
+        # to interpreted Python against anything else.
+        def map_plus(x: dict, y: int):
+            return y + 1
+
+        def array_plus(x: list, y: int):
+            return y + 1
+
+        for func, schema, rows, other_schema, other_rows in (
+            (
+                map_plus,
+                "a map<string,string>, b long",
+                [({"k": "v"}, 1), ({}, 2), (None, 3)],
+                "a string, b long",
+                [("z", 1)],
+            ),
+            (
+                array_plus,
+                "a array<string>, b long",
+                [(["x"], 1), ([], 2), (None, 3)],
+                "a long, b long",
+                [(1, 1)],
+            ),
+        ):
+            self.assertEqual(self._vals(func, LongType(), schema, rows), [2, 3, 4])
+            with self.sql_conf(_TRANSPILE_ON):
+                u = self._transpiled_udf(func, LongType())
+                projected = self.spark.createDataFrame(other_rows, other_schema).select(u("a", "b"))
+                self.assertGreater(self._eval_python_count(projected), 0, str(func))
+                self.assertEqual([r[0] for r in projected.collect()], [2], str(func))
+
+    def test_udf_transpile_map_and_array_comparison_falls_back(self):
+        # A lowered `=`/`<` fails analysis on a map (even vs None) and diverges from
+        # Python on arrays (None elements), so refuse and let Python answer
+        # (SPARK-55219).
+        def map_eq(a: dict, b: dict):
+            return a == b
+
+        def array_eq(a: list, b: list):
+            return a == b
+
+        def array_lt(a: list, b: list):
+            return a < b
+
+        def map_eq_none(a: dict):
+            return a == None  # noqa: E711
+
+        def map_ne_none(a: dict):
+            return a != None  # noqa: E711
+
+        def array_eq_none(a: list):
+            return a == None  # noqa: E711
+
+        def none_eq_map(a: dict):
+            return None == a  # noqa: E711
+
+        maps = "a map<string,string>, b map<string,string>"
+        arrays = "a array<string>, b array<string>"
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, expected, needle in (
+                (
+                    map_eq,
+                    maps,
+                    [({"k": "v"}, {"k": "v"}), ({"k": "v"}, {"k": "x"})],
+                    [True, False],
+                    "map",
+                ),
+                (array_eq, arrays, [(["x"], ["x"]), (["x"], ["y"])], [True, False], "array"),
+                (array_lt, arrays, [(["x"], ["y"]), (["y"], ["x"])], [True, False], "array"),
+                (
+                    map_eq_none,
+                    "a map<string,string>",
+                    [({"k": "v"},), (None,)],
+                    [False, True],
+                    "map",
+                ),
+                (
+                    map_ne_none,
+                    "a map<string,string>",
+                    [({"k": "v"},), (None,)],
+                    [True, False],
+                    "map",
+                ),
+                (array_eq_none, "a array<string>", [(["x"],), (None,)], [False, True], "array"),
+                (
+                    none_eq_map,
+                    "a map<string,string>",
+                    [(None,), ({"k": "v"},)],
+                    [True, False],
+                    "map",
+                ),
+            ):
+                with self.subTest(func=func.__name__):
+                    u, reasons = self._fallback_reason(func, BooleanType())
+                    # Assert the REASON names the map/array guard, so a fallback
+                    # for some new and unrelated cause fails here loudly.
+                    self.assertIn(needle, reasons)
+                    df = self.spark.createDataFrame(rows, schema)
+                    self.assertEqual([r[0] for r in df.select(u(*df.columns)).collect()], expected)
+
+    def test_udf_transpile_map_and_array_is_none_lowers(self):
+        # `is None`/`is not None` lower to isNull/isNotNull: the one lowered shape
+        # that references the map/array column itself, both analysis-valid and
+        # Python-faithful, so these must stay lowered (SPARK-55219).
+        def map_is_none(a: dict):
+            return a is None
+
+        def array_is_not_none(a: list):
+            return a is not None
+
+        with self.sql_conf(_TRANSPILE_ON):
+            for func, schema, rows, expected in (
+                (map_is_none, "a map<string,string>", [({"k": "v"},), (None,)], [False, True]),
+                (array_is_not_none, "a array<string>", [(["x"],), (None,)], [True, False]),
+            ):
+                with self.subTest(func=func.__name__):
+                    self.assertEqual(self._vals(func, BooleanType(), schema, rows), expected)
+
 
 if __name__ == "__main__":
     from pyspark.testing import main

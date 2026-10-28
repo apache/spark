@@ -30,8 +30,9 @@ Python's ``+`` and ``*`` are overloaded for text (concat / repeat), so an
 untyped parameter is transpiled into one option per input-type category
 (numeric and string) and the JVM picks the one matching the bound column
 types -- falling back to interpreted Python when none fit. Annotating the
-UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category and
-keeps the option matrix small; prefer doing so. To bound plan growth,
+UDF's parameters (e.g. ``def f(a: int, b: str)``) pins each category --
+numeric, string, bool, binary, or map/array for dict/list annotations --
+and keeps the option matrix small; prefer doing so. To bound plan growth,
 functions with more than three untyped parameters only emit the
 all-numeric and all-string variants.
 
@@ -385,6 +386,16 @@ class CatalystTranspiler(AbstractTranspiler):
                 "Python compares across types as unequal while Spark would coerce "
                 "or fail analysis, so the transpiler falls back to interpreted Python"
             )
+        if lc in ("map", "array") or rc in ("map", "array"):
+            # A map is not orderable, so `=` fails analysis -- even vs None, which
+            # coerces to MapType first. "array" says nothing about the element type
+            # (map elements fail the same way) and Python's `[None] == [None]` is
+            # True, so arrays are refused too (SPARK-55219).
+            raise UnsupportedOperationException(
+                "`==`/`!=` has a `map`/`array` operand; Spark's `=` fails analysis "
+                "or diverges from Python there, so the transpiler falls back to "
+                "interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         left_null = left_col.isNull()
@@ -441,6 +452,13 @@ class CatalystTranspiler(AbstractTranspiler):
                 f"({lc} vs {rc}); Python would raise TypeError, so the "
                 "transpiler falls back to interpreted Python"
             )
+        if lc in ("map", "array"):
+            # Same reasons as `_lower_eq`, plus Python's `[None] < [1]` raises.
+            raise UnsupportedOperationException(
+                f"`{op_repr}` operands are both `{lc}`; Spark's ordering fails "
+                "analysis or diverges from Python there, so the transpiler falls "
+                "back to interpreted Python"
+            )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
         null_guard = left_col.isNull() | right_col.isNull()
@@ -452,7 +470,8 @@ class CatalystTranspiler(AbstractTranspiler):
         return when(null_guard, raise_error(err)).otherwise(op(left_col, right_col))
 
     def _category(self, params: List[str], node: ast.AST) -> str:
-        """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
+        """Infer the category (``"numeric"``, ``"string"``, ``"bool"``,
+        ``"binary"``, ``"map"``, ``"array"``) for ``node`` under the current
         ``self._param_categories`` assumption (set per input-type variant).
 
         Drives operator selection (``+`` -> add vs concat, ``*`` -> multiply vs
@@ -937,16 +956,32 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
 
 def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
     """Map a parameter's type annotation to a category
-    (``"numeric"``/``"string"``/``"bool"``/``"binary"``), or ``None`` when it's
-    absent or unrecognised (the caller then tries both numeric and string)."""
+    (``"numeric"``/``"string"``/``"bool"``/``"binary"``/``"map"``/``"array"``),
+    or ``None`` when it's absent or unrecognised (the caller then tries both
+    numeric and string)."""
+    if isinstance(annotation, ast.Subscript):
+        annotation = annotation.value  # dict[str, str] -> dict
     name: Optional[str] = None
     if isinstance(annotation, ast.Name):
         name = annotation.id
+    elif (
+        isinstance(annotation, ast.Attribute)
+        and isinstance(annotation.value, ast.Name)
+        and annotation.value.id == "typing"
+    ):
+        name = annotation.attr  # typing.Dict -> Dict, but not torch.float
     elif isinstance(annotation, ast.Constant) and isinstance(annotation.value, str):
-        name = annotation.value  # stringized annotation, e.g. def f(a: "int")
+        # Stringized annotation (def f(a: "int")); parse it so quoted subscripted
+        # and typing.-qualified forms resolve like their unquoted spellings.
+        # Anything unparseable or unrecognized falls out as None (untyped).
+        try:
+            return _annotation_category(ast.parse(annotation.value, mode="eval").body)
+        except (SyntaxError, ValueError):
+            return None
     # str -> "string", int/float -> "numeric", bool -> "bool", bytes -> "binary"
-    # (matching the constant handling in ``_category``). complex and anything
-    # unrecognised return None so the caller tries both numeric and string.
+    # (matching the constant handling in ``_category``), dict/Dict/Mapping ->
+    # "map", list/List/Sequence -> "array". Anything unrecognised returns None so
+    # the caller tries both numeric and string.
     if name == "str":
         return "string"
     if name in ("int", "float"):
@@ -955,12 +990,16 @@ def _annotation_category(annotation: Optional[ast.AST]) -> Optional[str]:
         return "bool"
     if name == "bytes":
         return "binary"
+    if name in ("dict", "Dict", "Mapping"):
+        return "map"
+    if name in ("list", "List", "Sequence"):
+        return "array"
     return None
 
 
 def _param_category_combos(function_ast: ast.FunctionDef, public_params: List[str]) -> List[dict]:
     """Per-variant maps ``{public_param_index -> category}`` where category is
-    one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``.
+    one of ``"numeric"``/``"string"``/``"bool"``/``"binary"``/``"map"``/``"array"``.
 
     A typed param (``def f(a: str, b: int)``) is pinned to its category; an
     untyped param is tried as both numeric and string. To cap plan growth, when
@@ -1221,7 +1260,8 @@ def _transpile_func(
     method or callable instance) -- needed so the caller can resolve named-argument
     invocations to positional order at call time, since the ``_udf_param_N``
     substitution in :class:`UserDefinedPythonFunction` is positional.
-    list of per-option input-type categories (``"numeric"`` / ``"string"`` per
+    list of per-option input-type categories (one of ``"numeric"`` /
+    ``"string"`` / ``"bool"`` / ``"binary"`` / ``"map"`` / ``"array"`` per
     public param) -- the JVM picks the option whose categories match the bound
     column types, or falls back to the Python UDF when none match.
     list of the public parameter names Python forbids calling by keyword
