@@ -26,23 +26,25 @@ import org.apache.spark.sql.types.{IntegerType, StringType}
  * type coerce the second argument to [[IntegerType]], if necessary.
  */
 object StringLiteralTypeCoercion {
+  // Keep cast results boxed: unboxing a NULL as Int yields zero, which would make
+  // date_add/date_sub return the input date instead of NULL.
   def apply(expression: Expression): Expression = expression match {
     case DateAdd(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
       val days = try {
-        Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
+        Cast(r, IntegerType, ansiEnabled = true).eval()
       } catch {
         case e: NumberFormatException =>
           throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_add", e)
       }
-      DateAdd(l, Literal(days))
+      DateAdd(l, Literal.create(days, IntegerType))
     case DateSub(l, r) if r.dataType.isInstanceOf[StringType] && r.foldable =>
       val days = try {
-        Cast(r, IntegerType, ansiEnabled = true).eval().asInstanceOf[Int]
+        Cast(r, IntegerType, ansiEnabled = true).eval()
       } catch {
         case e: NumberFormatException =>
           throw QueryCompilationErrors.secondArgumentOfFunctionIsNotIntegerError("date_sub", e)
       }
-      DateSub(l, Literal(days))
+      DateSub(l, Literal.create(days, IntegerType))
     case other => other
   }
 }
