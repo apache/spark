@@ -137,10 +137,11 @@ class PythonArrowOutputSuite extends SparkFunSuite {
 
   test("SPARK-60627: slice by records: a batch that Arrow cannot slice is output whole") {
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("unsliceable", 0, Long.MaxValue)
-    // An array column that reports 2^29 + 2^20 rows without allocating them, so its offsets take
-    // over 2 GiB. Arrow computes the positions of the offsets of a slice in int, so a slice that
-    // reaches row 2^29 throws and leaks the vectors sliced so far. The fixed-width vectors that
-    // Spark reads, e.g. of an int64 column over 2 GiB, are final classes, so a list stands in.
+    // An array column that reports 2^29 + 2^20 rows without allocating them, as if its offsets
+    // took over 2 GiB, so that Arrow cannot slice it. Since a real overflow needs buffers over
+    // 2 GiB, this checks only that the batch is output whole instead of sliced. The fixed-width
+    // vectors that Spark reads, e.g. of an int64 column over 2 GiB, are final classes, so a list
+    // stands in.
     val rows = (1 << 29) + (1 << 20)
     val list = new ListVector("l", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
       override def getValueCount: Int = rows
@@ -189,10 +190,11 @@ class PythonArrowOutputSuite extends SparkFunSuite {
         "l", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
       override def getValueCount: Int = rows
     }
-    val vectors = Seq(fixed((1 << 28) - 1), fixed(1 << 28), list(1000), list(1 << 29))
+    val vectors =
+      Seq(fixed((1 << 28) - 1), fixed(1 << 28), list((1 << 29) - 2), list((1 << 29) - 1))
     try {
       // `splitAndTransfer` computes `startIndex * 8` and `length * 8` of an 8-byte wide column,
-      // and the offset positions of a list column, in int.
+      // and the offset positions and `(length + 1) * 4` offset bytes of a list column, in int.
       assert(vectors.map(BaseSliceArrowOutputProcessor.canSlice) ===
         Seq(true, false, true, false))
     } finally {

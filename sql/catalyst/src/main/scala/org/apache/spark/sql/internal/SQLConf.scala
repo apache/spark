@@ -5563,7 +5563,8 @@ object SQLConf {
         "the number of records is limited when sending it to the downstream operator. This is " +
         "used to avoid large batches being sent to the downstream operator including " +
         "the columnar-based operator implemented by third-party libraries. A batch that " +
-        "Arrow cannot slice is sent as a whole. " +
+        "Arrow cannot slice, e.g. one with a fixed-width column of 2 GiB or more, is sent " +
+        "as a whole. " +
         "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that take " +
         "columnar input directly ignore this config.")
       .version("4.1.0")
