@@ -44,24 +44,19 @@ object UnregisteredModel extends DefaultParamsReadable[UnregisteredModel]
 
 class MLClassLoadingSuite extends MLHelper {
 
+  override protected def afterEach(): Unit = {
+    try {
+      MLHandler.currentSessionHolder.remove()
+    } finally {
+      super.afterEach()
+    }
+  }
+
   private def withSavedModel(stage: Transformer)(f: String => Unit): Unit = {
     withTempDir { dir =>
       val path = new File(dir, "model").getAbsolutePath
       RFormulaModelTestHelper.withStage(stage).write.save(path)
       f(path)
-    }
-  }
-
-  private def withRestoredSessionHolder[T](f: => T): T = {
-    val previousSessionHolder = MLHandler.currentSessionHolder.get()
-    try {
-      f
-    } finally {
-      if (previousSessionHolder == null) {
-        MLHandler.currentSessionHolder.remove()
-      } else {
-        MLHandler.currentSessionHolder.set(previousSessionHolder)
-      }
     }
   }
 
@@ -78,10 +73,8 @@ class MLClassLoadingSuite extends MLHelper {
               .setType(proto.MlOperator.OperatorType.OPERATOR_TYPE_MODEL))
           .setPath(path))
       .build()
-    withRestoredSessionHolder {
-      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
-      MLHandler.handleMlCommand(sessionHolder, command)
-    }
+    val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+    MLHandler.handleMlCommand(sessionHolder, command)
   }
 
   test("load an RFormulaModel with an allowlisted nested stage") {
@@ -99,10 +92,8 @@ class MLClassLoadingSuite extends MLHelper {
     val stage = new UnregisteredModel("stageFixture")
     withSavedModel(stage) { path =>
       val nestedPath = new File(path, s"pipelineModel/stages/0_${stage.uid}").getAbsolutePath
-      val model = withRestoredSessionHolder {
-        MLHandler.currentSessionHolder.remove()
-        UnregisteredModel.load(nestedPath)
-      }
+      MLHandler.currentSessionHolder.remove()
+      val model = UnregisteredModel.load(nestedPath)
       assert(model.uid == stage.uid)
       val transformers = MLUtils.loadOperators(classOf[Transformer])
       assert(!transformers.contains(classOf[UnregisteredModel].getName))
