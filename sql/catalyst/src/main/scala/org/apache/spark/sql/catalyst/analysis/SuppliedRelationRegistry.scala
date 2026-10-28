@@ -75,7 +75,8 @@ private[sql] object SuppliedRelationRegistry
     }
   }
 
-  private def canonicalize(
+  /** The identity a supplied name is stored and matched under. */
+  def canonicalize(
       catalogManager: CatalogManager,
       nameParts: Seq[String]): Seq[String] = {
     if (CatalogManager.isSessionQualifiedViewName(nameParts)) {

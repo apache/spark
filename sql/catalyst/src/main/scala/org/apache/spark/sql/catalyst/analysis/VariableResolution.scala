@@ -136,9 +136,15 @@ class VariableResolution(
     }
 
     lookupScriptLocal(nameParts, namePartsCaseAdjusted)
+      .orElse(lookupSuppliedScriptLocal(nameParts, namePartsCaseAdjusted))
       .orElse(lookupSuppliedLocal(nameParts, namePartsCaseAdjusted))
       .orElse(lookupSession(nameParts, namePartsCaseAdjusted))
   }
+
+  // If variable name is qualified with session.<varName> treat it as a session variable.
+  private def maybeScriptLocalName(nameParts: Seq[String]): Boolean =
+    !(nameParts.length > 2 ||
+      (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head)))
 
   private def lookupScriptLocal(
       nameParts: Seq[String],
@@ -146,12 +152,7 @@ class VariableResolution(
     SqlScriptingContextManager
       .get()
       .flatMap(_.getVariableManager)
-      // If variable name is qualified with session.<varName> treat it as a session variable.
-      .filterNot(
-        _ =>
-          nameParts.length > 2
-          || (nameParts.length == 2 && isForbiddenLabelOrForVariableName(nameParts.head))
-      )
+      .filter(_ => maybeScriptLocalName(nameParts))
       .flatMap(_.get(namePartsCaseAdjusted))
       .map { varDef =>
         VariableReference(
@@ -161,6 +162,23 @@ class VariableResolution(
           varDef
         )
       }
+  }
+
+  private def lookupSuppliedScriptLocal(
+      nameParts: Seq[String],
+      namePartsCaseAdjusted: Seq[String]): Option[VariableReference] = {
+    if (!maybeScriptLocalName(nameParts)) {
+      None
+    } else {
+      SuppliedLocalScopeRegistry.lookup(nameParts, conf.resolver).map { case (scope, dataType) =>
+        val ident = Identifier.of(Array(scope.label), namePartsCaseAdjusted.last)
+        VariableReference(
+          nameParts,
+          FakeLocalCatalog,
+          ident,
+          VariableDefinition(ident, "NULL", Literal.create(null, dataType)))
+      }
+    }
   }
 
   private def lookupSuppliedLocal(

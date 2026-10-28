@@ -492,7 +492,7 @@ SELECT parse_sql('BEGIN SELECT 1; END')
 -- !query schema
 struct<parse_sql(BEGIN SELECT 1; END, PARSE, NULL, NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
-[{"start":1,"length":19,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22}]
+[{"start":1,"length":19,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"statements":[{"start":7,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]}]}]
 
 
 -- !query
@@ -500,7 +500,7 @@ SELECT parse_sql('BEGIN SELECT count(a) FROM script_t WHERE c = :p; END')
 -- !query schema
 struct<parse_sql(BEGIN SELECT count(a) FROM script_t WHERE c = :p; END, PARSE, NULL, NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
-[{"start":1,"length":53,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"source_table_references":[["script_t"]],"function_references":[["count"]],"parameter_markers":{"named":["p"]}}]
+[{"start":1,"length":53,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"source_table_references":[["script_t"]],"function_references":[["count"]],"parameter_markers":{"named":["p"]},"statements":[{"start":7,"length":42,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["script_t"]],"function_references":[["count"]],"select_list":[{"name":[]}],"parameter_markers":{"named":["p"]}}]}]
 
 
 -- !query
@@ -508,7 +508,7 @@ SELECT parse_sql('BEGIN SELECT * FROM t WHERE a = ?; END')
 -- !query schema
 struct<parse_sql(BEGIN SELECT * FROM t WHERE a = ?; END, PARSE, NULL, NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
-[{"start":1,"length":38,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"source_table_references":[["t"]],"parameter_markers":{"unnamed_count":1}}]
+[{"start":1,"length":38,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"source_table_references":[["t"]],"parameter_markers":{"unnamed_count":1},"statements":[{"start":7,"length":27,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["t"]],"select_list":[{"name":["*"]}],"parameter_markers":{"unnamed_count":1}}]}]
 
 
 -- !query
@@ -516,7 +516,7 @@ SELECT parse_sql('BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT 
 -- !query schema
 struct<parse_sql(BEGIN IF (SELECT flag FROM gate) THEN INSERT INTO dest SELECT * FROM src_if; ELSE DELETE FROM src_else; END IF; END, PARSE, NULL, NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
-[{"start":1,"length":115,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["dest"],["src_else"]],"source_table_references":[["gate"],["src_if"]]}]
+[{"start":1,"length":115,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["dest"],["src_else"]],"source_table_references":[["gate"],["src_if"]],"statements":[{"start":10,"length":23,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["gate"]],"select_list":[{"name":["condition"]}]},{"start":39,"length":37,"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"target_table_references":[["dest"]],"source_table_references":[["src_if"]],"select_list":[{"name":["*"]}]},{"start":83,"length":20,"parse_success":true,"statement_identifier":"DELETE WHERE","statement_code":19,"target_table_references":[["src_else"]]}]}]
 
 
 -- !query
@@ -524,7 +524,7 @@ SELECT parse_sql('BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO 
 -- !query schema
 struct<parse_sql(BEGIN DECLARE EXIT HANDLER FOR SQLEXCEPTION BEGIN INSERT INTO err_log SELECT * FROM failing_row; END; SELECT a FROM main_t; END, PARSE, NULL, NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
-[{"start":1,"length":127,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["err_log"]],"source_table_references":[["failing_row"],["main_t"]]}]
+[{"start":1,"length":127,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["err_log"]],"source_table_references":[["failing_row"],["main_t"]],"statements":[{"start":51,"length":45,"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"target_table_references":[["err_log"]],"source_table_references":[["failing_row"]],"select_list":[{"name":["*"]}]},{"start":103,"length":20,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["main_t"]],"select_list":[{"name":["a"]}]}]}]
 
 
 -- !query
@@ -591,4 +591,4 @@ struct<parse_sql(BEGIN
    END FOR;
  END, PARSE, NULL, NULL, NULL, NULL, NULL, NULL):string>
 -- !query output
-[{"start":1,"length":783,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["error_log"],["output_names"],["update_target"],["delete_target"]],"source_table_references":[["error_source"],["input_names"],["control_flags"],["update_source"],["delete_source"],["loop_source"],["loop_body"]],"function_references":[["format_string"],["normalize_name"],["is_valid"],["upper"],["enabled"],["coalesce"],["should_update"],["max"],["expired"],["ready"],["audit"],["count"]]}]
+[{"start":1,"length":783,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["error_log"],["output_names"],["update_target"],["delete_target"]],"source_table_references":[["error_source"],["input_names"],["control_flags"],["update_source"],["delete_source"],["loop_source"],["loop_body"]],"function_references":[["format_string"],["normalize_name"],["is_valid"],["upper"],["enabled"],["coalesce"],["should_update"],["max"],["expired"],["ready"],["audit"],["count"]],"statements":[{"start":62,"length":80,"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"target_table_references":[["error_log"]],"source_table_references":[["error_source"]],"function_references":[["format_string"]],"select_list":[{"name":[]}]},{"start":156,"length":182,"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"target_table_references":[["output_names"]],"source_table_references":[["input_names"]],"function_references":[["normalize_name"],["is_valid"],["upper"]],"select_list":[{"name":["id"]},{"name":[]}]},{"start":347,"length":52,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["control_flags"]],"function_references":[["enabled"]],"select_list":[{"name":["condition"]}]},{"start":410,"length":118,"parse_success":true,"statement_identifier":"UPDATE WHERE","statement_code":82,"target_table_references":[["update_target"]],"source_table_references":[["update_source"]],"function_references":[["coalesce"],["should_update"],["max"]]},{"start":543,"length":91,"parse_success":true,"statement_identifier":"DELETE WHERE","statement_code":19,"target_table_references":[["delete_target"]],"source_table_references":[["delete_source"]],"function_references":[["expired"]]},{"start":667,"length":42,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["loop_source"]],"function_references":[["ready"]],"select_list":[{"name":["id"]}]},{"start":721,"length":45,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"source_table_references":[["loop_body"]],"function_references":[["audit"],["count"]],"select_list":[{"name":[]},{"name":[]}]}]}]

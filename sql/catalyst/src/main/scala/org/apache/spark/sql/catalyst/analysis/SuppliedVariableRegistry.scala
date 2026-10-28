@@ -73,7 +73,8 @@ private[sql] object SuppliedVariableRegistry
     }
   }
 
-  private def canonicalize(nameParts: Seq[String]): Seq[String] = {
+  /** The identity a supplied name is stored and matched under. */
+  def canonicalize(nameParts: Seq[String]): Seq[String] = {
     if (isSessionName(nameParts)) {
       sessionIdentity(nameParts.last)
     } else {

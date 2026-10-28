@@ -389,3 +389,34 @@ SELECT get_json_object(
 struct<get_json_object(parse_sql(SELECT :p AS x, ANALYZE, NULL, NULL, NULL, NULL, NULL, array(named_struct(name, p, type, STRING))), $[0].select_list[0].type.name):string>
 -- !query output
 string
+
+
+-- !query
+SELECT parse_sql(
+'BEGIN
+   DECLARE n INT DEFAULT 0;
+   CREATE TABLE parse_sql_script_t (id INT, name STRING);
+   outer_blk: BEGIN
+     DECLARE n STRING DEFAULT ''x'';
+     INSERT INTO parse_sql_script_t VALUES (1, n);
+   END outer_blk;
+   FOR r AS SELECT id, name FROM parse_sql_script_t AS s DO
+     SET n = n + r.id;
+   END FOR;
+   SELECT n AS total, missing_v AS m;
+ END', 'ANALYZE')
+-- !query schema
+struct<parse_sql(BEGIN
+   DECLARE n INT DEFAULT 0;
+   CREATE TABLE parse_sql_script_t (id INT, name STRING);
+   outer_blk: BEGIN
+     DECLARE n STRING DEFAULT 'x';
+     INSERT INTO parse_sql_script_t VALUES (1, n);
+   END outer_blk;
+   FOR r AS SELECT id, name FROM parse_sql_script_t AS s DO
+     SET n = n + r.id;
+   END FOR;
+   SELECT n AS total, missing_v AS m;
+ END, ANALYZE, NULL, NULL, NULL, NULL, NULL, NULL):string>
+-- !query output
+[{"start":1,"length":353,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"analyze_success":false,"target_table_references":[["spark_catalog","default","parse_sql_script_t"]],"source_table_references":[["spark_catalog","default","parse_sql_script_t"]],"statements":[{"start":10,"length":23,"parse_success":true,"statement_identifier":"DECLARE VARIABLE","statement_code":-8,"analyze_success":true},{"start":38,"length":53,"parse_success":true,"statement_identifier":"CREATE TABLE","statement_code":77,"analyze_success":true,"target_table_references":[["spark_catalog","default","parse_sql_script_t"]]},{"start":118,"length":28,"parse_success":true,"statement_identifier":"DECLARE VARIABLE","statement_code":-8,"analyze_success":true},{"start":153,"length":44,"parse_success":true,"statement_identifier":"INSERT","statement_code":50,"analyze_success":true,"target_table_references":[["spark_catalog","default","parse_sql_script_t"]],"select_list":[{"name":["id"],"type":{"name":"int"}},{"name":["name"],"type":{"name":"string","collation":"UTF8_BINARY"}}]},{"start":229,"length":44,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"analyze_success":true,"source_table_references":[["spark_catalog","default","parse_sql_script_t"]],"select_list":[{"name":["id"],"type":{"name":"int"}},{"name":["name"],"type":{"name":"string","collation":"UTF8_BINARY"}}]},{"start":282,"length":16,"parse_success":true,"statement_identifier":"SET VARIABLE","statement_code":-9,"analyze_success":true},{"start":315,"length":33,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"analyze_success":false,"select_list":[{"name":["total"]},{"name":["m"]}],"error":{"errorClass":"UNRESOLVED_COLUMN.WITHOUT_SUGGESTION","messageTemplate":"A column, variable, or function parameter with name <objectName> cannot be resolved. ","sqlState":"42703","messageParameters":{"objectName":"`missing_v`"},"queryContext":[{"objectType":"","objectName":"","startIndex":334,"stopIndex":342,"fragment":"missing_v"}]}}]}]
