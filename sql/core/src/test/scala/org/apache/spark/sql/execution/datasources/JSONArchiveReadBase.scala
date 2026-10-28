@@ -197,7 +197,8 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
 
         mode match {
           case "PERMISSIVE" =>
-            checkAnswer(df, Seq(Row(null, "Alice", document), Row(2, "Bob", null)))
+            checkAnswer(
+              df, Seq(Row(null, "Alice", """{"id":"bad","name":"Alice"}"""), Row(2, "Bob", null)))
           case "DROPMALFORMED" =>
             checkAnswer(df, Row(2, "Bob", null))
           case "FAILFAST" =>

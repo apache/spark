@@ -1458,7 +1458,7 @@ abstract class JsonSuite
               case "nested array" if mode == "PERMISSIVE" => Seq(Row(1, null), Row(null, document))
               case "nested array" => Seq(Row(1, null))
               case _ if mode == "PERMISSIVE" =>
-                Seq(Row(1, null), Row(null, document), Row(2, null))
+                Seq(Row(1, null), Row(null, malformed), Row(2, null))
               case _ => Seq(Row(1, null), Row(2, null))
             }
           } else if (mode == "PERMISSIVE") {
@@ -1474,6 +1474,54 @@ abstract class JsonSuite
             Seq.empty[Row]
           }
           checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  gridTest("multiline top level JSON array cuts a malformed element's record by byte offset")(
+      for {
+        layout <- Seq(
+          "string element", "whitespace", "multi-byte UTF-8", "UTF-8 BOM", "explicit encoding")
+        mode <- Seq("PERMISSIVE", "FAILFAST")
+      } yield (layout, mode)) { case (layout, mode) =>
+    withSQLConf(SQLConf.JSON_STREAM_MULTILINE_TOP_LEVEL_ARRAY.key -> "true") {
+      withTempPath { file =>
+        val (document, encoding, record) = layout match {
+          case "string element" =>
+            ("""[{"a":1},"text",{"a":2}]""", Map.empty[String, String], "\"text\"")
+          case "whitespace" =>
+            ("[\n  {\"a\":1} ,\n\t{\"a\":\"bad\"} \r\n, {\"a\":2}\n]", Map.empty[String, String],
+              """{"a":"bad"}""")
+          // scalastyle:off nonascii
+          case "multi-byte UTF-8" =>
+            ("[{\"a\":1,\"s\":\"\u00e9\u65e5\"},{\"a\":\"\u00e9\u65e5\"},{\"a\":2}]",
+              Map.empty[String, String], "{\"a\":\"\u00e9\u65e5\"}")
+          case "UTF-8 BOM" =>
+            ("\uFEFF[{\"a\":\"bad\"},{\"a\":1},{\"a\":2}]", Map.empty[String, String],
+              """{"a":"bad"}""")
+          // scalastyle:on nonascii
+          // A char-based parser reports no byte offsets, so the record stays the whole document.
+          case "explicit encoding" =>
+            val document = """[{"a":1},{"a":"bad"},{"a":2}]"""
+            (document, Map("encoding" -> "ISO-8859-1"), document)
+        }
+        Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read
+          .schema("a INT, _corrupt_record STRING")
+          .option("multiLine", true)
+          .option("mode", mode)
+          .options(encoding)
+          .json(file.getCanonicalPath)
+
+        if (mode == "FAILFAST") {
+          checkError(
+            exception = intercept[SparkException](df.collect()).getCause
+              .asInstanceOf[SparkException],
+            condition = "MALFORMED_RECORD_IN_PARSING.WITHOUT_SUGGESTION",
+            parameters = Map("badRecord" -> s"[null,$record]", "failFastMode" -> "FAILFAST"))
+        } else {
+          checkAnswer(df, Seq(Row(1, null), Row(null, record), Row(2, null)))
         }
       }
     }
@@ -1529,7 +1577,7 @@ abstract class JsonSuite
           .json(file.getCanonicalPath)
 
         val expected = if (streaming) {
-          Seq(Row(null, document), Row(2, null))
+          Seq(Row(null, """{"a":"bad"}"""), Row(2, null))
         } else {
           Seq(Row(null, document), Row(2, document))
         }
@@ -1560,9 +1608,9 @@ abstract class JsonSuite
         val rows = MultiLineJsonDataSource.readFile(
           spark.sessionState.newHadoopConf(), partitionedFile, parser, schema)
 
-        assert(rows.next().getUTF8String(1).toString === document)
+        assert(rows.next().getUTF8String(1).toString === """{"a":"bad"}""")
         Files.delete(file.toPath)
-        assert(rows.next().getUTF8String(1).toString === document)
+        assert(rows.next().getUTF8String(1).toString === """{"a":"also bad"}""")
         assert(rows.next().getInt(0) === 2)
         assert(!rows.hasNext)
       }
@@ -2574,7 +2622,9 @@ abstract class JsonSuite
             F.count($"dummy").as("valid"),
             F.count($"_corrupt_record").as("corrupt"),
             F.count("*").as("count"))
-        checkAnswer(counts, if (enabled) Row(1, 6, 8) else Row(1, 4, 6))
+        // Streaming records the elements of `[1,2,3]`, which match no input document, so the outer
+        // join also keeps `[1,2,3]` itself.
+        checkAnswer(counts, if (enabled) Row(1, 6, 9) else Row(1, 4, 6))
       }
     }
   }

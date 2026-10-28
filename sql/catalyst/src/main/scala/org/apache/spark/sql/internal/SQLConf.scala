@@ -7466,13 +7466,15 @@ object SQLConf {
         "effect on reads using the `singleVariantColumn` or `explodeEmbeddedArray` option. " +
         "Streaming also makes an array element, rather than the whole document, the record " +
         "that a parse mode applies to, since rows already emitted cannot be withdrawn: " +
-        "PERMISSIVE fills the corrupt record column for the malformed element only, leaving " +
-        "it null on the valid rows of the same document, and DROPMALFORMED drops that " +
-        "element rather than the whole document. An element whose failure leaves the parser " +
-        "at an unknown position, such as a nested value of the wrong shape, still ends the " +
-        "document, as does a failure outside any element, such as a syntax error between two " +
-        "elements or a missing closing bracket. It can be overwritten by the JSON option " +
-        "`enableStreamingTopLevelArray`.")
+        "PERMISSIVE fills the corrupt record column for the malformed element only, with that " +
+        "element's text, leaving it null on the valid rows of the same document, and " +
+        "DROPMALFORMED drops that element rather than the whole document. An element whose " +
+        "failure leaves the parser at an unknown position, such as a nested value of the wrong " +
+        "shape, still ends the document, as does a failure outside any element, such as a " +
+        "syntax error between two elements or a missing closing bracket. Such a failure fills " +
+        "the corrupt record column with the whole document, as does a malformed element when " +
+        "the parser reports no byte offsets: with an explicit `encoding`, or with UTF-16 or " +
+        "UTF-32 input. It can be overwritten by the JSON option `enableStreamingTopLevelArray`.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf
