@@ -1304,6 +1304,73 @@ def print_jira_issue_summary(issue):
     )
 
 
+def check_linked_jira_issues(pr_num, title):
+    """Check the JIRA tickets that open ``title`` before merging, failing on a mismatch.
+
+    Only the leading ids count (see :func:`leading_jira_ids`), so a ticket that
+    the title body mentions is neither fetched nor checked.  Requires
+    ``asf_jira`` to be set.
+    """
+    jira_ids = leading_jira_ids(title)
+    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
+    # Collect every offender so the committer sees the full list in one shot rather than
+    # discovering them one-by-one across repeated merge attempts.
+    blocking_issue_types = {"Epic", "Umbrella"}
+    blockers = []
+    linked_issues = []
+    for jira_id in jira_ids:
+        try:
+            issue = asf_jira.issue(jira_id)
+        except Exception:
+            print_error("Unable to fetch summary of %s" % jira_id)
+            continue
+        print_jira_issue_summary(issue)
+        linked_issues.append((jira_id, issue))
+        issue_type = issue.fields.issuetype.name
+        if issue_type in blocking_issue_types:
+            blockers.append((jira_id, issue_type))
+    if blockers:
+        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
+        fail(
+            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
+            "tickets and MUST not be resolved by a single PR. File "
+            "Sub-task(s) under %s and update the PR title to reference "
+            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
+        )
+
+    # Confirm each linked JIRA actually matches this PR before merging. A committer can
+    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
+    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
+    # Show the PR title next to each ticket's summary, warn when a ticket is already
+    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
+    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
+    # its low similarity to the JIRA summary is expected and the warning is suppressed.
+    # The tag is read inside Revert/Reapply wrappers too.
+    is_followup = "FOLLOWUP" in leading_title_tags(title)
+    for jira_id, issue in linked_issues:
+        print()
+        print(
+            format_jira_verification(
+                pr_num,
+                title,
+                jira_id,
+                issue.fields.summary,
+                issue.fields.status.name,
+                issue.fields.issuetype.name,
+                resolution=(
+                    issue.fields.resolution.name if issue.fields.resolution is not None else None
+                ),
+                use_color=True,
+                is_followup=is_followup,
+            )
+        )
+        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
+            fail(
+                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
+                "correct JIRA ticket and retry." % (jira_id, pr_num)
+            )
+
+
 def jira_components_from_title_tags(tags):
     """Canonical SPARK JIRA component names implied by PR-title component tags.
 
@@ -1867,9 +1934,7 @@ class DryRunJira(Jira):
 jira_ops = None
 
 
-def resolve_jira_issues(title, merge_branches, comment, title_components=()):
-    jira_ids = leading_jira_ids(title)
-
+def resolve_jira_issues(jira_ids, merge_branches, comment, title_components=()):
     if len(jira_ids) == 0:
         resolve_jira_issue(
             merge_branches,
@@ -1887,20 +1952,9 @@ def resolve_jira_issues(title, merge_branches, comment, title_components=()):
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
-    tags = set(title_components)
-    # Revert/Reapply PRs keep their title verbatim, so unwrap before parsing to see the
-    # wrapped id, markers, and components.
-    jira_title = _unwrap_title(title)
-    jira_ids = leading_jira_ids(jira_title)
-    try:
-        parsed = Title.parse(jira_title)
-        tags.update(parsed.leading)
-        # Normalize aliases such as FOLLOW-UP, as main() does for ordinary titles.
-        for tag in parsed.components:
-            c = Component.find(tag)
-            tags.add(c.tag if c is not None else tag)
-    except ValueError:
-        pass
+    # Revert/Reapply PRs keep their title verbatim, so the tags are read inside the wrappers,
+    # without Title.parse, which rejects some older titles such as [SPARK-N][FOLLOWUP][MINOR].
+    tags = set(title_components) | leading_title_tags(title)
     skipped = [tag for tag in skip_jira_title_tags if tag in tags]
     if skipped:
         print()
@@ -1913,6 +1967,7 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
+    jira_ids = leading_jira_ids(title)
     if is_revert:
         for jira_id in jira_ids or [""]:
             revert_jira_issue(merge_branches, jira_id)
@@ -1924,7 +1979,7 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
         pr_num,
     )
     resolve_jira_issues(
-        title,
+        jira_ids,
         merge_branches,
         jira_comment,
         title_components,
@@ -1970,6 +2025,16 @@ class Component:
             if c.matches(token):
                 return c
         return None
+
+    @classmethod
+    def normalize(cls, token):
+        """Return the registered tag for ``token``, or ``token`` itself if none matches.
+
+        >>> Component.normalize("FOLLOW-UP"), Component.normalize("BOGUS")
+        ('FOLLOWUP', 'BOGUS')
+        """
+        c = cls.find(token)
+        return c.tag if c is not None else token
 
 
 # Full SPARK JIRA component list (sorted alphabetically by tag), followed
@@ -2257,6 +2322,22 @@ def leading_jira_ids(title: str) -> List[str]:
     return list(dict.fromkeys(ids))
 
 
+def leading_title_tags(title: str) -> set[str]:
+    """Return the tags in the leading run of bracket tags of ``title``, normalized.
+
+    ``Revert "..."`` / ``Reapply "..."`` wrappers are stripped first (see
+    :func:`_unwrap_title`), and aliases are normalized (see
+    :meth:`Component.normalize`).  Like :func:`leading_jira_ids`, the run is not
+    validated, so a title that :meth:`Title.parse` rejects still yields its tags.
+
+    >>> sorted(leading_title_tags('Revert "[SPARK-1234][FOLLOW-UP][SQL][MINOR] Fix [X]"'))
+    ['FOLLOWUP', 'MINOR', 'SPARK-1234', 'SQL']
+    >>> leading_title_tags("SPARK-49004")
+    set()
+    """
+    return {Component.normalize(tag) for tag, _ in _iter_bracket_tags(_unwrap_title(title))}
+
+
 def prompt_for_components():
     """
     Prompt the committer for component(s) when the PR title lacks a primary
@@ -2495,7 +2576,7 @@ def main():
             c = Component.find(tag)
             if c is not None and c.primary:
                 has_primary = True
-            components.append(c.tag if c is not None else tag)
+            components.append(Component.normalize(tag))
         if not has_primary:
             new_tags = prompt_for_components()
             components = new_tags + components
@@ -2647,63 +2728,7 @@ def main():
         continue_maybe(msg)
 
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
-    jira_ids = leading_jira_ids(title)
-    # Epic / Umbrella tickets group related work and must not be resolved by a single PR.
-    # Collect every offender so the committer sees the full list in one shot rather than
-    # discovering them one-by-one across repeated merge attempts.
-    blocking_issue_types = {"Epic", "Umbrella"}
-    blockers = []
-    linked_issues = []
-    for jira_id in jira_ids:
-        try:
-            issue = asf_jira.issue(jira_id)
-        except Exception:
-            print_error("Unable to fetch summary of %s" % jira_id)
-            continue
-        print_jira_issue_summary(issue)
-        linked_issues.append((jira_id, issue))
-        issue_type = issue.fields.issuetype.name
-        if issue_type in blocking_issue_types:
-            blockers.append((jira_id, issue_type))
-    if blockers:
-        ids_str = ", ".join("%s (%s)" % (jid, t) for jid, t in blockers)
-        fail(
-            "Cannot merge PR #%s. Linked JIRA(s) %s are Umbrella or Epic "
-            "tickets and MUST not be resolved by a single PR. File "
-            "Sub-task(s) under %s and update the PR title to reference "
-            "the Sub-task(s) instead." % (pr_num, ids_str, ids_str)
-        )
-
-    # Confirm each linked JIRA actually matches this PR before merging. A committer can
-    # reference the wrong ticket -- e.g. mistaking a GitHub PR number in the body
-    # ("Closes #NNNNN") for a SPARK JIRA id -- which resolves an unrelated ticket on merge.
-    # Show the PR title next to each ticket's summary, warn when a ticket is already
-    # Resolved/Closed (a fresh merge should target an open one), and require confirmation.
-    # For [FOLLOWUP] PRs the title describes the follow-up fix rather than the ticket, so
-    # its low similarity to the JIRA summary is expected and the warning is suppressed.
-    is_followup = "FOLLOWUP" in title_components
-    for jira_id, issue in linked_issues:
-        print()
-        print(
-            format_jira_verification(
-                pr_num,
-                title,
-                jira_id,
-                issue.fields.summary,
-                issue.fields.status.name,
-                issue.fields.issuetype.name,
-                resolution=(
-                    issue.fields.resolution.name if issue.fields.resolution is not None else None
-                ),
-                use_color=True,
-                is_followup=is_followup,
-            )
-        )
-        if get_input("Does %s match this PR? (y/N): " % jira_id, ["y", "n", ""]) != "y":
-            fail(
-                "Aborting: %s does not match PR #%s. Fix the PR title to reference the "
-                "correct JIRA ticket and retry." % (jira_id, pr_num)
-            )
+    check_linked_jira_issues(pr_num, title)
 
     print("\n=== Pull Request #%s ===" % pr_num)
     print("title\t%s\nsource\t%s\ntarget\t%s\nurl\t%s" % (title, pr_repo_desc, target_ref, url))
@@ -2951,11 +2976,13 @@ __test__ = {
     >>> reverter.assert_called_once_with(["master"], "SPARK-49004")
 
     Wrapped skip tags follow the same policy as direct merges for MINOR, TRIVIAL, and FOLLOWUP
-    changes, including the FOLLOW-UP alias.
+    changes, including the FOLLOW-UP alias and titles that Title.parse rejects.
 
     >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
     ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"',
-    ...               'Revert "[SPARK-1234][SQL][FOLLOW-UP] Fix"'):
+    ...               'Revert "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"',
+    ...               'Revert "[SPARK-1234][SQL][MINOR] Fix"'):
     ...     update(title, ["master"], is_revert=True)
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
@@ -2964,7 +2991,8 @@ __test__ = {
     Reapply titles are unwrapped too, so their skip tags apply as well.
 
     >>> for title in ('Reapply "[MINOR][SQL] Fix"', 'Reapply "[SPARK-1234][SQL][FOLLOWUP] Fix"',
-    ...               'Reapply "[SPARK-1234][SQL][FOLLOW-UP] Fix"'):
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"'):
     ...     update(title, ["master"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
@@ -2992,6 +3020,64 @@ __test__ = {
     ...         ["master"],
     ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
     ...         "SPARK-1234", title_components=[])
+    """,
+    "check_linked_jira_issues": """
+    Only the leading ids are fetched and checked, so an Epic or an already resolved ticket
+    that the title body mentions neither blocks the merge nor asks for confirmation.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import Mock, call, patch
+    >>> def issue(issue_type):
+    ...     i = Mock()
+    ...     i.fields.issuetype.name = issue_type
+    ...     return i
+    >>> client = Mock()
+    >>> client.issue.side_effect = {
+    ...     "SPARK-60328": issue("Sub-task"), "SPARK-34261": issue("Epic")}.__getitem__
+    >>> verify = Mock(return_value="")
+    >>> stop = Mock(side_effect=SystemExit)
+    >>> def check(title, answers=("y",)):
+    ...     for m in (client, verify, stop):
+    ...         m.reset_mock()
+    ...     with (
+    ...         patch.dict(check_linked_jira_issues.__globals__, asf_jira=client,
+    ...                    print_jira_issue_summary=Mock(), format_jira_verification=verify,
+    ...                    fail=stop),
+    ...         patch("builtins.input", side_effect=answers),
+    ...         redirect_stdout(StringIO()),
+    ...     ):
+    ...         check_linked_jira_issues("123", title)
+    >>> check("[SPARK-60328][SQL][TESTS] Use a unique jar copy in the HiveDDLSuite "
+    ...       "SPARK-34261 test")
+    >>> client.issue.call_args_list
+    [call('SPARK-60328')]
+    >>> stop.assert_not_called()
+    >>> verify.call_args.args[2]
+    'SPARK-60328'
+
+    A leading Epic still blocks the merge before any confirmation.
+
+    >>> try:
+    ...     check("[SPARK-34261][SQL] Fix")
+    ... except SystemExit:
+    ...     pass
+    >>> "SPARK-34261 (Epic)" in stop.call_args.args[0]
+    True
+    >>> verify.assert_not_called()
+
+    A FOLLOWUP tag suppresses the similarity check inside Revert/Reapply wrappers and
+    under the FOLLOW-UP alias too.
+
+    >>> for title in ('[SPARK-60328][SQL][FOLLOWUP] Fix', 'Revert "[SPARK-60328][SQL] Fix"',
+    ...               'Revert "[SPARK-60328][SQL][FOLLOW-UP] Fix"',
+    ...               'Reapply "[SPARK-60328][FOLLOWUP][SQL][MINOR] Fix"'):
+    ...     check(title)
+    ...     print(verify.call_args.kwargs["is_followup"])
+    True
+    False
+    True
+    True
     """,
     "reconcile_jira_affects_versions": """
     Blank input accepts the suggested version and appends it to the existing versions:
