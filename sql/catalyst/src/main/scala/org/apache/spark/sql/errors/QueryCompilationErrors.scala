@@ -1459,7 +1459,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def tableNotSpecifyDatabaseError(identifier: TableIdentifier): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1080",
+      errorClass = "TABLE_DATABASE_NOT_SPECIFIED",
       messageParameters = Map("identifier" -> identifier.toString))
   }
 
