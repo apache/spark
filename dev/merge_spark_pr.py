@@ -1952,9 +1952,17 @@ def resolve_jira_issues(jira_ids, merge_branches, comment, title_components=()):
 
 def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_revert=False):
     skip_jira_title_tags = ("MINOR", "TRIVIAL", "FOLLOWUP")
+    jira_ids = leading_jira_ids(title)
     # Revert/Reapply PRs keep their title verbatim, so the tags are read inside the wrappers,
     # without Title.parse, which rejects some older titles such as [SPARK-N][FOLLOWUP][MINOR].
-    tags = set(title_components) | leading_title_tags(title)
+    tags = leading_title_tags(title)
+    if jira_ids:
+        # Title.parse rejects an id next to [MINOR] or [TRIVIAL], so a subject has both only if
+        # it predates that rule or the committer added the marker at the component prompt. The
+        # former was normally merged as the fix for that id, so the id is updated.
+        tags -= _LEADING_TAGS
+    # Components the committer chose at the prompt in main() still apply.
+    tags |= set(title_components)
     skipped = [tag for tag in skip_jira_title_tags if tag in tags]
     if skipped:
         print()
@@ -1967,7 +1975,6 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     # asf_jira is guaranteed to be set here: initialize_jira() fails fast otherwise.
     print()
     continue_maybe("Would you like to update an associated JIRA?")
-    jira_ids = leading_jira_ids(title)
     if is_revert:
         for jira_id in jira_ids or [""]:
             revert_jira_issue(merge_branches, jira_id)
@@ -2271,7 +2278,7 @@ def _unwrap_title(title: str) -> str:
     return title
 
 
-def leading_jira_ids(title: str) -> List[str]:
+def leading_jira_ids(title: str) -> list[str]:
     """Return the JIRA ids that open ``title``, in order, upper-cased, without duplicates.
 
     ``Revert "..."`` / ``Reapply "..."`` wrappers, including nested ones, are
@@ -2365,7 +2372,7 @@ def prompt_for_components():
                 c = Component.find(t)
                 if c is not None and c.primary:
                     has_primary = True
-                components.append(c.tag if c else t)
+                components.append(Component.normalize(t))
         if not components:
             print_error("Component(s) cannot be empty. Please enter at least one.")
             continue
@@ -2946,7 +2953,7 @@ __test__ = {
     >>> from io import StringIO
     >>> from unittest.mock import Mock, call, patch
     >>> reverter, resolver, confirm = Mock(), Mock(), Mock()
-    >>> def update(title, branches, is_revert=False):
+    >>> def update(title, branches, is_revert=False, components=()):
     ...     reverter.reset_mock()
     ...     resolver.reset_mock()
     ...     confirm.reset_mock()
@@ -2955,7 +2962,7 @@ __test__ = {
     ...                    resolve_jira_issue=resolver, continue_maybe=confirm),
     ...         redirect_stdout(StringIO()),
     ...     ):
-    ...         update_jira_for_pr("123", title, branches, [], is_revert=is_revert)
+    ...         update_jira_for_pr("123", title, branches, list(components), is_revert=is_revert)
     >>> title = 'Revert "[SPARK-1234][SPARK-5678][SQL] Fix mentions SPARK-9999"'
     >>> update(title, ["master", "branch-4.x"], is_revert=True)
     >>> assert reverter.call_args_list == [
@@ -2976,14 +2983,35 @@ __test__ = {
     >>> reverter.assert_called_once_with(["master"], "SPARK-49004")
 
     Wrapped skip tags follow the same policy as direct merges for MINOR, TRIVIAL, and FOLLOWUP
-    changes, including the FOLLOW-UP alias and titles that Title.parse rejects.
+    changes, including the FOLLOW-UP alias. The tags are read even from a wrapped title that
+    Title.parse rejects.
 
     >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
     ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"',
     ...               'Revert "[SPARK-1234][SQL][FOLLOW-UP] Fix"',
     ...               'Revert "[SPARK-1234][SQL][FOLLOWUP][MINOR] Fix"',
-    ...               'Revert "[SPARK-1234][SQL][MINOR] Fix"'):
+    ...               'Revert "[MINOR][TRIVIAL][SQL] Fix"', 'Revert "[SQL][MINOR] Fix"',
+    ...               'Revert "[MINOR][SPARK-1234] Fix"'):
     ...     update(title, ["master"], is_revert=True)
+    ...     reverter.assert_not_called()
+    ...     resolver.assert_not_called()
+    ...     confirm.assert_not_called()
+
+    Title.parse rejects an id next to MINOR or TRIVIAL, so a subject that opens with an id
+    has one only if it predates that rule or the committer added it at the component prompt.
+    An older commit was normally merged as the fix for its id, so the id is updated. A MINOR
+    that the committer chooses at the prompt for this merge still skips.
+
+    >>> update('Revert "[SPARK-1234][SQL][MINOR] Fix"', ["master"], is_revert=True)
+    >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
+    >>> update("[SPARK-1234][SQL][MINOR] Fix", ["master"], components=["SQL", "MINOR"])
+    >>> resolver.assert_not_called()
+    >>> confirm.assert_not_called()
+
+    Direct merges read the markers from the title, since main() passes only components.
+
+    >>> for title in ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix"):
+    ...     update(title, ["master"], components=["SQL"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
     ...     confirm.assert_not_called()
@@ -3013,17 +3041,29 @@ __test__ = {
     Ordinary merges and reapplies resolve the leading id, not an id in the title body.
 
     >>> for title in ('[SPARK-1234][SQL] Fix mentions SPARK-9999',
-    ...               'Reapply "[SPARK-1234][SQL] Fix"'):
+    ...               'Reapply "[SPARK-1234][SQL] Fix"',
+    ...               'Reapply "[SPARK-1234][SQL][TRIVIAL] Fix"'):
     ...     update(title, ["master"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_called_once_with(
     ...         ["master"],
     ...         "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
     ...         "SPARK-1234", title_components=[])
+    >>> update("[SPARK-1234][SPARK-5678][SQL] Fix", ["master"])
+    >>> [c.args[2] for c in resolver.call_args_list]
+    ['SPARK-1234', 'SPARK-5678']
+
+    A title without an id still offers to resolve one that the committer enters.
+
+    >>> update('Reapply "Fix"', ["master"])
+    >>> resolver.assert_called_once_with(
+    ...     ["master"],
+    ...     "Issue resolved by pull request 123\\n[https://github.com/apache/spark/pull/123]",
+    ...     title_components=[])
     """,
     "check_linked_jira_issues": """
-    Only the leading ids are fetched and checked, so an Epic or an already resolved ticket
-    that the title body mentions neither blocks the merge nor asks for confirmation.
+    Only the leading ids are fetched and checked, so an Epic that the title body mentions
+    neither blocks the merge nor asks for confirmation.
 
     >>> from contextlib import redirect_stdout
     >>> from io import StringIO
@@ -3034,7 +3074,8 @@ __test__ = {
     ...     return i
     >>> client = Mock()
     >>> client.issue.side_effect = {
-    ...     "SPARK-60328": issue("Sub-task"), "SPARK-34261": issue("Epic")}.__getitem__
+    ...     "SPARK-60328": issue("Sub-task"), "SPARK-60329": issue("Bug"),
+    ...     "SPARK-34261": issue("Epic"), "SPARK-34262": issue("Umbrella")}.__getitem__
     >>> verify = Mock(return_value="")
     >>> stop = Mock(side_effect=SystemExit)
     >>> def check(title, answers=("y",)):
@@ -3056,25 +3097,62 @@ __test__ = {
     >>> verify.call_args.args[2]
     'SPARK-60328'
 
-    A leading Epic still blocks the merge before any confirmation.
+    Each leading id is confirmed, and declining one aborts the merge.
 
+    >>> check("[SPARK-60328][SPARK-60329][SQL] Fix", answers=("y", "y"))
+    >>> [c.args[2] for c in verify.call_args_list]
+    ['SPARK-60328', 'SPARK-60329']
+    >>> stop.assert_not_called()
     >>> try:
-    ...     check("[SPARK-34261][SQL] Fix")
+    ...     check("[SPARK-60328][SQL] Fix", answers=("n",))
+    ... except SystemExit:
+    ...     pass
+    >>> stop.call_args.args[0].startswith("Aborting: SPARK-60328 does not match PR #123.")
+    True
+    >>> try:
+    ...     check("[SPARK-60328][SQL] Fix", answers=("",))
+    ... except SystemExit:
+    ...     pass
+    >>> stop.call_count
+    1
+
+    A ticket that cannot be fetched is skipped.
+
+    >>> check("[SPARK-1][SQL] Fix")
+    >>> client.issue.call_args_list
+    [call('SPARK-1')]
+    >>> verify.assert_not_called()
+    >>> stop.assert_not_called()
+    >>> try:
+    ...     check("[SPARK-1][SPARK-34261][SQL] Fix")
     ... except SystemExit:
     ...     pass
     >>> "SPARK-34261 (Epic)" in stop.call_args.args[0]
     True
+
+    Leading Epic and Umbrella tickets block the merge, all listed at once, before any
+    confirmation.
+
+    >>> try:
+    ...     check("[SPARK-34261][SPARK-60328][SPARK-34262][SQL] Fix")
+    ... except SystemExit:
+    ...     pass
+    >>> msg = stop.call_args.args[0]
+    >>> "SPARK-34261 (Epic), SPARK-34262 (Umbrella)" in msg
+    True
     >>> verify.assert_not_called()
 
     A FOLLOWUP tag suppresses the similarity check inside Revert/Reapply wrappers and
-    under the FOLLOW-UP alias too.
+    under the FOLLOW-UP alias too, while a title without the tag is still checked.
 
     >>> for title in ('[SPARK-60328][SQL][FOLLOWUP] Fix', 'Revert "[SPARK-60328][SQL] Fix"',
+    ...               '[SPARK-60328][SQL] Fix FOLLOWUP handling',
     ...               'Revert "[SPARK-60328][SQL][FOLLOW-UP] Fix"',
     ...               'Reapply "[SPARK-60328][FOLLOWUP][SQL][MINOR] Fix"'):
     ...     check(title)
     ...     print(verify.call_args.kwargs["is_followup"])
     True
+    False
     False
     True
     True
