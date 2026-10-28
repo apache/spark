@@ -751,6 +751,16 @@ class Analyzer(
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
+    // Resolution has converged by here, so a transpiled UDF option that is still unresolved never
+    // will be. Drop it and let the call fall back to interpreted Python rather than hand
+    // CheckAnalysis an unresolved child to report on. The rule also re-runs some resolution rules
+    // on the plans it changed -- see its doc. Before "Remove TempResolvedColumn" on purpose: the
+    // re-run can create TempResolvedColumn in ORDER BY/HAVING, and only that batch strips them.
+    Batch("Drop Unresolved Transpiled UDF Options", Once,
+      new DropUnresolvedTranspiledPythonUDFOptions(
+        new ResolveReferences(catalogManager),
+        ResolveAliases,
+        ResolveAggregateFunctions)),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++
