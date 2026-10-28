@@ -21,9 +21,9 @@ import java.io.File
 
 import org.apache.spark.connect.proto
 import org.apache.spark.ml.{Model, Transformer}
-import org.apache.spark.ml.feature.VectorAssembler
+import org.apache.spark.ml.feature.{RFormulaModelTestHelper, VectorAssembler}
 import org.apache.spark.ml.param.ParamMap
-import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable, MLTestingUtils}
+import org.apache.spark.ml.util.{DefaultParamsReadable, DefaultParamsWritable}
 import org.apache.spark.sql.{DataFrame, Dataset}
 import org.apache.spark.sql.connect.SparkConnectTestUtils
 import org.apache.spark.sql.types.StructType
@@ -55,7 +55,7 @@ class MLClassLoadingSuite extends MLHelper {
   private def withSavedModel(stage: Transformer)(f: String => Unit): Unit = {
     withTempDir { dir =>
       val path = new File(dir, "model").getAbsolutePath
-      MLTestingUtils.createRFormulaModel(stage).write.save(path)
+      RFormulaModelTestHelper.withStage(stage).write.save(path)
       f(path)
     }
   }
