@@ -686,11 +686,152 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       case other => fail(s"expected a JSON array, got: $other")
     }
 
+  private def nested(script: JObject): List[JObject] = script \ "statements" match {
+    case JArray(values) => values.map(_.asInstanceOf[JObject])
+    case other => fail(s"expected nested statements, got: $other")
+  }
+
   private def typedColumns(columns: (String, JObject)*): JArray = JArray(columns.map {
     case (name, dataType) => JObject("name" -> JArray(List(JString(name))), "type" -> dataType)
   }.toList)
 
   private def ref(parts: String*): JArray = JArray(parts.map(JString).toList)
+
+  test("ANALYZE script types locals from DECLARE type or DEFAULT") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE x INT DEFAULT 5;
+          |  DECLARE s DEFAULT 'a';
+          |  DECLARE d DECIMAL(10, 2);
+          |  DECLARE e DEFAULT x * 2L;
+          |  SELECT x + 1 AS y, s AS t, d AS u, e AS v;
+          |END""".stripMargin)
+      assert(script \ "statement_identifier" === JString("BEGIN END"))
+      assert(script \ "analyze_success" === JBool(true))
+      val statements = nested(script)
+      assert(statements.map(_ \ "analyze_success").distinct === List(JBool(true)))
+      assert(statements.last \ "select_list" === typedColumns(
+        "y" -> jsonInt,
+        "t" -> jsonString,
+        "u" -> JObject(
+          "name" -> JString("decimal"), "precision" -> JInt(10), "scale" -> JInt(2)),
+        "v" -> jsonBigint))
+      assert(spark.sessionState.catalogManager.tempVariableManager.isEmpty)
+    }
+  }
+
+  test("ANALYZE script resolves locals by scope and label") {
+    Seq("false", "true").foreach { singlePass =>
+      withSQLConf(
+          SQLConf.PARSE_SQL_ENABLED.key -> "true",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass) {
+        checkScopesAndLabels()
+      }
+    }
+  }
+
+  private def checkScopesAndLabels(): Unit = {
+    val script = evalStatement(
+      """BEGIN
+        |  DECLARE x INT DEFAULT 1;
+        |  lbl: BEGIN
+        |    DECLARE x STRING DEFAULT 'a';
+        |    SELECT x AS inner_x, lbl.x AS lbl_x;
+        |  END lbl;
+        |  SELECT x AS outer_x;
+        |  blk: BEGIN
+        |    DECLARE z INT DEFAULT 1;
+        |  END blk;
+        |  SELECT z AS gone;
+        |END""".stripMargin)
+    val selects = nested(script).filter(_ \ "statement_identifier" == JString("SELECT"))
+    assert(selects.head \ "select_list" === typedColumns(
+      "inner_x" -> jsonString, "lbl_x" -> jsonString))
+    assert(selects(1) \ "select_list" === typedColumns("outer_x" -> jsonInt))
+    assert(selects(2) \ "analyze_success" === JBool(false))
+    assert(selects(2) \ "error" \ "errorClass" ===
+      JString("UNRESOLVED_COLUMN.WITHOUT_SUGGESTION"))
+    assert(script \ "analyze_success" === JBool(false))
+  }
+
+  test("ANALYZE script binds FOR loop columns and control-flow conditions") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE c INT DEFAULT 0;
+          |  WHILE c < 3 DO
+          |    SET c = c + 1;
+          |  END WHILE;
+          |  FOR r AS SELECT 1 AS id, 'n' AS name DO
+          |    SELECT id AS i, r.name AS n, c AS k;
+          |  END FOR;
+          |  IF c = 3 THEN SELECT c AS done; END IF;
+          |END""".stripMargin)
+      assert(script \ "analyze_success" === JBool(true))
+      val statements = nested(script)
+      assert(statements.length === 7)
+      assert(statements(1) \ "select_list" === typedColumns("condition" -> jsonBoolean))
+      assert(statements(4) \ "select_list" === typedColumns(
+        "i" -> jsonInt, "n" -> jsonString, "k" -> jsonInt))
+    }
+  }
+
+  test("ANALYZE script analyzes handler bodies and simple CASE branches in scope") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE code STRING DEFAULT 'x';
+          |  DECLARE EXIT HANDLER FOR SQLEXCEPTION SELECT code AS failed;
+          |  CASE code
+          |    WHEN 'x' THEN SELECT 1 AS one;
+          |    ELSE SELECT code || '!' AS other;
+          |  END CASE;
+          |END""".stripMargin)
+      assert(script \ "analyze_success" === JBool(true))
+      val selected = nested(script).map(_ \ "select_list").collect {
+        case JArray(List(column)) => column
+      }
+      assert(selected === List(
+        "failed" -> jsonString,
+        "condition" -> jsonBoolean,
+        "one" -> jsonInt,
+        "other" -> jsonString).map { case (name, dataType) =>
+          JObject("name" -> JArray(List(JString(name))), "type" -> dataType)
+        })
+    }
+  }
+
+  test("ANALYZE script sees tables and views it creates without creating them") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val results = evalBatch(
+        """BEGIN
+          |  CREATE TABLE parse_sql_script_t (a INT, b STRING);
+          |  CREATE TEMPORARY VIEW parse_sql_script_v AS
+          |    SELECT a * 2L AS a2 FROM parse_sql_script_t;
+          |  INSERT INTO parse_sql_script_t SELECT a2, 'x' FROM parse_sql_script_v;
+          |  CREATE TABLE parse_sql_script_c AS
+          |    SELECT b, a2 FROM parse_sql_script_t, parse_sql_script_v;
+          |  SELECT * FROM parse_sql_script_c;
+          |END;
+          |SELECT b FROM parse_sql_script_t""".stripMargin)
+      val script = results.head
+      assert(script \ "analyze_success" === JBool(true))
+      val statements = nested(script)
+      assert(statements.map(_ \ "analyze_success").distinct === List(JBool(true)))
+      assert(statements(4) \ "select_list" === typedColumns("b" -> jsonString, "a2" -> jsonBigint))
+      val table = ref("spark_catalog", "default", "parse_sql_script_t")
+      val view = ref("system", "session", "parse_sql_script_v")
+      assert(statements(2) \ "target_table_references" === JArray(List(table)))
+      assert(statements(2) \ "source_table_references" === JArray(List(view)))
+      assert(script \ "source_table_references" === JArray(List(table, view,
+        ref("spark_catalog", "default", "parse_sql_script_c"))))
+      assert(results(1) \ "analyze_success" === JBool(true))
+      assert(results(1) \ "select_list" === typedColumns("b" -> jsonString))
+      assert(!spark.catalog.tableExists("parse_sql_script_t"))
+      assert(!spark.catalog.tableExists("parse_sql_script_v"))
+    }
+  }
 
   test("ANALYZE batch carries DECLARE VARIABLE and DDL to later statements") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
@@ -799,6 +940,21 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("ANALYZE script applies the interpreter's local variable rules") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE OR REPLACE v INT;
+          |  DECLARE system.session.w INT;
+          |  DROP TEMPORARY VARIABLE IF EXISTS u;
+          |END""".stripMargin)
+      assert(nested(script).map(errorClass) === List(
+        JString("INVALID_VARIABLE_DECLARATION.REPLACE_LOCAL_VARIABLE"),
+        JString("INVALID_VARIABLE_DECLARATION.QUALIFIED_LOCAL_VARIABLE"),
+        JString("UNSUPPORTED_FEATURE.SQL_SCRIPTING_DROP_TEMPORARY_VARIABLE")))
+    }
+  }
+
   test("ANALYZE requires constant arguments; PARSE does not") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       val query = "SELECT parse_sql(c, '%s') FROM VALUES ('SELECT 1') AS t(c)"
@@ -808,13 +964,31 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("ANALYZE error indexes are code points relative to the statement") {
+  test("ANALYZE error indexes are code points relative to each statement") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       val top = evalStatement(s"SELECT '$emoji' AS e, missing_col")
       val topCtx = queryContext(top)
       assert(topCtx \ "startIndex" === JInt(18))
       assert(topCtx \ "stopIndex" === JInt(28))
       assert(topCtx \ "fragment" === JString("missing_col"))
+
+      val script = evalStatement(s"BEGIN SELECT '$emoji' AS e; SELECT missing_col; END")
+      val failed = nested(script)(1)
+      assert(failed \ "start" === JInt(24))
+      val nestedCtx = queryContext(failed)
+      assert(nestedCtx \ "objectType" === JString(""))
+      assert(nestedCtx \ "startIndex" === JInt(8))
+      assert(nestedCtx \ "stopIndex" === JInt(18))
+      assert(nestedCtx \ "fragment" === JString("missing_col"))
+    }
+  }
+
+  test("ANALYZE script conditions must be BOOLEAN") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      val script = evalStatement("BEGIN IF 1 THEN SELECT 1; END IF; END")
+      val condition = nested(script).head
+      assert(condition \ "analyze_success" === JBool(false))
+      assert(errorClass(condition) === JString("INVALID_BOOLEAN_STATEMENT"))
     }
   }
 

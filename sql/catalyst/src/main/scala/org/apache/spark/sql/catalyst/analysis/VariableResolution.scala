@@ -136,6 +136,7 @@ class VariableResolution(
     }
 
     lookupScriptLocal(nameParts, namePartsCaseAdjusted)
+      .orElse(lookupSuppliedScriptLocal(nameParts, namePartsCaseAdjusted))
       .orElse(lookupSuppliedLocal(nameParts, namePartsCaseAdjusted))
       .orElse(lookupSession(nameParts, namePartsCaseAdjusted))
   }
@@ -161,6 +162,23 @@ class VariableResolution(
           varDef
         )
       }
+  }
+
+  private def lookupSuppliedScriptLocal(
+      nameParts: Seq[String],
+      namePartsCaseAdjusted: Seq[String]): Option[VariableReference] = {
+    if (!maybeScriptLocalName(nameParts)) {
+      None
+    } else {
+      SuppliedLocalScopeRegistry.lookup(nameParts, conf.resolver).map { case (scope, dataType) =>
+        val ident = Identifier.of(Array(scope.label), namePartsCaseAdjusted.last)
+        VariableReference(
+          nameParts,
+          FakeLocalCatalog,
+          ident,
+          VariableDefinition(ident, "NULL", Literal.create(null, dataType)))
+      }
+    }
   }
 
   private def lookupSuppliedLocal(

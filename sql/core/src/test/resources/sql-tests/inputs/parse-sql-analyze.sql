@@ -123,3 +123,19 @@ SELECT get_json_object(
     parameter_markers => array(named_struct('name', 'p', 'type', 'STRING'))),
   '$[0].select_list[0].type.name');
 
+-- SQL script: locals by scope and label, FOR columns, and tables created earlier
+--QUERY-DELIMITER-START
+SELECT parse_sql(
+'BEGIN
+   DECLARE n INT DEFAULT 0;
+   CREATE TABLE parse_sql_script_t (id INT, name STRING);
+   outer_blk: BEGIN
+     DECLARE n STRING DEFAULT ''x'';
+     INSERT INTO parse_sql_script_t VALUES (1, n);
+   END outer_blk;
+   FOR r AS SELECT id, name FROM parse_sql_script_t AS s DO
+     SET n = n + r.id;
+   END FOR;
+   SELECT n AS total, missing_v AS m;
+ END', 'ANALYZE');
+--QUERY-DELIMITER-END

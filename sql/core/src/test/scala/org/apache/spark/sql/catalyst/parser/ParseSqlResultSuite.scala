@@ -248,6 +248,30 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs("BEGIN SELECT * FROM t WHERE a = ?; END") === Set(Seq("t")))
   }
 
+  test("BEGIN END lists nested statements and conditions with code-point spans") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT 0; BEGIN SELECT '$emoji' AS e FROM t1; " +
+      "IF x > 1 THEN DELETE FROM t2; END IF; FOR r AS SELECT 1 AS c DO SELECT c; END FOR; END"
+    val script = objs(sql)(1)
+    val nested = script \ "statements" match {
+      case JArray(values) => values
+      case other => fail(s"expected statements, got: $other")
+    }
+    val texts = nested.map { n =>
+      (n \ "start", n \ "length") match {
+        case (JInt(start), JInt(length)) => sliceByCodePoints(sql, start.toInt, length.toInt)
+        case other => fail(s"unexpected span: $other")
+      }
+    }
+    assert(texts === Seq(
+      s"SELECT '$emoji' AS e FROM t1", "x > 1", "DELETE FROM t2", "SELECT 1 AS c", "SELECT c"))
+    assert(nested.map(_ \ "statement_identifier") === Seq(
+      JString("SELECT"), JString("SELECT"), JString("DELETE WHERE"), JString("SELECT"),
+      JString("SELECT")))
+    assert(nested(2) \ "target_table_references" === JArray(List(JArray(List(JString("t2"))))))
+    assert(script \ "analyze_success" === JNothing)
+  }
+
   test("syntax error returns STANDARD error JSON without throwing") {
     val j = obj("SELEC FROM t")
     assert(j \ "parse_success" === JBool(false))

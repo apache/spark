@@ -35,7 +35,7 @@ import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, SQLQueryConte
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.classic.{SparkSession => ClassicSparkSession}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, PathElement, TableCatalog}
-import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.errors.{QueryExecutionErrors, SqlScriptingErrors}
 import org.apache.spark.sql.exceptions.SqlScriptingException
 import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{
@@ -47,7 +47,7 @@ import org.apache.spark.sql.execution.command.{
 }
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, StructField, StructType}
+import org.apache.spark.sql.types.{BooleanType, DataType, StructField, StructType}
 
 /**
  * Mode for [[ParseSqlResult.fromSql]]. `PARSE` is unresolved. `ANALYZE` types
@@ -116,8 +116,11 @@ object ParseSqlAnalyzeContext {
  * source location and a nested STANDARD-format error object, and parsing
  * continues with later statements. Nested `queryContext` indexes are 1-based
  * Unicode code points relative to the individual statement, while `start` is
- * relative to the original batch. An empty or closed-comment-only batch
- * produces an empty array. Only
+ * relative to the original batch. A SQL script object also carries a
+ * `statements` array for its nested statements and control-flow conditions,
+ * with batch-relative spans and error indexes relative to each nested
+ * statement. An
+ * empty or closed-comment-only batch produces an empty array. Only
  * [[ParseException]] / [[SqlScriptingException]] are converted to JSON;
  * unexpected / internal failures propagate so the function fails.
  */
@@ -139,6 +142,14 @@ object ParseSqlResult {
       JArray(statements.map { segment =>
         parsePlanOrError(sql, segment) match {
           case ParseFailed(errorObj) => errorObj
+          case Parsed(seg, script: CompoundBody) =>
+            val span = segmentSpan(sql, seg)
+            val nested = mutable.ListBuffer.empty[JObject]
+            walkScript(script, Nil, { (plan, origin, _, _) =>
+              nested += successJson(plan, None, None, None, nestedSpan(span, origin))
+              None
+            })
+            scriptJson(script, span, nested.toSeq, session = None)
           case Parsed(seg, plan) =>
             successJson(plan, analyzed = None, analyzeError = None, None, segmentSpan(sql, seg))
         }
@@ -156,7 +167,8 @@ object ParseSqlResult {
    * Parse every statement, then analyze with optional context overrides.
    * Statements are analyzed in order without being executed: each sees the
    * variables, tables, and views declared or created by earlier statements
-   * (see [[AnalyzeState]]).
+   * (see [[AnalyzeState]]). SQL scripts are walked statement by statement in
+   * lexical scope order (see [[walkScript]]).
    * Analysis / context failures stay JSON (`analyze_success` false) with
    * whatever parse and catalog qualification is already known.
    */
@@ -176,14 +188,33 @@ object ParseSqlResult {
             val state = new AnalyzeState(env)
             JArray(parsed.map {
               case ParseFailed(errorObj) => errorObj
+              case Parsed(segment, script: CompoundBody) =>
+                val span = segmentSpan(batch, segment)
+                val nested = mutable.ListBuffer.empty[JObject]
+                walkScript(script, Nil, { (plan, origin, scopes, isCondition) =>
+                  val (json, analyzed) =
+                    state.statement(plan, nestedSpan(span, origin), scopes, isCondition)
+                  nested += json
+                  analyzed
+                })
+                scriptJson(script, span, nested.toSeq, Some(session))
               case Parsed(segment, plan) =>
-                state.statement(plan, segmentSpan(batch, segment))
+                state.statement(plan, segmentSpan(batch, segment), Nil)._1
             }.toList)
           }
         } catch {
           case e: SparkThrowable with Throwable if !isInternalError(e) =>
             JArray(parsed.map {
               case ParseFailed(errorObj) => errorObj
+              case Parsed(segment, script: CompoundBody) =>
+                val span = segmentSpan(batch, segment)
+                val nested = mutable.ListBuffer.empty[JObject]
+                walkScript(script, Nil, { (plan, origin, _, _) =>
+                  nested += successJson(plan, None, None, Some(session), nestedSpan(span, origin))
+                  None
+                })
+                val scriptObj = scriptJson(script, span, nested.toSeq, Some(session))
+                JObject(scriptObj.obj :+ ("error" -> errorObject(e, spanBase(span))))
               case Parsed(segment, plan) =>
                 successJson(plan, None, Some(e), Some(session), segmentSpan(batch, segment))
             }.toList)
@@ -197,13 +228,31 @@ object ParseSqlResult {
     Option(e.getCondition).exists(_.startsWith("INTERNAL_ERROR"))
 
   /**
-   * Character span of a statement object; `text` is the statement's own text,
-   * which its error indexes are relative to.
+   * Character span of a statement object. `text` is the statement's own text;
+   * `offset` is where it starts, in code points, in the text its parser
+   * origins index (the enclosing top-level statement). Error indexes are
+   * reported relative to `text`.
    */
-  private case class StatementSpan(start: Int, length: Int, text: String)
+  private case class StatementSpan(start: Int, length: Int, text: String, offset: Int)
 
   private def segmentSpan(batch: String, segment: PositionedSqlStatement): StatementSpan =
-    StatementSpan(charStart(batch, segment), charLength(segment), segment.statement)
+    StatementSpan(charStart(batch, segment), charLength(segment), segment.statement, 0)
+
+  /**
+   * Span of a statement nested in a SQL script. Parser origins are ANTLR
+   * code-point offsets into the enclosing top-level statement.
+   */
+  private def nestedSpan(parent: StatementSpan, origin: Origin): StatementSpan =
+    (origin.startIndex, origin.stopIndex) match {
+      case (Some(from), Some(to)) if to >= from && from >= parent.offset =>
+        val local = from - parent.offset
+        StatementSpan(
+          parent.start + local,
+          to - from + 1,
+          codePointSlice(parent.text, local, to - parent.offset + 1),
+          from)
+      case _ => parent
+    }
 
   /** Code points `[from, until)` of `text`, clamped to its bounds. */
   private def codePointSlice(text: String, from: Int, until: Int): String = {
@@ -213,13 +262,108 @@ object ParseSqlResult {
     text.substring(text.offsetByCodePoints(0, begin), text.offsetByCodePoints(0, end))
   }
 
+  /** A lexical SQL script scope whose locals are known so far. */
+  private final class LocalScope(label: String) {
+    private val declared = mutable.ListBuffer.empty[(String, DataType)]
+    def declare(name: String, dataType: DataType): Unit = declared += name -> dataType
+    def snapshot: SuppliedLocalScope =
+      SuppliedLocalScope(label, declared.toList)
+  }
+
+  /**
+   * Visits one statement of a SQL script with the local scopes in effect
+   * (innermost first) and whether it is a control-flow condition, and returns
+   * its analyzed plan, if any.
+   */
+  private type ScriptStatementVisitor =
+    (LogicalPlan, Origin, List[LocalScope], Boolean) => Option[LogicalPlan]
+
+  /**
+   * Walk a SQL script in source order without executing it. Every leaf
+   * statement and control-flow condition is visited once, whether or not the
+   * interpreter would reach it. A BEGIN ... END block opens a local scope
+   * (named by its label); a FOR loop opens a scope named by its loop variable
+   * that declares one local per query column, as the interpreter does.
+   * Exception handler bodies are visited after the statements of their block.
+   * A simple CASE is visited as one `operand = value` condition per WHEN, as
+   * the interpreter evaluates it.
+   */
+  private def walkScript(
+      node: CompoundPlanStatement,
+      scopes: List[LocalScope],
+      visit: ScriptStatementVisitor): Unit = {
+    def walk(child: CompoundPlanStatement, in: List[LocalScope]): Unit =
+      walkScript(child, in, visit)
+    def walkCondition(statement: SingleStatement): Unit =
+      visit(statement.parsedPlan, statement.origin, scopes, true)
+    def condition(expr: Expression): LogicalPlan =
+      Project(Seq(Alias(expr, "condition")()), OneRowRelation())
+    node match {
+      case s: SingleStatement =>
+        visit(s.parsedPlan, s.origin, scopes, false)
+      case body: CompoundBody =>
+        val inner = if (body.isScope) new LocalScope(body.label.getOrElse("")) :: scopes else scopes
+        body.collection.foreach(walk(_, inner))
+        body.handlers.foreach(walk(_, inner))
+      case handler: ExceptionHandler if handler.body.isScope =>
+        walk(handler.body, scopes)
+      case handler: ExceptionHandler =>
+        // A single-statement handler body carries the origin of the whole
+        // DECLARE ... HANDLER; its parsed plan has the statement's own span.
+        handler.body.collection.foreach {
+          case s: SingleStatement =>
+            val planOrigin = s.parsedPlan.origin
+            val origin =
+              if (planOrigin.startIndex.isDefined && planOrigin.stopIndex.isDefined) {
+                planOrigin
+              } else {
+                s.origin
+              }
+            visit(s.parsedPlan, origin, scopes, false)
+          case other => walk(other, scopes)
+        }
+      case i: IfElseStatement =>
+        i.conditions.zip(i.conditionalBodies).foreach { case (c, b) =>
+          walkCondition(c)
+          walk(b, scopes)
+        }
+        i.elseBody.foreach(walk(_, scopes))
+      case c: SearchedCaseStatement =>
+        c.conditions.zip(c.conditionalBodies).foreach { case (cond, b) =>
+          walkCondition(cond)
+          walk(b, scopes)
+        }
+        c.elseBody.foreach(walk(_, scopes))
+      case c: SimpleCaseStatement =>
+        c.conditionExpressions.zip(c.conditionalBodies).foreach { case (e, b) =>
+          visit(condition(EqualTo(c.caseVariableExpression, e)), e.origin, scopes, true)
+          walk(b, scopes)
+        }
+        c.elseBody.foreach(walk(_, scopes))
+      case w: WhileStatement =>
+        walkCondition(w.condition)
+        walk(w.body, scopes)
+      case r: RepeatStatement =>
+        walk(r.body, scopes)
+        walkCondition(r.condition)
+      case l: LoopStatement =>
+        walk(l.body, scopes)
+      case f: ForStatement =>
+        val analyzed = visit(f.query.parsedPlan, f.query.origin, scopes, false)
+        val loopScope = new LocalScope(f.variableName.getOrElse(""))
+        analyzed.foreach(_.output.foreach(a => loopScope.declare(a.name, a.dataType)))
+        walk(f.body, loopScope :: scopes)
+      case _: LeaveStatement | _: IterateStatement | _: ErrorCondition =>
+    }
+  }
+
   /**
    * Analysis state carried across the statements of one ANALYZE batch. It
    * starts from the caller-supplied variables and relations and records the
    * effect of each analyzed statement on later ones, without executing
    * anything:
-   *  - DECLARE VARIABLE adds a session variable. DROP TEMPORARY VARIABLE
-   *    removes it.
+   *  - DECLARE in a SQL script adds a local to the innermost scope; outside a
+   *    script it adds a session variable. DROP TEMPORARY VARIABLE removes it.
    *  - CREATE [OR REPLACE] TABLE / VIEW / TEMP VIEW (column list, AS query,
    *    LIKE, or a temp view USING with a schema) adds a schema-only relation of
    *    that identity. DROP TABLE / VIEW removes a relation known this way.
@@ -227,6 +371,12 @@ object ParseSqlResult {
    * change a schema in place (for example ALTER TABLE) are not tracked.
    */
   private final class AnalyzeState(env: AnalyzeEnv) {
+    /** Outcome of analyzing one statement; `errorBase` overrides the span's. */
+    private case class StatementAnalysis(
+        analyzed: Option[LogicalPlan],
+        error: Option[SparkThrowable with Throwable] = None,
+        errorBase: Option[ErrorBase] = None)
+
     private val session = env.session
     private def mgr: CatalogManager = session.sessionState.catalogManager
     private def resolver: (String, String) => Boolean = session.sessionState.conf.resolver
@@ -239,16 +389,29 @@ object ParseSqlResult {
     }.toList
 
     /**
-     * Analyze one statement with the known objects, render its JSON, then
-     * record its effect.
+     * Analyze one statement with the known objects and local `scopes`
+     * (innermost first), render its JSON, then record its effect. A script
+     * condition must return a single BOOLEAN column, as the interpreter checks.
      */
-    def statement(plan: LogicalPlan, span: StatementSpan): JObject = {
+    def statement(
+        plan: LogicalPlan,
+        span: StatementSpan,
+        scopes: List[LocalScope],
+        isCondition: Boolean = false): (JObject, Option[LogicalPlan]) = {
       SuppliedVariableRegistry.create(variables).runWith {
         SuppliedRelationRegistry.create(relations).runWith {
-          val (analyzed, error) = analyze(plan)
-          val json = successJson(plan, analyzed, error, Some(session), span)
-          record(plan, analyzed)
-          json
+          SuppliedLocalScopeRegistry.create(scopes.reverse.map(_.snapshot)).runWith {
+            val result = plan match {
+              case _ if isCondition => analyzeCondition(plan, span)
+              case _ =>
+                val (analyzed, error) = analyze(plan)
+                StatementAnalysis(analyzed, error)
+            }
+            val json = successJson(plan, result.analyzed, result.error, Some(session), span,
+              result.errorBase)
+            record(plan, result.analyzed, scopes)
+            (json, result.analyzed)
+          }
         }
       }
     }
@@ -267,15 +430,37 @@ object ParseSqlResult {
       }
     }
 
-    private def record(plan: LogicalPlan, analyzed: Option[LogicalPlan]): Unit = plan match {
+    private def analyzeCondition(plan: LogicalPlan, span: StatementSpan): StatementAnalysis = {
+      val (analyzed, error) = analyze(plan)
+      analyzed match {
+        case Some(a) if !a.output.map(_.dataType).equals(Seq(BooleanType)) =>
+          val origin = Origin(
+            startIndex = Some(0),
+            stopIndex = Some(span.text.codePointCount(0, span.text.length) - 1),
+            sqlText = Some(span.text))
+          val e = SqlScriptingErrors.invalidBooleanStatement(origin, span.text)
+            .asInstanceOf[SparkThrowable with Throwable]
+          StatementAnalysis(None, Some(e), errorBase = Some(ErrorBase(span.text, 0)))
+        case _ => StatementAnalysis(analyzed, error)
+      }
+    }
+
+    private def record(
+        plan: LogicalPlan,
+        analyzed: Option[LogicalPlan],
+        scopes: List[LocalScope]): Unit = plan match {
       case c: CreateVariable =>
         variableType(c, analyzed).foreach { dataType =>
           c.names.foreach {
-            case UnresolvedIdentifier(nameParts, _) => declareVariable(nameParts, dataType)
+            case UnresolvedIdentifier(nameParts, _) =>
+              scopes match {
+                case scope :: _ => scope.declare(nameParts.last, dataType)
+                case Nil => declareVariable(nameParts, dataType)
+              }
             case _ =>
           }
         }
-      case DropVariable(UnresolvedIdentifier(nameParts, _), _) =>
+      case DropVariable(UnresolvedIdentifier(nameParts, _), _) if scopes.isEmpty =>
         val identity = SuppliedVariableRegistry.canonicalize(nameParts)
         variables = variables.filterNot { case (name, _) => sameName(name, identity) }
       case c: CreateTable =>
@@ -415,6 +600,46 @@ object ParseSqlResult {
 
     private def sameName(left: Seq[String], right: Seq[String]): Boolean =
       left.length == right.length && left.zip(right).forall { case (a, b) => resolver(a, b) }
+  }
+
+  /**
+   * JSON for a SQL script: the script's own statement object plus a
+   * `statements` array with one object per nested statement and control-flow
+   * condition, ordered by `start`. In ANALYZE mode the script's
+   * `analyze_success` is true only when every nested statement analyzed, and
+   * its table / routine references are the union of the qualified nested ones.
+   */
+  private def scriptJson(
+      script: CompoundBody,
+      span: StatementSpan,
+      nested: Seq[JObject],
+      session: Option[ClassicSparkSession]): JObject = {
+    val ordered = nested.zipWithIndex.sortBy { case (obj, index) =>
+      val start = obj \ "start" match {
+        case JInt(n) => n.toInt
+        case _ => 0
+      }
+      (start, index)
+    }.map(_._1)
+    val base = successJson(script, None, None, None, span)
+    val refKeys = Seq("target_table_references", "source_table_references", "function_references")
+    val fields = session match {
+      case None => base.obj
+      case Some(_) =>
+        val analyzeSuccess =
+          "analyze_success" -> JBool(ordered.forall(o => (o \ "analyze_success") == JBool(true)))
+        val nestedRefs = refKeys.flatMap { key =>
+          val refs = ordered.flatMap(o => o \ key match {
+            case JArray(values) => values
+            case _ => Nil
+          }).distinct
+          if (refs.isEmpty) None else Some(key -> JArray(refs.toList))
+        }
+        val kept = base.obj.filterNot(f => refKeys.contains(f._1))
+        val (head, tail) = kept.splitAt(kept.indexWhere(_._1 == "statement_code") + 1)
+        head ++ (analyzeSuccess +: nestedRefs) ++ tail
+    }
+    JObject(fields :+ ("statements" -> JArray(ordered.toList)))
   }
 
   /** Parsed plan, or parse-failure JSON for this statement. */
@@ -641,7 +866,8 @@ object ParseSqlResult {
       analyzed: Option[LogicalPlan],
       analyzeError: Option[SparkThrowable with Throwable],
       session: Option[ClassicSparkSession],
-      span: StatementSpan): JObject = {
+      span: StatementSpan,
+      errorBase: Option[ErrorBase] = None): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
     fields += "start" -> JInt(span.start)
@@ -687,7 +913,7 @@ object ParseSqlResult {
     }
     refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
     analyzeError.foreach { e =>
-      fields += "error" -> errorObject(e, span.text)
+      fields += "error" -> errorObject(e, errorBase.getOrElse(spanBase(span)))
     }
     JObject(fields.toList)
   }
@@ -704,45 +930,53 @@ object ParseSqlResult {
     if (text.isEmpty) 0 else text.codePointCount(0, text.length)
   }
 
-  /** STANDARD JSON of `e` with `queryContext` in code points of `statement`. */
-  private def errorObject(e: SparkThrowable with Throwable, statement: String): JObject = {
+  /**
+   * The text an error's `queryContext` indexes are reported against. Parser
+   * origins index the enclosing top-level statement in 1-based code points;
+   * `offset` is where `text` starts in it. Contexts of another object (a view
+   * body, an EXECUTE IMMEDIATE string) are left as is.
+   */
+  private case class ErrorBase(text: String, offset: Int)
+
+  private def spanBase(span: StatementSpan): ErrorBase = ErrorBase(span.text, span.offset)
+
+  /** STANDARD JSON of `e` with `queryContext` relative to `base`. */
+  private def errorObject(e: SparkThrowable with Throwable, base: ErrorBase): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
-    rewriteErrorCharIndexes(errorObj, statement)
+    rewriteErrorCharIndexes(errorObj, base)
   }
 
-  /**
-   * Recompute the fragment of each statement `queryContext` by code points.
-   * The indexes are parser (code-point) offsets, but [[SQLQueryContext]]
-   * slices its fragment by UTF-16 units, which is off after a supplementary
-   * character. A context that falls outside the statement covers all of it.
-   * Contexts of another object (a view body, an EXECUTE IMMEDIATE string) are
-   * left as is.
-   */
-  private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
+  private def rewriteErrorCharIndexes(errorObj: JObject, base: ErrorBase): JObject = {
     JObject(errorObj.obj.map {
       case ("queryContext", JArray(contexts)) =>
         "queryContext" -> JArray(contexts.map {
-          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement)
+          case ctx: JObject => rewriteQueryContextIndexes(ctx, base)
           case other => other
         }.toList)
       case other => other
     })
   }
 
-  private def rewriteQueryContextIndexes(ctx: JObject, statement: String): JObject = {
+  /**
+   * Rebase a statement context onto `base` and recompute its fragment by code
+   * points. A context that falls outside `base.text` covers all of it.
+   */
+  private def rewriteQueryContextIndexes(ctx: JObject, base: ErrorBase): JObject = {
     val objectType = ctx.obj.collectFirst { case ("objectType", JString(t)) => t }
     val start = ctx.obj.collectFirst { case ("startIndex", JInt(n)) => n.toInt }
     val stop = ctx.obj.collectFirst { case ("stopIndex", JInt(n)) => n.toInt }
     (objectType, start, stop) match {
       case (Some(""), Some(from), Some(to)) =>
-        val length = statement.codePointCount(0, statement.length)
+        val length = base.text.codePointCount(0, base.text.length)
+        val (newFrom, newTo) = (from - base.offset, to - base.offset)
         val (first, last) =
-          if (from >= 1 && to >= from && to <= length) (from, to) else (1, length)
+          if (newFrom >= 1 && newTo >= newFrom && newTo <= length) (newFrom, newTo)
+          else (1, length)
         JObject(ctx.obj.map {
           case ("startIndex", _) => "startIndex" -> JInt(first)
           case ("stopIndex", _) => "stopIndex" -> JInt(last)
-          case ("fragment", _) => "fragment" -> JString(codePointSlice(statement, first - 1, last))
+          case ("fragment", _) => "fragment" -> JString(codePointSlice(base.text, first - 1, last))
           case other => other
         })
       case _ => ctx
@@ -769,7 +1003,7 @@ object ParseSqlResult {
       "parse_success" -> JBool(false),
       "error" -> rewriteErrorCharIndexes(
         JObject(errorObj.obj ++ contextFields ++ locationFields),
-        span.text)
+        spanBase(span))
     )
   }
 

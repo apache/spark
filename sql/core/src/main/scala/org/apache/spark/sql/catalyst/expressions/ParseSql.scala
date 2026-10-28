@@ -72,10 +72,15 @@ import org.apache.spark.unsafe.types.UTF8String
     fully qualifies resolved relations and routines, and reports analysis failures as JSON
     without aborting the batch. Statements are analyzed in order without being executed:
     a later statement sees variables declared and tables or views created or dropped by
-    earlier ones. Dynamic SQL (`EXECUTE IMMEDIATE`), in-place schema changes such as ALTER TABLE,
+    earlier ones. A SQL script (`BEGIN ... END`) also lists its nested statements and
+    control-flow conditions in a `statements` array; in `ANALYZE` each sees the script
+    locals in scope (by block label or FOR variable) and the objects created before it.
+    Conditions must be a single BOOLEAN column, and a simple CASE is checked as
+    `operand = value` per WHEN.
+    Dynamic SQL (`EXECUTE IMMEDIATE`), in-place schema changes such as ALTER TABLE,
     USE, SET PATH, SET VAR, and SET of a config are not simulated. `CALL` is
     analyzed but the procedure is not run. A SQL script calling `parse_sql` does not
-    lend it its locals or cursors. `ANALYZE` inherits the invoker's current catalog,
+    lend it its locals. `ANALYZE` inherits the invoker's current catalog,
     schema, and SQL path. Named `current_catalog`, `current_schema`, and
     `current_path` override that context for analysis only; omitted or NULL keeps the
     invoker value, which is restored after the call. An override changes the session
@@ -150,6 +155,8 @@ import org.apache.spark.unsafe.types.UTF8String
        int
       > SELECT get_json_object(_FUNC_('SELECT a FROM missing_t', 'ANALYZE'), '$[0].analyze_success');
        false
+      > SELECT get_json_object(_FUNC_('BEGIN DECLARE x INT DEFAULT 1; SELECT x AS y; END', 'ANALYZE'), '$[0].statements[1].select_list[0].type.name');
+       int
       > SELECT get_json_object(_FUNC_('SELECT a FROM t', 'ANALYZE', relations => array(named_struct('name', 't', 'schema', 'a INT'))), '$[0].select_list[0].type.name');
        int
       > SELECT get_json_object(_FUNC_('SELECT system.session.v AS x', 'ANALYZE', variables => array(named_struct('name', 'v', 'type', 'INT'))), '$[0].select_list[0].type.name');
@@ -182,6 +189,11 @@ import org.apache.spark.unsafe.types.UTF8String
     JSON type object), `parameter_markers` (`named` and/or `unnamed_count`), and `error`
     (STANDARD format; nested `queryContext` `startIndex`/`stopIndex` are 1-based Unicode
     code points, statement-relative).
+    A SQL script object also has `statements`: one object of the same shape per nested
+    statement or condition, ordered by `start` (batch-relative); nested error indexes are
+    relative to that nested statement. ANALYZE sets the script's `analyze_success`
+    only when every nested statement analyzed, and its references are the nested
+    union.
     Later statements are still processed after a per-statement
     parse or analysis failure.
   """,
