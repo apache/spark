@@ -1433,8 +1433,8 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       checkQuery(query + "ORDER BY abs(score)", orderedByAlias)
       checkQuery(query + "ORDER BY max(score) - score, team", orderedByMax)
       checkQuery(
-        query + "HAVING min(score) > 1 ORDER BY max(score)",
-        Seq(Row("b", 2), Row("c", 4)))
+        query + "HAVING min(score) < 3 ORDER BY max(score)",
+        Seq(Row("b", 2), Row("a", 1)))
       checkQuery(query + "HAVING max(score) > 4", Seq(Row("a", 1), Row("c", 4)))
       checkQuery(
         "SELECT team, min(score) > 0 AS score\n" + input + "ORDER BY sum(score)",
