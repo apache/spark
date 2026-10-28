@@ -225,6 +225,14 @@ class DataSourceV2FunctionSuite extends DatasourceV2SQLBase {
       sql("CREATE FUNCTION default.ns1.ns2.fun as 'f'")
     }
     assert(e1.message.contains("requires a single-part namespace"))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql("CREATE FUNCTION testcat.ns.f() RETURNS INT RETURN 1")
+      },
+      condition = "MISSING_CATALOG_ABILITY.CREATE_FUNCTION",
+      parameters = Map("plugin" -> "testcat")
+    )
   }
 
   test("REFRESH FUNCTION: only support session catalog") {
