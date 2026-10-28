@@ -35,6 +35,13 @@ class ParseSqlResultSuite extends SparkFunSuite {
       case other => fail(s"expected JSON array, got: $other")
     }
 
+  /** Slice `s` using 1-based Unicode code-point start and length. */
+  private def sliceByCodePoints(s: String, start: Int, length: Int): String = {
+    val begin = s.offsetByCodePoints(0, start - 1)
+    val end = s.offsetByCodePoints(begin, length)
+    s.substring(begin, end)
+  }
+
   private def obj(sql: String): JObject = objs(sql) match {
     case value :: Nil => value
     case other => fail(s"expected one statement, got ${other.size}: $other")
@@ -103,9 +110,9 @@ class ParseSqlResultSuite extends SparkFunSuite {
       val JInt(length) = statement \ "length"
       (start.toInt, length.toInt)
     }
-    assert(spans === Seq((1, 13), (16, 8)))
+    assert(spans === Seq((1, 11), (14, 8)))
     assert(spans.map { case (start, length) =>
-      unicodeSql.substring(start - 1, start - 1 + length)
+      sliceByCodePoints(unicodeSql, start, length)
     } === Seq(s"SELECT '$emoji$emoji'", "SELECT 2"))
 
     val nbsp = 0xA0.toChar
@@ -241,9 +248,61 @@ class ParseSqlResultSuite extends SparkFunSuite {
     assert(sourceTableRefs("BEGIN SELECT * FROM t WHERE a = ?; END") === Set(Seq("t")))
   }
 
+  test("BEGIN END lists nested statements and conditions with code-point spans") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT 0; BEGIN SELECT '$emoji' AS e FROM t1; " +
+      "IF x > 1 THEN DELETE FROM t2; END IF; FOR r AS SELECT 1 AS c DO SELECT c; END FOR; END"
+    val script = objs(sql)(1)
+    val nested = script \ "statements" match {
+      case JArray(values) => values
+      case other => fail(s"expected statements, got: $other")
+    }
+    val texts = nested.map { n =>
+      (n \ "start", n \ "length") match {
+        case (JInt(start), JInt(length)) => sliceByCodePoints(sql, start.toInt, length.toInt)
+        case other => fail(s"unexpected span: $other")
+      }
+    }
+    assert(texts === Seq(
+      s"SELECT '$emoji' AS e FROM t1", "x > 1", "DELETE FROM t2", "SELECT 1 AS c", "SELECT c"))
+    assert(nested.map(_ \ "statement_identifier") === Seq(
+      JString("SELECT"), JString("SELECT"), JString("DELETE WHERE"), JString("SELECT"),
+      JString("SELECT")))
+    assert(nested(2) \ "target_table_references" === JArray(List(JArray(List(JString("t2"))))))
+    assert(script \ "analyze_success" === JNothing)
+  }
+
   test("syntax error returns STANDARD error JSON without throwing") {
     val j = obj("SELEC FROM t")
     assert(j \ "parse_success" === JBool(false))
     assert(j \ "error" \ "errorClass" === JString("PARSE_SYNTAX_ERROR"))
+  }
+
+  test("error queryContext indexes are Unicode code points") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji' FRUM t"
+    val j = obj(sql)
+    assert(j \ "parse_success" === JBool(false))
+    val ctx = (j \ "error" \ "queryContext")(0)
+    val JString(fragment) = ctx \ "fragment"
+    val JInt(start) = ctx \ "startIndex"
+    val JInt(stop) = ctx \ "stopIndex"
+    val JInt(position) = j \ "error" \ "position"
+    assert(fragment === sql)
+    assert(start.toInt === 1)
+    assert(stop.toInt === sql.codePointCount(0, sql.length))
+    assert(sliceByCodePoints(sql, start.toInt, stop.toInt - start.toInt + 1) === fragment)
+    // ANTLR column is already a 0-based code-point offset on the line.
+    assert(position.toInt === sql.codePointCount(0, sql.lastIndexOf('t')))
+
+    val literalSql = s"SELECT '$emoji' AS e, DATE 'bad'"
+    val literal = obj(literalSql)
+    assert(literal \ "error" \ "errorClass" === JString("INVALID_TYPED_LITERAL"))
+    val literalCtx = (literal \ "error" \ "queryContext")(0)
+    val JInt(literalStart) = literalCtx \ "startIndex"
+    val JInt(literalStop) = literalCtx \ "stopIndex"
+    assert(literalCtx \ "fragment" === JString("DATE 'bad'"))
+    assert(literalStart.toInt === literalSql.codePointCount(0, literalSql.indexOf("DATE")) + 1)
+    assert(literalStop.toInt === literalSql.codePointCount(0, literalSql.length))
   }
 }
