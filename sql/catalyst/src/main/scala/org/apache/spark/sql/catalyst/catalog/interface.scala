@@ -1036,6 +1036,23 @@ object CatalogColumnStat extends Logging {
   }
 
   /**
+   * Formatter for the min/max of nanosecond-precision timestamp columns. Unlike
+   * [[getTimestampFormatter]], it never switches to a legacy formatter under
+   * `spark.sql.legacy.timeParserPolicy=LEGACY`: those cannot represent nanoseconds, and the
+   * stats string is an internal format that every session must read and write the same way.
+   */
+  def getTimestampNanosFormatter(
+      isParsing: Boolean,
+      format: String = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS",
+      zoneId: ZoneId = ZoneOffset.UTC): TimestampFormatter = {
+    new Iso8601TimestampFormatter(
+      pattern = format,
+      zoneId = zoneId,
+      locale = TimestampFormatter.defaultLocale,
+      isParsing = isParsing)
+  }
+
+  /**
    * Converts from string representation of data type to the corresponding Catalyst data type.
    */
   def fromExternalString(s: String, name: String, dataType: DataType, version: Int): Any = {
@@ -1049,12 +1066,9 @@ object CatalogColumnStat extends Logging {
       case TimestampNTZType =>
         getTimestampFormatter(isParsing = true, forTimestampNTZ = true).parse(s)
       case t: TimestampLTZNanosType =>
-        getTimestampFormatter(isParsing = true, format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
-          .parseNanos(s, t.precision)
+        getTimestampNanosFormatter(isParsing = true).parseNanos(s, t.precision)
       case t: TimestampNTZNanosType =>
-        getTimestampFormatter(
-          isParsing = true, format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS", forTimestampNTZ = true)
-          .parseWithoutTimeZoneNanos(s, t.precision)
+        getTimestampNanosFormatter(isParsing = true).parseWithoutTimeZoneNanos(s, t.precision)
       case ByteType => s.toByte
       case ShortType => s.toShort
       case IntegerType => s.toInt
@@ -1082,11 +1096,10 @@ object CatalogColumnStat extends Logging {
         getTimestampFormatter(isParsing = false, forTimestampNTZ = true)
           .format(v.asInstanceOf[Long])
       case t: TimestampLTZNanosType =>
-        getTimestampFormatter(isParsing = false, format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS")
+        getTimestampNanosFormatter(isParsing = false)
           .formatNanos(v.asInstanceOf[TimestampNanosVal], t.precision)
       case t: TimestampNTZNanosType =>
-        getTimestampFormatter(
-          isParsing = false, format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS", forTimestampNTZ = true)
+        getTimestampNanosFormatter(isParsing = false)
           .formatWithoutTimeZoneNanos(v.asInstanceOf[TimestampNanosVal], t.precision)
       case BooleanType | _: IntegralType | FloatType | DoubleType => v
       case _: DecimalType => v.asInstanceOf[Decimal].toJavaBigDecimal

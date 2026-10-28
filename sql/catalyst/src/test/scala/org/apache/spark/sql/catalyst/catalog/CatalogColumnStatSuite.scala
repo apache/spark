@@ -18,10 +18,12 @@
 package org.apache.spark.sql.catalyst.catalog
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.{foreachNanosPrecision, nanoOfSecTruncator, nanosVal}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
-class CatalogColumnStatSuite extends SparkFunSuite {
+class CatalogColumnStatSuite extends SparkFunSuite with SQLHelper {
 
   test("SPARK-57812: nanosecond timestamp min/max round-trip through catalog stats") {
     // 1970-01-01 00:00:00.123456789 on the UTC grid.
@@ -44,6 +46,22 @@ class CatalogColumnStatSuite extends SparkFunSuite {
         assert(
           CatalogColumnStat.fromExternalString(
             external, "c", dataType, CatalogColumnStat.VERSION) === expected)
+      }
+    }
+  }
+
+  test("SPARK-57812: nanosecond timestamp stats do not depend on the time parser policy") {
+    // The legacy formatters cannot represent nanoseconds, so the stats string must be written
+    // and read the same way under every policy, including LEGACY.
+    val value = nanosVal(123456L, 789)
+    LegacyBehaviorPolicy.values.foreach { policy =>
+      withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> policy.toString) {
+        Seq[DataType](TimestampLTZNanosType(9), TimestampNTZNanosType(9)).foreach { dataType =>
+          val external = CatalogColumnStat.toExternalString(value, "c", dataType)
+          assert(external === "1970-01-01 00:00:00.123456789")
+          assert(CatalogColumnStat.fromExternalString(
+            external, "c", dataType, CatalogColumnStat.VERSION) === value)
+        }
       }
     }
   }

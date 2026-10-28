@@ -923,7 +923,7 @@ case class DescribeColumnCommand(
           CatalogColumnStat.fromExternalString(valueStr, name, dataType, CatalogColumnStat.VERSION)
         val curZoneId = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
         CatalogColumnStat
-          .getTimestampFormatter(
+          .getTimestampNanosFormatter(
             isParsing = false, format = "yyyy-MM-dd HH:mm:ss.SSSSSSSSS Z", zoneId = curZoneId)
           .formatNanos(internalValue.asInstanceOf[TimestampNanosVal], t.precision)
       case _ =>

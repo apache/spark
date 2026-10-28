@@ -32,9 +32,10 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, PST, UTC}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{getZoneId, TimeZoneUTC}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.nanosVal
 import org.apache.spark.sql.execution.LogicalRDD
 import org.apache.spark.sql.functions.timestamp_seconds
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.test.SQLTestData.ArrayData
 import org.apache.spark.sql.types._
@@ -644,7 +645,7 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
 
   test("SPARK-57812: describe column stats (min, max) for nanosecond timestamp columns") {
     withDefaultTimeZone(UTC) {
-      val table = "nanos_stats_same_time_zone"
+      val table = "nanos_stats_desc_time_zones"
       val ltzCol = "ltz_col"
       val ntzCol = "ntz_col"
       withTable(table) {
@@ -657,19 +658,27 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
           "TIMESTAMP_NTZ'2022-01-03 00:00:02.987654321')")
         sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
 
-        // LTZ catalog storage is always UTC; DESC re-renders it in the session time zone
-        // (UTC here, per withDefaultTimeZone above).
-        checkDescTimestampColStats(
-          tableName = table,
-          timestampColumn = ltzCol,
-          expectedMinTimestamp = "2022-01-01 00:00:01.123456789 +0000",
-          expectedMaxTimestamp = "2022-01-03 00:00:02.987654321 +0000")
-        // NTZ is zone-independent, so DESC shows the stored wall-clock value with no offset.
-        checkDescTimestampColStats(
-          tableName = table,
-          timestampColumn = ntzCol,
-          expectedMinTimestamp = "2022-01-01 00:00:01.123456789",
-          expectedMaxTimestamp = "2022-01-03 00:00:02.987654321")
+        // LTZ catalog storage is always UTC; DESC re-renders it in the session time zone, so the
+        // stats written above in UTC show up shifted to each zone's offset.
+        Seq(
+          ("UTC", "2022-01-01 00:00:01.123456789 +0000", "2022-01-03 00:00:02.987654321 +0000"),
+          ("PST", "2021-12-31 16:00:01.123456789 -0800", "2022-01-02 16:00:02.987654321 -0800"),
+          ("Asia/Hong_Kong",
+            "2022-01-01 08:00:01.123456789 +0800", "2022-01-03 08:00:02.987654321 +0800")
+        ).foreach { case (zone, expectedLtzMin, expectedLtzMax) =>
+          TimeZone.setDefault(DateTimeUtils.getTimeZone(zone))
+          checkDescTimestampColStats(
+            tableName = table,
+            timestampColumn = ltzCol,
+            expectedMinTimestamp = expectedLtzMin,
+            expectedMaxTimestamp = expectedLtzMax)
+          // NTZ is zone-independent, so DESC shows the stored wall-clock value with no offset.
+          checkDescTimestampColStats(
+            tableName = table,
+            timestampColumn = ntzCol,
+            expectedMinTimestamp = "2022-01-01 00:00:01.123456789",
+            expectedMaxTimestamp = "2022-01-03 00:00:02.987654321")
+        }
 
         // Converting nanosecond-timestamp catalog stats to plan stats must not throw.
         val catalogStats = getCatalogTable(table).stats.get.colStats
@@ -677,6 +686,91 @@ class StatisticsCollectionSuite extends StatisticsCollectionTestBase with Shared
         assert(ltzPlanStat.min.isDefined && ltzPlanStat.max.isDefined)
         val ntzPlanStat = catalogStats(ntzCol).toPlanStat(ntzCol, TimestampNTZNanosType(9))
         assert(ntzPlanStat.min.isDefined && ntzPlanStat.max.isDefined)
+      }
+    }
+  }
+
+  test("SPARK-57812: describe column stats (min, max) for nanosecond timestamp columns " +
+    "written and described in the same time zone") {
+    // The test above writes in UTC, where the UTC and session time zone renderings coincide, so
+    // it can't catch a write path that stores the LTZ stats string in the session time zone.
+    // Here the stats are written in other zones too, and DESC in the writing zone must still
+    // show the inserted wall-clock value with that zone's offset.
+    val zoneIdAndOffsets =
+      Seq((UTC, "+0000"), (PST, "-0800"), (getZoneId("Asia/Hong_Kong"), "+0800"))
+
+    zoneIdAndOffsets.foreach { case (zoneId, offset) =>
+      withDefaultTimeZone(zoneId) {
+        val table = "nanos_stats_desc_same_time_zone"
+        val ltzCol = "ltz_col"
+        val ntzCol = "ntz_col"
+        withTable(table) {
+          sql(s"CREATE TABLE $table ($ltzCol TIMESTAMP_LTZ(9), $ntzCol TIMESTAMP_NTZ(9)) " +
+            "USING parquet")
+          sql(s"INSERT INTO $table VALUES " +
+            "(TIMESTAMP_LTZ'2022-01-01 00:00:01.123456789', " +
+            "TIMESTAMP_NTZ'2022-01-01 00:00:01.123456789'), " +
+            "(TIMESTAMP_LTZ'2022-01-03 00:00:02.987654321', " +
+            "TIMESTAMP_NTZ'2022-01-03 00:00:02.987654321')")
+          sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+
+          checkDescTimestampColStats(
+            tableName = table,
+            timestampColumn = ltzCol,
+            expectedMinTimestamp = "2022-01-01 00:00:01.123456789 " + offset,
+            expectedMaxTimestamp = "2022-01-03 00:00:02.987654321 " + offset)
+          checkDescTimestampColStats(
+            tableName = table,
+            timestampColumn = ntzCol,
+            expectedMinTimestamp = "2022-01-01 00:00:01.123456789",
+            expectedMaxTimestamp = "2022-01-03 00:00:02.987654321")
+        }
+      }
+    }
+  }
+
+  test("SPARK-57812: nanosecond timestamp column stats do not depend on the time parser policy") {
+    withDefaultTimeZone(UTC) {
+      val table = "nanos_stats_time_parser_policy"
+      withTable(table) {
+        sql(s"CREATE TABLE $table (ltz TIMESTAMP_LTZ(9), ntz TIMESTAMP_NTZ(9)) USING parquet")
+        sql(s"INSERT INTO $table VALUES " +
+          "(TIMESTAMP_LTZ'2022-01-01 00:00:01.123456789', " +
+          "TIMESTAMP_NTZ'2022-01-01 00:00:01.123456789'), " +
+          "(TIMESTAMP_LTZ'2022-01-03 00:00:02.987654321', " +
+          "TIMESTAMP_NTZ'2022-01-03 00:00:02.987654321')")
+        val expectedMin = nanosVal(1640995201123456L, 789)
+        val expectedMax = nanosVal(1641168002987654L, 321)
+
+        // The legacy formatters cannot represent nanoseconds, so stats written under any policy
+        // must be readable under any other, both by DESC and by the plan stats of a CBO query.
+        val policies = LegacyBehaviorPolicy.values.toSeq.map(_.toString)
+        for (writePolicy <- policies; readPolicy <- policies) {
+          withSQLConf(SQLConf.LEGACY_TIME_PARSER_POLICY.key -> writePolicy) {
+            // Also refreshes the table, so the plan stats read below are recomputed.
+            sql(s"ANALYZE TABLE $table COMPUTE STATISTICS FOR ALL COLUMNS")
+          }
+          withSQLConf(
+              SQLConf.LEGACY_TIME_PARSER_POLICY.key -> readPolicy,
+              SQLConf.CBO_ENABLED.key -> "true") {
+            checkDescTimestampColStats(
+              tableName = table,
+              timestampColumn = "ltz",
+              expectedMinTimestamp = "2022-01-01 00:00:01.123456789 +0000",
+              expectedMaxTimestamp = "2022-01-03 00:00:02.987654321 +0000")
+            checkDescTimestampColStats(
+              tableName = table,
+              timestampColumn = "ntz",
+              expectedMinTimestamp = "2022-01-01 00:00:01.123456789",
+              expectedMaxTimestamp = "2022-01-03 00:00:02.987654321")
+            val planStats = spark.table(table).queryExecution.optimizedPlan.stats.attributeStats
+              .map { case (attr, stat) => attr.name -> stat }
+            Seq("ltz", "ntz").foreach { col =>
+              assert(planStats(col).min.contains(expectedMin))
+              assert(planStats(col).max.contains(expectedMax))
+            }
+          }
+        }
       }
     }
   }
