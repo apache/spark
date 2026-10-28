@@ -344,22 +344,19 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
-  test("decimal remainder propagates failure when both division attempts fail") {
-    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
-      val left = Decimal(1L, 1, Int.MinValue)
-      val right = Decimal(1L, 1, Int.MaxValue)
-      val dividend = left.toJavaBigDecimal
-      val divisor = right.toJavaBigDecimal
-      intercept[ArithmeticException] {
-        dividend.remainder(divisor, new MathContext(39, RoundingMode.DOWN))
-      }
-      intercept[ArithmeticException] {
-        dividend.remainder(divisor)
-      }
-      intercept[ArithmeticException] {
-        left % right
-      }
+  test("decimal remainder bounds exact retries by divisor scale") {
+    val left = Decimal(1L)
+    val right = Decimal("3E-100")
+    // The divisor alone puts the quotient beyond the retry bound. Without its scale term,
+    // exact division would succeed here and allow enormous quotients for smaller divisors.
+    val original = intercept[ArithmeticException] {
+      left.toJavaBigDecimal.remainder(right.toJavaBigDecimal,
+        new MathContext(39, RoundingMode.DOWN))
     }
+    val error = intercept[ArithmeticException] {
+      left % right
+    }
+    assert(error.getMessage == original.getMessage)
   }
 
   test("decimal remainder bounds exact retries for legacy negative scales") {
