@@ -32,7 +32,7 @@ import org.apache.spark.{SPARK_VERSION, SparkConf, SparkContext, SparkException,
 import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable}
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG}
+import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG, CONFIG2}
 import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
@@ -1268,6 +1268,8 @@ object SparkSession extends SparkSessionCompanion with Logging {
       sparkContext: SparkContext,
       extensions: SparkSessionExtensions): SparkSessionExtensions = {
     val extensionConfClassNames = {
+      val defaultKey = StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key
+      val userKey = StaticSQLConf.SPARK_SESSION_EXTENSIONS.key
       val defaultClassNames =
         sparkContext.conf.get(StaticSQLConf.SPARK_SESSION_EXTENSIONS_DEFAULT_LIST)
           .getOrElse(Seq.empty)
@@ -1276,8 +1278,9 @@ object SparkSession extends SparkSessionCompanion with Logging {
       // Last-win: drop operator defaults also listed by the user, then apply defaults first.
       defaultClassNames.distinct.filter(userClassNames.contains(_)).foreach { className =>
         logWarning(log"Extension ${MDC(CLASS_NAME, className)} is listed in both " +
-          log"spark.sql.extensions.defaultList and spark.sql.extensions; dropping it from " +
-          log"spark.sql.extensions.defaultList.")
+          log"${MDC(CONFIG, defaultKey)} and ${MDC(CONFIG2, userKey)}; dropping every " +
+          log"occurrence of it from ${MDC(CONFIG, defaultKey)}; it is applied where it " +
+          log"appears in ${MDC(CONFIG2, userKey)}.")
       }
       defaultClassNames.filterNot(userClassNames.contains(_)) ++ userClassNames
     }
