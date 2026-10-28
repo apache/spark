@@ -41,7 +41,7 @@ import org.apache.spark.unsafe.types.UTF8String
 @ExpressionDescription(
   usage = """_FUNC_(sqlStmt) - Splits `sqlStmt` into SQL statements, parses each with
     the stock Spark SQL parser, and returns a JSON array describing them (1-based
-    UTF-16 code-unit `start` and UTF-16 code-unit `length`, parse success, Table 39
+    Unicode code-point `start` and code-point `length`, parse success, Table 39
     statement identifier/code, target and source table references for lineage,
     select-list column names, and parameter markers).
     Statement length excludes surrounding whitespace and the terminating semicolon.
@@ -49,7 +49,8 @@ import org.apache.spark.unsafe.types.UTF8String
     Requires spark.sql.function.parseSql.enabled=true. On syntax / parse error returns JSON
     for that statement with `parse_success` false, source location, and a nested STANDARD
     error object instead of throwing or stopping the remaining statements. Nested error
-    locations are statement-relative. An empty or closed-comment-only batch returns `[]`.""",
+    locations are statement-relative Unicode code points. An empty or closed-comment-only
+    batch returns `[]`.""",
   arguments = """
     Arguments:
       * sqlStmt - A SQL batch string to split and parse.
@@ -60,7 +61,7 @@ import org.apache.spark.unsafe.types.UTF8String
       > SELECT _FUNC_('SELECT 1;SELECT 2');
        [{"start":1,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]},{"start":10,"length":8,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":[]}]}]
       > SELECT get_json_object(_FUNC_('SELECT ''😀'';SELECT 2'), '$[1].start');
-       13
+       12
       > SELECT get_json_object(_FUNC_('SELEC'), '$[0].error.errorClass');
        PARSE_SYNTAX_ERROR
   """,
