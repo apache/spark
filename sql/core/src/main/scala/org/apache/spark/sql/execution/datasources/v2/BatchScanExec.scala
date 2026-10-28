@@ -177,13 +177,20 @@ case class BatchScanExec(
       // Keep one empty task after pruning, without serializing padded slots in a packed scan.
       new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
+      // Padding remains in filteredPartitions for keyed runtime-filter validation. A packed
+      // scan advertises no keyed layout, so its tasks need not serialize or compute empty slots.
+      val inputs = if (partitionPacking.isDefined) {
+        filteredPartitions.filter(_.nonEmpty)
+      } else {
+        filteredPartitions
+      }
       val source = new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
+        sparkContext, inputs, readerFactory, supportsColumnar, customMetrics,
         storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
       partitionPacking match {
         case Some(snapshot) =>
-          val groups = snapshot.options.pack(filteredPartitions)
-          if (groups.size < filteredPartitions.size && groups.nonEmpty) {
+          val groups = snapshot.options.pack(inputs)
+          if (groups.size < inputs.size && groups.nonEmpty) {
             source.coalesce(groups.size, shuffle = false,
               partitionCoalescer = Some(new V2ScanPartitionCoalescer(groups)))
           } else {

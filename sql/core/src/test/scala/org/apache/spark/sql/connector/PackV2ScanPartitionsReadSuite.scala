@@ -372,7 +372,7 @@ class PackV2ScanPartitionsReadSuite extends KeyGroupedPartitioningSuiteBase {
 }
 
 trait PackV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuiteBase {
-  test("SPARK-60265: adaptive runtime filtering retains coalescing and pruned input slots") {
+  test("SPARK-60265: runtime filtering retains key metadata without executing empty slots") {
     createTable(items, itemsColumns, Array(identity("id")))
     createTable(purchases, purchasesColumns, Array.empty)
     val values = (1 to 2).flatMap { id =>
@@ -380,7 +380,8 @@ trait PackV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuite
     }.mkString(", ")
     sql(s"INSERT INTO testcat.ns.$items VALUES $values")
     sql(s"INSERT INTO testcat.ns.$purchases VALUES (1, 42.0, NULL), (2, 10.0, NULL)")
-    for (adaptive <- Seq(false, true); price <- Seq(40, 100)) {
+    for (adaptive <- Seq(false, true); (predicate, keptKey) <-
+        Seq("> 40" -> Some(1), "< 40" -> Some(2), "> 100" -> None)) {
       withSQLConf(SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED.key -> "true",
           SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES.key -> "2400",
           SQLConf.V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES.key -> "0",
@@ -396,19 +397,27 @@ trait PackV2ScanPartitionsRuntimeFilterTests extends KeyGroupedPartitioningSuite
           SQLConf.ADAPTIVE_OPTIMIZER_EXCLUDED_RULES.key ->
             "org.apache.spark.sql.execution.adaptive.AQEPropagateEmptyRelation") {
         val df = sql(s"SELECT i.id, i.name, p.price FROM testcat.ns.$items i " +
-          s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE p.price > $price")
-        val expected = if (price == 40) (1 to 24).map(i => Row(1, s"split$i", 42.0)) else Nil
+          s"JOIN testcat.ns.$purchases p ON i.id = p.item_id WHERE p.price $predicate")
+        val expected = keptKey.toSeq.flatMap { key =>
+          (1 to 24).map(i => Row(key, s"split$i", if (key == 1) 42.0 else 10.0))
+        }
         checkAnswer(df, expected)
         val plan = df.queryExecution.executedPlan
         assert(collectShuffles(plan).size === 2)
         val scan = collectScans(plan).find(_.table.name().endsWith(items)).get
         assert(scan.runtimeFilters.nonEmpty)
         assert(scan.filteredPartitions.size === 48)
-        assert(scan.filteredPartitions.count(_.isEmpty) === (if (price == 40) 24 else 48))
+        assert(scan.filteredPartitions.count(_.isEmpty) === 48 - expected.size)
+        if (keptKey.contains(2)) assert(scan.filteredPartitions.take(24).forall(_.isEmpty))
         assert(scan.partitionPacking.isDefined)
         val rowsPerTask = scan.inputRDD.mapPartitions(rows => Iterator.single(rows.size)).collect()
         assert(rowsPerTask.length === 1)
-        assert(rowsPerTask.sum === (if (price == 40) 24 else 0))
+        assert(rowsPerTask.sum === expected.size)
+        if (expected.nonEmpty) {
+          // The scan keeps padding for runtime-filter validation, but packed tasks must not
+          // serialize or compute the empty slots, including a completely pruned first key.
+          assert(scan.inputRDD.dependencies.head.rdd.getNumPartitions === expected.size)
+        }
         assert(scan.outputOrdering.isEmpty)
         assert(ValidateRequirements.validate(stripAQEPlan(plan)))
       }
