@@ -62,8 +62,10 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * the connector must preserve their values itself. Spark may call this method more than once
    * for the same operation, and every call must return the same columns.
    * <p>
-   * If {@link RowLevelOperationInfo#updatedColumns()} is empty, the builder should build an
-   * operation without this mix-in.
+   * For an UPDATE whose assignments are all identity assignments,
+   * {@link RowLevelOperationInfo#updatedColumns()} is empty and there is nothing to narrow, so the
+   * builder may build an operation without this mix-in to receive full-width rows. It must do so if
+   * it would otherwise declare no columns.
    * <p>
    * An operation that does not mix in {@link SupportsDelta} should locate original rows through
    * metadata columns returned by {@link #requiredMetadataAttributes()} that are preserved on

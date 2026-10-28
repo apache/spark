@@ -162,7 +162,7 @@ class InMemoryRowLevelOperationTable private (
     // the copy-on-write commit finds the original row by `pk`
     val updatesPk = info.updatedColumns().exists(_.describe() == "pk")
     // The default column-update fixtures drop the mix-in for an UPDATE with no updated columns,
-    // as SupportsColumnUpdates asks. The fixed-declaration fixtures, the split row-ID fixture and
+    // as SupportsColumnUpdates allows. The fixed-declaration fixtures, the split row-ID fixture and
     // all fixtures for DELETE and MERGE keep it.
     val updatesNothing = info.command == Command.UPDATE && info.updatedColumns().isEmpty
     if (properties.getOrDefault(COLUMN_UPDATE, "false") == "true") {
