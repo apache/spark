@@ -670,6 +670,86 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60602: a cheap condition over a throwable alias is not pushed ahead of an " +
+    "expensive one") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+        $"b")
+      .where($"f" && $"t" && $"b" > 1)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // `t` is cheap, but reading it evaluates the throwable expression behind it.
+    val correctAnswer = testStringRelation
+      .where($"b" > 1)
+      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+        $"b")
+      .where($"f" && $"t")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60602: a condition over a throwable alias is not split off ahead of the " +
+    "conditions before it") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val throwableAlias = If($"e".rlike("other"), Literal(true), raiseError)
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("third") as "h",
+        throwableAlias as "g", $"b")
+      .where($"f" =!= $"h" && $"g")
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // On cost alone the condition on g would go lowest, computing g on every row. Splitting
+    // f and h off instead only leaves g fewer rows to raise on.
+    val correctAnswer = testStringRelation
+      .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("third") as "h")
+      .where($"f" =!= $"h")
+      .select($"a", $"f", $"h", throwableAlias as "g", $"b")
+      .where($"g")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  // `comparePlans` sorts the conjuncts of each filter, so check the top filter's order directly.
+  private def assertTopFilterConjuncts(plan: LogicalPlan, expected: Seq[Expression]): Unit = {
+    val actual = plan.collectFirst { case Filter(condition, _) => condition }
+      .map(splitConjunctivePredicates).getOrElse(Nil)
+    assert(actual.map(_.canonicalized) === expected.map(_.canonicalized),
+      s"Top filter conjuncts ${actual.mkString(", ")} are not ${expected.mkString(", ")}")
+  }
+
+  test("SPARK-60602: the conditions left above the projection keep their written order") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where($"f" =!= $"g" && ($"g" || raiseError) && $"a" > 1)
+      .analyze
+    val Seq(unplaced, throwable, _) = splitConjunctivePredicates(
+      originalQuery.asInstanceOf[Filter].condition)
+
+    // a > 1 is pushed, (f != g) needs every expensive element and is left un-placed, and the
+    // throwable condition is not split. It must still come after (f != g).
+    assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(unplaced, throwable))
+  }
+
+  test("SPARK-60602: a non-deterministic condition left above the projection keeps its " +
+    "written order") {
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .where((Rand(10) > 0.5 || $"g") && $"f" =!= $"g" && $"a" > 1)
+      .analyze
+    val Seq(nonDeterministic, unplaced, _) = splitConjunctivePredicates(
+      originalQuery.asInstanceOf[Filter].condition)
+
+    assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(nonDeterministic, unplaced))
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation

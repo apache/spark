@@ -2594,7 +2594,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     //    is worth splitting.
     // Note that a given filter may contain parts (separated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
-    // Additional restriction:
+    // Additional restrictions:
+    // SPARK-60602: A throwable part (including one over a throwable alias) must not be
+    // evaluated on rows the parts written before it would have filtered out. So it is pushed
+    // only when no expensive part is written before it, it never enters the projection split,
+    // and the parts left above the projection keep their written order.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2623,20 +2627,18 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // eliminate more data quickly and it may also be something which could be evaluated at
         // the storage layer. We may wish to improve this heuristic in the future.
         def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(_._2.child.expensive)
-        val firstExpensive = originalAndRewrittenConditionsWithUsedAlias.indexWhere {
-          case (_, used, _) => !isCheap(used)
-        }
         // Split the filter's components into cheap and expensive while keeping track of
-        // what each references from the projection. A throwable component (e.g. `raise_error`)
-        // must not be evaluated on rows the components before it would have filtered out, so
-        // it is only pushed when no expensive component, which stays above, comes before it.
-        val (cheapWithIndex, expensiveWithIndex) = originalAndRewrittenConditionsWithUsedAlias
-          .zipWithIndex
-          .partition { case ((cond, used, _), idx) =>
-            isCheap(used) && (!cond.throwable || firstExpensive < 0 || idx < firstExpensive)
-          }
-        val cheapWithUsed = cheapWithIndex.map(_._1)
-        val expensiveWithUsed = expensiveWithIndex.map(_._1)
+        // what each references from the projection. The cheap components written before the
+        // first expensive one are all pushed. After it, a throwable component (e.g.
+        // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
+        // so it is not evaluated on rows the components before it would have filtered out.
+        val (leading, rest) = originalAndRewrittenConditionsWithUsedAlias.span {
+          case (_, used, _) => isCheap(used)
+        }
+        val (cheapRest, expensiveWithUsed) = rest.partition {
+          case (_, used, replaced) => isCheap(used) && !replaced.throwable
+        }
+        val cheapWithUsed = leading ++ cheapRest
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
@@ -2647,12 +2649,13 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Case 3: split the projection around the expensive conditions. Non-deterministic
         // conditions stay in the top filter, as they do everywhere else in this rule -- the
         // split orders conditions by cost, and cost is no way to decide how many rows a
-        // non-deterministic expression sees. Throwable conditions stay there too: ordering by
-        // cost could evaluate them ahead of the conditions written before them.
+        // non-deterministic expression sees. Throwable conditions, or conditions over throwable
+        // aliases, stay there too: ordering by cost could evaluate them (or compute the aliases
+        // in a lower projection) ahead of the conditions written before them.
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
             val (splittable, notSplittable) = expensiveWithUsed.partition {
-              case (cond, _, _) => cond.deterministic && !cond.throwable
+              case (cond, _, replaced) => cond.deterministic && !replaced.throwable
             }
             val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
               project, aliasMap, baseChild,
