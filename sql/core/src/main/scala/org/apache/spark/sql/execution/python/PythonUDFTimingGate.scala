@@ -20,18 +20,18 @@ package org.apache.spark.sql.execution.python
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.internal.SQLConf
 
-private[python] final class PythonUDFTiming private (
+private[python] final class PythonUDFTimingGate private (
     evalType: Int,
     val enabled: Boolean) extends Serializable {
   // `enabled` is the plan's saved enable decision; do not reread the timing setting here.
   // Recheck support because the conversion variant can change before execution.
   def workerEnabled(conf: SQLConf): Boolean =
-    enabled && PythonUDFTiming.isSupported(evalType, conf)
+    enabled && PythonUDFTimingGate.isSupported(evalType, conf)
 }
 
-private[python] object PythonUDFTiming {
-  def apply(evalType: Int, conf: SQLConf): PythonUDFTiming = {
-    new PythonUDFTiming(
+private[python] object PythonUDFTimingGate {
+  def apply(evalType: Int, conf: SQLConf): PythonUDFTimingGate = {
+    new PythonUDFTimingGate(
       evalType, conf.pythonUDFDetailedTimingEnabled && isSupported(evalType, conf))
   }
 
