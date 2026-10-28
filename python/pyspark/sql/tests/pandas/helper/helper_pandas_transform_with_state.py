@@ -897,6 +897,12 @@ class PandasListStateProcessor(StatefulProcessor):
     def handleInputRows(self, key, rows, timerValues) -> Iterator[pd.DataFrame]:
         import datetime
 
+        self.list_state1.put([(1,)])
+        assert self.list_state1.exists()
+        self.list_state1.clear()
+        assert not self.list_state1.exists()
+        assert list(self.list_state1.get()) == []
+
         count = 0
         time_list = []
         for pdf in rows:
@@ -962,6 +968,12 @@ class RowListStateProcessor(StatefulProcessor):
 
     def handleInputRows(self, key, rows, timerValues) -> Iterator[Row]:
         import datetime
+
+        self.list_state1.put([(1,)])
+        assert self.list_state1.exists()
+        self.list_state1.clear()
+        assert not self.list_state1.exists()
+        assert list(self.list_state1.get()) == []
 
         count = 0
         time_list = []
