@@ -877,12 +877,14 @@ def resolve_post_merge_fork_remote():
 
 
 def push_post_merge_build(local_ref, target_ref):
-    """Push `local_ref`, just pushed to `target_ref`, to the post-merge fork if there is one.
+    """Push `local_ref`, about to be pushed to `target_ref`, to the post-merge fork if there is one.
 
     The fork then runs the post-merge build of the commit, and apache/spark links that run instead
-    of running the build itself (see .github/workflows/build_main.yml). Branches whose
-    build_main.yml predates this are not pushed. For them, and if this push fails, apache/spark
-    runs the post-merge build as usual.
+    of running the build itself (see .github/workflows/build_main.yml). The fork is pushed first,
+    because apache/spark builds the commit itself if the fork branch does not exist yet when it
+    looks; if the push to apache/spark then fails, the fork builds a commit that was not merged.
+    Branches whose build_main.yml predates this are not pushed. For them, and if this push fails,
+    apache/spark runs the post-merge build as usual.
     """
     if not post_merge_fork_remote:
         return
@@ -965,13 +967,12 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
     )
 
+    push_post_merge_build(target_branch_name, target_ref)
     try:
         git.push(PUSH_REMOTE_NAME, target_branch_name, target_ref)
     except Exception as e:
         clean_up()
         print_error("Exception while pushing: %s" % e)
-    else:
-        push_post_merge_build(target_branch_name, target_ref)
 
     merge_hash = git.run("git rev-parse %s" % target_branch_name).strip()
     clean_up()
@@ -1029,11 +1030,11 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref):
         "Pick complete (local ref %s). Push to %s?" % (pick_branch_name, PUSH_REMOTE_NAME)
     )
 
+    push_post_merge_build(pick_branch_name, pick_ref)
     try:
         git.push(PUSH_REMOTE_NAME, pick_branch_name, pick_ref)
     except Exception as e:
         fail("Exception while pushing: %s" % e)
-    push_post_merge_build(pick_branch_name, pick_ref)
 
     pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
     clean_up()

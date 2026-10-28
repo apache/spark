@@ -25,12 +25,12 @@ on:
     - '**'
 
 jobs:
-  # The post-merge build of a commit runs in the fork of the committer instead of here:
-  # dev/merge_spark_pr.py also pushes the commit to the post-merge-<branch> branch of the fork (see
-  # POST_MERGE_FORK_REMOTE there), where build_and_test.yml builds it like it would here. This job
-  # looks for that run in the fork of the pusher. If it finds it, it links the run from a
-  # "Post-merge build" check, which update_build_status.yml keeps in sync, and the build is skipped
-  # here.
+  # The post-merge build of a commit runs in the fork of the committer instead of here: right
+  # before dev/merge_spark_pr.py pushes the commit here, it pushes it to the post-merge-<branch>
+  # branch of the fork (see POST_MERGE_FORK_REMOTE there), where build_and_test.yml builds it like
+  # it would here. This job looks for that run in the fork of the pusher. If it finds it, it links
+  # the run from a "Post-merge build" check, which update_build_status.yml keeps in sync, and the
+  # build is skipped here.
   find-post-merge-build:
     name: Find post-merge build in fork
     if: github.repository == 'apache/spark'
@@ -81,7 +81,7 @@ jobs:
             } catch (error) {
               return notFound(owner + '/' + repo + ' has no ' + branch + ' branch')
             }
-            // The merge script pushes to the fork right after apache/spark, so the run can take a
+            // The merge script pushes to the fork right before apache/spark, but the run can take a
             // moment to show up.
             let run
             for (let attempt = 0; attempt < 12 && !run; attempt++) {
