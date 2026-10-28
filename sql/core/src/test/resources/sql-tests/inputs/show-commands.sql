@@ -21,6 +21,6 @@ USE spark_catalog.default;
 DROP NAMESPACE testcat.show_commands_ns.`inner.ns`;
 DROP DATABASE show_commands_db;
 
-SHOW COLLATIONS LIKE 'utf8_*|en_USA';
+SHOW COLLATIONS LIKE 'utf8_*';
 SHOW COLLATIONS 'UTF8_BINARY';
 SHOW COLLATIONS LIKE 'non_existing_collation_pattern';

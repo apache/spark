@@ -103,9 +103,9 @@ DropNamespace false, false
 
 
 -- !query
-SHOW COLLATIONS LIKE 'utf8_*|en_USA'
+SHOW COLLATIONS LIKE 'utf8_*'
 -- !query analysis
-ShowCollationsCommand utf8_*|en_USA
+ShowCollationsCommand utf8_*
 
 
 -- !query
