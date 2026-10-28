@@ -74,8 +74,10 @@ import org.apache.spark.unsafe.types.UTF8String
     earlier ones. A SQL script (`BEGIN ... END`) also lists its nested statements and
     control-flow conditions in a `statements` array; in `ANALYZE` each sees the script
     locals in scope (by block label or FOR variable) and the objects created before it.
-    Dynamic SQL (EXECUTE IMMEDIATE), cursors, and in-place schema changes such as
-    ALTER TABLE are not simulated. `ANALYZE` inherits the invoker's current catalog, schema,
+    `DECLARE CURSOR` is recorded in that scope; `OPEN` / `FETCH` / `CLOSE` resolve it
+    the same way, and the cursor query is analyzed at DECLARE. Dynamic SQL
+    (`EXECUTE IMMEDIATE`) and in-place schema changes such as ALTER TABLE are
+    not simulated. `ANALYZE` inherits the invoker's current catalog, schema,
     and SQL path. Named `current_catalog`, `current_schema`, and `current_path` override
     that context for analysis only; omitted or NULL keeps the invoker value, which is
     restored after the call. Named `variables` is an array of structs (`name`, `type`) for

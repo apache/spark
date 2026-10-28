@@ -17,45 +17,69 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.CursorDefinition
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.LexicalThreadLocal
 
 /**
  * One lexical SQL script scope supplied by an analysis caller: the scope label
- * and the local variables declared in it so far, in declaration order.
+ * and the local variables and cursors declared in it so far, in declaration
+ * order.
  */
-private[sql] case class SuppliedLocalScope(label: String, variables: Seq[(String, DataType)])
+private[sql] case class SuppliedLocalScope(
+    label: String,
+    variables: Seq[(String, DataType)],
+    cursors: Seq[(String, String)] = Nil)
 
 /**
- * A lexical registry of SQL script local variable scopes supplied by an
- * analysis caller that analyzes a script without executing it.
+ * A lexical registry of SQL script local scopes supplied by an analysis
+ * caller that analyzes a script without executing it.
  *
  * Scopes are ordered outermost first. Lookup mirrors the SQL script
  * interpreter: an unqualified name binds to the innermost scope declaring it,
- * and `label.name` binds to the innermost scope with that label.
+ * and `label.name` binds to the innermost scope with that label. Variables and
+ * cursors are separate namespaces.
  */
 private[sql] object SuppliedLocalScopeRegistry
   extends LexicalThreadLocal[Seq[SuppliedLocalScope]] {
 
-  def create(scopes: Seq[SuppliedLocalScope]): Handle = createHandle(Some(scopes))
+  def create(scopes: Seq[SuppliedLocalScope]): Handle = {
+    if (scopes.isEmpty) createHandle(None) else createHandle(Some(scopes))
+  }
 
   /** The scope and type bound by `nameParts` (one or two parts), if any. */
   def lookup(
       nameParts: Seq[String],
       resolver: (String, String) => Boolean): Option[(SuppliedLocalScope, DataType)] = {
+    lookupNamed(nameParts, resolver, (s: SuppliedLocalScope) => s.variables)
+  }
+
+  /** The scope and cursor bound by `nameParts` (one or two parts), if any. */
+  def lookupCursor(
+      nameParts: Seq[String],
+      resolver: (String, String) => Boolean): Option[(SuppliedLocalScope, CursorDefinition)] = {
+    lookupNamed(nameParts, resolver, (s: SuppliedLocalScope) => s.cursors).map {
+      case (scope, queryText) => scope -> CursorDefinition(nameParts.last, queryText)
+    }
+  }
+
+  private def lookupNamed[T](
+      nameParts: Seq[String],
+      resolver: (String, String) => Boolean,
+      entries: SuppliedLocalScope => Seq[(String, T)]): Option[(SuppliedLocalScope, T)] = {
     get().flatMap { scopes =>
-      def typeIn(scope: SuppliedLocalScope, name: String): Option[DataType] =
-        scope.variables.reverseIterator.collectFirst {
-          case (declared, dataType) if resolver(declared, name) => dataType
+      def valueIn(scope: SuppliedLocalScope, name: String): Option[T] =
+        entries(scope).reverseIterator.collectFirst {
+          case (declared, value) if resolver(declared, name) => value
         }
       nameParts match {
         case Seq(name) =>
           scopes.reverseIterator
-            .map(scope => typeIn(scope, name).map(scope -> _))
+            .map(scope => valueIn(scope, name).map(scope -> _))
             .collectFirst { case Some(found) => found }
         case Seq(label, name) =>
           scopes.reverseIterator.find(scope => resolver(scope.label, label))
-            .flatMap(scope => typeIn(scope, name).map(scope -> _))
+            .flatMap(scope => valueIn(scope, name).map(scope -> _))
         case _ => None
       }
     }

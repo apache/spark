@@ -841,4 +841,63 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       assert(!spark.catalog.tableExists("parse_sql_batch_t"))
     }
   }
+
+  test("ANALYZE script resolves DECLARE CURSOR, OPEN, FETCH, and CLOSE") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE x INT;
+          |  CREATE TABLE parse_sql_cur_t (id INT);
+          |  lbl: BEGIN
+          |    DECLARE c CURSOR FOR SELECT id FROM parse_sql_cur_t;
+          |    OPEN c;
+          |    FETCH c INTO x;
+          |    FETCH lbl.c INTO x;
+          |    CLOSE c;
+          |  END lbl;
+          |END""".stripMargin)
+      assert(script \ "analyze_success" === JBool(true))
+      val statements = nested(script)
+      assert(statements.map(_ \ "analyze_success").distinct === List(JBool(true)))
+      val declareCur = statements.find { s =>
+        (s \ "source_table_references") != JNothing
+      }.get
+      assert(declareCur \ "source_table_references" === JArray(List(
+        ref("spark_catalog", "default", "parse_sql_cur_t"))))
+      assert(declareCur \ "select_list" === typedColumns("id" -> jsonInt))
+      assert(!spark.catalog.tableExists("parse_sql_cur_t"))
+    }
+  }
+
+  test("PARSE script DECLARE CURSOR lists the query tables") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true") {
+      val script = evalStatement(
+        "BEGIN DECLARE c CURSOR FOR SELECT a FROM t; OPEN c; END", "PARSE")
+      val declareCur = nested(script).head
+      assert(declareCur \ "source_table_references" === JArray(List(JArray(List(JString("t"))))))
+      assert(declareCur \ "select_list" === JArray(List(
+        JObject("name" -> JArray(List(JString("a")))))))
+    }
+  }
+
+  test("ANALYZE script FETCH of an unknown cursor is CURSOR_NOT_FOUND") {
+    withSQLConf(
+        SQLConf.PARSE_SQL_ENABLED.key -> "true",
+        SQLConf.SQL_SCRIPTING_CURSOR_ENABLED.key -> "true",
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false") {
+      val script = evalStatement(
+        """BEGIN
+          |  DECLARE x INT;
+          |  FETCH missing_cur INTO x;
+          |END""".stripMargin)
+      val fetch = nested(script).find(s => (s \ "error") != JNothing).get
+      assert(fetch \ "analyze_success" === JBool(false))
+      assert(fetch \ "error" \ "errorClass" === JString("CURSOR_NOT_FOUND"))
+    }
+  }
 }

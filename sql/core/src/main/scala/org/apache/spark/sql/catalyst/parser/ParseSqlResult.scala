@@ -223,11 +223,14 @@ object ParseSqlResult {
       case _ => parent
     }
 
-  /** A lexical SQL script scope whose local variables are known so far. */
+  /** A lexical SQL script scope whose locals and cursors are known so far. */
   private final class LocalScope(label: String) {
     private val declared = mutable.ListBuffer.empty[(String, DataType)]
+    private val cursors = mutable.ListBuffer.empty[(String, String)]
     def declare(name: String, dataType: DataType): Unit = declared += name -> dataType
-    def snapshot: SuppliedLocalScope = SuppliedLocalScope(label, declared.toList)
+    def declareCursor(name: String, queryText: String): Unit = cursors += name -> queryText
+    def snapshot: SuppliedLocalScope =
+      SuppliedLocalScope(label, declared.toList, cursors.toList)
   }
 
   /**
@@ -320,6 +323,8 @@ object ParseSqlResult {
    * anything:
    *  - DECLARE in a SQL script adds a local to the innermost scope; outside a
    *    script it adds a session variable. DROP TEMPORARY VARIABLE removes it.
+   *  - DECLARE CURSOR in a SQL script adds a cursor to the innermost scope.
+   *    OPEN / FETCH / CLOSE resolve it by name (and label) like the interpreter.
    *  - CREATE [OR REPLACE] TABLE / VIEW / TEMP VIEW (column list, AS query,
    *    LIKE, or a temp view USING with a schema) adds a schema-only relation of
    *    that identity. DROP TABLE / VIEW removes a relation known this way.
@@ -349,8 +354,9 @@ object ParseSqlResult {
       SuppliedVariableRegistry.create(variables).runWith {
         SuppliedRelationRegistry.create(mgr, relations).runWith {
           SuppliedLocalScopeRegistry.create(scopes.reverse.map(_.snapshot)).runWith {
-            val (analyzed, error) = analyze(plan)
-            val json = successJson(plan, analyzed, error, Some(session), span)
+            val (analyzed, error, cursorQuery) = analyzeStatement(plan)
+            val json = successJson(
+              plan, analyzed, error, Some(session), span, cursorQuery)
             record(plan, analyzed, scopes)
             (json, analyzed)
           }
@@ -365,6 +371,37 @@ object ParseSqlResult {
         val analyzed =
           session.sessionState.executePlan(toAnalyze, CommandExecutionMode.SKIP).analyzed
         (Some(analyzed), None)
+      } catch {
+        case e: SparkThrowable with Throwable => (None, Some(e))
+      }
+    }
+
+    /**
+     * Analyze `plan`. For `DECLARE CURSOR`, also parse and analyze the cursor
+     * query with the same overlays so a later FETCH can see its tables and
+     * a failed query is reported on the DECLARE.
+     */
+    private def analyzeStatement(plan: LogicalPlan): (
+        Option[LogicalPlan],
+        Option[SparkThrowable with Throwable],
+        Option[LogicalPlan]) = plan match {
+      case d: DeclareCursor =>
+        val (analyzed, error) = analyze(d)
+        if (error.isDefined) {
+          (analyzed, error, None)
+        } else {
+          val (query, queryError) = analyzeCursorQuery(d.queryText)
+          if (queryError.isDefined) (None, queryError, None) else (analyzed, None, query)
+        }
+      case _ =>
+        val (analyzed, error) = analyze(plan)
+        (analyzed, error, None)
+    }
+
+    private def analyzeCursorQuery(
+        queryText: String): (Option[LogicalPlan], Option[SparkThrowable with Throwable]) = {
+      try {
+        analyze(parser.get().parsePlan(queryText))
       } catch {
         case e: SparkThrowable with Throwable => (None, Some(e))
       }
@@ -426,6 +463,8 @@ object ParseSqlResult {
         v.userSpecifiedSchema.foreach(createRelation(viewIdentity(v.tableIdent, viewType), _))
       case d: DropTable => nameOf(d.child).foreach(dropRelation)
       case d: DropView => nameOf(d.child).foreach(dropRelation)
+      case d: DeclareCursor =>
+        scopes.headOption.foreach(_.declareCursor(d.cursorName, d.queryText))
       case _ =>
     }
 
@@ -770,7 +809,8 @@ object ParseSqlResult {
       analyzed: Option[LogicalPlan],
       analyzeError: Option[SparkThrowable with Throwable],
       session: Option[ClassicSparkSession],
-      span: StatementSpan): JObject = {
+      span: StatementSpan,
+      analyzedQuery: Option[LogicalPlan] = None): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
     fields += "start" -> JInt(span.start)
@@ -802,7 +842,8 @@ object ParseSqlResult {
     if (functions.nonEmpty) {
       fields += "function_references" -> JArray(functions.map(partsToJArray).toList)
     }
-    val selectList = analyzed.map(collectTypedSelectList).getOrElse(collectSelectList(plan))
+    val selectList = analyzedQuery.orElse(analyzed).map(collectTypedSelectList)
+      .getOrElse(collectSelectList(plan))
     if (selectList.nonEmpty) {
       fields += "select_list" -> JArray(selectList.toList)
     }
@@ -1095,6 +1136,9 @@ object ParseSqlResult {
         visitPlan(logicalPlan, scope, TableRefRole.Source)(f)
       case DescribeQueryCommand(_, queryPlan) =>
         visitPlan(queryPlan, scope, TableRefRole.Source)(f)
+      case d: DeclareCursor =>
+        parseQueryPlan(d.queryText).foreach(
+          q => visitPlan(q, scope, TableRefRole.Source)(f))
       case _ =>
     }
   }
@@ -1270,6 +1314,15 @@ object ParseSqlResult {
     }
   }
 
+  /** Parse a cursor query for lineage; failures leave the DECLARE without refs. */
+  private def parseQueryPlan(sqlText: String): Option[LogicalPlan] = {
+    try {
+      Some(parser.get().parsePlan(sqlText))
+    } catch {
+      case _: ParseException | _: SqlScriptingException => None
+    }
+  }
+
   private def primaryQueryPlan(plan: LogicalPlan): LogicalPlan = plan match {
     case UnresolvedWith(child, _, _) => primaryQueryPlan(child)
     case WithCTE(child, _) => primaryQueryPlan(child)
@@ -1284,6 +1337,8 @@ object ParseSqlResult {
     case c: CacheTableAsSelect => primaryQueryPlan(c.plan)
     case ExplainCommand(logicalPlan, _) => primaryQueryPlan(logicalPlan)
     case DescribeQueryCommand(_, queryPlan) => primaryQueryPlan(queryPlan)
+    case d: DeclareCursor =>
+      parseQueryPlan(d.queryText).map(primaryQueryPlan).getOrElse(d)
     case SubqueryAlias(_, child) => primaryQueryPlan(child)
     case Sort(_, _, child, _) => primaryQueryPlan(child)
     case Filter(_, child) => primaryQueryPlan(child)
