@@ -1562,6 +1562,17 @@ Apart from these, the following properties are also available, and may be useful
   <td>3.0.0</td>
 </tr>
 <tr>
+  <td><code>spark.shuffle.service.verifyBlockPathsAtRead</code></td>
+  <td>true</td>
+  <td>
+    Whether the ExternalShuffleService re-resolves the path of a shuffle or RDD block file when
+    serving it, and refuses the file if the resolved path is no longer under the executor's
+    registered local directories. Disabling it skips the path canonicalization done on each
+    block fetch.
+  </td>
+  <td>4.1.4</td>
+</tr>
+<tr>
   <td><code>spark.shuffle.service.db.enabled</code></td>
   <td>true</td>
   <td>
