@@ -58,12 +58,18 @@ jobs:
       with:
         distribution: temurin
         java-version: 8
-    - name: Install Java 17
-      if: matrix.branch != 'branch-3.5'
+    - name: Install Java 17 for branch-4.x
+      if: matrix.branch != 'branch-3.5' && matrix.branch != 'master'
       uses: actions/setup-java@v6
       with:
         distribution: temurin
         java-version: 17
+    - name: Install Java 21
+      if: matrix.branch == 'master'
+      uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: 21
     - name: Publish snapshot
       env:
         ASF_USERNAME: ${{ secrets.NEXUS_USER }}
