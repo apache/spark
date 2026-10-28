@@ -24,7 +24,6 @@ import scala.util.Try
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read._
 import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
@@ -84,7 +83,6 @@ class ColumnarScanBuilder(
     schema: StructType,
     createDataSource: () => ColumnarDataSource)
   extends ScanBuilder
-  with SupportsPushDownV2Filters
   with SupportsPushDownLimit
   with SupportsPushDownRequiredColumns {
 
@@ -94,7 +92,6 @@ class ColumnarScanBuilder(
   // batch, and its data source may not support batch scans at all.
   private var planner: ColumnarBatchPlanner = _
 
-  private var pushed: Array[Predicate] = Array.empty
   private var pushedLimit: Option[Int] = None
   // The limit passed to the reader, and whether the reader applies it.
   private var limitResult: Option[(Int, Boolean)] = None
@@ -106,16 +103,6 @@ class ColumnarScanBuilder(
     }
     planner
   }
-
-  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    pushed = batchPlanner.pushPredicates(predicates)
-    // Spark evaluates all the predicates again after reading, even the ones that the reader
-    // evaluates completely: Spark SQL compares values in ways that a data source can easily get
-    // wrong, such as NaN with other values. The pushed predicates are shown in the plan.
-    predicates
-  }
-
-  override def pushedPredicates(): Array[Predicate] = pushed
 
   override def pushLimit(limit: Int): Boolean = limitResult match {
     // Spark can push a limit more than once, for example the limit of LIMIT ... OFFSET, but the
@@ -146,7 +133,7 @@ class ColumnarScanBuilder(
 
   // The scan takes over the planner, so it is built once.
   private lazy val scan = new ColumnarScan(
-    shortName, schema, readSchema, dataSource, Option(planner), pushed, pushedLimit)
+    shortName, schema, readSchema, dataSource, Option(planner), pushedLimit)
 
   override def build(): Scan = scan
 }
@@ -161,7 +148,6 @@ class ColumnarScan(
     prunedSchema: StructType,
     dataSource: ColumnarDataSource,
     pushedDownPlanner: Option[ColumnarBatchPlanner],
-    pushedPredicates: Array[Predicate],
     pushedLimit: Option[Int])
   extends Scan with SupportsMetadata {
 
@@ -183,10 +169,8 @@ class ColumnarScan(
   }
 
   override def getMetaData(): Map[String, String] = {
-    Map(
-      "PushedPredicates" -> pushedPredicates.mkString("[", ", ", "]"),
-      "ReadSchema" -> prunedSchema.simpleString
-    ) ++ pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit")
+    Map("ReadSchema" -> prunedSchema.simpleString) ++
+      pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit")
   }
 }
 

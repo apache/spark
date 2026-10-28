@@ -36,7 +36,6 @@ import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperati
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -262,27 +261,6 @@ class NativeBatchPlanner(
   import NativeCalls._
 
   private var readSchema: StructType = schema
-
-  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    // Only the predicates that can be expressed in JSON are passed to the library.
-    val encoded = predicates.zipWithIndex.flatMap { case (predicate, i) =>
-      NativePredicates.toJson(predicate, schema).map(_ -> i)
-    }
-    val used = if (encoded.isEmpty) {
-      Set.empty[Int]
-    } else {
-      // How the reader uses each predicate: whether it uses it completely or only to skip data
-      // does not matter, since Spark evaluates all the predicates again after reading.
-      call(name, "plan a scan of") {
-        optional(library.pushPredicates(handle.get, encoded.map(_._1)))
-      }.map { uses =>
-        encoded.map(_._2).zip(uses).collect {
-          case (i, use) if use != NativeLibrary.PREDICATE_UNUSED => i
-        }.toSet
-      }.getOrElse(Set.empty[Int])
-    }
-    predicates.zipWithIndex.collect { case (predicate, i) if used.contains(i) => predicate }
-  }
 
   override def pushLimit(limit: Int): Boolean = {
     call(name, "plan a scan of")(optional(library.pushLimit(handle.get, limit))).getOrElse(false)

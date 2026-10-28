@@ -33,7 +33,7 @@ package, and loads it when a query uses the data source. Spark adapts it to
 
 - batch and micro-batch streaming reads,
 - batch and streaming writes, appending to or overwriting the existing data,
-- predicate, column and limit pushdown.
+- column and limit pushdown.
 
 Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
@@ -101,10 +101,10 @@ Spark calls the functions of the table as follows:
   that the data source does not support before it computes the data to write. When the user does
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
-  down with `push_predicates`, `push_limit` and `prune_columns`, plans the partitions with
-  `partitions`, and serializes the state of the reader with `serialize_reader`. Then it calls
-  `read` on the executors, in one task for each partition, and `read` exports an
-  `ArrowArrayStream`. Its callbacks can be called from any thread, but never concurrently.
+  down with `push_limit` and `prune_columns`, plans the partitions with `partitions`, and
+  serializes the state of the reader with `serialize_reader`. Then it calls `read` on the
+  executors, in one task for each partition, and `read` exports an `ArrowArrayStream`. Its
+  callbacks can be called from any thread, but never concurrently.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
   For each micro-batch, it asks for the `latest_offset`, plans the partitions with
   `stream_partitions`, and calls `read` on the executors. Offsets are defined by the library, as
@@ -135,8 +135,7 @@ function reports an error by returning a non-zero value, with the message return
 `last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
 must not cross the interface. Each handle that a `create` function returns is released exactly
 once, by the `close` function of its kind. The close functions cannot fail, and they can run after
-the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8, and
-the JSON of the predicates is ASCII, with the other characters escaped.
+the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8.
 
 A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
 data source must not declare a capability whose functions are `NULL`:
@@ -144,7 +143,7 @@ data source must not declare a capability whose functions are `NULL`:
 | Capability | Required functions | Optional functions |
 |-----------|--------------------|--------------------|
 | All | `create`, `close` | `last_error`, `schema` |
-| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_predicates`, `push_limit`, `prune_columns`, `serialize_reader` |
+| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns`, `serialize_reader` |
 | `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `serialize_stream_reader`, `commit_offset` |
 | `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | `serialize_writer` |
 
@@ -152,25 +151,7 @@ data source must not declare a capability whose functions are `NULL`:
 `overwrite` of a batch write, and the output mode `complete` of a streaming write.
 
 The comments of [`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h)
-specify each function, including the ownership of the Arrow structs and the JSON format of the
-pushed predicates. `push_predicates` tells Spark how the reader uses each predicate: not at all,
-only to skip data (`SPARK_DS_PREDICATE_PARTIAL`), or to only return the rows for which it is true
-(`SPARK_DS_PREDICATE_COMPLETE`). Spark shows the predicates that the reader uses as pushed in the
-plan of the query, and evaluates all the pushed predicates again after reading either way, so a
-library can use them to skip data, for example files or row groups whose statistics show that no
-row matches, but it must never skip a row for which the predicates are true under the semantics of
-Spark SQL: NaN values are equal to each other and greater than any other value, `-0.0` is equal to
-`0.0`, comparisons with null are null, strings compare by their UTF-8 bytes, and binary values by
-their unsigned bytes. The comparisons of IEEE 754 and the total orders of Arrow libraries, such as
-the comparison kernels of arrow-rs, differ for some of these values. Spark does not pass
-comparisons and `IN` on arrays, maps and structs, which it compares with other rules, such as the
-nulls in them equal to each other. The jar of Spark SQL contains test cases for a library,
-`org/apache/spark/sql/datasource/predicate-cases.json`: predicates as Spark pushes them, with the
-rows of a table for which they are true:
-
-```bash
-unzip -p "$SPARK_HOME"/jars/spark-sql_*.jar org/apache/spark/sql/datasource/predicate-cases.json
-```
+specify each function, including the ownership of the Arrow structs.
 
 The arrays that a library exports must have an offset of 0: copy a sliced array, such as the
 result of `RecordBatch::slice` in arrow-rs, before exporting it. A batch must have no null rows,
@@ -201,9 +182,7 @@ table and the manifest of a package declare. Within a version:
   against an earlier header keeps working with later releases of Spark, with the functions that it
   does not know as `NULL`. A library must only read the fields that fit in the size of a struct
   that Spark passes, so that it also runs on earlier releases of Spark that support its version;
-- new values may appear where the header says so: for example, later releases may push down
-  predicates with other names, which a library must ignore if it does not know them. Spark only
-  uses a new capability or write mode with a data source that declares it.
+- Spark only uses a new capability or write mode with a data source that declares it.
 
 An incompatible change comes with a new version: `spark_ds_init` gets the newest version that Spark
 supports, in `SparkDsHost`, and returns a table of a version that the library implements. Spark
@@ -214,6 +193,8 @@ supports version 1 at least in all the releases of Spark 4 from 4.4.0.
 Version 1 of the interface does not cover these features of Data Source V2 yet. They can be added
 later as functions or fields appended to the structs of the interface:
 
+- predicate pushdown: Spark filters the rows of a native scan after reading them, so a library
+  cannot use the filters of a query to skip data;
 - statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so it
   does not plan a native scan as the broadcast side of a join, unless the query has a broadcast
   hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
@@ -433,7 +414,6 @@ pub struct SparkDsLibrary {
     create_stream_reader: Unused,
     create_writer: Unused,
     close: unsafe extern "C" fn(source: *mut c_void),
-    push_predicates: Unused,
     push_limit: Unused,
     prune_columns: Unused,
     partitions: unsafe extern "C" fn(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int,
@@ -467,7 +447,6 @@ static LIBRARY: SparkDsLibrary = SparkDsLibrary {
     create_stream_reader: None,
     create_writer: None,
     close,
-    push_predicates: None,
     push_limit: None,
     prune_columns: None,
     partitions,

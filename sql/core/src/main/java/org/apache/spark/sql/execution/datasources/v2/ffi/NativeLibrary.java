@@ -81,9 +81,6 @@ final class NativeLibrary {
   static final int WRITE_APPEND = 0;
   static final int WRITE_TRUNCATE = 1;
 
-  /** A predicate that the reader does not use, SPARK_DS_PREDICATE_UNUSED. */
-  static final int PREDICATE_UNUSED = 0;
-
   // The C types of the parameters and the results of the functions.
   private enum C { VOID, BOOL, I32, I64, PTR }
 
@@ -96,7 +93,6 @@ final class NativeLibrary {
     CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
     CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE("close", C.VOID, C.PTR),
-    PUSH_PREDICATES("push_predicates", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
     PUSH_LIMIT("push_limit", C.I32, C.PTR, C.I32, C.PTR),
     PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
     PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR),
@@ -613,21 +609,6 @@ final class NativeLibrary {
 
   void closeDataSource(long dataSource) throws Throwable {
     function(Function.CLOSE).invokeExact(dataSource);
-  }
-
-  /** Returns how the reader uses each predicate, as SPARK_DS_PREDICATE_* values. */
-  int[] pushPredicates(long reader, String[] predicates) throws Throwable {
-    MethodHandle f = function(Function.PUSH_PREDICATES);
-    try (Memory memory = new Memory()) {
-      long uses = memory.zeroed(4L * Math.max(1, predicates.length));
-      check((int) f.invokeExact(reader, memory.strings(predicates), (long) predicates.length,
-        uses), Function.PUSH_PREDICATES);
-      int[] result = new int[predicates.length];
-      for (int i = 0; i < result.length; i++) {
-        result[i] = Platform.getInt(null, uses + 4L * i);
-      }
-      return result;
-    }
   }
 
   boolean pushLimit(long reader, int limit) throws Throwable {

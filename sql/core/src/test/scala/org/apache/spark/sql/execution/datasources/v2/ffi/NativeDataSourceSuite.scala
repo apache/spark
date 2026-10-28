@@ -29,23 +29,16 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import com.fasterxml.jackson.core.json.JsonWriteFeature
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.databind.json.JsonMapper
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
-import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
-import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, LiteralValue}
-import org.apache.spark.sql.connector.expressions.filter.{And, Predicate}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, DataSourceV2Strategy}
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
@@ -55,7 +48,6 @@ import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
-import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -238,211 +230,6 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       System.mapLibraryName("spark_datasource_my_source"))
   }
 
-  test("encode predicates as JSON") {
-    def predicate(name: String, children: Expression*): Predicate = {
-      new Predicate(name, children.toArray)
-    }
-    val id = FieldReference(Seq("id"))
-    val schema = StructType.fromDDL("id BIGINT, a STRUCT<b: INT>, s STRING, " +
-      "c STRING COLLATE UTF8_LCASE, d STRUCT<e: ARRAY<STRING COLLATE UTF8_LCASE>>")
-    def toJson(predicate: Predicate): Option[String] = NativePredicates.toJson(predicate, schema)
-    assert(toJson(predicate(">", id, LiteralValue(5L, LongType))).contains(
-      """{"type":"function","name":">","children":[{"type":"column","name":["id"]},""" +
-        """{"type":"literal","dataType":"bigint","value":5}]}"""))
-    assert(toJson(new And(
-      predicate("IS_NULL", FieldReference(Seq("a", "b"))),
-      predicate("IN", id, LiteralValue(1L, LongType), LiteralValue(2L, LongType))
-    )).contains(
-      """{"type":"function","name":"AND","children":[{"type":"function","name":"IS_NULL",""" +
-        """"children":[{"type":"column","name":["a","b"]}]},{"type":"function","name":"IN",""" +
-        """"children":[{"type":"column","name":["id"]},""" +
-        """{"type":"literal","dataType":"bigint","value":1},""" +
-        """{"type":"literal","dataType":"bigint","value":2}]}]}"""))
-    // Only the functions listed in push_predicates are passed, so not arithmetic.
-    NativePredicates.FUNCTION_NAMES.foreach { name =>
-      assert(toJson(predicate(name, id, id)).nonEmpty, name)
-    }
-    val plusOne = new GeneralScalarExpression("+", Array(id, LiteralValue(1, IntegerType)))
-    assert(toJson(predicate("=", id, plusOne)).isEmpty)
-    assert(toJson(new And(predicate("IS_NULL", id), predicate("=", id, plusOne))).isEmpty)
-    assert(toJson(predicate("UPPER", FieldReference(Seq("s")))).isEmpty)
-
-    def literal(value: Any, dataType: DataType): Option[String] = {
-      toJson(predicate("=", id, LiteralValue(value, dataType)))
-        .map(json => json.substring(json.indexOf("\"dataType\""), json.length - 3))
-    }
-    assert(literal(null, LongType).contains(""""dataType":"bigint","value":null"""))
-    assert(literal(true, BooleanType).contains(""""dataType":"boolean","value":true"""))
-    assert(literal(1.toByte, ByteType).contains(""""dataType":"tinyint","value":1"""))
-    assert(literal(2.toShort, ShortType).contains(""""dataType":"smallint","value":2"""))
-    assert(literal(1.5f, FloatType).contains(""""dataType":"float","value":1.5"""))
-    // As the double of the same value, which a reader that parses JSON numbers as doubles gets
-    // exactly: parsing 0.1 as a double gives another value than the float 0.1.
-    assert(literal(0.1f, FloatType)
-      .contains(""""dataType":"float","value":0.10000000149011612"""))
-    assert(literal(2.5, DoubleType).contains(""""dataType":"double","value":2.5"""))
-    assert(literal(UTF8String.fromString("a\"b"), StringType)
-      .contains(""""dataType":"string","value":"a\"b""""))
-    // The JSON is ASCII, with the other characters escaped, such as the characters outside the
-    // Basic Multilingual Plane.
-    val text = "x" + new String(Character.toChars(0x1F600)) + new String(Character.toChars(0xE9))
-    val encoded = literal(UTF8String.fromString(text), StringType).get
-    assert(encoded.forall(_ < 128), encoded)
-    assert(new ObjectMapper().readTree(s"{$encoded}").get("value").asText() == text)
-    assert(literal(Array[Byte](1, 2), BinaryType)
-      .contains(""""dataType":"binary","value":"AQI=""""))
-    assert(literal(Decimal("12.30"), DecimalType(10, 2))
-      .contains(""""dataType":"decimal(10,2)","value":"12.30""""))
-    assert(literal(10, DateType).contains(""""dataType":"date","value":10"""))
-    assert(literal(10L, TimestampType).contains(""""dataType":"timestamp","value":10"""))
-    assert(literal(10L, TimestampNTZType).contains(""""dataType":"timestamp_ntz","value":10"""))
-    // Values that JSON cannot represent, and types without an encoding, are not pushed down.
-    assert(literal(Double.NaN, DoubleType).isEmpty)
-    assert(literal(Float.PositiveInfinity, FloatType).isEmpty)
-    assert(literal(UTF8String.fromString("a"), StringType("UTF8_LCASE")).isEmpty)
-    // A JSON string would replace the invalid bytes, which Spark compares.
-    assert(literal(UTF8String.fromBytes(Array(0xFF.toByte)), StringType).isEmpty)
-    assert(literal(null, ArrayType(IntegerType)).nonEmpty)
-    assert(literal(Array(1), ArrayType(IntegerType)).isEmpty)
-
-    // A source compares strings by their bytes, so the columns with strings of a non-binary
-    // collation are not pushed down, and neither are the columns that are not in the schema.
-    def compare(left: String, right: String): Option[String] = {
-      toJson(predicate("=", FieldReference(left.split('.').toSeq),
-        FieldReference(right.split('.').toSeq)))
-    }
-    assert(compare("s", "s").nonEmpty)
-    assert(compare("a.b", "id").nonEmpty)
-    assert(compare("c", "c").isEmpty)
-    assert(compare("s", "c").isEmpty)
-    assert(compare("d", "d").isEmpty)
-    assert(compare("d.e", "d.e").isEmpty)
-    assert(compare("missing", "id").isEmpty)
-    assert(compare("a.missing", "id").isEmpty)
-    assert(compare("id.b", "id").isEmpty)
-  }
-
-  /**
-   * Generates `org/apache/spark/sql/datasource/predicate-cases.json`, which lists predicates as
-   * Spark passes them to `push_predicates`, with the rows of a table for which Spark
-   * finds them true, for libraries to test their pushdown with. Regenerate it with
-   * `SPARK_GENERATE_GOLDEN_FILES=1`.
-   */
-  test("predicate cases") {
-    val schema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING, f FLOAT, b BINARY")
-    def char(codePoint: Int): String = new String(Character.toChars(codePoint))
-    val (emoji, eAcute, replacement) = (char(0x1F600), char(0xE9), char(0xFFFD))
-    def bytes(values: Int*): Array[Byte] = values.map(_.toByte).toArray
-    val rows = Seq(
-      Row(0, 1, 0.0, "a", 0.1f, bytes(0x00)),
-      Row(1, 2, -0.0, "", 1.5f, bytes(0x7F)),
-      Row(2, null, Double.NaN, eAcute, null, bytes(0x80)),
-      Row(3, 3, Double.PositiveInfinity, emoji, 0.1f, bytes(0xFF)),
-      Row(4, 1, Double.NegativeInfinity, null, 0.5f, bytes(0x7F, 0x00)),
-      Row(5, null, 1.5, "ab", 2.0f, bytes()),
-      Row(6, 2, null, "b" + eAcute, 0.25f, null),
-      Row(7, 4, 2.5, replacement, 3.0f, bytes(0x01, 0x02)))
-    val filters = Seq(
-      // NaN is equal to NaN and greater than any other value, and -0.0 is equal to 0.0.
-      "d = 0.0D", "d = -0.0D", "d < 0.0D", "d > 1.0D", "d >= 2.5D", "d <> 0.0D", "d <=> 0.0D",
-      "d IN (0.0D, 1.5D)", "NOT (d > 1.0D)", "NOT (d < 1.0D)", "d IS NULL", "d IS NOT NULL",
-      // Comparisons with null are null, also under NOT.
-      "i = 1", "i = NULL", "i <=> NULL", "NOT (i <=> NULL)", "i IN (1, NULL)",
-      "NOT (i IN (1, NULL))", "NOT (i IN (1, 3))", "i IS NULL OR d > 1.0D",
-      "i > 1 AND d IS NOT NULL",
-      // Strings are compared by their UTF-8 bytes.
-      s"s = '$emoji'", s"s > '$replacement'", "s < 'b'", "startswith(s, 'a')",
-      s"endswith(s, '$eAcute')", s"contains(s, '$emoji')", s"s IN ('', '$eAcute')",
-      // A float literal is the exact value of the float, which a double holds.
-      "f = CAST(0.1 AS FLOAT)", "f > CAST(0.1 AS FLOAT)",
-      // Binary values are compared as unsigned bytes: X'80', X'FF' and X'7F00', which starts with
-      // X'7F', are greater than X'7F'.
-      "b > X'7F'", "b < X'80'",
-      // Taking a part of a predicate under = as true would drop the row whose id is 3.
-      "(id > 3) = (id < 3)")
-
-    val mapper = JsonMapper.builder().enable(JsonWriteFeature.ESCAPE_NON_ASCII).build()
-    def json(value: Any): String = mapper.writeValueAsString(value)
-    def jsonValue(value: Any): String = value match {
-      case d: Double if d.isNaN || d.isInfinite => json(d.toString)
-      // The exact value of the float, as the literals of the predicates.
-      case f: Float => json(f.toDouble)
-      case other => json(other)
-    }
-    val df = spark.createDataFrame(rows.asJava, schema)
-    val cases = filters.map { filter =>
-      val filtered = df.where(filter)
-      // The predicates that Spark pushes for the filter: its conjuncts, with constants folded.
-      val condition = filtered.queryExecution.analyzed.collectFirst {
-        case Filter(condition, _) => condition
-      }.get
-      val predicates = splitConjunctivePredicates(condition.transformUp {
-        case e if e.foldable && !e.isInstanceOf[CatalystLiteral] =>
-          CatalystLiteral.create(e.eval(), e.dataType)
-      }).map { predicate =>
-        DataSourceV2Strategy.translateFilterV2(predicate)
-          .flatMap(NativePredicates.toJson(_, schema))
-          .getOrElse(fail(s"$filter is not pushed down"))
-      }
-      val matches = filtered.select("id").collect().map(_.getInt(0)).sorted
-      s"""    {"sql": ${json(filter)}, "predicates": [${predicates.mkString(", ")}], """ +
-        s""""rows": [${matches.mkString(", ")}]}"""
-    }
-    val generated =
-      s"""{
-         |  "description": ${json("Predicates as Spark passes them to push_predicates of " +
-        "spark_datasource.h, with the ids of the rows of the table for which they are true. A " +
-        "case lists the predicates that Spark pushes for the filter in its SQL, which are " +
-        "combined with AND. A row has a value for each column of the schema; NaN and infinite " +
-        "doubles are strings, floats are written as the doubles of the same values, and binary " +
-        "values are base64 strings.")},
-         |  "schema": ${json(schema.toDDL)},
-         |  "rows": [
-         |${rows.map(row => row.toSeq.map(jsonValue).mkString("    [", ", ", "]")).mkString(",\n")}
-         |  ],
-         |  "cases": [
-         |${cases.mkString(",\n")}
-         |  ]
-         |}
-         |""".stripMargin
-    assert(generated.forall(_ < 128))
-    val file = getWorkspaceFilePath("sql", "core", "src", "main", "resources", "org", "apache",
-      "spark", "sql", "datasource", "predicate-cases.json").toFile
-    if (regenerateGoldenFiles) {
-      Files.createDirectories(file.toPath.getParent)
-      Files.writeString(file.toPath, generated)
-    } else {
-      assert(Files.readString(file.toPath) == generated,
-        s"$file is out of date: regenerate it with SPARK_GENERATE_GOLDEN_FILES=1.")
-    }
-    // The file is in the jar of Spark SQL.
-    assert(getClass.getClassLoader.getResource(
-      "org/apache/spark/sql/datasource/predicate-cases.json") != null)
-  }
-
-  test("comparisons and IN on arrays and structs are not pushed") {
-    val schema = StructType.fromDDL(
-      "a ARRAY<INT>, a2 ARRAY<INT>, s STRUCT<x: INT>, s2 STRUCT<x: INT>")
-    val df = spark.createDataFrame(Seq.empty[Row].asJava, schema)
-    def toJson(filter: String): Option[String] = {
-      val condition = df.where(filter).queryExecution.analyzed.collectFirst {
-        case Filter(condition, _) => condition
-      }.get
-      val predicate = DataSourceV2Strategy.translateFilterV2(condition)
-        .getOrElse(fail(s"$filter is not a Data Source V2 predicate"))
-      NativePredicates.toJson(predicate, schema)
-    }
-    // Spark compares these values with other rules than push_predicates describes, for example
-    // with the nulls in them equal to each other: array(1, null) = array(1, null) is true.
-    Seq("a = a2", "a < a2", "a IN (a2)", "s = s2", "s <=> s2").foreach { filter =>
-      assert(toJson(filter).isEmpty, s"$filter is pushed down")
-    }
-    // Null checks apply to any type, and a field of a struct has its own type.
-    Seq("a IS NULL", "s IS NOT NULL", "s.x = 1", "s.x IN (1, 2)").foreach { filter =>
-      assert(toJson(filter).isDefined, s"$filter is not pushed down")
-    }
-  }
-
   test("tell missing functions from link errors") {
     // A function that the library leaves NULL in its table is an unsupported operation.
     val missing = new NativeLibrary.MissingFunctionException("push_limit")
@@ -534,6 +321,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(df.schema == StructType.fromDDL(
       "id BIGINT, mod INT, name STRING, value DOUBLE, flag BOOLEAN, day DATE, ts TIMESTAMP"))
     checkRows(df, (0L until 20L).map(expectedRow))
+    // The scan is described by the name of the data source.
+    assert(scan(df).description() == "native_range")
+    assert(!df.queryExecution.executedPlan.toString.contains("NativeDataSource"))
     // The data source names are case-insensitive, and so are the option keys.
     checkRows(
       session.read.format("NATIVE_RANGE").option("END", "3").load(),
@@ -558,7 +348,6 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val collated = session.read.schema("id BIGINT, name STRING COLLATE UTF8_LCASE")
       .format("native_range").option("end", "6").load()
     checkRows(collated.filter("name = 'N1'"), Seq(Row(1L, "n1")))
-    assert(scan(collated.filter("name = 'N1'")).getMetaData()("PushedPredicates") == "[]")
 
     val e = intercept[Exception] {
       session.read.schema("id INT").format("native_range").load().collect()
@@ -572,57 +361,15 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "msg" -> "The data has the schema id BIGINT, but the expected schema is id INT."))
   }
 
-  nativeTest("push down predicates") {
-    val df = range(newSession(defaultPackage), "end" -> "20").filter("id > 5 AND id <= 12")
-    checkRows(df, (6L to 12L).map(expectedRow))
-    val pushed = scan(df).getMetaData()("PushedPredicates")
-    assert(pushed.contains("id > 5") && pushed.contains("id <= 12"), pushed)
-    // The scan is described by the name of the data source.
-    assert(scan(df).description() == "native_range")
-    assert(!df.queryExecution.executedPlan.toString.contains("NativeDataSource"))
-
-    // A predicate that the library does not accept is evaluated by Spark.
-    val partly = range(newSession(defaultPackage), "end" -> "20")
-      .filter("id < 10 AND name LIKE 'n1%'")
-    checkRows(partly, Seq(1L).map(expectedRow))
-    assert(scan(partly).getMetaData()("PushedPredicates").contains("id < 10"))
-
-    // Spark evaluates all the predicates again after reading, even the ones that the library
-    // reports as evaluated completely: here, a library that ignores them.
-    val claimed = range(newSession(defaultPackage), "end" -> "20", "claim_predicates" -> "true")
-      .filter("id > 15")
-    checkRows(claimed, (16L until 20L).map(expectedRow))
-    assert(scan(claimed).getMetaData()("PushedPredicates").contains("id > 15"))
-
-    // A library that only uses the predicates to skip data, here by reading the blocks of 10
-    // rows that may match, with all their rows. Spark shows these predicates as pushed too, and
-    // so it does with a value that it does not know.
-    Seq("partial", "7").foreach { use =>
-      val skipping = range(newSession(defaultPackage), "end" -> "45", "predicate_use" -> use)
-        .filter("id > 13 AND id < 27")
-      checkRows(skipping, (14L until 27L).map(expectedRow))
-      val pushed = scan(skipping).getMetaData()("PushedPredicates")
-      assert(pushed.contains("id > 13") && pushed.contains("id < 27"), pushed)
-    }
-
-    // The answers of the library are for the predicates that Spark passes to it: here, not the
-    // first one, which uses another function.
-    val mapped = range(newSession(defaultPackage), "end" -> "20")
-      .filter("upper(name) = 'N1' AND id < 5")
-    checkRows(mapped, Seq(expectedRow(1L)))
-    assert(scan(mapped).getMetaData()("PushedPredicates") == "[id < 5]")
-  }
-
   nativeTest("prune columns") {
     val df = range(newSession(defaultPackage), "end" -> "10").select("name", "id")
     checkRows(df, (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
     assert(scan(df).readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
 
-    // The columns of the pushed predicates are read too, since Spark evaluates the predicates
-    // again after reading, even the ones that the library evaluates completely.
+    // The columns that the query filters on are read too, since Spark filters the rows after
+    // reading.
     val filtered = range(newSession(defaultPackage), "end" -> "10").filter("id > 7").select("name")
     checkRows(filtered, Seq(Row("n8"), Row("n9")))
-    assert(scan(filtered).getMetaData()("PushedPredicates").contains("id > 7"))
     assert(scan(filtered).readSchema() == StructType.fromDDL("id BIGINT, name STRING"))
 
     // A count reads no column at all.
@@ -641,7 +388,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     checkRows(withOffset, (5L until 10L).map(expectedRow))
     assert(scan(withOffset).getMetaData()("PushedLimit") == "LIMIT 10")
 
-    // Spark evaluates the predicates after reading, so it does not push a limit with them.
+    // Spark filters the rows after reading, so it does not push a limit with a filter.
     val filtered = range(newSession(defaultPackage), "end" -> "100").filter("id > 5").limit(3)
     assert(filtered.collect().length == 3)
     assert(!scan(filtered).getMetaData().contains("PushedLimit"))
@@ -1236,10 +983,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("operations that a data source does not support") {
     val session = newSession(defaultPackage, createPackage(readOnlyLibrary, dataSources("ro_")))
-    // The library does not push anything down, so Spark evaluates the filter.
-    val df = session.read.format("ro_native_range").option("end", "10").load().filter("id > 6")
-    checkRows(df, (7L until 10L).map(expectedRow))
-    assert(scan(df).getMetaData()("PushedPredicates") == "[]")
+    // The library does not push anything down: it reads all the columns, and Spark applies the
+    // limit.
+    val df = session.read.format("ro_native_range").option("end", "10").load()
+    val limited = df.select("id").limit(3)
+    assert(limited.collect().length == 3)
+    assert(scan(limited).readSchema() == df.schema)
+    assert(!scan(limited).getMetaData().contains("PushedLimit"))
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
       val e = intercept[Exception](f)

@@ -27,8 +27,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
-import org.apache.spark.sql.connector.expressions.{Literal, NamedReference, Transform}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
+import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -74,11 +73,7 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
       Seq(Row(0L), Row(1L), Row(2L)))
   }
 
-  test("push down predicates, a limit and the required columns") {
-    val filtered = spark.read.format(format).option("end", "10").load().filter("id > 6")
-    checkAnswer(filtered, (7L until 10L).map(id => Row(id, s"name$id")))
-    assert(scan(filtered).getMetaData()("PushedPredicates").contains("id > 6"))
-
+  test("push down a limit and the required columns") {
     val pruned = spark.read.format(format).option("end", "4").load().select("name")
     checkAnswer(pruned, (0L until 4L).map(id => Row(s"name$id")))
     assert(scan(pruned).readSchema() == StructType.fromDDL("name STRING"))
@@ -306,24 +301,10 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 
 case class TestRangePartition(lo: Long, hi: Long) extends InputPartition
 
-/** Accepts the predicates `id > <literal>`. */
 class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: AtomicInteger)
   extends ColumnarBatchPlanner {
-  private var lo = 0L
   private var limit = Long.MaxValue
   private var readSchema = schema
-
-  override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
-    predicates.filter { predicate =>
-      (predicate.name(), predicate.children()) match {
-        case (">", Array(column: NamedReference, literal: Literal[_]))
-            if column.fieldNames().sameElements(Array("id")) =>
-          lo = math.max(lo, literal.value().asInstanceOf[Long] + 1)
-          true
-        case _ => false
-      }
-    }
-  }
 
   override def pushLimit(limit: Int): Boolean = {
     this.limit = limit
@@ -340,10 +321,10 @@ class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: Atom
     if (fail) {
       throw new IllegalStateException("injected planning failure")
     }
-    val hi = if (limit == Long.MaxValue) end else math.min(end, lo + limit)
-    val mid = (lo + hi) / 2
+    val hi = math.min(end, limit)
+    val mid = hi / 2
     ColumnarPlannedBatch(
-      Array(TestRangePartition(lo, mid), TestRangePartition(mid, hi)),
+      Array(TestRangePartition(0, mid), TestRangePartition(mid, hi)),
       new TestRangeReaderFactory(readSchema))
   }
 }

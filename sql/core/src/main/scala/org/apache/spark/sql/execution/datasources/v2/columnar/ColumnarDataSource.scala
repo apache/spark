@@ -20,7 +20,6 @@ import java.util
 
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
-import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.types.StructType
@@ -72,26 +71,19 @@ trait ColumnarDataSource {
 
 /**
  * Plans a batch scan of a [[ColumnarDataSource]], on the driver. Spark pushes operations down by
- * calling, each at most once and in this order, `pushPredicates`, `pushLimit` and `pruneColumns`,
- * then plans the scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the
- * planned scan is serialized to the executors.
+ * calling, each at most once and in this order, `pushLimit` and `pruneColumns`, then plans the
+ * scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the planned scan is
+ * serialized to the executors.
  */
 trait ColumnarBatchPlanner {
-
-  /**
-   * Returns the predicates that the reader uses, to skip data or to only return the rows for which
-   * they are true. Spark evaluates all the predicates after reading anyway, and shows the returned
-   * ones as pushed in the plan.
-   */
-  def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = Array.empty
 
   /** Returns whether the reader returns at most `limit` rows. Spark applies it again anyway. */
   def pushLimit(limit: Int): Boolean = false
 
   /**
    * Returns whether the partitions return exactly the columns of `requiredSchema`, the top-level
-   * columns that the query needs, including the columns of the pushed predicates, instead of all
-   * the columns of the read schema.
+   * columns that the query needs, including the columns that it filters on, instead of all the
+   * columns of the read schema.
    */
   def pruneColumns(requiredSchema: StructType): Boolean = false
 

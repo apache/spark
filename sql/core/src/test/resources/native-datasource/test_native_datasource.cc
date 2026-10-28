@@ -19,30 +19,25 @@
 // spark_datasource.h without any other dependency, building the Arrow C data interface structs by
 // hand. It provides three data sources:
 //
-//   native_range    Reads rows [0, end) with columns of several types. Supports predicate,
-//                   column and limit pushdown. With the option "claim_predicates", it reports
-//                   all the predicates as evaluated completely, but ignores them. With the
-//                   option "predicate_use", it reports the predicates that it evaluates with
-//                   another value: "partial" for SPARK_DS_PREDICATE_PARTIAL, as a reader that
-//                   reads the blocks of 10 rows that may match, or a number. With the option
-//                   "extra", the schema has one more column: "map" adds a map whose entry fields
-//                   are named "keys" and "values", as arrow-rs names them, "struct" adds a
-//                   struct, "decimal256" adds a decimal256, "listview" adds a list view,
-//                   "largelist" adds a large list, and "dictionary" adds a dictionary-encoded
+//   native_range    Reads rows [0, end) with columns of several types. Supports column and limit
+//                   pushdown. With the option "extra", the schema has one more column: "map" adds a
+//                   map whose entry fields are named "keys" and "values", as arrow-rs names them,
+//                   "struct" adds a struct, "decimal256" adds a decimal256, "listview" adds a list
+//                   view, "largelist" adds a large list, and "dictionary" adds a dictionary-encoded
 //                   string column, whose data Spark rejects before reading it. With the option
 //                   "slice", the columns of the batches have an offset of 1. With the option
-//                   "short", an array of the batches has one value fewer than its parent refers
-//                   to, although its buffers hold them all: "id" shortens the column id,
-//                   "entries" the entries of the map and their fields, and "values" the values
-//                   of the entries. "children" exports the batches without their columns, with
-//                   n_children = 0. With the option "null_rows", the struct of a batch has a
-//                   validity buffer that marks its first row as null, and a null_count of 1 for
-//                   "count" or -1 for "unknown"; "unknown_valid" has one without nulls and a
-//                   null_count of -1, and "no_buffer" a null_count of -1 without a validity
-//                   buffer. "column" gives the first column, which has no validity buffer, a
-//                   null_count of -1 instead. With the option "wait_for_interrupt", the stream
-//                   of a partition creates the file <wait_for_interrupt>.waiting, waits until its
-//                   task is killed, and then creates the file <wait_for_interrupt> and fails.
+//                   "short", an array of the batches has one value fewer than its parent refers to,
+//                   although its buffers hold them all: "id" shortens the column id, "entries" the
+//                   entries of the map and their fields, and "values" the values of the entries.
+//                   "children" exports the batches without their columns, with n_children = 0. With
+//                   the option "null_rows", the struct of a batch has a validity buffer that marks
+//                   its first row as null, and a null_count of 1 for "count" or -1 for "unknown";
+//                   "unknown_valid" has one without nulls and a null_count of -1, and "no_buffer" a
+//                   null_count of -1 without a validity buffer. "column" gives the first column,
+//                   which has no validity buffer, a null_count of -1 instead. With the option
+//                   "wait_for_interrupt", the stream of a partition creates the file
+//                   <wait_for_interrupt>.waiting, waits until its task is killed, and then creates
+//                   the file <wait_for_interrupt> and fails.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -467,7 +462,7 @@ void setBatchNulls(const std::string& null_rows, ArrowArray* batch) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// A minimal JSON parser, for the predicates and the offsets
+// A minimal JSON parser, for the offsets
 // ---------------------------------------------------------------------------------------------
 
 struct Json {
@@ -967,8 +962,8 @@ int createReader(void* handle, struct ArrowSchema* schema, void** out) {
     reader->state["hi"] = get(source->options, "end", "10");
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
-    for (const char* option : {"fail", "slice", "short", "null_rows", "claim_predicates",
-                               "predicate_use", "wait_for_interrupt", "task_path"}) {
+    for (const char* option :
+         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -997,60 +992,6 @@ int createStreamReader(void* handle, struct ArrowSchema* schema, void** out) {
     reader->state["bad_offset"] = get(source->options, "bad_offset", "");
     reader->state["closed_path"] = get(source->options, "closed_path", "");
     *out = reader;
-  });
-}
-
-int pushPredicates(void* handle, const char* const* predicates, int64_t count, int32_t* uses) {
-  return guarded([&] {
-    auto* reader = fromHandle<Reader>(handle);
-    auto json = toStrings(predicates, count);
-    int64_t end = getLong(reader->state, "hi", 0);
-    int64_t lo = getLong(reader->state, "lo", 0);
-    int64_t hi = end;
-    // With the option "claim_predicates", reports every predicate as evaluated completely, but
-    // evaluates none of them.
-    if (reader->state["claim_predicates"] == "true") {
-      for (size_t i = 0; i < json.size(); i++) uses[i] = SPARK_DS_PREDICATE_COMPLETE;
-      return;
-    }
-    std::string predicate_use = reader->state["predicate_use"];
-    bool partial = predicate_use == "partial";
-    int32_t use = predicate_use.empty() ? SPARK_DS_PREDICATE_COMPLETE
-                  : partial            ? SPARK_DS_PREDICATE_PARTIAL
-                                       : std::stoi(predicate_use);
-    for (size_t i = 0; i < json.size(); i++) {
-      // Accepts "id <op> <integer literal>" for the comparison operators.
-      Json predicate = JsonParser(json[i]).parse();
-      const Json& children = predicate["children"];
-      std::string op = predicate["name"].text;
-      bool comparison = op == ">" || op == ">=" || op == "<" || op == "<=" || op == "=";
-      bool ok = ID_SIGN == 1 && predicate["type"].text == "function" && comparison &&
-                children.items.size() == 2 && children.items[0]["type"].text == "column" &&
-                children.items[0]["name"].items.size() == 1 &&
-                children.items[0]["name"].items[0].text == "id" &&
-                children.items[1]["type"].text == "literal" &&
-                children.items[1]["value"].kind == Json::kNumber;
-      if (ok) {
-        auto value = static_cast<int64_t>(children.items[1]["value"].number);
-        if (op == ">") lo = std::max(lo, value + 1);
-        if (op == ">=") lo = std::max(lo, value);
-        if (op == "<") hi = std::min(hi, value);
-        if (op == "<=") hi = std::min(hi, value + 1);
-        if (op == "=") {
-          lo = std::max(lo, value);
-          hi = std::min(hi, value + 1);
-        }
-      }
-      uses[i] = ok ? use : SPARK_DS_PREDICATE_UNUSED;
-    }
-    if (partial) {
-      // Reads the blocks of 10 rows that contain matching rows, with all their rows.
-      lo = lo / 10 * 10;
-      hi = std::min(end, (hi + 9) / 10 * 10);
-    }
-    reader->state["lo"] = std::to_string(lo);
-    reader->state["hi"] = std::to_string(std::max(lo, hi));
-    reader->state["predicates"] = std::to_string(json.size());
   });
 }
 
@@ -1399,7 +1340,6 @@ void closeDataWriter(void* handle) {
 #ifndef READ_ONLY
   table.create_stream_reader = createStreamReader;
   table.create_writer = createWriter;
-  table.push_predicates = pushPredicates;
   table.push_limit = pushLimit;
   table.prune_columns = pruneColumns;
   table.initial_offset = initialOffset;

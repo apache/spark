@@ -24,8 +24,7 @@
  * Spark calls them with the Foreign Function and Memory API of Java, so native data sources
  * require Java 22 or later. Each library has its own table, so any number of libraries can be
  * loaded side by side. Spark adapts a native data source to Data Source V2, with batch and
- * micro-batch streaming reads, batch and streaming writes, and predicate, column and limit
- * pushdown.
+ * micro-batch streaming reads, batch and streaming writes, and column and limit pushdown.
  *
  * This header is self-contained: it only depends on the C standard library, and defines the
  * structs of the Arrow C data interface unless they are already defined, as by Arrow C++. A library
@@ -56,11 +55,11 @@
  * write can override, so Spark checks the capabilities of each operation again.
  *
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
- *   by calling, each at most once and in this order, push_predicates, push_limit and
- *   prune_columns, plans the partitions with partitions, serializes the state of the reader with
- *   serialize_reader, and closes it. Then it calls read on the executors, in one task for each
- *   partition. If Spark never plans the partitions, for example to only explain the plan of the
- *   query, it closes the reader once the reader is no longer referenced.
+ *   by calling, each at most once and in this order, push_limit and prune_columns, plans the
+ *   partitions with partitions, serializes the state of the reader with serialize_reader, and
+ *   closes it. Then it calls read on the executors, in one task for each partition. If Spark never
+ *   plans the partitions, for example to only explain the plan of the query, it closes the reader
+ *   once the reader is no longer referenced.
  * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader and
  *   keeps it until the streaming query stops. For each micro-batch, it asks for the latest_offset,
  *   plans the partitions with stream_partitions and serializes the state with
@@ -119,10 +118,8 @@
  * - Memory. What Spark passes to a function, such as strings, byte arrays, SparkDsCreateInfo and
  *   SparkDsWriteInfo, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
- *   Spark fails an operation whose options or column names contain the character U+0000.
- *   The JSON of the predicates is ASCII: it escapes the other characters, which any JSON parser
- *   decodes. The library returns strings and byte arrays by passing them to a SparkDsSink, which
- *   copies them.
+ *   Spark fails an operation whose options or column names contain the character U+0000. The
+ *   library returns strings and byte arrays by passing them to a SparkDsSink, which copies them.
  * - State. Partitions, the state of readers and writers, and commit messages are byte arrays in a
  *   format defined by the library. Spark sends them to the executors and back.
  * - Arrow data. Schemas and data are exchanged with the Arrow C data interface
@@ -180,9 +177,7 @@
  * - Spark only reads the functions that fit in the size of the table of a library, so a library
  *   built against an earlier header keeps working, with the functions that it does not know as
  *   NULL. A library must only read the fields that fit in the size of a struct that Spark passes;
- * - new values may appear where this documentation says so, such as the names of pushed
- *   predicates. Spark only uses a new capability or write mode with a data source that declares
- *   it.
+ * - Spark only uses a new capability or write mode with a data source that declares it.
  * An incompatible change uses a new SPARK_DS_ABI_VERSION: spark_ds_init gets the newest version
  * that Spark supports, the library returns a table of a version that it implements, and Spark
  * rejects a table of a version that it does not support. Spark supports version 1 at least in all
@@ -366,13 +361,6 @@ typedef struct SparkDsWriteInfo {
 #define SPARK_DS_STREAMING_WRITE 8  /* streaming writes, with create_writer */
 #define SPARK_DS_TRUNCATE 16        /* writes with the mode SPARK_DS_WRITE_TRUNCATE */
 
-/* How a reader uses a predicate pushed with push_predicates. */
-#define SPARK_DS_PREDICATE_UNUSED 0 /* not at all */
-/* only to skip data, so it may return rows for which the predicate is not true */
-#define SPARK_DS_PREDICATE_PARTIAL 1
-/* to only return the rows for which the predicate is true */
-#define SPARK_DS_PREDICATE_COMPLETE 2
-
 /*
  * The functions of a library, which spark_ds_init returns. A library sets the functions of the
  * operations it supports, and leaves the others NULL: see "Optional functions" above.
@@ -448,72 +436,8 @@ typedef struct SparkDsLibrary {
    * ------------------------------------------------------------------------------------------- */
 
   /*
-   * Pushes predicates down to the reader. The predicates are combined with AND.
-   *
-   * Each predicate is a JSON expression tree. An expression is one of:
-   * - {"type": "column", "name": ["a", "b"]}: a column. A nested field has a name part for each
-   *   level.
-   * - {"type": "literal", "dataType": "bigint", "value": 1}: a literal. The data type is a Spark
-   *   SQL type name such as int, string or decimal(10,2). The value is null, a JSON boolean or
-   *   number for boolean and numeric types, a string for string, a base64 string for binary, a
-   *   decimal string for decimal, the days since the epoch for date, and the microseconds since
-   *   the epoch for timestamp and timestamp_ntz. Read a literal at the precision of its data type:
-   *   a float literal is the exact value of the float, written as the double of the same value,
-   *   and the values of the integer types, dates and timestamps are exact 64-bit integers, which
-   *   a double does not hold above 2^53. Spark does not pass a string that is not valid UTF-8.
-   * - {"type": "function", "name": ">", "children": [...]}: a predicate, with the name it has in
-   *   org.apache.spark.sql.connector.expressions.filter.Predicate. The names are =, <>, <=>
-   *   (equal, with null equal to null), <, <=, > and >= with two children, IN with the value to
-   *   look for and then the values to look in, IS_NULL and IS_NOT_NULL with one child,
-   *   STARTS_WITH, ENDS_WITH and CONTAINS with the string and the string to look for, AND and OR
-   *   with two predicates, and NOT with one. The children of the other functions are columns,
-   *   literals or predicates.
-   * Spark does not pass predicates that it cannot express this way, such as predicates that use
-   * arithmetic or other functions, nor predicates on columns that contain strings with a
-   * non-binary collation, such as UTF8_LCASE: strings are compared by their UTF-8 bytes. Nor does
-   * it pass comparisons and IN on arrays, maps or structs, whose values Spark compares with other
-   * rules, for example with the nulls in them equal to each other, but only on values of the
-   * other types, such as a field of a struct that is an int. IS_NULL and IS_NOT_NULL apply to
-   * columns of any type. A later version of Spark may pass predicates with other names without
-   * changing SPARK_DS_ABI_VERSION, so a reader must ignore a predicate that contains a name that
-   * it does not know, or a data type that it does not support.
-   *
-   * Spark evaluates all the predicates again after reading, so a reader may use them only to skip
-   * data, for example the files whose statistics show that no row matches. But it must never drop
-   * or skip a row for which the predicates are true under the semantics of Spark SQL, which Spark
-   * cannot detect. In particular:
-   * - For floating-point columns, NaN is equal to NaN and greater than any other value, including
-   *   positive infinity, and -0.0 is equal to 0.0. IEEE 754 comparisons treat NaN differently, and
-   *   total orders, such as f64::total_cmp in Rust or the comparison kernels of arrow-rs, also
-   *   order -0.0 before 0.0. For example, d > 1.0 is true for a NaN value of d, and d = 0.0 for
-   *   -0.0.
-   * - Comparisons with null are null, and a row only matches if the predicates are true. For
-   *   example, NOT (i IN (1, NULL)) matches no row.
-   * - Strings are compared by their UTF-8 bytes, which order the characters outside the Basic
-   *   Multilingual Plane after all the others, unlike comparisons of UTF-16 strings.
-   * - Binary values are compared as unsigned bytes, in lexicographic order: X'80' is greater than
-   *   X'7F', and a value is greater than its prefixes.
-   * - To use only a part of a predicate, a reader may take a part that it does not support as
-   *   true, but only when every function between that part and the root of the predicate is AND
-   *   or OR. Under any other function, such as NOT, or = and <=> between two predicates, that
-   *   would drop rows: (id > 3) = (id < 3) is true for the row whose id is 3, but taking id < 3
-   *   as true makes it false.
-   * The file org/apache/spark/sql/datasource/predicate-cases.json in the jar of Spark SQL lists
-   * predicates as Spark passes them to this function, with the rows of a table for which they are
-   * true, to test a reader with.
-   *
-   * predicates: the count predicates, as JSON
-   * uses: an array of count values, all SPARK_DS_PREDICATE_UNUSED, to set to how the reader uses
-   *       each predicate, a SPARK_DS_PREDICATE_* value. Spark shows the predicates that the reader
-   *       uses as pushed in the plan of the query, and evaluates all the predicates again after
-   *       reading anyway. It takes other values as SPARK_DS_PREDICATE_PARTIAL.
-   */
-  int (*push_predicates)(void* reader, const char* const* predicates, int64_t count,
-                         int32_t* uses);
-
-  /*
    * Pushes a LIMIT down to the reader. Spark only pushes a limit when the query does not filter
-   * the rows, since it evaluates the predicates after reading.
+   * the rows, since it filters them after reading.
    *
    * applied: set to whether the reader returns at most `limit` rows in total. Spark applies the
    *          limit again after reading either way.
@@ -524,8 +448,8 @@ typedef struct SparkDsLibrary {
    * Prunes the columns to read.
    *
    * columns: the names of the count top-level columns that the query needs, which include the
-   *          columns of the pushed predicates. There may be none, for example for
-   *          SELECT count(*): then the batches only have a number of rows.
+   *          columns that it filters on. There may be none, for example for SELECT count(*):
+   *          then the batches only have a number of rows.
    * pruned: set to whether read returns exactly these columns, in this order. If not, it returns
    *         all the columns of the schema to read.
    */
@@ -539,8 +463,8 @@ typedef struct SparkDsLibrary {
   int (*partitions)(void* reader, SparkDsSink add_partition, void* sink);
 
   /*
-   * Serializes the state of the reader that read needs on the executors, such as the pushed
-   * predicates. Spark calls it after partitions.
+   * Serializes the state of the reader that read needs on the executors, such as the pruned
+   * columns. Spark calls it after partitions.
    *
    * set_state: called once with the state, or not at all if there is none
    */
