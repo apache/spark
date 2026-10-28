@@ -908,7 +908,8 @@ class JacksonParser(
   private[sql] def parseIterator[T](
       record: T,
       createParser: (JsonFactory, T) => JsonParser,
-      recordLiteral: T => UTF8String): Iterator[InternalRow] = {
+      recordLiteral: T => UTF8String,
+      closeOnTaskCompletion: Boolean = true): Iterator[InternalRow] = {
     val streamArray = allowArrayAsStructs && schema.isInstanceOf[StructType] &&
       options.singleVariantColumn.isEmpty && options.explodeEmbeddedArray.isEmpty
     val jsonParser = try {
@@ -922,10 +923,10 @@ class JacksonParser(
           _: PartialArrayDataResultException | _: PartialMapDataResultException) =>
         throw badRecord(e, () => recordLiteral(record))
     }
-    // An archive read builds one parser per entry inside a single task, so a closed parser left
-    // reachable from the completion listener keeps its entry's buffer alive for the rest of the
-    // task. Every close path takes the parser out of this cell first, so exactly one of them closes
-    // it and the listener stops retaining it as soon as one does.
+    // A task can read many files, one parser each, so a closed parser left reachable from the
+    // completion listener keeps it and its input alive for the rest of the task. Every close path
+    // takes the parser out of this cell first, so exactly one of them closes it and the listener
+    // stops retaining it as soon as one does.
     val openParser = new AtomicReference(jsonParser)
     def takeParser(): Option[JsonParser] = Option(openParser.getAndSet(null))
     // Cleanup must not fail a read that already emitted rows, nor a task whose iterator was
@@ -1001,7 +1002,9 @@ class JacksonParser(
         Iterator.empty
       case START_ARRAY if streamArray =>
         // Abandoning the iterator before END_ARRAY (e.g. a LIMIT) reaches no eager close.
-        Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeParser()))
+        if (closeOnTaskCompletion) {
+          Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => closeParser()))
+        }
         new Iterator[InternalRow] {
           private var nextRow: InternalRow = _
           private var prepared = false

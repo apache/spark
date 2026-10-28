@@ -22,8 +22,9 @@ import java.nio.charset.{Charset, StandardCharsets}
 import java.nio.file.Files
 import java.sql.{Date, Timestamp}
 import java.time.{Duration, Instant, LocalDate, LocalDateTime, Period, ZoneId, ZoneOffset}
-import java.util.Locale
+import java.util.{Locale, Properties}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicLong}
+import java.util.zip.{ZipEntry, ZipOutputStream}
 
 import com.fasterxml.jackson.core.{JsonFactory, JsonToken}
 import com.fasterxml.jackson.core.util.JsonParserDelegate
@@ -34,6 +35,8 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.apache.spark.{SparkConf, SparkException, SparkRuntimeException, SparkUpgradeException, TestUtils}
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.TaskContext
+import org.apache.spark.TaskContextImpl
+import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.io.ZStdCompressionCodec
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.rdd.RDD
@@ -60,6 +63,7 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.TaskCompletionListener
 import org.apache.spark.util.Utils
 
 class TestFileFilter extends PathFilter {
@@ -1187,7 +1191,7 @@ abstract class JsonSuite
       assert(closes.get() === 1)
       context.markTaskCompleted(None)
       // A second close here would mean the completion listener still held a parser that had already
-      // been closed, which is what keeps an archive entry's buffer alive for the rest of the task.
+      // been closed, which keeps it and its input alive for the rest of the task.
       assert(closes.get() === 1)
     } finally {
       TaskContext.unset()
@@ -1329,6 +1333,66 @@ abstract class JsonSuite
       assert(closed)
     } finally {
       TaskContext.unset()
+    }
+  }
+
+  gridTest("multiline top level JSON array registers a task completion listener only for a file")(
+      Seq("file" -> 1, "archive entry" -> 0)) { case (source, parserListeners) =>
+    withTempDir { dir =>
+      val document = """[{"a":1},{"a":2},{"a":3}]"""
+      val schema = StructType(Seq(StructField("a", IntegerType)))
+      val conf = spark.sessionState.newHadoopConf()
+      val input = source match {
+        case "file" =>
+          val file = new File(dir, "data.json")
+          Files.write(file.toPath, document.getBytes(StandardCharsets.UTF_8))
+          file
+        case "archive entry" =>
+          val archive = new File(dir, "data.zip")
+          Utils.tryWithResource(new ZipOutputStream(new FileOutputStream(archive))) { zip =>
+            Seq("a.json", "b.json").foreach { name =>
+              zip.putNextEntry(new ZipEntry(name))
+              zip.write(document.getBytes(StandardCharsets.UTF_8))
+              zip.closeEntry()
+            }
+          }
+          archive
+      }
+      val partitionedFile = PartitionedFile(
+        InternalRow.empty, SparkPath.fromPathString(input.getCanonicalPath), 0, input.length())
+      // The stream opener and the archive reader register their own listeners, so count only
+      // what streaming adds over the same read parsed eagerly.
+      def listenersAdded(streaming: Boolean): Int = {
+        val options = new JSONOptions(
+          Map("multiLine" -> "true", "enableStreamingTopLevelArray" -> streaming.toString),
+          SQLConf.get.sessionLocalTimeZone)
+        def parser(): JacksonParser = new JacksonParser(schema, options, allowArrayAsStructs = true)
+        val listeners = new AtomicInteger(0)
+        val context = new TaskContextImpl(
+            0, 0, 0, 0, 0, 1, null, new Properties, null, TaskMetrics.empty, 1) {
+          override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
+            listeners.incrementAndGet()
+            super.addTaskCompletionListener(listener)
+          }
+        }
+        TaskContext.setTaskContext(context)
+        try {
+          val rows = source match {
+            case "file" =>
+              MultiLineJsonDataSource.readFile(conf, partitionedFile, parser(), schema)
+            case "archive entry" =>
+              MultiLineJsonDataSource.readArchive(
+                conf, partitionedFile, () => parser(), schema, None)
+          }
+          rows.foreach(_ => ())
+          listeners.get()
+        } finally {
+          context.markTaskCompleted(None)
+          TaskContext.unset()
+        }
+      }
+      assert(
+        listenersAdded(streaming = true) === listenersAdded(streaming = false) + parserListeners)
     }
   }
 

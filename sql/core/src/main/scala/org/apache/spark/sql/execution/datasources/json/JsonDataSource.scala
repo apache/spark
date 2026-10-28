@@ -451,8 +451,9 @@ object MultiLineJsonDataSource extends JsonDataSource {
     if (parser.options.streamMultilineTopLevelArray) {
       safeParser.parseIterator(
         input,
+        // An abandoned parser over `bytes` holds nothing that needs closing.
         input => parser.parseIterator[InputStream](
-          input, streamParser, _ => documentLiteral))
+          input, streamParser, _ => documentLiteral, closeOnTaskCompletion = false))
     } else {
       safeParser.parse(input)
     }
