@@ -84,9 +84,11 @@ Keeping gRPC here means `proto/`, `core/`, and their consumers (`core`, `catalys
 
 The packaging-only `runtime/` module combines the worker modules for Spark
 distributions. It relocates gRPC and protobuf into a UDF-worker namespace while
-leaving Netty unrelocated for Spark's existing native transports. Guava is
-bundled in the UDF-worker namespace because Maven and SBT compile generated
-gRPC stubs against different Guava package names.
+leaving Netty unrelocated for Spark's existing native transports. Both builds
+compile the generated gRPC stubs against `com.google.common`. Maven's inherited
+module shading relocates those references to `org.sparkproject.guava` in the
+packaged jars and SBT does not, so the runtime relocates both names and bundles
+its own Guava.
 
 ## Wire protocol
 

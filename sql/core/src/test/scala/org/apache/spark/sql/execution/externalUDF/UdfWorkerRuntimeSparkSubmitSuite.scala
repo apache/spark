@@ -24,6 +24,7 @@ import java.nio.file.Paths
 import java.util.jar.JarFile
 
 import scala.jdk.CollectionConverters._
+import scala.util.Try
 
 import org.scalatest.Assertions
 import org.scalatest.time.SpanSugar._
@@ -44,11 +45,17 @@ import org.apache.spark.udf.worker.{DirectWorker, ProcessCallable, UDFProtoCommu
 @ExtendedSQLTest
 class UdfWorkerRuntimeSparkSubmitSuite extends SparkSubmitTestUtils {
 
+  import UdfWorkerRuntimeSparkSubmitSuite.{assemblyJarsDir, RuntimeJarPrefix}
   import org.apache.spark.udf.worker.grpc.testing.EchoGrpcWorkerMain
 
   test("packaged UDF worker runtime executes Range(0, 6) with the echo worker") {
     assume(EchoGrpcWorkerMain.udsTransportAvailable,
       "Netty UDS native transport (epoll on Linux or kqueue on macOS) is required")
+    val sparkHome = sys.props.getOrElse("spark.test.home", fail("spark.test.home is not set!"))
+    val jarsDir = assemblyJarsDir(sparkHome)
+    assume(Option(jarsDir.listFiles()).exists(_.exists(_.getName.startsWith(RuntimeJarPrefix))),
+      s"A Spark assembly containing $RuntimeJarPrefix is required in $jarsDir. " +
+        "Build it with build/sbt package or build/mvn install -pl assembly.")
     val javaBin = Paths.get(System.getProperty("java.home"), "bin", "java").toString
     val classPath = System.getProperty("java.class.path")
     val workerMain = classOf[EchoGrpcWorkerMain.type].getName.stripSuffix("$")
@@ -75,27 +82,30 @@ class UdfWorkerRuntimeSparkSubmitSuite extends SparkSubmitTestUtils {
       environmentOverrides = packagedDriverEnvironment())
   }
 
-  // SPARK_PREPEND_CLASSES puts unshaded module classes ahead of the assembly.
-  // The dist classpath also carries unshaded udf-worker jars, including a second
-  // Init.class. Drop those entries and keep the third-party test jars.
+  // SPARK_PREPEND_CLASSES puts unshaded module classes ahead of the assembly. With
+  // SPARK_TESTING the launcher already adds the assembly jars and every test-classes
+  // directory, so the dist classpath carries only the ScalaTest jars that main needs.
+  // The module's test jars would otherwise satisfy dependencies a distribution lacks.
   private def packagedDriverEnvironment(): Map[String, Option[String]] = {
-    val dist = Option(new ProcessBuilder().environment().get("SPARK_DIST_CLASSPATH"))
-    val filtered = dist.map { classpath =>
-      classpath.split(java.io.File.pathSeparator).filterNot(isUnshadedUdfWorker)
-        .mkString(java.io.File.pathSeparator)
-    }.filter(_.nonEmpty)
+    val testSupport = System.getProperty("java.class.path").split(File.pathSeparator)
+      .filter { entry =>
+        val name = new File(entry).getName
+        name.startsWith("scalatest") || name.startsWith("scalactic")
+      }
     Map(
       "SPARK_PREPEND_CLASSES" -> None,
-      "SPARK_DIST_CLASSPATH" -> filtered)
-  }
-
-  private def isUnshadedUdfWorker(entry: String): Boolean = {
-    val path = entry.replace('\\', '/')
-    path.contains("/udf/worker/") || path.contains("spark-udf-worker-")
+      "SPARK_DIST_CLASSPATH" -> Some(testSupport.mkString(File.pathSeparator)))
   }
 }
 
 object UdfWorkerRuntimeSparkSubmitSuite extends Assertions {
+
+  private val RuntimeJarPrefix = "spark-udf-worker-runtime"
+
+  private def assemblyJarsDir(sparkHome: String): File = {
+    val scalaBinary = scala.util.Properties.versionNumberString.split('.').take(2).mkString(".")
+    new File(sparkHome, s"assembly/target/scala-$scalaBinary/jars").getCanonicalFile
+  }
 
   private val InitResource = "org/apache/spark/udf/worker/Init.class"
   private val DispatcherFactory = "org.apache.spark.udf.worker.grpc.DirectDispatcherFactory"
@@ -109,6 +119,11 @@ object UdfWorkerRuntimeSparkSubmitSuite extends Assertions {
     Seq("io/grpc/", "com/google/protobuf/", "com/google/common/", "org/sparkproject/guava/")
   private val GuavaLiterals = Set("com/google/common/", "org/sparkproject/guava/")
   private val RequiredRefs = Seq("io/netty/", "org/sparkproject/spark_udf_worker/guava/")
+  private val UnshippedClasses = Seq(
+    "io.grpc.Channel",
+    "io.perfmark.PerfMark",
+    "com.google.rpc.Status",
+    "com.google.protobuf.Message")
 
   def main(args: Array[String]): Unit = {
     TestUtils.configTestLog4j2("INFO")
@@ -119,10 +134,11 @@ object UdfWorkerRuntimeSparkSubmitSuite extends Assertions {
 
   private def assertPackagedRuntime(): Unit = {
     val loader = classOf[SparkEnv].getClassLoader
+    assertNoTestJarDependencies(loader)
     val initUrls = loader.getResources(InitResource).asScala.toSeq
     assert(initUrls.length == 1, initUrls.mkString("\n"))
     val runtimeJar = jarFile(initUrls.head)
-    assert(runtimeJar.getName.startsWith("spark-udf-worker-runtime"), runtimeJar.getPath)
+    assert(runtimeJar.getName.startsWith(RuntimeJarPrefix), runtimeJar.getPath)
 
     val factoryClass = loader.loadClass(DispatcherFactory)
     assert(codeSource(factoryClass) == runtimeJar, codeSource(factoryClass).getPath)
@@ -132,6 +148,23 @@ object UdfWorkerRuntimeSparkSubmitSuite extends Assertions {
     assert(codeSource(grpcClass) == runtimeJar, codeSource(grpcClass).getPath)
     assertDistinctConnectSource(loader, runtimeJar)
     assertJarLayout(runtimeJar)
+  }
+
+  // A distribution ships none of these. An sbt assembly copies Connect's unshaded gRPC
+  // and protobuf jars, and under SPARK_TESTING the launcher adds core/target/jars, which
+  // holds protobuf-java in a Maven build. None may come from the module's test jars.
+  private def assertNoTestJarDependencies(loader: ClassLoader): Unit = {
+    val sparkHome = sys.env.getOrElse("SPARK_HOME", fail("SPARK_HOME is not set"))
+    val launcherJarDirs = Set(
+      assemblyJarsDir(sparkHome),
+      new File(sparkHome, "core/target/jars").getCanonicalFile,
+      new File(sparkHome, "mllib/target/jars").getCanonicalFile)
+    val leaked = UnshippedClasses.flatMap { name =>
+      Try(loader.loadClass(name)).toOption.map(codeSource)
+        .filterNot(source => launcherJarDirs.contains(source.getParentFile))
+        .map(source => s"$name from $source")
+    }
+    assert(leaked.isEmpty, leaked.mkString("\n"))
   }
 
   // A Connect server is not started. When the shaded Connect class is already
