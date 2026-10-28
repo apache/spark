@@ -29,7 +29,8 @@ import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression =>
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, BooleanType, DataType, IntegerType,
+  StringType}
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -431,8 +432,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse)) =>
       Some(new GeneralAggregateFunc(
         "MODE", isDistinct, Array.empty, Array(generateSortValue(expr, !reverse))))
-    case aggregate.Percentile(
-      PushableExpression(left), PushableExpression(right), LongLiteral(1L), _, _, reverse) =>
+    // A source would interpolate a nanosecond timestamp with its own rounding, not Spark's floor.
+    case p @ aggregate.Percentile(
+      PushableExpression(left), PushableExpression(right), LongLiteral(1L), _, _, reverse)
+        if !p.child.dataType.isInstanceOf[AnyTimestampNanoType] =>
       Some(new GeneralAggregateFunc("PERCENTILE_CONT", isDistinct,
         Array(right), Array(generateSortValue(left, reverse))))
     case aggregate.PercentileDisc(
