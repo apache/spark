@@ -57,7 +57,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf, pythonTiming)
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf, pythonTimingGate)
     val pythonUDF = func.asInstanceOf[PythonUDF]
     val pythonFunction = pythonUDF.func
     val chainedFunc = Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))

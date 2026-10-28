@@ -92,7 +92,7 @@ case class ArrowEvalPythonExec(
   override protected def pythonTimingEvalType: Option[Int] = Some(evalType)
 
   private def pythonRunnerConfMap: Map[String, String] =
-    ArrowPythonRunner.getPythonRunnerConfMap(conf, pythonTiming)
+    ArrowPythonRunner.getPythonRunnerConfMap(conf, pythonTimingGate)
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
