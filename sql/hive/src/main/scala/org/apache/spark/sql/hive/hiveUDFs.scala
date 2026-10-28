@@ -259,11 +259,22 @@ private[hive] case class HiveGenericUDTF(
   @transient
   private lazy val unwrapper = unwrapperFor(outputInspector, elementSchema)
 
+  @transient
+  private lazy val inputExpressions = children.toArray
+
   override def eval(input: InternalRow): IterableOnce[InternalRow] = {
     outputInspector // Make sure initialized.
     // GenerateExec has initialized these children for the partition. A projection would create
-    // fresh stateful copies without initializing them, so keep evaluating the original children.
-    val inputRow = new GenericInternalRow(children.map(_.eval(input)).toArray)
+    // fresh stateful copies without initializing them. Fill the final array directly to avoid
+    // creating an intermediate collection for each row.
+    val expressions = inputExpressions
+    val outputArray = new Array[Any](expressions.length)
+    var i = 0
+    while (i < expressions.length) {
+      outputArray(i) = expressions(i).eval(input)
+      i += 1
+    }
+    val inputRow = new GenericInternalRow(outputArray)
     function.process(wrap(inputRow, wrappers, udtInput, inputDataTypes))
     collector.collectRows()
   }

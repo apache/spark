@@ -106,6 +106,7 @@ case class UserDefinedGenerator(
   extends Generator with CodegenFallback {
 
   @transient private[this] var convertToScala: (InternalRow) => Row = _
+  @transient private lazy val inputExpressions = children.toArray
 
   private def initializeConverters(): Unit = {
     convertToScala = {
@@ -121,8 +122,16 @@ case class UserDefinedGenerator(
       initializeConverters()
     }
     // GenerateExec initializes these children for the partition. A projection would fresh-copy
-    // stateful expressions without initializing the copies, so evaluate the original children.
-    val inputRow = new GenericInternalRow(children.map(_.eval(input)).toArray)
+    // stateful expressions without initializing the copies. Fill the final array directly to
+    // avoid creating an intermediate collection for each row.
+    val expressions = inputExpressions
+    val outputArray = new Array[Any](expressions.length)
+    var i = 0
+    while (i < expressions.length) {
+      outputArray(i) = expressions(i).eval(input)
+      i += 1
+    }
+    val inputRow = new GenericInternalRow(outputArray)
     // Convert the objects into Scala Type before calling function, we need schema to support UDT
     function(convertToScala(inputRow))
   }
