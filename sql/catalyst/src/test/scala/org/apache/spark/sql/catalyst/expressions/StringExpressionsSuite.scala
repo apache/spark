@@ -26,9 +26,10 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, InvalidFormat}
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.Cast._
-import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateUnsafeProjection}
 import org.apache.spark.sql.catalyst.util.CharsetProvider
 import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.ToNumberParser
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
@@ -1638,6 +1639,31 @@ class StringExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       Literal.create(null, IntegerType), Literal.create(null, StringType)), null)
     checkEvaluation(FormatNumber(
       Literal.create(null, IntegerType), Literal.create(null, IntegerType)), null)
+  }
+
+  for ((expression, expected) <- Seq(
+      (ToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (TryToNumber(Literal("12"), Literal("99")), Decimal(12)),
+      (ToCharacter(Literal(Decimal(12)), Literal("99")), "12"))) {
+    test(s"number format evaluator copies isolate parser state: ${expression.prettyName}") {
+      checkEvaluation(expression, expected)
+      val first = expression.freshCopyIfContainsStatefulExpression()
+      val second = expression.freshCopyIfContainsStatefulExpression()
+      assert(first ne expression)
+      assert(second ne first)
+      assert(first.foldable == expression.foldable)
+      checkEvaluation(first, expected)
+      checkEvaluation(second, expected)
+      val contexts = Seq(first, second).map { copy =>
+        val context = new CodegenContext
+        copy.genCode(context)
+        context.references.collect { case parser: ToNumberParser => parser }.toSeq
+      }
+      assert(contexts.forall(_.size == 1))
+      assert(contexts.head.head ne contexts.last.head)
+      checkEvaluation(expression.withNewChildren(Seq(
+        Literal.create(null, expression.children.head.dataType), Literal("99"))), null)
+    }
   }
 
   test("ToNumber: positive tests") {
