@@ -58,3 +58,53 @@ USE default;
 DROP TABLE parse_sql_ctx_a.t;
 DROP DATABASE parse_sql_ctx_a;
 DROP DATABASE parse_sql_ctx_b;
+
+-- known session variable not in the persisted schema
+SELECT get_json_object(
+  parse_sql(
+    'SELECT system.session.v AS x',
+    'ANALYZE',
+    variables => array(named_struct('name', 'system.session.v', 'type', 'INT'))),
+  '$[0].select_list[0].type');
+
+-- known procedure / SQL function parameter by qualified identity
+SELECT get_json_object(
+  parse_sql(
+    'SELECT proc.parm1 AS x',
+    'ANALYZE',
+    variables => array(named_struct('name', 'proc.parm1', 'type', 'STRING'))),
+  '$[0].select_list[0].type');
+
+-- known relation via DDL column list
+SELECT get_json_object(
+  parse_sql(
+    'SELECT a FROM t',
+    'ANALYZE',
+    relations => array(named_struct('name', 't', 'schema', 'a INT'))),
+  '$[0].select_list[0].type');
+
+-- invalid variable type stays JSON
+SELECT get_json_object(
+  parse_sql(
+    'SELECT 1 AS a',
+    'ANALYZE',
+    variables => array(named_struct('name', 'v', 'type', '!!!'))),
+  '$[0].analyze_success');
+SELECT get_json_object(
+  parse_sql(
+    'SELECT 1 AS a',
+    'ANALYZE',
+    variables => array(named_struct('name', 'v', 'type', '!!!'))),
+  '$[0].error.errorClass');
+
+-- supplied relation shadows the matching persistent relation
+CREATE TABLE parse_sql_overlay_t (a BIGINT) USING parquet;
+SELECT get_json_object(
+  parse_sql(
+    'SELECT a FROM parse_sql_overlay_t',
+    'ANALYZE',
+    relations => array(named_struct(
+      'name', 'parse_sql_overlay_t',
+      'schema', 'a STRING'))),
+  '$[0].select_list[0].type');
+DROP TABLE parse_sql_overlay_t;

@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.{
   TemporaryViewRelation,
   UnresolvedCatalogRelation
 }
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SubqueryAlias}
+import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, SubqueryAlias}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.connector.catalog.{
   CatalogManager,
@@ -244,6 +244,12 @@ class RelationResolution(
       finalTimeTravelSpec: Option[TimeTravelSpec]): Option[LogicalPlan] = {
     expandIdentifier(identifier) match {
       case CatalogAndIdentifier(catalog, ident) =>
+        val nameParts = ident.toQualifiedNameParts(catalog)
+        SuppliedRelationRegistry.lookup(nameParts, conf.resolver).map { schema =>
+          // The overlay shadows a persistent object with the same resolved identity.
+          // Temp views have already been checked by the caller.
+          SubqueryAlias(nameParts, LocalRelation(schema))
+        }.orElse {
         val planId = u.getTagValue(LogicalPlan.PLAN_ID_TAG)
         val writePrivileges = u.options.get(UnresolvedRelation.REQUIRED_WRITE_PRIVILEGES)
         val finalOptions = u.clearWritePrivileges.options
@@ -347,7 +353,6 @@ class RelationResolution(
             } yield {
               val updatedRelation = cached.copy(options = finalOptions)
               updatedRelation.copyTagsFrom(cached)
-              val nameParts = ident.toQualifiedNameParts(catalog)
               val aliasedRelation = SubqueryAlias(nameParts, updatedRelation)
               tableCache.update(tableKey, cached.table)
               relationCache.update(key, aliasedRelation)
@@ -372,6 +377,7 @@ class RelationResolution(
               loaded.map(cloneWithPlanId(_, planId))
             }
           }
+        }
       case _ => None
     }
   }

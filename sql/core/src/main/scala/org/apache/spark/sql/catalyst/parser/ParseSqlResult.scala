@@ -25,6 +25,7 @@ import org.json4s._
 import org.json4s.jackson.JsonMethods.{compact, parse => parseJson, render}
 
 import org.apache.spark.{ErrorMessageFormat, SparkThrowable, SparkThrowableHelper}
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
 import org.apache.spark.sql.catalyst.analysis._
 import org.apache.spark.sql.catalyst.expressions._
@@ -38,6 +39,7 @@ import org.apache.spark.sql.execution.{CommandExecutionMode, SparkSqlParser}
 import org.apache.spark.sql.execution.command.{CreateViewCommand, DescribeQueryCommand, ExplainCommand}
 import org.apache.spark.sql.execution.datasources.CreateTempViewUsing
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StructType}
 
 /**
  * Mode for [[ParseSqlResult.fromSql]]. `PARSE` is unresolved. `ANALYZE` types
@@ -61,8 +63,13 @@ object ParseSqlMode {
 case class ParseSqlAnalyzeContext(
     catalog: Option[String] = None,
     schema: Option[String] = None,
-    path: Option[String] = None) {
-  def isEmpty: Boolean = catalog.isEmpty && schema.isEmpty && path.isEmpty
+    path: Option[String] = None,
+    variables: Seq[(String, String)] = Nil,
+    relations: Seq[(String, String)] = Nil) {
+  def isEmpty: Boolean = {
+    catalog.isEmpty && schema.isEmpty && path.isEmpty &&
+      variables.isEmpty && relations.isEmpty
+  }
 }
 
 object ParseSqlAnalyzeContext {
@@ -143,10 +150,10 @@ object ParseSqlResult {
       .orElse(ClassicSparkSession.getDefaultSession)
       .getOrElse(throw QueryExecutionErrors.parseSqlAnalyzeRequiresSession())
     try {
-      withAnalyzeContext(session, context) {
+      withAnalyzeContext(session, context) { env =>
         JArray(parsed.map {
           case ParseFailed(errorObj) => errorObj
-          case Parsed(segment, plan) => analyzeJson(plan, segment, session)
+          case Parsed(segment, plan) => analyzeJson(plan, segment, env)
         }.toList)
       }
     } catch {
@@ -181,6 +188,9 @@ object ParseSqlResult {
     }
   }
 
+  private case class AnalyzeEnv(
+      session: ClassicSparkSession)
+
   /**
    * Analyze `plan` with the active session catalog. Parse metadata is always
    * retained; analysis failures become JSON (`analyze_success` false).
@@ -188,26 +198,28 @@ object ParseSqlResult {
   private def analyzeJson(
       plan: LogicalPlan,
       segment: PositionedSqlStatement,
-      session: ClassicSparkSession): JObject = {
+      env: AnalyzeEnv): JObject = {
     try {
       val analyzed =
-        session.sessionState.executePlan(plan, CommandExecutionMode.SKIP).analyzed
-      successJson(plan, Some(analyzed), None, Some(session), segment)
+        env.session.sessionState.executePlan(plan, CommandExecutionMode.SKIP).analyzed
+      successJson(plan, Some(analyzed), None, Some(env.session), segment)
     } catch {
       case e: SparkThrowable with Throwable =>
-        successJson(plan, None, Some(e), Some(session), segment)
+        successJson(plan, None, Some(e), Some(env.session), segment)
     }
   }
 
   /**
-   * Run `f` with optional catalog / schema / SQL path overrides, then restore
-   * the invoker session. `None` on a field keeps the current value.
+   * Run `f` with optional catalog / schema / SQL path / known-object overrides,
+   * then restore the invoker session. `None` on a field keeps the current value.
    */
   private def withAnalyzeContext[T](
       session: ClassicSparkSession,
-      context: ParseSqlAnalyzeContext)(f: => T): T = {
+      context: ParseSqlAnalyzeContext)(f: AnalyzeEnv => T): T = {
+    val parsedVars = context.variables.map(parseKnownVariable)
+    val parsedRels = context.relations.map(parseKnownRelation)
     if (context.isEmpty) {
-      f
+      f(AnalyzeEnv(session))
     } else {
       val mgr = session.sessionState.catalogManager
       val conf = session.sessionState.conf
@@ -240,7 +252,11 @@ object ParseSqlResult {
           }
           applyPathOverride(mgr, conf, path)
         }
-        f
+        SuppliedVariableRegistry.create(parsedVars).runWith {
+          SuppliedRelationRegistry
+            .create(mgr, parsedRels)
+            .runWith(f(AnalyzeEnv(session)))
+        }
       } finally {
         mgr.setCurrentCatalog(prevCatalog)
         mgr.setCurrentNamespace(prevNamespace)
@@ -277,6 +293,49 @@ object ParseSqlResult {
         mgr.setSessionPath(expanded)
       }
     }
+  }
+
+  private def parseKnownVariable(
+      spec: (String, String)): (Seq[String], DataType) = {
+    val (name, typeDdl) = spec
+    val parts = parseKnownName(name, "variables")
+    val dataType = try {
+      DataType.fromDDL(typeDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("variables", typeDdl)
+    }
+    (parts, dataType)
+  }
+
+  private def parseKnownRelation(
+      spec: (String, String)): (Seq[String], StructType) = {
+    val (name, schemaDdl) = spec
+    val parts = parseKnownName(name, "relations")
+    val dataType = try {
+      DataType.fromDDL(schemaDdl)
+    } catch {
+      case _: ParseException | _: AnalysisException =>
+        throw QueryExecutionErrors.invalidParseSqlContext("relations", schemaDdl)
+    }
+    dataType match {
+      case schema: StructType if schema.nonEmpty => (parts, schema)
+      case _ =>
+        throw QueryExecutionErrors.invalidParseSqlContext("relations", schemaDdl)
+    }
+  }
+
+  private def parseKnownName(name: String, parameter: String): Seq[String] = {
+    val parts = try {
+      parser.get().parseMultipartIdentifier(name)
+    } catch {
+      case _: ParseException =>
+        throw QueryExecutionErrors.invalidParseSqlContext(parameter, name)
+    }
+    if (parts.isEmpty) {
+      throw QueryExecutionErrors.invalidParseSqlContext(parameter, name)
+    }
+    parts
   }
 
   /** Build success JSON from an already-parsed unresolved plan. */
