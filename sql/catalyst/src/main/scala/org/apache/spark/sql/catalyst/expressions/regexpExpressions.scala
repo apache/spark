@@ -87,28 +87,88 @@ abstract class StringRegexExpression extends BinaryExpression
   override def expensive: Boolean = hasExpensiveChild || _expensivePattern
 
   // Heuristic, not designed to be perfect. A pattern that is not foldable is compiled for every
-  // row; a foldable one is left to `isExpensivePattern`.
-  private lazy val _expensivePattern = if (right.foldable) {
-    val str = right.eval()
-    str != null && isExpensivePattern(str.toString)
-  } else {
-    true
+  // row; a foldable one is left to `isExpensivePattern`. Like `ConstantFolding`, evaluate a fresh
+  // copy so that a stateful pattern keeps its state.
+  private lazy val _expensivePattern = !right.foldable || {
+    try {
+      val str = right.freshCopyIfContainsStatefulExpression().eval()
+      str != null && isExpensivePattern(str.toString)
+    } catch {
+      // E.g. a pattern that `ConstantFolding` left in a conditional branch because it throws.
+      case NonFatal(_) => true
+    }
   }
 
   /** Whether matching against the constant pattern `str` is likely to be expensive. */
-  protected def isExpensivePattern(str: String): Boolean
+  protected def isExpensivePattern(str: String): Boolean = true
 }
 
 private[catalyst] object StringRegexExpression {
-  // Quantifiers, which are what make a regex backtrack.
-  private val quantifierPattern = Pattern.compile("[+*{]")
+  /**
+   * Counts the `%` wildcards in a LIKE pattern, skipping escaped characters. Each one becomes a
+   * `.*`, and a failed match tries every combination of their lengths.
+   */
+  def countLikeWildcards(pattern: String, escapeChar: Char): Int = {
+    var count = 0
+    var i = 0
+    while (i < pattern.length) {
+      val c = pattern.charAt(i)
+      if (c == escapeChar) {
+        i += 1
+      } else if (c == '%') {
+        count += 1
+      }
+      i += 1
+    }
+    count
+  }
 
   /**
-   * Heuristic for whether a regex is likely to backtrack: one with a clear start limits the
-   * backtracking, otherwise any quantifier may need it.
+   * Counts the repeating quantifiers (`*`, `+` and `{n,m}`) in a regex, which are what make a
+   * failed match backtrack. Escaped characters, quoted text, character classes and the braces of
+   * `\p{..}`, `\x{..}` and `\N{..}` are skipped, and the `+` or `?` that makes a quantifier
+   * possessive or lazy is not counted again.
    */
-  def isExpensiveRegex(regex: String): Boolean =
-    !regex.startsWith("^") && !regex.startsWith("\\b") && quantifierPattern.matcher(regex).find()
+  def countRegexQuantifiers(regex: String): Int = {
+    var count = 0
+    var classDepth = 0
+    var i = 0
+    // Moves `i` past a `+` or `?` that modifies the quantifier ending at `i`.
+    def skipModifier(): Unit = {
+      if (i + 1 < regex.length && (regex.charAt(i + 1) == '+' || regex.charAt(i + 1) == '?')) {
+        i += 1
+      }
+    }
+    while (i < regex.length) {
+      regex.charAt(i) match {
+        case '\\' if i + 1 < regex.length =>
+          i += 1
+          if (regex.charAt(i) == 'Q') {
+            val end = regex.indexOf("\\E", i)
+            i = if (end < 0) regex.length else end + 1
+          } else if ("pPxN".indexOf(regex.charAt(i)) >= 0 &&
+              i + 1 < regex.length && regex.charAt(i + 1) == '{') {
+            val end = regex.indexOf('}', i)
+            i = if (end < 0) regex.length else end
+          }
+        case '[' => classDepth += 1
+        case ']' if classDepth > 0 => classDepth -= 1
+        case '*' | '+' if classDepth == 0 =>
+          count += 1
+          skipModifier()
+        case '{' if classDepth == 0 =>
+          val end = regex.indexOf('}', i)
+          if (end > i + 1 && regex.charAt(i + 1).isDigit && regex.substring(i, end).contains(',')) {
+            count += 1
+            i = end
+            skipModifier()
+          }
+        case _ =>
+      }
+      i += 1
+    }
+    count
+  }
 
   def expressionToEscapeChar(e: Expression): Char = e match {
     case StringLiteral(v) if v.length == 1 => v.charAt(0)
@@ -181,8 +241,10 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  // A LIKE pattern only has the `%` and `_` wildcards, which do not nest.
-  override protected def isExpensivePattern(str: String): Boolean = false
+  // Each `%` multiplies the cost of a failed match by the input length; two of them are cheap
+  // enough, and `LikeSimplification` rewrites most patterns with fewer.
+  override protected def isExpensivePattern(str: String): Boolean =
+    StringRegexExpression.countLikeWildcards(str, escapeChar) >= 3
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
@@ -536,8 +598,10 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
+  // Like the `%` of LIKE, but `find` also tries every start position, which costs one more
+  // factor of the input length. An anchor does not bound the backtracking within a match.
   override protected def isExpensivePattern(str: String): Boolean =
-    StringRegexExpression.isExpensiveRegex(str)
+    StringRegexExpression.countRegexQuantifiers(str) >= 2
   override def toString: String = s"RLIKE($left, $right)"
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 

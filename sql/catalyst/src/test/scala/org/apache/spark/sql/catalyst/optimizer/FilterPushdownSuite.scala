@@ -61,10 +61,6 @@ class FilterPushdownSuite extends PlanTest {
 
   val testStringRelation = LocalRelation(attrA, attrB, attrE)
 
-  // Stands in for an expensive expression: a regex whose pattern is not a constant is compiled
-  // for every row.
-  private def expensiveRLike(tag: String): Expression = $"e".rlike(Concat(Seq($"e", Literal(tag))))
-
   val testArrayStringRelation = LocalRelation($"a".int, $"s_arr".array(StringType))
 
   val simpleDisjunctivePredicate =
@@ -75,6 +71,10 @@ class FilterPushdownSuite extends PlanTest {
     left.join(right, condition = Some("x.b".attr === "y.b".attr
       && (("x.a".attr > 3) && ("y.a".attr > 13) || ("x.a".attr > 1) && ("y.a".attr > 11)))).analyze
   }
+
+  // Stands in for an expensive expression: a regex whose pattern is not a constant is compiled
+  // for every row.
+  private def expensiveRLike(tag: String): Expression = $"e".rlike(Concat(Seq($"e", Literal(tag))))
 
   // This test already passes.
   test("eliminate subqueries") {
@@ -343,8 +343,11 @@ class FilterPushdownSuite extends PlanTest {
     Seq(
       $"e".rlike("^1"),
       $"e".rlike("magic"),
+      $"e".rlike("^a.*b"),
       $"e".like("1_"),
-      $"e".like("%magic%")).foreach { pred =>
+      $"e".like("%magic%"),
+      // ILIKE, as the optimizer sees it after `ReplaceExpressions`.
+      Like(Lower($"e"), Lower(Literal("%Magic%")), '\\')).foreach { pred =>
       val originalQuery = testStringRelation
         .select($"a", pred as "f")
         .where($"f")
@@ -359,13 +362,15 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
-  test("SPARK-60632: Do not push a filter on an RLIKE alias with a backtracking constant pattern") {
-    val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("(a+)+b") as "f")
-      .where($"f")
-      .analyze
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias with a backtracking pattern") {
+    Seq($"e".rlike("(a+)+b"), $"e".rlike(".*a.*b"), $"e".like("%a%b%c")).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
 
-    comparePlans(Optimize.execute(originalQuery), originalQuery)
+      comparePlans(Optimize.execute(originalQuery), originalQuery)
+    }
   }
 
   test("SPARK-55014: split the projection so a second expensive element sees fewer rows") {

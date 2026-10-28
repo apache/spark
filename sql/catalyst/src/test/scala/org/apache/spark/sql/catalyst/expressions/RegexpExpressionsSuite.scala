@@ -740,23 +740,41 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val str = $"s".string.at(0)
     val pattern = $"p".string.at(1)
 
-    // The subject string is irrelevant; a constant pattern is checked.
-    Seq("^1", "\\b1", "^a.*b", "magic", "a.b").foreach { p =>
+    // The subject string is irrelevant; a constant pattern is checked. Two or more repeating
+    // quantifiers make an RLIKE expensive, anchored or not.
+    Seq("^1", "magic", "a.b", "^a.*b", "2024-.*", "\\d{2,}", "a{3}b*", "a*+b", "(?i)^abc.*",
+      "a\\+b\\*", "[+*{]x+", "\\p{Lu}+", "\\x{41}.*", "\\Q.*+\\E.*").foreach { p =>
       assert(!RLike(str, Literal(p)).expensive, p)
     }
-    Seq(".*magic", "a+b", "(a+)+b", "a{2,}").foreach { p =>
+    Seq(".*a.*b", "^.*a.*a.*a.*b", "\\b.*a.*b", "(a+)+b", "a{2,}b+", "\\d+\\s*", "a+?b.*",
+      "a{1,9}b{1,9}").foreach { p =>
       assert(RLike(str, Literal(p)).expensive, p)
     }
-    Seq("1_", "%magic%", "%a%b%").foreach { p =>
+    // Three or more `%` make a LIKE expensive.
+    Seq("1_", "%magic%", "%a%b", "%a\\%b%", "a_b_c").foreach { p =>
       assert(!Like(str, Literal(p), '\\').expensive, p)
     }
+    assert(!Like(str, Literal("%a#%b#%c%"), '#').expensive)
+    Seq("%a%b%", "%a%a%a%b").foreach { p =>
+      assert(Like(str, Literal(p), '\\').expensive, p)
+    }
+
     // A foldable pattern that is not yet a literal.
     assert(!RLike(str, Concat(Seq(Literal("^"), Literal("a.*")))).expensive)
-    assert(RLike(str, Concat(Seq(Literal("a"), Literal(".*")))).expensive)
+    assert(RLike(str, Concat(Seq(Literal(".*a"), Literal(".*b")))).expensive)
     assert(!RLike(str, Literal.create(null, StringType)).expensive)
+    // A foldable pattern that fails to evaluate is expensive rather than failing the optimizer.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      assert(RLike(str, Cast(Divide(Literal(1), Literal(0)), StringType)).expensive)
+    }
 
     // A non-foldable pattern is compiled for every row.
     assert(RLike(str, pattern).expensive)
     assert(Like(str, pattern, '\\').expensive)
+
+    // An expensive subject wins over a cheap pattern.
+    val udf = ScalaUDF((s: String) => s, StringType, Seq(str), Seq(None))
+    assert(RLike(udf, Literal("^1")).expensive)
+    assert(Like(udf, Literal("1_"), '\\').expensive)
   }
 }
