@@ -20,7 +20,8 @@ import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.Instant
 import java.time.temporal.ChronoUnit.MILLIS
-import java.util.concurrent.{Callable, CompletableFuture, CountDownLatch, ThreadPoolExecutor, TimeoutException, TimeUnit}
+import java.util.Collection
+import java.util.concurrent.{Callable, CompletableFuture, CountDownLatch, LinkedBlockingQueue, ThreadPoolExecutor, TimeoutException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
@@ -1600,6 +1601,67 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         caller.shutdownNow()
         stopper.shutdownNow()
       }
+    }
+  }
+
+  test("Stopping wakes a worker whose request finishes during queue draining") {
+    startParallelAllocator(conf.clone
+      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
+      .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "1s"))
+    val started = new CountDownLatch(1)
+    val response = new CountDownLatch(1)
+    val taking = new CountDownLatch(1)
+    val drained = new CountDownLatch(1)
+    val queue = new LinkedBlockingQueue[Runnable]() {
+      override def take(): Runnable = {
+        // getTask has already observed SHUTDOWN with a nonempty queue. Delay the actual
+        // take until drainTo empties it, so this worker needs another shutdown signal.
+        taking.countDown()
+        assert(drained.await(10, TimeUnit.SECONDS))
+        super.take()
+      }
+
+      override def drainTo(tasks: Collection[_ >: Runnable]): Int = {
+        response.countDown()
+        assert(taking.await(10, TimeUnit.SECONDS))
+        val count = super.drainTo(tasks)
+        drained.countDown()
+        count
+      }
+    }
+    val pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, queue,
+      ThreadUtils.namedThreadFactory("test-draining-pod-creator"))
+    // Install the controlled queue without adding a production hook for this interleaving.
+    val poolField = classOf[ExecutorPodsAllocator].getDeclaredField("podCreationThreadPool")
+    poolField.setAccessible(true)
+    poolField.set(podsAllocatorUnderTest, Some(pool))
+    val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-draining-allocation")
+    mockPodCreation { pod =>
+      started.countDown()
+      assert(response.await(10, TimeUnit.SECONDS))
+      pod
+    }
+    try {
+      val allocation = caller.submit(new Callable[Unit] {
+        override def call(): Unit = {
+          podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
+        }
+      })
+      assert(started.await(10, TimeUnit.SECONDS))
+      eventually(timeout(Span(10, Seconds))) {
+        assert(queue.size() == 1)
+      }
+      podsAllocatorUnderTest.stopAllocation()
+      ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
+      assert(pool.isTerminated, "An idle worker was left blocked after the queue was drained")
+      verify(podResource, times(1)).create()
+      verify(podResource, times(1)).delete()
+    } finally {
+      response.countDown()
+      drained.countDown()
+      pool.shutdownNow()
+      assert(pool.awaitTermination(10, TimeUnit.SECONDS))
+      caller.shutdownNow()
     }
   }
 

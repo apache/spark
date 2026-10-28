@@ -824,6 +824,9 @@ class ExecutorPodsAllocator(
         case future: Future[_] => future.cancel(false)
         case _ =>
       }
+      // A worker may observe a nonempty queue after shutdown, then block in take() after
+      // drainTo empties it. Signal idle workers again without interrupting active API calls.
+      pool.shutdown()
       val timeout = podAllocationShutdownTimeout
       if (!pool.awaitTermination(timeout, TimeUnit.MILLISECONDS)) {
         logWarning(log"Pod creation requests did not finish within " +
