@@ -197,6 +197,13 @@ case class VirtualTableInput(
         val resolver = SchemaInferenceUtils.resolverFor(
           SchemaInferenceUtils.effectiveCaseSensitivity(
             identifier, availableFlows, sessionCaseSensitive))
+        // This read path runs during flow analysis, before GraphValidations
+        // .validateUserSpecifiedSchemas. Validate the declared reserved column(s) here too so a
+        // malformed declaration (e.g. a case-duplicate reserved column) surfaces as the user-facing
+        // AUTOCDC_INVALID_RESERVED_SCHEMA error rather than an opaque internal error from
+        // appendEngineOwnedReservedFields's defense-in-depth guard.
+        AutoCdcReservedNames.validateDeclaredReservedFields(
+          identifier.unquotedString, ss, flowInferredSchema, resolver)
         AutoCdcReservedNames.appendEngineOwnedReservedFields(ss, flowInferredSchema, resolver)
       // Otherwise a declared schema is used directly.
       case Some(ss) => ss

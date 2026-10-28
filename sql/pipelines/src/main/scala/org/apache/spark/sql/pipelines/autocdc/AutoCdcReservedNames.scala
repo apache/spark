@@ -85,9 +85,12 @@ private[pipelines] object AutoCdcReservedNames {
       resolver: Resolver): StructType = {
     val engineReserved = StructType(reservedFields(flowInferredSchema, resolver)).asNullable.fields
 
-    // A declaration carries at most one field matching each engine-owned reserved column;
-    // `validateDeclaredReservedFields` rejects a case-insensitive duplicate upstream, so this guard
-    // is defense-in-depth, provably unreachable from a validated declaration.
+    // A declaration carries at most one field matching each engine-owned reserved column. In both
+    // contexts the declaration is validated first -- at materialization by
+    // GraphValidations.validateUserSpecifiedSchemas before DatasetManager materializes, and on the
+    // same-graph read path by VirtualTableInput.load just before it calls this method -- and
+    // `validateDeclaredReservedFields` rejects a case-insensitive duplicate, so this guard is
+    // defense-in-depth.
     engineReserved.foreach { ef =>
       val matches = declaredSchema.fields.filter(df => resolver(df.name, ef.name))
       if (matches.length > 1) {
@@ -98,9 +101,9 @@ private[pipelines] object AutoCdcReservedNames {
     }
 
     // Rebuild the declared schema in place: a declared reserved field keeps its spelling and
-    // position but takes the engine-owned type/nullability. `validateDeclaredReservedFields`
-    // rejects a reserved-prefixed declared field with no engine counterpart upstream, so
-    // `case None => df` is unreachable from a validated declaration.
+    // position but takes the engine-owned type/nullability. Both contexts validate the
+    // declaration first (see the duplicate guard above), rejecting a reserved-prefixed field with
+    // no engine counterpart, so `case None => df` is defense-in-depth.
     val usedEngineNames = scala.collection.mutable.Set.empty[String]
     val rebuilt = declaredSchema.fields.map { df =>
       if (isReservedFieldName(df.name, resolver)) {
@@ -229,9 +232,9 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * Reconcile a declared data type against its engine-owned counterpart: keep the declared nested
-   * spelling and ordering, take the engine's types and nullability. Recurse through structs -- the
-   * AUTO CDC metadata column is one -- and through array element types, since a sequencing column
-   * can be `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
+   * spelling, take the engine's types, nullability, and field ordering. Recurse through structs --
+   * the AUTO CDC metadata column is one -- and through array element types, since a sequencing
+   * column can be `ARRAY<STRUCT<...>>`; any other shape takes the engine's type as-is.
    */
   private def reconcileReservedType(
       declared: DataType,
@@ -247,25 +250,34 @@ private[pipelines] object AutoCdcReservedNames {
     }
 
   /**
-   * Rebuild `engine`'s struct with the declared nested spelling and ordering: each engine nested
-   * field takes a matching declared field's name (recursively), and engine nested fields the
-   * declaration omitted are appended in canonical form. A declared nested field with no engine
-   * counterpart is kept as-is, as at the outer level.
+   * Rebuild `engine`'s struct in the engine's field order, carrying the declared nested spelling
+   * and metadata: each engine nested field takes a matching declared field's name and comment
+   * (recursively), and engine nested fields the declaration omitted stay in canonical form. The
+   * order is the engine's, not the declaration's. These structs are engine-owned, and a sequencing
+   * struct -- the type of a reserved sequencing field (`${prefix}metadata.upsertSequence` /
+   * `deleteSequence` for SCD1, `recordStartAt` for SCD2) when `SEQUENCE BY` yields a struct -- is
+   * compared positionally during AUTO CDC processing (struct ordering is name-blind). A partial or
+   * reordered declaration must therefore not change the engine's field order: the target stores the
+   * sequencing struct in that order, and a mismatch against the engine-ordered microbatch would
+   * mis-pair the fields -- letting an older event overwrite a newer one in an SCD1 merge, or
+   * mis-ordering the history intervals in SCD2 (SPARK-58118). A declared nested field with no
+   * engine counterpart is rejected upstream by `validateReservedLevel`, so the trailing
+   * `filterNot` is defense-in-depth, unreachable from a validated declaration.
    */
   private def reconcileReservedStruct(
       declared: StructType,
       engine: StructType,
       resolver: Resolver): StructType = {
-    val usedEngineNames = scala.collection.mutable.Set.empty[String]
-    val rebuilt = declared.fields.map { df =>
-      engine.fields.find(ef => resolver(df.name, ef.name)) match {
-        case Some(ef) =>
-          usedEngineNames += ef.name
+    val usedDeclaredNames = scala.collection.mutable.Set.empty[String]
+    val rebuilt = engine.fields.map { ef =>
+      declared.fields.find(df => resolver(df.name, ef.name)) match {
+        case Some(df) =>
+          usedDeclaredNames += df.name
           reconcileReservedField(df, ef, resolver)
-        case None => df
+        case None => ef
       }
     }
-    StructType(rebuilt ++ engine.fields.filterNot(ef => usedEngineNames.contains(ef.name)))
+    StructType(rebuilt ++ declared.fields.filterNot(df => usedDeclaredNames.contains(df.name)))
   }
 
   /**

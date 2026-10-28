@@ -570,11 +570,284 @@ class AutoCdcReservedColumnMaterializationSuite
     val metaStruct = spark.table(s"$catalog.$namespace.target").schema
       .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
       .dataType.asInstanceOf[StructType]
+    // The appended field must land in the engine's order. Reconciliation normalizes every reserved
+    // struct to the engine's field order, not the declaration's: the same code governs the nested
+    // sequencing struct, where order is load-bearing (SCD1 compares sequencing values positionally
+    // and the target's recorded sequencing type must match the flow's), so a declared-order layout
+    // would break those comparisons. This pins the ordering at the metadata level (SPARK-58118).
     assert(
-      metaStruct.fieldNames.toSet == Set(
-        Scd1BatchProcessor.cdcUpsertSequenceFieldName,
-        Scd1BatchProcessor.cdcDeleteSequenceFieldName),
-      "materialization should append the omitted engine nested field, got " +
+      metaStruct.fieldNames.toSeq == Seq(
+        Scd1BatchProcessor.cdcDeleteSequenceFieldName,
+        Scd1BatchProcessor.cdcUpsertSequenceFieldName),
+      "materialization should append the omitted engine nested field in the engine's order, got " +
         metaStruct.fieldNames.mkString(", "))
+  }
+
+  test("a partial declaration of a struct sequencing field keeps the engine's nested field order") {
+    // When SEQUENCE BY yields a struct, the reserved upsertSequence/deleteSequence fields are
+    // themselves structs, and SCD1 compares them positionally (struct ordering is name-blind). A
+    // declared reserved column may list the sequencing sub-struct partially, or in a different
+    // order. If reconciliation kept declared order, the target would store the sequencing struct
+    // in a different field order than the engine-ordered microbatch: the recorded sequencing type
+    // then diverges from the flow's (breaking incremental re-runs, see the two-run test below) and
+    // the positional comparison mis-pairs the fields. Reconciliation must emit the engine's field
+    // order so the stored struct matches what the merge compares against (SPARK-58118).
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    // The engine's sequencing struct is STRUCT<major, minor>; the declaration lists only `minor`.
+    val partialUpsert = new StructType().add("minor", LongType)
+    val metadataType = new StructType().add(ups, partialUpsert)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("major", LongType)
+      .add("minor", LongType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, metadataType)
+
+    // Nullable sequencing fields: the engine makes the reserved sequencing struct nullable
+    // throughout (`asNullable`), so non-null source fields would fail the merge's nullability cast.
+    val stream = MemoryStream[(Int, Option[Long], Option[Long])]
+    stream.addData((1, Some(2L), Some(9L)))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "major", "minor")),
+        keys = Seq("id"),
+        sequencing = functions.struct(functions.col("major"), functions.col("minor"))))
+    }
+    runPipeline(ctx)
+
+    val metaStruct = spark.table(s"$catalog.$namespace.target").schema
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+      .dataType.asInstanceOf[StructType]
+    def seqFieldNames(seqField: String): Seq[String] =
+      metaStruct(seqField).dataType.asInstanceOf[StructType].fieldNames.toSeq
+    // The partially-declared upsertSequence is the negative control: declared order would make it
+    // <minor, major>, which mis-pairs positionally against the engine's <major, minor> microbatch.
+    assert(seqFieldNames(ups) == Seq("major", "minor"),
+      s"upsertSequence should keep the engine order [major, minor], got " +
+        seqFieldNames(ups).mkString(","))
+    // The fully-omitted deleteSequence is appended canonically; it must carry the engine order too.
+    assert(seqFieldNames(del) == Seq("major", "minor"),
+      s"deleteSequence should keep the engine order [major, minor], got " +
+        seqFieldNames(del).mkString(","))
+  }
+
+  test("a reordered full declaration of a struct sequencing field is normalized to engine order") {
+    // The declaration lists BOTH sequencing sub-fields, but swapped relative to the engine. The
+    // field order of an engine-owned sequencing struct is not user-chosen: SCD1 compares it
+    // positionally, so reconciliation must emit the engine's order regardless of the declared order
+    // (SPARK-58118).
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    // Engine sequencing struct is STRUCT<major, minor>; declared swapped as <minor, major>.
+    val reorderedUpsert = new StructType().add("minor", LongType).add("major", LongType)
+    val metadataType = new StructType().add(ups, reorderedUpsert)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("major", LongType)
+      .add("minor", LongType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, metadataType)
+
+    val stream = MemoryStream[(Int, Option[Long], Option[Long])]
+    stream.addData((1, Some(2L), Some(9L)))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "major", "minor")),
+        keys = Seq("id"),
+        sequencing = functions.struct(functions.col("major"), functions.col("minor"))))
+    }
+    runPipeline(ctx)
+
+    val seqStruct = spark.table(s"$catalog.$namespace.target").schema
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+      .dataType.asInstanceOf[StructType](ups).dataType.asInstanceOf[StructType]
+    assert(seqStruct.fieldNames.toSeq == Seq("major", "minor"),
+      s"a swapped declaration should still materialize engine order [major, minor], got " +
+        seqStruct.fieldNames.mkString(","))
+  }
+
+  test("a partial declaration of an array-of-struct sequencing field keeps the engine's element " +
+    "field order") {
+    // SEQUENCE BY can yield ARRAY<STRUCT<...>>, which SCD1 compares element-wise and positionally,
+    // so the array's element struct carries the same reorder hazard as a plain struct. The reserved
+    // array element may be declared partially; reconciliation recurses through the array and must
+    // keep the engine's element field order (SPARK-58118).
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val del = Scd1BatchProcessor.cdcDeleteSequenceFieldName
+    // Engine element struct is STRUCT<major, minor>; the declaration lists only `minor`.
+    val partialElem = new StructType().add("minor", LongType)
+    val metadataType = new StructType().add(ups, ArrayType(partialElem))
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("major", LongType)
+      .add("minor", LongType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, metadataType)
+
+    val stream = MemoryStream[(Int, Option[Long], Option[Long])]
+    stream.addData((1, Some(2L), Some(9L)))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "major", "minor")),
+        keys = Seq("id"),
+        sequencing = functions.array(
+          functions.struct(functions.col("major"), functions.col("minor")))))
+    }
+    runPipeline(ctx)
+
+    val metaStruct = spark.table(s"$catalog.$namespace.target").schema
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+      .dataType.asInstanceOf[StructType]
+    def elemFieldNames(seqField: String): Seq[String] =
+      metaStruct(seqField).dataType.asInstanceOf[ArrayType]
+        .elementType.asInstanceOf[StructType].fieldNames.toSeq
+    // The partially-declared upsertSequence element is the negative control: declared order would
+    // make it <minor, major>.
+    assert(elemFieldNames(ups) == Seq("major", "minor"),
+      s"upsertSequence element should keep the engine order [major, minor], got " +
+        elemFieldNames(ups).mkString(","))
+    assert(elemFieldNames(del) == Seq("major", "minor"),
+      s"deleteSequence element should keep the engine order [major, minor], got " +
+        elemFieldNames(del).mkString(","))
+  }
+
+  test("a declared COMMENT on a nested reserved sequencing field survives the engine-order " +
+    "rebuild") {
+    // reconcileReservedStruct rebuilds a declared reserved struct in the engine's field order,
+    // routing each matched declared field through reconcileReservedField, which keeps the declared
+    // field's name AND metadata (comment) while taking the engine's type/nullability. A declaration
+    // may carry a COMMENT on a NESTED sequencing field; rebuilding in engine order must not drop it
+    // (rebuilding from the engine side instead of the declared field is the nested-metadata-drop
+    // hazard). SEQUENCE BY yields STRUCT<major, minor>; the declaration lists only `minor`, with a
+    // comment, so this also exercises the engine-order append of `major` (SPARK-58118).
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val partialUpsert = new StructType()
+      .add("minor", LongType, nullable = true, "minor tiebreak")
+    val metadataType = new StructType().add(ups, partialUpsert)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("major", LongType)
+      .add("minor", LongType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, metadataType)
+
+    val stream = MemoryStream[(Int, Option[Long], Option[Long])]
+    stream.addData((1, Some(2L), Some(9L)))
+    val ctx = new TestGraphRegistrationContext(spark) {
+      registerTable("target", catalog = Some(catalog), database = Some(namespace),
+        specifiedSchema = Some(declaredSchema))
+      registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+        query = dfFlowFunc(stream.toDF().toDF("id", "major", "minor")),
+        keys = Seq("id"),
+        sequencing = functions.struct(functions.col("major"), functions.col("minor"))))
+    }
+    runPipeline(ctx)
+
+    val seqStruct = spark.table(s"$catalog.$namespace.target").schema
+      .find(_.name == AutoCdcReservedNames.cdcMetadataColName).get
+      .dataType.asInstanceOf[StructType](ups).dataType.asInstanceOf[StructType]
+    // Order is still normalized to the engine's [major, minor]...
+    assert(seqStruct.fieldNames.toSeq == Seq("major", "minor"),
+      s"nested sequencing struct should keep engine order [major, minor], got " +
+        seqStruct.fieldNames.mkString(","))
+    // ...and the declared COMMENT on the nested `minor` field survives the rebuild. A rebuild from
+    // the engine field would drop it -- the negative control for nested-metadata preservation.
+    assert(seqStruct("minor").getComment().contains("minor tiebreak"),
+      "the declared COMMENT on the nested sequencing field should survive the engine-order" +
+        " rebuild, got " + seqStruct("minor").getComment())
+  }
+
+  test("a partial struct-sequencing declaration supports an incremental re-run and keeps the " +
+    "newer row") {
+    // SPARK-58118 end-to-end across two runs. SEQUENCE BY yields STRUCT<major, minor>; the reserved
+    // upsertSequence is declared partially (only `minor`). Run 1 creates the target and writes the
+    // newer row; run 2 re-runs with an older event. On the old declared-first order the
+    // target records the sequencing type as STRUCT<minor, major>, which mismatches the flow's
+    // STRUCT<major, minor>, so run 2 fails with AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT. With
+    // engine-order normalization the types agree, the re-run succeeds, and the older event does not
+    // overwrite the newer row. (The intra-run positional mis-pair the ordering guards against --
+    // an older event winning the >= comparison -- needs multiple microbatches in one run against a
+    // this-run-created target, which this one-run-per-microbatch harness cannot express; the
+    // schema-order tests above pin that root cause directly.)
+    val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
+    val partialUpsert = new StructType().add("minor", LongType)
+    val metadataType = new StructType().add(ups, partialUpsert)
+    val declaredSchema = new StructType()
+      .add("id", IntegerType, nullable = false)
+      .add("payload", StringType)
+      .add("major", LongType)
+      .add("minor", LongType)
+      .add(AutoCdcReservedNames.cdcMetadataColName, metadataType)
+
+    def buildCtx(
+        rows: Seq[(Int, String, Option[Long], Option[Long])]): TestGraphRegistrationContext = {
+      val stream = MemoryStream[(Int, String, Option[Long], Option[Long])]
+      stream.addData(rows: _*)
+      new TestGraphRegistrationContext(spark) {
+        registerTable("target", catalog = Some(catalog), database = Some(namespace),
+          specifiedSchema = Some(declaredSchema))
+        registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+          query = dfFlowFunc(stream.toDF().toDF("id", "payload", "major", "minor")),
+          keys = Seq("id"),
+          sequencing = functions.struct(functions.col("major"), functions.col("minor"))))
+      }
+    }
+
+    // Run 1 writes the newer row: a higher major is newer.
+    runPipeline(buildCtx(Seq((1, "newer", Some(10L), Some(1L)))))
+    // Run 2 delivers an older event (major 9 < 10); it must not overwrite the newer row. On the old
+    // declared-first order the target recorded the sequencing type as STRUCT<minor, major>, so this
+    // re-run is rejected with SEQUENCING_TYPE_DRIFT before any merge runs. With engine-order
+    // normalization the types agree, the merge runs, and the newer row survives.
+    runPipeline(buildCtx(Seq((1, "older", Some(9L), Some(100L)))))
+
+    checkAnswer(
+      spark.table(s"$catalog.$namespace.target").select("id", "payload"),
+      Seq(Row(1, "newer")))
+  }
+
+  test("a same-graph downstream reader surfaces a case-duplicate reserved declaration as a " +
+    "user-facing error, not an internal error") {
+    // VirtualTableInput.load reconciles the declared reserved column on the read path during flow
+    // analysis, which runs before GraphValidations.validateUserSpecifiedSchemas. A malformed
+    // declaration -- here two case-differing reserved columns that both resolve to the single
+    // engine-owned column under case-insensitive analysis -- must surface as the user-facing
+    // AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_COLUMN, not an opaque internal error from
+    // appendEngineOwnedReservedFields's defense-in-depth guard (SPARK-58118). The downstream reader
+    // is what forces the read path during analysis; without it, validateUserSpecifiedSchemas would
+    // already raise the clean error.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val meta = AutoCdcReservedNames.cdcMetadataColName
+      val upperMeta = meta.toUpperCase(Locale.ROOT)
+      val declaredSchema = new StructType()
+        .add("id", IntegerType, nullable = false)
+        .add("version", LongType, nullable = false)
+        .add(meta, scd1MetadataType)
+        .add(upperMeta, scd1MetadataType)
+
+      val stream = MemoryStream[(Int, Long)]
+      stream.addData((1, 5L))
+      val ctx = new TestGraphRegistrationContext(spark) {
+        registerTable("target", catalog = Some(catalog), database = Some(namespace),
+          specifiedSchema = Some(declaredSchema))
+        registerFlow(autoCdcFlow(name = "auto_cdc_flow", target = "target",
+          query = dfFlowFunc(stream.toDF().toDF("id", "version")),
+          keys = Seq("id"), sequencing = functions.col("version")))
+        registerMaterializedView("copy", catalog = Some(catalog), database = Some(namespace),
+          query = readFlowFunc(s"$catalog.$namespace.target"))
+      }
+
+      val ex = intercept[RuntimeException] { runPipeline(ctx) }
+      checkErrorInPipelineFailure(
+        failure = ex,
+        condition = "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_COLUMN",
+        parameters = Map(
+          "tableName" ->
+            fullyQualifiedIdentifier("target", Some(catalog), Some(namespace)).unquotedString,
+          "columnNames" -> s"`$meta`, `$upperMeta`",
+          "engineColumnName" -> meta))
+    }
   }
 }
