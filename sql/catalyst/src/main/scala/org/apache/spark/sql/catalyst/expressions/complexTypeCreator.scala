@@ -397,7 +397,7 @@ object CreateStruct {
    * by users.
    */
   def apply(children: Seq[Expression]): CreateNamedStruct = {
-    CreateNamedStruct(children.zipWithIndex.flatMap {
+    CreateNamedStruct(children.zipWithIndex.flatMap { case (child, index) =>
       // For multi-part column name like `struct(a.b.c)`, it may be resolved into:
       //   1. Attribute if `a.b.c` is simply a qualified column name.
       //   2. GetStructField if `a.b` refers to a struct-type column.
@@ -405,14 +405,17 @@ object CreateStruct {
       //   4. GetMapValue if `a.b` refers to a map-type column.
       // We should always use the last part of the column name (`c` in the above example) as the
       // alias name inside CreateNamedStruct.
-      case (u: UnresolvedAttribute, _) => Seq(Literal(u.nameParts.last), u)
-      case (u @ UnresolvedExtractValue(_, e: Literal), _) if e.dataType.isInstanceOf[StringType] =>
-        Seq(e, u)
-      case (a: Alias, _) => Seq(Literal(a.name), a)
-      case (e: NamedExpression, _) if e.resolved => Seq(Literal(e.name), e)
-      case (e: NamedExpression, _) => Seq(NamePlaceholder, e)
-      case (g @ GetStructField(_, _, Some(name)), _) => Seq(Literal(name), g)
-      case (e, index) => Seq(Literal(s"col${index + 1}"), e)
+      // Temporary resolution wrappers affect neither the name nor the original value expression.
+      val nameExpr = trimTempResolvedColumn(child) match {
+        case u: UnresolvedAttribute => Literal(u.nameParts.last)
+        case UnresolvedExtractValue(_, e: Literal) if e.dataType.isInstanceOf[StringType] => e
+        case a: Alias => Literal(a.name)
+        case e: NamedExpression if e.resolved => Literal(e.name)
+        case _: NamedExpression => NamePlaceholder
+        case GetStructField(_, _, Some(name)) => Literal(name)
+        case _ => Literal(s"col${index + 1}")
+      }
+      Seq(nameExpr, child)
     })
   }
 

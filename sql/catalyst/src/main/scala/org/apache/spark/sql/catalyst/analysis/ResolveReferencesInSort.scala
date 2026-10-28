@@ -16,11 +16,14 @@
  */
 package org.apache.spark.sql.catalyst.analysis
 
+import java.util.IdentityHashMap
+
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.{Expression, SortOrder, WindowExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPlan, Project, Sort}
 import org.apache.spark.sql.catalyst.trees.TreeNodeTag
+import org.apache.spark.sql.catalyst.trees.TreePattern.{AGGREGATE_EXPRESSION, UNRESOLVED_FUNCTION}
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.internal.SQLConf
 
@@ -113,24 +116,57 @@ class ResolveReferencesInSort(val catalogManager: CatalogManager)
 
   private def preserveOriginalFunctions(e: Expression, agg: Aggregate): Expression = {
     import ResolveReferencesInSort._
-    e match {
+    if (!e.containsAnyPattern(UNRESOLVED_FUNCTION, AGGREGATE_EXPRESSION)) {
+      return e
+    }
+
+    // Separate lazy DataFrame branches may share the caller's expression. Own the live tree
+    // before writing tags, and retain one detached snapshot rather than overlapping deep copies
+    // at every nested invocation. The consumer clones saved subtrees before mutating them.
+    val owned = e.clone()
+    val saved = owned.clone()
+    saved.foreach(_.unsetTagValue(ORIGINAL_FUNCTION))
+
+    // Cache negative results too: nested ordinary functions otherwise repeatedly inspect the
+    // same descendants for an explicitly targeted DataFrame attribute.
+    val planIdMemo = new IdentityHashMap[Expression, java.lang.Boolean]()
+    def hasUnresolvedPlanId(expression: Expression): Boolean = {
+      val cached = planIdMemo.get(expression)
+      if (cached != null) {
+        cached.booleanValue()
+      } else {
+        val result = expression match {
+          case u: UnresolvedAttribute => u.containsTag(LogicalPlan.PLAN_ID_TAG)
+          case other => other.children.exists(hasUnresolvedPlanId)
+        }
+        planIdMemo.put(expression, java.lang.Boolean.valueOf(result))
+        result
+      }
+    }
+
+    def preserveChildren(current: Expression, original: Expression): Expression = {
+      // Pair all structural children, including FILTER and WITHIN GROUP. Always use the fresh
+      // snapshot: a previous ORIGINAL_FUNCTION may predate casts or extractors in the live tree.
+      val originals = original.children.iterator
+      current.mapChildren(child => preserve(child, originals.next()))
+    }
+
+    def preserve(current: Expression, original: Expression): Expression = current match {
       // Window aggregates use their own scope, rather than the grouped ORDER BY input scope.
-      case _: WindowExpression => e
+      case _: WindowExpression => current
       // A DataFrame target that could not bind must not fall back to SQL name rebinding.
       case f if (f.isInstanceOf[UnresolvedFunction] || f.isInstanceOf[AggregateExpression]) &&
-          f.exists {
-            case u: UnresolvedAttribute => u.containsTag(LogicalPlan.PLAN_ID_TAG)
-            case _ => false
-          } => f
+          hasUnresolvedPlanId(f) => f
       case ae: AggregateExpression => resolveColWithAgg(ae, agg)
       case f: UnresolvedFunction =>
         if (!f.containsTag(ORIGINAL_FUNCTION) && !f.containsTag(AGGREGATE_INPUT)) {
-          // Save the whole invocation before output resolution can specialize its arguments.
-          f.setTagValue(ORIGINAL_FUNCTION, f.clone().asInstanceOf[UnresolvedFunction])
+          f.setTagValue(ORIGINAL_FUNCTION, original.asInstanceOf[UnresolvedFunction])
         }
-        f.mapChildren(preserveOriginalFunctions(_, agg))
-      case other => other.mapChildren(preserveOriginalFunctions(_, agg))
+        preserveChildren(f, original)
+      case other => preserveChildren(other, original)
     }
+
+    preserve(owned, saved)
   }
 
   private def resolveOrderByAll(

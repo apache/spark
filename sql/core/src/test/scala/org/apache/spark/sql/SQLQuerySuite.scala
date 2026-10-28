@@ -1511,6 +1511,58 @@ class SQLQuerySuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       }
   }
 
+  gridTest("ORDER BY struct preserves grouped field names")(
+    for {
+      singlePassEnabled <- Seq(false, true)
+      scenario <- Seq("DataFrame column", "DataFrame nested field", "DataFrame alias", "SQL column",
+        "SQL nested field", "SQL output alias", "SQL unnamed expression")
+    } yield (singlePassEnabled, scenario)) {
+    case (singlePassEnabled, scenario) =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePassEnabled.toString,
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+        SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+        val (df, expectedAnswer) = scenario match {
+          case "DataFrame column" =>
+            (spark.range(2).groupBy("id").count()
+              .orderBy(struct(col("id")).getField("id").desc),
+              Seq(Row(1L, 1L), Row(0L, 1L)))
+          case "DataFrame nested field" =>
+            (spark.range(2).select(struct(col("id")).as("a")).groupBy("a").count()
+              .orderBy(struct(col("a.id")).getField("id").desc),
+              Seq(Row(Row(1L), 1L), Row(Row(0L), 1L)))
+          case "DataFrame alias" =>
+            (spark.range(2).groupBy("id").count()
+              .orderBy(struct(col("id").as("key")).getField("key").desc),
+              Seq(Row(1L, 1L), Row(0L, 1L)))
+          case "SQL column" =>
+            (sql("""SELECT id FROM VALUES (2), (1) AS t(id)
+                   |GROUP BY id ORDER BY struct(id).id""".stripMargin),
+              Seq(Row(1), Row(2)))
+          case "SQL nested field" =>
+            (sql("""SELECT a FROM VALUES (named_struct('id', 2)), (named_struct('id', 1))
+                   |  AS t(a) GROUP BY a ORDER BY struct(a.id).id""".stripMargin),
+              Seq(Row(Row(1)), Row(Row(2))))
+          case "SQL output alias" =>
+            (sql("""SELECT team, min(score) AS score
+                   |FROM VALUES ('a', 1), ('a', 10), ('b', 2), ('b', 3) AS t(team, score)
+                   |GROUP BY team ORDER BY struct(score).score""".stripMargin),
+              Seq(Row("a", 1), Row("b", 2)))
+          case "SQL unnamed expression" =>
+            (sql("""SELECT id FROM VALUES (2), (1) AS t(id)
+                   |GROUP BY id ORDER BY struct(id + 1).col1""".stripMargin),
+              Seq(Row(1), Row(2)))
+        }
+        assert(df.queryExecution.analyzed.resolved)
+        withSQLConf(
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "false",
+          SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+          SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false") {
+          checkAnswer(df, expectedAnswer)
+        }
+      }
+  }
+
   test("SPARK-7952: fix the equality check between boolean and numeric types") {
     // If ANSI mode is on, Spark disallows comparing Int with Boolean.
     if (!conf.ansiEnabled) {

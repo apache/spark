@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import java.lang.management.ManagementFactory
-import java.util.{TimeZone, UUID}
+import java.util.{Collections, IdentityHashMap, TimeZone, UUID}
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -283,6 +283,116 @@ class AnalysisSuite extends AnalysisTest with Matchers {
       case m: org.apache.spark.sql.catalyst.expressions.aggregate.Max => m.child
     }))
     assert(maxInputs == Seq(selected.toAttribute))
+  }
+
+  private def resolveGroupedSortExpression(expression: Expression): Expression = {
+    val input = LocalRelation($"key".int, $"score".int)
+    val aggregate = input.groupBy(input.output.head)(min(input.output(1)).as("score"))
+    val sort = Sort(Seq(SortOrder(expression, Ascending)), global = true, aggregate)
+    new ResolveReferencesInSort(getAnalyzer.catalogManager).apply(sort)
+      .asInstanceOf[Sort].order.head.child
+  }
+
+  test("SPARK-38951: ORDER BY function snapshots retain a linear expression graph") {
+    import ResolveReferencesInSort.ORIGINAL_FUNCTION
+
+    Seq(8, 32).foreach { depth =>
+      val branches = (0 until 64).map { i =>
+        EqualTo(UnresolvedAttribute("score"), Literal(i)) -> UnresolvedAttribute("score")
+      }
+      val argument = CaseWhen(branches, Some(UnresolvedAttribute("score")))
+      val expression = (0 until depth).foldLeft[Expression](argument) { (child, _) =>
+        UnresolvedFunction("abs", Seq(child), isDistinct = false)
+      }
+      val resolved = resolveGroupedSortExpression(expression)
+      val snapshots = resolved.collect {
+        case f: UnresolvedFunction => f.getTagValue(ORIGINAL_FUNCTION).get
+      }
+      assert(snapshots.size == depth)
+
+      // Count the complete retained graph by identity, including metadata references. Nested
+      // invocations must share the corresponding saved subtrees instead of retaining copies of
+      // the wide CASE expression at every depth.
+      val retained = Collections.newSetFromMap(
+        new IdentityHashMap[Expression, java.lang.Boolean]())
+      def visit(e: Expression): Unit = {
+        if (retained.add(e)) {
+          e.children.foreach(visit)
+          e.getTagValue(ORIGINAL_FUNCTION).foreach(visit)
+        }
+      }
+      snapshots.foreach(visit)
+      assert(retained.size() <= expression.collect { case e => e }.size)
+    }
+  }
+
+  test("SPARK-38951: ORDER BY function snapshots are private to each resolution") {
+    import ResolveReferencesInSort.{AGGREGATE_INPUT, ORIGINAL_FUNCTION}
+
+    def function(name: String): UnresolvedFunction = {
+      UnresolvedFunction(name, Seq(UnresolvedAttribute("score")), isDistinct = false)
+    }
+    val expression = UnresolvedFunction(
+      Seq("percentile_cont"),
+      Seq(function("argument")),
+      isDistinct = false,
+      filter = Some(function("predicate")),
+      orderingWithinGroup = Seq(function("ordering").asc))
+    val first = resolveGroupedSortExpression(expression).asInstanceOf[UnresolvedFunction]
+    val second = resolveGroupedSortExpression(expression).asInstanceOf[UnresolvedFunction]
+
+    // Lazy DataFrame branches can share the caller's expression. Publishing analyzer metadata
+    // must not mutate those shared expressions or expose another branch's mutable live nodes.
+    assert(expression.collect { case f: UnresolvedFunction => f }.forall { f =>
+      !f.containsTag(ORIGINAL_FUNCTION) && !f.containsTag(AGGREGATE_INPUT)
+    })
+    val firstFunctions = first.collect { case f: UnresolvedFunction => f }
+    val secondFunctions = second.collect { case f: UnresolvedFunction => f }
+    assert(firstFunctions.size == 4)
+    firstFunctions.zip(secondFunctions).foreach { case (left, right) =>
+      assert(!(left eq right))
+      val leftSaved = left.getTagValue(ORIGINAL_FUNCTION).get
+      val rightSaved = right.getTagValue(ORIGINAL_FUNCTION).get
+      assert(leftSaved == rightSaved)
+      assert(!(leftSaved eq rightSaved))
+      // ResolveFunctions clones snapshots before adding its classification metadata. Changing a
+      // consumed copy must leave both the saved enclosing invocation and the other branch intact.
+      val consumed = leftSaved.clone().asInstanceOf[UnresolvedFunction]
+      consumed.foreach {
+        case f: UnresolvedFunction => f.setTagValue(AGGREGATE_INPUT, true)
+        case _ =>
+      }
+      assert(!leftSaved.exists(_.containsTag(AGGREGATE_INPUT)))
+      assert(!rightSaved.exists(_.containsTag(AGGREGATE_INPUT)))
+    }
+    val saved = first.getTagValue(ORIGINAL_FUNCTION).get
+    assert(saved == expression)
+    assert(first.arguments.head.getTagValue(ORIGINAL_FUNCTION).get eq saved.arguments.head)
+    assert(first.filter.get.getTagValue(ORIGINAL_FUNCTION).get eq saved.filter.get)
+    assert(first.orderingWithinGroup.head.child.getTagValue(ORIGINAL_FUNCTION).get eq
+      saved.orderingWithinGroup.head.child)
+  }
+
+  test("SPARK-38951: marked ORDER BY functions still preserve newly introduced children") {
+    import ResolveReferencesInSort.{AGGREGATE_INPUT, ORIGINAL_FUNCTION}
+
+    Seq(false, true).foreach { aggregateInput =>
+      val child = UnresolvedFunction(
+        "abs", Seq(Cast(UnresolvedAttribute("score"), LongType)), isDistinct = false)
+      val expression = UnresolvedFunction("abs", Seq(child), isDistinct = false)
+      val oldSnapshot = UnresolvedFunction("abs", Seq(Literal(1)), isDistinct = false)
+      if (aggregateInput) {
+        expression.setTagValue(AGGREGATE_INPUT, true)
+      } else {
+        expression.setTagValue(ORIGINAL_FUNCTION, oldSnapshot)
+      }
+      val resolved = resolveGroupedSortExpression(expression).asInstanceOf[UnresolvedFunction]
+      val savedChild = resolved.arguments.head.getTagValue(ORIGINAL_FUNCTION).get
+      assert(savedChild == child)
+      assert(savedChild.arguments.head.isInstanceOf[Cast])
+      assert(!child.containsTag(ORIGINAL_FUNCTION))
+      assert(!oldSnapshot.containsTag(AGGREGATE_INPUT))
+    }
   }
 
   test("resolve relations") {
