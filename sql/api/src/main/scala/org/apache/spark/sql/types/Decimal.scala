@@ -556,9 +556,23 @@ final class Decimal extends Ordered[Decimal] with Serializable {
     if (that.isZero) null
     else Decimal(toJavaBigDecimal.divide(that.toJavaBigDecimal, scale, RoundingMode.HALF_UP))
 
-  def %(that: Decimal): Decimal =
-    if (that.isZero) null
-    else Decimal(toJavaBigDecimal.remainder(that.toJavaBigDecimal, MATH_CONTEXT))
+  def %(that: Decimal): Decimal = {
+    if (that.isZero) {
+      null
+    } else {
+      val dividend = toJavaBigDecimal
+      val divisor = that.toJavaBigDecimal
+      // Try the context first for speed and for huge trailing-zero quotients that exact division
+      // cannot materialize. On failure, retry without its quotient precision limit: a quotient
+      // wider than the context may still have a representable remainder.
+      val remainder = try {
+        dividend.remainder(divisor, MATH_CONTEXT)
+      } catch {
+        case _: ArithmeticException => dividend.remainder(divisor)
+      }
+      Decimal(remainder)
+    }
+  }
 
   def quot(that: Decimal): Decimal =
     if (that.isZero) null
