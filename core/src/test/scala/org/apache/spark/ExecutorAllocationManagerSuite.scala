@@ -197,8 +197,16 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
   test("SPARK-59561: reconcile() does not resurrect a stage already completed on our side") {
     val conf = createConf(0, 5, 0)
-    val manager = createManager(conf)
     val statusStore = AppStatusStore.createLiveStore(conf)
+    // Not createManager(..): it does not wire statusStoreProvider, so a resurrected stage would
+    // read no ground truth and count as 0, which hides the bug this test is about.
+    ResourceProfile.reInitDefaultProfile(conf)
+    val rpManagerLocal = new ResourceProfileManager(conf, listenerBus)
+    val manager = new ExecutorAllocationManager(client, listenerBus, conf,
+      resourceProfileManager = rpManagerLocal, reliableShuffleStorage = false,
+      statusStoreProvider = () => Some(statusStore))
+    managers += manager
+    manager.start()
 
     val stageInfo = createStageInfo(0, 2)
     stageInfo.submissionTime = Some(System.currentTimeMillis())
@@ -483,6 +491,9 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
       "not double-counted") {
     val conf = createConf(0, 20, 0)
       .set("spark.scheduler.listenerbus.eventqueue.executorManagement.capacity", "1")
+      // AppStatusStore writes live stage updates only once per period; write every one, so the
+      // running task below is visible in its numActiveTasks.
+      .set("spark.ui.liveUpdate.period", "0")
     val customBus = new LiveListenerBus(conf)
     val statusStore = AppStatusStore.createLiveStore(conf)
     customBus.addToStatusQueue(statusStore.listener.get)
@@ -525,6 +536,12 @@ class ExecutorAllocationManagerSuite extends SparkFunSuite {
 
       // 1 already-running task + 2 still-pending tasks = 3 total, matching the stage's real
       // numTasks -- read straight from AppStatusStore's ground truth, no double-counting risk.
+      assert(statusStore.stageAttempt(0, 0)._1.numActiveTasks === 1,
+        "test setup: AppStatusStore should show the started task as active")
+      assert(manager.listener.pendingTasksPerResourceProfile(defaultProfile.id) === 2,
+        "expected 2 pending tasks: 3 in the stage minus 1 already running")
+      assert(manager.listener.totalRunningTasksPerResourceProfile(defaultProfile.id) === 1,
+        "expected the already-running task to be counted as running")
       assert(manager.maxNumExecutorsNeededPerResourceProfile(defaultProfile.id) === 3,
         "expected the pre-existing TaskStart's progress (1 running) to combine correctly " +
           "with the recovered stage's total (3 tasks)")
