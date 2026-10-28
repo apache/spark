@@ -33,7 +33,11 @@ import org.apache.spark.util.ArrayImplicits._
 
 class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
 
-  override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
+  override def apply(plan: LogicalPlan): LogicalPlan = {
+    if (InvokeProcedures.suppressed.get()) plan else invokeProcedures(plan)
+  }
+
+  private def invokeProcedures(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
     case c: Call if c.resolved && c.bound && c.execute && c.checkArgTypes().isSuccess =>
       session.sessionState.optimizer.execute(c) match {
         case Call(ResolvedProcedure(_, _, procedure: BoundProcedure), args, _) =>
@@ -81,5 +85,20 @@ class InvokeProcedures(session: SparkSession) extends Rule[LogicalPlan] {
     require(args.forall(_.foldable), "args must be foldable")
     val values = args.map(_.eval()).toArray
     new GenericInternalRow(values)
+  }
+}
+
+object InvokeProcedures {
+  private val suppressed: ThreadLocal[Boolean] = ThreadLocal.withInitial(() => false)
+
+  /**
+   * Run `f` with CALL left unexecuted by analysis on this thread, including
+   * CALL inside EXECUTE IMMEDIATE. For callers that analyze statements without
+   * running them.
+   */
+  def withoutInvocation[T](f: => T): T = {
+    val previous = suppressed.get()
+    suppressed.set(true)
+    try f finally suppressed.set(previous)
   }
 }
