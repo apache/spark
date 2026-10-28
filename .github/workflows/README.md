@@ -20,12 +20,9 @@ Workflows triggered by `on: pull_request` [count against the base repo's (i.e. t
 
 #### Post-merge builds
 
-Every commit pushed to a branch of this repo, that is every merged PR and every backport, gets a post-merge build, and these builds take a large share of this repo's usage. A committer can run them in their fork instead:
+Every commit pushed to a branch of this repo, that is every merged PR and every backport, gets a post-merge build, and these builds take a large share of this repo's usage. So the build runs in the fork of the committer who pushed the commit, as PR builds run in the fork of the contributor, when GitHub Actions is enabled there.
 
-1. Enable GitHub Actions in the fork, as for PR builds.
-2. Set `POST_MERGE_FORK_REMOTE` to the git remote of the fork, e.g. `export POST_MERGE_FORK_REMOTE=origin`, when running `dev/merge_spark_pr.py`.
-
-The merge script then also pushes each commit to the `post-merge-<branch>` branch of the fork, where it is built with the same jobs as here. The `Build` workflow here finds that run, links it from a `Post-merge build` check on the commit, and skips its own build, and `update_build_status.yml` keeps the check in sync with the fork run. A branch whose workflows predate this, a failed push to the fork, or a run that cannot be found falls back to the build here.
+`dev/merge_spark_pr.py` also pushes each commit to the `post-merge-<branch>` branch of the fork, where it is built with the same jobs as here. The fork is the `origin` remote if GitHub says that it is a fork of apache/spark. Set `POST_MERGE_FORK_REMOTE` to use another remote, or to an empty string to keep your post-merge builds here. The `Build` workflow here finds the run in the fork, links it from a `Post-merge build` check on the commit, and skips its own build, and `update_build_status.yml` keeps the check in sync with the fork run. A branch whose workflows predate this, a failed push to the fork, or a run that cannot be found falls back to the build here.
 
 #### Downsides of avoiding the `pull_request` workflow trigger
 

@@ -66,11 +66,12 @@ SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())
 PR_REMOTE_NAME = os.environ.get("PR_REMOTE_NAME", "apache-github")
 # Remote name which points to Apache git
 PUSH_REMOTE_NAME = os.environ.get("PUSH_REMOTE_NAME", "apache")
-# Remote name which points to your fork of apache/spark on GitHub (optional). When set, every
-# commit this script pushes to PUSH_REMOTE_NAME is also pushed to the post-merge-<branch> branch of
-# the fork, so that its post-merge build runs in the fork instead of apache/spark. See "Post-merge
-# builds" in .github/workflows/README.md.
-POST_MERGE_FORK_REMOTE = os.environ.get("POST_MERGE_FORK_REMOTE", "")
+# Remote name which points to your fork of apache/spark on GitHub. Every commit this script pushes
+# to PUSH_REMOTE_NAME is also pushed to the post-merge-<branch> branch of the fork, so that its
+# post-merge build runs in the fork instead of apache/spark. See "Post-merge builds" in
+# .github/workflows/README.md. When unset, "origin" is used if it is a fork of apache/spark; set it
+# to an empty string to not push to a fork.
+POST_MERGE_FORK_REMOTE = os.environ.get("POST_MERGE_FORK_REMOTE")
 # ASF JIRA username
 JIRA_USERNAME = os.environ.get("JIRA_USERNAME", "")
 # ASF JIRA password
@@ -841,15 +842,49 @@ def clean_up():
             git.run("git branch -D %s" % branch)
 
 
+# Set in main() by resolve_post_merge_fork_remote(): the remote to push post-merge builds to, or ""
+# to not push them.
+post_merge_fork_remote = ""
+
+
+def resolve_post_merge_fork_remote():
+    """Return the remote to push post-merge builds to, or "" to not push them.
+
+    POST_MERGE_FORK_REMOTE if it is set, even to "". Otherwise "origin", but only if GitHub says
+    that it is a fork of apache/spark, so that a clone whose origin is apache/spark itself never
+    pushes post-merge-* branches there.
+    """
+    if POST_MERGE_FORK_REMOTE is not None:
+        return POST_MERGE_FORK_REMOTE
+    try:
+        url = git.run("git remote get-url origin").strip()
+    except subprocess.CalledProcessError:
+        return ""
+    match = re.search(r"github\.com[:/]([^/]+)/([^/]+?)(?:\.git)?/?$", url)
+    if not match:
+        return ""
+    # Not get_json: it exits on errors, and this check must never stop a merge.
+    try:
+        request = Request("https://api.github.com/repos/%s/%s" % match.groups())
+        if GITHUB_OAUTH_KEY:
+            request.add_header("Authorization", "token %s" % GITHUB_OAUTH_KEY)
+        repo = json.load(urlopen(request))
+    except Exception as e:
+        print_error("Unable to check whether origin is a fork of apache/spark: %s" % e)
+        return ""
+    parent = (repo.get("parent") or {}).get("full_name", "")
+    return "origin" if repo.get("fork") and parent.lower() == "apache/spark" else ""
+
+
 def push_post_merge_build(local_ref, target_ref):
-    """Push `local_ref`, just pushed to `target_ref`, to POST_MERGE_FORK_REMOTE if it is set.
+    """Push `local_ref`, just pushed to `target_ref`, to the post-merge fork if there is one.
 
     The fork then runs the post-merge build of the commit, and apache/spark links that run instead
     of running the build itself (see .github/workflows/build_main.yml). Branches whose
     build_main.yml predates this are not pushed. For them, and if this push fails, apache/spark
     runs the post-merge build as usual.
     """
-    if not POST_MERGE_FORK_REMOTE:
+    if not post_merge_fork_remote:
         return
     try:
         workflow = git.run(["git", "show", "%s:.github/workflows/build_main.yml" % local_ref])
@@ -858,15 +893,15 @@ def push_post_merge_build(local_ref, target_ref):
     if "post-merge-" not in workflow:
         print(
             "%s does not run post-merge builds in forks; not pushing to %s."
-            % (target_ref, POST_MERGE_FORK_REMOTE)
+            % (target_ref, post_merge_fork_remote)
         )
         return
     try:
-        git.push_post_merge(POST_MERGE_FORK_REMOTE, local_ref, target_ref)
+        git.push_post_merge(post_merge_fork_remote, local_ref, target_ref)
     except Exception as e:
         print_error(
             "Exception while pushing to %s, so apache/spark runs the post-merge build: %s"
-            % (POST_MERGE_FORK_REMOTE, e)
+            % (post_merge_fork_remote, e)
         )
 
 
@@ -2379,7 +2414,7 @@ def build_arg_parser():
 
 
 def main():
-    global git, github, jira_ops, original_head
+    global git, github, jira_ops, original_head, post_merge_fork_remote
     args = build_arg_parser().parse_args()
     if args.dry_run:
         # Swap the outbound clients for their logging-only variants; everything else is unchanged.
@@ -2387,9 +2422,9 @@ def main():
         github = DryRunGitHub()
         print(
             bold(
-                "=== DRY-RUN: read-only steps run for real, but the git push to %s, the GitHub "
-                "PR close/comment, and all JIRA writes are suppressed and only logged. ==="
-                % PUSH_REMOTE_NAME
+                "=== DRY-RUN: read-only steps run for real, but the git pushes to %s and the "
+                "post-merge fork, the GitHub PR close/comment, and all JIRA writes are suppressed "
+                "and only logged. ===" % PUSH_REMOTE_NAME
             )
         )
 
@@ -2399,6 +2434,12 @@ def main():
 
     os.chdir(SPARK_HOME)
     original_head = get_current_ref()
+    post_merge_fork_remote = resolve_post_merge_fork_remote()
+    if post_merge_fork_remote:
+        print(
+            "Post-merge builds run in the fork at remote %s (POST_MERGE_FORK_REMOTE)."
+            % post_merge_fork_remote
+        )
 
     branches = get_json("%s/branches" % GITHUB_API_BASE)
     branch_names = list(filter(lambda x: x.startswith("branch-"), [x["name"] for x in branches]))
