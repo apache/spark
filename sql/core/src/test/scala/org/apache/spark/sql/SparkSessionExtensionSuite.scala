@@ -560,6 +560,32 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-60483: a shared extension is applied last-win with user-list repeats kept") {
+    // The shared extension must run only at its user-list positions; plain concatenation,
+    // first-win, and whole-list distinct all give a different rule order here.
+    val appender = new LogAppender("SPARK-60483 dedup warning")
+    withLogAppender(appender) {
+      val session = SparkSession.builder()
+        .master("local[1]")
+        .config(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key, classOf[MyExtensions].getCanonicalName)
+        .config(SPARK_SESSION_EXTENSIONS.key, Seq(
+          classOf[MyExtensions].getCanonicalName,
+          classOf[MyExtensions2].getCanonicalName,
+          classOf[MyExtensions].getCanonicalName).mkString(","))
+        .getOrCreate()
+      try {
+        val rules = session.sessionState.analyzer.extendedResolutionRules
+        assert(rules.filter(r => r == MyRule(session) || r == MyRule2(session)) ===
+          Seq(MyRule(session), MyRule2(session), MyRule(session)))
+      } finally {
+        stop(session)
+      }
+    }
+    val messages = appender.loggingEvents.map(_.getMessage.getFormattedMessage)
+    assert(messages.exists(m => m.contains(SPARK_SESSION_EXTENSIONS_DEFAULT_LIST.key) &&
+      m.contains(SPARK_SESSION_EXTENSIONS.key) && m.contains("it is applied where it appears")))
+  }
+
   test("use the last registered function name when there are duplicates") {
     val session = SparkSession.builder()
       .master("local[1]")
