@@ -366,6 +366,13 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   * A catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or
+   * {@code CREATE OR REPLACE TABLE} here only after Spark has dropped the existing table; a
+   * {@link StagingTableCatalog} gets {@code stageReplace} or {@code stageCreateOrReplace}
+   * instead, before anything is dropped.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
@@ -376,10 +383,8 @@ public interface TableCatalog extends CatalogPlugin {
    *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported, or
-   *         if the table info requests a write distribution or ordering; see
-   *         {@link TableCatalogCapability}. For a {@code REPLACE TABLE} this comes after Spark has
-   *         dropped the table, because only a {@link StagingTableCatalog} is asked first.
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @since 4.1.0
    */

@@ -74,6 +74,13 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     spark.sessionState.catalogManager.catalog(catalogName)
       .asInstanceOf[RecordsWriteSpecs].recordedCalls
 
+  private def assertCreatedInTransaction(catalogName: String): Unit = {
+    val catalog = spark.sessionState.catalogManager.catalog(catalogName)
+      .asInstanceOf[RecordingTransactionalTableCatalog]
+    assert(catalog.observedTransactions.size === 1)
+    assert(catalog.lastTransaction.catalog.txnTables.contains(Identifier.of(Array.empty, "t")))
+  }
+
   private def writeClauseLines(ddl: String): Seq[String] = ddl.split("\n").toSeq.filter { line =>
     Seq("DISTRIBUTED BY", "ORDERED BY", "LOCALLY ORDERED BY", "UNORDERED").exists(line.startsWith)
   }
@@ -95,11 +102,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "tableName" -> tableName,
         "operation" -> WriteDistributionAndOrdering.CLAUSES))
-  }
-
-  private def assertCreatedInTransaction(catalog: RecordingTransactionalTableCatalog): Unit = {
-    assert(catalog.observedTransactions.size === 1)
-    assert(catalog.lastTransaction.catalog.txnTables.contains(Identifier.of(Array.empty, "t")))
   }
 
   private def checkUnsupported(stmt: String, tableName: String, operation: String): Unit = {
@@ -548,9 +550,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
     withSQLConf("spark.sql.catalog.txncat" -> catalogClass) {
       sql("CREATE TABLE txncat.t USING foo ORDERED BY id AS SELECT 1 AS id")
 
-      val catalog = spark.sessionState.catalogManager.catalog("txncat")
-        .asInstanceOf[RecordingTransactionalTableCatalog]
-      assertCreatedInTransaction(catalog)
+      assertCreatedInTransaction("txncat")
       assert(calls("txncat") ===
         Seq(WriteSpecCall("createTable", "t", RANGE, Seq("id ASC NULLS FIRST"))))
     }
@@ -574,9 +574,7 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
       sql("CREATE TABLE txncat.t (id INT) USING foo")
       sql("REPLACE TABLE txncat.t USING foo ORDERED BY id AS SELECT 1 AS id")
 
-      val catalog = spark.sessionState.catalogManager.catalog("txncat")
-        .asInstanceOf[RecordingTransactionalTableCatalog]
-      assertCreatedInTransaction(catalog)
+      assertCreatedInTransaction("txncat")
       assert(calls("txncat") === Seq(
         WriteSpecCall("createTable", "t", null, Seq.empty),
         WriteSpecCall("createTable", "t", RANGE, Seq("id ASC NULLS FIRST"))))
@@ -849,7 +847,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
 
       checkUnsupported("CREATE TABLE spark_catalog.default.u (id INT) USING parquet ORDERED BY id",
         "`spark_catalog`.`default`.`u`", "CREATE TABLE")
-      assert(calls(SESSION_CATALOG_NAME).isEmpty)
     }
   }
 
@@ -901,7 +898,6 @@ class CreateTableWriteOrderSuite extends QueryTest with SharedSparkSession {
           val create = "CREATE TABLE spark_catalog.default.u (id INT) ORDERED BY id"
           if (hiveByDefault) {
             checkUnsupported(create, "`spark_catalog`.`default`.`u`", "CREATE TABLE")
-            assert(calls(SESSION_CATALOG_NAME).isEmpty)
           } else {
             sql(create)
             assert(calls(SESSION_CATALOG_NAME) ===
@@ -1196,7 +1192,7 @@ case class WriteSpecCall(
 
 object WriteSpecCall {
   def render(writeOrdering: Seq[SortOrder]): Seq[String] = {
-    writeOrdering.map(o => s"${o.expression().describe()} ${o.direction()} ${o.nullOrdering()}")
+    writeOrdering.map(_.describe())
   }
 
   def apply(

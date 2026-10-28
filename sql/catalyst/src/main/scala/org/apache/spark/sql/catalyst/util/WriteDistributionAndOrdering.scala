@@ -22,7 +22,6 @@ import java.time.ZoneOffset
 import scala.util.{Failure, Success, Try}
 import scala.util.control.NonFatal
 
-import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.analysis.Resolver
 import org.apache.spark.sql.catalyst.expressions.{Literal => CatalystLiteral}
 import org.apache.spark.sql.catalyst.parser.ParserInterface
@@ -30,7 +29,7 @@ import org.apache.spark.sql.catalyst.plans.logical.CreateTable
 import org.apache.spark.sql.connector.catalog.{CatalogPlugin, Identifier, Table, TableCatalog, TableCatalogCapability, TableInfo, WriteDistributionMode}
 import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, GetArrayItem, IdentityTransform, Literal, NamedReference, SortOrder, Transform, VariantGet}
 import org.apache.spark.sql.connector.expressions.filter.PartitionPredicate
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.internal.connector.{ExpressionWithToString, ToStringSQLBuilder}
 import org.apache.spark.sql.types.{DataType, FloatType, StructField, StructType, TimestampLTZNanosType, TimestampType}
 import org.apache.spark.unsafe.types.TimestampNanosVal
@@ -98,10 +97,7 @@ object WriteDistributionAndOrdering {
   def rejectRequested(catalog: CatalogPlugin, ident: Identifier, tableInfo: TableInfo): Unit = {
     if (isRequested(
         tableInfo.writeDistributionMode(), tableInfo.writeOrdering().toImmutableArraySeq)) {
-      val error = QueryCompilationErrors.unsupportedTableOperationError(catalog, ident, CLAUSES)
-        .asInstanceOf[SparkThrowable]
-      throw new SparkUnsupportedOperationException(
-        error.getCondition, error.getMessageParameters)
+      throw QueryExecutionErrors.unsupportedTableOperationError(catalog, ident, CLAUSES)
     }
   }
 
@@ -199,16 +195,16 @@ object WriteDistributionAndOrdering {
 
   /**
    * Parses `clauses` with `parser` in a minimal statement whose parse depends only on them, and
-   * returns the write distribution and ordering it declares, or None when it does not parse. The
-   * statement's partitioning is there only so that the parser accepts `DISTRIBUTED BY PARTITION`.
+   * returns the write distribution and ordering it declares. A statement that does not parse
+   * throws, which [[writeClausesSQL]] treats as no match. The statement's partitioning is there
+   * only so that the parser accepts `DISTRIBUTED BY PARTITION`.
    */
   def replayWith(parser: ParserInterface)(
       clauses: String): Option[(WriteDistributionMode, Seq[SortOrder])] = {
-    attempt(parser.parsePlan(s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses")).toOption
-      .flatMap {
-        case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
-        case _ => None
-      }
+    parser.parsePlan(s"CREATE TABLE t USING foo PARTITIONED BY (p) $clauses") match {
+      case c: CreateTable => Some((c.writeDistributionMode, c.writeOrdering))
+      case _ => None
+    }
   }
 
   /**

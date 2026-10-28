@@ -179,8 +179,9 @@ as any order. For example, you can write COMMENT table_comment after TBLPROPERTI
     renders, every column they reference exists, and parsing them in the current session gives
     back the same pair. A sort key with a `TRUE`, `FALSE` or `NULL` argument, for example, is read
     back as a column reference when that keyword is not reserved, so it is not reproduced.
-    `DESCRIBE TABLE EXTENDED` reports the requested values whether or not `SHOW CREATE TABLE` can
-    reproduce them.
+    `DESCRIBE TABLE EXTENDED` reports the write distribution and ordering that the table declares,
+    which can differ from the requested ones, whether or not `SHOW CREATE TABLE` can reproduce
+    them.
 
 * **AS select_statement**
 

@@ -257,13 +257,13 @@ class WriteDistributionAndOrderingUtilsSuite extends SparkFunSuite with SQLHelpe
 
   test("a clause that quoting cannot change is replayed once") {
     val replays = new AtomicInteger(0)
-    val countingReplay = (_: String) => {
+    val countingReplay = (clauses: String) => {
       replays.incrementAndGet()
-      None
+      replay(clauses)
     }
-    assert(
-      writeClausesSQL(WriteDistributionMode.NONE, Seq.empty, Seq.empty, schema, countingReplay)
-        .isEmpty)
+    val keys = Seq(key(FieldReference(Seq("missing-col"))))
+    assert(writeClausesSQL(WriteDistributionMode.RANGE, keys, Seq.empty, schema, countingReplay)
+      .isEmpty)
     assert(replays.get === 1)
   }
 
