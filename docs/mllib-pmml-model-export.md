@@ -24,7 +24,7 @@ license: |
 
 ## spark.mllib supported models
 
-`spark.mllib` supports model export to Predictive Model Markup Language ([PMML](http://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
+`spark.mllib` supports model export to Predictive Model Markup Language ([PMML](https://en.wikipedia.org/wiki/Predictive_Model_Markup_Language)).
 
 The table below outlines the `spark.mllib` models that can be exported to PMML and their equivalent PMML model.
 
