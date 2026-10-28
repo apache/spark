@@ -20,7 +20,8 @@ license: |
 
 Spark Connect ships with every Spark release since 3.4 and supports PySpark and Scala
 applications. For what Spark Connect is and how it differs from classic Spark, see the
-[Spark Connect Overview](spark-connect-overview.html).
+[Spark Connect Overview](spark-connect-overview.html); for writing applications against a server,
+see the [Spark Connect Programming Guide](spark-connect-programming-guide.html).
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -379,7 +380,8 @@ libraryDependencies += "org.apache.spark" %% "spark-connect-client-jvm" % "{{sit
 ```
 
 Depend on `spark-connect-client-jvm` only, and on JDK 17 and later start the JVM with
-`--add-opens=java.base/java.nio=ALL-UNNAMED`.
+`--add-opens=java.base/java.nio=ALL-UNNAMED`;
+[Scala dependency](spark-connect-programming-guide.html#scala-dependency) explains both.
 
 When writing your own code, include the `remote` function with a reference to
 your Spark server when you create a Spark session, as in this example:

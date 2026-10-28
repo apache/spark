@@ -81,8 +81,8 @@ that developers need to be aware of when using Spark Connect:
 Apart from these differences the Spark Connect API is code-compatible with classic Spark
 applications: the DataFrame code they contain does not change. What changes is around that code:
 how the application is launched and configured, where its dependencies go, and when a plan is
-analyzed. [Setting up Spark Connect](spark-connect-setup.html) covers starting a server,
-connecting to it and switching an application between the two modes; the
+analyzed. The [Spark Connect Programming Guide](spark-connect-programming-guide.html) covers
+launching, configuration, dependencies and migration; the
 [Eager vs Lazy](spark-connect-gotchas.html) page covers the behavioral differences, starting with
 the deferred analysis of query plans.
 
@@ -151,13 +151,16 @@ outside the Apache Spark repository as well. The Apache Software Foundation host
 
 # Where to go from here
 
+* [Spark Connect Programming Guide](spark-connect-programming-guide.html): connect from Python,
+  Scala and Rust, run and configure jobs, ship code to the server, and migrate code that uses
+  `SparkContext` or RDDs.
 * [Setting up Spark Connect](spark-connect-setup.html): start a Spark Connect server, connect
   to it from the shells and from standalone applications, run a persistent local server for
   development, switch existing applications between Spark Classic and Spark Connect, and put
   the server behind an authenticating proxy.
 * [Eager vs Lazy: Spark Connect vs Spark Classic](spark-connect-gotchas.html): how deferred
-  analysis changes the behavior of temporary views, UDFs and error reporting, and how to write
-  code that works in both modes.
+  analysis changes the behavior of temporary views, UDFs and error reporting, how a session
+  differs from a local one, and how to write code that works in both modes.
 * [Extending Spark with Spark Server Libraries](spark-connect-server-libs.html): add custom
   server-side logic and expose it to clients through the Spark Connect protocol.
 * [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html): a notebook
