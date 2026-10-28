@@ -41,6 +41,7 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -670,6 +671,12 @@ class NativePartitionReader(
     }
   }
 
+  /**
+   * Wraps a vector of the root, into which every batch is imported. It is not freeable between
+   * batches: Spark must not close it when it moves to the next batch, as `ColumnarToRowExec` does
+   * with the column vectors that are freeable, because closing a struct column also drops its
+   * child column vectors. The reader closes the Arrow vectors at the end.
+   */
   private def columnVector(vector: FieldVector): ColumnVector = {
     try {
       new ReusedArrowColumnVector(vector)
@@ -852,17 +859,6 @@ class NativePartitionReader(
       Utils.tryLogNonFatalError(allocator.close())
     }
   }
-}
-
-/**
- * The Arrow column vector of a column of a [[NativePartitionReader]], which imports all its batches
- * into the same Arrow vectors. It is not freeable between batches: Spark must not close it when it
- * moves to the next batch, as `ColumnarToRowExec` does with the column vectors that are freeable,
- * because closing a struct column also drops its child column vectors. The reader closes the
- * Arrow vectors at the end.
- */
-private class ReusedArrowColumnVector(vector: ValueVector) extends ArrowColumnVector(vector) {
-  override def closeIfFreeable(): Unit = {}
 }
 
 /** Writes the batches of a task to the data writer of a native library. */

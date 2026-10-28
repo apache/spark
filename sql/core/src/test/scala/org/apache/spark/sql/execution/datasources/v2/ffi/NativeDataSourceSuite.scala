@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, DataSourceV2Strategy}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
@@ -660,6 +661,17 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       "batch_size" -> "3", "extra" -> "struct").select("id", "st")
     assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]))
     checkRows(df, (0L until 10L).map(id => Row(id, Row(id, s"s$id"))))
+    // So the columns are ReusedArrowColumnVectors, which the consumers of the batches recognize
+    // as reused by their producer.
+    val batch = scan(df).toBatch
+    val reader = batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+    try {
+      assert(reader.next())
+      val columns = (0 until reader.get().numCols()).map(reader.get().column)
+      assert(columns.nonEmpty && columns.forall(_.isInstanceOf[ReusedArrowColumnVector]))
+    } finally {
+      reader.close()
+    }
 
     // A nested field is read with its top-level column: the library only prunes the top-level
     // columns, and Spark the nested fields.
