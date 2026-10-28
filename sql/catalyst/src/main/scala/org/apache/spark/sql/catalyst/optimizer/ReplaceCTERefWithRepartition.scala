@@ -75,13 +75,16 @@ object ReplaceCTERefWithRepartition extends Rule[LogicalPlan] {
               s"CTERelationDef.forcePartitioning supports only HashPartitioning, but got " +
                 s"${other.getClass.getSimpleName}")
           case (true, None) =>
-            if (canSkipExtraRepartition(inlined) || cteDef.underSubquery) {
-              // If the CTE definition plan itself is a repartition operation or if it hosts a
-              // merged scalar subquery, we do not need to add an extra repartition shuffle.
-              inlined
-            } else {
-              RepartitionByExpression(Seq.empty, inlined, None)
-                .addRepartitionId(reassign = true)
+            // A forced CTE must always carry the plan-reuse identity so every reference seals into
+            // a CTEReuseRelation and materializes once, whatever the body's root shape. Stamp an
+            // existing reusable repartition in place (no extra shuffle); wrap any other root -- a
+            // plain repartition, a rebalance, or a merged-subquery body -- in a plan-reuse
+            // RepartitionByExpression.
+            inlined match {
+              case r: PlanReusableRepartition => r.addRepartitionId()
+              case _ =>
+                RepartitionByExpression(Seq.empty, inlined, None)
+                  .addRepartitionId(reassign = true)
             }
           case _ =>
             // Non-forceSkipInline CTEs keep the original OSS behavior: a plain repartition that

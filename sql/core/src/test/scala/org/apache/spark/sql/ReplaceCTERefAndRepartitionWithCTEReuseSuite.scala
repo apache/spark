@@ -501,4 +501,60 @@ class ReplaceCTERefAndRepartitionWithCTEReuseSuite
       s"Expected the forced partition key `b` to survive column pruning:\n${pruned.treeString}")
   }
 
+  // ---------------------------------------------------------------------------
+  // forceSkipInline lowering is total: every body root shape seals for reuse
+  // ---------------------------------------------------------------------------
+
+  // A resolved WithCTE with one forceSkipInline CTE def referenced `refCount` times.
+  private def forcedCteRefs(
+      cteBody: LogicalPlan, refCount: Int, underSubquery: Boolean = false): WithCTE = {
+    val cteDef = CTERelationDef(cteBody, underSubquery = underSubquery, forceSkipInline = true)
+    val refs = (0 until refCount).map { _ =>
+      CTERelationRef(cteDef.id, _resolved = true, cteBody.output, isStreaming = false)
+    }
+    val body = refs.reduce[LogicalPlan]((l, r) => Union(Seq(l, r)))
+    WithCTE(body, Seq(cteDef))
+  }
+
+  private def assertAllRefsShareOneNonzeroId(
+      reuses: Seq[CTEReuseRelation], refCount: Int): Unit = {
+    assert(reuses.size == refCount,
+      s"Expected $refCount CTEReuseRelation nodes (one per reference), got ${reuses.size}.")
+    val ids = reuses.map(_.cteId).distinct
+    assert(ids.size == 1 && ids.head != 0L,
+      s"Expected all references to share one nonzero cteId, got $ids.")
+    assertCTEReuseWithSameIdHaveSameCanonical(reuses)
+  }
+
+  test("forced CTE rooted at an existing repartition seals (stamped in place)") {
+    val body = RepartitionByExpression(Seq.empty, rel, optNumPartitions = Some(3))
+    val reuses = collectCTEReuseRelations(runReuseRules(forcedCteRefs(body, refCount = 2)))
+    assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+  }
+
+  test("forced CTE rooted at a rebalance seals (wrapped)") {
+    val body = RebalancePartitions(Seq.empty, rel)
+    val reuses = collectCTEReuseRelations(runReuseRules(forcedCteRefs(body, refCount = 2)))
+    assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+  }
+
+  test("forced under-subquery CTE seals (wrapped)") {
+    val reuses = collectCTEReuseRelations(
+      runReuseRules(forcedCteRefs(rel, refCount = 2, underSubquery = true)))
+    assertAllRefsShareOneNonzeroId(reuses, refCount = 2)
+  }
+
+  test("forced CTE under an existing repartition materializes once (one value set)") {
+    withCTEReuseEnabled {
+      // A nondeterministic body under a user REPARTITION. If each reference materialized its own
+      // copy, the two sides' rand() values would differ; one shared materialization makes each id's
+      // value identical on both sides of the self-join.
+      val df = sqlWithForcedCTEReuse(
+        """WITH cte AS (SELECT /*+ REPARTITION(3, id) */ id, rand() as r FROM range(20))
+          |SELECT (c1.r = c2.r) AS same FROM cte c1 JOIN cte c2 ON c1.id = c2.id
+          |""".stripMargin)
+      checkAnswer(df, (0 until 20).map(_ => Row(true)))
+    }
+  }
+
 }
