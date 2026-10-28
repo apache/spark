@@ -19,13 +19,14 @@ package org.apache.spark.sql.connect.client.arrow.types.ops
 
 import java.time.{Instant, LocalDateTime}
 
-import org.apache.arrow.vector.FieldVector
+import org.apache.arrow.vector.{FieldVector, TimeStampNanoTZVector, TimeStampNanoVector}
 
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoder
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{InstantNanosEncoder, LocalDateTimeNanosEncoder}
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MICROS
 import org.apache.spark.sql.catalyst.util.SparkDateTimeUtils
-import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader}
+import org.apache.spark.sql.connect.client.arrow.{ArrowDeserializers, ArrowSerializer, ArrowVectorReader, TypedArrowVectorReader}
 import org.apache.spark.sql.connect.common.InvalidPlanInput
 import org.apache.spark.sql.connect.common.types.ops.ConnectTypeOps
 import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType}
@@ -35,16 +36,17 @@ import org.apache.spark.unsafe.types.TimestampNanosVal
  * Combined Connect operations shared by the nanosecond-capable timestamp types
  * ([[TimestampNTZNanosType]] and [[TimestampLTZNanosType]], precision 7..9).
  *
- * Implements the proto DataType/Literal side of [[ConnectTypeOps]]. The physical value is
- * [[org.apache.spark.unsafe.types.TimestampNanosVal]] (epoch micros + nanos within the micro),
- * which the proto carries as `epoch_micros` + `nanos_within_micro` rather than a single int64 of
- * nanoseconds, because nanoseconds-since-epoch cannot span the supported 0001..9999 year range.
+ * Implements both the proto DataType/Literal side and the Arrow side of [[ConnectTypeOps]].
+ * The physical value is [[org.apache.spark.unsafe.types.TimestampNanosVal]] (epoch micros +
+ * nanos within the micro), which the proto carries as `epoch_micros` + `nanos_within_micro`
+ * rather than a single int64 of nanoseconds, because nanoseconds-since-epoch cannot span the
+ * supported 0001..9999 year range.
  * The two concrete subclasses differ only in their proto message arm, external java.time value
  * ([[LocalDateTime]] for NTZ, [[Instant]] for LTZ) and the conversion helpers used.
  *
- * Arrow IPC serialization is out of scope for these types (SPARK-57161), so the ops is not
- * registered in the Arrow dispatch of [[ConnectTypeOps]] and the Arrow methods below are never
- * reached; they throw to make an accidental wiring obvious.
+ * On the Arrow side the value is stored as a single int64 of epoch-nanoseconds
+ * (TimeStampNanoVector for NTZ, TimeStampNanoTZVector for LTZ); the precision is recovered from
+ * the Arrow field metadata (see ArrowUtils).
  *
  * Lives under the arrow.types.ops sub-package to co-locate with [[TimeTypeConnectOps]], the
  * reference implementation this mirrors.
@@ -71,21 +73,9 @@ private[connect] abstract class TimestampNanosTypeConnectOps extends ConnectType
     TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
   }
 
-  // ==================== Arrow Serialization (unsupported) ====================
-
-  private def arrowUnsupported: Nothing =
-    throw new UnsupportedOperationException(
-      s"Arrow serialization is not supported for ${dataType.sql} over Spark Connect.")
-
-  override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer =
-    arrowUnsupported
-
-  override def createArrowDeserializer(
-      enc: AgnosticEncoder[_],
-      data: AnyRef,
-      timeZoneId: String): ArrowDeserializers.Deserializer[Any] = arrowUnsupported
-
-  override def createArrowVectorReader(vector: FieldVector): ArrowVectorReader = arrowUnsupported
+  /** Converts a physical value to the epoch-nanoseconds stored in an Arrow vector. */
+  protected def toEpochNanos(v: TimestampNanosVal): Long =
+    Math.addExact(Math.multiplyExact(v.epochMicros, NANOS_PER_MICROS), v.nanosWithinMicro.toLong)
 }
 
 /**
@@ -155,6 +145,33 @@ private[connect] class TimestampNTZNanosTypeConnectOps(val t: TimestampNTZNanosT
     }
     proto.DataType.newBuilder().setTimestampNtzNanos(typeBuilder.build()).build()
   }
+
+  // ==================== Arrow Serialization ====================
+
+  override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer = {
+    val v = vector.asInstanceOf[TimeStampNanoVector]
+    new ArrowSerializer.FieldSerializer[LocalDateTime, TimeStampNanoVector](v) {
+      override def set(index: Int, value: LocalDateTime): Unit = {
+        v.setSafe(
+          index,
+          toEpochNanos(SparkDateTimeUtils.localDateTimeToTimestampNanos(value, t.precision)))
+      }
+    }
+  }
+
+  override def createArrowDeserializer(
+      enc: AgnosticEncoder[_],
+      data: AnyRef,
+      timeZoneId: String): ArrowDeserializers.Deserializer[Any] = {
+    val v = data.asInstanceOf[FieldVector]
+    new ArrowDeserializers.LeafFieldDeserializer[LocalDateTime](enc, v, timeZoneId) {
+      override def value(i: Int): LocalDateTime = reader.getLocalDateTime(i)
+    }
+  }
+
+  override def createArrowVectorReader(vector: FieldVector): ArrowVectorReader = {
+    new TimestampNTZNanosVectorReader(vector.asInstanceOf[TimeStampNanoVector])
+  }
 }
 
 /**
@@ -222,5 +239,58 @@ private[connect] class TimestampLTZNanosTypeConnectOps(val t: TimestampLTZNanosT
       typeBuilder.setPrecision(literal.getTimestampLtzNanos.getPrecision)
     }
     proto.DataType.newBuilder().setTimestampLtzNanos(typeBuilder.build()).build()
+  }
+
+  // ==================== Arrow Serialization ====================
+
+  override def createArrowSerializer(vector: AnyRef): ArrowSerializer.Serializer = {
+    val v = vector.asInstanceOf[TimeStampNanoTZVector]
+    new ArrowSerializer.FieldSerializer[Instant, TimeStampNanoTZVector](v) {
+      override def set(index: Int, value: Instant): Unit = {
+        v.setSafe(
+          index,
+          toEpochNanos(SparkDateTimeUtils.instantToTimestampNanos(value, t.precision)))
+      }
+    }
+  }
+
+  override def createArrowDeserializer(
+      enc: AgnosticEncoder[_],
+      data: AnyRef,
+      timeZoneId: String): ArrowDeserializers.Deserializer[Any] = {
+    val v = data.asInstanceOf[FieldVector]
+    new ArrowDeserializers.LeafFieldDeserializer[Instant](enc, v, timeZoneId) {
+      override def value(i: Int): Instant = reader.getInstant(i)
+    }
+  }
+
+  override def createArrowVectorReader(vector: FieldVector): ArrowVectorReader = {
+    new TimestampLTZNanosVectorReader(vector.asInstanceOf[TimeStampNanoTZVector])
+  }
+}
+
+/** Reads epoch-nanoseconds from a TimeStampNanoVector as [[LocalDateTime]]. */
+private[connect] class TimestampNTZNanosVectorReader(v: TimeStampNanoVector)
+    extends TypedArrowVectorReader[TimeStampNanoVector](v) {
+  override def getLocalDateTime(i: Int): LocalDateTime =
+    SparkDateTimeUtils.timestampNanosToLocalDateTime(
+      TimestampNanosTypeConnectOps.fromEpochNanos(vector.get(i)))
+}
+
+/** Reads epoch-nanoseconds from a TimeStampNanoTZVector as [[Instant]]. */
+private[connect] class TimestampLTZNanosVectorReader(v: TimeStampNanoTZVector)
+    extends TypedArrowVectorReader[TimeStampNanoTZVector](v) {
+  override def getInstant(i: Int): Instant =
+    SparkDateTimeUtils.timestampNanosToInstant(
+      TimestampNanosTypeConnectOps.fromEpochNanos(vector.get(i)))
+}
+
+private[connect] object TimestampNanosTypeConnectOps {
+
+  /** Splits epoch-nanoseconds read from an Arrow vector into the physical value. */
+  def fromEpochNanos(epochNanos: Long): TimestampNanosVal = {
+    val epochMicros = Math.floorDiv(epochNanos, NANOS_PER_MICROS)
+    val nanosWithinMicro = Math.floorMod(epochNanos, NANOS_PER_MICROS).toShort
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro)
   }
 }
