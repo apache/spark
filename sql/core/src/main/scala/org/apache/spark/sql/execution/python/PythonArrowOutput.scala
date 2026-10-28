@@ -335,9 +335,10 @@ class SliceBytesArrowOutputProcessorImpl(
       lastRowTooLarge = false
     }
     // We iteratively shrink the slice by 10% until it fits. Each later search starts from the
-    // number of rows that would fit at the bytes per row of the last slice that fit, rather than
-    // from all the remaining rows, since a slice usually copies its offset buffers, and restarting
-    // from all the remaining rows would copy them again and again.
+    // number of rows that would fit at the bytes per row of the last slice that fit, or of the
+    // root while none has, rather than from all the remaining rows, since a slice usually copies
+    // its offset buffers, and restarting from all the remaining rows would copy them again and
+    // again.
     var numRows = math.min(sliceRowCount, rowCount - currentRowIdx)
     while (numRows > 0) {
       val rootSlice = root.slice(currentRowIdx, numRows)
@@ -389,8 +390,8 @@ object SliceBytesArrowOutputProcessorImpl {
    *
    * Fixed-width and (large) variable-width vectors are measured in Long. A nested vector adds up
    * its children in Long, but its own buffers come from its int `getBufferSize`, so they are
-   * still wrong when they alone exceed 2 GiB, e.g. the offsets of a list vector with more than
-   * 2^29 rows. Other vectors, e.g. the view vectors, fall back to `getBufferSize`.
+   * still wrong when they alone reach 2 GiB, e.g. the offsets of a list vector with 2^29 - 1 rows
+   * or more. Other vectors, e.g. the view vectors, fall back to `getBufferSize`.
    */
   private[python] def bufferSize(vector: ValueVector): Long = vector match {
     case v: BaseFixedWidthVector if v.getTypeWidth > 0 && v.getValueCount > 0 =>
@@ -419,10 +420,10 @@ object SliceBytesArrowOutputProcessorImpl {
   /**
    * Returns whether `VectorSchemaRoot.slice` can slice `vector` and its children. Arrow computes
    * some byte positions of a slice in int, so it throws, and leaks the vectors sliced so far, for
-   * a fixed-width vector over 2 GiB, a view vector with more than 2^27 rows, or a list vector with
-   * more than 2^29 rows. A batch that holds one is output whole instead.
+   * a fixed-width vector of 2 GiB or more, a view vector with 2^27 rows or more, or a list vector
+   * with 2^29 - 1 rows or more. A batch that holds one is output whole instead.
    */
-  private[python] def canSlice(vector: ValueVector): Boolean = {
+  private[python] def canSlice(vector: FieldVector): Boolean = {
     val fits = vector match {
       case v: BaseFixedWidthVector => v.getValueCount.toLong * v.getTypeWidth <= Int.MaxValue
       case v: BaseVariableWidthViewVector =>
@@ -431,10 +432,7 @@ object SliceBytesArrowOutputProcessorImpl {
         (v.getValueCount + 1L) * BaseRepeatedValueVector.OFFSET_WIDTH <= Int.MaxValue
       case _ => true
     }
-    fits && (vector match {
-      case v: FieldVector => v.getChildrenFromFields.asScala.forall(canSlice)
-      case _ => true
-    })
+    fits && vector.getChildrenFromFields.asScala.forall(canSlice)
   }
 }
 

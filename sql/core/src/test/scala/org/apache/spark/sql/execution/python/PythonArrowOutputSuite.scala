@@ -253,10 +253,10 @@ class PythonArrowOutputSuite extends SparkFunSuite {
     checkAllRowsOnceInOrder(batchSizes, output)
     assert(output.forall { case (rows, bytes) => rows.size <= 1 || bytes <= maxBytes })
     assert(output.size >= 50)
-    // The whole batch and the first search take about log(50) / log(1 / 0.9) = 38 measurements,
-    // and each later slice one, or a few more where its rows are larger. Restarting every search
-    // from all the remaining rows would take hundreds.
-    assert(measured <= 40 + 2 * output.size, s"$measured measurements for ${output.size} slices")
+    // The whole batch and the first search take a few measurements, and each later slice one,
+    // or a few more where its rows are larger. Restarting every search from all the remaining
+    // rows would take hundreds.
+    assert(measured <= 2 * output.size, s"$measured measurements for ${output.size} slices")
   }
 
   /**
@@ -401,6 +401,8 @@ class PythonArrowOutputSuite extends SparkFunSuite {
       assert(SliceBytesArrowOutputProcessorImpl.bufferSize(struct) === expected)
       val root = new VectorSchemaRoot(Seq[FieldVector](struct).asJava)
       assert(SliceBytesArrowOutputProcessorImpl.batchBytes(root) === expected)
+      // Arrow cannot slice the int64 child of 2 GiB, which only the check of the children sees.
+      assert(!SliceBytesArrowOutputProcessorImpl.canSlice(struct))
     } finally {
       struct.close()
       allocator.close()
