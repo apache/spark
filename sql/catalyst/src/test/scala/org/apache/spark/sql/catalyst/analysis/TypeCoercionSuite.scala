@@ -1938,6 +1938,23 @@ class TypeCoercionSuite extends TypeCoercionSuiteBase {
     ruleTest(rules, Divide(nullLit, 1L), Divide(Cast(nullLit, DoubleType), Cast(1L, DoubleType)))
   }
 
+  test("date arithmetic preserves foldable NULL string day counts") {
+    val date = Literal(0, DateType)
+    val nullString = Literal.create(null, StringType)
+    for (days <- Seq(
+        nullString,
+        If(Literal(true), nullString, Literal("2")),
+        Cast(Literal.create(null, IntegerType), StringType))) {
+      for (expression <- Seq(DateAdd(date, days), DateSub(date, days))) {
+        val coerced = StringLiteralTypeCoercion(expression)
+        assert(coerced.children(1) == Literal.create(null, IntegerType))
+        assert(coerced.eval() == null)
+      }
+    }
+    assert(StringLiteralTypeCoercion(DateAdd(date, Literal("2"))).eval() == 2)
+    assert(StringLiteralTypeCoercion(DateSub(date, Literal("2"))).eval() == -2)
+  }
+
   test("Do not promote strings in binary arithmetic with intervals") {
     val rule = TypeCoercion.PromoteStrings
     // Verify String literal is not promoted in binary arithmetic operations with
