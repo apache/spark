@@ -48,6 +48,7 @@ import org.apache.spark.sql.execution.{ColumnarToRowExec, ExecSubqueryExpression
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanHelper, AQEPropagateEmptyRelation}
 import org.apache.spark.sql.execution.columnar._
 import org.apache.spark.sql.execution.command.CommandUtils
+import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.ui.SparkListenerSQLAdaptiveExecutionUpdate
@@ -851,6 +852,115 @@ class CachedTableSuite extends SharedSparkSession
         uncacheTable("t")
         assert(spark.table("t").select($"i").count() == 0)
         assert(getNumInMemoryRelations(spark.table("t").select($"i")) == 0)
+      }
+    }
+  }
+
+  private def appendParquetWithoutRefresh(path: String, value: Long): Unit = {
+    withTempDir { staging =>
+      val output = new File(staging, "data")
+      spark.range(value, value + 1).write.parquet(output.getCanonicalPath)
+      // Move files externally so Spark does not refresh the destination before refreshByPath.
+      output.listFiles().filter(_.getName.endsWith(".parquet")).foreach { file =>
+        Files.move(file.toPath, new File(path, file.getName).toPath)
+      }
+    }
+  }
+
+  for (relationCount <- Seq(1, 2, 3)) {
+    test(s"refreshByPath refreshes all $relationCount file indexes in one cached plan") {
+      withTempDir { dir =>
+        val paths = (0 until relationCount).map(i => new File(dir, s"part$i").getCanonicalPath)
+        paths.foreach(path => spark.range(1).write.parquet(path))
+        val cached = paths.map(spark.read.parquet(_)).reduce(_.union(_)).cache()
+        try {
+          assert(cached.count() == relationCount)
+          paths.foreach(path => appendParquetWithoutRefresh(path, 1L))
+          assert(cached.count() == relationCount)
+          spark.catalog.refreshByPath(dir.getCanonicalPath)
+          checkAnswer(cached, Seq.fill(relationCount)(Row(0L)) ++
+            Seq.fill(relationCount)(Row(1L)))
+        } finally {
+          cached.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
+  private class RefreshCountingFileIndex(relation: HadoopFsRelation)
+    extends InMemoryFileIndex(
+      spark, relation.location.rootPaths, relation.options, Some(relation.schema)) {
+    var refreshCount: Int = 0
+
+    override def refresh(): Unit = {
+      refreshCount += 1
+      super.refresh()
+    }
+  }
+
+  private def readWithRefreshCount(path: String): (DataFrame, RefreshCountingFileIndex) = {
+    val relation = spark.read.parquet(path).queryExecution.analyzed.collectFirst {
+      case LogicalRelationWithTable(hr: HadoopFsRelation, _) => hr
+    }.get
+    val index = new RefreshCountingFileIndex(relation)
+    val df = classic.Dataset.ofRows(spark, LogicalRelation(relation.copy(location = index)(spark)))
+    (df, index)
+  }
+
+  for (sharedIndex <- Seq(true, false)) {
+    test(s"refreshByPath refreshes each index object once: sharedIndex=$sharedIndex") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        spark.range(1).write.parquet(path)
+        val (first, firstIndex) = readWithRefreshCount(path)
+        val (second, secondIndex) = if (sharedIndex) {
+          (first, firstIndex)
+        } else {
+          readWithRefreshCount(path)
+        }
+        assert(firstIndex == secondIndex)
+        assert((firstIndex eq secondIndex) == sharedIndex)
+        val cached = first.union(second).union(first).cache()
+        try {
+          // Use a fresh query so a prior physical plan is not reused after recaching.
+          checkAnswer(cached.select("*"), Seq.fill(3)(Row(0L)))
+          spark.catalog.refreshByPath(new File(dir, "unrelated").getCanonicalPath)
+          assert(firstIndex.refreshCount == 0)
+          assert(secondIndex.refreshCount == 0)
+
+          for (value <- 1L to 2L) {
+            appendParquetWithoutRefresh(path, value)
+            assert(cached.count() == value * 3)
+            spark.catalog.refreshByPath(path)
+            assert(firstIndex.refreshCount == value)
+            assert(secondIndex.refreshCount == value)
+            checkAnswer(cached.select("*"), (0L to value).flatMap(i => Seq.fill(3)(Row(i))))
+          }
+        } finally {
+          cached.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
+  test("refreshByPath deduplicates shared indexes separately for each cached entry") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(1).write.parquet(path)
+      val (df, index) = readWithRefreshCount(path)
+      val first = df.union(df).cache()
+      val second = df.filter($"id" > 0).union(df.filter($"id" > 0)).cache()
+      try {
+        checkAnswer(first.select("*"), Seq(Row(0L), Row(0L)))
+        checkAnswer(second.select("*"), Seq.empty[Row])
+        appendParquetWithoutRefresh(path, 1L)
+        spark.catalog.refreshByPath(path)
+        assert(index.refreshCount == 2)
+        checkAnswer(first.select("*"), Seq(Row(0L), Row(0L), Row(1L), Row(1L)))
+        checkAnswer(second.select("*"), Seq(Row(1L), Row(1L)))
+      } finally {
+        first.unpersist(blocking = true)
+        second.unpersist(blocking = true)
       }
     }
   }

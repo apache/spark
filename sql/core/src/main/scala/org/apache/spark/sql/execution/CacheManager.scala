@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.{Collections, IdentityHashMap, Set => JSet}
+
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
@@ -636,7 +638,21 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
     val qualifiedPath = fs.makeQualified(resourcePath)
     recacheByCondition(
       spark,
-      _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)))
+      cached => {
+        // Shared plan nodes can reuse one index. Use object identity: distinct indexes with
+        // equal root paths still have independent file-listing caches that must be refreshed.
+        val refreshedIndexes = Collections.newSetFromMap(
+          new IdentityHashMap[FileIndex, java.lang.Boolean]())
+        var refreshed = false
+        // lookupAndRefresh has side effects: exists would stop after the first matching read.
+        // Refresh every matching file index before rebuilding a cache with multiple reads.
+        cached.plan.foreach { plan =>
+          if (lookupAndRefresh(plan, fs, qualifiedPath, includeTimeTravel, refreshedIndexes)) {
+            refreshed = true
+          }
+        }
+        refreshed
+      })
   }
 
   /**
@@ -649,11 +665,13 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       plan: LogicalPlan,
       fs: FileSystem,
       qualifiedPath: Path,
-      includeTimeTravel: Boolean): Boolean = {
+      includeTimeTravel: Boolean,
+      refreshedIndexes: JSet[FileIndex]): Boolean = {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
-          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath, includeTimeTravel)
+          refreshFileIndexIfNecessary(
+            hr.location, fs, qualifiedPath, includeTimeTravel, refreshedIndexes)
         case _ => false
       }
 
@@ -663,7 +681,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           fileTable.fileIndex,
           fs,
           qualifiedPath,
-          includeTimeTravel)
+          includeTimeTravel,
+          refreshedIndexes)
 
       case _ => false
     }
@@ -672,19 +691,20 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /**
    * Refresh the given [[FileIndex]] if one of its root paths is a subdirectory of
    * `qualifiedPath` and either `includeTimeTravel` is true or the index is not an immutable
-   * time-travel snapshot.
-   * @return whether the [[FileIndex]] was refreshed.
+   * time-travel snapshot. Refresh each index at most once per cached entry.
+   * @return whether the [[FileIndex]] matches, including an index already refreshed for this entry.
    */
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,
       fs: FileSystem,
       qualifiedPath: Path,
-      includeTimeTravel: Boolean): Boolean = {
+      includeTimeTravel: Boolean,
+      refreshedIndexes: JSet[FileIndex]): Boolean = {
     val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
       fileIndex.rootPaths
         .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
         .exists(isSubDir(qualifiedPath, _))
-    if (needToRefresh) fileIndex.refresh()
+    if (needToRefresh && refreshedIndexes.add(fileIndex)) fileIndex.refresh()
     needToRefresh
   }
 
