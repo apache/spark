@@ -76,35 +76,33 @@ class ResolveCursors extends Rule[LogicalPlan] with DataTypeErrorsBase {
       }
     }
 
-    // Look up cursor definition from scripting context using the extension API
-    val context = SqlScriptingContextManager.get()
-      .map(_.getContext)
-      .getOrElse {
-        // Cursors are only allowed within SQL scripts
+    val fromScript = SqlScriptingContextManager.get().flatMap { manager =>
+      val context = manager.getContext
+      val definition = normalizedScopeLabel match {
+        case Some(label) => context.findCursorInScope(label, normalizedName)
+        case None => context.findCursorByName(normalizedName)
+      }
+      definition.map(d => CursorReference(nameParts, normalizedName, normalizedScopeLabel, d))
+    }
+
+    fromScript.orElse {
+      SuppliedLocalScopeRegistry.lookupCursor(nameParts, SQLConf.get.resolver).map {
+        case (scope, definition) =>
+          val label = if (scope.label.isEmpty) None else Some(scope.label)
+          CursorReference(nameParts, normalizedName, label, definition)
+      }
+    }.getOrElse {
+      val inScript = SqlScriptingContextManager.get().isDefined ||
+        SuppliedLocalScopeRegistry.get().isDefined
+      if (inScript) {
+        throw new AnalysisException(
+          errorClass = "CURSOR_NOT_FOUND",
+          messageParameters = Map("cursorName" -> toSQLId(nameParts)))
+      } else {
         throw new AnalysisException(
           errorClass = "CURSOR_OUTSIDE_SCRIPT",
           messageParameters = Map("cursorName" -> toSQLId(nameParts)))
       }
-
-    // Use the SqlScriptingExecutionContextExtension API for cursor lookup
-    val cursorDef = normalizedScopeLabel match {
-      case Some(label) =>
-        // Qualified cursor: look up in specific labeled scope
-        context.findCursorInScope(label, normalizedName)
-      case None =>
-        // Unqualified cursor: search current and parent scopes
-        context.findCursorByName(normalizedName)
-    }
-
-    // If cursor not found, fail with appropriate error
-    cursorDef match {
-      case Some(definition) =>
-        // Create CursorReference with the cursor definition
-        CursorReference(nameParts, normalizedName, normalizedScopeLabel, definition)
-      case None =>
-        throw new AnalysisException(
-          errorClass = "CURSOR_NOT_FOUND",
-          messageParameters = Map("cursorName" -> toSQLId(nameParts)))
     }
   }
 }

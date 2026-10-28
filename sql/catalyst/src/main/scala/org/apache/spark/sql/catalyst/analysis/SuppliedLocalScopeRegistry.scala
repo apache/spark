@@ -17,16 +17,19 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import org.apache.spark.sql.catalyst.expressions.CursorDefinition
 import org.apache.spark.sql.types.DataType
 import org.apache.spark.util.LexicalThreadLocal
 
 /**
  * One lexical SQL script scope supplied by an analysis caller: the scope label
- * and the local variables declared in it so far, in declaration order.
+ * and the local variables and cursors declared in it so far, in declaration
+ * order.
  */
 private[sql] case class SuppliedLocalScope(
     label: String,
-    variables: Seq[(String, DataType)])
+    variables: Seq[(String, DataType)],
+    cursors: Seq[(String, String)] = Nil)
 
 /**
  * A lexical registry of SQL script local scopes supplied by an analysis
@@ -34,7 +37,8 @@ private[sql] case class SuppliedLocalScope(
  *
  * Scopes are ordered outermost first. Lookup mirrors the SQL script
  * interpreter: an unqualified name binds to the innermost scope declaring it,
- * and `label.name` binds to the innermost scope with that label.
+ * and `label.name` binds to the innermost scope with that label. Variables and
+ * cursors are separate namespaces.
  */
 private[sql] object SuppliedLocalScopeRegistry
   extends LexicalThreadLocal[Seq[SuppliedLocalScope]] {
@@ -48,6 +52,15 @@ private[sql] object SuppliedLocalScopeRegistry
       nameParts: Seq[String],
       resolver: (String, String) => Boolean): Option[(SuppliedLocalScope, DataType)] = {
     lookupNamed(nameParts, resolver, (s: SuppliedLocalScope) => s.variables)
+  }
+
+  /** The scope and cursor bound by `nameParts` (one or two parts), if any. */
+  def lookupCursor(
+      nameParts: Seq[String],
+      resolver: (String, String) => Boolean): Option[(SuppliedLocalScope, CursorDefinition)] = {
+    lookupNamed(nameParts, resolver, (s: SuppliedLocalScope) => s.cursors).map {
+      case (scope, queryText) => scope -> CursorDefinition(nameParts.last, queryText)
+    }
   }
 
   private def lookupNamed[T](

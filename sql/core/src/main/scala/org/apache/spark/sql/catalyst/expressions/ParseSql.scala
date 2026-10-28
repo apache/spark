@@ -75,12 +75,14 @@ import org.apache.spark.unsafe.types.UTF8String
     earlier ones. A SQL script (`BEGIN ... END`) also lists its nested statements and
     control-flow conditions in a `statements` array; in `ANALYZE` each sees the script
     locals in scope (by block label or FOR variable) and the objects created before it.
-    Conditions must be a single BOOLEAN column, and a simple CASE is checked as
-    `operand = value` per WHEN.
+    `DECLARE CURSOR` is recorded in that scope; `OPEN` / `FETCH` / `CLOSE` resolve it
+    the same way. The cursor query is analyzed at DECLARE, or at OPEN with the types
+    of its USING arguments when it has parameter markers. Conditions must be a single
+    BOOLEAN column, and a simple CASE is checked as `operand = value` per WHEN.
     Dynamic SQL (`EXECUTE IMMEDIATE`), in-place schema changes such as ALTER TABLE,
     USE, SET PATH, SET VAR, and SET of a config are not simulated. `CALL` is
     analyzed but the procedure is not run. A SQL script calling `parse_sql` does not
-    lend it its locals. `ANALYZE` inherits the invoker's current catalog,
+    lend it its locals or cursors. `ANALYZE` inherits the invoker's current catalog,
     schema, and SQL path. Named `current_catalog`, `current_schema`, and
     `current_path` override that context for analysis only; omitted or NULL keeps the
     invoker value, which is restored after the call. An override changes the session
@@ -191,9 +193,10 @@ import org.apache.spark.unsafe.types.UTF8String
     code points, statement-relative).
     A SQL script object also has `statements`: one object of the same shape per nested
     statement or condition, ordered by `start` (batch-relative); nested error indexes are
-    relative to that nested statement. ANALYZE sets the script's `analyze_success`
-    only when every nested statement analyzed, and its references are the nested
-    union.
+    relative to that nested statement. A cursor query error reported on OPEN has a
+    `CURSOR` query context whose indexes are relative to the cursor query. ANALYZE
+    sets the script's `analyze_success` only when every nested statement analyzed,
+    and its references are the nested union.
     Later statements are still processed after a per-statement
     parse or analysis failure.
   """,
