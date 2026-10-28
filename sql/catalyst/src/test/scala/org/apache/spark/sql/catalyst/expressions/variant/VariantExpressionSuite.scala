@@ -1464,8 +1464,7 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkErrorInExpression[SparkRuntimeException](
       CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
       InternalRow(new VariantVal(value, Array[Byte](VERSION, 0, 0))),
-      "VARIANT_SIZE_LIMIT",
-      Map("sizeLimit" -> "16.0 MiB", "functionName" -> "`canonicalize_variant`"))
+      "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
   }
 
   test("variant_delete") {

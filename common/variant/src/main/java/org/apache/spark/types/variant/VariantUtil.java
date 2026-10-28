@@ -184,7 +184,7 @@ public class VariantUtil {
   }
 
   // Build a metadata header byte for an offset size of 1 to 4 bytes, with `sorted_strings` unset.
-  public static byte metadataHeader(int offsetSize) {
+  static byte metadataHeader(int offsetSize) {
     return (byte) (VERSION | ((offsetSize - 1) << 6));
   }
 
@@ -728,21 +728,25 @@ public class VariantUtil {
   // Throw `MALFORMED_VARIANT` if the variant is malformed. An out-of-bound `id` is also considered
   // a malformed variant because it is read from the corresponding variant value.
   public static String getMetadataKey(byte[] metadata, int id) {
-    int offsetSize = getMetadataOffsetSize(metadata);
-    int dictSize = getMetadataNumKeys(metadata, offsetSize);
-    if (id >= dictSize) throw malformedVariant();
-    int stringStart = getMetadataStringStart(metadata, dictSize, offsetSize);
-    int offset = readUnsigned(metadata, 1 + (id + 1) * offsetSize, offsetSize);
-    int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
-    if (offset > nextOffset) throw malformedVariant();
-    checkIndex(stringStart + nextOffset - 1, metadata.length);
     // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
     // explicitly rather than relying on the platform-dependent JVM default charset.
-    return new String(metadata, stringStart + offset, nextOffset - offset, StandardCharsets.UTF_8);
+    return handleMetadataKey(metadata, id, (start, length) ->
+        new String(metadata, start, length, StandardCharsets.UTF_8));
   }
 
   // Read the original dictionary key bytes without UTF-8 decoding or replacement.
   static byte[] getMetadataKeyBytes(byte[] metadata, int id) {
+    return handleMetadataKey(metadata, id, (start, length) ->
+        Arrays.copyOfRange(metadata, start, start + length));
+  }
+
+  private interface MetadataKeyHandler<T> {
+    T apply(int start, int length);
+  }
+
+  // Read and validate a dictionary key range before passing it to `handler`.
+  private static <T> T handleMetadataKey(
+      byte[] metadata, int id, MetadataKeyHandler<T> handler) {
     int offsetSize = getMetadataOffsetSize(metadata);
     int dictSize = getMetadataNumKeys(metadata, offsetSize);
     if (id >= dictSize) throw malformedVariant();
@@ -751,6 +755,6 @@ public class VariantUtil {
     int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
     if (offset > nextOffset) throw malformedVariant();
     checkIndex(stringStart + nextOffset - 1, metadata.length);
-    return Arrays.copyOfRange(metadata, stringStart + offset, stringStart + nextOffset);
+    return handler.apply(stringStart + offset, nextOffset - offset);
   }
 }
