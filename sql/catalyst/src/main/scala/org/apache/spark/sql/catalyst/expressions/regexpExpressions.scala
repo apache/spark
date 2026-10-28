@@ -105,69 +105,129 @@ abstract class StringRegexExpression extends BinaryExpression
 
 private[catalyst] object StringRegexExpression {
   /**
-   * Counts the `%` wildcards in a LIKE pattern, skipping escaped characters. Each one becomes a
-   * `.*`, and a failed match tries every combination of their lengths.
+   * Whether matching `regex` is likely to be expensive. A failed match tries every combination of
+   * the lengths that its repeating quantifiers take, so each one costs a factor of the input
+   * length. `find` also tries every start position, which costs one more factor unless the regex
+   * is anchored at the start. So two quantifiers are expensive, and three when the regex is
+   * anchored or must match the whole input, as the one a LIKE pattern becomes. Repeating a group
+   * that holds a quantifier multiplies the factors, so it is always expensive.
+   *
+   * @param matchesWhole whether `regex` must match the whole input rather than be found in it.
    */
-  def countLikeWildcards(pattern: String, escapeChar: Char): Int = {
-    var count = 0
-    var i = 0
-    while (i < pattern.length) {
-      val c = pattern.charAt(i)
-      if (c == escapeChar) {
-        i += 1
-      } else if (c == '%') {
-        count += 1
-      }
-      i += 1
-    }
-    count
+  def isExpensiveRegex(regex: String, matchesWhole: Boolean): Boolean = {
+    val (quantifiers, topLevelAlternation) = scanQuantifiers(regex)
+    val anchored = matchesWhole || (!topLevelAlternation && startsWithAnchor(regex))
+    quantifiers >= (if (anchored) 3 else 2)
+  }
+
+  // Leading inline flags, e.g. `(?i)` or `(?s-m)`.
+  private val leadingFlags = """(?:\(\?[a-zA-Z]*(?:-[a-zA-Z]*)?\))*""".r
+
+  // Whether `regex` starts with `^` or `\A`. A leading flag that mentions MULTILINE, under which
+  // `^` also matches after every line terminator, makes it not anchored.
+  private def startsWithAnchor(regex: String): Boolean = {
+    val flags = leadingFlags.findPrefixOf(regex).getOrElse("")
+    val rest = regex.substring(flags.length)
+    !flags.contains('m') && (rest.startsWith("^") || rest.startsWith("\\A"))
   }
 
   /**
-   * Counts the repeating quantifiers (`*`, `+` and `{n,m}`) in a regex, which are what make a
-   * failed match backtrack. Escaped characters, quoted text, character classes and the braces of
-   * `\p{..}`, `\x{..}` and `\N{..}` are skipped, and the `+` or `?` that makes a quantifier
-   * possessive or lazy is not counted again.
+   * Counts the repeating quantifiers (`*`, `+` and `{n,m}`) in a regex that can backtrack, and
+   * tells whether the regex has a `|` outside any group. Escaped characters, quoted text,
+   * character classes and the braces of `\p{..}`, `\x{..}` and `\N{..}` are skipped. A possessive
+   * quantifier never backtracks and a `{n,m}` with a small range adds a small factor, so neither
+   * is counted. The count is `Int.MaxValue` for a repeated group that holds a counted quantifier,
+   * and for a `[` that is never closed, which may hide quantifiers.
    */
-  def countRegexQuantifiers(regex: String): Int = {
+  private def scanQuantifiers(regex: String): (Int, Boolean) = {
     var count = 0
     var classDepth = 0
+    var topLevelAlternation = false
+    // Whether each open group holds a counted quantifier, innermost first.
+    var groups = List.empty[Boolean]
     var i = 0
+    def possessive: Boolean = i + 1 < regex.length && regex.charAt(i + 1) == '+'
     // Moves `i` past a `+` or `?` that modifies the quantifier ending at `i`.
     def skipModifier(): Unit = {
       if (i + 1 < regex.length && (regex.charAt(i + 1) == '+' || regex.charAt(i + 1) == '?')) {
         i += 1
       }
     }
+    def markGroup(): Unit = groups = groups match {
+      case _ :: outer => true :: outer
+      case Nil => Nil
+    }
     while (i < regex.length) {
       regex.charAt(i) match {
         case '\\' if i + 1 < regex.length =>
           i += 1
-          if (regex.charAt(i) == 'Q') {
-            val end = regex.indexOf("\\E", i)
-            i = if (end < 0) regex.length else end + 1
-          } else if ("pPxN".indexOf(regex.charAt(i)) >= 0 &&
-              i + 1 < regex.length && regex.charAt(i + 1) == '{') {
-            val end = regex.indexOf('}', i)
-            i = if (end < 0) regex.length else end
+          regex.charAt(i) match {
+            case 'Q' =>
+              val end = regex.indexOf("\\E", i)
+              i = if (end < 0) regex.length else end + 1
+            // `\cX` is a control character, and `X` may be `[`.
+            case 'c' => i += 1
+            case c if "pPxN".indexOf(c) >= 0 &&
+                i + 1 < regex.length && regex.charAt(i + 1) == '{' =>
+              val end = regex.indexOf('}', i)
+              i = if (end < 0) regex.length else end
+            case _ =>
           }
         case '[' => classDepth += 1
         case ']' if classDepth > 0 => classDepth -= 1
-        case '*' | '+' if classDepth == 0 =>
-          count += 1
-          skipModifier()
-        case '{' if classDepth == 0 =>
-          val end = regex.indexOf('}', i)
-          if (end > i + 1 && regex.charAt(i + 1).isDigit && regex.substring(i, end).contains(',')) {
+        case _ if classDepth > 0 =>
+        case '(' => groups = false :: groups
+        case ')' if groups.nonEmpty =>
+          val holdsQuantifier = groups.head
+          groups = groups.tail
+          if (holdsQuantifier) {
+            if (repeats(regex, i + 1)) return (Int.MaxValue, topLevelAlternation)
+            markGroup()
+          }
+        case '|' if groups.isEmpty => topLevelAlternation = true
+        case '*' | '+' =>
+          if (!possessive) {
             count += 1
+            markGroup()
+          }
+          skipModifier()
+        case '?' => skipModifier()
+        case '{' =>
+          bounds(regex, i).foreach { case (end, min, max) =>
             i = end
+            if (!possessive && max - min >= 10) {
+              count += 1
+              markGroup()
+            }
             skipModifier()
           }
         case _ =>
       }
       i += 1
     }
-    count
+    (if (classDepth > 0) Int.MaxValue else count, topLevelAlternation)
+  }
+
+  // Whether a quantifier that can repeat its operand more than once starts at `i`.
+  private def repeats(regex: String, i: Int): Boolean = i < regex.length && {
+    regex.charAt(i) match {
+      case '*' | '+' => true
+      case '{' => bounds(regex, i).exists(_._3 >= 2)
+      case _ => false
+    }
+  }
+
+  private val repetition = """\{(\d+)(?:,(\d*))?\}""".r
+
+  // Parses the `{n}`, `{n,}` or `{n,m}` at `start` into its closing index and its bounds, with
+  // `Int.MaxValue` as the upper bound of `{n,}`.
+  private def bounds(regex: String, start: Int): Option[(Int, Int, Int)] = {
+    repetition.findPrefixMatchOf(regex.substring(start)).map { m =>
+      def toInt(s: String): Int = s.toIntOption.getOrElse(Int.MaxValue)
+      val min = toInt(m.group(1))
+      val max = Option(m.group(2)).map(s => if (s.isEmpty) Int.MaxValue else toInt(s))
+      (start + m.end - 1, min, max.getOrElse(min))
+    }
   }
 
   def expressionToEscapeChar(e: Expression): Char = e match {
@@ -241,10 +301,9 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
 
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).matches()
 
-  // Each `%` multiplies the cost of a failed match by the input length; two of them are cheap
-  // enough, and `LikeSimplification` rewrites most patterns with fewer.
+  // Each `%` becomes a `.*`. `LikeSimplification` rewrites most patterns with fewer than three.
   override protected def isExpensivePattern(str: String): Boolean =
-    StringRegexExpression.countLikeWildcards(str, escapeChar) >= 3
+    StringRegexExpression.isExpensiveRegex(escape(str), matchesWhole = true)
 
   final override val nodePatterns: Seq[TreePattern] = Seq(LIKE_FAMLIY)
 
@@ -598,10 +657,8 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
 
   override def escape(v: String): String = v
   override def matches(regex: Pattern, str: String): Boolean = regex.matcher(str).find(0)
-  // Like the `%` of LIKE, but `find` also tries every start position, which costs one more
-  // factor of the input length. An anchor does not bound the backtracking within a match.
   override protected def isExpensivePattern(str: String): Boolean =
-    StringRegexExpression.countRegexQuantifiers(str) >= 2
+    StringRegexExpression.isExpensiveRegex(str, matchesWhole = false)
   override def toString: String = s"RLIKE($left, $right)"
   override def sql: String = s"${prettyName.toUpperCase(Locale.ROOT)}(${left.sql}, ${right.sql})"
 

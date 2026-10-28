@@ -741,23 +741,36 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val pattern = $"p".string.at(1)
 
     // The subject string is irrelevant; a constant pattern is checked. Two or more repeating
-    // quantifiers make an RLIKE expensive, anchored or not.
-    Seq("^1", "magic", "a.b", "^a.*b", "2024-.*", "\\d{2,}", "a{3}b*", "a*+b", "(?i)^abc.*",
-      "a\\+b\\*", "[+*{]x+", "\\p{Lu}+", "\\x{41}.*", "\\Q.*+\\E.*").foreach { p =>
+    // quantifiers that can backtrack make an RLIKE expensive, and three or more when it is
+    // anchored at the start.
+    // scalastyle:off SingleSpaceBetweenRParenAndLCurlyBrace
+    Seq("^1", "magic", "a.b", "^a.*b", "2024-.*", "\\d{2,}", "a{3}b*", "(?i)^abc.*",
+      "a\\+b\\*", "[+*{]x+", "\\p{Lu}+", "\\x{41}.*", "\\Q.*+\\E.*", "[a-z&&[^b]]+x",
+      // Possessive quantifiers and small ranges.
+      "a*+b", "a?+b?+", "a{3}+b", ".*+a.*+b", "a{1,9}b{1,9}", "(ab){3}.*",
+      // Anchored.
+      "^.*a.*b", "\\A.*a.*b", "(?i)^.*a.*b", "^v[0-9]+_.*", "^(a|b).*c.*").foreach { p =>
       assert(!RLike(str, Literal(p)).expensive, p)
     }
-    Seq(".*a.*b", "^.*a.*a.*a.*b", "\\b.*a.*b", "(a+)+b", "a{2,}b+", "\\d+\\s*", "a+?b.*",
-      "a{1,9}b{1,9}").foreach { p =>
+    Seq(".*a.*b", "^.*a.*a.*b", "\\b.*a.*b", "a{2,}b+", "\\d+\\s*", "a+?b.*",
+      ".{0,50}a.{0,50}b", "^a|.*b.*c", "(?m)^.*a.*b",
+      // A repeated group that holds a quantifier.
+      "(a+)+b", "^(a+)+b", "^(.*?,){11}P", "(.*a){3}x", "^((.*a)b){2}",
+      // A `[` that does not open a class.
+      "\\c[.*a.*b", "(?x)a # [\n.*a.*b").foreach { p =>
       assert(RLike(str, Literal(p)).expensive, p)
     }
-    // Three or more `%` make a LIKE expensive.
-    Seq("1_", "%magic%", "%a%b", "%a\\%b%", "a_b_c").foreach { p =>
+    // scalastyle:on SingleSpaceBetweenRParenAndLCurlyBrace
+    // Three or more `%` make a LIKE expensive, since it must match the whole input.
+    Seq("1_", "%magic%", "%a%b", "%a\\%b%", "a_b_c", "%a\\\\%b").foreach { p =>
       assert(!Like(str, Literal(p), '\\').expensive, p)
     }
     assert(!Like(str, Literal("%a#%b#%c%"), '#').expensive)
-    Seq("%a%b%", "%a%a%a%b").foreach { p =>
+    Seq("%a%b%", "%a%a%a%b", "%(.*)%|%").foreach { p =>
       assert(Like(str, Literal(p), '\\').expensive, p)
     }
+    // A pattern with an invalid escape is expensive rather than failing the optimizer.
+    assert(Like(str, Literal("a\\b"), '\\').expensive)
 
     // A foldable pattern that is not yet a literal.
     assert(!RLike(str, Concat(Seq(Literal("^"), Literal("a.*")))).expensive)
