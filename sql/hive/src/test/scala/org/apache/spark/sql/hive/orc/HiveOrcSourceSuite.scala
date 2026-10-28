@@ -638,17 +638,20 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       withTempPath { dir =>
         val path = dir.getCanonicalPath
         // `StringType("UTF8_BINARY")` prints as `string collate UTF8_BINARY` unlike `StringType`.
+        // A DDL `COLLATE UTF8_BINARY` becomes the default `StringType`, so only this test covers
+        // an explicit `UTF8_BINARY` map key.
         val schema = new StructType()
           .add("b", StringType("UTF8_BINARY"))
           .add("c", StringType("UNICODE_CI"))
           .add("a", ArrayType(StringType("UTF8_LCASE")))
           .add("s", new StructType().add("f", StringType("UNICODE_CI")))
-        val df = spark.createDataFrame(
-          spark.sparkContext.parallelize(Seq(Row("a", "b", Seq("c"), Row("d")))), schema)
+          .add("m", MapType(StringType("UTF8_BINARY"), StringType("UNICODE_CI")))
+        val rows = Seq(Row("a", "b", Seq("c"), Row("d"), Map("k" -> "v")))
+        val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
         df.write.orc(path)
         // The file stores plain strings.
         assert(spark.read.orc(path).schema === StructType.fromDDL(
-          "b STRING, c STRING, a ARRAY<STRING>, s STRUCT<f: STRING>"))
+          "b STRING, c STRING, a ARRAY<STRING>, s STRUCT<f: STRING>, m MAP<STRING, STRING>"))
         // A read with a collated schema decodes the same values.
         checkAnswer(spark.read.schema(df.schema).orc(path), df)
       }
