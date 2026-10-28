@@ -346,7 +346,7 @@ object RFormula extends DefaultParamsReadable[RFormula] {
  * @param pipelineModel the fitted feature model, including factor to index mappings.
  */
 @Since("1.5.0")
-class RFormulaModel private[feature](
+class RFormulaModel private[ml](
     @Since("1.5.0") override val uid: String,
     private[ml] val resolvedFormula: ResolvedRFormula,
     private[ml] val pipelineModel: PipelineModel)
@@ -484,16 +484,6 @@ object RFormulaModel extends MLReadable[RFormulaModel] {
       metadata.getAndSetParams(model)
       model
     }
-  }
-}
-
-/** Creates minimal RFormulaModel containers for nested class-loading tests. */
-private[spark] object RFormulaModelTestHelper {
-
-  def withStage(stage: Transformer): RFormulaModel = {
-    val pipeline = new PipelineModel("pipelineFixture", Array(stage))
-    val formula = ResolvedRFormula("y", Seq(Seq("x")), hasIntercept = true)
-    new RFormulaModel("rFormulaFixture", formula, pipeline)
   }
 }
 

@@ -20,7 +20,7 @@ package org.apache.spark.ml.util
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.ml._
 import org.apache.spark.ml.evaluation.Evaluator
-import org.apache.spark.ml.feature.{Instance, LabeledPoint}
+import org.apache.spark.ml.feature.{Instance, LabeledPoint, ResolvedRFormula, RFormulaModel}
 import org.apache.spark.ml.linalg.{Vector, Vectors, VectorUDT}
 import org.apache.spark.ml.param.ParamMap
 import org.apache.spark.ml.param.shared.HasWeightCol
@@ -30,6 +30,13 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 
 object MLTestingUtils extends SparkFunSuite {
+
+  /** Creates a minimal RFormulaModel container for nested class-loading tests. */
+  def createRFormulaModel(stage: Transformer): RFormulaModel = {
+    val pipeline = new PipelineModel("pipelineFixture", Array(stage))
+    val formula = ResolvedRFormula("y", Seq(Seq("x")), hasIntercept = true)
+    new RFormulaModel("rFormulaFixture", formula, pipeline)
+  }
 
   def checkCopyAndUids[T <: Estimator[_]](estimator: T, model: Model[_]): Unit = {
     assert(estimator.uid === model.uid, "Model uid does not match parent estimator")
