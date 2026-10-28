@@ -313,8 +313,7 @@ object ResolveDefaultColumns extends QueryErrorsBase
       val expression = analyzed.collectFirst {
         case Project(Seq(a: Alias), OneRowRelation()) => a.child
       }.get
-      // Keep validation on the original tree: partial folding can change nested nullability
-      // and therefore which target types are accepted.
+      // Retain the analyzed expression for statement binding while validating an eager copy.
       val folded = ConstantFolding(DefaultColumnOptimizer.FinishAnalysis(analyzed))
       (folded, expression)
     } catch {
@@ -351,62 +350,13 @@ object ResolveDefaultColumns extends QueryErrorsBase
       // Non-time current-like functions retain the default analyzer's catalog context.
       val bound = ReplaceCurrentLike(DefaultColumnAnalyzer.catalogManager)
         .applyForExpression(replaced)
-      Option.when(bound.containsPattern(CURRENT_LIKE))(normalizeCurrentTimeDefault(bound))
+      Option.when(bound.containsPattern(CURRENT_LIKE))(bound)
     } else {
       None
     }
     currentDefault.map { expr =>
-      // Use the validated target type, including permissive literal narrowing. Coercing the
-      // preserved expression again could evaluate current-time functions prematurely.
-      if (expr.dataType == coerced.dataType) {
-        expr
-      } else {
-        val cast = Cast(expr, coerced.dataType, Some(conf.sessionLocalTimeZone))
-        if (cast.checkInputDataTypes().isSuccess) {
-          cast
-        } else {
-          // Clock-dependent special datetime strings can become non-null only after clock
-          // binding. Enforce those validated nested constraints at runtime before casting.
-          val input = AttributeReference(colName, expr.dataType, expr.nullable)()
-          val target = AttributeReference(colName, coerced.dataType, expr.nullable)()
-          val nullCheckConf = conf.clone()
-          nullCheckConf.setConf(SQLConf.STORE_ASSIGNMENT_POLICY,
-            SQLConf.StoreAssignmentPolicy.ANSI)
-          val output = TableOutputResolver.resolveOutputColumns(
-            "", Seq(target), LocalRelation(input), byName = false, nullCheckConf)
-            .asInstanceOf[Project].projectList.head.asInstanceOf[Alias].child
-          val checked = output.transform {
-            case attr: AttributeReference if attr.exprId == input.exprId =>
-              BoundReference(0, input.dataType, input.nullable)
-          }
-          DeferredDefaultValue(
-            expr, Cast(checked, coerced.dataType, Some(conf.sessionLocalTimeZone)))
-        }
-      }
+      DeferredDefaultValue(expr, dataType, statementType, colName, defaultSQL, conf.getAllConfs)
     }.getOrElse(coerced)
-  }
-
-  private def normalizeCurrentTimeDefault(expression: Expression): Expression = {
-    val dependencies = new IdentityHashMap[Expression, java.lang.Boolean]
-    def normalize(expr: Expression): Expression = {
-      if (isTimeToTimestampCast(expr)) {
-        expr
-      } else if (containsDeferredClock(expr, dependencies)) {
-        // Keep clock-dependent nodes evaluable: type-defining arguments such as struct names
-        // can be evaluated when their parent's datatype is requested during analysis.
-        expr.mapChildren(normalize)
-      } else {
-        // The original whole expression passed eager validation. A detached subtree may be
-        // skipped by a boolean, null, or conditional guard, so these rewrites are speculative.
-        try {
-          ConstantFolding.constantFolding(
-            SpecialDatetimeValues.applyForExpression(expr), isConditionalBranch = true)
-        } catch {
-          case NonFatal(_) => expr
-        }
-      }
-    }
-    normalize(expression)
   }
 
   private def isTimeToTimestampCast(expression: Expression): Boolean = expression match {
@@ -437,22 +387,63 @@ object ResolveDefaultColumns extends QueryErrorsBase
     }
   }
 
-  // Eager validation established that this default is statement-constant. Its generated nested
-  // checks may be nonfoldable, but the complete checked value can be materialized after clock
-  // binding and special datetime rewrites, before it reaches individual input rows. Evaluate the
-  // source once so each generated field check reads the same value rather than reconstructing it.
-  private case class DeferredDefaultValue(left: Expression, right: Expression)
-      extends BinaryExpression with CodegenFallback {
-    override def dataType: DataType = right.dataType
-    override def nullable: Boolean = right.nullable
-    override def foldable: Boolean = !children.exists(containsDeferredClock(_))
-    override def sql: String = left.sql
+  // Keep the validated output schema even if clock binding changes a type-defining operand.
+  // Only the final statement-bound value is converted, using the same default coercion policy.
+  private case class DeferredDefaultValue(
+      child: Expression,
+      targetType: DataType,
+      statementType: String,
+      colName: String,
+      defaultSQL: String,
+      settings: Map[String, String]) extends UnaryExpression with CodegenFallback {
+    override lazy val dataType: DataType = CharVarcharUtils.replaceCharVarcharWithString(targetType)
+    override def nullable: Boolean = true
+    override lazy val foldable: Boolean = !containsDeferredClock(child)
+    override def stateful: Boolean = true
+    override def sql: String = child.sql
+    override protected def stringArgs: Iterator[Any] = Iterator(child, dataType)
 
-    override def eval(input: InternalRow): Any = right.eval(InternalRow(left.eval(input)))
+    // Local relation conversion can evaluate the default before ConstantFolding runs. Cache only
+    // within this prepared expression; fresh copies and clock rewrites receive an empty cache.
+    @transient private lazy val value: Any = {
+      val evalConf = new SQLConf
+      settings.foreach { case (key, setting) => evalConf.setConfString(key, setting) }
+      SQLConf.withExistingConf(evalConf) {
+        val source = SpecialDatetimeValues.applyForExpression(child)
+        val literal = Literal.create(source.eval(EmptyRow), source.dataType)
+        val converted = coerceDefaultValue(
+          literal, targetType.asNullable, statementType, colName, defaultSQL).eval(EmptyRow)
+        if (dataType == dataType.asNullable) {
+          converted
+        } else {
+          // Conversion has already established the leaf types. Use table assignment only to
+          // generate nested null checks, without imposing its different conversion policy.
+          val input = AttributeReference(colName, dataType.asNullable, nullable = true)()
+          val target = AttributeReference(colName, dataType, nullable = true)()
+          evalConf.setConf(SQLConf.STORE_ASSIGNMENT_POLICY, SQLConf.StoreAssignmentPolicy.ANSI)
+          val output = TableOutputResolver.resolveOutputColumns(
+            "", Seq(target), LocalRelation(input), byName = false, evalConf)
+          val checked = output match {
+            case project: Project => project.projectList.head
+            case _ => input
+          }
+          checked.transform {
+            case attr: AttributeReference if attr.exprId == input.exprId =>
+              BoundReference(0, input.dataType, input.nullable)
+          }.eval(InternalRow(converted))
+        }
+      }
+    }
 
-    override protected def withNewChildrenInternal(
-        newLeft: Expression,
-        newRight: Expression): DeferredDefaultValue = copy(left = newLeft, right = newRight)
+    override def eval(input: InternalRow): Any = {
+      if (!foldable) {
+        throw SparkException.internalError("Default evaluated before statement clock binding")
+      }
+      InternalRow.copyValue(value)
+    }
+
+    override protected def withNewChildInternal(newChild: Expression): DeferredDefaultValue =
+      copy(child = newChild)
   }
 
   /**

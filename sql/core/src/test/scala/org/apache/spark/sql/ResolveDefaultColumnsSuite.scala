@@ -20,19 +20,21 @@ package org.apache.spark.sql
 import java.time.Instant
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
-import org.apache.spark.sql.catalyst.InternalRow
+import org.mockito.Mockito.{mockStatic, CALLS_REAL_METHODS}
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver
-import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayRepeat, ArrayTransform, AttributeReference, CurrentTime, EqualTo, Expression, Literal, Sha2, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, ArrayRepeat, ArrayTransform, AttributeReference, CurrentTime, CurrentTimestamp, EqualTo, Expression, If, IsNotNull, Literal, Sha2, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
 import org.apache.spark.sql.catalyst.expressions.objects.StaticInvoke
 import org.apache.spark.sql.catalyst.optimizer.{ComputeCurrentTime, ReplaceCurrentLike, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, OneRowRelation, Project}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, DateTimeUtils, ResolveDefaultColumns}
+import org.apache.spark.sql.catalyst.util.{ArrayData, CharVarcharUtils, DateTimeUtils, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.{Column, ColumnDefaultValue, Identifier, InMemoryTableCatalog, TableInfo}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DoubleType, IntegerType, LongType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, ByteType, DataType, DateType, DecimalType, DoubleType, IntegerType, LongType, MapType, MetadataBuilder, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType, TimestampNTZType, TimestampType}
 
 class ResolveDefaultColumnsSuite extends SharedSparkSession {
   test("column without default value defined (null as default)") {
@@ -88,6 +90,28 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           "tableColumns" -> "`c1`, `c2`",
           "dataColumns" -> "`col1`"))
     }
+  }
+
+  private def withAnalysisInstant[T](instant: Instant)(f: => T): T = {
+    val clock = mockStatic(classOf[Instant], CALLS_REAL_METHODS)
+    try {
+      clock.when[Instant](() => Instant.now()).thenReturn(instant)
+      f
+    } finally {
+      clock.close()
+    }
+  }
+
+  private case class CountedDefaultSource(child: Expression, counter: AtomicInteger)
+      extends UnaryExpression with CodegenFallback {
+    override def nullable: Boolean = child.nullable
+    override def dataType: DataType = child.dataType
+    override def eval(input: InternalRow): Any = {
+      counter.incrementAndGet()
+      child.eval(input)
+    }
+    override protected def withNewChildInternal(newChild: Expression): CountedDefaultSource =
+      copy(child = newChild)
   }
 
   test("current-time defaults use the enclosing query instant") {
@@ -170,24 +194,18 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           val analyzed = spark.sessionState.analyzer.execute(parsed)
           spark.sessionState.analyzer.checkAnalysis(analyzed)
           val counter = new AtomicInteger()
-          case class CountedLocalDefault(child: Expression)
-              extends UnaryExpression with CodegenFallback {
-            override def dataType: DataType = child.dataType
-            override def eval(input: InternalRow): Any = {
-              counter.incrementAndGet()
-              child.eval(input)
-            }
-            override protected def withNewChildInternal(
-                newChild: Expression): CountedLocalDefault = copy(child = newChild)
-          }
           var instrumented = 0
           val counted = analyzed.transformUp {
             case project: Project =>
               project.copy(projectList = project.projectList.map {
                 case alias: Alias if alias.name == "h" &&
                     alias.child.exists(_.isInstanceOf[Sha2]) =>
-                  instrumented += 1
-                  alias.withNewChildren(Seq(CountedLocalDefault(alias.child))).asInstanceOf[Alias]
+                  val child = alias.child.transformUp {
+                    case source: Sha2 =>
+                      instrumented += 1
+                      CountedDefaultSource(source, counter)
+                  }
+                  alias.withNewChildren(Seq(child)).asInstanceOf[Alias]
                 case other => other
               })
           }
@@ -202,6 +220,113 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
           assert(counter.get() == 1)
         }
       }
+  }
+
+  test("current-time defaults reset materialized values for fresh expressions and query instants") {
+    val firstInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val secondInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val defaultSQL = "sha2(CAST(current_timestamp() AS STRING), 256)"
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", StringType).withCurrentDefaultValue(defaultSQL)
+      val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      val counter = new AtomicInteger()
+      var instrumented = 0
+      val counted = default.transformUp {
+        case source: Sha2 =>
+          instrumented += 1
+          CountedDefaultSource(source, counter)
+      }
+      assert(instrumented == 1)
+      checkError(
+        intercept[SparkException](counted.eval()),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> "Default evaluated before statement clock binding"))
+      assert(counter.get() == 0)
+      val first = ComputeCurrentTime.applyForExpression(counted, firstInstant)
+      val firstValue = first.eval()
+      assert(first.eval() == firstValue)
+      assert(counter.get() == 1)
+
+      val fresh = first.freshCopyIfContainsStatefulExpression()
+      assert(fresh ne first)
+      assert(fresh.eval() == firstValue)
+      assert(fresh.eval() == firstValue)
+      assert(counter.get() == 2)
+
+      val second = ComputeCurrentTime.applyForExpression(counted, secondInstant)
+      val secondValue = second.eval()
+      assert(secondValue != firstValue)
+      assert(second.eval() == secondValue)
+      assert(first.eval() == firstValue)
+      assert(counter.get() == 3)
+    }
+  }
+
+  test("current-time defaults cache null values within each prepared expression") {
+    val counter = new AtomicInteger()
+    val defaultSQL = "IF(current_timestamp() IS NOT NULL, CAST(NULL AS INT), 1)"
+    val expression = If(IsNotNull(CurrentTimestamp()),
+      CountedDefaultSource(Literal.create(null, IntegerType), counter), Literal(1))
+    val metadata = new MetadataBuilder().putExpression(
+      ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+      defaultSQL, Some(expression)).build()
+    val field = StructField("value", IntegerType, metadata = metadata)
+    val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+    counter.set(0)
+    val instant = Instant.parse("2000-01-01T00:00:00Z")
+    val bound = ComputeCurrentTime.applyForExpression(default, instant)
+    assert(bound.eval() == null)
+    assert(bound.eval() == null)
+    assert(counter.get() == 1)
+    val fresh = bound.freshCopyIfContainsStatefulExpression()
+    assert(fresh.eval() == null)
+    assert(fresh.eval() == null)
+    assert(counter.get() == 2)
+  }
+
+  gridTest("current-time defaults isolate returned nested mutable values")(
+      Seq("struct", "array", "map")) { container =>
+    val instant = Instant.parse("2000-01-01T00:00:00Z")
+    val structType = StructType(Seq(StructField("a", TimestampType, nullable = false)))
+    val structSQL = "named_struct('a', current_timestamp())"
+    val (dataType, defaultSQL) = container match {
+      case "struct" => (structType, structSQL)
+      case "array" => (ArrayType(structType, containsNull = false), s"array($structSQL)")
+      case "map" =>
+        (MapType(StringType, structType, valueContainsNull = false), s"map('key', $structSQL)")
+      case other => fail(s"Unknown container: $other")
+    }
+    def nestedRow(value: Any): InternalRow = container match {
+      case "struct" => value.asInstanceOf[InternalRow]
+      case "array" => value.asInstanceOf[ArrayData].getStruct(0, 1)
+      case "map" => value.asInstanceOf[MapData].valueArray().getStruct(0, 1)
+      case other => fail(s"Unknown container: $other")
+    }
+    val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
+    val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+    val bound = ComputeCurrentTime.applyForExpression(default, instant)
+    val first = nestedRow(bound.eval())
+    assert(first.getLong(0) == DateTimeUtils.instantToMicros(instant))
+    first.setLong(0, -1L)
+    assert(nestedRow(bound.eval()).getLong(0) == DateTimeUtils.instantToMicros(instant))
+  }
+
+  test("current-time defaults avoid evaluating successful unused branches") {
+    val counter = new AtomicInteger()
+    val defaultSQL = "IF(current_timestamp() IS NOT NULL, 1, 2)"
+    val expression = If(
+      IsNotNull(CurrentTimestamp()), Literal(1), CountedDefaultSource(Literal(2), counter))
+    val metadata = new MetadataBuilder().putExpression(
+      ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+      defaultSQL, Some(expression)).build()
+    val field = StructField("value", IntegerType, metadata = metadata)
+    val default = ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+    assert(counter.get() == 0)
+    val instant = Instant.parse("2000-01-01T00:00:00Z")
+    val bound = ComputeCurrentTime.applyForExpression(default, instant)
+    assert(bound.eval() == 1)
+    assert(bound.eval() == 1)
+    assert(counter.get() == 0)
   }
 
   namedGridTest("current-time defaults preserve short-circuit guards")(Map(
@@ -295,6 +420,197 @@ class ResolveDefaultColumnsSuite extends SharedSparkSession {
         sql(s"INSERT INTO $tableName SELECT 1, DEFAULT")
         sql(s"INSERT INTO $tableName (i) SELECT 2")
         checkAnswer(spark.table(tableName), Seq(Row(1, Row(1)), Row(2, Row(1))))
+      }
+    }
+  }
+
+  gridTest("current-time defaults retain target schemas after clock binding")(
+      Seq("struct", "array", "map")) { container =>
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val structType = StructType(Seq(StructField("a", IntegerType)))
+    val structSQL = "named_struct(" +
+      "IF(current_timestamp() < TIMESTAMP'2000-01-02', 'a', 'b'), " +
+      "IF(current_timestamp() IS NOT NULL, 1, CAST(NULL AS INT)))"
+    val (dataType, defaultSQL) = container match {
+      case "struct" => (structType, structSQL)
+      case "array" => (ArrayType(structType, containsNull = false), s"array($structSQL)")
+      case "map" =>
+        (MapType(StringType, structType, valueContainsNull = false), s"map('key', $structSQL)")
+      case other => fail(s"Unknown container: $other")
+    }
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
+      val default = withAnalysisInstant(analysisInstant) {
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      assert(default.dataType == dataType)
+      val bound = ComputeCurrentTime.applyForExpression(default, queryInstant)
+      assert(bound.dataType == dataType)
+    }
+  }
+
+  test("current-time defaults preserve struct names in omitted JSON writes") {
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val defaultSQL = "named_struct(" +
+      "IF(current_timestamp() < TIMESTAMP'2000-01-02', 'a', 'b'), " +
+      "IF(current_timestamp() IS NOT NULL, 1, CAST(NULL AS INT)))"
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      withTable("clock_schema_defaults") {
+        withAnalysisInstant(analysisInstant) {
+          sql("CREATE TABLE clock_schema_defaults(i INT, s STRUCT<a: INT> DEFAULT " +
+            s"($defaultSQL)) USING json")
+        }
+        // Catalog persistence retains the original SQL but drops cached Catalyst expressions.
+        val catalog = spark.sessionState.catalog
+        val table = catalog.getTableMetadata(TableIdentifier("clock_schema_defaults"))
+        val schema = DataType.fromJson(table.schema.json).asInstanceOf[StructType]
+        catalog.alterTableDataSchema(table.identifier, schema)
+        val analyzed = withAnalysisInstant(analysisInstant) {
+          val parsed = spark.sessionState.sqlParser.parsePlan(
+            "INSERT INTO clock_schema_defaults(i) SELECT 1")
+          val plan = spark.sessionState.analyzer.execute(parsed)
+          spark.sessionState.analyzer.checkAnalysis(plan)
+          plan
+        }
+        val bound = analyzed.transformAllExpressions {
+          case expression => ComputeCurrentTime.applyForExpression(expression, queryInstant)
+        }
+        classic.Dataset.ofRows(spark, bound).collect()
+        checkAnswer(sql("SELECT i, s.a FROM clock_schema_defaults"), Row(1, 1))
+      }
+    }
+  }
+
+  test("current-time defaults retain decimal target types after clock binding") {
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val dataType = DecimalType(2, 0)
+    val defaultSQL = "round(1.25, " +
+      "IF(current_timestamp() < TIMESTAMP'2000-01-02', 0, 1))"
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
+      val default = withAnalysisInstant(analysisInstant) {
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      assert(default.dataType == dataType)
+      val bound = ComputeCurrentTime.applyForExpression(default, queryInstant)
+      assert(bound.dataType == dataType)
+    }
+  }
+
+  test("current-time defaults check numeric narrowing after catalog reparsing") {
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val defaultSQL = "IF(current_timestamp() < TIMESTAMP'2000-01-02', 127L, 128L)"
+    val metadata = new MetadataBuilder().putExpression(
+      ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY,
+      defaultSQL, Some(Literal(127.toByte))).build()
+    val schema = StructType(Seq(StructField("value", ByteType, metadata = metadata)))
+    val field = DataType.fromJson(schema.json).asInstanceOf[StructType].head
+    assert(field.metadata.getExpression[Expression](
+      ResolveDefaultColumns.CURRENT_DEFAULT_COLUMN_METADATA_KEY)._2.isEmpty)
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "false",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val default = withAnalysisInstant(analysisInstant) {
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      assert(ComputeCurrentTime.applyForExpression(default, analysisInstant).eval() == 127.toByte)
+      val bound = ComputeCurrentTime.applyForExpression(default, queryInstant)
+      val error = intercept[Exception](bound.eval())
+      val checkedRejection = error match {
+        case e: AnalysisException => e.getCondition == "INVALID_DEFAULT_VALUE.DATA_TYPE"
+        case e: SparkArithmeticException => e.getCondition == "CAST_OVERFLOW"
+        case _ => false
+      }
+      assert(checkedRejection, error.toString)
+    }
+  }
+
+  test("current-time defaults preserve accepted nested leaf conversions") {
+    val instant = Instant.parse("2000-01-01T00:00:00Z")
+    val dataType = StructType(Seq(StructField("a", LongType, nullable = false)))
+    val defaultSQL = "named_struct('a', CAST(" +
+      "IF(current_timestamp() < TIMESTAMP'2000-01-02', 'epoch', CAST(NULL AS STRING)) " +
+      "AS TIMESTAMP))"
+    withSQLConf(
+        SQLConf.STORE_ASSIGNMENT_POLICY.key -> "ANSI",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", dataType).withCurrentDefaultValue(defaultSQL)
+      val default = withAnalysisInstant(instant) {
+        assert(ResolveDefaultColumns.analyze(field, "INSERT").dataType == dataType)
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      val bound = SpecialDatetimeValues.applyForExpression(
+        ComputeCurrentTime.applyForExpression(default, instant))
+      assert(bound.eval().asInstanceOf[InternalRow].getLong(0) == 0L)
+    }
+  }
+
+  test("current-time defaults surface arithmetic failures after clock binding") {
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val defaultSQL = "IF(current_timestamp() < TIMESTAMP'2000-01-02', 1D, 1D / 0D)"
+    withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", DoubleType).withCurrentDefaultValue(defaultSQL)
+      val default = withAnalysisInstant(analysisInstant) {
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      assert(ComputeCurrentTime.applyForExpression(default, analysisInstant).eval() == 1.0)
+      val bound = ComputeCurrentTime.applyForExpression(default, queryInstant)
+      assert(intercept[SparkArithmeticException](bound.eval()).getCondition == "DIVIDE_BY_ZERO")
+    }
+  }
+
+  gridTest("current-time defaults preserve map duplicate-key semantics after clock binding")(
+      Seq("LAST_WIN", "EXCEPTION")) { policy =>
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val defaultSQL = "IF(current_timestamp() < TIMESTAMP'2000-01-02', " +
+      "0, size(map(1, 'a', 1, 'b')))"
+    withSQLConf(
+        SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy,
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", IntegerType).withCurrentDefaultValue(defaultSQL)
+      val default = withAnalysisInstant(analysisInstant) {
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      val bound = ComputeCurrentTime.applyForExpression(default, queryInstant)
+      if (policy == "LAST_WIN") {
+        assert(bound.eval() == 1)
+      } else {
+        assert(intercept[SparkRuntimeException](bound.eval()).getCondition == "DUPLICATED_MAP_KEY")
+      }
+    }
+  }
+
+  gridTest("current-time defaults retain the analysis configuration after clock binding")(
+      Seq("LAST_WIN", "EXCEPTION")) { policy =>
+    val analysisInstant = Instant.parse("2000-01-01T00:00:00Z")
+    val queryInstant = Instant.parse("2000-01-03T00:00:00Z")
+    val defaultSQL = "IF(current_timestamp() < TIMESTAMP'2000-01-02', " +
+      "0, size(map(1, 'a', 1, 'b')))"
+    withSQLConf(
+        SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy,
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      val field = StructField("value", IntegerType).withCurrentDefaultValue(defaultSQL)
+      val default = withAnalysisInstant(analysisInstant) {
+        ResolveDefaultColumns.getDefaultValueExprOrNullLit(field)
+      }
+      val outerPolicy = if (policy == "LAST_WIN") "EXCEPTION" else "LAST_WIN"
+      withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> outerPolicy) {
+        val bound = ComputeCurrentTime.applyForExpression(default, queryInstant)
+        if (policy == "LAST_WIN") {
+          assert(bound.eval() == 1)
+        } else {
+          val error = intercept[SparkRuntimeException](bound.eval())
+          assert(error.getCondition == "DUPLICATED_MAP_KEY")
+        }
+        assert(SQLConf.get.getConf(SQLConf.MAP_KEY_DEDUP_POLICY).toString == outerPolicy)
       }
     }
   }

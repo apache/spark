@@ -19,12 +19,12 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import java.util.concurrent.atomic.AtomicInteger
 
-import org.apache.spark.SparkArithmeticException
+import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayTransform, AttributeReference, Cast, Divide, EqualTo, EvalMode, Expression, GenericInternalRow, If, LambdaFunction, LeafExpression, LessThan, Literal, NamedLambdaVariable, Nondeterministic, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Add, Alias, ArrayTransform, AttributeReference, Cast, CreateMap, Divide, EqualTo, EvalMode, Expression, GenericInternalRow, If, LambdaFunction, LeafExpression, LessThan, Literal, NamedLambdaVariable, Nondeterministic, Size, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, LogicalPlan, Project}
@@ -104,7 +104,7 @@ class ConvertToLocalRelationSuite extends PlanTest {
     assert(element.value.get() == null)
   }
 
-  gridTest("materialize complete foldable projected values once")(Seq(1, 4)) { rowCount =>
+  gridTest("local projections evaluate constant values per row")(Seq(1, 4)) { rowCount =>
     val counter = new AtomicInteger()
     val value = CountedLocalEvaluation(Add(Literal(1), Literal(2)), counter)
     val input = LocalRelation(Nil, Seq.fill(rowCount)(InternalRow.empty))
@@ -113,7 +113,74 @@ class ConvertToLocalRelationSuite extends PlanTest {
     val result = Optimize.execute(project).asInstanceOf[LocalRelation]
 
     assert(result.data.map(_.getInt(0)) == Seq.fill(rowCount)(3))
-    assert(counter.get() == 1)
+    assert(counter.get() == rowCount)
+  }
+
+  gridTest("local projections preserve map duplicate-key semantics")(
+      Seq("LAST_WIN", "EXCEPTION")) { policy =>
+    withSQLConf(SQLConf.MAP_KEY_DEDUP_POLICY.key -> policy) {
+      val size = Size(CreateMap(Seq(Literal(1), Literal("a"), Literal(1), Literal("b"))))
+      val project = Project(Seq(Alias(size, "v")()),
+        LocalRelation(Nil, Seq.fill(3)(InternalRow.empty)))
+
+      if (policy == "LAST_WIN") {
+        val result = Optimize.execute(project).asInstanceOf[LocalRelation]
+        assert(result.data.map(_.getInt(0)) == Seq(1, 1, 1))
+      } else {
+        assert(intercept[SparkRuntimeException](Optimize.execute(project)).getCondition ==
+          "DUPLICATED_MAP_KEY")
+      }
+    }
+  }
+
+  gridTest("local projections preserve shared evaluation")(
+      for {
+        cseEnabled <- Seq(false, true)
+        rowCount <- Seq(1, 4)
+        shape <- Seq("roots", "shared children", "repeated child")
+      } yield (cseEnabled, rowCount, shape)) { case (cseEnabled, rowCount, shape) =>
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString) {
+      val counter = new AtomicInteger()
+      val shared = CountedLocalEvaluation(Add(Literal(1), Literal(2)), counter)
+      val (values, expected) = shape match {
+        case "roots" => (Seq.fill(3)(shared), Seq(3, 3, 3))
+        case "shared children" =>
+          (Seq(1, 2, 3).map(i => Add(shared, Literal(i))), Seq(4, 5, 6))
+        case "repeated child" => (Seq(Add(Add(shared, shared), shared)), Seq(9))
+      }
+      val project = Project(values.zipWithIndex.map { case (value, index) =>
+        Alias(value, s"v$index")()
+      }, LocalRelation(Nil, Seq.fill(rowCount)(InternalRow.empty)))
+
+      val result = Optimize.execute(project).asInstanceOf[LocalRelation]
+
+      assert(result.data.map { row =>
+        expected.indices.map(row.getInt)
+      } == Seq.fill(rowCount)(expected))
+      assert(counter.get() == rowCount * (if (cseEnabled) 1 else 3))
+    }
+  }
+
+  gridTest("local projections share constants with row-dependent outputs")(
+      for {
+        cseEnabled <- Seq(false, true)
+        rowCount <- Seq(1, 4)
+      } yield (cseEnabled, rowCount)) { case (cseEnabled, rowCount) =>
+    withSQLConf(SQLConf.SUBEXPRESSION_ELIMINATION_ENABLED.key -> cseEnabled.toString) {
+      val counter = new AtomicInteger()
+      val shared = CountedLocalEvaluation(Add(Literal(1), Literal(2)), counter)
+      val input = AttributeReference("v", IntegerType)()
+      val project = Project(Seq(
+        Alias(shared, "constant")(),
+        Alias(Add(input, shared), "dependent")()),
+        LocalRelation(Seq(input), (1 to rowCount).map(i => InternalRow(i))))
+
+      val result = Optimize.execute(project).asInstanceOf[LocalRelation]
+
+      assert(result.data.map(row => (row.getInt(0), row.getInt(1))) ==
+        (1 to rowCount).map(i => (3, i + 3)))
+      assert(counter.get() == rowCount * (if (cseEnabled) 1 else 2))
+    }
   }
 
   test("empty local input does not evaluate projected constants") {
@@ -145,7 +212,7 @@ class ConvertToLocalRelationSuite extends PlanTest {
     }
   }
 
-  test("local materialization retains original output attributes") {
+  test("local projections retain original output attributes") {
     val metadata = new MetadataBuilder().putString("description", "original output").build()
     val value = Cast(Literal("7"), IntegerType, evalMode = EvalMode.LEGACY)
     val alias = Alias(value, "original_name")(
@@ -168,6 +235,9 @@ class ConvertToLocalRelationSuite extends PlanTest {
 
   test("local projections isolate stateful per-row evaluation") {
     val sequence = LocalProjectionSequence()
+    sequence.initialize(0)
+    assert(sequence.eval(InternalRow.empty) == 1)
+    assert(sequence.freshCopyIfContainsStatefulExpression() ne sequence)
     val project = Project(Seq(Alias(sequence, "v")()),
       LocalRelation(Nil, Seq.fill(3)(InternalRow.empty)))
 
@@ -175,11 +245,10 @@ class ConvertToLocalRelationSuite extends PlanTest {
       val result = Optimize.execute(project).asInstanceOf[LocalRelation]
       assert(result.data.map(_.getInt(0)) == Seq(1, 2, 3))
     }
-    sequence.initialize(0)
-    assert(sequence.eval(InternalRow.empty) == 1)
+    assert(sequence.eval(InternalRow.empty) == 2)
   }
 
-  test("folded and row-dependent mutable projection outputs are copied") {
+  test("constant and row-dependent mutable projection outputs are copied") {
     val input = AttributeReference("v", IntegerType)()
     val project = Project(Seq(
       Alias(ExprReuseOutput(Literal(7)), "constant")(),
@@ -194,7 +263,7 @@ class ConvertToLocalRelationSuite extends PlanTest {
     assert(result.data(1).getStruct(1, 1).getInt(0) == 2)
   }
 
-  test("local constant materialization respects static evaluation exceptions") {
+  test("local projections retain evaluation exceptions") {
     val counter = new AtomicInteger()
     val value = CountedLocalEvaluation(Literal(7), counter)
     value.setTagValue(ConstantFolding.FAILED_TO_EVALUATE, ())
@@ -236,6 +305,8 @@ case class LocalProjectionSequence() extends LeafExpression with Nondeterministi
     next += 1
     next
   }
+  override def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): LocalProjectionSequence = copy()
 }
 
 

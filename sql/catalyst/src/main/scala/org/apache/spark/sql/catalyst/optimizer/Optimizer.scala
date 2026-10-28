@@ -3339,24 +3339,13 @@ object DecimalAggregates extends Rule[LogicalPlan] {
 object ConvertToLocalRelation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
     _.containsPattern(LOCAL_RELATION), ruleId) {
-    case project @ Project(projectList, LocalRelation(output, data, isStreaming, stream))
+    case Project(projectList, LocalRelation(output, data, isStreaming, stream))
         if !projectList.exists(hasUnevaluableExpr) =>
       val freshProjectList = projectList.map(
-        _.freshCopyIfContainsStatefulExpression())
-      // Materialize complete constant values once, before evaluating individual local rows.
-      // Leave row-dependent expressions intact so their guarded operands stay guarded.
-      val evaluationExprs = if (data.nonEmpty) {
-        freshProjectList.map {
-          case Alias(child, _) if child.foldable => ConstantFolding.constantFolding(child)
-          case expr if expr.foldable => ConstantFolding.constantFolding(expr)
-          case expr => expr
-        }
-      } else {
-        freshProjectList
-      }
-      val projection = new InterpretedMutableProjection(evaluationExprs, output)
+        _.freshCopyIfContainsStatefulExpression().asInstanceOf[NamedExpression])
+      val projection = new InterpretedMutableProjection(freshProjectList, output)
       projection.initialize(0)
-      LocalRelation(project.output, data.map(projection(_).copy()),
+      LocalRelation(freshProjectList.map(_.toAttribute), data.map(projection(_).copy()),
         isStreaming, stream)
 
     case Limit(IntegerLiteral(limit), LocalRelation(output, data, isStreaming, stream)) =>
