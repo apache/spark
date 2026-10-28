@@ -158,7 +158,7 @@ object StaticSQLConf {
         "server refuses to start when hive.server2.enable.doAs=true and " +
         "hive.server2.authentication verifies user identities (any recognized type other " +
         "than NONE/NOSASL), unless this option is set to true to acknowledge the limitation.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)

@@ -428,4 +428,64 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows11(0).getString(0) === "amy")
     assert(rows11(1).getString(0) === "alex")
   }
+
+  test("SPARK-60479: CHAR equality is pushed, including CJK") {
+    val tableName = caseConvert("char_pad")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      // CHAR(n CHAR) so CJK occupies one length unit, matching Spark CHAR padding.
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 CHAR))").executeUpdate()
+      }
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, '日本')")
+      // scalastyle:on nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getDecimal(0).intValueExact() === 1)
+      // scalastyle:off nonascii
+      val cjk = sql(s"SELECT id FROM $table WHERE flag = '日本'")
+      // scalastyle:on nonascii
+      checkFilterPushed(cjk)
+      val cjkRows = cjk.collect()
+      assert(cjkRows.length === 1)
+      assert(cjkRows(0).getDecimal(0).intValueExact() === 3)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getDecimal(0).intValueExact() === 2)
+    }
+  }
+
+  test("SPARK-60479: CHAR(n BYTE) multibyte equality is pushed") {
+    val tableName = caseConvert("char_byte")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 BYTE))").executeUpdate()
+        // Insert via JDBC. A Spark INSERT would pad the 2-byte character to
+        // CHAR width in characters (5 bytes) and Oracle would raise ORA-12899.
+        // scalastyle:off nonascii
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1, 'ä'), (2, 'äb'), (3, 'Y')").executeUpdate()
+        // scalastyle:on nonascii
+      }
+      // scalastyle:off nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'ä'")
+      checkFilterPushed(eq)
+      assert(eq.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(1))
+      val eqAb = sql(s"SELECT id FROM $table WHERE flag = 'äb'")
+      checkFilterPushed(eqAb)
+      assert(eqAb.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(2))
+      // scalastyle:on nonascii
+      val eqY = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eqY)
+      assert(eqY.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(3))
+    }
+  }
 }
