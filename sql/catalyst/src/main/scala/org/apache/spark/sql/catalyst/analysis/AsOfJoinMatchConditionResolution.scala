@@ -116,12 +116,14 @@ private[sql] object AsOfJoinMatchConditionResolution {
         leftSet = leftSet,
         rightSet = rightSet,
         leftExpr = leftOperand,
-        rightExpr = rightOperand
+        rightExpr = rightOperand,
+        isDataFrame = true
       )
       AsOfJoinValidation.validateMatchConditionOperands(
         join = join,
         leftExpr = leftOperand,
-        rightExpr = rightOperand
+        rightExpr = rightOperand,
+        isDataFrame = true
       )
     }
     AsOfJoinValidation.validateNearestStringKeys(
@@ -129,6 +131,13 @@ private[sql] object AsOfJoinMatchConditionResolution {
       leftKey = leftOperand,
       rightKey = rightOperand
     )
+    if (useSortMerge) {
+      AsOfJoinValidation.validateSortMergeToleranceKeys(
+        join = join,
+        leftKey = leftOperand,
+        rightKey = rightOperand
+      )
+    }
     val asOfCondition = AsOfJoin.makeAsOfCond(
       leftAsOf = leftOperand,
       rightAsOf = rightOperand,
@@ -145,7 +154,8 @@ private[sql] object AsOfJoinMatchConditionResolution {
         rightSet = rightSet,
         expr1 = leftOperand,
         operator = operator,
-        expr2 = rightOperand
+        expr2 = rightOperand,
+        isDataFrame = true
       )
       val (coercedLeft, coercedRight) =
         AsOfJoin.coerceMatchStringOperands(normalizedLeft, normalizedRight)

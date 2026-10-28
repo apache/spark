@@ -571,6 +571,44 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
+  gridTest("fallback selection survives enabling sort-merge after analysis")(Seq(false, true)) {
+      singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT 10 AS k")
+        val right = spark.sql("SELECT * FROM VALUES (9, 'before'), (12, 'after') AS t(k, tag)")
+        for (direction <- Seq("backward", "forward", "nearest")) {
+          withTempView("asof_fallback_view") {
+            val joined = left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = direction
+            ).select("tag")
+            val join = joined.queryExecution.analyzed.collectFirst { case j: AsOfJoin => j }.get
+            assert(!join.requiresSortMergeAsOfJoin)
+            // The single-pass analyzer does not resolve CREATE VIEW commands.
+            withAsOfJoinAnalyzer(singlePass = false) {
+              joined.createOrReplaceTempView("asof_fallback_view")
+            }
+            withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+              for (df <- Seq(joined, spark.table("asof_fallback_view"))) {
+                val expected = if (direction == "forward") "after" else "before"
+                QueryTest.checkAnswer(
+                  df = df, expectedAnswer = Seq(Row(expected)), checkToRDD = false)
+                assert(!df.queryExecution.optimizedPlan.exists(_.isInstanceOf[AsOfJoin]))
+                assert(collectFirst(df.queryExecution.executedPlan) {
+                  case s: SortMergeAsOfJoinExec => s
+                }.isEmpty)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
   gridTest("sort-merge keys preserve analysis case sensitivity")(Seq(false, true)) {
       singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
@@ -699,7 +737,8 @@ class SortMergeAsOfJoinSuite extends QueryTest
         }
 
         for ((leftKey, direction) <- Seq(
-            (functions.lit(5), "backward"), (left.col("lk"), "nearest"))) {
+            (functions.lit(5), "backward"), (left.col("lk"), "backward"),
+            (left.col("lk"), "nearest"))) {
           checkError(
             exception = intercept[AnalysisException] {
               join(leftKey, direction).queryExecution.analyzed
@@ -1348,24 +1387,29 @@ class SortMergeAsOfJoinSuite extends QueryTest
 
   gridTest("nearest join rejects STRING keys during analysis")(Seq(false, true)) { singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
-      for (ansi <- Seq(false, true)) {
+      for {
+        ansi <- Seq(false, true)
+        sortMerge <- Seq(false, true)
+      } {
         withSQLConf(
-            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> sortMerge.toString,
             SQLConf.ANSI_ENABLED.key -> ansi.toString) {
           val left = spark.sql("SELECT '50' AS k")
           val right = spark.sql(
             "SELECT * FROM VALUES ('9', 'nine'), ('10', 'ten'), ('100', 'hundred') AS t(k, tag)")
+          val error = intercept[AnalysisException] {
+            left.joinAsOf(
+              other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
+              usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+              allowExactMatches = true, direction = "nearest"
+            ).queryExecution.analyzed
+          }
           checkError(
-            exception = intercept[AnalysisException] {
-              left.joinAsOf(
-                other = right, leftAsOf = left.col("k"), rightAsOf = right.col("k"),
-                usingColumns = Seq.empty, joinType = "inner", tolerance = null,
-                allowExactMatches = true, direction = "nearest"
-              ).queryExecution.analyzed
-            },
+            exception = error,
             condition = "AS_OF_JOIN.UNSUPPORTED_NEAREST_KEY_TYPE",
             parameters = Map("dataType" -> "\"STRING\"")
           )
+          assert(!error.getMessage.contains("sort-merge"))
           val castKeys = left.joinAsOf(
             other = right, leftAsOf = left.col("k").cast("double"),
             rightAsOf = right.col("k").cast("double"), usingColumns = Seq.empty,
@@ -1447,6 +1491,44 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
+  gridTest("sort-merge joins reject a tolerance on STRING keys")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      for {
+        ansi <- Seq(false, true)
+        collation <- Seq("", " COLLATE UTF8_LCASE")
+      } {
+        withSQLConf(
+            SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+            SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+          val left = spark.sql(s"SELECT '50'$collation AS lk")
+          val right = spark.sql(
+            s"SELECT k$collation AS rk FROM VALUES ('41'), ('5'), ('50') AS t(k)")
+          for (direction <- Seq("backward", "forward")) {
+            checkError(
+              exception = intercept[AnalysisException] {
+                left.joinAsOf(
+                  other = right, leftAsOf = left.col("lk"), rightAsOf = right.col("rk"),
+                  usingColumns = Seq.empty, joinType = "inner", tolerance = functions.lit(10),
+                  allowExactMatches = true, direction = direction
+                ).queryExecution.analyzed
+              },
+              condition = "AS_OF_JOIN.UNSUPPORTED_TOLERANCE_KEY_TYPE",
+              parameters = Map("dataType" -> s""""STRING$collation"""")
+            )
+            val castKeys = left.joinAsOf(
+              other = right, leftAsOf = left.col("lk").cast("int"),
+              rightAsOf = right.col("rk").cast("int"), usingColumns = Seq.empty,
+              joinType = "inner", tolerance = functions.lit(10),
+              allowExactMatches = true, direction = direction
+            ).select("rk")
+            QueryTest.checkAnswer(
+              df = castKeys, expectedAnswer = Seq(Row("50")), checkToRDD = false)
+          }
+        }
+      }
+    }
+  }
+
   gridTest("join rejects mixed STRING collations")(Seq(false, true)) { singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
       for (ansi <- Seq(false, true)) {
@@ -1465,7 +1547,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
                   allowExactMatches = true, direction = direction
                 ).queryExecution.analyzed
               },
-              condition = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+              condition = "AS_OF_JOIN.UNSUPPORTED_KEY_TYPE",
               parameters = Map("type1" -> "\"STRING COLLATE UTF8_LCASE\"", "type2" -> "\"STRING\"")
             )
           }
@@ -1588,9 +1670,58 @@ class SortMergeAsOfJoinSuite extends QueryTest
                   allowExactMatches = false, direction = direction
                 ).queryExecution.analyzed
               },
-              condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+              condition = "AS_OF_JOIN.KEY_REFERENCE",
               parameters = Map("refs1" -> refs1, "refs2" -> refs2)
             )
+          }
+        }
+      }
+    }
+  }
+
+  gridTest("join key errors describe DataFrame keys")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(
+          SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+          SQLConf.ANSI_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT 10 AS lk")
+        val right = spark.sql("SELECT 9 AS rk")
+        for (direction <- Seq("backward", "forward", "nearest")) {
+          for ((leftKey, rightKey, refs1, refs2) <- Seq(
+              (left.col("lk") + right.col("rk"), right.col("rk"),
+                "\"(lk + rk)\"", "\"rk\""),
+              (left.col("lk"), left.col("lk"), "\"lk\"", "\"lk\""))) {
+            val error = intercept[AnalysisException] {
+              left.joinAsOf(
+                other = right, leftAsOf = leftKey, rightAsOf = rightKey,
+                usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                allowExactMatches = true, direction = direction
+              ).queryExecution.analyzed
+            }
+            checkError(
+              exception = error,
+              condition = "AS_OF_JOIN.KEY_REFERENCE",
+              parameters = Map("refs1" -> refs1, "refs2" -> refs2)
+            )
+            assert(!error.getMessage.contains("MATCH_CONDITION"))
+          }
+
+          for ((leftKey, invalidExpression) <- Seq(
+              (left.col("lk") + functions.rand(), ".*rand.*"),
+              (left.col("lk") + functions.expr("(SELECT 1)"), ".*scalarsubquery.*"))) {
+            val error = intercept[AnalysisException] {
+              left.joinAsOf(
+                other = right, leftAsOf = leftKey, rightAsOf = right.col("rk"),
+                usingColumns = Seq.empty, joinType = "inner", tolerance = null,
+                allowExactMatches = true, direction = direction
+              ).queryExecution.analyzed
+            }
+            checkErrorMatchPVals(
+              exception = error,
+              condition = "AS_OF_JOIN.INVALID_KEY_EXPRESSION",
+              parameters = Map("expr" -> invalidExpression)
+            )
+            assert(!error.getMessage.contains("MATCH_CONDITION"))
           }
         }
       }
@@ -1624,7 +1755,7 @@ class SortMergeAsOfJoinSuite extends QueryTest
           tolerance = null, allowExactMatches = true, direction = "nearest"
         ).queryExecution.analyzed
       },
-      condition = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      condition = "AS_OF_JOIN.KEY_REFERENCE",
       parameters = Map("refs1" -> expectedRef, "refs2" -> "\"k\"")
     )
   }

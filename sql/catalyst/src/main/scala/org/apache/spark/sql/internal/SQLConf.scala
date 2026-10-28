@@ -1165,8 +1165,10 @@ object SQLConf {
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
       .internal()
-      .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
-        "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
+      .doc("When true, use a dedicated sort-merge physical operator for DataFrame AS-OF joins " +
+        "instead of rewriting to a correlated subquery. The strategy is selected during " +
+        "analysis; later changes to this setting do not affect already analyzed joins. " +
+        "SQL AS-OF joins always use sort-merge. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
         "in a single pass.")
       .version("4.3.0")

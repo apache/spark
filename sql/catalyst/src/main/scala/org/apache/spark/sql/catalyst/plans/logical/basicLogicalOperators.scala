@@ -2965,12 +2965,15 @@ object AsOfJoin {
       rightSet: AttributeSet,
       expr1: Expression,
       operator: MatchComparisonOperator,
-      expr2: Expression): (Expression, Expression, MatchComparisonOperator) = {
+      expr2: Expression,
+      isDataFrame: Boolean = false): (Expression, Expression, MatchComparisonOperator) = {
     val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
     val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
     (expr1Side, expr2Side) match {
       case (Some(true), Some(false)) => (expr1, expr2, operator)
       case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
+      case _ if isDataFrame =>
+        throw QueryCompilationErrors.asOfJoinKeyReferenceError(expr1, expr2)
       case _ =>
         throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(expr1, expr2)
     }
@@ -3018,7 +3021,7 @@ object AsOfJoin {
       tolerance: Option[Expression],
       allowExactMatches: Boolean,
       direction: AsOfJoinDirection,
-      evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get)): Expression = {
+      evalContext: NumericEvalContext): Expression = {
     val base = (allowExactMatches, direction) match {
       case (true, Backward) => GreaterThanOrEqual(leftAsOf, rightAsOf)
       case (false, Backward) => GreaterThan(leftAsOf, rightAsOf)

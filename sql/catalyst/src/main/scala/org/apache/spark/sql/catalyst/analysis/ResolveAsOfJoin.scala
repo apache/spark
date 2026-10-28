@@ -25,8 +25,9 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.AS_OF_JOIN
 import org.apache.spark.sql.catalyst.util._
 
 /**
- * Resolves [[AsOfJoin]] operators: materializes `MATCH_CONDITION` into the fields of
- * [[MaterializedMatchCondition]], and expands `USING` column lists into equi-join predicates.
+ * Resolves SQL `MATCH_CONDITION` operands and DataFrame keys into [[MaterializedMatchCondition]].
+ * Validates DataFrame tolerance and selects its execution strategy during analysis.
+ * Expands `USING` column lists into equi-join predicates.
  */
 object ResolveAsOfJoin extends Rule[LogicalPlan] with SQLConfHelper {
 

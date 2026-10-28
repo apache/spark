@@ -5210,6 +5210,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "refs2" -> toSQLExpr(expr2)))
   }
 
+  def asOfJoinKeyReferenceError(expr1: Expression, expr2: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "AS_OF_JOIN.KEY_REFERENCE",
+      messageParameters = Map(
+        "refs1" -> toSQLExpr(expr1),
+        "refs2" -> toSQLExpr(expr2)))
+  }
+
   def nestedSequentialStreamingUnionError(): Throwable = {
     new AnalysisException(
       errorClass = "NESTED_SEQUENTIAL_STREAMING_UNION",

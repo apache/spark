@@ -30,13 +30,14 @@ import org.apache.spark.sql.types.StringType
 /** Shared validation for SQL and DataFrame ASOF joins. */
 private[sql] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelper {
 
-  /** Rejects a MATCH_CONDITION operand that references both inputs. */
+  /** Rejects a SQL operand or DataFrame key that references both inputs. */
   def validateMatchConditionTableReferences(
       join: AsOfJoin,
       leftSet: AttributeSet,
       rightSet: AttributeSet,
       leftExpr: Expression,
-      rightExpr: Expression): Unit = {
+      rightExpr: Expression,
+      isDataFrame: Boolean = false): Unit = {
     def referencesBothJoinSides(refs: AttributeSet): Boolean = {
       refs.nonEmpty &&
         refs.intersect(leftSet).nonEmpty &&
@@ -47,7 +48,11 @@ private[sql] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelpe
     val rightRefs = rightExpr.references
     if (referencesBothJoinSides(leftRefs) || referencesBothJoinSides(rightRefs)) {
       join.failAnalysis(
-        errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+        errorClass = if (isDataFrame) {
+          "AS_OF_JOIN.KEY_REFERENCE"
+        } else {
+          "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE"
+        },
         messageParameters = Map(
           "refs1" -> toSQLExpr(leftExpr),
           "refs2" -> toSQLExpr(rightExpr)))
@@ -58,24 +63,37 @@ private[sql] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelpe
   def validateMatchConditionOperands(
       join: AsOfJoin,
       leftExpr: Expression,
-      rightExpr: Expression): Unit = {
+      rightExpr: Expression,
+      isDataFrame: Boolean = false): Unit = {
     Seq(leftExpr, rightExpr).foreach { expr =>
       findInvalidMatchConditionExpression(expr).foreach { invalidExpr =>
         join.failAnalysis(
-          errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION",
+          errorClass = if (isDataFrame) {
+            "AS_OF_JOIN.INVALID_KEY_EXPRESSION"
+          } else {
+            "ASOF_JOIN_MATCH_CONDITION_INVALID_EXPRESSION"
+          },
           messageParameters = Map("expr" -> toSQLExpr(invalidExpr)))
       }
     }
     if (!MatchConditionTypes.areOperandsCompatible(leftExpr.dataType, rightExpr.dataType)) {
       join.failAnalysis(
-        errorClass = "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE",
+        errorClass = if (isDataFrame) {
+          "AS_OF_JOIN.UNSUPPORTED_KEY_TYPE"
+        } else {
+          "ASOF_JOIN_MATCH_CONDITION_INVALID_TYPE"
+        },
         messageParameters = Map(
           "type1" -> toSQLType(leftExpr.dataType),
           "type2" -> toSQLType(rightExpr.dataType)))
     }
 
     if (leftExpr.references.isEmpty || rightExpr.references.isEmpty) {
-      throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(leftExpr, rightExpr)
+      if (isDataFrame) {
+        throw QueryCompilationErrors.asOfJoinKeyReferenceError(leftExpr, rightExpr)
+      } else {
+        throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(leftExpr, rightExpr)
+      }
     }
   }
 
@@ -112,6 +130,21 @@ private[sql] object AsOfJoinValidation extends QueryErrorsBase with SQLConfHelpe
         join = join,
         leftKey = leftKey,
         rightKey = rightKey
+      )
+    }
+  }
+
+  /** Rejects numeric tolerance bounds that are not monotone in STRING key order. */
+  def validateSortMergeToleranceKeys(
+      join: AsOfJoin,
+      leftKey: Expression,
+      rightKey: Expression): Unit = {
+    if (join.tolerance.nonEmpty &&
+        leftKey.dataType.isInstanceOf[StringType] &&
+        rightKey.dataType.isInstanceOf[StringType]) {
+      join.failAnalysis(
+        errorClass = "AS_OF_JOIN.UNSUPPORTED_TOLERANCE_KEY_TYPE",
+        messageParameters = Map("dataType" -> toSQLType(leftKey.dataType))
       )
     }
   }
