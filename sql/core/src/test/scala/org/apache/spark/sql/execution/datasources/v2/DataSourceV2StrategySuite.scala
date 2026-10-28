@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.Count
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete, Count, Percentile, PercentileDisc}
 import org.apache.spark.sql.catalyst.expressions.variant.VariantGet
 import org.apache.spark.sql.catalyst.optimizer.{BooleanSimplification, CombineFilters, ConstantFolding}
 import org.apache.spark.sql.catalyst.plans.Inner
@@ -43,7 +43,7 @@ import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.{BaseRelation, TableScan}
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampType, TimeType, VariantType}
+import org.apache.spark.sql.types.{ArrayType, BooleanType, DoubleType, FloatType, IntegerType, LongType, StringType, StructField, StructType, TimestampNTZNanosType, TimestampType, TimeType, VariantType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
@@ -1008,6 +1008,17 @@ class DataSourceV2StrategySuite extends SharedSparkSession {
     val expr = VariantGet(ref, nullPath, StringType, failOnError = true)
     val result = new V2ExpressionBuilder(expr).build()
     assert(result.isEmpty, "null path should not translate (graceful, no NPE)")
+  }
+
+  test("SPARK-60542: percentile_cont over nanosecond timestamps is not pushed down") {
+    def translate(agg: AggregateFunction): Option[V2Expression] =
+      new V2ExpressionBuilder(AggregateExpression(agg, Complete, isDistinct = false)).build()
+    val d = AttributeReference("d", DoubleType)()
+    val ts = AttributeReference("ts", TimestampNTZNanosType(9))()
+    assert(translate(new Percentile(d, Literal(0.5))).isDefined)
+    // A source would interpolate with its own rounding; percentile_disc returns an input value.
+    assert(translate(new Percentile(ts, Literal(0.5))).isEmpty)
+    assert(translate(PercentileDisc(ts, Literal(0.5))).isDefined)
   }
 
   test("VariantGet with non-column child returns None") {
