@@ -1603,12 +1603,12 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title=""):
 
     choice = get_input(
         "Pick complete (local ref %s). How should it land?\n"
-        "  [d] Push directly to %s/%s (default)\n"
+        "  [d] Push directly to %s/%s\n"
         "  [p] Push to your fork (%s) and open a draft backport PR against %s (for CI)\n"
-        "  [s] Skip this branch\n"
+        "  [s] Skip this branch (default)\n"
         "Choose [d/p/s]: "
         % (pick_branch_name, PUSH_REMOTE_NAME, pick_ref, FORK_REMOTE_NAME, pick_ref),
-        {"d": ["d", "direct", ""], "p": ["p", "pr"], "s": ["s", "skip"]},
+        {"d": ["d", "direct"], "p": ["p", "pr"], "s": ["s", "skip", ""]},
     )
     if choice == "s":
         # Restore the original checkout and drop the temp PICK_PR_* branches before skipping,
