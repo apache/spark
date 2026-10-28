@@ -458,69 +458,6 @@ df.withColumn("c", col("c").cast("string")).select(col("c")).collect()
 
 If you cannot change the call sites, set `spark.sql.analyzer.strictDataFrameColumnResolution=false` to opt into the lenient name-based fallback. This is intended as an escape hatch and is not the default.
 
-# Session and Configuration Gotchas
-
-The [common gotchas](#common-gotchas-with-mitigations) come from deferred analysis. The following
-come from the session being a handle to a server rather than a process-local object. In PySpark neither produces an error (the Scala
-builder raises for the second). The
-[Spark Connect Programming Guide](spark-connect-programming-guide.html) describes the intended
-usage of each API.
-
-## 6. Session reuse across connection strings
-
-In PySpark, `getOrCreate()` returns the process's active session whenever there is one, even when
-the builder names a different `remote` URL:
-
-```python
-a = SparkSession.builder.remote("sc://server-a:15002").getOrCreate()
-b = SparkSession.builder.remote("sc://server-b:15002").getOrCreate()
-assert b is a     # passes; server-b is never contacted
-```
-
-Code that intends to talk to a second server keeps talking to the first, and `stop()` on the
-shared object ends the session for every caller that holds it. The Scala client caches sessions
-by builder configuration, so it does not show this.
-
-### Mitigation
-
-Use `builder.create()` for each server, or for each unit of work that needs its own session;
-`create()` always starts a new server-side session, and sessions created this way do not share
-temporary views, configuration or artifacts. `create()` needs a `sc://` connection string and
-rejects `local[*]` with `UNSUPPORTED_LOCAL_CONNECTION_STRING`.
-
-## 7. Static configuration set from the client is ignored
-
-A client can only change runtime SQL configuration of its own session. Static SQL configuration
-(`spark.sql.catalogImplementation`, `spark.sql.extensions`) and core configuration
-(`spark.jars`, `spark.jars.packages`) are fixed when the server starts. `spark.conf.set()` on such a
-key raises `CANNOT_MODIFY_STATIC_CONFIG` or `CANNOT_MODIFY_CONFIG`, but in PySpark the same key on
-the builder does not: the builder applies its options after the session exists, and a static one
-produces a `UserWarning` and no change. The Scala builder raises the same error from
-`getOrCreate()` instead, except for `spark.sql.catalogImplementation` (set with `.config` or with
-`enableHiveSupport()`), which the Scala client drops with a log warning before contacting the server.
-
-```python
-spark = SparkSession.builder.remote("sc://localhost:15002").enableHiveSupport().getOrCreate()
-# UserWarning: Failed to set spark.sql.catalogImplementation (CANNOT_MODIFY_STATIC_CONFIG)
-spark.conf.get("spark.sql.catalogImplementation")   # 'in-memory'
-```
-
-The wording of the warning depends on the server: servers up to the 4.3 line say
-`Failed to set <key> to <value> due to [<condition>] ...`. The key and the condition are the
-parts to match on.
-
-A session that asked for Hive support, an extension or a JAR this way runs without it. Catalog
-definitions (`spark.sql.catalog.<name>`) are runtime configuration and read back as set, but the
-server resolves the class the first time the catalog is used and fails then with
-`CANNOT_LOAD_CATALOG` if the JAR is not on the server.
-
-### Mitigation
-
-Put static settings, catalogs and their JARs in the server's startup command (see
-[Starting a Spark Connect server](spark-connect-setup.html#starting-a-spark-connect-server)), treat
-the warning as an error in CI, and have the application confirm what it depends on at startup,
-for example with `spark.sql("SHOW NAMESPACES IN <catalog>")`.
-
 # Summary
 
 | Aspect                | Spark Classic | Spark Connect                                       |
