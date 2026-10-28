@@ -587,4 +587,107 @@ class HiveOrcSourceSuite extends OrcSuite with TestHiveSingleton {
       }
     }
   }
+
+  test("SPARK-60642: Hive ORC writes and reads collated strings") {
+    // The Hive type parser rejects `string collate <name>`, which `catalogString` produces for a
+    // collated string, so the serializer must not put a collation in the type string.
+    val collations = Seq("UTF8_BINARY", "UTF8_LCASE", "UNICODE_CI")
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      collations.foreach { collation =>
+        withTable("t") {
+          sql(s"CREATE TABLE t (i INT, c STRING COLLATE $collation) USING ORC")
+          sql("INSERT INTO t SELECT 1, 'a'")
+          checkAnswer(spark.table("t"), Row(1, "a"))
+          // The collation is kept by the catalog, not by the file.
+          assert(spark.table("t").schema("c").dataType === StringType(collation))
+          checkAnswer(
+            sql("SELECT i FROM t WHERE c = 'A'"),
+            if (collation == "UTF8_BINARY") Nil else Seq(Row(1)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes and reads collated strings in nested types") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTable("t") {
+        sql(
+          """CREATE TABLE t (
+            |  a ARRAY<STRING COLLATE UNICODE_CI>,
+            |  s STRUCT<f: STRING COLLATE UTF8_LCASE, g: ARRAY<STRING COLLATE UNICODE_CI>>,
+            |  m MAP<STRING, STRING COLLATE UNICODE_CI>,
+            |  b MAP<STRING COLLATE UTF8_BINARY, ARRAY<STRING COLLATE UNICODE_CI>>
+            |) USING ORC""".stripMargin)
+        sql(
+          """INSERT INTO t SELECT
+            |  array('a'),
+            |  named_struct('f', 'b', 'g', array('c')),
+            |  map('k', 'd'),
+            |  map('k', array('e'))""".stripMargin)
+        checkAnswer(
+          spark.table("t"),
+          Row(Seq("a"), Row("b", Seq("c")), Map("k" -> "d"), Map("k" -> Seq("e"))))
+        checkAnswer(sql("SELECT a[0], s.f, s.g[0], m['k'], b['k'][0] FROM t"),
+          Row("a", "b", "c", "d", "e"))
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC data source writes collated strings through DataFrame") {
+    withSQLConf(SQLConf.ORC_IMPLEMENTATION.key -> "hive") {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // `StringType("UTF8_BINARY")` prints as `string collate UTF8_BINARY` unlike `StringType`.
+        val schema = new StructType()
+          .add("b", StringType("UTF8_BINARY"))
+          .add("c", StringType("UNICODE_CI"))
+          .add("a", ArrayType(StringType("UTF8_LCASE")))
+          .add("s", new StructType().add("f", StringType("UNICODE_CI")))
+        val df = spark.createDataFrame(
+          spark.sparkContext.parallelize(Seq(Row("a", "b", Seq("c"), Row("d")))), schema)
+        df.write.orc(path)
+        // The file stores plain strings.
+        assert(spark.read.orc(path).schema === StructType.fromDDL(
+          "b STRING, c STRING, a ARRAY<STRING>, s STRUCT<f: STRING>"))
+        // A read with a collated schema decodes the same values.
+        checkAnswer(spark.read.schema(df.schema).orc(path), df)
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes and reads collated CHAR and VARCHAR") {
+    // CHAR and VARCHAR with a collation print as `char(3) collate <name>` under the last two
+    // confs, and as `string collate <name>` by default.
+    Seq(
+      Seq.empty[(String, String)],
+      Seq(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> "true"),
+      Seq(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true")).foreach { confs =>
+      withSQLConf((SQLConf.ORC_IMPLEMENTATION.key -> "hive") +: confs: _*) {
+        withTable("t") {
+          sql(
+            """CREATE TABLE t (
+              |  c CHAR(3) COLLATE UNICODE_CI,
+              |  v VARCHAR(3) COLLATE UTF8_LCASE,
+              |  b CHAR(3) COLLATE UTF8_BINARY,
+              |  a ARRAY<VARCHAR(3) COLLATE UNICODE_CI>
+              |) USING ORC""".stripMargin)
+          sql("INSERT INTO t SELECT 'a', 'b', 'c', array('d')")
+          checkAnswer(spark.table("t"), Row("a  ", "b", "c  ", Seq("d")))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60642: Hive ORC writes collated strings through a converted Hive serde table") {
+    withSQLConf(
+        SQLConf.ORC_IMPLEMENTATION.key -> "hive",
+        HiveUtils.CONVERT_METASTORE_ORC.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t (i INT, c STRING COLLATE UNICODE_CI) STORED AS ORC")
+        sql("INSERT INTO t SELECT 1, 'a'")
+        checkAnswer(spark.table("t"), Row(1, "a"))
+        checkAnswer(sql("SELECT i FROM t WHERE c = 'A'"), Row(1))
+      }
+    }
+  }
 }
