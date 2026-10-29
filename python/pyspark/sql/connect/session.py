@@ -101,8 +101,6 @@ from pyspark.sql.types import (
     StructType,
     TimestampType,
     VarcharType,
-    VariantVal,
-    _create_converter,
     _has_nulltype,
     _infer_schema,
     _merge_type,
@@ -144,11 +142,10 @@ def _replace_char_varchar_with_collation_preserving_string(
     return data_type
 
 
-from pyspark.core.connect.rdd import RDD as ConnectRDD, _loads, _PAYLOAD_COL
-
-
 def _is_connect_rdd(obj: Any) -> bool:
-    return isinstance(obj, ConnectRDD)
+    # A Spark Connect RDD only exists once its module was imported, so do not import it here.
+    rdd_module = sys.modules.get("pyspark.core.connect.rdd")
+    return rdd_module is not None and isinstance(obj, rdd_module.RDD)
 
 
 def _materialize_connect_rdd_with_schema(
@@ -156,27 +153,8 @@ def _materialize_connect_rdd_with_schema(
     struct: StructType,
     prefers_large_types: bool,
 ) -> DataFrame:
-    """Decode pickled Connect-RDD rows into a typed SQL DataFrame (distributed ``mapInArrow``)."""
-
-    from pyspark.sql.conversion import LocalDataToArrowConversion
-
-    deduped = cast(StructType, _deduplicate_field_names(struct))
-    converter = _create_converter(deduped)
-
-    def mapper(it: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-        rows_py: List[Any] = []
-        for batch in it:
-            for pb in batch.column(0).to_pylist():
-                elem = _loads(pb)
-                if isinstance(elem, VariantVal):
-                    raise PySparkValueError("Rows cannot be of type VariantVal")
-                rows_py.append(converter(elem))
-        if not rows_py:
-            return
-        tbl = LocalDataToArrowConversion.convert(rows_py, deduped, prefers_large_types)
-        yield from tbl.to_batches()
-
-    return cast(DataFrame, rdd._df.select(_PAYLOAD_COL).mapInArrow(mapper, schema=deduped))
+    """Convert the elements of a Spark Connect RDD into rows of ``struct``."""
+    return cast(DataFrame, rdd._to_dataframe(struct, prefers_large_types))
 
 
 if TYPE_CHECKING:
@@ -565,7 +543,9 @@ class SparkSession:
         samplingRatio: Optional[float],
         names: Optional[List[str]],
     ) -> StructType:
-        """Infer schema from a Connect-mode Python :class:`~pyspark.RDD` (mirrors classic ``_inferSchema``)."""
+        """
+        Infer the schema of a Spark Connect :class:`~pyspark.RDD`, like classic ``_inferSchema``.
+        """
 
         first = rdd.first()
         if isinstance(first, Sized) and len(first) == 0:

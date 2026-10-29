@@ -615,7 +615,7 @@ pyspark_core = Module(
     python_test_goals=[
         # doctests
         "pyspark.conf",
-        "pyspark.core.rdd",
+        "pyspark.core.classic.rdd",
         "pyspark.core.context",
         "pyspark.core.broadcast",
         "pyspark.accumulators",

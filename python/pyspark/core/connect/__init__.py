@@ -22,13 +22,23 @@ RDD-style execution backed by Spark SQL Connect lives here so imports stay separ
 JVM APIs: use :mod:`pyspark.core.context` (:class:`~pyspark.core.context.SparkContext`,
 :class:`~pyspark.core.rdd.RDD`) versus this package's
 :class:`~pyspark.core.connect.context.SparkContext` and :class:`~pyspark.core.connect.rdd.RDD`.
+
+Python workers import ``pyspark.core.connect._runtime``, which runs this module too, so it
+imports nothing eagerly: the client modules check the Spark Connect dependencies themselves.
 """
 
-from pyspark.sql.connect.utils import check_dependencies
-
-check_dependencies()
-
-from pyspark.core.connect.context import SparkContext
-from pyspark.core.connect.rdd import RDD
+from typing import Any
 
 __all__ = ["RDD", "SparkContext"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "RDD":
+        from pyspark.core.connect.rdd import RDD
+
+        return RDD
+    if name == "SparkContext":
+        from pyspark.core.connect.context import SparkContext
+
+        return SparkContext
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

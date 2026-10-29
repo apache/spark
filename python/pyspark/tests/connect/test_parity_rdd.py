@@ -15,14 +15,19 @@
 # limitations under the License.
 #
 
+import os
+import tempfile
 import unittest
+import uuid
 
 from py4j.protocol import Py4JJavaError
 
+from pyspark.errors import PySparkNotImplementedError
 from pyspark.errors.exceptions.connect import PythonException
-from pyspark.tests.test_rdd import RDDTestsMixin
+from pyspark.sql import Row
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import QuietTest, have_numpy, have_pandas
+from pyspark.tests.test_rdd import RDDTestsMixin
 
 _CONNECT_STOPITER_EXCEPTIONS = (Py4JJavaError, RuntimeError, PythonException)
 
@@ -45,20 +50,6 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         self.assertEqual(sorted(rdd.collect()), [20, 30])
         self.assertEqual(rdd.count(), 2)
 
-    @unittest.skip(
-        "Spark Connect parity: skips very large shuffle/load test covered by classic "
-        "`pyspark.tests.test_rdd` (times out Connect CI module budget)."
-    )
-    def test_external_group_by_key(self):
-        super().test_external_group_by_key()
-
-    @unittest.skip(
-        "Spark Connect parity: skips oversized row payload test covered by classic "
-        "`pyspark.tests.test_rdd` (slow over Connect)."
-    )
-    def test_zip_with_different_object_sizes(self):
-        super().test_zip_with_different_object_sizes()
-
     @unittest.skip("Spark Connect does not support SparkContext.broadcast / Broadcast variables.")
     def test_large_broadcast(self):
         super().test_large_broadcast()
@@ -75,13 +66,6 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
     def test_multithread_broadcast_pickle(self):
         super().test_multithread_broadcast_pickle()
 
-    @unittest.skip(
-        "Spark Connect RDD does not support ``toLocalIterator(prefetchPartitions=True)``; "
-        "covered by classic ``pyspark.tests.test_rdd``."
-    )
-    def test_to_localiterator_prefetch(self):
-        super().test_to_localiterator_prefetch()
-
     def test_to_localiterator(self):
         """Same checks as mixin, but bounded repartition for Spark Connect throughput.
 
@@ -96,6 +80,24 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         rdd2 = rdd.repartition(_CONNECT_TO_LOCAL_ITERATOR_TEST_NUM_PARTITIONS)
         it2 = rdd2.toLocalIterator()
         self.assertEqual([1, 2, 3], sorted(it2))
+
+    def test_count_approx_distinct(self):
+        # Spark Connect counts with Spark SQL's approx_count_distinct, whose HyperLogLog++ hashes
+        # values with XxHash64 rather than the MurmurHash of Spark Classic's RDD, so estimates of
+        # a few distinct values can be off by a couple in either direction.
+        rdd = self.sc.parallelize(range(1000))
+        self.assertTrue(950 < rdd.countApproxDistinct(0.03) < 1050)
+        self.assertTrue(950 < rdd.map(float).countApproxDistinct(0.03) < 1050)
+        self.assertTrue(950 < rdd.map(str).countApproxDistinct(0.03) < 1050)
+        self.assertTrue(950 < rdd.map(lambda x: (x, -x)).countApproxDistinct(0.03) < 1050)
+
+        rdd = self.sc.parallelize([i % 20 for i in range(1000)], 7)
+        self.assertTrue(17 <= rdd.countApproxDistinct() <= 23)
+        self.assertTrue(17 <= rdd.map(float).countApproxDistinct() <= 23)
+        self.assertTrue(17 <= rdd.map(str).countApproxDistinct() <= 23)
+        self.assertTrue(17 <= rdd.map(lambda x: (x, -x)).countApproxDistinct() <= 23)
+
+        self.assertRaises(ValueError, lambda: rdd.countApproxDistinct(0.00000001))
 
     def test_stopiteration_in_user_code(self):
         def stopit(*x):
@@ -179,6 +181,40 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
         actual = [list(row)]
         expected = [list(data[0])]
         self.assertEqual(expected, actual)
+
+    def test_dataframe_rdd(self):
+        df = self.spark.createDataFrame([(1, "a"), (2, "b")], "x int, y string")
+        self.assertEqual(df.rdd.collect(), [Row(x=1, y="a"), Row(x=2, y="b")])
+        self.assertEqual(df.rdd.map(lambda r: (r.x + 1, r.y)).collect(), [(2, "a"), (3, "b")])
+        self.assertEqual(df.rdd.toDF().collect(), df.collect())
+        self.assertEqual(
+            df.rdd.map(lambda r: Row(z=r.x * 10)).toDF().collect(), [Row(z=10), Row(z=20)]
+        )
+
+    def test_application_id(self):
+        self.assertEqual(self.sc.applicationId, self.spark.conf.get("spark.app.id"))
+
+    def test_list_files_and_archives(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "added_%s.txt" % uuid.uuid4().hex)
+            with open(path, "w") as f:
+                f.write("x")
+            self.sc.addFile(path)
+            self.assertIn("file:" + path, self.sc.listFiles)
+
+    def test_profiles(self):
+        with self.sql_conf({"spark.sql.pyspark.udf.profiler": "perf"}):
+            self.sc.parallelize(range(10), 2).map(lambda x: x + 1).collect()
+        try:
+            with tempfile.TemporaryDirectory() as d:
+                self.sc.dump_profiles(d)
+                self.assertTrue(len(os.listdir(d)) > 0)
+        finally:
+            self.spark.profile.clear()
+
+    def test_set_checkpoint_dir_not_supported(self):
+        with self.assertRaises(PySparkNotImplementedError):
+            self.sc.setCheckpointDir("/tmp/connect-rdd-checkpoint")
 
 
 if __name__ == "__main__":

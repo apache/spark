@@ -15,39 +15,37 @@
 # limitations under the License.
 #
 
-from __future__ import annotations
-
 import os
 import time
 import warnings
-from collections.abc import Sequence
-from io import BytesIO
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Dict,
     Iterable,
-    Iterator,
     List,
     Optional,
+    Sequence,
     Set,
     Tuple,
     TypeVar,
     cast,
 )
 
-import pyarrow as pa
-
+from pyspark.core.connect import _runtime as rt
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
-from pyspark.serializers import BatchedSerializer, CloudPickleSerializer, CPickleSerializer
+from pyspark.serializers import CloudPickleSerializer, CPickleSerializer
 from pyspark.sql.connect import functions as F
-from pyspark.sql.types import BinaryType, IntegerType, StructField, StructType
 
 if TYPE_CHECKING:
+    from pyspark.conf import SparkConf
     from pyspark.core.connect.rdd import RDD
+    from pyspark.sql.dataframe import DataFrame
 
 
 T = TypeVar("T")
+U = TypeVar("U")
 
 # Sentinel so default ``serializer`` is not recreated per call site (would break equality checks).
 _CONNECT_SC_SERIALIZER_ARG_UNSPECIFIED = object()
@@ -101,12 +99,21 @@ def _connect_remote_endpoint(master: Optional[str], conf_pairs: List[Tuple[str, 
     return f"sc://localhost:{DefaultChannelBuilder.default_port()}"
 
 
+def _resource_uri(path: str) -> str:
+    """The URI Spark Classic lists for a resource added from ``path``."""
+    from urllib.parse import urlparse
+
+    if urlparse(path).scheme:
+        return path
+    return "file:" + os.path.abspath(path)
+
+
 class SparkContext:
     """
-    Session-scoped SparkContext façade for Spark Connect (PySpark only).
+    Session-scoped SparkContext facade for Spark Connect (PySpark only).
 
-    Elements are exchanged as ``pickle`` bytes in a single binary column backed by Spark SQL /
-    Arrow execution (``mapInArrow``, Python UDFs, etc.).
+    RDD elements are exchanged as pickled chunks in a binary column backed by Spark SQL /
+    Arrow execution (``mapInArrow``).
 
     Besides ``SparkContext(connectSparkSession)`` (wrapper used by
     :meth:`SparkSession.sparkContext <pyspark.sql.connect.session.SparkSession.sparkContext>`),
@@ -131,7 +138,7 @@ class SparkContext:
         profiler_cls: Any = None,
         udf_profiler_cls: Any = None,
         memory_profiler_cls: Any = None,
-    ) -> SparkContext:
+    ) -> "SparkContext":
         from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
 
         if (
@@ -270,7 +277,7 @@ class SparkContext:
                 continue
             b = b.config(ck, cv)
 
-        # Always allocate a new Connect SparkSession for this façade. ``getOrCreate()`` would
+        # Always allocate a new Connect SparkSession for this facade. ``getOrCreate()`` would
         # return the global default/active session and make ``stop()`` affect unrelated callers.
         session = b.create()
         self._session = session
@@ -280,12 +287,29 @@ class SparkContext:
         self._finalize_connect_sc_init()
 
     def _finalize_connect_sc_init(self) -> None:
-        """One-time façade clock for :attr:`startTime` (milliseconds since Unix epoch)."""
-        # Session-scoped attribute duck-typed for the Connect façade only.
-        sess = self._session
-        s = cast(Any, sess)
+        """One-time facade clock for :attr:`startTime` (milliseconds since Unix epoch)."""
+        # Session-scoped attribute duck-typed for the Connect facade only.
+        s = cast(Any, self._session)
         if getattr(s, "_pyspark_connect_sc_epoch_ms", None) is None:
             s._pyspark_connect_sc_epoch_ms = int(time.time() * 1000)
+        if getattr(s, "_pyspark_connect_sc_files", None) is None:
+            s._pyspark_connect_sc_files = []
+            s._pyspark_connect_sc_archives = []
+
+    @classmethod
+    def getOrCreate(cls, conf: Optional["SparkConf"] = None) -> "SparkContext":
+        """
+        The :class:`SparkContext` of the active Spark Connect session, or of a new session
+        built from ``conf`` when there is none.
+        """
+        from pyspark.sql.connect.session import SparkSession as ConnectSparkSession
+
+        session = ConnectSparkSession.getActiveSession()
+        if session is None:
+            session = ConnectSparkSession._get_default_session()
+        if session is not None and not session.is_stopped:
+            return session.sparkContext
+        return cls(conf=conf)
 
     @property
     def serializer(self) -> CloudPickleSerializer:
@@ -301,14 +325,33 @@ class SparkContext:
         return self._session.version
 
     @property
+    def applicationId(self) -> str:
+        """The ``spark.app.id`` of the application serving this Spark Connect session."""
+        return cast(str, self._session.conf.get("spark.app.id"))
+
+    @property
     def _jvm(self) -> Any:
         return _JVM_QUIET_STUB
 
     @property
     def defaultParallelism(self) -> int:
-        v = self._session.conf.get("spark.default.parallelism", "1")
-        assert v is not None
-        return max(1, int(v))
+        """
+        ``spark.default.parallelism`` when set; otherwise the server's default parallelism,
+        found once per session from the partitions of a ``range`` without a partition count.
+        """
+        v = self._session.conf.get("spark.default.parallelism", None)
+        if v is not None:
+            return max(1, int(v))
+        s = cast(Any, self._session)
+        cached = getattr(s, "_pyspark_connect_sc_default_parallelism", None)
+        if cached is None:
+            # A range without a partition count is split into the server's default parallelism,
+            # and every split is non-empty while there are at least as many rows as splits.
+            pids = self._session.range(1 << 20).select(F.spark_partition_id().alias("p"))
+            row = pids.agg(F.max("p")).first()
+            cached = 1 if row is None or row[0] is None else int(row[0]) + 1
+            s._pyspark_connect_sc_default_parallelism = cached
+        return cached
 
     @property
     def defaultMinPartitions(self) -> int:
@@ -326,7 +369,7 @@ class SparkContext:
     @property
     def startTime(self) -> int:
         """
-        Milliseconds since the Unix epoch when this Connect :class:`SparkContext` façade was
+        Milliseconds since the Unix epoch when this Connect :class:`SparkContext` facade was
         first initialized for the backing session (best-effort analogue of classic ``startTime``).
         """
         s = cast(Any, self._session)
@@ -338,7 +381,7 @@ class SparkContext:
     def _conf(self) -> Any:
         return self._session.conf
 
-    def union(self, rdds: List[RDD[Any]]) -> RDD[Any]:
+    def union(self, rdds: List["RDD[T]"]) -> "RDD[T]":
         if len(rdds) == 0:
             return self.emptyRDD()
         acc = rdds[0]
@@ -349,7 +392,8 @@ class SparkContext:
     def cancelJobGroup(self, groupId: str) -> None:
         self._session.interruptTag(groupId)
 
-    def cancelAllJobs(self) -> None:
+    def cancelAllJobs(self, reason: Optional[str] = None) -> None:
+        """Interrupt every operation of this Spark Connect session. ``reason`` is not sent."""
         self._session.interruptAll()
 
     def cancelJobsWithTag(self, tag: str) -> None:
@@ -386,8 +430,19 @@ class SparkContext:
             )
 
     def setCheckpointDir(self, dirName: str) -> None:
-        """Best-effort: stores ``spark.checkpoint.dir`` in session configuration."""
-        self._session.conf.set("spark.checkpoint.dir", dirName)
+        """
+        Not supported: ``spark.checkpoint.dir`` is a server configuration that a Spark Connect
+        session cannot change. Set it when starting the Spark Connect server.
+        """
+        raise PySparkNotImplementedError(
+            errorClass="NOT_IMPLEMENTED",
+            messageParameters={
+                "feature": (
+                    "SparkContext.setCheckpointDir on Spark Connect (set spark.checkpoint.dir "
+                    "when starting the Spark Connect server)"
+                ),
+            },
+        )
 
     def getCheckpointDir(self) -> Optional[str]:
         return self._session.conf.get("spark.checkpoint.dir", None)
@@ -423,12 +478,34 @@ class SparkContext:
                 },
             )
         self._session.addArtifacts(path, file=True)
+        self._record_resource("_pyspark_connect_sc_files", path)
 
     def addPyFile(self, path: str) -> None:
         self._session.addArtifacts(path, pyfile=True)
+        self._record_resource("_pyspark_connect_sc_files", path)
 
     def addArchive(self, path: str) -> None:
         self._session.addArtifacts(path, archive=True)
+        self._record_resource("_pyspark_connect_sc_archives", path)
+
+    def _record_resource(self, attr: str, path: str) -> None:
+        self._finalize_connect_sc_init()
+        resources = getattr(self._session, attr)
+        uri = _resource_uri(path)
+        if uri not in resources:
+            resources.append(uri)
+
+    @property
+    def listFiles(self) -> List[str]:
+        """The files added through this context with :meth:`addFile` or :meth:`addPyFile`."""
+        self._finalize_connect_sc_init()
+        return list(cast(Any, self._session)._pyspark_connect_sc_files)
+
+    @property
+    def listArchives(self) -> List[str]:
+        """The archives added through this context with :meth:`addArchive`."""
+        self._finalize_connect_sc_init()
+        return list(cast(Any, self._session)._pyspark_connect_sc_archives)
 
     def addJobTag(self, tag: str) -> None:
         self._session.addTag(tag)
@@ -442,16 +519,43 @@ class SparkContext:
     def clearJobTags(self) -> None:
         self._session.clearTags()
 
+    def show_profiles(self) -> None:
+        """
+        Print the Python profiles collected for this session, which RDD functions produce when
+        ``spark.sql.pyspark.udf.profiler`` is set (see :meth:`SparkSession.profile`).
+        """
+        self._session.profile.show()
+
+    def dump_profiles(self, path: str) -> None:
+        """Dump the Python profiles collected for this session into ``path``."""
+        self._session.profile.dump(path)
+
+    # -- RDD sources ---------------------------------------------------------------------------
+
+    def _with_min_partitions(self, rdd: "RDD[T]", minPartitions: Optional[int]) -> "RDD[T]":
+        """
+        Honor an explicit ``minPartitions`` for file sources. Spark SQL decides file splits from
+        session configurations, so count them, and spread the elements over ``minPartitions``
+        partitions only when there are fewer.
+        """
+        if minPartitions is None or minPartitions <= 1:
+            return rdd
+        if rdd.getNumPartitions() >= minPartitions:
+            return rdd
+        return rdd.repartition(minPartitions)
+
     def textFile(
         self,
         name: str,
         minPartitions: Optional[int] = None,
         use_unicode: bool = True,
-    ) -> RDD[str]:
-        """Match classic :meth:`SparkContext.textFile`; ``use_unicode=False`` emits a parity warning."""
-
-        import pyspark.core.connect.rdd as _rdd
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    ) -> "RDD[str]":
+        """
+        Read a text file through the Spark SQL text source, one element per line. File splits
+        follow the session's file source configurations; ``minPartitions`` is honored as a
+        minimum, which takes a job to count the splits.
+        """
+        from pyspark.core.connect.rdd import RDD
 
         if not use_unicode:
             warnings.warn(
@@ -460,36 +564,20 @@ class SparkContext:
                 UserWarning,
                 stacklevel=2,
             )
-
-        df_txt = self._session.read.text(name)
-        minPartitions = minPartitions or min(self.defaultParallelism, 2)
-        np = int(minPartitions)
-        if np > 1:
-            df_txt = cast(ConnectDataFrame, df_txt.repartition(np))
-
-        def enc(it: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for batch in it:
-                vals = batch.column(0).to_pylist()
-                yield pa.record_batch(
-                    {
-                        _rdd._PAYLOAD_COL: pa.array(
-                            [_rdd._dumps(v) for v in vals], type=pa.large_binary()
-                        )
-                    }
-                )
-
-        out = df_txt.mapInArrow(enc, schema=_rdd._PICKLED_SCHEMA)
-        return _rdd.RDD(out, self, np)
+        rdd: RDD[str] = RDD(self._session.read.text(name), self, None, rt.SOURCE_VALUES)
+        return self._with_min_partitions(rdd, minPartitions)
 
     def wholeTextFiles(
         self,
         path: str,
         minPartitions: Optional[int] = None,
         use_unicode: bool = True,
-    ) -> RDD[Tuple[str, str]]:
-        """Each file becomes one pickled ``(uri, utf-8 text)`` row (via ``read.text(wholetext=True)``)."""
-        import pyspark.core.connect.rdd as _rdd
-        from pyspark.sql.connect.dataframe import DataFrame as ConnectDataFrame
+    ) -> "RDD[Tuple[str, str]]":
+        """
+        Each file becomes one ``(uri, utf-8 text)`` element, read with
+        ``read.text(wholetext=True)``.
+        """
+        from pyspark.core.connect.rdd import RDD
 
         if not use_unicode:
             warnings.warn(
@@ -500,148 +588,72 @@ class SparkContext:
             )
 
         paths = [p.strip() for p in path.split(",") if p.strip()]
-        tagged = cast(
-            ConnectDataFrame,
-            self._session.read.text(paths, wholetext=True).select(
-                F.input_file_name().alias("__wtp"),
-                F.col("value").alias("__wtv"),
-            ),
+        df = self._session.read.text(paths, wholetext=True).select(
+            F.input_file_name(), F.col("value")
         )
+        rdd: RDD[Tuple[str, str]] = RDD(df, self, None, rt.SOURCE_PAIRS)
+        return self._with_min_partitions(rdd, minPartitions)
 
-        minPartitions = minPartitions or self.defaultMinPartitions
-        np = int(minPartitions)
-        if np > 1:
-            tagged = cast(ConnectDataFrame, tagged.repartition(np))
-
-        def enc_pairs(it: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for batch in it:
-                pl = batch.column(0).to_pylist()
-                vl = batch.column(1).to_pylist()
-                yield pa.record_batch(
-                    {
-                        _rdd._PAYLOAD_COL: pa.array(
-                            [_rdd._dumps((str(pu), str(vu))) for pu, vu in zip(pl, vl)],
-                            type=pa.large_binary(),
-                        )
-                    }
-                )
-
-        out = cast(ConnectDataFrame, tagged.select("__wtp", "__wtv")).mapInArrow(
-            enc_pairs, schema=_rdd._PICKLED_SCHEMA
-        )
-        return _rdd.RDD(out, self, np)
-
-    def binaryFiles(self, path: str, minPartitions: Optional[int] = None) -> RDD[Tuple[str, bytes]]:
-        """
-        Read paths through the Spark SQL ``binaryFile`` datasource; each row becomes a
-        pickled ``(file_uri, content_bytes)``.
-
-        Uses the same ``minPartitions`` default as classic
-        :meth:`pyspark.core.context.SparkContext.binaryFiles`. Very large payloads remain subject to
-        ``spark.sql.sources.binaryFile.maxLength`` on the server.
-        """
-        import pyspark.core.connect.rdd as _rdd
-
+    def _binary_files_df(self, path: str) -> "DataFrame":
         paths = [p.strip() for p in path.split(",") if p.strip()]
         reader = self._session.read.format("binaryFile")
-        if len(paths) == 1:
-            df_bin = reader.load(paths[0])
-        else:
-            df_bin = reader.load(paths)
-        staged = df_bin.select(F.col("path"), F.col("content"))
+        df = reader.load(paths[0]) if len(paths) == 1 else reader.load(paths)
+        return df.select(F.col("path"), F.col("content"))
 
-        minPartitions = minPartitions or self.defaultMinPartitions
-        np = int(minPartitions)
-        if np > 1:
-            staged = staged.repartition(np)
-
-        def enc_pairs(it: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
-            for batch in it:
-                pl = batch.column(0).to_pylist()
-                cl = batch.column(1).to_pylist()
-                pairs: List[Tuple[str, bytes]] = []
-                for pu, raw in zip(pl, cl):
-                    if isinstance(raw, memoryview):
-                        bu = raw.tobytes()
-                    elif raw is None:
-                        bu = b""
-                    else:
-                        bu = bytes(raw)
-                    pairs.append((str(pu), bu))
-                yield pa.record_batch(
-                    {
-                        _rdd._PAYLOAD_COL: pa.array(
-                            [_rdd._dumps(pair) for pair in pairs], type=pa.large_binary()
-                        )
-                    }
-                )
-
-        out = staged.mapInArrow(enc_pairs, schema=_rdd._PICKLED_SCHEMA)
-        return _rdd.RDD(out, self, np)
-
-    def pickleFile(self, name: str, minPartitions: Optional[int] = None) -> RDD[Any]:
+    def binaryFiles(
+        self, path: str, minPartitions: Optional[int] = None
+    ) -> "RDD[Tuple[str, bytes]]":
         """
-        Read a directory produced by :meth:`~pyspark.core.connect.rdd.RDD.saveAsPickleFile`.
-
-        Not compatible with classic JVM pickle object files.
+        Read paths through the Spark SQL ``binaryFile`` datasource; each file becomes a
+        ``(file_uri, content_bytes)`` element. Very large files remain subject to
+        ``spark.sql.sources.binaryFile.maxLength`` on the server.
         """
+        from pyspark.core.connect.rdd import RDD
 
-        import os
+        rdd: RDD[Tuple[str, bytes]] = RDD(self._binary_files_df(path), self, None, rt.SOURCE_PAIRS)
+        return self._with_min_partitions(rdd, minPartitions)
 
-        from pyspark.serializers import read_int
+    def binaryRecords(self, path: str, recordLength: int) -> "RDD[bytes]":
+        """
+        Read flat binary files of fixed-length records through the Spark SQL ``binaryFile``
+        datasource. Each file is read as a whole, so files remain subject to
+        ``spark.sql.sources.binaryFile.maxLength`` on the server.
+        """
+        from pyspark.core.connect.rdd import RDD
 
-        parts = sorted(
-            p
-            for p in (
-                os.path.join(name, f)
-                for f in os.listdir(name)
-                if f.startswith("part-") and not f.endswith(".crc")
-            )
+        if recordLength <= 0:
+            raise ValueError("recordLength must be positive, but got %d" % recordLength)
+
+        def split_records(_: int, files: Iterable[Tuple[str, bytes]]) -> Iterable[bytes]:
+            for file_path, content in files:
+                if len(content) % recordLength != 0:
+                    raise ValueError(
+                        "Partial record (length = %d, fixed record length = %d) found at the "
+                        "end of %s." % (len(content) % recordLength, recordLength, file_path)
+                    )
+                for start in range(0, len(content), recordLength):
+                    yield content[start : start + recordLength]
+
+        return RDD(self._binary_files_df(path), self, None, rt.SOURCE_PAIRS, split_records)
+
+    def pickleFile(self, name: str, minPartitions: Optional[int] = None) -> "RDD[Any]":
+        """
+        Read the elements saved by :meth:`~pyspark.core.connect.rdd.RDD.saveAsPickleFile` on
+        Spark Connect. The files of Spark Classic's ``saveAsPickleFile`` cannot be read.
+        """
+        from pyspark.core.connect.rdd import RDD
+
+        df = self._session.read.parquet(name).select(
+            F.col("value").alias(rt.CHUNK_COL), F.col("n").alias(rt.COUNT_COL)
         )
-        raw = b""
-        for p in parts:
-            with open(p, "rb") as bf:
-                raw += bf.read()
+        rdd: RDD[Any] = RDD(df, self, None)
+        return self._with_min_partitions(rdd, minPartitions)
 
-        if not raw:
-            elems: List[Any] = []
-        else:
-            meta_path = os.path.join(name, ".connect_pickle_batchsize")
-            mode = "10"
-            if os.path.isfile(meta_path):
-                with open(meta_path, encoding="ascii") as meta_f:
-                    mode = meta_f.read().strip()
-            stream = BytesIO(raw)
-            if mode == "auto":
-                ser = CPickleSerializer()
-                elems = []
-                while True:
-                    try:
-                        ln = read_int(stream)
-                    except Exception:
-                        break
-                    if ln <= 0:
-                        break
-                    chunk = stream.read(ln)
-                    if len(chunk) != ln:
-                        break
-                    batch = ser.loads(chunk)
-                    if isinstance(batch, list):
-                        elems.extend(batch)
-                    else:
-                        elems.append(batch)
-            else:
-                bs = int(mode)
-                elems = list(BatchedSerializer(CPickleSerializer(), bs).load_stream(stream))
+    def emptyRDD(self) -> "RDD[Any]":
+        from pyspark.core.connect.rdd import RDD, _chunk_schema
 
-        np = max(1, int(minPartitions or self.defaultMinPartitions))
-        return self.parallelize(elems, numSlices=np)
-
-    def emptyRDD(self) -> RDD[Any]:
-        import pyspark.core.connect.rdd as _rdd
-
-        df = self._session.createDataFrame([], schema=_rdd._PICKLED_SCHEMA)
-        return _rdd.RDD(df, self, None)
+        df = self._session.createDataFrame([], schema=_chunk_schema())
+        return RDD(df, self, 0)
 
     def range(
         self,
@@ -649,25 +661,29 @@ class SparkContext:
         end: Optional[int] = None,
         step: int = 1,
         numSlices: Optional[int] = None,
-    ) -> RDD[int]:
-        import pyspark.core.connect.rdd as _rdd
+    ) -> "RDD[int]":
+        """
+        Create an RDD of int over ``range(start, end, step)`` through
+        :meth:`SparkSession.range`; the partitions hold the same elements as Spark Classic's.
+        """
+        from pyspark.core.connect.rdd import RDD
 
         if end is None:
             end = start
             start = 0
         num_partitions = int(numSlices) if numSlices is not None else self.defaultParallelism
+        df = self._session.range(int(start), int(end), int(step), numPartitions=num_partitions)
+        return RDD(df, self, num_partitions, rt.SOURCE_VALUES)
 
-        rg = self._session.range(int(start), int(end), int(step), numPartitions=num_partitions)
-        rg_tagged = rg.withColumn(_rdd._STABLE_PARTITION_COL, F.spark_partition_id())
-        out = _rdd._encode_pickled_range_df(rg_tagged)
-        rd_int: _rdd.RDD[int] = _rdd.RDD(out, self, num_partitions)
-        rd_int._stable_partition_col = _rdd._STABLE_PARTITION_COL
-        rd_int._range_meta = (int(start), int(end), int(step), num_partitions)
-        rd_int._range_map_chain = []
-        return rd_int
+    def parallelize(self, c: Iterable[T], numSlices: Optional[int] = None) -> "RDD[T]":
+        """
+        Distribute a local Python collection: it is sliced like Spark Classic's
+        ``ParallelCollectionRDD``, pickled in chunks on the driver, and placed with
+        :meth:`DataFrame.repartitionById`.
+        """
+        import pyarrow as pa
 
-    def parallelize(self, c: Iterable[T], numSlices: Optional[int] = None) -> RDD[T]:
-        import pyspark.core.connect.rdd as _rdd
+        from pyspark.core.connect.rdd import RDD, _pid_chunk_schema, _place
 
         if not isinstance(c, Iterable):
             raise PySparkTypeError(
@@ -682,36 +698,54 @@ class SparkContext:
         num_partitions = int(numSlices) if numSlices is not None else self.defaultParallelism
 
         if isinstance(c, range):
-            return cast(_rdd.RDD[T], self.range(c.start, c.stop, c.step, numSlices=num_partitions))
+            return cast("RDD[T]", self.range(c.start, c.stop, c.step, numSlices=num_partitions))
 
-        elems_source: Sequence[Any]
-        # Partition slicing requires sequence-style indexing (``dict_keys``, ``set``, etc. must be copied).
-        if "__len__" not in dir(c) or getattr(type(c), "__getitem__", None) is None:
-            elems_source = list(c)
-        else:
-            elems_source = cast(Sequence[Any], c)
-
-        if len(elems_source) == 0:
-            return cast(_rdd.RDD[T], self.emptyRDD())
-
-        n = len(elems_source)
+        elems: Sequence[Any] = c if isinstance(c, (list, tuple)) else list(c)
+        n = len(elems)
         k = max(1, num_partitions)
-        # Mirror JVM ParallelCollectionRDD slicing, then pin rows with repartitionById. Keep a stable
-        # partition id column so narrow transforms can filter before Python mapInArrow executes.
-        part_schema = StructType(
-            [
-                StructField(_rdd._PAYLOAD_COL, BinaryType(), True),
-                StructField(_rdd._STABLE_PARTITION_COL, IntegerType(), False),
-            ]
-        )
-        parts_rows: List[Tuple[bytes, int]] = []
+        blobs: List[bytes] = []
+        counts: List[int] = []
+        pids: List[int] = []
         for p in range(k):
-            lo = (p * n) // k
-            hi = ((p + 1) * n) // k
-            for x in elems_source[lo:hi]:
-                parts_rows.append((_rdd._dumps(x), p))
-        df_tagged = self._session.createDataFrame(parts_rows, schema=part_schema)
-        df_out = df_tagged.repartitionById(k, _rdd._STABLE_PARTITION_COL)
-        rd_out: _rdd.RDD[T] = _rdd.RDD(df_out, self, k)
-        rd_out._stable_partition_col = _rdd._STABLE_PARTITION_COL
-        return rd_out
+            lo, hi = (p * n) // k, ((p + 1) * n) // k
+            for blob, cnt in rt.encode_chunks(elems[lo:hi]):
+                blobs.append(blob)
+                counts.append(cnt)
+                pids.append(p)
+        if n == 0:
+            local = self._session.createDataFrame([], schema=_pid_chunk_schema())
+        else:
+            table = pa.Table.from_arrays(
+                [
+                    pa.array(blobs, pa.large_binary()),
+                    pa.array(counts, pa.int32()),
+                    pa.array(pids, pa.int32()),
+                ],
+                schema=rt.PID_CHUNK_ARROW_SCHEMA,
+            )
+            local = self._session.createDataFrame(table)
+        df = _place(local, k)
+        rdd: RDD[T] = RDD(df, self, k)
+        rdd._df_has_pid = True
+        return rdd
+
+    def runJob(
+        self,
+        rdd: "RDD[T]",
+        partitionFunc: Callable[[Iterable[T]], Iterable[U]],
+        partitions: Optional[Sequence[int]] = None,
+        allowLocal: bool = False,
+    ) -> List[U]:
+        """
+        Run ``partitionFunc`` on the given partitions only, and return the results in the order
+        of ``partitions``.
+        """
+        if partitions is None:
+            partitions = list(range(rdd.getNumPartitions()))
+        if len(partitions) == 0:
+            return []
+        results = rdd.mapPartitions(partitionFunc)._collect_partitions(partitions)
+        out: List[U] = []
+        for p in partitions:
+            out.extend(results.get(p, []))
+        return out

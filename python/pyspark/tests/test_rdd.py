@@ -1002,6 +1002,116 @@ class RDDTestsMixin:
                 is_job_cancelled[i], "Thread {i}: Job in group B did not succeeded.".format(i=i)
             )
 
+    def test_glom_keeps_empty_partitions(self):
+        self.assertEqual(self.sc.parallelize([1], 3).glom().collect(), [[], [], [1]])
+
+    def test_zip_with_index_with_empty_partitions(self):
+        rdd = self.sc.parallelize([1, 2, 3], 5)
+        self.assertEqual(rdd.zipWithIndex().collect(), [(1, 0), (2, 1), (3, 2)])
+
+    def test_subtract_keeps_duplicates(self):
+        rdd = self.sc.parallelize([1, 1, 2, 3], 2)
+        self.assertEqual(sorted(rdd.subtract(self.sc.parallelize([2], 1)).collect()), [1, 1, 3])
+
+    def test_distinct_uses_python_equality(self):
+        # 1, 1.0 and True are equal in Python, although they pickle differently.
+        self.assertEqual(self.sc.parallelize([1, 1.0, True, 2], 3).distinct().count(), 2)
+
+    def test_pipe_large_input(self):
+        # More data than a pipe buffer holds, in both directions.
+        self.assertEqual(self.sc.parallelize(range(200000), 1).pipe("cat").count(), 200000)
+
+    def test_repartition_and_sort_within_partitions_by_key_only(self):
+        # Values are not compared, so they do not need to be comparable.
+        rdd = self.sc.parallelize([(1, {"b": 2}), (0, {}), (1, {"a": 1})], 2)
+        result = rdd.repartitionAndSortWithinPartitions(1, lambda k: 0).collect()
+        self.assertEqual([k for k, _ in result], [0, 1, 1])
+
+    def test_coalesce_keeps_partition_index(self):
+        rdd = self.sc.parallelize(range(4), 4).mapPartitionsWithIndex(lambda i, it: [i])
+        self.assertEqual(sorted(rdd.coalesce(2).collect()), [0, 1, 2, 3])
+
+    def test_union_keeps_partition_index(self):
+        a = self.sc.parallelize([1, 2], 2)
+        b = self.sc.parallelize([3, 4], 2).mapPartitionsWithIndex(
+            lambda i, it: [(i, x) for x in it]
+        )
+        self.assertEqual(a.union(b).collect(), [1, 2, (0, 3), (1, 4)])
+        self.assertEqual(a.union(b).getNumPartitions(), 4)
+
+    def test_cartesian_keeps_partition_index(self):
+        a = self.sc.parallelize([1, 2], 2).mapPartitionsWithIndex(
+            lambda i, it: [(i, x) for x in it]
+        )
+        b = self.sc.parallelize(["x", "y"], 2)
+        self.assertEqual(
+            sorted(a.cartesian(b).collect()),
+            [((0, 1), "x"), ((0, 1), "y"), ((1, 2), "x"), ((1, 2), "y")],
+        )
+
+    def test_save_as_text_file_fails_if_exists(self):
+        with tempfile.TemporaryDirectory() as path:
+            with QuietTest(self.sc):
+                self.assertRaises(
+                    Exception, lambda: self.sc.parallelize(["a"]).saveAsTextFile(path)
+                )
+
+    def test_save_as_text_file_with_bytes(self):
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        self.sc.parallelize([b"\xc3\xa9 \xff raw", "text"], 1).saveAsTextFile(tempFile.name)
+        raw = b"".join(open(p, "rb").read() for p in sorted(glob(tempFile.name + "/part-0000*")))
+        # bytes elements are decoded as UTF-8, with malformed bytes replaced by U+FFFD.
+        self.assertEqual(raw.splitlines(), [b"\xc3\xa9 \xef\xbf\xbd raw", b"text"])
+
+    def test_pickle_file_round_trip(self):
+        tempFile = tempfile.NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data = [(1, {"a": [1, 2]}), None, "x"]
+        self.sc.parallelize(data, 2).saveAsPickleFile(tempFile.name)
+        self.assertEqual(
+            sorted(map(repr, self.sc.pickleFile(tempFile.name).collect())),
+            sorted(map(repr, data)),
+        )
+
+    def test_binary_records(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "records.bin")
+            with open(path, "wb") as f:
+                f.write(b"aabbccdd")
+            records = self.sc.binaryRecords(path, 2).collect()
+            self.assertEqual(sorted(records), [b"aa", b"bb", b"cc", b"dd"])
+
+    def test_local_checkpoint(self):
+        rdd = self.sc.parallelize(range(10), 3).map(lambda x: x * 2)
+        rdd.localCheckpoint()
+        self.assertEqual(rdd.collect(), list(range(0, 20, 2)))
+        self.assertTrue(rdd.isCheckpointed())
+        self.assertTrue(rdd.isLocallyCheckpointed())
+        self.assertEqual(rdd.getNumPartitions(), 3)
+
+    def test_name(self):
+        rdd = self.sc.parallelize([1])
+        self.assertIsNone(rdd.name())
+        self.assertIs(rdd.setName("my rdd"), rdd)
+        self.assertEqual(rdd.name(), "my rdd")
+
+    def test_to_debug_string(self):
+        self.assertIsInstance(self.sc.parallelize([1]).map(lambda x: x).toDebugString(), bytes)
+
+    def test_run_job(self):
+        rdd = self.sc.parallelize(range(6), 3)
+        self.assertEqual(self.sc.runJob(rdd, lambda it: [sum(it)], [2, 0]), [9, 1])
+        self.assertEqual(self.sc.runJob(rdd, lambda it: [sum(it)]), [1, 5, 9])
+
+    def test_top_and_take_ordered(self):
+        rdd = self.sc.parallelize(range(100), 4)
+        self.assertEqual(rdd.top(3), [99, 98, 97])
+        self.assertEqual(rdd.takeOrdered(3, key=lambda x: -x), [99, 98, 97])
+
+    def test_is_instance_of_rdd(self):
+        self.assertIsInstance(self.sc.parallelize([1]), RDD)
+
 
 class RDDTests(RDDTestsMixin, ReusedPySparkTestCase):
     pass

@@ -38,7 +38,6 @@ from pyspark.sql.streaming.readwriter import DataStreamWriter as ClassicDataStre
 from pyspark.sql.window import Window as ClassicWindow
 from pyspark.sql.window import WindowSpec as ClassicWindowSpec
 from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 if should_test_connect:
     import pyspark.sql.connect.avro.functions as ConnectAvro
@@ -92,19 +91,15 @@ class ConnectCompatibilityTestsMixin:
         connect_cls,
         cls_name,
         *,
-        signature_skip_methods: frozenset[str] | None = None,
         compare_signature_parameter_shapes_only: bool = False,
     ):
         """Compare method signatures between classic and connect classes."""
-        skip = signature_skip_methods or frozenset()
         classic_methods = self.get_public_methods(classic_cls)
         connect_methods = self.get_public_methods(connect_cls)
 
         common_methods = set(classic_methods.keys()) & set(connect_methods.keys())
 
         for method in common_methods:
-            if method in skip:
-                continue
             # Skip non-callable, Spark Connect-specific methods
             if classic_methods[method] is None or connect_methods[method] is None:
                 continue
@@ -214,7 +209,6 @@ class ConnectCompatibilityTestsMixin:
         expected_missing_connect_methods,
         expected_missing_classic_methods,
         *,
-        signature_skip_methods: frozenset[str] | None = None,
         compare_signature_parameter_shapes_only: bool = False,
     ):
         """
@@ -241,8 +235,6 @@ class ConnectCompatibilityTestsMixin:
             A set of methods expected to be missing in the connect class.
         expected_missing_classic_methods : set
             A set of methods expected to be missing in the classic class.
-        signature_skip_methods : frozenset of str, optional
-            Intersection-method names excluded from signature checks.
         compare_signature_parameter_shapes_only : bool, optional
             If True, compares only `(name, kind, default)` for each ``inspect.Parameter`` rather
             than full ``inspect.Signature`` equality (helps when annotations differ widely).
@@ -251,7 +243,6 @@ class ConnectCompatibilityTestsMixin:
             classic_cls,
             connect_cls,
             cls_name,
-            signature_skip_methods=signature_skip_methods,
             compare_signature_parameter_shapes_only=compare_signature_parameter_shapes_only,
         )
         self.compare_property_lists(
@@ -283,13 +274,6 @@ class ConnectCompatibilityTestsMixin:
             expected_missing_classic_properties,
             expected_missing_connect_methods,
             expected_missing_classic_methods,
-            signature_skip_methods=frozenset(
-                {
-                    # Connect DataFrame exposes toLocalIterator() without prefetchPartitions;
-                    # partition prefetch is not supported on Spark Connect.
-                    "toLocalIterator",
-                }
-            ),
         )
 
     def test_column_compatibility(self):
@@ -330,32 +314,25 @@ class ConnectCompatibilityTestsMixin:
         )
 
     def test_spark_context_compatibility(self):
-        """Test Spark ``SparkContext`` coverage between JVM Classic and Spark Connect façade."""
-        # Keep this enumerate explicit — add new JVM-only hooks to Classic SparkContext sparingly:
+        """Test Spark ``SparkContext`` coverage between JVM Classic and Spark Connect facade."""
+        # Keep this enumerate explicit -- add new JVM-only hooks to Classic SparkContext sparingly:
         expected_missing_connect_methods = {
             "accumulator",
-            "binaryRecords",
             "broadcast",
-            "dump_profiles",
             "getLocalProperty",
             "hadoopFile",
             "hadoopRDD",
             "newAPIHadoopFile",
             "newAPIHadoopRDD",
-            "runJob",
             "sequenceFile",
             "setJobDescription",
             "setLocalProperty",
             "setLogLevel",
-            "show_profiles",
             "statusTracker",
         }
         expected_missing_classic_methods = set()
 
         expected_missing_connect_properties = {
-            "applicationId",
-            "listArchives",
-            "listFiles",
             "resources",
             "uiWebUrl",
         }
