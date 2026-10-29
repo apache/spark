@@ -45,7 +45,7 @@ import org.apache.spark.network.shuffle.{BlockStoreClient, MergeFinalizerListene
 import org.apache.spark.network.shuffle.protocol.MergeStatuses
 import org.apache.spark.network.util.JavaUtils
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.rdd.{DeterministicLevel, LocalRDDCheckpointData, RDD, RDDCheckpointData, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
+import org.apache.spark.rdd.{DeterministicLevel, RDD, RDDCheckpointData, ReliableRDDCheckpointData, ShuffleReducePartitionMapping}
 import org.apache.spark.resource.{CpuAmount, ResourceProfile, TaskResourceProfile}
 import org.apache.spark.resource.ResourceProfile.{CPUS, DEFAULT_RESOURCE_PROFILE_ID, EXECUTOR_CORES_LOCAL_PROPERTY, MAX_TASKS_PER_EXECUTOR_LOCAL_PROPERTY, PYSPARK_MEMORY_LOCAL_PROPERTY}
 import org.apache.spark.rpc.RpcTimeout
@@ -1519,8 +1519,7 @@ private[spark] class DAGScheduler(
   private def checkPipelinedCacheSupported(finalRDD: RDD[_]): Unit = {
     val persisted = new HashSet[RDD[_]]
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
-      if (rdd.getStorageLevel != StorageLevel.NONE ||
-          rdd.checkpointData.exists(_.isInstanceOf[LocalRDDCheckpointData[_]])) {
+      if (rdd.getStorageLevel != StorageLevel.NONE || rdd.isLocallyCheckpointed) {
         persisted += rdd
       }
       rdd.dependencies.foreach {
@@ -1548,7 +1547,7 @@ private[spark] class DAGScheduler(
    * Each (RDD, partition) is propagated at most twice, since two reads already violate the
    * single-reader contract. Work is linear in the reachable partition-dependency graph, without
    * enumerating paths through shared ancestry. This runs only for native pipelined jobs.
-   * A cache declaration is not a boundary: evicted or unstored partitions still compute lineage.
+   * Consumer persistence is rejected separately by checkPipelinedCacheSupported.
    */
   private def checkPipelinedShuffleRepeatedReads(
       finalRDD: RDD[_],
@@ -2694,22 +2693,15 @@ private[spark] class DAGScheduler(
     var finalStage: ResultStage = null
     try {
       if (hasPipelined) {
-        checkPipelinedCacheSupported(finalRDD)
         // Validate cache semantics before counting tasks: a cached consumer could suppress
         // producers included in the demand, or skip readers needed by a running producer.
+        checkPipelinedCacheSupported(finalRDD)
         if (rejectUnadmittablePipelinedGroup(jobId, finalRDD, partitions, listener)) {
+          // Clear the slot-check retry count an earlier deferral may have left.
           barrierJobIdToNumTasksCheckFailures.remove(jobId)
           return
         }
-      }
-      // Reject unsupported pipelined idioms and cross-job reuse from the RDD graph, before
-      // any stage is created, so a rejection leaves no partial scheduler state. Gated on
-      // hasPipelined: every idiom this checks concerns a pipelined group, so it must not run for a
-      // job with no pipelined dependency (the resource-profile check in particular is not keyed on
-      // a pipelined dependency and would otherwise reject an ordinary job that merely uses a
-      // non-default profile via RDD.withResources). Inside this try so any incidental exception
-      // from the graph walk is handled by the same listener.jobFailed path as stage creation.
-      if (hasPipelined) {
+        // Keep group restrictions, including resource profiles, specific to pipelined jobs.
         checkPipelinedJobSupported(finalRDD, partitions, jobId)
       }
       // New stage creation may throw an exception if, for example, jobs are run on a
@@ -5578,10 +5570,11 @@ private[spark] object DAGScheduler {
 private[spark] case class CancelledJobInfo(jobId: Int, properties: Properties)
 
 /**
- * Thrown when a job uses a pipelined-shuffle idiom that is not supported (fan-out, dynamic
- * allocation, a barrier / indeterminate / checksum-retry / push-merge producer, a reliable
- * checkpoint in a member's chain, cache/persist/localCheckpoint in a consumer's within-stage chain,
- * or a non-default resource profile on a member). `handleJobSubmitted` matches on this
+ * Thrown for unsupported pipelined-shuffle idioms: fan-out, repeated consumption, dynamic
+ * allocation on the map-stage path, a barrier / indeterminate / checksum-retry / push-merge
+ * producer, a reliable checkpoint in a member's chain, cache/persist/localCheckpoint in a
+ * consumer's within-stage chain, or a non-default resource profile on a member.
+ * `handleJobSubmitted` matches on this
  * TYPE to distinguish an up-front idiom rejection from an ordinary stage-creation failure, not on
  * the error-condition string, so renaming the condition does not change the routing. Carries the
  * `PIPELINED_SHUFFLE_UNSUPPORTED` error class.

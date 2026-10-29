@@ -665,17 +665,20 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
         val input = sc.parallelize(0 until 1000, 2).map(i => (i, i))
         val consumer = new PipelinedShuffledRDD[Int, Int, Int](input, new HashPartitioner(2))
           .cache()
-        val blocks = (0 until cachedPartitions).map(RDDBlockId(consumer.id, _))
+        val blocks = consumer.partitions.indices.map(RDDBlockId(consumer.id, _))
         val blockManager = sc.env.blockManager
         // Populate blocks without running the shuffle so a partial cache cannot leave a
-        // producer waiting for a reader. Admission must reject before starting either stage.
-        blocks.foreach { block =>
+        // producer waiting for a reader during setup.
+        blocks.take(cachedPartitions).foreach { block =>
           assert(blockManager.putIterator(
             block, Iterator((block.splitIndex, block.splitIndex)),
             StorageLevel.MEMORY_ONLY, tellMaster = true))
         }
-        assert(blockManager.master.getLocations(blocks.toArray[BlockId]).forall(_.nonEmpty))
+        assert(blockManager.master.getLocations(blocks.toArray[BlockId]).map(_.nonEmpty).toSeq ===
+          blocks.indices.map(_ < cachedPartitions))
 
+        val events = new JobEvents
+        sc.addSparkListener(events)
         val error = intercept[SparkException](consumer.collect())
         checkError(
           exception = error,
@@ -686,7 +689,9 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
               "within-stage chain (unpersist this RDD or rebuild it without localCheckpoint " +
               "before submitting the job; persist only RDDs that do not read a pipelined " +
               "shuffle within their stage)")))
-        assert(sc.statusTracker.getActiveStageIds().isEmpty)
+        sc.listenerBus.waitUntilEmpty()
+        assert(events.taskStarts.isEmpty)
+        assert(events.stageEnds.isEmpty)
         assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
         assert(consumer.getStorageLevel === StorageLevel.MEMORY_ONLY)
 
