@@ -2520,7 +2520,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // 3) When an a filter references expensive to compute references we do not push it.
     // Note that a given filter may contain parts (sepereated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
-    // Additional restriction:
+    // Additional restrictions:
+    // SPARK-60602: A throwable part (including one over a throwable alias) must not be
+    // evaluated on rows the parts written before it would have filtered out. So it is pushed
+    // only when no expensive part is written before it, and the parts left above the projection
+    // keep their written order.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2544,22 +2548,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
           (cond, usedAliases, replaced)
         }
+        // A component is cheap if it uses nothing expensive from the projection: either it
+        // uses nothing at all, or only inexpensive items. Then we can push it because it might
+        // eliminate more data quickly and it may also be something which could be evaluated at
+        // the storage layer. We may wish to improve this heuristic in the future.
+        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(_._2.child.expensive)
         // Split the filter's components into cheap and expensive while keeping track of
-        // what each references from the projection.
-        val (cheapWithUsed, expensiveWithUsed) = originalAndRewrittenConditionsWithUsedAlias
-          .partition { case (cond, used, replaced) =>
-            // Didn't use anything? We're good
-            if (used.isEmpty) {
-              true
-            } else if (!used.exists(_._2.child.expensive)) {
-              // If it's cheap we can push it because it might eliminate more data quickly and
-              // it may also be something which could be evaluated at the storage layer.
-              // We may wish to improve this heuristic in the future.
-              true
-            } else {
-              false
-            }
-          }
+        // what each references from the projection. The cheap components written before the
+        // first expensive one are all pushed. After it, a throwable component (e.g.
+        // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
+        // so it is not evaluated on rows the components before it would have filtered out.
+        val (leading, rest) = originalAndRewrittenConditionsWithUsedAlias.span {
+          case (_, used, _) => isCheap(used)
+        }
+        val (cheapRest, expensiveWithUsed) = rest.partition {
+          case (_, used, replaced) => isCheap(used) && !replaced.throwable
+        }
+        val cheapWithUsed = leading ++ cheapRest
         // Short circuit if we do not have any cheap filters return the original filter as is.
         if (cheapWithUsed.isEmpty) {
           f
