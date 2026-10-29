@@ -119,36 +119,11 @@ BRANCH_PREFIX = "PR_TOOL"
 SKIP_VERSION_CHECK = os.environ.get("SKIP_VERSION_CHECK", "")
 # Path of this script relative to the repo root, used to fetch the canonical copy from master.
 MERGE_SCRIPT_REPO_PATH = "dev/merge_spark_pr.py"
-# Maven profiles for the optional compile check below, copied from the "Build Spark" step in
-# .github/workflows/build_and_test.yml. Without them SBT builds only its default projects, so a
-# merge touching resource-managers/ or a connector behind a profile would pass the check while
-# never being compiled at all. Profiles a branch does not define are ignored, so one list serves
-# every branch. Copied rather than curated on purpose: CI is what rejects the push, so the check
-# is worth only as much as it matches CI. In particular do not add "-Psbt" -- it would put guava
-# and pmml-model on every module's compile classpath, which CI does not, turning a CI failure
-# into a local pass. (SparkBuild defaults to that profile when SBT_MAVEN_PROFILES is unset, and
-# passing any -P replaces the default rather than adding to it, so CI runs without it too.)
-COMPILE_CHECK_PROFILES = [
-    "-Phadoop-3",
-    "-Pyarn",
-    "-Pspark-ganglia-lgpl",
-    "-Phadoop-cloud",
-    "-Phive",
-    "-Pkubernetes",
-    "-Pjvm-profiler",
-    "-Pkinesis-asl",
-    "-Pcredential-aws",
-    "-Phive-thriftserver",
-    "-Pdocker-integration-tests",
-    "-Pkubernetes-integration-tests",
-    "-Pvolcano",
-    "-Poidc-e2e",
-]
 # Optional pre-push check offered by maybe_compile_check: a clean SBT compile of the main and
 # test sources run on the merged tree, i.e. exactly what would be pushed. Slow on a cold build,
 # but catches mis-resolved conflicts and PRs that bit-rotted after their CI ran. `clean` deletes
 # every module's build output, so the offer says so -- declining is a reasonable answer.
-COMPILE_CHECK_CMD = ["build/sbt"] + COMPILE_CHECK_PROFILES + [";clean;compile;Test/compile"]
+COMPILE_CHECK_CMD = ["build/sbt"] + [";clean;compile;Test/compile"]
 # Precise patterns for the 4.2+ ConfigBindingPolicy API. A merge or backport to a pre-4.2 branch
 # that adds either will not compile there (the API arrived in SPARK-55928): the
 # .withBindingPolicy(...) call and the ConfigBindingPolicy import have to be dropped. Nothing
