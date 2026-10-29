@@ -90,6 +90,14 @@ FROM t_int_double_1_5_through_7_11;
 SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, 12)) AS result
 FROM t_int_int_1_5_through_7_11;
 
+-- Constant RuntimeReplaceable configuration expressions are accepted.
+SELECT tuple_sketch_estimate_double(
+         tuple_sketch_agg_double(key1, val1, nvl(CAST(NULL AS INT), 12)))
+FROM t_int_double_1_5_through_7_11;
+
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, try_add(10, 2)))
+FROM t_int_int_1_5_through_7_11;
+
 -- Test tuple_sketch_agg_double with ArrayType(IntegerType) key and double summary from table
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_array_int_double_1_3_through_4_6;

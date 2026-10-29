@@ -19,6 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
+import org.apache.spark.sql.catalyst.expressions.{Add, BoundReference, Literal, Nvl, TryAdd}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -46,6 +47,48 @@ class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
     // Should also work on arrays. See SPARK-14990
     typeCheckPass(ArrayType(StringType, containsNull = true) ::
       ArrayType(StringType, containsNull = false) :: Nil)
+  }
+
+  test("checkFoldableIntInRange replaces RuntimeReplaceable inputs") {
+    val nullInt = Literal.create(null, IntegerType)
+    val inputs = Seq(
+      new Nvl(nullInt, Literal(12)),
+      new TryAdd(Literal(10), Literal(2)),
+      Add(new Nvl(nullInt, Literal(10)), Literal(2)))
+
+    Seq(21, 26).foreach { max =>
+      inputs.foreach { input =>
+        assert(!input.foldable)
+        assert(TypeUtils.checkFoldableIntInRange(input, "size", 4, max) == TypeCheckSuccess)
+      }
+
+      Seq(
+        (new Nvl(nullInt, Literal(3)), 3),
+        (new TryAdd(Literal(max), Literal(1)), max + 1))
+        .foreach { case (input, value) =>
+          assert(TypeUtils.checkFoldableIntInRange(input, "size", 4, max) == DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> "size",
+              "valueRange" -> s"[4, $max]",
+              "currentValue" -> value.toString)))
+        }
+    }
+
+    Seq(new Nvl(nullInt, nullInt), new TryAdd(Literal(Int.MaxValue), Literal(1)))
+      .foreach { input =>
+        assert(TypeUtils.checkFoldableIntInRange(input, "size", 4, 21) == DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map("exprName" -> "size")))
+      }
+
+    val nonFoldable = new Nvl(BoundReference(0, IntegerType, nullable = true), Literal(12))
+    assert(TypeUtils.checkFoldableIntInRange(nonFoldable, "size", 4, 21) == DataTypeMismatch(
+      errorSubClass = "NON_FOLDABLE_INPUT",
+      messageParameters = Map(
+        "inputName" -> "`size`",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> TypeUtils.toSQLExpr(nonFoldable))))
   }
 
   test("typeWithProperEquals") {

@@ -93,8 +93,9 @@ case class FinalizedSketch(sketch: CompactSketch) extends ThetaSketchState {
     Arguments:
       * expr - The expression whose distinct values are aggregated into the sketch.
         An expression that evaluates to an array, binary, double, float, integer, long, or string.
-      * lgNomEntries - A foldable integer expression containing the log-base-2 of nominal entries,
-        which sets the number of buckets for the ThetaSketch.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+        log-base-2 of nominal entries, which sets the number of buckets for the ThetaSketch.
+        Must be between 4 and 26 (inclusive). Defaults to 12.
   """,
   examples = """
     Examples:
@@ -115,14 +116,7 @@ case class ThetaSketchAgg(
 
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgNomEntries: Int = {
-    if (!right.foldable) {
-      throw QueryExecutionErrors.thetaLgNomEntriesMustBeConstantError(prettyName)
-    }
-    val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
-    lgNomEntriesInput
-  }
+  lazy val lgNomEntries: Int = right.eval().asInstanceOf[Int]
 
   // Constructors
 
@@ -349,9 +343,9 @@ case class ThetaSketchAgg(
   arguments = """
     Arguments:
       * expr - A binary expression of Compact ThetaSketch representations to union.
-      * lgNomEntries - An optional foldable integer expression containing the log-base-2 of nominal
-          entries, which sets the number of buckets for the resulting ThetaSketch. When omitted,
-          it defaults to the default log nominal entries.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+          log-base-2 of nominal entries, which sets the number of buckets for the resulting
+          ThetaSketch. Must be between 4 and 26 (inclusive). Defaults to 12.
   """,
   examples = """
     Examples:
@@ -372,14 +366,7 @@ case class ThetaUnionAgg(
 
   // ThetaSketch config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgNomEntries: Int = {
-    if (!right.foldable) {
-      throw QueryExecutionErrors.thetaLgNomEntriesMustBeConstantError(prettyName)
-    }
-    val lgNomEntriesInput = right.eval().asInstanceOf[Int]
-    ThetaSketchUtils.checkLgNomLongs(lgNomEntriesInput, prettyName)
-    lgNomEntriesInput
-  }
+  lazy val lgNomEntries: Int = right.eval().asInstanceOf[Int]
 
   // Constructors
 

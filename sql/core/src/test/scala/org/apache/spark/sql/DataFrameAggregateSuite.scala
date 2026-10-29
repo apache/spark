@@ -2648,9 +2648,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"hll_sketch_agg(value, id)\"",
-        "inputName" -> "lgConfigK",
-        "inputType" -> "int",
-        "inputExpr" -> "id"),
+        "inputName" -> "`lgConfigK`",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"id\""),
       context = ExpectedContext(
         fragment = "hll_sketch_agg",
         callSitePattern = getCurrentClassCallSitePattern))
@@ -3171,9 +3171,9 @@ class DataFrameAggregateSuite extends SharedSparkSession
       condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
       parameters = Map(
         "sqlExpr" -> "\"theta_sketch_agg(value, id)\"",
-        "inputName" -> "lgNomEntries",
-        "inputType" -> "int",
-        "inputExpr" -> "id"),
+        "inputName" -> "`lgNomEntries`",
+        "inputType" -> "\"INT\"",
+        "inputExpr" -> "\"id\""),
       context = ExpectedContext(
         fragment = "theta_sketch_agg",
         callSitePattern = getCurrentClassCallSitePattern))

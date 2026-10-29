@@ -78,8 +78,9 @@ case class ThetaSketchEstimate(child: Expression)
           An expression that evaluates to binary.
       * second - The binary representation of the second Datasketches ThetaSketch.
           An expression that evaluates to binary.
-      * lgNomEntries - Optional. A foldable integer expression containing the log-base-2 of the
-          nominal entries used to size the union buffer, between 4 and 26. Defaults to 12.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+          log-base-2 of nominal entries used to size the union buffer. Must be between 4 and 26
+          (inclusive). Defaults to 12.
   """,
   examples = """
     Examples:

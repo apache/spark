@@ -308,7 +308,7 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     expressionsWithLgNomEntries(BoundReference(1, IntegerType, nullable = true)).foreach { expr =>
       val result = expr.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
       assert(result.errorSubClass == "NON_FOLDABLE_INPUT")
-      assert(result.messageParameters("inputName") == "lgNomEntries")
+      assert(result.messageParameters("inputName") == "`lgNomEntries`")
     }
 
     expressionsWithLgNomEntries(Literal.create(null, IntegerType)).foreach { expr =>

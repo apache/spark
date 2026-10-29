@@ -486,9 +486,9 @@ abstract class TupleSketchAggBase[U, S <: UpdatableSummary[U]]
         An expression that evaluates to an array, binary, double, float, integer, long, or string.
       * summary - The double value to be aggregated as the summary.
         An expression that evaluates to a double.
-      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
-        TupleSketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+        log-base-2 of nominal entries, which sets the number of buckets for the TupleSketch.
+        Must be between 4 and 26 (inclusive). Defaults to 12.
       * mode - The aggregation mode for numeric summaries (sum, min, max, alwaysone).
         An expression that evaluates to a string. Must be a constant.
   """,
@@ -530,9 +530,9 @@ object TupleSketchAggDoubleExpressionBuilder extends ExpressionBuilder {
         An expression that evaluates to an array, binary, double, float, integer, long, or string.
       * summary - The integer value to be aggregated as the summary.
         An expression that evaluates to an integer.
-      * lgNomEntries - The log-base-2 of nominal entries, which sets the number of buckets for the
-        TupleSketch.
-        An expression that evaluates to an integer. Must be a constant.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+        log-base-2 of nominal entries, which sets the number of buckets for the TupleSketch.
+        Must be between 4 and 26 (inclusive). Defaults to 12.
       * mode - The aggregation mode for numeric summaries (sum, min, max, alwaysone).
         An expression that evaluates to a string. Must be a constant.
   """,

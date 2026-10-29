@@ -3068,22 +3068,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = e)
   }
 
-  def hllInvalidLgK(function: String, min: Int, max: Int, value: Int): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "HLL_INVALID_LG_K",
-      messageParameters = Map(
-        "function" -> toSQLId(function),
-        "min" -> toSQLValue(min, IntegerType),
-        "max" -> toSQLValue(max, IntegerType),
-        "value" -> toSQLValue(value, IntegerType)))
-  }
-
-  def hllKMustBeConstantError(function: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "HLL_K_MUST_BE_CONSTANT",
-      messageParameters = Map("function" -> toSQLId(function)))
-  }
-
   def hllInvalidInputSketchBuffer(function: String): Throwable = {
     new SparkRuntimeException(
       errorClass = "HLL_INVALID_INPUT_SKETCH_BUFFER",
@@ -3505,12 +3489,6 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
         "min" -> toSQLValue(min, IntegerType),
         "max" -> toSQLValue(max, IntegerType),
         "value" -> toSQLValue(value, IntegerType)))
-  }
-
-  def thetaLgNomEntriesMustBeConstantError(function: String): Throwable = {
-    new SparkRuntimeException(
-      errorClass = "THETA_LG_NOM_ENTRIES_MUST_BE_CONSTANT",
-      messageParameters = Map("function" -> toSQLId(function)))
   }
 
   def kllSketchInvalidQuantileRangeError(function: String): Throwable = {

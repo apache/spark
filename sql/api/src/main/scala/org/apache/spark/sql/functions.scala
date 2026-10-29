@@ -9989,8 +9989,9 @@ object functions {
    * @param c2
    *   The second ThetaSketch column to union. A column that evaluates to a binary.
    * @param lgNomEntries
-   *   The log-base-2 of nominal entries for the union buffer. A column that evaluates to an
-   *   integral.
+   *   The log-base-2 of nominal entries for the union buffer. Must be a foldable (constant) column
+   *   that evaluates to a non-NULL integer between 4 and 26 (inclusive) and does not depend on
+   *   input rows.
    * @group sketch_funcs
    * @since 4.1.0
    * @return

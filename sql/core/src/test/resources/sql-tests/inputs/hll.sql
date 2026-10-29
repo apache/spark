@@ -38,6 +38,15 @@ SELECT hll_sketch_estimate(hll_sketch_agg(s COLLATE UNICODE_CI_RTRIM)) unicode_c
 SELECT hll_sketch_estimate(hll_sketch_agg(col, 12))
 FROM VALUES (50), (60), (60), (60), (75), (100) tab(col);
 
+-- A foldable size argument does not have to be a literal.
+SELECT hll_sketch_estimate(hll_sketch_agg(col, 10 + 2))
+FROM VALUES (50), (60), (60) tab(col);
+
+-- Constant RuntimeReplaceable configuration expressions are accepted.
+SELECT hll_sketch_estimate(hll_sketch_agg(col, nvl(CAST(NULL AS INT), 12))),
+       hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2)))
+FROM VALUES (50), (60), (60) tab(col);
+
 SELECT hll_sketch_estimate(hll_sketch_agg(col))
 FROM VALUES ('abc'), ('def'), ('abc'), ('ghi'), ('abc') tab(col);
 
@@ -58,6 +67,17 @@ SELECT hll_sketch_estimate(hll_union_agg(sketch, true))
           UNION ALL
           SELECT hll_sketch_agg(col, 20) as sketch
             FROM VALUES (1) AS tab(col));
+
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nvl(CAST(NULL AS BOOLEAN), true)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col));
+
+-- A NULL flag behaves as false: sketches with the same lgConfigK can still be merged.
+SELECT hll_sketch_estimate(hll_union_agg(sketch, CAST(NULL AS BOOLEAN)))
+FROM (SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (2) tab(col));
 
 -- TIME type: hll_sketch_agg counts distinct times, and the resulting sketches merge via
 -- hll_union_agg (which only sees the serialized binary sketch).
@@ -83,6 +103,12 @@ FROM VALUES (50), (60), (60) tab(col);
 
 SELECT hll_sketch_agg(col, CAST(NULL AS INT)) AS k_is_null
 FROM VALUES (15), (16), (17) tab(col);
+
+-- Evaluating a foldable size argument can itself fail during analysis.
+SET spark.sql.ansi.enabled=true;
+SELECT hll_sketch_agg(col, CAST('x' AS INT))
+FROM VALUES (1), (2) tab(col);
+RESET spark.sql.ansi.enabled;
 
 SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
 FROM VALUES (15), (16), (17) tab(col);
@@ -112,6 +138,12 @@ FROM (SELECT hll_sketch_agg(col, 12) as sketch
       UNION ALL
       SELECT hll_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col));
+
+-- A NULL flag does not allow merging sketches with different lgConfigK values.
+SELECT hll_union_agg(sketch, CAST(NULL AS BOOLEAN))
+FROM (SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col));
 
 SELECT hll_union(1, 2)
   FROM VALUES

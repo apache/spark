@@ -26,45 +26,14 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{ExpectsInputTypes, Expression, ExpressionDescription, Literal}
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.trees.BinaryLike
-import org.apache.spark.sql.catalyst.util.CollationFactory
+import org.apache.spark.sql.catalyst.util.{CollationFactory, TypeUtils}
+import org.apache.spark.sql.catalyst.util.TypeUtils.{toSQLExpr, toSQLId, toSQLType}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.internal.types.StringTypeWithCollation
 import org.apache.spark.sql.types.{AbstractDataType, AnyTimeType, BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
-
-private object DatasketchesInputValidation {
-  def checkFoldableInput(
-      input: Expression,
-      inputName: String,
-      inputType: String,
-      valueRange: String)(validate: Any => Boolean): TypeCheckResult = {
-    if (!input.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> inputName,
-          "inputType" -> inputType,
-          "inputExpr" -> input.sql))
-    } else {
-      val inputValue = input.eval()
-      if (inputValue == null) {
-        DataTypeMismatch(
-          errorSubClass = "UNEXPECTED_NULL",
-          messageParameters = Map("exprName" -> inputName))
-      } else if (!validate(inputValue)) {
-        DataTypeMismatch(
-          errorSubClass = "VALUE_OUT_OF_RANGE",
-          messageParameters = Map(
-            "exprName" -> inputName,
-            "valueRange" -> valueRange,
-            "currentValue" -> inputValue.toString))
-      } else {
-        TypeCheckResult.TypeCheckSuccess
-      }
-    }
-  }
-}
 
 /**
  * The HllSketchAgg function utilizes a Datasketches HllSketch instance to count a probabilistic
@@ -86,8 +55,9 @@ private object DatasketchesInputValidation {
     Arguments:
       * expr - The expression to aggregate into the HLL sketch.
         An expression that evaluates to an integer, long, time, string, or binary.
-      * lgConfigK - A foldable integer expression containing the log-base-2 of K, where K is the
-        number of buckets for the sketch.
+      * lgConfigK - Optional. A foldable (constant), non-NULL integer expression containing the
+        log-base-2 of K, where K is the number of buckets for the sketch. Must be between 4 and 21
+        (inclusive). Defaults to 12.
   """,
   examples = """
     Examples:
@@ -106,20 +76,7 @@ case class HllSketchAgg(
 
   // Hllsketch config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val lgConfigK: Int = {
-    if (!right.foldable) {
-      throw QueryExecutionErrors.hllKMustBeConstantError(prettyName)
-    }
-    val lgConfigK = right.eval().asInstanceOf[Int]
-    if (!HllSketchAgg.checkLgK(lgConfigK)) {
-      throw QueryExecutionErrors.hllInvalidLgK(
-        function = "hll_sketch_agg",
-        min = HllSketchAgg.minLgConfigK,
-        max = HllSketchAgg.maxLgConfigK,
-        value = lgConfigK)
-    }
-    lgConfigK
-  }
+  lazy val lgConfigK: Int = right.eval().asInstanceOf[Int]
 
   // The default target type (register size) to use.
   private val targetType = TgtHllType.HLL_8
@@ -175,13 +132,11 @@ case class HllSketchAgg(
     if (defaultCheck.isFailure) {
       defaultCheck
     } else {
-      DatasketchesInputValidation.checkFoldableInput(
+      TypeUtils.checkFoldableIntInRange(
         right,
         inputName = "lgConfigK",
-        inputType = "int",
-        valueRange = s"[${HllSketchAgg.minLgConfigK}, ${HllSketchAgg.maxLgConfigK}]") { value =>
-        HllSketchAgg.checkLgK(value.asInstanceOf[Int])
-      }
+        min = HllSketchAgg.minLgConfigK,
+        max = HllSketchAgg.maxLgConfigK)
     }
   }
 
@@ -274,8 +229,7 @@ case class HllSketchAgg(
 }
 
 /**
- * Companion object to HllSketchAgg, meant to encapsulate static
- * shared functions like checkLgK
+ * Sketch-size bounds used by HllSketchAgg during input validation.
  */
 object HllSketchAgg {
   // lgConfigK min/max values copied from Dataksketches HllUtil. These
@@ -283,11 +237,6 @@ object HllSketchAgg {
   // https://datasketches.apache.org/docs/HLL/HLL.html
   private val minLgConfigK = 4
   private val maxLgConfigK = 21
-
-  // Replicate Datasketches' HllUtil's range check, as we can't reference it directly.
-  def checkLgK(lgConfigK: Int): Boolean = {
-    lgConfigK >= minLgConfigK && lgConfigK <= maxLgConfigK
-  }
 }
 
 /**
@@ -304,13 +253,14 @@ object HllSketchAgg {
   usage = """
     _FUNC_(expr, allowDifferentLgConfigK) - Returns the merged HllSketch's updatable binary representation.
       `allowDifferentLgConfigK` (optional) Allow sketches with different lgConfigK values
-       to be unioned (defaults to false).""",
+       to be unioned (defaults to false; NULL is treated as false).""",
   arguments = """
     Arguments:
       * expr - The binary representation of an HllSketch to merge.
           An expression that evaluates to binary.
       * allowDifferentLgConfigK - Optional. A foldable boolean expression indicating whether to
           allow sketches with different lgConfigK values to be unioned. Defaults to false.
+          NULL is treated as false.
   """,
   examples = """
     Examples:
@@ -331,8 +281,9 @@ case class HllUnionAgg(
 
   // Union config - mark as lazy so that they're not evaluated during tree transformation.
 
-  lazy val allowDifferentLgConfigK: Boolean = {
-    right.eval().asInstanceOf[Boolean]
+  lazy val allowDifferentLgConfigK: Boolean = right.eval() match {
+    case null => false
+    case value => value.asInstanceOf[Boolean]
   }
 
   // The default target type (register size) to use.
@@ -373,13 +324,13 @@ case class HllUnionAgg(
     val defaultCheck = super.checkInputDataTypes()
     if (defaultCheck.isFailure) {
       defaultCheck
-    } else if (!right.foldable) {
+    } else if (!ReplaceExpressions.replace(right).foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
         messageParameters = Map(
-          "inputName" -> "allowDifferentLgConfigK",
-          "inputType" -> "boolean",
-          "inputExpr" -> right.sql))
+          "inputName" -> toSQLId("allowDifferentLgConfigK"),
+          "inputType" -> toSQLType(BooleanType),
+          "inputExpr" -> toSQLExpr(right)))
     } else {
       TypeCheckResult.TypeCheckSuccess
     }

@@ -431,6 +431,17 @@ SELECT
   theta_sketch_estimate(theta_difference(sketch1, sketch2)) as difference_estimate
 FROM individual_sketches;
 
+-- Constant RuntimeReplaceable configuration expressions are accepted.
+SELECT theta_sketch_estimate(theta_sketch_agg(col, nvl(CAST(NULL AS INT), 12))),
+       theta_sketch_estimate(theta_sketch_agg(col, try_add(10, 2)))
+FROM VALUES (1), (2), (2) tab(col);
+
+SELECT theta_sketch_estimate(theta_union_agg(sketch, nvl(CAST(NULL AS INT), 12)))
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2), (2) tab(col));
+
+SELECT theta_sketch_estimate(theta_union(sketch, sketch, try_add(10, 2)))
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2), (2) tab(col));
+
 -- Negative test cases
 
 -- Test theta_sketch_agg with lgNomEntries value of 2 (too low, minimum is 4) - should fail
@@ -457,9 +468,22 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col));
 
+-- Scalar theta_union rejects sizes below and above the supported range.
+SELECT theta_union(sketch, sketch, 3)
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col));
+
+SELECT theta_union(sketch, sketch, 27)
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col));
+
 -- lgNomEntries parameter is NULL
 SELECT theta_sketch_agg(col, CAST(NULL AS INT)) AS lg_nom_entries_is_null
 FROM VALUES (15), (16), (17) tab(col);
+
+SELECT theta_union_agg(sketch, CAST(NULL AS INT))
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col));
+
+SELECT theta_union(sketch, sketch, CAST(NULL AS INT))
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col));
 
 -- lgNomEntries parameter is not foldable (non-constant)
 SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant

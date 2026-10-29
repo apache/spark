@@ -99,7 +99,7 @@ hll_sketch_agg(expr [, lgConfigK])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `expr` | INT, BIGINT, TIME, STRING, or BINARY | The expression whose distinct values will be counted |
-| `lgConfigK` | INT (optional) | Log-base-2 of K, where K is the number of buckets. Range: 4-21. Default: 12. Higher values provide more accuracy but use more memory. |
+| `lgConfigK` | INT (optional) | Log-base-2 of K, where K is the number of buckets. Must be a foldable (constant), non-NULL integer expression. Range: 4-21 (inclusive). Default: 12. Higher values provide more accuracy but use more memory. |
 
 Returns a BINARY containing the HLL sketch in updatable binary representation.
 
@@ -140,7 +140,7 @@ hll_union_agg(sketch [, allowDifferentLgConfigK])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `sketch` | BINARY | An HLL sketch in binary format (produced by `hll_sketch_agg`) |
-| `allowDifferentLgConfigK` | BOOLEAN (optional) | If true, allows merging sketches with different lgConfigK values. Default: false. |
+| `allowDifferentLgConfigK` | BOOLEAN (optional) | A foldable boolean expression. If true, allows merging sketches with different lgConfigK values. Default: false. NULL is treated as false. |
 
 Returns a BINARY containing the merged HLL sketch.
 
@@ -170,7 +170,7 @@ FROM (
 ```
 
 **Notes:**
-- If `allowDifferentLgConfigK` is false and sketches have different lgConfigK values, an error is thrown.
+- If `allowDifferentLgConfigK` is false or NULL and sketches have different lgConfigK values, an error is thrown.
 - The output sketch uses the minimum lgConfigK value of all input sketches when merging sketches with different sizes.
 
 ---
@@ -251,7 +251,7 @@ theta_sketch_agg(expr [, lgNomEntries])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `expr` | INT, BIGINT, FLOAT, DOUBLE, STRING, BINARY, ARRAY&lt;INT&gt;, or ARRAY&lt;BIGINT&gt; | The expression whose distinct values will be counted |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 
 Returns a BINARY containing the Theta sketch in compact binary representation.
 
@@ -292,7 +292,7 @@ theta_union_agg(sketch [, lgNomEntries])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `sketch` | BINARY | A Theta sketch in binary format |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 
 Returns a BINARY containing the merged Theta sketch.
 
@@ -378,7 +378,7 @@ theta_union(first, second [, lgNomEntries])
 |----------|------|-------------|
 | `first` | BINARY | First Theta sketch |
 | `second` | BINARY | Second Theta sketch |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 
 Returns a BINARY containing the merged Theta sketch.
 
@@ -483,7 +483,7 @@ tuple_sketch_agg_integer(key, summary [, lgNomEntries] [, mode])
 |----------|------|-------------|
 | `key` | INT, BIGINT, FLOAT, DOUBLE, STRING, BINARY, ARRAY&lt;INT&gt;, or ARRAY&lt;BIGINT&gt; | The key column for distinct counting |
 | `summary` | DOUBLE (for _double) or INT (for _integer) | The numeric value to aggregate for each key |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 | `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
 
 Returns a BINARY containing the Tuple sketch in compact binary representation.
@@ -524,7 +524,7 @@ tuple_union_agg_integer(sketch [, lgNomEntries] [, mode])
 | Argument | Type | Description |
 |----------|------|-------------|
 | `sketch` | BINARY | A Tuple sketch in binary format |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 | `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
 
 Returns a BINARY containing the merged Tuple sketch.
@@ -672,7 +672,7 @@ tuple_union_integer(first, second [, lgNomEntries] [, mode])
 |----------|------|-------------|
 | `first` | BINARY | First Tuple sketch |
 | `second` | BINARY | Second Tuple sketch |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 | `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" (sets all summary values to 1) |
 
 Returns a BINARY containing the merged Tuple sketch.
@@ -765,7 +765,7 @@ tuple_union_theta_integer(tupleSketch, thetaSketch [, lgNomEntries] [, mode])
 |----------|------|-------------|
 | `tupleSketch` | BINARY | Tuple sketch with double/integer summaries |
 | `thetaSketch` | BINARY | Theta sketch (keys only) |
-| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Range: 4-26. Default: 12. |
+| `lgNomEntries` | INT (optional) | Log-base-2 of nominal entries. Must be a foldable (constant), non-NULL integer expression. Range: 4-26 (inclusive). Default: 12. |
 | `mode` | STRING (optional) | Summary aggregation mode: "sum" (default), "min", "max", "alwaysone" |
 
 Returns a BINARY containing the merged Tuple sketch.

@@ -28,7 +28,6 @@ import org.apache.datasketches.tuple.aninteger.{IntegerSummary, IntegerSummaryDe
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Expression
-import org.apache.spark.sql.catalyst.util.ThetaSketchUtils.{MAX_LG_NOM_LONGS, MIN_LG_NOM_LONGS}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -109,35 +108,14 @@ trait SketchSize extends Expression {
   protected def prettyName: String
 
   /**
-   * Validates that lgNomEntries parameter is a constant and within valid range (4-26).
+   * Validates that lgNomEntries is foldable, non-NULL, and within the inclusive range [4, 26].
    */
   protected def checkLgNomEntriesParameter(): TypeCheckResult = {
-    if (!lgNomEntries.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "lgNomEntries",
-          "inputType" -> "int",
-          "inputExpr" -> lgNomEntries.sql))
-    } else if (lgNomEntries.eval() == null) {
-      DataTypeMismatch(
-        errorSubClass = "UNEXPECTED_NULL",
-        messageParameters = Map("exprName" -> "lgNomEntries"))
-    } else if (!ThetaSketchUtils.isValidLgNomLongs(lgNomEntriesInput)) {
-      DataTypeMismatch(
-        errorSubClass = "VALUE_OUT_OF_RANGE",
-        messageParameters = Map(
-          "exprName" -> "lgNomEntries",
-          "valueRange" -> s"[$MIN_LG_NOM_LONGS, $MAX_LG_NOM_LONGS]",
-          "currentValue" -> lgNomEntriesInput.toString))
-    } else {
-      TypeCheckResult.TypeCheckSuccess
-    }
+    ThetaSketchUtils.checkLgNomEntriesInput(lgNomEntries)
   }
 
   /**
-   * Validates and extracts the lgNomEntries parameter value. Ensures the value is a constant and
-   * within valid range (4-26)
+   * Evaluates and extracts the lgNomEntries value after input validation.
    */
   protected lazy val lgNomEntriesInput: Int = {
     lgNomEntries.eval().asInstanceOf[Int]

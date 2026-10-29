@@ -17,10 +17,12 @@
 
 package org.apache.spark.sql.catalyst.util
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
+import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -66,6 +68,45 @@ object TypeUtils extends QueryErrorsBase {
           "dataType" -> types.map(toSQLType).mkString("(", " or ", ")")
         )
       )
+    }
+  }
+
+  /**
+   * Replaces RuntimeReplaceable expressions, then checks that an integer input is foldable,
+   * non-null, and within the inclusive range.
+   * The caller must check the input data type before calling this method.
+   */
+  def checkFoldableIntInRange(
+      input: Expression,
+      inputName: String,
+      min: Int,
+      max: Int): TypeCheckResult = {
+    val preparedInput = ReplaceExpressions.replace(input)
+    if (!preparedInput.foldable) {
+      DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> toSQLId(inputName),
+          "inputType" -> toSQLType(IntegerType),
+          "inputExpr" -> toSQLExpr(input)))
+    } else {
+      preparedInput.eval() match {
+        case null =>
+          DataTypeMismatch(
+            errorSubClass = "UNEXPECTED_NULL",
+            messageParameters = Map("exprName" -> inputName))
+        case value: Int if value < min || value > max =>
+          DataTypeMismatch(
+            errorSubClass = "VALUE_OUT_OF_RANGE",
+            messageParameters = Map(
+              "exprName" -> inputName,
+              "valueRange" -> s"[$min, $max]",
+              "currentValue" -> value.toString))
+        case _: Int => TypeCheckResult.TypeCheckSuccess
+        case other =>
+          throw SparkException.internalError(
+            s"Expected an Int for $inputName, but got ${other.getClass.getName}")
+      }
     }
   }
 

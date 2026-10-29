@@ -383,8 +383,8 @@ abstract class TupleUnionBase[S <: Summary]
     Arguments:
       * tupleSketch1 - The first TupleSketch (double summary) as a binary value.
       * tupleSketch2 - The second TupleSketch (double summary) as a binary value.
-      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
-          number of nominal entries. Defaults to 12.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+          log-base-2 of nominal entries. Must be between 4 and 26 (inclusive). Defaults to 12.
       * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
           Defaults to 'sum'.
   """,
@@ -422,8 +422,8 @@ object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * tupleSketch1 - The first TupleSketch (integer summary) as a binary value.
       * tupleSketch2 - The second TupleSketch (integer summary) as a binary value.
-      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
-          number of nominal entries. Defaults to 12.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+          log-base-2 of nominal entries. Must be between 4 and 26 (inclusive). Defaults to 12.
       * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
           Defaults to 'sum'.
   """,
@@ -464,8 +464,8 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * tupleSketch - The TupleSketch (double summary) as a binary value.
       * thetaSketch - The ThetaSketch as a binary value.
-      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
-          number of nominal entries. Defaults to 12.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+          log-base-2 of nominal entries. Must be between 4 and 26 (inclusive). Defaults to 12.
       * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
           Defaults to 'sum'.
   """,
@@ -506,8 +506,8 @@ object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
     Arguments:
       * tupleSketch - The TupleSketch (integer summary) as a binary value.
       * thetaSketch - The ThetaSketch as a binary value.
-      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
-          number of nominal entries. Defaults to 12.
+      * lgNomEntries - Optional. A foldable (constant), non-NULL integer expression containing the
+          log-base-2 of nominal entries. Must be between 4 and 26 (inclusive). Defaults to 12.
       * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
           Defaults to 'sum'.
   """,

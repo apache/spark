@@ -21,9 +21,7 @@ import org.apache.datasketches.common.{Family, SketchesArgumentException}
 import org.apache.datasketches.memory.{Memory, MemoryBoundsException}
 import org.apache.datasketches.theta.CompactSketch
 
-import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult
-import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.errors.QueryExecutionErrors
 
@@ -77,35 +75,11 @@ object ThetaSketchUtils {
    * Validates that an lgNomEntries input is foldable, non-null, and within the supported range.
    */
   def checkLgNomEntriesInput(lgNomEntries: Expression): TypeCheckResult = {
-    if (!lgNomEntries.foldable) {
-      DataTypeMismatch(
-        errorSubClass = "NON_FOLDABLE_INPUT",
-        messageParameters = Map(
-          "inputName" -> "lgNomEntries",
-          "inputType" -> "int",
-          "inputExpr" -> lgNomEntries.sql))
-    } else {
-      lgNomEntries.eval() match {
-        case null =>
-          DataTypeMismatch(
-            errorSubClass = "UNEXPECTED_NULL",
-            messageParameters = Map("exprName" -> "lgNomEntries"))
-        case lgNomEntriesValue: Int =>
-          if (!isValidLgNomLongs(lgNomEntriesValue)) {
-            DataTypeMismatch(
-              errorSubClass = "VALUE_OUT_OF_RANGE",
-              messageParameters = Map(
-                "exprName" -> "lgNomEntries",
-                "valueRange" -> s"[$MIN_LG_NOM_LONGS, $MAX_LG_NOM_LONGS]",
-                "currentValue" -> lgNomEntriesValue.toString))
-          } else {
-            TypeCheckResult.TypeCheckSuccess
-          }
-        case other =>
-          throw SparkException.internalError(
-            s"Expected an Int for lgNomEntries, but got ${other.getClass.getName}")
-      }
-    }
+    TypeUtils.checkFoldableIntInRange(
+      lgNomEntries,
+      inputName = "lgNomEntries",
+      min = MIN_LG_NOM_LONGS,
+      max = MAX_LG_NOM_LONGS)
   }
 
   /**
