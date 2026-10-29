@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.catalyst.plans.logical
 
+import scala.collection.mutable
+
 import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.analysis.{AnalysisContext, AssignmentUtils, EliminateSubqueryAliases, FieldName, NamedRelation, PartitionSpec, ResolvedIdentifier, ResolvedProcedure, ResolveSchemaEvolution, TypeCheckResult, UnresolvedAttribute, UnresolvedException, UnresolvedProcedure, ViewSchemaMode}
@@ -1255,7 +1257,14 @@ case class MergeIntoTable(
   override lazy val pendingSchemaChanges: Seq[TableChange] = {
     if (schemaEvolutionEnabled && schemaEvolutionReady) {
       val candidateChanges = MergeIntoTable.computePendingSchemaChanges(this)
-      ResolveSchemaEvolution.filterSupportedChanges(table, candidateChanges)
+      val supportedChanges =
+        ResolveSchemaEvolution.filterSupportedChanges(table, candidateChanges)
+      if (SQLConf.get.schemaEvolutionPreserveColumnOrder) {
+        ResolveSchemaEvolution.assignAddPositions(
+          supportedChanges, table.schema, sourceTable.schema)
+      } else {
+        supportedChanges
+      }
     } else {
       Seq.empty
     }
@@ -1313,25 +1322,54 @@ object MergeIntoTable {
   }
 
   private def computePendingSchemaChanges(merge: MergeIntoTable): Seq[TableChange] = {
+    val resolver = SQLConf.get.resolver
+
+    val addedFieldPaths = mutable.ArrayBuffer.empty[Seq[String]]
+
+    def isAlreadyAdded(fieldPath: Seq[String]): Boolean = {
+      addedFieldPaths.exists { added =>
+        added.length == fieldPath.length &&
+          added.lazyZip(fieldPath).forall((a, b) => resolver(a, b))
+      }
+    }
+
     schemaEvolutionTriggeringAssignments(merge).flatMap {
       // New column: the key didn't resolve against the target, so the column is missing.
       // Applies to top-level fields (e.g. SET new_col = source.new_col) and nested fields
       // where the leaf is missing (e.g. SET addr.zip = source.addr.zip).
       case a @ Assignment(UnresolvedAttribute(fieldPath), _)
           if !containsColumn(merge.targetTable, fieldPath) =>
-        Seq(TableChange.addColumn(fieldPath.toArray, a.value.dataType.asNullable))
+        if (isAlreadyAdded(fieldPath)) {
+          Seq.empty
+        } else {
+          addedFieldPaths += fieldPath
+          Seq(TableChange.addColumn(
+            fieldPath.toArray,
+            a.value.dataType.asNullable,
+            /* isNullable */ true))
+        }
 
       // Type mismatch on an existing column: the key is resolved but the source type differs.
       // For atomic types this produces an updateColumnType; for structs this recurses to
       // find nested additions or type changes (e.g. SET addr = source.addr where source.addr
       // has an extra field or a widened child type).
       case a if a.key.resolved && a.key.dataType != a.value.dataType =>
-        ResolveSchemaEvolution.computeSchemaChanges(
+        val changes = ResolveSchemaEvolution.computeSchemaChanges(
           a.key.dataType,
           a.value.dataType,
           fieldPath = extractFieldPath(a.key, allowUnresolved = false),
           isByName = true,
           throwError = throwIncompatibleSchemasError(merge))
+        changes.filter {
+          case add: TableChange.AddColumn =>
+            val newFieldPath = add.fieldNames.toSeq
+            val emit = !isAlreadyAdded(newFieldPath)
+            if (emit) {
+              addedFieldPaths += newFieldPath
+            }
+            emit
+          case _ => true
+        }
 
       // Types already match - no schema change needed.
       case _ => Seq.empty

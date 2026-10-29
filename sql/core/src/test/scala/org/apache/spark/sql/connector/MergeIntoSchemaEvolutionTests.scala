@@ -27,3 +27,4 @@ trait MergeIntoSchemaEvolutionTests
   with MergeIntoSchemaEvolutionExtraTargetColumnTests
   with MergeIntoSchemaEvolutionTypeWideningTests
   with MergeIntoSchemaEvolutionMixedTests
+  with MergeIntoSchemaEvolutionColumnOrderTests
