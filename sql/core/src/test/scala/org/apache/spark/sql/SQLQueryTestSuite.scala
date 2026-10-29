@@ -422,6 +422,7 @@ class SQLQueryTestSuite extends SharedSparkSession
 
     queriesWithDebug.zipWithIndex.foreach { case ((sql, isDebug), i) =>
       lazy val parsedPlan = parsePlan(localSparkSession, sql)
+      // Custom statements are setup commands, so run them regardless of their --DEBUG marker.
       val customQueryExecuted = executeCustomQuery(sql, () => parsedPlan).nonEmpty
       lazy val isCommand = parsedPlan.exists(_.isInstanceOf[Command])
 
