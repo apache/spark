@@ -165,4 +165,42 @@ class AQEPipelinedShuffleSuite extends SparkFunSuite
       pool.shutdownNow()
     }
   }
+
+  test("SPARK-60497: an AQE shuffle over a pipelined toRdd is rejected instead of hanging") {
+    withAqePipelinedSession { spark =>
+      import spark.implicits._
+      val inner = spark.range(0, 1000, 1, 2).withColumn("k", ($"id" % 7)).groupBy($"k").count()
+      // QueryExecution.toRdd runs the inner plan as planned: its only exchange is pipelined.
+      val rows = inner.queryExecution.toRdd
+        .map(r => org.apache.spark.sql.Row(r.getLong(0), r.getLong(1)))
+      assert(pipelinedExchanges(inner.queryExecution.executedPlan).nonEmpty)
+      // The outer plan scans an RDD, so its exchange stays regular, and AQE materializes it with a
+      // map-stage job that depends on the inner pipelined shuffle. The scheduler rejects that job
+      // up front. Collect under a deadline so that a regression (the job's channel tasks killed
+      // and relaunched forever) fails here instead of hanging the suite.
+      val outer = spark.createDataFrame(rows, inner.schema).groupBy($"count").count()
+      val pool = Executors.newSingleThreadExecutor()
+      try {
+        val fut = pool.submit(new java.util.concurrent.Callable[Int] {
+          override def call(): Int = outer.collect().length
+        })
+        intercept[java.util.concurrent.ExecutionException] {
+          fut.get(90, TimeUnit.SECONDS)
+        }.getCause match {
+          case e: org.apache.spark.SparkException =>
+            checkError(
+              exception = e,
+              condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+              sqlState = Some("0A000"),
+              parameters = Map("reason" -> "a map-stage job that depends on a pipelined shuffle"))
+          case other => fail(s"expected a SparkException, got $other", other)
+        }
+      } finally {
+        spark.sparkContext.cancelAllJobs()
+        pool.shutdownNow()
+      }
+      // The inner pipelined query still runs.
+      assert(inner.collect().map(_.getLong(1)).sum === 1000L)
+    }
+  }
 }

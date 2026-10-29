@@ -46,7 +46,14 @@ object MimaExcludes {
       "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
     // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance")
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
+    // BIN BY DataFrame API.
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy"),
+    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
@@ -72,6 +79,15 @@ object MimaExcludes {
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-60384] Spark 4.2 artifacts shade Jetty types in these private wrapper classes.
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler$MutableFieldsWrapper"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.onAddField"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.getHeaders"),
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
@@ -105,8 +121,6 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-56700][SS] Make DataStreamReader.name public
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
-    // [SPARK-34591][ML] Add pruneTree parameter to Strategy
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
     // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin"),
     // [SPARK-57332][SQL] MySQLDialect no longer overrides the visit methods below; the public

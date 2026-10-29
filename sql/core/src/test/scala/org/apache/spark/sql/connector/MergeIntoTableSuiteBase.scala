@@ -893,6 +893,41 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-60673: merge with metadata columns in conditions and assignments") {
+    // the metadata columns must be read even if the operation does not require them
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |{ "pk": 4, "salary": 400, "dep": "software" }
+          |""".stripMargin)
+
+      val sourceDF = Seq((1, "hr"), (2, "hr"), (5, "hr")).toDF("pk", "dep")
+      sourceDF.createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t._partition = s.dep
+           |WHEN MATCHED AND t.index = 0 THEN
+           | UPDATE SET t.salary = t.index + 10
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, salary, dep) VALUES (s.pk, 0, s.dep)
+           |WHEN NOT MATCHED BY SOURCE AND t._partition = 'software' THEN
+           | DELETE
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 10, "hr"), // update
+          Row(2, 0, "hr"), // insert
+          Row(3, 300, "hr"), // unchanged
+          Row(5, 0, "hr"))) // insert
+    }
+  }
+
   test("merge with one NOT MATCHED BY SOURCE clause") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
@@ -1992,6 +2027,70 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, Row("x1 ", "x2"), "hr"), // update (matched)
           Row(2, Row("x1 ", "x2"), "software"), // update (matched)
           Row(3, Row("y1 ", "y2"), "hr"))) // update (not matched by source)
+    }
+  }
+
+  test("SPARK-60708: merge into char/varchar table with metadata columns") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+      append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+          |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+          |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+          |{ "pk": 4, "id": 4, "dep": "software", "name": "d" }
+          |""".stripMargin)
+
+      Seq(1, 2, 5).toDF("pk").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk
+           |WHEN MATCHED AND t._partition = 'hr' THEN
+           | UPDATE SET t.id = t.index + 10
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, id, dep, name) VALUES (s.pk, 0, 'hr', 'e')
+           |WHEN NOT MATCHED BY SOURCE AND t._partition = 'software' THEN
+           | DELETE
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 10, "hr", "a"), // update (matched)
+          Row(2, 2, "software", "b"), // unchanged
+          Row(3, 3, "hr", "c"), // unchanged
+          Row(5, 0, "hr", "e"))) // insert
+    }
+  }
+
+  test("SPARK-60708: insert-only merge into char/varchar table with metadata column in ON") {
+    withTempView("source") {
+      createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+      append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+        """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+          |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+          |""".stripMargin)
+
+      Seq(1, 2, 3).toDF("pk").createOrReplaceTempView("source")
+
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t._partition = 'hr'
+           |WHEN NOT MATCHED THEN
+           | INSERT (pk, id, dep, name) VALUES (s.pk, 0, 'hr', 'new')
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 1, "hr", "a"), // unchanged (matched)
+          Row(2, 2, "software", "b"), // unchanged
+          Row(2, 0, "hr", "new"), // insert (not matched in hr)
+          Row(3, 0, "hr", "new"))) // insert
     }
   }
 

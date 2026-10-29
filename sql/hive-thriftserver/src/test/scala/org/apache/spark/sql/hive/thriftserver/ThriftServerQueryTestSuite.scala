@@ -345,6 +345,9 @@ class ThriftServerQueryTestSuite extends SQLQueryTestSuite with SharedThriftServ
     upperCase.startsWith("SELECT ") || upperCase.startsWith("SELECT\n") ||
       upperCase.startsWith("WITH ") || upperCase.startsWith("WITH\n") ||
       upperCase.startsWith("VALUES ") || upperCase.startsWith("VALUES\n") ||
+      // A query may start with its FROM clause (e.g. `FROM t1 JOIN t2 ...` in using-join.sql);
+      // its row order is as unspecified as a SELECT's.
+      upperCase.startsWith("FROM ") || upperCase.startsWith("FROM\n") ||
       // postgreSQL/union.sql
       upperCase.startsWith("(")
   }

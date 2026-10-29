@@ -360,6 +360,27 @@ abstract class DeleteFromTableSuiteBase extends RowLevelOperationSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
   }
 
+  test("SPARK-60673: delete with metadata columns in the condition") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 1)
+
+    sql(s"DELETE FROM $tableNameAsString t WHERE t.index = 0 AND t.id > 1")
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(3, 1, "software") :: Nil)
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 0)
+  }
+
   test("delete with IN subqueries") {
     withTempView("deleted_id", "deleted_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",

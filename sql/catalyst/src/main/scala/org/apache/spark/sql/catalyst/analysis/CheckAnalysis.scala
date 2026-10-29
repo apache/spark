@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression,
 import org.apache.spark.sql.catalyst.optimizer.InlineCTE
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.TreePattern.{LATERAL_COLUMN_ALIAS_REFERENCE, PLAN_EXPRESSION, UNRESOLVED_WINDOW_EXPRESSION}
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, StringUtils, TypeUtils, WriteDistributionAndOrdering}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, LookupCatalog, SupportsPartitionManagement}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -492,7 +492,9 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
         throw SparkException.internalError(
           s"V2Reference should be resolved during analysis: ${r.name}")
 
-      case u: UnresolvedInlineTable if unresolvedInlineTableContainsScalarSubquery(u) =>
+      case u: UnresolvedInlineTable
+          if !SQLConf.get.getConf(SQLConf.INLINE_TABLE_NON_FOLDABLE_EXPRESSIONS_ENABLED) &&
+            unresolvedInlineTableContainsScalarSubquery(u) =>
         throw QueryCompilationErrors.inlineTableContainsScalarSubquery(u)
 
       case command: V2PartitionCommand =>
@@ -522,6 +524,12 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
           errorClass = "NOT_A_CONSTANT_STRING.NOT_CONSTANT",
           messageParameters = Map("name" -> "IDENTIFIER", "expr" -> p.identifierExpr.sql)
         )
+
+      // Invariant check: the temporary UnresolvedInsert is lowered to InsertIntoStatement once
+      // its target identifier is evaluated, so it must never survive analysis.
+      case insert: UnresolvedInsert =>
+        throw SparkException.internalError(
+          s"UnresolvedInsert target was not lowered during analysis: ${insert.table.nodeName}")
 
       case c: CacheTableAsSelect if c.tempViewName.resolved =>
         // The parser builds `tempViewName` as either a `Literal[StringType]` (for direct
@@ -644,6 +652,14 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
               s"Cannot resolve the runtime replaceable expression ${toSQLExpr(e)}. " +
               s"The replacement is unresolved: ${toSQLExpr(e.replacement)}.")
 
+          // Only the Spark Connect planner creates UnresolvedPlanId (a DataFrame subquery by plan
+          // id), and only its WithRelations transform resolves it. A survivor usually means the
+          // client never attached the referenced plan to the request, so report an invalid Spark
+          // Connect plan. If the planner analyzes the plan before substituting an attached plan
+          // id, it rethrows this error as an INTERNAL_ERROR.
+          case u: UnresolvedPlanId =>
+            throw QueryCompilationErrors.subqueryPlanNotAttached(u)
+
           // `Grouping` and `GroupingID` are considered as of having lower priority than the other
           // nodes which cause errors.
           case g: Grouping =>
@@ -762,8 +778,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "joinCondition" -> toSQLExpr(condition),
                 "conditionType" -> toSQLType(condition.dataType)))
 
-          case j @ AsOfJoin(_, _, _, Some(condition), _, _, _, _, _, _, _, _, _, _, _)
-              if condition.dataType != BooleanType =>
+          case j: AsOfJoin if j.condition.exists(_.dataType != BooleanType) =>
+            val condition = j.condition.get
             j.failAnalysis(
               errorClass = "JOIN_CONDITION_IS_NOT_BOOLEAN_TYPE",
               messageParameters = Map(
@@ -771,20 +787,7 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 "conditionType" -> toSQLType(condition.dataType)))
 
           case j: AsOfJoin =>
-            j.toleranceAssertion.foreach { toleranceAssertion =>
-              if (!toleranceAssertion.foldable) {
-                j.failAnalysis(
-                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_UNFOLDABLE",
-                  messageParameters = Map.empty)
-              }
-              if (!toleranceAssertion.eval().asInstanceOf[Boolean]) {
-                j.failAnalysis(
-                  errorClass = "AS_OF_JOIN.TOLERANCE_IS_NON_NEGATIVE",
-                  messageParameters = Map.empty)
-              }
-            }
-
-            AsOfJoinValidation.validateKeyTypes(j)
+            AsOfJoinValidation.validateTolerance(j)
 
           // Reject streaming inputs early. The optimizer rewrite is built around an
           // unconditioned cross-product fed into a global `Aggregate` keyed by a per-row
@@ -993,6 +996,18 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
                 errorClass = "UNSUPPORTED_FEATURE.PARTITION_WITH_NESTED_COLUMN_IS_UNSUPPORTED",
                 messageParameters = Map(
                   "cols" -> badReferences.map(r => toSQLId(r)).mkString(", ")))
+            }
+
+            // PreprocessTableCreation keeps a reference to a missing column as is, so this is the
+            // only check that rejects it, also for analyzers that do not run that rule.
+            val badOrderingReferences = WriteDistributionAndOrdering.unknownReferences(
+              create.tableSchema, create.writeOrdering)
+
+            if (badOrderingReferences.nonEmpty) {
+              create.failAnalysis(
+                errorClass = "WRITE_ORDERING_WITH_UNKNOWN_COLUMN",
+                messageParameters = Map(
+                  "cols" -> badOrderingReferences.map(parts => toSQLId(parts)).mkString(", ")))
             }
 
             create.tableSchema.foreach(f => TypeUtils.failWithIntervalType(f.dataType))
@@ -1219,6 +1234,8 @@ trait CheckAnalysis extends LookupCatalog with QueryErrorsBase with PlanToString
 
           case _ => // Analysis successful!
         }
+
+        NanosTimestampSubtractionCheck.checkOperator(operator)
     }
     checkCollectedMetrics(plan)
     extendedCheckRules.foreach(_(plan))

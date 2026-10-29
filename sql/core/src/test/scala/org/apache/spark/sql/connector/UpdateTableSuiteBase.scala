@@ -523,6 +523,29 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
+  test("SPARK-60673: update with metadata columns in the condition and assignments") {
+    // the metadata columns must be read even if the operation does not require them
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE _partition = 'hr' AND id < 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 3")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "hr") :: Row(3, 10, "software") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
   test("update with IN subqueries") {
     withTempView("updated_id", "updated_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
@@ -890,6 +913,50 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, Row("x  ", "y"), "hr") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with metadata columns") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id IN (1, 2) AND _partition = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 10, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with an outer metadata reference") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    withTempView("deps") {
+      Seq("hr").toDF("d").createOrReplaceTempView("deps")
+      sql(s"UPDATE $tableNameAsString t SET id = -1 " +
+        "WHERE id IN (1, 2) AND EXISTS (SELECT 1 FROM deps WHERE deps.d = t._partition)")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
   }
 
   test("update with NOT NULL checks") {

@@ -94,12 +94,6 @@ object JDBCRDD extends Logging {
     }
   }
 
-  def resolveTable(options: JDBCOptions): StructType = {
-    JdbcUtils.withConnection(options) {
-      resolveTable(options, _)
-    }
-  }
-
   def getQueryOutputSchema(
       query: String, options: JDBCOptions, dialect: JdbcDialect, conn: Connection): StructType = {
     logInfo(log"Generated JDBC query to get scan output schema: ${MDC(SQL_TEXT, query)}")
@@ -171,7 +165,8 @@ object JDBCRDD extends Logging {
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
       offset: Int = 0,
-      additionalMetrics: Map[String, SQLMetric] = Map()): RDD[InternalRow] = {
+      additionalMetrics: Map[String, SQLMetric] = Map(),
+      databaseMetadata: Option[JDBCDatabaseMetadata] = None): RDD[InternalRow] = {
     val url = options.url
     val dialect = JdbcDialects.get(url)
     val quotedColumns = if (groupByColumns.isEmpty) {
@@ -191,7 +186,8 @@ object JDBCRDD extends Logging {
       parts,
       url,
       options,
-      databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
+      databaseMetadata = databaseMetadata.getOrElse(
+        JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory)),
       groupByColumns,
       sampleClause,
       limit,

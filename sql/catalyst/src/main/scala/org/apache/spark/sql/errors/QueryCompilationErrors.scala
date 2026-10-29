@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedPlanId, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -1038,6 +1038,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
+  def duplicateAssignmentsError(nameList: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DUPLICATE_ASSIGNMENTS",
+      messageParameters = Map("nameList" -> nameList))
+  }
+
   def unresolvedVariableError(
       name: Seq[String],
       pathEntries: Seq[Seq[String]],
@@ -2020,6 +2026,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Some(cause))
   }
 
+  def nativeDataSourcePackageConflictError(name: String, packages: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT",
+      messageParameters = Map("name" -> name, "packages" -> packages.mkString(", ")))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "MULTIPLE_DATA_SOURCES",
@@ -2212,6 +2224,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "existingPartCols" -> existingPartCols))
   }
 
+  def fileStreamSinkPartitioningMismatchError(
+      tableName: String,
+      expectedPartCols: Seq[String],
+      recordedPartCols: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_FILE_SINK_PARTITIONING_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "expectedPartCols" -> expectedPartCols.mkString(", "),
+        "recordedPartCols" -> recordedPartCols.mkString(", ")))
+  }
+
   def mismatchedTableBucketingError(
       tableName: String,
       specifiedBucketString: String,
@@ -2240,6 +2264,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1165",
       messageParameters = Map.empty)
+  }
+
+  def specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      origin = origin)
   }
 
   def bucketingColumnCannotBePartOfPartitionColumnsError(
@@ -4878,6 +4909,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     )
   }
 
+  def subqueryPlanNotAttached(u: UnresolvedPlanId): Throwable = {
+    new AnalysisException(
+      errorClass = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      messageParameters = Map("planId" -> u.planId.toString),
+      origin = u.origin
+    )
+  }
+
   def ambiguousColumnReferences(e: Expression): Throwable = {
     new AnalysisException(
       errorClass = "AMBIGUOUS_COLUMN_REFERENCE",
@@ -5184,6 +5223,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       expr2: Expression): Throwable = {
     new AnalysisException(
       errorClass = "ASOF_JOIN_MATCH_CONDITION_TABLE_REFERENCE",
+      messageParameters = Map(
+        "refs1" -> toSQLExpr(expr1),
+        "refs2" -> toSQLExpr(expr2)))
+  }
+
+  def asOfJoinKeyReferenceError(expr1: Expression, expr2: Expression): Throwable = {
+    new AnalysisException(
+      errorClass = "AS_OF_JOIN.KEY_REFERENCE",
       messageParameters = Map(
         "refs1" -> toSQLExpr(expr1),
         "refs2" -> toSQLExpr(expr2)))
