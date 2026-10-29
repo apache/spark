@@ -254,9 +254,58 @@ if should_test_connect:
                 resp.operation_statuses.append(op_status)
             return resp
 
+    class ExitRecordingStub:
+        """Records every RPC by name, so a test can assert which RPCs the client sent.
+
+        Answers the RPCs the exit hook may send; any other RPC is recorded and then fails.
+        """
+
+        def __init__(self, session_id: str, release_server_side_session_id: str = ""):
+            self._session_id = session_id
+            # ReleaseSession carries no server-side ID when the session never existed.
+            self._release_server_side_session_id = release_server_side_session_id
+            self.calls = []
+
+        def Config(self, req, metadata, timeout=None):
+            self.calls.append("Config")
+            resp = proto.ConfigResponse(
+                session_id=self._session_id, server_side_session_id="server-session-id"
+            )
+            for key in req.operation.get.keys:
+                resp.pairs.add(key=key)
+            return resp
+
+        def ExecutePlan(self, req, metadata, timeout=None):
+            self.calls.append("ExecutePlan")
+            return [
+                proto.ExecutePlanResponse(
+                    session_id=self._session_id,
+                    server_side_session_id="server-session-id",
+                    operation_id=req.operation_id,
+                )
+            ]
+
+        def ReleaseSession(self, req, metadata, timeout=None):
+            self.calls.append("ReleaseSession")
+            return proto.ReleaseSessionResponse(
+                session_id=self._session_id,
+                server_side_session_id=self._release_server_side_session_id,
+            )
+
+        def __getattr__(self, name):
+            if name.startswith("__"):
+                raise AttributeError(name)
+
+            def unexpected_rpc(*args, **kwargs):
+                self.calls.append(name)
+                raise RuntimeError(f"Unexpected RPC: {name}")
+
+            return unexpected_rpc
+
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
+    _real_cleanup_ml_cache = SparkConnectClient._cleanup_ml_cache
     SparkConnectClient._cleanup_ml_cache = lambda _: None
 
 
@@ -818,6 +867,52 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         self.assertEqual(call_tracker["release_session"], 1)
         self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_sends_no_rpc_without_live_session(self):
+        """Test _on_exit sends no RPC for a session that was never established or was released.
+
+        RPCs are recorded at the stub, so any new exit-time RPC is covered, not only the ones
+        _on_exit sends today.
+        """
+
+        def exit_rpcs(observed_id, release_on_exit, release_first=False, release_id=""):
+            client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+            # Use the real ML cache cleanup, which this module patches out, and keep the atexit
+            # hook from running it again at interpreter exit.
+            client._cleanup_ml_cache = _real_cleanup_ml_cache.__get__(client)
+            self.addCleanup(setattr, client, "_closed", True)
+            stub = ExitRecordingStub(client._session_id, release_id)
+            client._stub = stub
+            client._server_session_id = observed_id
+            client._release_session_on_exit = release_on_exit
+            if release_first:
+                client.release_session()
+                stub.calls.clear()
+            client._on_exit()
+            return stub.calls
+
+        # Control: a live session cleans its ML cache at exit, so exit-time RPCs are recorded.
+        self.assertIn("ExecutePlan", exit_rpcs("server-session-id", release_on_exit=False))
+
+        for release_on_exit in [False, True]:
+            with self.subTest(state="released after use", release_on_exit=release_on_exit):
+                calls = exit_rpcs(
+                    "server-session-id",
+                    release_on_exit,
+                    release_first=True,
+                    release_id="server-session-id",
+                )
+                self.assertEqual(calls, [])
+            with self.subTest(state="released before use", release_on_exit=release_on_exit):
+                self.assertEqual(exit_rpcs(None, release_on_exit, release_first=True), [])
+
+        for observed_id in [None, ""]:
+            with self.subTest(state="never established", observed_id=observed_id):
+                self.assertEqual(exit_rpcs(observed_id, release_on_exit=False), [])
+                # The opt-in release still runs: artifact uploads and cloneSession() can create
+                # a server-side session without the client observing its ID.
+                calls = exit_rpcs(observed_id, release_on_exit=True)
+                self.assertEqual(calls, ["ReleaseSession"])
 
     def test_get_operations_statuses_all(self):
         """Test get_operations_statuses returns all operation statuses when no IDs specified."""
