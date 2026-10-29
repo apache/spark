@@ -19,22 +19,30 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, DropField, Length, UpdateFields, Upper}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Expression, Length, Literal, StructFieldsOperation, UpdateFields, UpdateNestedField, Upper, WithField}
+import org.apache.spark.sql.catalyst.trees.LeafLike
 import org.apache.spark.sql.types.{DataType, IndeterminateStringType, IntegerType, StringType, StructType}
 
-/** The indeterminate-collation check of [[CollationTypeCoercion]]. */
-class IndeterminateCollationCheckSuite extends SparkFunSuite {
+class CollationTypeCoercionSuite extends SparkFunSuite {
 
   private val struct = AttributeReference(
-    "s", new StructType().add("a", IntegerType).add("b", StringType))()
+    "s",
+    new StructType()
+      .add("a", IntegerType)
+      .add("b", StringType)
+      .add("n", new StructType().add("y", StringType)))()
 
   private val indeterminate = AttributeReference("x", IndeterminateStringType)()
 
   test("does not ask the field operations of UpdateFields for a data type") {
-    val drop = new CountingDropField("b")
-    val update = UpdateFields(struct, Seq(drop))
-    assert(CollationTypeCoercion(update) eq update)
-    assert(drop.dataTypeRequests == 0)
+    val op = CountingFieldOperation("b")
+    val nestedOp = CountingFieldOperation("y")
+    val update = UpdateFields(struct,
+      Seq(WithField("c", Literal(1)), op, UpdateNestedField("n", Seq(nestedOp))))
+    // Visit every node, as CollationTypeCasts does.
+    assert(update.transformUp { case e => CollationTypeCoercion(e) } eq update)
+    assert(op.dataTypeRequests == 0)
+    assert(nestedOp.dataTypeRequests == 0)
   }
 
   test("fails an expression that does not accept an indeterminate collation input") {
@@ -46,13 +54,26 @@ class IndeterminateCollationCheckSuite extends SparkFunSuite {
       parameters = Map("expr" -> "\"upper(x)\""))
   }
 
+  test("fails when only a later child has an indeterminate collation") {
+    checkError(
+      exception = intercept[AnalysisException] {
+        CollationTypeCoercion(EqualTo(Literal("a"), indeterminate))
+      },
+      condition = "INDETERMINATE_COLLATION_IN_EXPRESSION",
+      parameters = Map("expr" -> "\"(a = x)\""))
+  }
+
   test("keeps an expression that accepts an indeterminate collation input") {
     val length = Length(indeterminate)
     assert(CollationTypeCoercion(length) eq length)
   }
 
-  /** A [[DropField]] that counts the requests for its data type, which it does not have. */
-  private class CountingDropField(name: String) extends DropField(name) {
+  /**
+   * A field operation that counts the requests for its data type, which, like every
+   * [[StructFieldsOperation]], it does not have.
+   */
+  private case class CountingFieldOperation(name: String)
+    extends StructFieldsOperation with LeafLike[Expression] {
     var dataTypeRequests = 0
 
     override def dataType: DataType = {
