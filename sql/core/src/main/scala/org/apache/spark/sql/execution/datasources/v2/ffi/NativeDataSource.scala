@@ -96,13 +96,14 @@ class NativeDataSource(
   }
 
   // The readers and the writers export the schemas with the time zone of the session on the
-  // driver, also on the executors, where they pass the same schemas to the library again.
+  // driver, also on the executors, where they pass the same schemas to the library again. A data
+  // source is created for each scan and each write, so it is read once for each.
+  private val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     NativeArrow.checkSupported(schema, name, "plan a scan of")
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
     val handle = create(library, "plan a scan of", NativeLibrary.BATCH_READ,
         "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.BatchReadFunctions) {
       dataSource =>
@@ -120,7 +121,6 @@ class NativeDataSource(
     NativeArrow.checkSupported(schema, name, "plan a scan of")
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
     val handle = create(library, "plan a scan of", NativeLibrary.MICRO_BATCH_READ,
         "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.MicroBatchReadFunctions) {
       dataSource =>
@@ -135,7 +135,6 @@ class NativeDataSource(
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
     val created = createWriter(library, schema, timeZoneId, overwrite, queryId = null)
     new NativeDataSourceWriter(executorLocation, name, schema, timeZoneId,
       new NativeHandle(created.handle, library.closeWriter), bytesOrEmpty(Option(created.state)))
@@ -147,7 +146,6 @@ class NativeDataSource(
       queryId: String): ColumnarStreamWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val timeZoneId = SQLConf.get.sessionLocalTimeZone
     val created = createWriter(library, schema, timeZoneId, overwrite, queryId)
     val handle = new NativeHandle(created.handle, library.closeWriter)
     val writer = new NativeDataSourceStreamWriter(

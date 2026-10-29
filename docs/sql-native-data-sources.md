@@ -451,6 +451,7 @@ pub struct SparkDsLibrary {
     prune_columns: Unused,
     partitions: unsafe extern "C" fn(
         reader: *mut c_void,
+        info: *const c_void,
         add_partition: Sink,
         set_state: Sink,
         sink: *mut c_void,
@@ -575,9 +576,11 @@ unsafe extern "C" fn close(source: *mut c_void) {
     drop(Box::from_raw(source as *mut RangeSource));
 }
 
-/// Plans two partitions. The reader has no state, so it does not call `set_state`.
+/// Plans two partitions. It needs nothing from its `SparkDsPartitionsInfo`, and the reader has no
+/// state, so it does not call `set_state`.
 unsafe extern "C" fn partitions(
     reader: *mut c_void,
+    _info: *const c_void,
     add_partition: Sink,
     _set_state: Sink,
     sink: *mut c_void,
@@ -729,8 +732,10 @@ int CreateReader(void* source, struct ArrowSchema*, void** reader) {
 
 void Close(void* source) { delete static_cast<RangeSource*>(source); }
 
-// Plans two partitions. The reader has no state, so it does not call set_state.
-int Partitions(void* reader, SparkDsSink add_partition, SparkDsSink, void* sink) {
+// Plans two partitions. It needs nothing from its info, and the reader has no state, so it does
+// not call set_state.
+int Partitions(void* reader, const SparkDsPartitionsInfo*, SparkDsSink add_partition, SparkDsSink,
+               void* sink) {
   return Call([&] {
     int64_t end = static_cast<RangeReader*>(reader)->end;
     int64_t bounds[2][2] = {{0, end / 2}, {end / 2, end}};
