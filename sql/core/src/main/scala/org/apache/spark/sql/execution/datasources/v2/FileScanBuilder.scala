@@ -31,7 +31,7 @@ abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     dataSchema: StructType)
-  extends ScanBuilder
+    extends ScanBuilder
     with SupportsPushDownRequiredColumns
     with SupportsPushDownCatalystFilters {
   private val partitionSchema = fileIndex.partitionSchema
@@ -73,10 +73,11 @@ abstract class FileScanBuilder(
     val (deterministicFilters, nonDeterminsticFilters) = filters.partition(_.deterministic)
     val (partitionFilters, dataFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
-    this.partitionFilters = partitionFilters.filter { f =>
+    val (partitionFiltersToPush, postScanPartitionFilters) = partitionFilters.partition { f =>
       // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
       !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
     }
+    this.partitionFilters = partitionFiltersToPush
     this.dataFilters = dataFilters
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
     for (filterExpr <- dataFilters) {
@@ -86,7 +87,7 @@ abstract class FileScanBuilder(
       }
     }
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
-    dataFilters ++ nonDeterminsticFilters
+    dataFilters ++ postScanPartitionFilters ++ nonDeterminsticFilters
   }
 
   override def pushedFilters: Array[Predicate] = pushedDataFilters.map(_.toV2)
