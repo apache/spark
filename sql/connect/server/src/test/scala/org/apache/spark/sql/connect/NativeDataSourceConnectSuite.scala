@@ -16,6 +16,7 @@
  */
 package org.apache.spark.sql.connect
 
+import java.io.File
 import java.nio.file.Files
 import java.util.UUID
 
@@ -89,6 +90,23 @@ class NativeDataSourceConnectSuite extends SparkConnectServerTest {
         other.read.format("native_range").load().collect()
       }
       assert(e.getCondition == "DATA_SOURCE_NOT_FOUND")
+    }
+  }
+
+  nativeTest("reject a package that Spark cannot use when a session adds it") {
+    val invalid = new File(Utils.createTempDir(), "native_range.sparkpkg")
+    Files.writeString(invalid.toPath, "not a zip")
+    withNewSession { session =>
+      // The client gets the error of the server in the message of a SparkException.
+      val e = intercept[SparkException](session.addArtifact(invalid.getPath))
+      assert(e.getMessage.contains("[INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST]"), e)
+      // It names the artifact, rather than the file in which the server staged it.
+      assert(e.getMessage.contains(s"package files${File.separator}native_range.sparkpkg:"), e)
+      // A valid package with the same file name can be added then.
+      session.addArtifact(
+        createPackage(library, dataSources(""), fileName = invalid.getName).getPath)
+      val df = session.read.format("native_range").option("end", "3").load()
+      assert(df.select("id").collect().map(_.getLong(0)).sorted.toSeq == Seq(0L, 1L, 2L))
     }
   }
 

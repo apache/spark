@@ -325,12 +325,15 @@ A session finds the packages in two places, and the executors get them automatic
 
 The packages of a session take precedence over the installed libraries, and the package that a
 session added last over its other packages, also the configured ones: a session cannot remove an
-artifact, or add a file with the same name again, so it upgrades a package by adding the new
-version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are also
-needed because the sessions that are not isolated share the files they add. A query fails if more
-than one configured package provides its data source. Spark ignores, and logs, a package that it
-cannot read or whose version it does not support, unless its manifest lists the data source that a
-query uses and no other package or installed library provides it.
+artifact, or add another file with the name of one that it added, so it upgrades a package by adding
+the new version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are
+also needed because the sessions that are not isolated share the files they add. A query fails if
+more than one configured package provides its data source. `spark.addArtifact` fails for a package
+that Spark cannot read or whose version it does not support, so that a session does not keep using
+the package that it added before. A package without a library for the platform of the driver is
+added, and a query that uses it fails with an error. Spark ignores, and logs, a configured package
+that it cannot read or whose version it does not support, unless its manifest lists the data source
+that a query uses and no other package or installed library provides it.
 
 ## Example in Rust
 
@@ -761,7 +764,7 @@ statically, or install them on the nodes.
 | Property Name | Default | Meaning |
 |---------------|---------|---------|
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
-| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries. |
+| `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries, and the packages that a session adds with `spark.addArtifact` take precedence over them. |
 
 ## Security
 

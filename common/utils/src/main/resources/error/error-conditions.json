@@ -4847,7 +4847,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       }
     },
@@ -4870,7 +4870,7 @@
       },
       "UNSUPPORTED_ABI_VERSION" : {
         "message" : [
-          "It requires version <version> of the native data source interface, but Spark supports version <supported>."
+          "It implements version <version> of the native data source interface, but Spark supports version <supported>."
         ]
       },
       "UNSUPPORTED_PLATFORM" : {

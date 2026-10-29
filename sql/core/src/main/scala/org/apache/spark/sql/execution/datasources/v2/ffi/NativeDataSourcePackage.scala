@@ -133,6 +133,33 @@ object NativeDataSourcePackage extends Logging {
   def read(file: File): NativeDataSourcePackage = tryRead(file).fold(p => throw p.error, identity)
 
   /**
+   * Checks a package that a session adds with `spark.addArtifact`, in the given file, before the
+   * session gets it: fails if Spark cannot read the package, or does not support its version of
+   * the interface. The package that a session added last takes precedence, and a session cannot
+   * remove an artifact, so Spark rejects such a package rather than ignore it, as it ignores the
+   * configured ones, which would keep the session on the package that it added before. The file
+   * is not the artifact itself, so the result is not cached, and errors call it `path`.
+   */
+  def checkAdded(file: File, path: String): Unit = {
+    parse(file, path) match {
+      case Left(invalid) => throw invalid.error
+      case Right(pkg) if pkg.manifest.abiVersion > NativeLibrary.ABI_VERSION =>
+        throw unsupportedAbiVersionError(pkg)
+      case _ =>
+    }
+  }
+
+  /** The error for a package whose version of the interface Spark does not support. */
+  private[ffi] def unsupportedAbiVersionError(pkg: NativeDataSourcePackage): Throwable = {
+    QueryExecutionErrors.invalidNativeDataSourcePackageError(
+      pkg.path,
+      "UNSUPPORTED_ABI_VERSION",
+      Map(
+        "version" -> pkg.manifest.abiVersion.toString,
+        "supported" -> NativeLibrary.ABI_VERSION.toString))
+  }
+
+  /**
    * Reads the package in the given file, or returns why it is invalid. The result is cached until
    * the file changes, and an invalid package, or a package of a version of the interface that
    * Spark does not support, is logged when it is read.
@@ -143,11 +170,11 @@ object NativeDataSourcePackage extends Logging {
     } catch {
       case e: IOException =>
         return Left(InvalidNativeDataSourcePackage(
-          invalidManifestError(file, s"The package cannot be read: $e", e), Nil))
+          invalidManifestError(file.getPath, s"The package cannot be read: $e", e), Nil))
     }
     Option(packages.getIfPresent(version)).getOrElse {
       val canonical = new File(version.path)
-      val result = parse(canonical)
+      val result = parse(canonical, canonical.getPath)
       result match {
         case Left(invalid) =>
           logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
@@ -177,14 +204,15 @@ object NativeDataSourcePackage extends Logging {
     packages.asMap().keySet().asScala.exists(_.path == canonicalPath)
   }
 
-  private def invalidManifestError(file: File, reason: String, cause: Throwable = null) = {
+  private def invalidManifestError(path: String, reason: String, cause: Throwable = null) = {
     QueryExecutionErrors.invalidNativeDataSourcePackageError(
-      file.getPath, "INVALID_MANIFEST", Map("reason" -> reason), cause)
+      path, "INVALID_MANIFEST", Map("reason" -> reason), cause)
   }
 
-  private def parse(file: File): ReadResult = {
+  /** Reads the package in the given file, which errors call `path`. */
+  private def parse(file: File, path: String): ReadResult = {
     def invalid(reason: String, dataSources: Seq[String] = Nil, cause: Throwable = null) = {
-      Left(InvalidNativeDataSourcePackage(invalidManifestError(file, reason, cause), dataSources))
+      Left(InvalidNativeDataSourcePackage(invalidManifestError(path, reason, cause), dataSources))
     }
     try {
       val manifest = Utils.tryWithResource(new ZipFile(file)) { zip =>
@@ -205,7 +233,7 @@ object NativeDataSourcePackage extends Logging {
             }
         }
       }
-      manifest.map(NativeDataSourcePackage(file.getPath, sha256(file), _))
+      manifest.map(NativeDataSourcePackage(path, sha256(file), _))
     } catch {
       case e: IOException => invalid(s"The package is not a valid zip file: $e", cause = e)
     }

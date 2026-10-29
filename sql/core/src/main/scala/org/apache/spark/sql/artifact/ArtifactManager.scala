@@ -160,11 +160,16 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    */
   private[sql] def getNativeDataSourcePackages: (Seq[File], Option[String]) = {
     val packages = sparkContextRelativePaths.asScala.collect {
-      case (SparkContextResourceType.FILE, path, _)
-          if path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION) =>
+      case (SparkContextResourceType.FILE, path, _) if isNativeDataSourcePackage(path) =>
         artifactPath.resolve(path).toFile
     }.toSeq
     (packages, Option(state).map(_.uuid))
+  }
+
+  /** Whether an artifact at the given normalized path is a native data source package. */
+  private def isNativeDataSourcePackage(path: Path): Boolean = {
+    path.startsWith(s"files${File.separator}") &&
+      path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION)
   }
 
   /** Returns whether a file with the given name was added to this session as a file artifact. */
@@ -284,6 +289,19 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
           "ARTIFACT_ALREADY_EXISTS",
           Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
         )
+      }
+      // A package is checked before it becomes an artifact of the session: see checkAdded. A
+      // file that does not exist fails to transfer instead. Errors name the file of the user, or
+      // the artifact if the file was staged for it, such as by a Spark Connect client.
+      if (isNativeDataSourcePackage(normalizedRemoteRelativePath) &&
+          session.conf.get(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED) &&
+          Files.exists(serverLocalStagingPath)) {
+        val path = if (deleteStagedFile) {
+          normalizedRemoteRelativePath.toString
+        } else {
+          serverLocalStagingPath.toString
+        }
+        NativeDataSourcePackage.checkAdded(serverLocalStagingPath.toFile, path)
       }
       transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 

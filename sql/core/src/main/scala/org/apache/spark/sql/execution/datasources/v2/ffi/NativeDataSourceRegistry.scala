@@ -26,7 +26,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{DATA_SOURCE, PATH, PATHS}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
+import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.util.Utils
 
@@ -62,7 +62,8 @@ object NativeDataSourceRegistry extends Logging {
     val artifacts = artifactPackageFiles()
     val (invalid, valid) = (configuredPackageFiles(conf) ++ artifacts)
       .map(NativeDataSourcePackage.tryRead).partitionMap(identity)
-    // A package of a version of the interface that Spark does not support is unusable too.
+    // A package of a version of the interface that Spark does not support is unusable too. Spark
+    // checks the packages that a session adds when it adds them, so these are configured ones.
     val (unsupported, usable) = valid.partitionMap { pkg =>
       // The version of a package is the oldest that its library implements.
       if (pkg.manifest.abiVersion <= NativeLibrary.ABI_VERSION) Right(pkg) else Left(pkg)
@@ -78,12 +79,7 @@ object NativeDataSourceRegistry extends Logging {
         // provides the data source: a stale copy does not hide a valid one. An invalid package
         // whose manifest cannot be read is only logged, when it is read.
         unsupported.find(_.manifest.dataSources.exists(_.equalsIgnoreCase(name))).foreach { pkg =>
-          throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
-            pkg.path,
-            "UNSUPPORTED_ABI_VERSION",
-            Map(
-              "version" -> pkg.manifest.abiVersion.toString,
-              "supported" -> NativeLibrary.ABI_VERSION.toString))
+          throw NativeDataSourcePackage.unsupportedAbiVersionError(pkg)
         }
         invalid.find(_.dataSources.exists(_.equalsIgnoreCase(name))).foreach(p => throw p.error)
         None
@@ -146,8 +142,8 @@ object NativeDataSourceRegistry extends Logging {
       packages: Seq[NativeDataSourcePackage]): Option[(String, NativeDataSourcePackage)] = {
     val found = packages
       .flatMap(pkg => pkg.manifest.dataSources.find(_.equalsIgnoreCase(name)).map(_ -> pkg))
-      // The same package can be found more than once, for example when it is in a configured
-      // directory and was also added as an artifact.
+      // The same package can be found more than once, for example when it is listed in
+      // spark.sql.dataSource.native.paths both as a file and through its directory.
       .groupBy(_._2.sha256).values.map(_.head).toSeq
     found match {
       case Seq() => None
