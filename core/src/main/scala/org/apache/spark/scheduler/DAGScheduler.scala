@@ -1529,12 +1529,11 @@ private[spark] class DAGScheduler(
     // and a partial cache hit skips a reader whose producer still needs its termination ACK.
     // Check storage intent instead, including pending local checkpoints and narrow descendants.
     val visited = new HashSet[RDD[_]]
-    if (persisted.exists(rdd => rddChainReadsPipelinedShuffle(rdd, visited))) {
+    persisted.find(rdd => rddChainReadsPipelinedShuffle(rdd, visited)).foreach { rdd =>
       throw pipelinedUnsupportedError(
-        "cache/persist/localCheckpoint in a pipelined consumer's within-stage chain " +
-          "(unpersist cached RDDs or rebuild locally checkpointed consumers without " +
-          "localCheckpoint before submitting the job; persist only RDDs that do not read " +
-          "a pipelined shuffle within their stage)")
+        s"cache/persist/localCheckpoint on RDD $rdd in a pipelined consumer's within-stage chain " +
+          "(unpersist this RDD or rebuild it without localCheckpoint before submitting the job; " +
+          "persist only RDDs that do not read a pipelined shuffle within their stage)")
     }
   }
 

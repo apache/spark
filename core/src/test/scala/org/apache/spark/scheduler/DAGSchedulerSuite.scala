@@ -9494,7 +9494,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       }
       scheduler.asInstanceOf[MyDAGScheduler].maxConcurrentTasksForTest = slots
 
-      assertPersistedPipelinedConsumerRejected(consumer, Seq(dependency.shuffleId))
+      assertPersistedPipelinedConsumerRejected(consumer, consumer, Seq(dependency.shuffleId))
     }
   }
 
@@ -9504,7 +9504,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val consumer = new MyRDD(sc, 2, List(dependency)).persist(StorageLevel.MEMORY_AND_DISK)
     cacheLocations(consumer.id -> 0) = Seq(makeBlockManagerId("hostA"))
 
-    assertPersistedPipelinedConsumerRejected(consumer, Seq(dependency.shuffleId))
+    assertPersistedPipelinedConsumerRejected(consumer, consumer, Seq(dependency.shuffleId))
   }
 
   test("pipelined cache preflight: reject a persisted narrow descendant inside a consumer stage") {
@@ -9514,7 +9514,18 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val result = new MyRDD(sc, 2, List(new OneToOneDependency(cached)))
     cacheLocations(cached.id -> 0) = Seq(makeBlockManagerId("hostA"))
 
-    assertPersistedPipelinedConsumerRejected(result, Seq(dependency.shuffleId))
+    assertPersistedPipelinedConsumerRejected(result, cached, Seq(dependency.shuffleId))
+  }
+
+  test("pipelined cache preflight: name the persisted consumer among cached producer inputs") {
+    val input = new MyRDD(sc, 2, Nil).cache()
+    val producer = new MyRDD(sc, 2, List(new OneToOneDependency(input))).cache()
+    val dependency = new PipelinedShuffleDependency(producer, new HashPartitioner(2))
+    val consumer = new MyRDD(sc, 2, List(dependency)).persist(StorageLevel.MEMORY_AND_DISK)
+
+    assertPersistedPipelinedConsumerRejected(consumer, consumer, Seq(dependency.shuffleId))
+    assert(input.getStorageLevel === StorageLevel.MEMORY_ONLY)
+    assert(producer.getStorageLevel === StorageLevel.MEMORY_ONLY)
   }
 
   test("pipelined cache preflight: reject a persisted stage that consumes and produces shuffles") {
@@ -9526,7 +9537,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       cacheLocations(middle.id -> partition) = Seq(makeBlockManagerId("hostA"))
     }
 
-    assertPersistedPipelinedConsumerRejected(result, Seq(first.shuffleId, second.shuffleId))
+    assertPersistedPipelinedConsumerRejected(
+      result, middle, Seq(first.shuffleId, second.shuffleId))
   }
 
   test("pipelined cache preflight: reject a pending local checkpoint in a consumer") {
@@ -9535,7 +9547,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(!consumer.isCheckpointed)
     assert(consumer.getStorageLevel != StorageLevel.NONE)
 
-    assertPersistedPipelinedConsumerRejected(consumer, Seq(dependency.shuffleId))
+    assertPersistedPipelinedConsumerRejected(consumer, consumer, Seq(dependency.shuffleId))
   }
 
   test("pipelined cache preflight: unpersisting a pending local checkpoint still requires " +
@@ -9548,9 +9560,8 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assert(!consumer.isCheckpointed)
 
     val exception = submitAndCaptureFailure(consumer, Array(0, 1))
-    assertPipelinedUnsupported(exception, "cache/persist/localCheckpoint in a pipelined consumer")
-    assert(exception.getMessage.contains(
-      "rebuild locally checkpointed consumers without localCheckpoint"))
+    assertPipelinedUnsupported(exception, pipelinedCacheRejectionReason(consumer))
+    assert(exception.getMessage.contains("rebuild it without localCheckpoint"))
     assert(consumer.getStorageLevel === StorageLevel.NONE)
     assertNoPipelinedStageRegistration(Seq(dependency.shuffleId))
     assert(taskSets.isEmpty)
@@ -9640,7 +9651,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     clearInvocations(scheduler, mapOutputTracker)
     assertPipelinedUnsupported(
       submitAndCaptureFailure(consumer, Array(0, 1)),
-      "cache/persist/localCheckpoint in a pipelined consumer")
+      pipelinedCacheRejectionReason(consumer))
     assertNoPipelinedStageRegistration(Nil)
     assert(taskSets.size === 2, "the rejected submission must launch no additional tasks")
     assertDataStructuresEmpty()
@@ -9946,10 +9957,7 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
       } else {
         assertPipelinedRejectedBeforeStageRegistration(
           result,
-          "cache/persist/localCheckpoint in a pipelined consumer's within-stage chain " +
-            "(unpersist cached RDDs or rebuild locally checkpointed consumers without " +
-            "localCheckpoint before submitting the job; persist only RDDs that do not read " +
-            "a pipelined shuffle within their stage)",
+          pipelinedCacheRejectionReason(consumer),
           Seq(dependency.shuffleId))
       }
     }
@@ -10334,14 +10342,23 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     }
   }
 
+  private def pipelinedCacheRejectionReason(rdd: RDD[_]): String = {
+    s"cache/persist/localCheckpoint on RDD $rdd in a pipelined consumer's within-stage chain " +
+      "(unpersist this RDD or rebuild it without localCheckpoint before submitting the job; " +
+      "persist only RDDs that do not read a pipelined shuffle within their stage)"
+  }
+
   private def assertPersistedPipelinedConsumerRejected(
-      finalRdd: RDD[_], shuffleIds: Seq[Int]): Unit = {
+      finalRdd: RDD[_],
+      persistedRdd: RDD[_],
+      shuffleIds: Seq[Int]): Unit = {
     val storageLevel = finalRdd.getStorageLevel
     val exception = submitAndCaptureFailure(finalRdd, Array(0, 1))
-    assertPipelinedUnsupported(exception, "cache/persist/localCheckpoint in a pipelined consumer")
-    assert(exception.getMessage.contains("unpersist"), "the error must explain how to recover")
-    assert(exception.getMessage.contains(
-      "persist only RDDs that do not read a pipelined shuffle within their stage"))
+    checkError(
+      exception = exception.asInstanceOf[PipelinedShuffleUnsupportedException],
+      condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+      sqlState = Some("0A000"),
+      parameters = immutable.Map("reason" -> pipelinedCacheRejectionReason(persistedRdd)))
     assert(finalRdd.getStorageLevel === storageLevel)
     assertNoPipelinedStageRegistration(shuffleIds)
     assert(taskSets.isEmpty, "rejected consumers must not leave a producer waiting for readers")

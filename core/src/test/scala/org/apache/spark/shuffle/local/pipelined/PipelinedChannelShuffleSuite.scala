@@ -677,8 +677,15 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
         assert(blockManager.master.getLocations(blocks.toArray[BlockId]).forall(_.nonEmpty))
 
         val error = intercept[SparkException](consumer.collect())
-        assert(error.getCondition === "PIPELINED_SHUFFLE_UNSUPPORTED")
-        assert(error.getMessage.contains("unpersist cached RDDs"))
+        checkError(
+          exception = error,
+          condition = "PIPELINED_SHUFFLE_UNSUPPORTED",
+          sqlState = Some("0A000"),
+          parameters = Map("reason" ->
+            (s"cache/persist/localCheckpoint on RDD $consumer in a pipelined consumer's " +
+              "within-stage chain (unpersist this RDD or rebuild it without localCheckpoint " +
+              "before submitting the job; persist only RDDs that do not read a pipelined " +
+              "shuffle within their stage)")))
         assert(sc.statusTracker.getActiveStageIds().isEmpty)
         assert(ChannelShuffleRendezvous.numQueuesForTesting === 0)
         assert(consumer.getStorageLevel === StorageLevel.MEMORY_ONLY)
