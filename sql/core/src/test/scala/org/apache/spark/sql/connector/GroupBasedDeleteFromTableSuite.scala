@@ -50,6 +50,33 @@ class GroupBasedDeleteFromTableSuite extends DeleteFromTableSuiteBase {
     checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2)
   }
 
+  test("SPARK-60667: delete with type coercion preserves metadata columns for " +
+    "carried-over records") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |{ "pk": 3, "id": 3, "dep": "hr" }
+        |{ "pk": 4, "id": 4, "dep": "hr" }
+        |""".stripMargin)
+
+    // the condition references a metadata column and needs type coercion (`id < 1.5`),
+    // so the DELETE is resolved only in a later iteration of the analyzer
+    sql(s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 1.5")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "software") :: Row(3, 3, "hr") :: Row(4, 4, "hr") :: Nil)
+
+    checkLastWriteInfo(
+      expectedRowSchema = table.schema,
+      expectedMetadataSchema = Some(StructType(Array(PARTITION_FIELD, INDEX_FIELD))))
+
+    checkLastWriteLog(
+      writeWithMetadataLogEntry(metadata = Row("hr", 1), data = Row(3, 3, "hr")),
+      writeWithMetadataLogEntry(metadata = Row("hr", 2), data = Row(4, 4, "hr")))
+    checkDeleteMetrics(numDeletedRows = 1, numCopiedRows = 2)
+  }
+
   test("delete with nondeterministic conditions") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }
