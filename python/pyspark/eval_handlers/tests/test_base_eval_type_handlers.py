@@ -124,7 +124,7 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
                     handler = handler_class([], conf, None)
                     serializer = handler.serializer
                     self.assertIsInstance(serializer, serializer_class)
-                    self.assertEqual(serializer._collect_timing, supported and enabled)
+                    self.assertEqual(serializer._detailed_timing_enabled, supported and enabled)
                     self.assertEqual(
                         handler._create_phase_timers() is not None, supported and enabled
                     )
