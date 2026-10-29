@@ -208,7 +208,9 @@ trait SimpleMetricsCachedBatch extends CachedBatch {
   /**
    * Holds stats for each cached column. The optional `upperBound` and `lowerBound` should be
    * of the same type as the original column. If they are null, then it is assumed that they
-   * are not provided, and will not be used for filtering.
+   * are not provided, and will not be used for filtering. Bounds must follow Catalyst ordering
+   * for the original type because [[SimpleMetricsCachedBatchSerializer]] compares them with
+   * Catalyst expressions when pruning batches.
    * <ul>
    *   <li>`upperBound` (optional)</li>
    *   <li>`lowerBound` (Optional)</li>
