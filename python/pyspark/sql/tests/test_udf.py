@@ -889,11 +889,28 @@ class BaseUDFTestsMixin:
 
         try:
             with self.sql_conf({"spark.sql.sources.useV1SourceList": ""}):
-                self.spark.range(1).write.mode("overwrite").format("parquet").save(path)
-                df = self.spark.read.parquet(path).toDF("i")
+                (
+                    self.spark.range(6)
+                    .selectExpr("id AS i", "id % 3 AS p")
+                    .write.mode("overwrite")
+                    .partitionBy("p")
+                    .parquet(path)
+                )
+                df = self.spark.read.parquet(path)
                 f = udf(lambda x: False, "boolean")(lit(1))
                 result = df.filter(f)
                 self.assertEqual(0, result.count())
+
+                # SPARK-60486: partition predicates that cannot be pushed must still be evaluated.
+                matches_partition = udf(lambda x: x == 1, "boolean")(col("p"))
+                expected = [Row(i=1, p=1), Row(i=4, p=1)]
+                assertDataFrameEqual(df.filter(col("p") == 1), expected)
+                assertDataFrameEqual(df.filter(matches_partition), expected)
+                assertDataFrameEqual(df.filter(matches_partition & (col("p") > 0)), expected)
+                assertDataFrameEqual(
+                    df.filter(matches_partition | (col("p") == 0)),
+                    [Row(i=0, p=0), Row(i=1, p=1), Row(i=3, p=0), Row(i=4, p=1)],
+                )
 
         finally:
             shutil.rmtree(path)
