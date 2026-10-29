@@ -512,6 +512,14 @@ trait JoinSelectionHelper extends Logging {
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_MERGE))
   }
 
+  def hintToSkewJoinLeft(hint: JoinHint): Boolean = {
+    hint.leftHint.exists(_.strategy.contains(SKEW_JOIN))
+  }
+
+  def hintToSkewJoinRight(hint: JoinHint): Boolean = {
+    hint.rightHint.exists(_.strategy.contains(SKEW_JOIN))
+  }
+
   def hintToShuffleReplicateNL(hint: JoinHint): Boolean = {
     hint.leftHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL)) ||
       hint.rightHint.exists(_.strategy.contains(SHUFFLE_REPLICATE_NL))

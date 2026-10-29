@@ -1581,6 +1581,38 @@ object SQLConf {
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("256MB")
 
+  val SKEW_JOIN_HINT_SAMPLE_FRACTION =
+    buildConf("spark.sql.skewJoinHint.sampleFraction")
+      .doc("The fraction of the rows of the hinted side that is sampled to find the hot keys " +
+        "for a join with a SKEW_JOIN hint.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v > 0.0 && v <= 1.0, "The sample fraction must be in (0, 1].")
+      .createWithDefault(0.1)
+
+  val SKEW_JOIN_HINT_MIN_HOT_KEY_ROWS =
+    buildConf("spark.sql.skewJoinHint.minHotKeyRows")
+      .doc("The minimum estimated number of rows a key must have on the hinted side to be " +
+        "treated as hot for a join with a SKEW_JOIN hint. A key is hot if it has at least this " +
+        "many rows and at least as many rows as the average shuffle partition, which is the " +
+        s"estimated row count of the hinted side divided by '${SHUFFLE_PARTITIONS.key}'.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .longConf
+      .checkValue(_ > 0, "The minimum number of rows of a hot key must be positive.")
+      .createWithDefault(1000L)
+
+  val SKEW_JOIN_HINT_MAX_HOT_KEYS =
+    buildConf("spark.sql.skewJoinHint.maxHotKeys")
+      .doc("The maximum number of hot keys to split out of a join with a SKEW_JOIN hint. When " +
+        "more keys are hot, the most frequent ones are used.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .intConf
+      .checkValue(_ > 0, "The maximum number of hot keys must be positive.")
+      .createWithDefault(1000)
+
   val NON_EMPTY_PARTITION_RATIO_FOR_BROADCAST_JOIN =
     buildConf("spark.sql.adaptive.nonEmptyPartitionRatioForBroadcastJoin")
       .internal()
