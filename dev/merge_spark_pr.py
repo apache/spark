@@ -1513,6 +1513,15 @@ def _backport_pr_branch(pr_num, pick_ref):
     return "backport-pr%s-%s" % (pr_num, pick_ref)
 
 
+def _backport_pr_title(pick_ref, title):
+    """PR title for a backport PR: the merged title tagged with its target branch.
+
+    >>> _backport_pr_title("branch-4.2", "[SPARK-1234][SQL] Fix a thing")
+    '[BACKPORT-branch-4.2] [SPARK-1234][SQL] Fix a thing'
+    """
+    return "[BACKPORT-%s] %s" % (pick_ref, title)
+
+
 def _fork_owner():
     """GitHub owner of the fork remote, for the `head` field of a backport PR.
 
@@ -1635,8 +1644,16 @@ def _do_cherry_pick(pr_num, merge_hash, pick_ref, title=""):
         except Exception as e:
             fail("Exception while pushing to fork: %s" % e)
         head = "%s:%s" % (owner, backport_branch)
-        pr_body = "Backport of #%s to `%s`." % (pr_num, pick_ref)
-        created = github.create_pr(pick_ref, head, title, pr_body)
+        # Reuse the backport commit's own message as the PR description -- the same body GitHub
+        # would prefill from this single-commit branch -- rather than a bare one-liner, and tag
+        # the title with the target branch. The @ symbols were stripped when the merge commit
+        # was built, so this does not fire mention mails; fall back to a short descriptor only
+        # if the commit somehow carries no body.
+        pr_title = _backport_pr_title(pick_ref, title)
+        pr_body = git.run(["git", "log", "-1", "--format=%b", pick_branch_name]).strip()
+        if not pr_body:
+            pr_body = "Backport of #%s to `%s`." % (pr_num, pick_ref)
+        created = github.create_pr(pick_ref, head, pr_title, pr_body)
         pick_hash = git.run("git rev-parse %s" % pick_branch_name).strip()
         clean_up()
         if created and created.get("html_url"):
