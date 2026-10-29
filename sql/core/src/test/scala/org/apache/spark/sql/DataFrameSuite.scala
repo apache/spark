@@ -2905,6 +2905,50 @@ class DataFrameSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60602: a throwable filter condition is not evaluated ahead of its order") {
+    val f = udf((i: Long) => i)
+    val g = udf((i: Long) => i)
+    val h = udf((i: Long) => i)
+    // `assert_true(g > 5)` only holds for the ids the first conjunct (`f + g > 10`) keeps, so the
+    // `AND` short-circuit must keep it away from the other rows however the filter is pushed.
+    // With `id >= 0` the rule also rebuilds the plan, pushing that conjunct below the projection,
+    // and only the order of the conjuncts left above keeps the throwable one behind the first.
+    def splitQuery(extra: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g")
+      .where($"f" + $"g" > 10 && assert_true($"g" > 5).isNull && extra)
+    // The same with the throwable conjunct referencing no projected UDF at all.
+    def cheapQuery(extra: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" > 5 && assert_true($"id" > 5).isNull && extra)
+    // The same two shapes with the throwable part inside a projected alias.
+    def cheapAliasQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", assert_true($"id" > 5) as "t")
+      .where($"f" > 5 && $"t".isNull)
+    def splitAliasQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", h($"id") as "h",
+        when(g($"id") > 5, g($"id")).otherwise(raise_error(lit("boom"))) as "g")
+      .where($"f" + $"h" > 10 && $"g" > 5)
+    val expected = (6L until 10L).map(i => Row(i, i, i))
+    for (codegen <- Seq(true, false); split <- Seq(true, false); avoid <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        Seq(lit(true), $"id" >= 0).foreach { extra =>
+          checkAnswer(splitQuery(extra), expected)
+          checkAnswer(cheapQuery(extra), (6L until 10L).map(i => Row(i, i)))
+        }
+        // An interpreted projection computes every projected column for every row it gets, so
+        // a throwable alias only waits for the filter when codegen defers it past the filter
+        // or the whole filter is pushed below the projection.
+        if (codegen || !avoid) {
+          checkAnswer(cheapAliasQuery(), (6L until 10L).map(i => Row(i, i, null)))
+          checkAnswer(splitAliasQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
+        }
+      }
+    }
+  }
+
   test("SPARK-60528: collect a nested empty struct") {
     val df = spark.range(1).selectExpr("id AS i", "named_struct('a', struct()) AS s")
     checkAnswer(df, Row(0L, Row(Row())))
