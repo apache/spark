@@ -26,6 +26,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReference
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, GenerateOrdering}
 import org.apache.spark.sql.catalyst.plans._
+import org.apache.spark.sql.catalyst.plans.logical.AsOfJoin
 import org.apache.spark.sql.catalyst.plans.physical._
 import org.apache.spark.sql.catalyst.util.TypeUtils
 import org.apache.spark.sql.execution._
@@ -190,7 +191,7 @@ private[joins] class SortMergeAsOfJoinScanner(
   private lazy val nearestKeys: (Expression, Expression, Ordering[Any]) =
     (leftSortExprs, rightSortExprs) match {
       case (Seq(leftKey), Seq(rightKey))
-          if SortMergeAsOfJoinScanner.supportsNearestKeys(leftKey.dataType, rightKey.dataType) =>
+          if AsOfJoin.supportsNearestKeys(leftKey.dataType, rightKey.dataType) =>
         (
           bindReference(leftKey, leftOutput),
           bindReference(rightKey, rightOutput),
@@ -516,20 +517,4 @@ private[joins] class SortMergeAsOfJoinScanner(
     val upper = upperKey.asInstanceOf[java.lang.Number].doubleValue()
     if (lower.isNaN || upper.isNaN) 2 else if (lower.isInfinite || upper.isInfinite) 1 else 0
   }
-}
-
-private[execution] object SortMergeAsOfJoinScanner {
-
-  /** Whether a nearest join can compare the exact gaps between keys of these types. */
-  def supportsNearestKeys(leftType: DataType, rightType: DataType): Boolean =
-    (leftType, rightType) match {
-      // A decimal subtraction keeps the precision and scale of each operand.
-      case (_: DecimalType, _: DecimalType) => true
-      case _ => leftType == rightType && (leftType match {
-        case _: IntegralType | FloatType | DoubleType => true
-        case DateType | _: YearMonthIntervalType | _: DayTimeIntervalType => true
-        case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
-        case _ => false
-      })
-    }
 }
