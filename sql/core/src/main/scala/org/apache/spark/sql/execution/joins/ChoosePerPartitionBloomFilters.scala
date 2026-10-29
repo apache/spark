@@ -28,7 +28,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, Exchange, ShuffleExchangeLike}
 
 /**
- * Chooses between the two checks `InjectRuntimeFilter` adds to the application side of a join
+ * Chooses between the checks `InjectRuntimeFilter` adds to the application side of a join
  * with per-partition runtime bloom filters:
  *  - the per-partition one, a left semi join with one bloom filter per partition key;
  *  - the global one, a filter with a bloom filter of the whole creation side.

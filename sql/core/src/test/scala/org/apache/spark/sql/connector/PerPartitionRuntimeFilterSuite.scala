@@ -22,8 +22,9 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, Expression, GetStructField, PlanExpression, PredicateHelper}
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.plans.LeftSemi
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction}
@@ -371,6 +372,51 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase wit
         assert(executedSemiJoins(plan).size == 1, plan)
         assert(executedGlobalChecks(plan).isEmpty, plan)
       }
+    }
+  }
+
+  // The expected number of items of each per-partition bloom filter of `join()`.
+  private def perPartitionNumItems(): Seq[Long] = join().queryExecution.optimizedPlan.collect {
+    case Aggregate(grouping, aggregates, _, _) if grouping.nonEmpty =>
+      aggregates.flatMap(_.collect { case b: BloomFilterAggregate => b })
+  }.flatten.map(_.estimatedNumItemsExpression.eval().asInstanceOf[Long])
+
+  test("each per-partition bloom filter expects one bucket's share of the items") {
+    // Without CBO the Filter on the creation side drops its row count, so the bloom filters spread
+    // the default expected number of items.
+    createTables()
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "400") {
+      assert(perPartitionNumItems() == Seq(100L), "the 400 expected items spread over 4 buckets")
+    }
+  }
+
+  test("each per-partition bloom filter expects one partition's share of the items when the " +
+      "scan reports fewer partitions than buckets") {
+    // The scan of `dim` reports one partition per row, 6 in all, fewer than the 16 buckets.
+    createTables(
+      factPartitioning = Array(bucket(16, "id")), dimPartitioning = Array(bucket(16, "id")))
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "600") {
+      assert(perPartitionNumItems() == Seq(100L), "the 600 expected items spread over 6 partitions")
+    }
+  }
+
+  test("the creation side's size threshold applies to one partition of it") {
+    createTables()
+    val size = creationSideSize("dim")
+    // Under the size of the creation side, but over that of one of its 4 buckets.
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> (size / 2).toString) {
+      val df = join()
+      val plan = df.queryExecution.optimizedPlan
+      assert(perPartitionSemiJoins(df).size == 1, plan)
+      assert(!hasGlobalBloomFilter(df), plan)
+      checkAnswer(df, expectedRows)
+    }
+    // Under the size of one bucket.
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> (size / 8).toString) {
+      val df = join()
+      val plan = df.queryExecution.optimizedPlan
+      assert(perPartitionSemiJoins(df).isEmpty && !hasGlobalBloomFilter(df), plan)
+      checkAnswer(df, expectedRows)
     }
   }
 

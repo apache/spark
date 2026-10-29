@@ -28,6 +28,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LEFT_SEMI_OR_ANTI_JOIN, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.connector.read.SupportsReportPartitioning
+import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder}
@@ -76,7 +78,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       plan: LogicalPlan,
       useMaterializedThreshold: Boolean,
       materializedRowCount: Option[BigInt] = None,
-      materializedSizeInBytes: Option[BigInt] = None)
+      materializedSizeInBytes: Option[BigInt] = None) {
+
+    // The creation side's row count, when known. A count of 0 is taken as unknown.
+    def rowCount: Option[BigInt] =
+      materializedRowCount.orElse(plan.stats.rowCount).filter(_ > 0)
+
+    // The creation side's size, and the threshold the input of one bloom filter must not exceed.
+    def sizeInBytes: BigInt = materializedSizeInBytes.getOrElse(plan.stats.sizeInBytes)
+    def sizeThreshold: Long = if (useMaterializedThreshold) {
+      conf.runtimeFilterMaterializedCreationSideThreshold
+    } else {
+      conf.runtimeFilterCreationSideThreshold
+    }
+  }
 
   private def injectFilter(
       filterApplicationSideKey: Expression,
@@ -107,6 +122,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    *
+   * The creation side's size threshold applies to one partition of it, since each bloom filter
+   * holds the keys of one partition and is built in its own task.
+   *
    * The bloom filter column carries [[PER_PARTITION_BLOOM_FILTER]] in its metadata, which is how
    * `ChoosePerPartitionBloomFilters` tells this semi join from one a query wrote.
    */
@@ -119,19 +137,21 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       return planWithBloomFilter
     }
     val transforms = for {
-      application <- partitionTransform(filterApplicationSideKey, planWithBloomFilter)
-      creation <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
+      (application, _) <- partitionTransform(filterApplicationSideKey, planWithBloomFilter)
+      (creation, scan) <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
       if application.isSameFunction(creation)
-    } yield (application, creation)
+    } yield (application, creation, partitionsOf(creation, scan))
     transforms match {
-      case Some((application, creation))
-          if !hasPerPartitionBloomFilter(planWithBloomFilter, filterApplicationSideKey) =>
+      case Some((application, creation, numPartitions))
+          if filterCreationSide.sizeInBytes / numPartitions <= filterCreationSide.sizeThreshold &&
+            !hasPerPartitionBloomFilter(planWithBloomFilter, filterApplicationSideKey) =>
         val creationPartitionKey = Alias(creation, "partitionKey")()
         val bloomFilter = Alias(new BloomFilterAggregate(
-          new XxHash64(Seq(filterCreationSide.key))).toAggregateExpression(), "bloomFilter")(
-          explicitMetadata = Some(new MetadataBuilder()
-            .putLong(PER_PARTITION_BLOOM_FILTER, globalBloomFilter.map(_.id).getOrElse(-1L))
-            .build()))
+          new XxHash64(Seq(filterCreationSide.key)),
+          perPartitionNumItems(filterCreationSide, numPartitions)
+        ).toAggregateExpression(), "bloomFilter")(explicitMetadata = Some(new MetadataBuilder()
+          .putLong(PER_PARTITION_BLOOM_FILTER, globalBloomFilter.map(_.id).getOrElse(-1L))
+          .build()))
         val aggregate = ColumnPruning(PullOutGroupingExpressions(Aggregate(
           Seq(creation), Seq(creationPartitionKey, bloomFilter), filterCreationSide.plan)))
         if (aggregate.containsPattern(PYTHON_UDF)) {
@@ -170,8 +190,34 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
   }
 
   /**
-   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`.
-   * Defined when:
+   * An upper bound of the number of partition keys the creation side's rows spread over. The number
+   * of buckets of a `bucket` transform bounds it, and so does the number of partitions the scan
+   * reports, since partitions may share a key. This takes the smaller of the two.
+   */
+  private def partitionsOf(transform: TransformExpression, scan: DataSourceV2ScanRelation): Int = {
+    val reported = scan.scan match {
+      case s: SupportsReportPartitioning => s.outputPartitioning() match {
+        case k: KeyGroupedPartitioning => Some(k.numPartitions())
+        case _ => None
+      }
+      case _ => None
+    }
+    (transform.numBucketsOpt ++ reported).filter(_ > 0).minOption.getOrElse(1)
+  }
+
+  /** The expected number of items of one partition's bloom filter. */
+  private def perPartitionNumItems(
+      filterCreationSide: FilterCreationSide,
+      numPartitions: Int): Long = {
+    val numItems = filterCreationSide.rowCount
+      .map(_.longValue)
+      .getOrElse(conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS))
+    math.max(1L, (numItems + numPartitions - 1) / numPartitions)
+  }
+
+  /**
+   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`, with
+   * the scan. Defined when:
    *  - V2 bucketing is on;
    *  - `key` is one of the scan's columns, followed down through `plan`;
    *  - the scan reports a keyed partitioning by a single transform of that column;
@@ -185,7 +231,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def partitionTransform(
       key: Expression,
-      plan: LogicalPlan): Option[TransformExpression] = {
+      plan: LogicalPlan): Option[(TransformExpression, DataSourceV2ScanRelation)] = {
     if (!conf.v2BucketingEnabled) {
       None
     } else {
@@ -195,7 +241,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             case Seq(t @ TransformExpression(_, Seq(child), _, _))
                 if child.semanticEquals(column) && t.function.isDeterministic &&
                   evaluableAsIs(t) =>
-              t.copy(children = Seq(key))
+              (t.copy(children = Seq(key)), scan)
           }
         case _ => None
       }
@@ -216,24 +262,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSide: FilterCreationSide): LogicalPlan = {
     val filterCreationSideKey = filterCreationSide.key
     val filterCreationSidePlan = filterCreationSide.plan
-    val creationSideThreshold = if (filterCreationSide.useMaterializedThreshold) {
-      conf.runtimeFilterMaterializedCreationSideThreshold
-    } else {
-      conf.runtimeFilterCreationSideThreshold
-    }
     // Skip if the filter creation side is too big
-    if (filterCreationSide.materializedSizeInBytes
-        .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
+    if (filterCreationSide.sizeInBytes > filterCreationSide.sizeThreshold) {
       return filterApplicationSidePlan
     }
-    val rowCount = filterCreationSide.materializedRowCount
-      .orElse(filterCreationSidePlan.stats.rowCount)
-    val bloomFilterAgg =
-      if (rowCount.isDefined && rowCount.get.longValue > 0L) {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
-      } else {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)))
-      }
+    val hash = new XxHash64(Seq(filterCreationSideKey))
+    val bloomFilterAgg = filterCreationSide.rowCount
+      .map(rowCount => new BloomFilterAggregate(hash, rowCount.longValue))
+      .getOrElse(new BloomFilterAggregate(hash))
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =

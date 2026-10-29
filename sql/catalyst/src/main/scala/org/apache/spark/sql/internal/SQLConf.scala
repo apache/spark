@@ -969,12 +969,14 @@ object SQLConf {
 
   val RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.perPartition.enabled")
-      .doc("When true, and both sides of a join with a runtime bloom filter are V2 scans that " +
-        "report a keyed partitioning by the same partition transform of the join key (other " +
-        "than identity), a runtime bloom filter can be built per partition. Each partition of " +
-        "the application side is then checked against the bloom filter of the matching " +
-        "partition of the creation side, in a left semi join. That semi join replaces the bloom " +
-        "filter of the whole creation side when it needs no shuffle, and is dropped otherwise.")
+      .doc("When true, a runtime bloom filter can be built per partition. This needs the join " +
+        "key of each side of a join to come from a V2 scan, and both scans to report a keyed " +
+        "partitioning by the same partition transform of that key (other than identity). Each " +
+        "partition of the application side is then checked against the bloom filter of the " +
+        "matching partition of the creation side, in a left semi join. That semi join is dropped " +
+        "when it adds a shuffle or cuts the tasks that read the application side, or when a " +
+        "scan of the application side applies the bloom filter of the whole creation side as a " +
+        "storage filter. Otherwise it stays and replaces that bloom filter, if there is one.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
@@ -984,7 +986,8 @@ object SQLConf {
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. A per-partition bloom filter needs the " +
+        "estimated size of one partition of the creation side to be under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
