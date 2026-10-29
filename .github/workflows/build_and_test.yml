@@ -1092,6 +1092,15 @@ jobs:
         export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
         export MAVEN_CLI_OPTS="--no-transfer-progress"
         ./build/mvn $MAVEN_CLI_OPTS -DskipTests -Pyarn -Pkubernetes -Pvolcano -Phive -Phive-thriftserver -Phadoop-cloud -Pjvm-profiler -Pspark-ganglia-lgpl -Pkinesis-asl -Pcredential-aws clean install
+    # Native data sources are called with the FFM API, which requires Java 22 or later, so the
+    # other jobs, on Java 17, skip the tests that load a library. The tests build their library
+    # with the C++ compiler of the runner.
+    - name: Test native data sources
+      run: |
+        export MAVEN_OPTS="-Xss64m -Xmx4g -Xms4g -XX:ReservedCodeCacheSize=128m -Dorg.slf4j.simpleLogger.defaultLogLevel=WARN"
+        export MAVEN_CLI_OPTS="--no-transfer-progress"
+        ./build/mvn $MAVEN_CLI_OPTS -pl sql/core -Dtest=none -DwildcardSuites=org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourceSuite,org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourceClusterSuite test
+        ./build/mvn $MAVEN_CLI_OPTS -pl sql/connect/server -Dtest=none -DwildcardSuites=org.apache.spark.sql.connect.NativeDataSourceConnectSuite test
 
   # Documentation build
   docs:
