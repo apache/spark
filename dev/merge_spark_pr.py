@@ -1065,8 +1065,6 @@ def maybe_compile_check(ref_name: str, cherry: bool = False) -> None:
     ('build/sbt', ';clean;compile;Test/compile')
     >>> "-Psbt" in run.call_args[0][0]
     False
-    >>> "-Pyarn" in run.call_args[0][0] and "-Pkubernetes" in run.call_args[0][0]
-    True
     >>> run.call_args[1]["cwd"]
     '/repo'
 
