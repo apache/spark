@@ -39,12 +39,14 @@ import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles,
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
-import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead}
+import org.apache.spark.sql.connector.catalog.SupportsRead
+import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarMicroBatchStream, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
@@ -625,7 +627,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
     val e = intercept[Exception] {
-      session.range(10).write.format("native_sink").option("path", dir.getPath)
+      session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
         .option("fail", "write").mode("append").save()
     }
     checkError(
@@ -635,7 +637,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "write to",
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
-    assert(new File(dir, "_ABORTED").isFile)
+    // Spark aborted the write with a null message for each of the two tasks, which both failed.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "2,2,0")
     assert(new File(dir, "_CLOSED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
@@ -660,7 +663,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val session = newSession(defaultPackage)
     val dir = Utils.createTempDir()
     val e = intercept[Exception] {
-      session.range(10).write.format("native_sink").option("path", dir.getPath)
+      session.range(10).repartition(2).write.format("native_sink").option("path", dir.getPath)
         .option("fail", "commit").mode("append").save()
     }
     checkError(
@@ -671,8 +674,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in commit"))
     assert(e.getSuppressed.isEmpty)
-    // Spark aborted the write with the writer, which it closed afterwards.
-    assert(new File(dir, "_ABORTED").isFile)
+    // Spark aborted the write with the writer, which it closed afterwards, with the messages of
+    // the two tasks, which both committed: the library removes the data that they point to.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "0,2,0")
     assert(new File(dir, "_CLOSED").isFile)
   }
 
@@ -691,8 +695,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in commitDataWriter"))
     // abort_data_writer removed the temporary files of the tasks, whose data writers were then
-    // closed.
-    assert(new File(dir, "_ABORTED").isFile)
+    // closed, and Spark aborted the write with a null message for each of them.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "2,2,0")
     assert(new File(dir, "_temporary").listFiles().isEmpty)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
     checkDataWritersClosed(dir)
@@ -717,7 +721,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // aborted the write.
     assert(!new File(dir, "_ABORTED_COMMITTED_DATA_WRITER").exists())
     checkDataWritersClosed(dir)
-    assert(new File(dir, "_ABORTED").isFile)
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "1,1,0")
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
   }
 
@@ -886,6 +890,60 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val written = out.listFiles().filter(_.getName.startsWith("part-"))
       .flatMap(file => Files.readAllLines(file.toPath).asScala)
     assert(written.map(_.toLong).sorted.toSeq == (0L until 10L))
+  }
+
+  nativeTest("ask for the initial offset once, and keep it in the checkpoint") {
+    val session = newSession(defaultPackage)
+    val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
+    // The initial offset of the stream reader is the number of times that it was asked before, as
+    // for an initial offset that depends on when it is asked.
+    val initialOffsets = new File(Utils.createTempDir(), "initial_offsets")
+    def run(fail: Boolean): Unit = {
+      val writer = session.readStream.format("native_counter")
+        .option("max_offset", "4").option("initial_offsets_path", initialOffsets.getPath)
+        .load()
+        .writeStream
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("checkpointLocation", checkpoint.getPath)
+      val query = (if (fail) writer.option("fail", "write") else writer).start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    // The first micro-batch fails, so it is not committed. A query that starts without a
+    // checkpoint asks for the initial offset once, for the start of the first latest offset and
+    // of the first micro-batch.
+    val e = intercept[Exception](run(fail = true))
+    findError(e, "NATIVE_DATA_SOURCE_ERROR")
+    assert(Files.readAllLines(initialOffsets.toPath).size == 1)
+    assert(new File(checkpoint, s"sources/0/${ColumnarMicroBatchStream.InitialOffsetLog}")
+      .isDirectory)
+    // The restarted query plans the first micro-batch again from the initial offset that the
+    // checkpoint kept, without asking the stream reader.
+    run(fail = false)
+    assert(Files.readAllLines(initialOffsets.toPath).size == 1)
+    val written = dir.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.map(_.toLong).sorted.toSeq == (0L until 4L))
+  }
+
+  nativeTest("pass only the columns to read to the stream reader") {
+    val session = newSession(defaultPackage)
+    val columnsPath = new File(Utils.createTempDir(), "columns")
+    val relation = session.readStream.format("native_counter").schema("id BIGINT, mod INT")
+      .option("columns_path", columnsPath.getPath).load()
+      .queryExecution.analyzed.collectFirst { case relation: StreamingRelationV2 => relation }.get
+    val builder = relation.table.asInstanceOf[SupportsRead].newScanBuilder(relation.extraOptions)
+    builder.asInstanceOf[SupportsPushDownRequiredColumns]
+      .pruneColumns(StructType.fromDDL("mod INT"))
+    val scan = builder.build()
+    val stream = scan.toMicroBatchStream(Utils.createTempDir().getPath)
+    try {
+      assert(Files.readString(columnsPath.toPath) == "mod")
+      assert(scan.readSchema() == StructType.fromDDL("mod INT"))
+    } finally {
+      stream.stop()
+    }
   }
 
   nativeTest("reject offsets that are not JSON on a single line") {

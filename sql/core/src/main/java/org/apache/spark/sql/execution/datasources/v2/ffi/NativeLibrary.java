@@ -189,6 +189,19 @@ final class NativeLibrary {
   private static final long FINISH_WRITE_INFO_REJECTED = 40;
   private static final long FINISH_DATA_WRITER_INFO_SIZE = 8;
 
+  // The structs that only hold their size, which the library gets as const pointers. Until fields
+  // are added to them, a single struct of each kind is allocated once, and never freed.
+  private static final long READER_INFO = sizeOnlyInfo(READER_INFO_SIZE);
+  private static final long PARTITIONS_INFO = sizeOnlyInfo(PARTITIONS_INFO_SIZE);
+  private static final long INITIAL_OFFSET_INFO = sizeOnlyInfo(INITIAL_OFFSET_INFO_SIZE);
+  private static final long FINISH_DATA_WRITER_INFO = sizeOnlyInfo(FINISH_DATA_WRITER_INFO_SIZE);
+
+  private static long sizeOnlyInfo(long size) {
+    long info = Platform.allocateMemory(size);
+    Platform.putLong(null, info, size);
+    return info;
+  }
+
   /**
    * The offsets of the fields of the structs that Spark reads or writes, by {@code struct.field},
    * and the sizes of the structs, by {@code struct}, for the tests to compare with the header.
@@ -709,10 +722,9 @@ final class NativeLibrary {
   long createReader(long dataSource, long schemaAddress) throws Throwable {
     MethodHandle f = function(Function.CREATE_READER);
     try (Memory memory = new Memory()) {
-      long info = memory.zeroed(READER_INFO_SIZE);
-      Platform.putLong(null, info, READER_INFO_SIZE);
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, info, out), Function.CREATE_READER);
+      check((int) f.invokeExact(dataSource, schemaAddress, READER_INFO, out),
+        Function.CREATE_READER);
       return readHandle(out, Function.CREATE_READER);
     }
   }
@@ -825,10 +837,8 @@ final class NativeLibrary {
 
   PlannedPartitions partitions(long reader) throws Throwable {
     MethodHandle f = function(Function.PARTITIONS);
-    try (Memory memory = new Memory(); Sink sink = new Sink()) {
-      long info = memory.zeroed(PARTITIONS_INFO_SIZE);
-      Platform.putLong(null, info, PARTITIONS_INFO_SIZE);
-      check((int) f.invokeExact(reader, info, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(reader, PARTITIONS_INFO, Ffm.SINK, Ffm.STATE_SINK, sink.id),
         Function.PARTITIONS);
       return new PlannedPartitions(sink.values(), state(sink, Function.PARTITIONS));
     }
@@ -840,10 +850,9 @@ final class NativeLibrary {
 
   String initialOffset(long streamReader) throws Throwable {
     MethodHandle f = function(Function.INITIAL_OFFSET);
-    try (Memory memory = new Memory(); Sink sink = new Sink()) {
-      long info = memory.zeroed(INITIAL_OFFSET_INFO_SIZE);
-      Platform.putLong(null, info, INITIAL_OFFSET_INFO_SIZE);
-      check((int) f.invokeExact(streamReader, info, Ffm.SINK, sink.id), Function.INITIAL_OFFSET);
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(streamReader, INITIAL_OFFSET_INFO, Ffm.SINK, sink.id),
+        Function.INITIAL_OFFSET);
       return offset(Function.INITIAL_OFFSET, sink);
     }
   }
@@ -963,7 +972,7 @@ final class NativeLibrary {
       Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGES, pointers);
       Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGE_LENGTHS, lengths);
       Platform.putLong(null, info + FINISH_WRITE_INFO_NUM_MESSAGES, messages.length);
-      Platform.putByte(null, info + FINISH_WRITE_INFO_REJECTED, (byte) (rejected ? 1 : 0));
+      Platform.putLong(null, info + FINISH_WRITE_INFO_REJECTED, rejected ? 1L : 0L);
       check((int) f.invokeExact(writer, info), function);
     }
   }
@@ -1005,10 +1014,8 @@ final class NativeLibrary {
    */
   byte[] commitDataWriter(long dataWriter, Runnable committed) throws Throwable {
     MethodHandle f = function(Function.COMMIT_DATA_WRITER);
-    try (Memory memory = new Memory(); Sink sink = new Sink()) {
-      long info = memory.zeroed(FINISH_DATA_WRITER_INFO_SIZE);
-      Platform.putLong(null, info, FINISH_DATA_WRITER_INFO_SIZE);
-      check((int) f.invokeExact(dataWriter, info, Ffm.SINK, sink.id),
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(dataWriter, FINISH_DATA_WRITER_INFO, Ffm.SINK, sink.id),
         Function.COMMIT_DATA_WRITER);
       committed.run();
       byte[] message = single(sink, Function.COMMIT_DATA_WRITER);
@@ -1017,12 +1024,9 @@ final class NativeLibrary {
   }
 
   void abortDataWriter(long dataWriter) throws Throwable {
-    try (Memory memory = new Memory()) {
-      long info = memory.zeroed(FINISH_DATA_WRITER_INFO_SIZE);
-      Platform.putLong(null, info, FINISH_DATA_WRITER_INFO_SIZE);
-      check((int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter, info),
-        Function.ABORT_DATA_WRITER);
-    }
+    check(
+      (int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter, FINISH_DATA_WRITER_INFO),
+      Function.ABORT_DATA_WRITER);
   }
 
   void closeDataWriter(long dataWriter) throws Throwable {
