@@ -170,7 +170,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val splitUpdates = operation.representUpdateAsDeleteAndInsert
 
     operation match {
-      case op: SupportsColumnUpdates if splitUpdates =>
+      case op: SupportsColumnUpdates if splitUpdates && RewriteRowLevelCommand.narrowsWrite(op) =>
         val declared = AttributeSet(writeAttrs)
         validateNoRowIdReassignment(op, relation, declared, updatedAttrs, rowIdAttrs)
         validateRowIdDeclared(op, declared, rowIdAttrs, metadataAttrs)
@@ -246,29 +246,34 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
-   * Returns the table attributes that these assignments set to a new value, skipping identity
-   * assignments.
+   * Returns the data columns that these assignments set to a new value, skipping identity
+   * assignments and metadata columns.
    */
   private def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
     assignments.collect {
-      case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
+      case Assignment(key: AttributeReference, value)
+          if !MetadataAttribute.isValid(key.metadata) && !isIdentityAssignment(key, value) => key
     }
   }
 
   /**
    * Returns the output of the write relation, which is the layout of the data rows the connector
    * receives. If the operation opts into column updates, this is the connector's
-   * `requiredDataAttributes()`, validated against the updated columns. Otherwise it is the full
-   * relation output.
+   * `requiredDataAttributes()`, validated against the updated columns, unless it is empty. Then,
+   * and for any other operation, it is the full relation output.
    */
   private def resolveWriteAttrs(
       relation: DataSourceV2Relation,
       operation: RowLevelOperation,
       updatedAttrs: Seq[AttributeReference]): Seq[AttributeReference] = operation match {
     case op: SupportsColumnUpdates =>
-      val attrs = RewriteRowLevelCommand.resolveRequiredDataAttrs(relation, op)
+      val attrs = if (RewriteRowLevelCommand.narrowsWrite(op)) {
+        RewriteRowLevelCommand.resolveRequiredDataAttrs(relation, op)
+      } else {
+        Seq.empty
+      }
       validateUpdatedColumnsSubset(op, updatedAttrs, AttributeSet(attrs))
-      attrs
+      if (attrs.isEmpty) relation.output else attrs
     case _ =>
       relation.output
   }

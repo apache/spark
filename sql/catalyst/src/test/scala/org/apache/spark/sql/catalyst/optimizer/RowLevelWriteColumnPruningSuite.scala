@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.catalyst.optimizer
 
-import java.util
-
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.ProjectingInternalRow
+import org.apache.spark.sql.catalyst.analysis.TestRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, EqualNullSafe, Expression, If, Literal, Not}
 import org.apache.spark.sql.catalyst.plans.{LeftOuter, PlanTest}
@@ -29,10 +28,7 @@ import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Keep, Update
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.catalyst.util.{ReplaceDataProjections, WriteDeltaProjections}
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils._
-import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 import org.apache.spark.sql.types.{IntegerType, StructField, StructType}
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 /**
  * Tests the [[ColumnPruning]] case that prunes the query columns of a [[RowLevelWrite]] that its
@@ -51,14 +47,7 @@ class RowLevelWriteColumnPruningSuite extends PlanTest {
     $"_partition".string.notNull)
 
   // the write and original table relations; the pruning never inspects them
-  private val tableRelation: DataSourceV2Relation = {
-    val table = new Table {
-      override def name(): String = "t"
-      override def columns(): Array[Column] = Array(Column.create("pk", IntegerType))
-      override def capabilities(): util.Set[TableCapability] = util.Set.of[TableCapability]()
-    }
-    DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty())
-  }
+  private val tableRelation = TestRelation(Nil)
 
   private val dataColumns = Seq("pk", "id", "dep", "salary", "bonus", "extra")
 

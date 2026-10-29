@@ -414,6 +414,17 @@ abstract class RowLevelOperationSuiteBase
     info.columnUpdateSchema.get
   }
 
+  protected def checkLastWriteIsFullWidth(): Unit = {
+    val info = table.lastWriteInfo
+    assert(!info.columnUpdateSchema.isPresent,
+      s"the last write must be full width, but has the column update schema " +
+        s"${info.columnUpdateSchema}")
+    val columnUpdates = table.lastWriteLog.filter { entry =>
+      entry.getUTF8String(0).toString == WriteColumnUpdate.toString
+    }
+    assert(columnUpdates.isEmpty, "rows must not be sent to writeColumnUpdate")
+  }
+
   protected def checkLastWriteLog(expectedEntries: WriteLogEntry*): Unit = {
     checkWriteLog(table.schema, expectedEntries)
   }

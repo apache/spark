@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.streaming.InternalOutputModes._
 import org.apache.spark.sql.catalyst.util.WriteDeltaProjections
 import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.distributions.{ClusteredDistribution, OrderedDistribution}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWriteBuilder, LogicalWriteInfoImpl, RequiresDistributionAndOrdering, SupportsColumnUpdates, SupportsDynamicOverwrite, SupportsOverwriteV2, SupportsTruncate, Write, WriteBuilder}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.UPDATE
@@ -142,7 +141,7 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
    * declared columns cover the whole table.
    */
   private[v2] def hasNarrowRows(write: RowLevelWrite): Boolean = {
-    write.operation.isInstanceOf[SupportsColumnUpdates] && write.operation.command == UPDATE
+    write.operation.command == UPDATE && RewriteRowLevelCommand.narrowsWrite(write.operation)
   }
 
   /**
@@ -176,11 +175,8 @@ object V2Writes extends Rule[LogicalPlan] with PredicateHelper {
   private def validateColumnUpdateWrite(rowLevelWrite: RowLevelWrite, write: Write): Unit = {
     write match {
       case w: RequiresDistributionAndOrdering if hasNarrowRows(rowLevelWrite) =>
-        val distribution = w.requiredDistribution match {
-          case d: ClusteredDistribution => d.clustering.toImmutableArraySeq
-          case d: OrderedDistribution => d.ordering.toImmutableArraySeq
-          case _ => Seq.empty
-        }
+        val distribution =
+          DistributionAndOrderingUtils.distributionExpressions(w.requiredDistribution)
         val readAttrs = rowLevelWrite.references.toSeq.distinctBy(_.name)
         val unread = V2ExpressionUtils.unresolvableReferences(
             distribution ++ w.requiredOrdering.toImmutableArraySeq,

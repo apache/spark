@@ -221,7 +221,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     sql(s"UPDATE $tableNameAsString SET pk = 2, salary = 0 WHERE pk = 1")
 
     // the copy-on-write fixture finds original rows by `pk`, so it falls back to full-width rows
-    assert(table.lastWriteInfo.columnUpdateSchema().isPresent == deltaUpdate)
+    if (deltaUpdate) checkLastColumnUpdateSchema("pk", "salary") else checkLastWriteIsFullWidth()
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk, id"),
       Row(2, 1, "hr", 0, 10, 1) ::
@@ -229,11 +229,12 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
       Row(3, 3, "software", 300, 30, 1) :: Nil)
   }
 
-  test("column-update: an UPDATE whose assignments are all identity assignments is narrowed " +
-    "only if the operation keeps the mix-in") {
+  test("column-update: an UPDATE whose assignments are all identity assignments follows the " +
+    "declaration") {
     Seq(
-      extraTableProps -> None,
-      reqAttrsTableProps("pk,salary") -> Some(Seq("pk", "salary"))
+      extraTableProps -> Some(Seq("pk", "dep")),
+      reqAttrsTableProps("pk,salary") -> Some(Seq("pk", "salary")),
+      reqAttrsTableProps("") -> None
     ).foreach { case (props, columnUpdateNames) =>
       withTable(tableNameAsString) {
         createAndInitTableWithProps(props)
@@ -243,9 +244,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
         checkLastUpdatedColumns()
         columnUpdateNames match {
           case Some(names) => checkLastColumnUpdateSchema(names: _*)
-          case None =>
-            assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
-              s"the write must be full width: ${table.lastWriteInfo.columnUpdateSchema()}")
+          case None => checkLastWriteIsFullWidth()
         }
         checkAnswer(
           sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
@@ -254,6 +253,61 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
           Row(3, 3, "software", 300, 30, 1) :: Nil)
       }
     }
+  }
+
+  test("column-update: updatedColumns omits an assigned metadata column") {
+    createAndInitTableWithProps(extraTableProps)
+
+    // the coerced `salary > 0.5` makes the analyzer add the metadata columns in a later iteration
+    sql(s"UPDATE $tableNameAsString SET _partition = 'x', bonus = 0 WHERE salary > 0.5")
+
+    checkLastUpdatedColumns("bonus")
+    checkLastColumnUpdateSchema("pk", "dep", "bonus")
+  }
+
+  test("column-update: a narrow UPDATE keeps the other columns after a schema change") {
+    Seq(
+      ("ALTER COLUMN salary AFTER bonus",
+        Row(1, 10, -1, "hr") :: Row(2, 20, 200, "software") :: Row(3, 30, 300, "hr") :: Nil),
+      ("ALTER COLUMN bonus TYPE DOUBLE",
+        Row(1, -1, 10.0, "hr") :: Row(2, 200, 20.0, "software") :: Row(3, 300, 30.0, "hr") :: Nil)
+    ).foreach { case (alter, expectedRows) =>
+      withTable(tableNameAsString) {
+        createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+          """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+            |{ "pk": 2, "salary": 200, "bonus": 20, "dep": "software" }
+            |{ "pk": 3, "salary": 300, "bonus": 30, "dep": "hr" }
+            |""".stripMargin)
+        sql(s"ALTER TABLE $tableNameAsString $alter")
+
+        sql(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1")
+
+        checkAnswer(sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"), expectedRows)
+      }
+    }
+  }
+
+  test("column-update: a top-level column with a dot in its name is one updated column") {
+    createAndInitTable("pk INT NOT NULL, `a.b` INT, dep STRING",
+      """{ "pk": 1, "a.b": 100, "dep": "hr" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET `a.b` = -1 WHERE pk = 1")
+
+    checkLastUpdatedColumns("`a.b`")
+    checkLastColumnUpdateSchema("pk", "dep", "a.b")
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, "hr") :: Nil)
+  }
+
+  test("column-update: an empty requiredDataAttributes does not cover an updated column") {
+    createAndInitTableWithProps(reqAttrsTableProps(""))
+
+    checkError(
+      exception = intercept[AnalysisException] {
+        sql(s"UPDATE $tableNameAsString SET bonus = 0 WHERE pk = 1")
+      },
+      condition = "COLUMN_UPDATE_REQUIRED_DATA_ATTRIBUTES_MISSING_UPDATED_COLUMNS",
+      parameters = Map("connector" -> reqAttrsOperationClass, "missingColumns" -> "[`bonus`]"))
   }
 
   test("column-update: other operations keep a full-width write relation") {
@@ -278,9 +332,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
   protected def checkDeleteFallsBackToFullWidthRows(remainingRows: Row*): Unit = {
     sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
 
-    assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
-      s"DELETE must not report a column update schema: " +
-        s"${table.lastWriteInfo.columnUpdateSchema()}")
+    checkLastWriteIsFullWidth()
     checkLastUpdatedColumns()
     checkAnswer(
       sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),
@@ -309,9 +361,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
            |WHEN NOT MATCHED THEN INSERT *
            |""".stripMargin)
 
-      assert(!table.lastWriteInfo.columnUpdateSchema().isPresent,
-        s"MERGE must not report a column update schema: " +
-          s"${table.lastWriteInfo.columnUpdateSchema()}")
+      checkLastWriteIsFullWidth()
       checkLastUpdatedColumns()
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString ORDER BY pk"),

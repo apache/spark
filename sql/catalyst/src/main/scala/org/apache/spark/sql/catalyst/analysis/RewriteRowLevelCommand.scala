@@ -74,7 +74,7 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
       command: Command,
       options: CaseInsensitiveStringMap,
       updatedAttrs: Seq[AttributeReference] = Nil): RowLevelOperationTable = {
-    val updatedColumns = updatedAttrs.map(attr => FieldReference(Seq(attr.name)))
+    val updatedColumns = updatedAttrs.map(attr => FieldReference.column(attr.name))
     val info = RowLevelOperationInfoImpl(command, options, updatedColumns)
     val operation = table.newRowLevelOperationBuilder(info).build()
     RowLevelOperationTable(table, operation)(info)
@@ -357,18 +357,23 @@ trait RewriteRowLevelCommand extends Rule[LogicalPlan] {
 object RewriteRowLevelCommand extends SQLConfHelper {
 
   /**
+   * Whether the operation narrows the write: it mixes in `SupportsColumnUpdates` and declares at
+   * least one column. An operation that declares none receives full-width rows.
+   */
+  private[sql] def narrowsWrite(operation: RowLevelOperation): Boolean = operation match {
+    case op: SupportsColumnUpdates => op.requiredDataAttributes.nonEmpty
+    case _ => false
+  }
+
+  /**
    * Resolves the connector-declared required data attributes for column-update writes against
-   * the given relation, in declared order and with the relation's spelling. An empty array,
-   * nested fields, duplicate columns, columns that do not exist in the relation (including a
+   * the given relation, in declared order and with the relation's spelling. Nested fields, duplicate columns, columns that do not exist in the relation (including a
    * reference with no name parts) and metadata columns are rejected with an `AnalysisException`.
    */
   private[sql] def resolveRequiredDataAttrs(
       relation: LogicalPlan,
       operation: SupportsColumnUpdates): Seq[AttributeReference] = {
     val refs = operation.requiredDataAttributes.toImmutableArraySeq
-    if (refs.isEmpty) {
-      throw QueryCompilationErrors.emptyRequiredDataAttributesError(operation.getClass.getName)
-    }
     val nameless = refs.filter(_.fieldNames.isEmpty).map(_ => Seq.empty[String])
     if (nameless.nonEmpty) {
       throw QueryCompilationErrors.unknownRequiredDataAttributeError(

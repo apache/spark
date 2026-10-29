@@ -62,10 +62,10 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * the connector must preserve their values itself. Spark may call this method more than once
    * for the same operation, and every call must return the same columns.
    * <p>
-   * For an UPDATE whose assignments are all identity assignments,
-   * {@link RowLevelOperationInfo#updatedColumns()} is empty and there is nothing to narrow, so the
-   * builder may build an operation without this mix-in to receive full-width rows. It must do so if
-   * it would otherwise declare no columns.
+   * If the returned array is empty, Spark does not narrow the write and the operation receives
+   * full-width rows. An UPDATE whose assignments are all identity assignments reports no
+   * {@link RowLevelOperationInfo#updatedColumns()}, so an operation that declares exactly those
+   * columns takes this path for such an UPDATE.
    * <p>
    * An operation that does not mix in {@link SupportsDelta} should locate original rows through
    * metadata columns returned by {@link #requiredMetadataAttributes()} that are preserved on
@@ -76,8 +76,8 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * <p>
    * Each entry must name a top-level data column of the table. For updates on nested fields such
    * as {@code SET s.c1 = -1}, the connector must declare the root struct column {@code s}. Spark
-   * rejects with an analysis exception an empty array, a column that does not exist, a column
-   * declared more than once, a nested field, a metadata column (declare those through
+   * rejects with an analysis exception a column that does not exist, a column declared more than
+   * once, a nested field, a metadata column (declare those through
    * {@link #requiredMetadataAttributes()} instead), and an array that misses a column reported by
    * {@link RowLevelOperationInfo#updatedColumns()}.
    * <p>

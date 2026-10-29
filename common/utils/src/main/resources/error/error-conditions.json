@@ -1259,12 +1259,6 @@
     ],
     "sqlState" : "42000"
   },
-  "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES" : {
-    "message" : [
-      "Connector <connector> mixes in `SupportsColumnUpdates` but returned an empty array from `requiredDataAttributes()`. Connectors that opt into column-level updates must declare at least one required data attribute."
-    ],
-    "sqlState" : "42000"
-  },
   "COLUMN_UPDATE_METADATA_REQUIRED_DATA_ATTRIBUTE" : {
     "message" : [
       "Connector <connector> mixes in `SupportsColumnUpdates` but declared metadata column(s) <metadataAttributes> in `requiredDataAttributes()`. Declare metadata columns in `requiredMetadataAttributes()` instead."

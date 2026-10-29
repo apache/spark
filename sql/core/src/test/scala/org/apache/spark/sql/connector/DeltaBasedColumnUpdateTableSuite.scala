@@ -170,6 +170,7 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       ("id = -1, dep = 'eng'", Seq("id", "dep"), Seq("pk", "dep", "id"), Row(1, -1, "eng")),
       ("id = -1, dep = dep", Seq("id"), Seq("pk", "dep", "id"), Row(1, -1, "hr")),
       ("id = id, dep = 'eng'", Seq("dep"), Seq("pk", "dep"), Row(1, 10, "eng")),
+      ("id = id, dep = dep", Seq.empty, Seq("pk", "dep"), Row(1, 10, "hr")),
       ("id = pk", Seq("id"), Seq("pk", "dep", "id"), Row(1, 1, "hr"))
     ).foreach { case (assignments, updatedColumns, columnUpdateNames, updatedRow) =>
       withTable(tableNameAsString) {
@@ -330,22 +331,6 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
 
       checkLastColumnUpdateSchema("pk", "salary", "SALARY", "dep")
       checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, 200, "hr") :: Nil)
-    }
-  }
-
-  test("column-update: empty requiredDataAttributes throws AnalysisException") {
-    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
-      """{ "pk": 1, "id": 1, "dep": "hr" }""".stripMargin,
-      java.util.Map.of("column-update-empty-req-attrs", "true"))
-
-    // `id = id` assigns nothing, so only the non-empty check can reject the declaration
-    Seq("id = -1", "id = id").foreach { assignment =>
-      checkError(
-        exception = intercept[AnalysisException] {
-          sql(s"UPDATE $tableNameAsString SET $assignment WHERE pk = 1")
-        },
-        condition = "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES",
-        parameters = Map("connector" -> reqAttrsOperationClass))
     }
   }
 

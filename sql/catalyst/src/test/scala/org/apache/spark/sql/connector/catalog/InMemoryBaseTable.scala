@@ -1485,7 +1485,6 @@ private class BufferedRowsWriterFactory(schema: StructType)
 private class BufferWriter(schema: StructType) extends DataWriter[InternalRow] {
 
   private final val WRITE = UTF8String.fromString(Write.toString)
-  private final val WRITE_COLUMN_UPDATE = UTF8String.fromString(WriteColumnUpdate.toString)
 
   protected val buffer = new BufferedRows(Seq.empty, schema)
 
@@ -1498,21 +1497,6 @@ private class BufferWriter(schema: StructType) extends DataWriter[InternalRow] {
   override def write(row: InternalRow): Unit = {
     buffer.rows.append(row.copy())
     val logEntry = new GenericInternalRow(Array[Any](WRITE, null, null, row.copy()))
-    buffer.log.append(logEntry)
-  }
-
-  // Tag UPDATE/COPY rows distinctly so tests can verify that Spark dispatches
-  // through writeColumnUpdate (the SupportsColumnUpdates path) rather than write.
-  override def writeColumnUpdate(metadata: InternalRow, row: InternalRow): Unit = {
-    buffer.rows.append(row.copy())
-    val logEntry = new GenericInternalRow(
-      Array[Any](WRITE_COLUMN_UPDATE, null, metadata.copy(), row.copy()))
-    buffer.log.append(logEntry)
-  }
-
-  override def writeColumnUpdate(row: InternalRow): Unit = {
-    buffer.rows.append(row.copy())
-    val logEntry = new GenericInternalRow(Array[Any](WRITE_COLUMN_UPDATE, null, null, row.copy()))
     buffer.log.append(logEntry)
   }
 

@@ -4644,12 +4644,6 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   private def columnSQLIds(columns: Seq[Seq[String]]): String =
     columns.map(columnSQLId).mkString("[", ", ", "]")
 
-  def emptyRequiredDataAttributesError(connectorClass: String): Throwable = {
-    new AnalysisException(
-      errorClass = "COLUMN_UPDATE_EMPTY_REQUIRED_DATA_ATTRIBUTES",
-      messageParameters = Map("connector" -> connectorClass))
-  }
-
   def duplicateRequiredDataAttributeError(
       connectorClass: String,
       duplicateAttributes: Seq[Seq[String]]): Throwable = {
