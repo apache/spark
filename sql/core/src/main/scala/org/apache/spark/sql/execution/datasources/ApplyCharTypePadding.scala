@@ -25,7 +25,7 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -68,6 +68,11 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case r: DataSourceV2Relation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
             r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        // A lookup-only table is read through an external lookup join and needs the same padding.
+        case r: ExternalLookupRelation =>
+          ApplyCharTypePaddingHelper.readSidePadding(r, () =>
+            r.copy(relation = r.relation.copy(
+              output = r.relation.output.map(CharVarcharUtils.cleanAttrMetadata))))
         case r: HiveTableRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () => {
             val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
