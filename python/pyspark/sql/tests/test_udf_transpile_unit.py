@@ -1591,7 +1591,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 return a + b
 
             u = self._transpiled_udf(add, LongType())
-            # The combo's numeric guess (the only combo for two int-annotated
+            # The combo's integer guess (the only combo for two int-annotated
             # params) must NOT label the option.
             self.assertEqual([["bool", "bool"]], u._transpiled_input_categories)
 
@@ -1622,8 +1622,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 return a + b
 
             u = self._transpiled_udf(add, LongType())
-            # Numeric is the only combo for two int-annotated params.
-            self.assertEqual([["numeric", "numeric"]], u._transpiled_input_categories)
+            # Integer is the only combo for two int-annotated params.
+            self.assertEqual([["integer", "integer"]], u._transpiled_input_categories)
 
     def test_udf_transpile_variety_tuple_with_none_column_falls_back(self):
         # Declining is plain ``None``; a ``(None, categories)`` tuple is refused.
@@ -1836,8 +1836,8 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             u = self._transpiled_udf(ident, LongType())
             self.assertIsNone(seen["function_ast"])
             self.assertIs(ident.__code__, seen["held_code"])
-            # One untyped param from the code object: numeric and string combos.
-            self.assertEqual([["numeric"], ["numeric"]], u._transpiled_input_categories)
+            # One untyped param from the code object: integer, float, and string combos.
+            self.assertEqual([["numeric"]] * 3, u._transpiled_input_categories)
             from pyspark.sql.types import StructField, StructType
 
             long_schema = StructType([StructField("a", LongType(), nullable=True)])
