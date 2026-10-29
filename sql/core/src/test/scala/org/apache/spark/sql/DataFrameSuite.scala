@@ -2786,6 +2786,42 @@ class DataFrameSuite extends SharedSparkSession
     checkAnswer(df1, Seq(Row(1), Row(4)))
   }
 
+  test("SPARK-60602: a throwable filter condition is not evaluated ahead of its order") {
+    val f = udf((i: Long) => i)
+    val g = udf((i: Long) => i)
+    // `assert_true(g > 5)` only holds for the ids the first conjunct (`f + g > 10`) keeps, so the
+    // `AND` short-circuit must keep it away from the other rows however the filter is pushed.
+    // With `id >= 0` the rule also rebuilds the plan, pushing that conjunct below the projection,
+    // and only the order of the conjuncts left above keeps the throwable one behind the first.
+    def expensiveQuery(extra: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g")
+      .where($"f" + $"g" > 10 && assert_true($"g" > 5).isNull && extra)
+    // The same with the throwable conjunct referencing no projected UDF at all.
+    def cheapQuery(extra: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" > 5 && assert_true($"id" > 5).isNull && extra)
+    // The same with the throwable part inside a projected alias.
+    def cheapAliasQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", assert_true($"id" > 5) as "t")
+      .where($"f" > 5 && $"t".isNull)
+    for (codegen <- Seq(true, false); avoid <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString) {
+        Seq(lit(true), $"id" >= 0).foreach { extra =>
+          checkAnswer(expensiveQuery(extra), (6L until 10L).map(i => Row(i, i, i)))
+          checkAnswer(cheapQuery(extra), (6L until 10L).map(i => Row(i, i)))
+        }
+        // An interpreted projection computes every projected column for every row it gets, so
+        // a throwable alias only waits for the filter when codegen defers it past the filter
+        // or the whole filter is pushed below the projection.
+        if (codegen || !avoid) {
+          checkAnswer(cheapAliasQuery(), (6L until 10L).map(i => Row(i, i, null)))
+        }
+      }
+    }
+  }
+
   test("SPARK-57725: resolve columns when the input plan has a null-named attribute") {
     // A null-named AttributeReference can reach the analyzer (e.g. via a StructField built with a
     // null name). Selecting another column must still resolve through the full analyzer path

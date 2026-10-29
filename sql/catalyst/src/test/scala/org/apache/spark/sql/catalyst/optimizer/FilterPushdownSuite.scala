@@ -271,6 +271,61 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(optimized, correctAnswer)
   }
 
+  test("SPARK-60602: a cheap throwable condition is not pushed ahead of an expensive one") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .where($"f" && ($"a" > 5 || raiseError) && $"b" > 1)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // Only the non-throwable cheap condition moves below the expensive one.
+    val correctAnswer = testStringRelation
+      .where($"b" > 1)
+      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .where($"f" && ($"a" > 5 || raiseError))
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+
+    // Written ahead of every expensive condition, it is pushed as usual.
+    val throwableFirst = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .where(($"a" > 5 || raiseError) && $"f")
+      .analyze
+
+    val throwableFirstAnswer = testStringRelation
+      .where($"a" > 5 || raiseError)
+      .select($"a", $"e".rlike("magic") as "f", $"b")
+      .where($"f")
+      .analyze
+
+    comparePlans(Optimize.execute(throwableFirst), throwableFirstAnswer)
+  }
+
+  test("SPARK-60602: a cheap condition over a throwable alias is not pushed ahead of an " +
+    "expensive one") {
+    val raiseError = IsNull(RaiseError(Literal("boom")))
+    val originalQuery = testStringRelation
+      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+        $"b")
+      .where($"f" && $"t" && $"b" > 1)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+
+    // `t` is cheap, but reading it evaluates the throwable expression behind it.
+    val correctAnswer = testStringRelation
+      .where($"b" > 1)
+      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+        $"b")
+      .where($"f" && $"t")
+      .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
   test("nondeterministic: can always push down filter through project with deterministic field") {
     val originalQuery = testRelation
       .select($"a")
