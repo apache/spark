@@ -84,7 +84,8 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override def expensive: Boolean = hasExpensiveChild || _expensivePattern
+  override def expensive: Boolean = hasExpensiveChild ||
+    !SQLConf.get.getConf(SQLConf.ESTIMATE_REGEX_PATTERN_COST) || _expensivePattern
 
   // Heuristic, not designed to be perfect. A pattern that is not foldable is compiled for every
   // row; a foldable one is left to `isExpensivePattern`. Like `ConstantFolding`, evaluate a fresh
@@ -110,7 +111,7 @@ private[catalyst] object StringRegexExpression {
    * length. `find` also tries every start position, which costs one more factor unless the regex
    * is anchored at the start. So two quantifiers are expensive, and three when the regex is
    * anchored or must match the whole input, as the one a LIKE pattern becomes. Repeating a group
-   * that holds a quantifier multiplies the factors, so it is always expensive.
+   * that holds a quantifier or an alternation multiplies the factors, so it is always expensive.
    *
    * @param matchesWhole whether `regex` must match the whole input rather than be found in it.
    */
@@ -131,31 +132,58 @@ private[catalyst] object StringRegexExpression {
     !flags.contains('m') && (rest.startsWith("^") || rest.startsWith("\\A"))
   }
 
+  // An inline flag, e.g. `(?x)` or `(?ix:`, that turns on COMMENTS mode, which lets whitespace
+  // and comments separate a group from its quantifier.
+  private val commentsFlag = Pattern.compile("""\(\?[a-zA-Z]*x""")
+
+  // The product of the choices of the uncounted ranges that makes them count as one quantifier.
+  private val smallRangesLimit = 1000
+
   /**
    * Counts the repeating quantifiers (`*`, `+` and `{n,m}`) in a regex that can backtrack, and
    * tells whether the regex has a `|` outside any group. Escaped characters, quoted text,
-   * character classes and the braces of `\p{..}`, `\x{..}` and `\N{..}` are skipped. A possessive
-   * quantifier never backtracks and a `{n,m}` with a small range adds a small factor, so neither
-   * is counted. The count is `Int.MaxValue` for a repeated group that holds a counted quantifier,
-   * and for a `[` that is never closed, which may hide quantifiers.
+   * character classes and the braces of `\p{..}`, `\x{..}` and `\N{..}` are skipped. These
+   * quantifiers are not counted:
+   *  - a possessive one, which never backtracks;
+   *  - one that ends the regex, which a failed match never backtracks into;
+   *  - a `{n,m}` that spans fewer than 10, which adds a small factor. The choices of such ranges
+   *    multiply, so they count as one quantifier each time their product reaches 1000.
+   * The count is `Int.MaxValue` for a repeated group that holds a quantifier that can backtrack or
+   * a `|`, for a regex in COMMENTS mode, and for a `[` that is never closed, since the scan cannot
+   * follow them.
    */
   private def scanQuantifiers(regex: String): (Int, Boolean) = {
     var count = 0
+    var smallRanges = 1
     var classDepth = 0
     var topLevelAlternation = false
-    // Whether each open group holds a counted quantifier, innermost first.
+    // Whether each open group holds a choice that a repetition of it would multiply, innermost
+    // first.
     var groups = List.empty[Boolean]
     var i = 0
-    def possessive: Boolean = i + 1 < regex.length && regex.charAt(i + 1) == '+'
-    // Moves `i` past a `+` or `?` that modifies the quantifier ending at `i`.
-    def skipModifier(): Unit = {
-      if (i + 1 < regex.length && (regex.charAt(i + 1) == '+' || regex.charAt(i + 1) == '?')) {
-        i += 1
-      }
-    }
     def markGroup(): Unit = groups = groups match {
       case _ :: outer => true :: outer
       case Nil => Nil
+    }
+    // Handles the quantifier that ends at `i`, which repeats its operand `min` to `max` times,
+    // and moves `i` past its modifier.
+    def quantifier(min: Int, max: Int): Unit = {
+      val possessive = i + 1 < regex.length && regex.charAt(i + 1) == '+'
+      if (i + 1 < regex.length && (regex.charAt(i + 1) == '+' || regex.charAt(i + 1) == '?')) {
+        i += 1
+      }
+      if (!possessive && max > min && i + 1 < regex.length) {
+        markGroup()
+        if (max - min >= 10) {
+          count += 1
+        } else {
+          smallRanges *= max - min + 1
+          if (smallRanges >= smallRangesLimit) {
+            count += 1
+            smallRanges = 1
+          }
+        }
+      }
     }
     while (i < regex.length) {
       regex.charAt(i) match {
@@ -173,33 +201,34 @@ private[catalyst] object StringRegexExpression {
               i = if (end < 0) regex.length else end
             case _ =>
           }
-        case '[' => classDepth += 1
+        case '[' =>
+          classDepth += 1
+          // A `]` right after `[` or `[^` is a literal.
+          if (i + 1 < regex.length && regex.charAt(i + 1) == '^') i += 1
+          if (i + 1 < regex.length && regex.charAt(i + 1) == ']') i += 1
         case ']' if classDepth > 0 => classDepth -= 1
         case _ if classDepth > 0 =>
-        case '(' => groups = false :: groups
+        case '(' =>
+          if (matcherAt(commentsFlag, regex, i).lookingAt()) {
+            return (Int.MaxValue, topLevelAlternation)
+          }
+          groups = false :: groups
         case ')' if groups.nonEmpty =>
-          val holdsQuantifier = groups.head
+          val holdsChoice = groups.head
           groups = groups.tail
-          if (holdsQuantifier) {
+          if (holdsChoice) {
             if (repeats(regex, i + 1)) return (Int.MaxValue, topLevelAlternation)
             markGroup()
           }
-        case '|' if groups.isEmpty => topLevelAlternation = true
-        case '*' | '+' =>
-          if (!possessive) {
-            count += 1
-            markGroup()
-          }
-          skipModifier()
-        case '?' => skipModifier()
+        case '|' => if (groups.isEmpty) topLevelAlternation = true else markGroup()
+        case '*' => quantifier(0, Int.MaxValue)
+        case '+' => quantifier(1, Int.MaxValue)
+        // `?` adds at most a factor of 2 and is not counted.
+        case '?' => quantifier(0, 0)
         case '{' =>
           bounds(regex, i).foreach { case (end, min, max) =>
             i = end
-            if (!possessive && max - min >= 10) {
-              count += 1
-              markGroup()
-            }
-            skipModifier()
+            quantifier(min, max)
           }
         case _ =>
       }
@@ -217,16 +246,21 @@ private[catalyst] object StringRegexExpression {
     }
   }
 
-  private val repetition = """\{(\d+)(?:,(\d*))?\}""".r
+  // A matcher of `p` over `regex` from `start`, which does not copy the rest of `regex`.
+  private def matcherAt(p: Pattern, regex: String, start: Int): Matcher =
+    p.matcher(regex).region(start, regex.length)
+
+  private val repetition = Pattern.compile("""\{(\d+)(?:,(\d*))?\}""")
 
   // Parses the `{n}`, `{n,}` or `{n,m}` at `start` into its closing index and its bounds, with
   // `Int.MaxValue` as the upper bound of `{n,}`.
   private def bounds(regex: String, start: Int): Option[(Int, Int, Int)] = {
-    repetition.findPrefixMatchOf(regex.substring(start)).map { m =>
+    val m = matcherAt(repetition, regex, start)
+    Option.when(m.lookingAt()) {
       def toInt(s: String): Int = s.toIntOption.getOrElse(Int.MaxValue)
       val min = toInt(m.group(1))
       val max = Option(m.group(2)).map(s => if (s.isEmpty) Int.MaxValue else toInt(s))
-      (start + m.end - 1, min, max.getOrElse(min))
+      (m.end - 1, min, max.getOrElse(min))
     }
   }
 

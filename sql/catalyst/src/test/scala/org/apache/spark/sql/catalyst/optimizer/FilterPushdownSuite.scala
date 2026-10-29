@@ -373,6 +373,19 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias without the pattern estimate") {
+    withSQLConf(SQLConf.ESTIMATE_REGEX_PATTERN_COST.key -> "false") {
+      Seq($"e".rlike("^1"), $"e".like("1_")).foreach { pred =>
+        val originalQuery = testStringRelation
+          .select($"a", pred as "f")
+          .where($"f")
+          .analyze
+
+        comparePlans(Optimize.execute(originalQuery), originalQuery)
+      }
+    }
+  }
+
   test("SPARK-55014: split the projection so a second expensive element sees fewer rows") {
     val originalQuery = testStringRelation
       .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")

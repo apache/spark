@@ -746,27 +746,35 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     // scalastyle:off SingleSpaceBetweenRParenAndLCurlyBrace
     Seq("^1", "magic", "a.b", "^a.*b", "2024-.*", "\\d{2,}", "a{3}b*", "(?i)^abc.*",
       "a\\+b\\*", "[+*{]x+", "\\p{Lu}+", "\\x{41}.*", "\\Q.*+\\E.*", "[a-z&&[^b]]+x",
+      "\\(?x.*a", "[]a]*x",
       // Possessive quantifiers and small ranges.
       "a*+b", "a?+b?+", "a{3}+b", ".*+a.*+b", "a{1,9}b{1,9}", "(ab){3}.*",
+      ".{0,9}a.{0,9}a.{0,9}x",
+      // A quantifier that ends the pattern.
+      "a.*b.*", "a{2,}b+", "\\d+\\s*", "a+?b.*",
       // Anchored.
       "^.*a.*b", "\\A.*a.*b", "(?i)^.*a.*b", "^v[0-9]+_.*", "^(a|b).*c.*").foreach { p =>
       assert(!RLike(str, Literal(p)).expensive, p)
     }
-    Seq(".*a.*b", "^.*a.*a.*b", "\\b.*a.*b", "a{2,}b+", "\\d+\\s*", "a+?b.*",
-      ".{0,50}a.{0,50}b", "^a|.*b.*c", "(?m)^.*a.*b",
-      // A repeated group that holds a quantifier.
-      "(a+)+b", "^(a+)+b", "^(.*?,){11}P", "(.*a){3}x", "^((.*a)b){2}",
-      // A `[` that does not open a class.
-      "\\c[.*a.*b", "(?x)a # [\n.*a.*b").foreach { p =>
+    Seq(".*a.*b", "^.*a.*a.*b", "\\b.*a.*b", "a.*b.*$", ".{0,50}a.{0,50}b", "^a|.*b.*c",
+      "(?m)^.*a.*b", ".{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}x",
+      // A repeated group that holds a quantifier or an alternation.
+      "(a+)+b", "^(a+)+b", "^(.*?,){11}P", "(.*a){3}x", "^((.*a)b){2}", "(a{1,9}){6}b",
+      "(a|aa){20}b", "^(\\d|\\w){24}x",
+      // COMMENTS mode.
+      "(?x) ^ (.*?,) {11} P", "(?x)(.*a) {3}x",
+      // A `[` that does not open a class, and a `]` that does not close one.
+      "\\c[.*a.*b", "(?x)a # [\n.*a.*b", "^[](]a|.*b.*c").foreach { p =>
       assert(RLike(str, Literal(p)).expensive, p)
     }
     // scalastyle:on SingleSpaceBetweenRParenAndLCurlyBrace
-    // Three or more `%` make a LIKE expensive, since it must match the whole input.
-    Seq("1_", "%magic%", "%a%b", "%a\\%b%", "a_b_c", "%a\\\\%b").foreach { p =>
+    // Three or more `%` that are not at the end make a LIKE expensive, since it must match the
+    // whole input.
+    Seq("1_", "%magic%", "%a%b", "%a%b%", "%a\\%b%", "a_b_c", "%a\\\\%b").foreach { p =>
       assert(!Like(str, Literal(p), '\\').expensive, p)
     }
     assert(!Like(str, Literal("%a#%b#%c%"), '#').expensive)
-    Seq("%a%b%", "%a%a%a%b", "%(.*)%|%").foreach { p =>
+    Seq("%a%b%c%", "%a%a%a%b", "%(.*)%|%x").foreach { p =>
       assert(Like(str, Literal(p), '\\').expensive, p)
     }
     // A pattern with an invalid escape is expensive rather than failing the optimizer.
@@ -789,5 +797,11 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val udf = ScalaUDF((s: String) => s, StringType, Seq(str), Seq(None))
     assert(RLike(udf, Literal("^1")).expensive)
     assert(Like(udf, Literal("1_"), '\\').expensive)
+
+    // Without the estimate, every LIKE and RLIKE is expensive.
+    withSQLConf(SQLConf.ESTIMATE_REGEX_PATTERN_COST.key -> "false") {
+      assert(RLike(str, Literal("^1")).expensive)
+      assert(Like(str, Literal("1_"), '\\').expensive)
+    }
   }
 }
