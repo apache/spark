@@ -253,14 +253,6 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
 
   private def errorClass(statement: JObject): JValue = statement \ "error" \ "errorClass"
 
-  private def queryContext(statement: JObject): JObject =
-    statement \ "error" \ "queryContext" match {
-      case JArray(List(ctx: JObject)) => ctx
-      case other => fail(s"expected one query context, got: $other")
-    }
-
-  private val emoji = new String(Character.toChars(0x1F600))
-
   test("ANALYZE does not run CALL, directly or through EXECUTE IMMEDIATE") {
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       spark.conf.set("spark.sql.catalog.parse_sql_cat", classOf[InMemoryCatalog].getName)
@@ -305,16 +297,6 @@ class ParseSqlAnalyzeSuite extends QueryTest with SharedSparkSession {
       val e = intercept[AnalysisException](spark.sql(query.format("ANALYZE")).collect())
       assert(e.getCondition === "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
       assert(spark.sql(query.format("PARSE")).collect().length === 1)
-    }
-  }
-
-  test("ANALYZE error indexes are code points relative to the statement") {
-    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
-      val top = evalStatement(s"SELECT '$emoji' AS e, missing_col")
-      val topCtx = queryContext(top)
-      assert(topCtx \ "startIndex" === JInt(18))
-      assert(topCtx \ "stopIndex" === JInt(28))
-      assert(topCtx \ "fragment" === JString("missing_col"))
     }
   }
 

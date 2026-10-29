@@ -106,10 +106,10 @@ object ParseSqlAnalyzeContext {
  * `function_references`, `select_list`, `parameter_markers`) when empty. On
  * parse failure the statement object contains `parse_success: false` with
  * source location and a nested STANDARD-format error object, and parsing
- * continues with later statements. Nested `queryContext` indexes are 1-based
- * Unicode code points relative to the individual statement, while `start` is
- * relative to the original batch. An empty or closed-comment-only batch
- * produces an empty array. Only
+ * continues with later statements. Nested `queryContext` is the STANDARD
+ * renderer output for that error, relative to the individual statement,
+ * while `start` is relative to the original batch. An empty or
+ * closed-comment-only batch produces an empty array. Only
  * [[ParseException]] / [[SqlScriptingException]] are converted to JSON;
  * unexpected / internal failures propagate so the function fails.
  */
@@ -187,22 +187,11 @@ object ParseSqlResult {
   private def isInternalError(e: SparkThrowable): Boolean =
     Option(e.getCondition).exists(_.startsWith("INTERNAL_ERROR"))
 
-  /**
-   * Character span of a statement object; `text` is the statement's own text,
-   * which its error indexes are relative to.
-   */
-  private case class StatementSpan(start: Int, length: Int, text: String)
+  /** Character span of a statement object in the original batch. */
+  private case class StatementSpan(start: Int, length: Int)
 
   private def segmentSpan(batch: String, segment: PositionedSqlStatement): StatementSpan =
-    StatementSpan(charStart(batch, segment), charLength(segment), segment.statement)
-
-  /** Code points `[from, until)` of `text`, clamped to its bounds. */
-  private def codePointSlice(text: String, from: Int, until: Int): String = {
-    val count = text.codePointCount(0, text.length)
-    val begin = math.max(0, math.min(from, count))
-    val end = math.max(begin, math.min(until, count))
-    text.substring(text.offsetByCodePoints(0, begin), text.offsetByCodePoints(0, end))
-  }
+    StatementSpan(charStart(batch, segment), charLength(segment))
 
   /** Parsed plan, or parse-failure JSON for this statement. */
   private def parsePlanOrError(
@@ -375,7 +364,7 @@ object ParseSqlResult {
     }
     refs.parameterMarkers.foreach(markers => fields += "parameter_markers" -> markers)
     analyzeError.foreach { e =>
-      fields += "error" -> errorObject(e, span.text)
+      fields += "error" -> errorObject(e)
     }
     JObject(fields.toList)
   }
@@ -392,54 +381,14 @@ object ParseSqlResult {
     if (text.isEmpty) 0 else text.codePointCount(0, text.length)
   }
 
-  /** STANDARD JSON of `e` with `queryContext` in code points of `statement`. */
-  private def errorObject(e: SparkThrowable with Throwable, statement: String): JObject = {
-    val errorObj = parseJson(
+  /** STANDARD JSON of `e`. Nested `queryContext` is left to the renderer. */
+  private def errorObject(e: SparkThrowable with Throwable): JObject = {
+    parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
-    rewriteErrorCharIndexes(errorObj, statement)
-  }
-
-  /**
-   * Recompute the fragment of each statement `queryContext` by code points.
-   * The indexes are parser (code-point) offsets, but [[SQLQueryContext]]
-   * slices its fragment by UTF-16 units, which is off after a supplementary
-   * character. A context that falls outside the statement covers all of it.
-   * Contexts of another object (a view body, an EXECUTE IMMEDIATE string) are
-   * left as is.
-   */
-  private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
-    JObject(errorObj.obj.map {
-      case ("queryContext", JArray(contexts)) =>
-        "queryContext" -> JArray(contexts.map {
-          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement)
-          case other => other
-        }.toList)
-      case other => other
-    })
-  }
-
-  private def rewriteQueryContextIndexes(ctx: JObject, statement: String): JObject = {
-    val objectType = ctx.obj.collectFirst { case ("objectType", JString(t)) => t }
-    val start = ctx.obj.collectFirst { case ("startIndex", JInt(n)) => n.toInt }
-    val stop = ctx.obj.collectFirst { case ("stopIndex", JInt(n)) => n.toInt }
-    (objectType, start, stop) match {
-      case (Some(""), Some(from), Some(to)) =>
-        val length = statement.codePointCount(0, statement.length)
-        val (first, last) =
-          if (from >= 1 && to >= from && to <= length) (from, to) else (1, length)
-        JObject(ctx.obj.map {
-          case ("startIndex", _) => "startIndex" -> JInt(first)
-          case ("stopIndex", _) => "stopIndex" -> JInt(last)
-          case ("fragment", _) => "fragment" -> JString(codePointSlice(statement, first - 1, last))
-          case other => other
-        })
-      case _ => ctx
-    }
   }
 
   private def errorJson(e: SparkThrowable with Throwable, span: StatementSpan): JObject = {
-    val errorObj = parseJson(
-      SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
+    val errorObj = errorObject(e)
     val origin = e match {
       case p: ParseException => Some(p.start)
       case s: SqlScriptingException => Some(s.origin)
@@ -455,9 +404,7 @@ object ParseSqlResult {
       "start" -> JInt(span.start),
       "length" -> JInt(span.length),
       "parse_success" -> JBool(false),
-      "error" -> rewriteErrorCharIndexes(
-        JObject(errorObj.obj ++ contextFields ++ locationFields),
-        span.text)
+      "error" -> JObject(errorObj.obj ++ contextFields ++ locationFields)
     )
   }
 
