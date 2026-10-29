@@ -26,6 +26,7 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
@@ -46,7 +47,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+      Set("TRUNC", CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -117,6 +120,29 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       } else {
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
+
+    override def visitIn(v: String, list: java.util.List[String]): String = {
+      if (list.size() <= 1000) {
+        super.visitIn(v, list)
+      } else {
+        val chunks = new java.util.ArrayList[String]()
+        var i = 0
+        while (i < list.size()) {
+          val end = Math.min(i + 1000, list.size())
+          val ins = new java.lang.StringBuilder(v).append(" IN (")
+          var j = i
+          while (j < end) {
+            if (j > i) ins.append(", ")
+            ins.append(list.get(j))
+            j += 1
+          }
+          ins.append(")")
+          chunks.add(ins.toString)
+          i = end
+        }
+        chunks.toArray.mkString("(", " OR ", ")")
+      }
+    }
 
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {

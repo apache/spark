@@ -5562,7 +5562,9 @@ object SQLConf {
         "there is no limit. Note that the complete ArrowRecordBatch is actually created but " +
         "the number of records is limited when sending it to the downstream operator. This is " +
         "used to avoid large batches being sent to the downstream operator including " +
-        "the columnar-based operator implemented by third-party libraries. " +
+        "the columnar-based operator implemented by third-party libraries. A batch that " +
+        "Arrow cannot slice, e.g. one with a fixed-width column of 2 GiB or more, is sent " +
+        "as a whole. " +
         "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that take " +
         "columnar input directly ignore this config.")
       .version("4.1.0")
@@ -7421,6 +7423,19 @@ object SQLConf {
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
     .booleanConf
     .createWithDefault(false)
+
+  val NATIVE_DATA_SOURCE_PATHS = buildConf("spark.sql.dataSource.native.paths")
+    .doc("Comma-separated list of native data source packages (.sparkpkg files), and of " +
+      "directories that contain them, on the local file system of the driver. Spark adds a " +
+      "package to the artifacts of the session when one of its data sources is used, so that " +
+      "the executors get it too. Packages can also be added with spark.addArtifact. These " +
+      "packages take precedence over the native data source libraries installed in the native " +
+      "library path. See spark.sql.dataSource.native.enabled.")
+    .version("4.4.0")
+    .withBindingPolicy(ConfigBindingPolicy.SESSION)
+    .stringConf
+    .toSequence
+    .createWithDefault(Nil)
 
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
