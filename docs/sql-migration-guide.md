@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Spark SQL 4.2.1 to 4.2.2
+
+- Since Spark 4.2.2, Data Source V2 file scans correctly evaluate deterministic Python UDF filter predicates that reference only partition columns. Previously, these predicates could be dropped, returning rows that did not satisfy the filter (SPARK-60486). Data derived from affected query results may need to be recomputed.
+
 ## Upgrading from Spark SQL 4.2.0 to 4.2.1
 
 - Spark 4.2.0 contains a correctness bug in the Data Source V2 `PartitionPredicate`. For scans, `PartitionPredicate` is the additional predicate type Spark sends during the second pass of iterative pushdown. When a data source opts into iterative pushdown by returning `true` from `supportsIterativePushdown()`, Spark may call its pushdown API again with a `PartitionPredicate` that evaluates a filter against the full partition key described by `Table.partitioning()`. Spark also uses `PartitionPredicate` separately for metadata-only `DELETE`. On either path, once the data source accepts the predicate, there is no later evaluator for the condition. In Spark 4.2.0, `PartitionPredicate.eval(InternalRow)` incorrectly returns `true` when evaluation fails, for example when an ANSI cast of a partition value fails, or when the partition key width does not match `Table.partitioning()`. This can produce incorrect results in two ways:
