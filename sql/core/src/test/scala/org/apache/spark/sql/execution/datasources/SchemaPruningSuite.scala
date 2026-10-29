@@ -820,10 +820,11 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("SPARK-47230: a posexplode position and a scan column of the same name") {
     withDataSourceTable(positioned, "positioned") {
-      // the position `t1.pos` and the column `positioned.pos` are both read, with other types
+      // the position `t1.pos` and the column `positioned.pos` are both read, with other types;
+      // `items` is still narrowed (the column passes through the posexplode and is read whole)
       val query = sql("select t1.pos, item.x, item.y, positioned.pos is not null as f, " +
         "positioned.pos.a as pa from positioned lateral view posexplode(items) t1 as pos, item")
-      checkScan(query, "struct<pos:struct<a:int>,items:array<struct<x:int,y:int>>>")
+      checkScan(query, "struct<pos:struct<a:int,b:int>,items:array<struct<x:int,y:int>>>")
       checkAnswer(query, Row(0, 10, 20, true, 1) :: Row(1, 30, 40, true, 1) :: Nil)
     }
   }
