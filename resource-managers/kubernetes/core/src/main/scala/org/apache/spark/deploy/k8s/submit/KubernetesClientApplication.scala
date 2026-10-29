@@ -22,8 +22,9 @@ import scala.util.control.Breaks._
 import scala.util.control.NonFatal
 
 import io.fabric8.kubernetes.api.model._
-import io.fabric8.kubernetes.client.{KubernetesClient, Watch}
+import io.fabric8.kubernetes.client.{KubernetesClient, KubernetesClientException, Watch}
 import io.fabric8.kubernetes.client.Watcher.Action
+import io.fabric8.kubernetes.client.dsl.base.{PatchContext, PatchType}
 
 import org.apache.spark.SparkConf
 import org.apache.spark.deploy.SparkApplication
@@ -135,6 +136,24 @@ private[spark] class Client(
       .build()
     val driverPodName = resolvedDriverPod.getMetadata.getName
 
+    // The API server rejects a pod that has both spec.nodeName and scheduling gates, and a pod
+    // with spec.nodeName skips the scheduler anyway, so only pods the scheduler places are gated.
+    // The check cannot see a nodeName that an admission webhook sets after this point.
+    val gateDriverPod = conf.get(USE_DRIVER_SCHEDULING_GATE) &&
+      Option(resolvedDriverPod.getSpec.getNodeName).forall(_.isEmpty)
+    val podToCreate =
+      if (gateDriverPod) {
+        // A gate of the same name would be rejected as a duplicate, and the patch clears it.
+        new PodBuilder(resolvedDriverPod)
+          .editSpec()
+            .removeMatchingFromSchedulingGates(_.getName == DRIVER_RESOURCES_SCHEDULING_GATE)
+            .addNewSchedulingGate(DRIVER_RESOURCES_SCHEDULING_GATE)
+            .endSpec()
+          .build()
+      } else {
+        resolvedDriverPod
+      }
+
     // setup resources before pod creation
     val preKubernetesResources = resolvedDriverSpec.driverPreKubernetesResources
     try {
@@ -151,7 +170,7 @@ private[spark] class Client(
     var createdDriverPod: Pod = null
     try {
       createdDriverPod =
-        kubernetesClient.pods().inNamespace(conf.namespace).resource(resolvedDriverPod).create()
+        kubernetesClient.pods().inNamespace(conf.namespace).resource(podToCreate).create()
     } catch {
       case NonFatal(e) =>
         kubernetesClient.resourceList(preKubernetesResources: _*).delete()
@@ -177,8 +196,34 @@ private[spark] class Client(
       kubernetesClient.resourceList(otherKubernetesResources: _*).forceConflicts().serverSideApply()
     } catch {
       case NonFatal(e) =>
-        kubernetesClient.pods().resource(createdDriverPod).delete()
+        Utils.tryLogNonFatalError {
+          kubernetesClient.pods().resource(createdDriverPod).delete()
+        }
         throw e
+    }
+
+    // The resources spark-submit creates for the driver exist now, so let the scheduler place the
+    // pod. The strategic merge patch names the gate, so it is idempotent and leaves other gates
+    // alone.
+    if (gateDriverPod) {
+      try {
+        kubernetesClient.pods().resource(createdDriverPod).patch(
+          PatchContext.of(PatchType.STRATEGIC_MERGE),
+          """{"spec":{"schedulingGates":[""" +
+            s"""{"$$patch":"delete","name":"$DRIVER_RESOURCES_SCHEDULING_GATE"}]}}""")
+      } catch {
+        case NonFatal(e) =>
+          e match {
+            case ke: KubernetesClientException if ke.getCode == 403 =>
+              logError("Please check \"kubectl auth can-i patch pod\" first. It should be yes." +
+                s" Or set ${USE_DRIVER_SCHEDULING_GATE.key} to false.")
+            case _ =>
+          }
+          Utils.tryLogNonFatalError {
+            kubernetesClient.pods().resource(createdDriverPod).delete()
+          }
+          throw e
+      }
     }
 
     val sId = Client.submissionId(conf.namespace, driverPodName)
