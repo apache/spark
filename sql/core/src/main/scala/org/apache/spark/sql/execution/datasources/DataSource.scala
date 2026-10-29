@@ -356,6 +356,10 @@ case class DataSource(
         }
         PartitioningUtils.validatePartitionColumn(
           schema, partitionColumns, conf.caseSensitiveAnalysis)
+        catalogTable.foreach { table =>
+          FileStreamSink.checkPartitioningOfCommittedFiles(
+            sparkSession, new Path(path), table.qualifiedName, partitionColumns)
+        }
         new FileStreamSink(sparkSession, path, fileFormat, partitionColumns, caseInsensitiveOptions)
 
       case _ =>

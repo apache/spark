@@ -377,7 +377,8 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     }
 
     val tableName = "partition_test"
-    Seq(None, Some(Seq("P"))).foreach { partitionColumns =>
+    // An empty `partitionBy()` is the same as no `partitionBy`, which Spark Connect always sends.
+    Seq(None, Some(Seq.empty[String]), Some(Seq("P"))).foreach { partitionColumns =>
       withTable(tableName) {
         sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet PARTITIONED BY (p)")
         writeAndCheck(tableName, partitionColumns)
@@ -406,7 +407,6 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
     Seq(
       "PARTITIONED BY (p)" -> Seq("i"),
       "PARTITIONED BY (p)" -> Seq("i", "p"),
-      "PARTITIONED BY (p)" -> Seq.empty,
       "" -> Seq("p")).foreach { case (partitionSpec, partitionColumns) =>
       withTable(tableName) {
         sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet $partitionSpec")
@@ -443,6 +443,131 @@ class DataStreamTableAPISuite extends StreamTest with BeforeAndAfter {
           "columnType" -> "Partition",
           "columnName" -> "p",
           "validColumnNames" -> "i"))
+    }
+  }
+
+  test("SPARK-60665: partitionBy of an existing table keeps the order of the partition columns") {
+    val tableName = "partition_test"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (i INT, a INT, b INT) USING parquet PARTITIONED BY (a, b)")
+      withTempDir { checkpointDir =>
+        val input = MemoryStream[Int]
+        val writer = input.toDF().selectExpr("value AS i", "value % 2 AS a", "value % 3 AS b")
+          .writeStream
+          .format("parquet")
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+        checkError(
+          exception = intercept[AnalysisException] {
+            writer.partitionBy("b", "a").toTable(tableName)
+          },
+          condition = "_LEGACY_ERROR_TEMP_1163",
+          parameters = Map(
+            "tableName" -> s"spark_catalog.default.$tableName",
+            "specifiedPartCols" -> "b, a",
+            "existingPartCols" -> "a, b"))
+        val query = writer.partitionBy("a", "b").toTable(tableName)
+        try {
+          input.addData(1, 2, 3)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+      checkAnswer(spark.table(tableName), Seq(Row(1, 1, 1), Row(2, 0, 2), Row(3, 1, 0)))
+      assert(spark.table(tableName).inputFiles.map { file =>
+        val dir = new Path(file).getParent
+        s"${dir.getParent.getName}/${dir.getName}"
+      }.toSet === Set("a=1/b=1", "a=0/b=2", "a=1/b=0"))
+    }
+  }
+
+  test("SPARK-60665: do not write to a table in a layout different from its committed files") {
+    val tableName = "layout_test"
+    // Writes to the location of the table with the given partitioning like `toTable` did before.
+    def writeToPath(path: String, partitionColumns: Seq[String]): Unit = {
+      withTempDir { checkpointDir =>
+        val input = MemoryStream[Int]
+        val query = input.toDF().selectExpr("value AS i", "value % 2 AS p")
+          .writeStream
+          .format("parquet")
+          .partitionBy(partitionColumns: _*)
+          .option("checkpointLocation", checkpointDir.getCanonicalPath)
+          .start(path)
+        try {
+          input.addData(1, 2)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+    }
+
+    Seq(
+      ("PARTITIONED BY (p)", Seq.empty[String], "", "p"),
+      ("PARTITIONED BY (p)", Seq("i"), "i", "p"),
+      ("", Seq("p"), "p", "")).foreach {
+      case (partitionSpec, committedColumns, recordedColumns, expectedColumns) =>
+        withTempDir { location =>
+          withTable(tableName) {
+            sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet $partitionSpec " +
+              s"LOCATION '${location.toURI}'")
+            writeToPath(location.getCanonicalPath, committedColumns)
+            def committedFiles: Set[String] =
+              Utils.recursiveList(location).filter(_.isFile).map(_.getPath).toSet
+            val filesBefore = committedFiles
+
+            withTempDir { checkpointDir =>
+              checkError(
+                exception = intercept[AnalysisException] {
+                  MemoryStream[Int].toDF().selectExpr("value AS i", "value % 2 AS p")
+                    .writeStream
+                    .format("parquet")
+                    .option("checkpointLocation", checkpointDir.getCanonicalPath)
+                    .toTable(tableName)
+                },
+                condition = "STREAMING_FILE_SINK_PARTITIONING_MISMATCH",
+                parameters = Map(
+                  "tableName" -> s"spark_catalog.default.$tableName",
+                  "recordedPartCols" -> recordedColumns,
+                  "expectedPartCols" -> expectedColumns))
+            }
+            assert(committedFiles === filesBefore)
+            if (committedColumns.isEmpty) {
+              checkAnswer(spark.table(tableName), Seq(Row(1, 1), Row(2, 0)))
+            }
+          }
+        }
+    }
+  }
+
+  test("SPARK-60665: append to a table with committed files in the layout of the table") {
+    val tableName = "layout_test"
+    withTable(tableName) {
+      sql(s"CREATE TABLE $tableName (i INT, p INT) USING parquet PARTITIONED BY (p)")
+      withTempDir { checkpointDir =>
+        val input = MemoryStream[Int]
+        // The first run commits no files, which does not record any layout. The others restart
+        // the query from the same checkpoint and append to the files committed by the former.
+        Seq((None, Seq.empty[Int]), (None, Seq(1, 2)), (Some(Seq("P")), Seq(3, 4)))
+          .foreach { case (partitionColumns, values) =>
+            val writer = input.toDF().selectExpr("value AS i", "value % 2 AS p")
+              .writeStream
+              .format("parquet")
+              .option("checkpointLocation", checkpointDir.getCanonicalPath)
+            val query = partitionColumns.map(cols => writer.partitionBy(cols: _*))
+              .getOrElse(writer)
+              .toTable(tableName)
+            try {
+              if (values.nonEmpty) {
+                input.addData(values: _*)
+              }
+              query.processAllAvailable()
+            } finally {
+              query.stop()
+            }
+          }
+      }
+      checkAnswer(spark.table(tableName), Seq(Row(1, 1), Row(2, 0), Row(3, 1), Row(4, 0)))
     }
   }
 

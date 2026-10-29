@@ -206,8 +206,9 @@ final class DataStreamWriter[T] private[sql](ds: Dataset[T]) extends streaming.D
         throw QueryCompilationErrors.inputSourceDiffersFromDataSourceProviderError(
           source, tableName, table)
       }
-      // Like a batch append, the specified partitioning should match that of the table.
-      partitioningColumns.foreach { cols =>
+      // Like a batch append, the specified partitioning should match that of the table. An empty
+      // `partitionBy()` is the same as no `partitionBy`, which is all Spark Connect can send.
+      partitioningColumns.filter(_.nonEmpty).foreach { cols =>
         val resolver = ds.sparkSession.sessionState.analyzer.resolver
         val specifiedPartCols = CatalogUtils.normalizePartCols(
           table.qualifiedName, table.schema.map(_.name), cols, resolver)
