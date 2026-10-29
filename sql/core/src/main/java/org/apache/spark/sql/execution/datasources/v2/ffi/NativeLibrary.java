@@ -1179,7 +1179,7 @@ final class NativeLibrary {
   // The message of get_last_error for a stream that Spark does not know, which lives as long as
   // the JVM.
   private static final long UNKNOWN_STREAM_ERROR =
-    cString("The stream was released, or is not a stream of Spark.");
+    toCString("The stream was released, or is not a stream of Spark.");
 
   private static final AtomicLong nextEngineStreamId = new AtomicLong(1);
   // The streams wrapped for engines that are not released yet, by their private_data.
@@ -1214,7 +1214,7 @@ final class NativeLibrary {
     int fail(String message, Throwable e) {
       try {
         clearError();
-        sparkError = cString(message + ": " + rootCause(e));
+        sparkError = toCString(message + ": " + rootCause(e));
         LOGGER.error(message, e);
       } catch (Throwable ignored) {
         // An upcall must not throw.
@@ -1231,7 +1231,7 @@ final class NativeLibrary {
   }
 
   /** Copies a string to native memory, as a NUL-terminated UTF-8 string, which the caller frees. */
-  private static long cString(String value) {
+  private static long toCString(String value) {
     byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
     long address = Platform.allocateMemory(bytes.length + 1);
     Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
