@@ -17,29 +17,37 @@
 
 package org.apache.spark.sql.connect.planner
 
+import java.io.File
+import java.nio.file.Files
+
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.{Any, ByteString, StringValue}
+import org.apache.logging.log4j.Level
 
 import org.apache.spark.{SparkException, SparkFunSuite}
+import org.apache.spark.api.python.{PythonEvalType, PythonUtils}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression.{Alias, ExpressionString, UnresolvedStar}
-import org.apache.spark.sql.{AnalysisException, Row}
+import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{RelationTimeTravel, UnresolvedAlias, UnresolvedFunction, UnresolvedRelation}
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, PythonUDF, UnsafeProjection}
 import org.apache.spark.sql.catalyst.plans.logical
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, LogicalPlan}
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, TreePattern}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.Dataset
 import org.apache.spark.sql.connect.SparkConnectTestUtils
-import org.apache.spark.sql.connect.common.InvalidPlanInput
+import org.apache.spark.sql.connect.common.{DataTypeProtoConverter, InvalidPlanInput}
 import org.apache.spark.sql.connect.common.LiteralValueProtoConverter.toLiteralProto
+import org.apache.spark.sql.connect.service.SessionHolder
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.Utils
 
 /**
  * Testing trait for SparkConnect tests with some helper methods to make it easier to create new
@@ -1334,5 +1342,220 @@ class SparkConnectPlannerSuite extends SparkFunSuite with SparkConnectPlanTest {
     assert(
       intercepted.getMessage.contains("No handler found for extension type: " +
         "type.googleapis.com/google.protobuf.StringValue"))
+  }
+
+  // A Spark Connect client checks its own Python before it sends an Arrow-optimized Python UDF,
+  // so the server checks the Python that runs the UDF.
+
+  private def pythonUdf(evalType: Int): proto.CommonInlineUserDefinedFunction =
+    proto.CommonInlineUserDefinedFunction
+      .newBuilder()
+      .setFunctionName("f")
+      .setPythonUdf(
+        proto.PythonUDF
+          .newBuilder()
+          .setEvalType(evalType)
+          .setOutputType(DataTypeProtoConverter.toConnectProtoType(IntegerType)))
+      .addArguments(proto.Expression.newBuilder().setLiteral(toLiteralProto(1)))
+      .build()
+
+  private def plannedEvalType(evalType: Int, sessionHolder: SessionHolder): Int = {
+    val expression = proto.Expression
+      .newBuilder()
+      .setCommonInlineUserDefinedFunction(pythonUdf(evalType))
+      .build()
+    new SparkConnectPlanner(sessionHolder)
+      .transformExpression(expression)
+      .asInstanceOf[PythonUDF]
+      .evalType
+  }
+
+  private def notInstalled(module: String): String =
+    s"""raise ModuleNotFoundError("No module named '$module'", name="$module")"""
+
+  // Runs `f` with the Python of `IntegratedUDFTestUtils` as the Python that runs Python UDFs, and
+  // `modules` written to a directory, passed to `f`, in front of its path.
+  private def withPythonModules(modules: (String, String)*)(f: File => Unit): Unit = {
+    withTempDir { dir =>
+      modules.foreach { case (name, code) =>
+        Files.writeString(new File(dir, s"$name.py").toPath, code)
+      }
+      withSQLConf(
+        SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE.key -> IntegratedUDFTestUtils.pythonExec,
+        "spark.pythonWorkerEnv.PYTHONPATH" -> PythonUtils.mergePythonPaths(
+          dir.getAbsolutePath,
+          IntegratedUDFTestUtils.pysparkPythonPath,
+          IntegratedUDFTestUtils.pythonPath)) {
+        f(dir)
+      }
+    }
+  }
+
+  test("SPARK-60241: Arrow-optimized Python UDF falls back without PyArrow") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { _ =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      assert(
+        plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+          PythonEvalType.SQL_BATCHED_UDF)
+    }
+  }
+
+  test("SPARK-60241: other Python UDFs are left alone without PyArrow") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { _ =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      Seq(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_SCALAR_PANDAS_UDF).foreach {
+        evalType => assert(plannedEvalType(evalType, sessionHolder) === evalType)
+      }
+    }
+  }
+
+  test("SPARK-60241: Arrow-optimized Python UDF stays Arrow-optimized without pandas") {
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    withPythonModules("pandas" -> notInstalled("pandas")) { _ =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      assert(
+        plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+          PythonEvalType.SQL_ARROW_BATCHED_UDF)
+    }
+  }
+
+  test("SPARK-60241: Arrow-optimized Python UDF falls back without pandas in legacy mode") {
+    assume(IntegratedUDFTestUtils.shouldTestPandasUDFs)
+    withPythonModules("pandas" -> notInstalled("pandas")) { _ =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      assert(
+        plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+          PythonEvalType.SQL_ARROW_BATCHED_UDF)
+      withSQLConf(SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED.key -> "true") {
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_BATCHED_UDF)
+      }
+    }
+  }
+
+  test("SPARK-60241: Arrow-optimized Python UDF stays Arrow-optimized if the check cannot run") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { dir =>
+      withSQLConf(
+        SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE.key -> new File(
+          dir,
+          "missing").getAbsolutePath) {
+        val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_ARROW_BATCHED_UDF)
+      }
+    }
+  }
+
+  test("SPARK-60241: the check runs the Python that runs Python UDFs") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs && !Utils.isWindows)
+    withTempDir { dir =>
+      Files.writeString(new File(dir, "pyarrow.py").toPath, notInstalled("pyarrow"))
+      // A Python without PyArrow, which records that it ran.
+      val ran = new File(dir, "ran")
+      val python = new File(dir, "python")
+      Files.writeString(
+        python.toPath,
+        s"""#!/bin/sh
+           |touch "$ran"
+           |export PYTHONPATH="$dir:$$PYTHONPATH"
+           |exec "${IntegratedUDFTestUtils.pythonExec}" "$$@"
+           |""".stripMargin)
+      assert(python.setExecutable(true))
+      withSQLConf(
+        SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE.key -> python.getAbsolutePath,
+        "spark.pythonWorkerEnv.PYTHONPATH" -> PythonUtils.mergePythonPaths(
+          IntegratedUDFTestUtils.pysparkPythonPath,
+          IntegratedUDFTestUtils.pythonPath)) {
+        val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_BATCHED_UDF)
+        assert(ran.exists())
+      }
+    }
+  }
+
+  test("SPARK-60241: the check runs, and warns, once per session") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { dir =>
+      val logAppender = new LogAppender("Arrow optimization fallback warning")
+      withLogAppender(logAppender, level = Some(Level.WARN)) {
+        val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_BATCHED_UDF)
+        // A check would pass now, but the session keeps the result of its first one.
+        Files.writeString(new File(dir, "pyarrow.py").toPath, "__version__ = '99.0.0'")
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_BATCHED_UDF)
+        val newSessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, newSessionHolder) ===
+            PythonEvalType.SQL_ARROW_BATCHED_UDF)
+      }
+      val warnings = logAppender.loggingEvents
+        .map(_.getMessage.getFormattedMessage)
+        .filter(_.contains("Arrow optimization failed to enable"))
+      assert(warnings.size === 1)
+      assert(warnings.head.contains("[PACKAGE_NOT_INSTALLED] PyArrow >= "))
+    }
+  }
+
+  test("SPARK-60241: the session checks again for another Python or environment") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs && !Utils.isWindows)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { noPyArrow =>
+      val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
+      assert(
+        plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+          PythonEvalType.SQL_BATCHED_UDF)
+      // Another environment, whose path has a PyArrow.
+      withPythonModules("pyarrow" -> "__version__ = '99.0.0'") { _ =>
+        assert(
+          plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+            PythonEvalType.SQL_ARROW_BATCHED_UDF)
+        // Another Python, which puts the directory without PyArrow in front of that path.
+        val python = new File(noPyArrow, "python")
+        Files.writeString(
+          python.toPath,
+          s"""#!/bin/sh
+             |export PYTHONPATH="$noPyArrow:$$PYTHONPATH"
+             |exec "${IntegratedUDFTestUtils.pythonExec}" "$$@"
+             |""".stripMargin)
+        assert(python.setExecutable(true))
+        withSQLConf(SQLConf.PYSPARK_WORKER_PYTHON_EXECUTABLE.key -> python.getAbsolutePath) {
+          assert(
+            plannedEvalType(PythonEvalType.SQL_ARROW_BATCHED_UDF, sessionHolder) ===
+              PythonEvalType.SQL_BATCHED_UDF)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60241: registered Arrow-optimized Python UDF falls back without PyArrow") {
+    assume(IntegratedUDFTestUtils.shouldTestPythonUDFs)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { _ =>
+      try {
+        transform(
+          proto.Command
+            .newBuilder()
+            .setRegisterFunction(pythonUdf(PythonEvalType.SQL_ARROW_BATCHED_UDF))
+            .build())
+        val evalTypes = spark
+          .sql("SELECT f(1)")
+          .queryExecution
+          .analyzed
+          .expressions
+          .flatMap(_.collect { case udf: PythonUDF => udf.evalType })
+        assert(evalTypes === Seq(PythonEvalType.SQL_BATCHED_UDF))
+      } finally {
+        spark.sessionState.catalog.dropTempFunction("f", ignoreIfNotExists = true)
+      }
+    }
   }
 }

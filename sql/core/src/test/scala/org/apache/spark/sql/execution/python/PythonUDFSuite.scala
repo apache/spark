@@ -17,13 +17,20 @@
 
 package org.apache.spark.sql.execution.python
 
+import java.io.{File, IOException}
+import java.nio.file.Files
+import java.util.UUID
+
 import scala.concurrent.duration._
 
+import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkException, SparkFiles}
+import org.apache.spark.api.python.PythonUtils
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.LongType
+import org.apache.spark.util.Utils
 
 class PythonUDFSuite extends SharedSparkSession {
   import testImplicits._
@@ -335,6 +342,100 @@ class PythonUDFSuite extends SharedSparkSession {
       } finally {
         spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
       }
+    }
+  }
+
+  private def notInstalled(module: String): String =
+    s"""raise ModuleNotFoundError("No module named '$module'", name="$module")"""
+
+  // Runs `f` with the worker environment of a Python whose path starts with `modules`.
+  private def withPythonModules(modules: (String, String)*)(
+      f: Map[String, String] => Unit): Unit = {
+    withTempDir { dir =>
+      modules.foreach { case (name, code) =>
+        Files.writeString(new File(dir, s"$name.py").toPath, code)
+      }
+      f(Map("PYTHONPATH" ->
+        PythonUtils.mergePythonPaths(dir.getAbsolutePath, pysparkPythonPath, pythonPath)))
+    }
+  }
+
+  test("SPARK-60241: checkArrowOptimization optionally requires pandas") {
+    assume(shouldTestPandasUDFs)
+    withPythonModules() { envVars =>
+      assert(PythonUtils.checkArrowOptimization(pythonExec, envVars).isEmpty)
+      assert(PythonUtils.checkArrowOptimization(pythonExec, envVars, requirePandas = true).isEmpty)
+    }
+    withPythonModules("pandas" -> notInstalled("pandas")) { envVars =>
+      assert(PythonUtils.checkArrowOptimization(pythonExec, envVars).isEmpty)
+      val reason = PythonUtils.checkArrowOptimization(pythonExec, envVars, requirePandas = true)
+      assert(reason.exists(_.startsWith("[PACKAGE_NOT_INSTALLED] Pandas >= ")))
+    }
+  }
+
+  test("SPARK-60241: checkArrowOptimization reports a missing or too old PyArrow") {
+    assume(shouldTestPythonUDFs)
+    withPythonModules("pyarrow" -> notInstalled("pyarrow")) { envVars =>
+      val reason = PythonUtils.checkArrowOptimization(pythonExec, envVars)
+      assert(reason.exists(_.startsWith("[PACKAGE_NOT_INSTALLED] PyArrow >= ")))
+    }
+    withPythonModules("pyarrow" -> "__version__ = '1.0.0'") { envVars =>
+      val reason = PythonUtils.checkArrowOptimization(pythonExec, envVars)
+      assert(reason.exists(_.startsWith("[UNSUPPORTED_PACKAGE_VERSION] PyArrow >= ")))
+    }
+  }
+
+  test("SPARK-60241: checkArrowOptimization throws when the check cannot run") {
+    assume(shouldTestPythonUDFs)
+    withPythonModules() { envVars =>
+      intercept[IOException] {
+        PythonUtils.checkArrowOptimization("/nonexistent/python3", envVars)
+      }
+    }
+    withPythonModules("pyarrow" -> "raise RuntimeError('broken')") { envVars =>
+      val e = intercept[SparkException] {
+        PythonUtils.checkArrowOptimization(pythonExec, envVars)
+      }
+      assert(e.getMessage.contains("exited with code 1"))
+    }
+    // An import that hangs, which the check stops after timeoutMs.
+    withPythonModules("pyarrow" -> "import time; time.sleep(60)") { envVars =>
+      val e = intercept[SparkException] {
+        PythonUtils.checkArrowOptimization(pythonExec, envVars, timeoutMs = 1000)
+      }
+      assert(e.getMessage.contains("did not finish within 1000 ms"))
+    }
+  }
+
+  test("SPARK-60241: checkArrowOptimization runs in the session's working directory") {
+    assume(shouldTestPythonUDFs && !Utils.isWindows)
+    val uuid = UUID.randomUUID().toString
+    val sessionDir = new File(SparkFiles.getRootDirectory(), uuid)
+    try {
+      // A Python environment that the session unpacked, without PyArrow, run by a relative path.
+      val modules = new File(sessionDir, "modules")
+      assert(modules.mkdirs())
+      Files.writeString(new File(modules, "pyarrow.py").toPath, notInstalled("pyarrow"))
+      val python = new File(sessionDir, "environment/bin/python")
+      assert(python.getParentFile.mkdirs())
+      Files.writeString(
+        python.toPath,
+        s"""#!/bin/sh
+           |export PYTHONPATH="$modules:$$PYTHONPATH"
+           |exec "$pythonExec" "$$@"
+           |""".stripMargin)
+      assert(python.setExecutable(true))
+      withPythonModules() { envVars =>
+        JobArtifactSet.withActiveJobArtifactState(JobArtifactState(uuid, None)) {
+          val reason = PythonUtils.checkArrowOptimization("environment/bin/python", envVars)
+          assert(reason.exists(_.startsWith("[PACKAGE_NOT_INSTALLED] PyArrow >= ")))
+        }
+        intercept[IOException] {
+          PythonUtils.checkArrowOptimization("environment/bin/python", envVars)
+        }
+      }
+    } finally {
+      Utils.deleteRecursively(sessionDir)
     }
   }
 }
