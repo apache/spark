@@ -29,7 +29,7 @@ import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCa
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JdbcOptionsInWrite, JDBCRDD, JDBCRelation, JdbcUtils}
 import org.apache.spark.sql.execution.metric.SQLMetrics
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
@@ -171,7 +171,8 @@ class JDBCTableCatalog extends TableCatalog
           JDBCRDD.resolveTable(tableOptions, conn, Some(ident), Some(name()))
         }
         JDBCTable(ident, schema, tableOptions,
-          Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
+          Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric),
+          Some(JDBCDatabaseMetadata.fromJDBCConnection(conn)))
       }
     }
   }
