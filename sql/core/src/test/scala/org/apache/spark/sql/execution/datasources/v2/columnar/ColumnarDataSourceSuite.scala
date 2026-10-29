@@ -473,6 +473,10 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
 
   test("the stream reader gets its checkpoint location and the start of each micro-batch") {
     val table = "stream_reader_calls"
+    // The calls of an earlier run of the test in the same JVM.
+    TestRangeStreamReader.checkpointLocations.remove(table)
+    TestRangeStreamReader.starts.remove(table)
+    TestColumnarSink.committed.remove(s"${table}_sink")
     val checkpoint = Utils.createTempDir()
     val query = spark.readStream.format(format).option("end", "5").option("table", table).load()
       .writeStream

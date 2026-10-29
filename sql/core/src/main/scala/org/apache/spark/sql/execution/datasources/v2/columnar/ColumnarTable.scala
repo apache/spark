@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
@@ -194,11 +194,20 @@ case class ColumnarStreamOffset(json: String) extends Offset
  * the data source gets the offset that each micro-batch starts after: its default read limit reads
  * all the available data, which Spark then always asks for.
  */
+/**
+ * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the start of each
+ * micro-batch, the end of the last one, for every trigger: with `Trigger.AvailableNow`, Spark runs
+ * micro-batches up to the latest offset that the first micro-batch got, rather than wrapping the
+ * stream in one that asks for the latest offset from the initial offset.
+ */
 class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
-  extends MicroBatchStream with SupportsAdmissionControl {
+  extends MicroBatchStream with SupportsTriggerAvailableNow {
 
   // The offset that the reader returned last, which the progress of the query reports.
   @volatile private var lastLatestOffset: Offset = _
+  // With Trigger.AvailableNow, whether the latest offset of the run is the first one asked.
+  @volatile private var availableNow = false
+  @volatile private var availableNowEnd: Offset = _
 
   override def initialOffset(): Offset = ColumnarStreamOffset(reader.initialOffset())
 
@@ -208,9 +217,20 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
   }
 
   override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
-    val latest = ColumnarStreamOffset(reader.latestOffset(start.json()))
+    val latest = if (availableNow && availableNowEnd != null) {
+      availableNowEnd
+    } else {
+      ColumnarStreamOffset(reader.latestOffset(start.json()))
+    }
+    if (availableNow) {
+      availableNowEnd = latest
+    }
     lastLatestOffset = latest
     latest
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    availableNow = true
   }
 
   override def reportLatestOffset(): Offset = lastLatestOffset

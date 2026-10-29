@@ -799,7 +799,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       query.stop()
     }
-    // Each call to latestOffset makes 5 more rows available: [0, 5), [5, 10) and [10, 12).
+    // Each micro-batch makes 5 more rows available after its start: [0, 5), [5, 10) and [10, 12).
     assert((0 to 2).forall(epoch => new File(dir, s"_EPOCH_$epoch").isFile))
     // Each micro-batch creates a new stream writer, which closes the one of the previous
     // micro-batch. The last one is closed once it is no longer referenced.
@@ -856,6 +856,39 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val (restartedLocation, restartedStarts) = run(15)
     assert(restartedLocation == location)
     assert(restartedStarts.take(2) == Seq(12L, 15L), restartedStarts)
+  }
+
+  nativeTest("read up to the latest offset with Trigger.AvailableNow, also after a restart") {
+    val session = newSession(defaultPackage)
+    // Spark does not wrap the stream of a native data source, which supports the trigger itself,
+    // even with the internal flag that wraps the others.
+    session.conf.set("spark.sql.streaming.triggerAvailableNowWrapper.enabled", "true")
+    val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
+    val out = Utils.createTempDir()
+    // Runs the query with Trigger.AvailableNow, and returns the start offsets that the stream
+    // reader got.
+    def run(name: String): Seq[String] = {
+      val startsPath = new File(dir, name)
+      val query = session.readStream.format("native_counter")
+        .option("max_offset", "12").option("step", "5").option("starts_path", startsPath.getPath)
+        .load()
+        .writeStream
+        .format("native_sink")
+        .option("path", out.getPath)
+        .option("checkpointLocation", checkpoint.getPath)
+        .trigger(Trigger.AvailableNow())
+        .start()
+      try query.awaitTermination() finally query.stop()
+      Files.readAllLines(startsPath.toPath).asScala.toSeq
+    }
+    // Each run asks for the latest offset once, after the end of the last micro-batch, and reads
+    // up to it: a restart neither reads the same rows again nor goes back to the initial offset.
+    assert(run("first") == Seq("""{"offset":0}"""))
+    assert(run("second") == Seq("""{"offset":5}"""))
+    val written = out.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.map(_.toLong).sorted.toSeq == (0L until 10L))
   }
 
   nativeTest("reject offsets that are not JSON on a single line") {
@@ -973,10 +1006,15 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         .writeStream.format("noop").start()
       try query.processAllAvailable() finally query.stop()
     }
+    val dir = Utils.createTempDir()
     check("plan a write to", "native_sink", "create_writer") { session =>
-      session.range(2).write.format("native_sink").option("path", Utils.createTempDir().getPath)
+      session.range(2).write.format("native_sink").option("path", dir.getPath)
         .option("states", "2").mode("append").save()
     }
+    // The rejected writer is aborted, with no messages, so that the library can undo what
+    // create_writer prepared, and released.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "0")
+    assert(new File(dir, "_CLOSED").isFile)
   }
 
   nativeTest("a scan whose planning failed fails again with the same error") {
