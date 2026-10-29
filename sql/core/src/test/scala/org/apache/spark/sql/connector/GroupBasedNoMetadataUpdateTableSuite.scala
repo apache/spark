@@ -18,6 +18,7 @@
 package org.apache.spark.sql.connector
 
 import org.apache.spark.sql.Row
+import org.apache.spark.sql.internal.SQLConf
 
 class GroupBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
 
@@ -50,18 +51,28 @@ class GroupBasedNoMetadataUpdateTableSuite extends UpdateTableSuiteBase {
         writeLogEntry(data = Row(2, 2, "hr")))
 
       // UPDATEs with subqueries are rewritten as a UNION of two reads
+      // the runtime group filter is disabled to test only the reads
       val updatedPkDF = Seq(3).toDF()
       updatedPkDF.createOrReplaceTempView("updated_pk")
 
-      sql(s"UPDATE $tableNameAsString SET id = index + 20 WHERE pk IN (SELECT * FROM updated_pk)")
+      withSQLConf(SQLConf.RUNTIME_ROW_LEVEL_OPERATION_GROUP_FILTER_ENABLED.key -> "false") {
+        sql(
+          s"""UPDATE $tableNameAsString
+             |SET id = index + 20
+             |WHERE _partition = 'software' AND pk IN (SELECT * FROM updated_pk)
+             |""".stripMargin)
+      }
 
       checkAnswer(
         sql(s"SELECT * FROM $tableNameAsString"),
         Row(1, 10, "hr") :: Row(2, 2, "hr") :: Row(3, 20, "software") :: Nil)
 
-      checkReplacedPartitions(Seq("software"))
+      checkReplacedPartitions(Seq("hr", "software"))
       checkLastWriteInfo(expectedRowSchema = table.schema)
-      checkLastWriteLog(writeLogEntry(data = Row(3, 20, "software")))
+      checkLastWriteLog(
+        writeLogEntry(data = Row(1, 10, "hr")),
+        writeLogEntry(data = Row(2, 2, "hr")),
+        writeLogEntry(data = Row(3, 20, "software")))
     }
   }
 }

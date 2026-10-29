@@ -74,4 +74,46 @@ class DeltaBasedNoMetadataMergeIntoTableSuite extends MergeIntoTableSuiteBase {
         insertWriteLogEntry(data = Row(5, 0, "hr")))
     }
   }
+
+  test("SPARK-60673: merge reads non-required metadata columns only used in conditions") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 300, "dep": "hr" }
+          |""".stripMargin)
+
+      val sourceDF = Seq(1, 2).toDF("pk")
+      sourceDF.createOrReplaceTempView("source")
+
+      // `_partition` is only in the ON condition and `index` is only in the condition of
+      // the NOT MATCHED BY SOURCE clause, which also disables the runtime group filter
+      sql(
+        s"""MERGE INTO $tableNameAsString t
+           |USING source s
+           |ON t.pk = s.pk AND t._partition = 'hr'
+           |WHEN MATCHED THEN
+           | UPDATE SET t.salary = -1
+           |WHEN NOT MATCHED BY SOURCE AND t.index = 1 THEN
+           | DELETE
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, -1, "hr"), // update
+          Row(2, 200, "software"))) // unchanged
+
+      checkLastWriteInfo(
+        expectedRowSchema = StructType(table.schema.map {
+          case attr if attr.name == "salary" => attr.copy(nullable = false) // input is a constant
+          case attr => attr
+        }),
+        expectedRowIdSchema = Some(StructType(Array(PK_FIELD))))
+
+      checkLastWriteLog(
+        updateWriteLogEntry(id = 1, metadata = null, data = Row(1, -1, "hr")),
+        deleteWriteLogEntry(id = 3, metadata = null))
+    }
+  }
 }
