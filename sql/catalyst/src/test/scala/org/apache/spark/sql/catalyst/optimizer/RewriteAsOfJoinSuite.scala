@@ -290,7 +290,7 @@ class RewriteAsOfJoinSuite extends PlanTest {
     }
   }
 
-  test("sort-merge normalization preserves the tolerance condition on repeated application") {
+  test("sort-merge analysis preserves the tolerance condition for reversed keys") {
     withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
       val analyzed = AsOfJoin(
         left = left,
@@ -304,13 +304,12 @@ class RewriteAsOfJoinSuite extends PlanTest {
         direction = AsOfJoinDirection("backward")
       ).analyze.asInstanceOf[AsOfJoin]
 
-      val normalized = RewriteAsOfJoin(analyzed).asInstanceOf[AsOfJoin]
-
-      assert(normalized.asOfCondition == analyzed.asOfCondition)
-      assert(normalized.leftSortExprs == Seq(left.output(0)))
-      assert(normalized.rightSortExprs == Seq(right.output(0)))
-      assert(normalized.direction == AsOfJoinDirection("forward"))
-      comparePlans(RewriteAsOfJoin(normalized), normalized)
+      val expectedCondition = right.output(0) >= left.output(0) &&
+        left.output(0) >= right.output(0) - 1
+      assert(analyzed.asOfCondition == expectedCondition)
+      assert(analyzed.leftSortExprs == Seq(left.output(0)))
+      assert(analyzed.rightSortExprs == Seq(right.output(0)))
+      assert(analyzed.direction == AsOfJoinDirection("forward"))
     }
   }
 

@@ -1610,6 +1610,30 @@ class SortMergeAsOfJoinSuite extends QueryTest
     }
   }
 
+  gridTest("reversed join keys respect the tolerance")(Seq(false, true)) { singlePass =>
+    withAsOfJoinAnalyzer(singlePass) {
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true") {
+        val left = spark.sql("SELECT * FROM VALUES (10), (20) AS t(lk)")
+        val right = spark.sql(
+          """SELECT * FROM VALUES
+            |(7, 'far before'), (9, 'before'), (11, 'after'), (13, 'far after'),
+            |(18, 'outside before'), (22, 'outside after') AS t(rk, tag)
+            |""".stripMargin)
+        for ((direction, expected) <- Seq("backward" -> "after", "forward" -> "before")) {
+          val reversed = left.joinAsOf(
+            other = right, leftAsOf = right.col("rk"), rightAsOf = left.col("lk"),
+            usingColumns = Seq.empty, joinType = "leftouter", tolerance = functions.lit(1),
+            allowExactMatches = true, direction = direction
+          ).select("lk", "tag")
+          QueryTest.checkAnswer(
+            df = reversed, expectedAnswer = Seq(Row(10, expected), Row(20, null)),
+            checkToRDD = false
+          )
+        }
+      }
+    }
+  }
+
   gridTest("join keys can reference hidden USING columns")(Seq(false, true)) { singlePass =>
     withAsOfJoinAnalyzer(singlePass) {
       withSQLConf(
