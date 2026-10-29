@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
@@ -46,10 +46,13 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
           |  named_struct('a', id * 10, 'b', id * 20, 'c', id * 30, 's', cast(id * 40 as int))
           |) as items from range(1, 3)""".stripMargin).write.parquet(path)
       val query = "select item.a, item.c from t lateral view explode(items) e as item"
-      val expected = withTempView("t") {
+      // V1 Parquet as the baseline
+      var expected: Seq[Row] = Nil
+      withTempView("t") {
         spark.read.parquet(path).createOrReplaceTempView("t")
-        sql(query).collect().toSeq
+        expected = sql(query).collect().toSeq
       }
+      assert(expected.size == 4)
 
       Seq(false, true).foreach { reject =>
         withSQLConf(
