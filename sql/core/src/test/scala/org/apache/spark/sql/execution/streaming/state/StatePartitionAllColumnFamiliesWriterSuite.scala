@@ -32,12 +32,14 @@ import org.apache.spark.sql.streaming.{InputEvent, ListStateTTLProcessor, MapInp
 import org.apache.spark.sql.streaming.util.{StreamManualClock, TTLProcessorUtils}
 import org.apache.spark.sql.streaming.util.{EventTimeTimerProcessor, MultiStateVarProcessor, MultiStateVarProcessorTestUtils, TimerTestUtils}
 import org.apache.spark.sql.types.StructType
+import org.apache.spark.tags.SlowSQLTest
 
 /**
  * Test suite for StatePartitionAllColumnFamiliesWriter.
  * Tests the writer's ability to correctly write raw bytes read from
  * StatePartitionAllColumnFamiliesReader to a state store without loading previous versions.
  */
+@SlowSQLTest
 class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase {
   import testImplicits._
 
@@ -83,24 +85,29 @@ class StatePartitionAllColumnFamiliesWriterSuite extends StateDataSourceTestBase
     val lastBatch = targetCheckpointMetadata.commitLog.getLatestBatchId().get
     val targetOffsetSeq = targetCheckpointMetadata.offsetLog.get(lastBatch).get
     val writeBatchId = lastBatch + 1
-    targetCheckpointMetadata.offsetLog.add(writeBatchId, targetOffsetSeq)
+    // Wrap the offset/commit-log writes and StateRewriter.run() (which writes state files
+    // and metadata into the target checkpoint) so they bypass write protection on the
+    // target temp dir. Subsequent state-data-source reads stay protected.
+    withWritableCheckpoint {
+      targetCheckpointMetadata.offsetLog.add(writeBatchId, targetOffsetSeq)
 
-    val rewriter = new StateRewriter(
-      spark,
-      readBatchId,
-      writeBatchId,
-      targetCpLocation,
-      hadoopConf,
-      readResolvedCheckpointLocation = Some(sourceCpLocation),
-      transformFunc = None,
-      writeCheckpointMetadata = Some(targetCheckpointMetadata)
-    )
-    val checkpointInfos = rewriter.run()
+      val rewriter = new StateRewriter(
+        spark,
+        readBatchId,
+        writeBatchId,
+        targetCpLocation,
+        hadoopConf,
+        readResolvedCheckpointLocation = Some(sourceCpLocation),
+        transformFunc = None,
+        writeCheckpointMetadata = Some(targetCheckpointMetadata)
+      )
+      val checkpointInfos = rewriter.run()
 
-    // Commit to commitLog with checkpoint IDs
-    val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
-    val commitMetadata = latestCommit.copy(stateUniqueIds = checkpointInfos)
-    targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
+      // Commit to commitLog with checkpoint IDs
+      val latestCommit = targetCheckpointMetadata.commitLog.get(lastBatch).get
+      val commitMetadata = latestCommit.withStateUniqueIds(checkpointInfos)
+      targetCheckpointMetadata.commitLog.add(writeBatchId, commitMetadata)
+    }
     val versionToCheck = writeBatchId + 1
 
     storeToColumnFamilies.foreach { case (storeName, columnFamilies) =>

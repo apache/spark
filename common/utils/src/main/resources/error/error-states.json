@@ -4655,6 +4655,12 @@
         "standard": "N",
         "usedBy": ["Spark"]
     },
+    "42K0S": {
+        "description": "Pipeline run failed.",
+        "origin": "Spark",
+        "standard": "N",
+        "usedBy": ["Spark"]
+    },
     "42KD0": {
         "description": "Ambiguous name reference.",
         "origin": "Databricks",

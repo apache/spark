@@ -20,12 +20,16 @@ package org.apache.spark.sql.connector.catalog
 import java.util
 import java.util.Locale
 
+import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Expression}
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
 import org.apache.spark.sql.connector.read.{InputPartition, SampleMethod, Scan, ScanBuilder, SupportsPushDownJoin, SupportsPushDownTableSample, SupportsPushDownV2Filters}
 import org.apache.spark.sql.connector.read.SupportsPushDownJoin.ColumnWithAlias
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.internal.connector.SupportsPushDownCatalystFilters
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
@@ -66,11 +70,11 @@ class InMemoryTableWithTableSample(
       options: CaseInsensitiveStringMap)
     extends InMemoryScanBuilder(tableSchema, options) with SupportsPushDownTableSample {
 
-    private var sampleFraction: Double = 1.0
-    private var sampleSeed: Long = 0L
-    private var sampleMethod: SampleMethod = SampleMethod.BERNOULLI
-    private var sampleWithReplacement: Boolean = false
-    private var samplePushed: Boolean = false
+    protected var sampleFraction: Double = 1.0
+    protected var sampleSeed: Long = 0L
+    protected var sampleMethod: SampleMethod = SampleMethod.BERNOULLI
+    protected var sampleWithReplacement: Boolean = false
+    protected var samplePushed: Boolean = false
 
     override def pushTableSample(
         lowerBound: Double,
@@ -118,6 +122,20 @@ class InMemoryTableWithTableSample(
         InMemoryBatchScan(filteredPartitions, schema, tableSchema, options)
       }
     }
+
+    protected def hasResultAffectingSample: Boolean = {
+      samplePushed && (sampleWithReplacement || sampleFraction < 1.0)
+    }
+
+    protected def sampleDescription(side: String): Option[String] = {
+      if (samplePushed) {
+        val pct = sampleFraction * 100
+        val method = sampleMethod.toString.toUpperCase(Locale.ROOT)
+        Some(s"$side SAMPLE: $method SAMPLE ($pct)")
+      } else {
+        None
+      }
+    }
   }
 
   private class InMemoryBatchScanWithSample(
@@ -141,7 +159,7 @@ class InMemoryTableWithTableSample(
 
 /**
  * An in-memory table that supports both TABLESAMPLE pushdown and JOIN pushdown.
- * Used to test the guard that prevents join pushdown when a side has a pushed sample.
+ * Used to test join pushdown when a side has a pushed sample.
  */
 class InMemoryTableWithJoinAndSample(
     name: String,
@@ -163,6 +181,7 @@ class InMemoryTableWithJoinAndSample(
     private[catalog] val ownSchema: StructType = tableSchema
     private var pushed: Array[Predicate] = Array.empty
     private var joinedSchema: Option[StructType] = None
+    private var joinedSampleDescription: Option[String] = None
 
     override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
       pushed = predicates
@@ -189,7 +208,103 @@ class InMemoryTableWithJoinAndSample(
         leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
         condition: Predicate): Boolean = {
-      val otherSchema = other.asInstanceOf[InMemoryJoinAndSampleScanBuilder].ownSchema
+      val otherScanBuilder = other.asInstanceOf[InMemoryJoinAndSampleScanBuilder]
+      if (sampleWithReplacement || otherScanBuilder.sampleWithReplacement) {
+        return false
+      }
+
+      val otherSchema = otherScanBuilder.ownSchema
+      val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
+        val name = if (col.alias() != null) col.alias() else col.colName()
+        tableSchema(col.colName()).copy(name = name)
+      }
+      val rightFields = rightSideRequiredColumnsWithAliases.map { col =>
+        val name = if (col.alias() != null) col.alias() else col.colName()
+        otherSchema(col.colName()).copy(name = name)
+      }
+      joinedSchema = Some(StructType(leftFields ++ rightFields))
+      joinedSampleDescription = Some(
+        Seq(sampleDescription("LEFT"), otherScanBuilder.sampleDescription("RIGHT"))
+          .flatten
+          .mkString(" "))
+      true
+    }
+
+    override def build: Scan = {
+      joinedSchema match {
+        case Some(js) =>
+          new InMemoryBatchScanWithJoinSample(
+            data.map(_.asInstanceOf[InputPartition]).toImmutableArraySeq,
+            js, tableSchema, options, joinedSampleDescription.getOrElse(""))
+        case None => super.build
+      }
+    }
+
+    private class InMemoryBatchScanWithJoinSample(
+        data: Seq[InputPartition],
+        readSchema: StructType,
+        tableSchema: StructType,
+        options: CaseInsensitiveStringMap,
+        sampleDescription: String)
+      extends InMemoryBatchScan(data, readSchema, tableSchema, options) {
+
+      override def description(): String = {
+        Seq(super.description(), sampleDescription).filter(_.nonEmpty).mkString(" ")
+      }
+    }
+  }
+}
+
+/**
+ * An in-memory table that supports TABLESAMPLE pushdown and only the original
+ * JOIN pushdown API. Used to test a connector rejecting pushed samples from pushDownJoin.
+ */
+class InMemoryTableWithLegacyJoinAndSample(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String])
+  extends InMemoryTableWithTableSample(name, columns, partitioning, properties) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new InMemoryLegacyJoinAndSampleScanBuilder(schema, options)
+  }
+
+  class InMemoryLegacyJoinAndSampleScanBuilder(
+      tableSchema: StructType,
+      options: CaseInsensitiveStringMap)
+    extends InMemoryTableSampleScanBuilder(tableSchema, options)
+      with SupportsPushDownJoin with SupportsPushDownV2Filters {
+
+    private[catalog] val ownSchema: StructType = tableSchema
+    private var pushed: Array[Predicate] = Array.empty
+    private var joinedSchema: Option[StructType] = None
+
+    override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
+      pushed = predicates
+      Array.empty
+    }
+
+    override def pushFilters(filters: Array[Filter]): Array[Filter] = {
+      Array.empty
+    }
+
+    override def pushedPredicates(): Array[Predicate] = pushed
+
+    override def isOtherSideCompatibleForJoin(other: SupportsPushDownJoin): Boolean = true
+
+    override def pushDownJoin(
+        other: SupportsPushDownJoin,
+        joinType: JoinType,
+        leftSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
+        rightSideRequiredColumnsWithAliases: Array[ColumnWithAlias],
+        condition: Predicate): Boolean = {
+      val otherScanBuilder = other.asInstanceOf[InMemoryLegacyJoinAndSampleScanBuilder]
+      if (hasResultAffectingSample || otherScanBuilder.hasResultAffectingSample) {
+        return false
+      }
+
+      val otherSchema = otherScanBuilder.ownSchema
       val leftFields = leftSideRequiredColumnsWithAliases.map { col =>
         val name = if (col.alias() != null) col.alias() else col.colName()
         tableSchema(col.colName()).copy(name = name)
@@ -254,5 +369,71 @@ class InMemoryTableWithLegacyTableSample(
         upperBound: Double,
         withReplacement: Boolean,
         seed: Long): Boolean = true
+  }
+}
+
+/**
+ * Sample table plus inferred Catalyst filters. V1 `SupportsPushDownFilters` cannot
+ * mix with `SupportsPushDownCatalystFilters` (`pushedFilters` return types clash),
+ * so this wraps the sample builder. The inferred filter SQL is specified by the
+ * `inferred-filter` property.
+ */
+class InMemoryTableWithTableSampleAndInferredFilters(
+    name: String,
+    columns: Array[Column],
+    partitioning: Array[Transform],
+    properties: util.Map[String, String])
+  extends InMemoryTableWithTableSample(name, columns, partitioning, properties) {
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    new SampleAndInferredScanBuilder(new InMemoryTableSampleScanBuilder(schema, options), schema)
+  }
+
+  private class SampleAndInferredScanBuilder(
+      inner: InMemoryTableSampleScanBuilder,
+      tableSchema: StructType)
+    extends ScanBuilder
+      with SupportsPushDownTableSample
+      with SupportsPushDownCatalystFilters {
+
+    override def pushTableSample(
+        lowerBound: Double,
+        upperBound: Double,
+        withReplacement: Boolean,
+        seed: Long): Boolean =
+      inner.pushTableSample(lowerBound, upperBound, withReplacement, seed)
+
+    override def pushTableSample(
+        lowerBound: Double,
+        upperBound: Double,
+        withReplacement: Boolean,
+        seed: Long,
+        sampleMethod: SampleMethod): Boolean =
+      inner.pushTableSample(lowerBound, upperBound, withReplacement, seed, sampleMethod)
+
+    override def pushFilters(filters: Seq[Expression]): Seq[Expression] = filters
+
+    override def pushedFilters: Array[Predicate] = Array.empty
+
+    override def inferredFilters: Seq[Expression] =
+      InMemoryTableWithTableSampleAndInferredFilters.parseInferred(properties, tableSchema)
+
+    override def build(): Scan = inner.build
+  }
+}
+
+object InMemoryTableWithTableSampleAndInferredFilters {
+  val INFERRED_FILTER_PROP: String = "inferred-filter"
+
+  def parseInferred(
+      properties: util.Map[String, String],
+      tableSchema: StructType): Seq[Expression] = {
+    Option(properties.get(INFERRED_FILTER_PROP)).filter(_.nonEmpty).map { sql =>
+      CatalystSqlParser.parseExpression(sql).transformUp {
+        case u: UnresolvedAttribute =>
+          val field = tableSchema(u.name)
+          AttributeReference(field.name, field.dataType, field.nullable)()
+      }
+    }.toSeq
   }
 }

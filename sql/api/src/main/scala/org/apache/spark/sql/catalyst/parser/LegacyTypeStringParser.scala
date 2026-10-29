@@ -47,7 +47,24 @@ object LegacyTypeStringParser extends RegexParsers {
 
   protected lazy val fixedDecimalType: Parser[DataType] =
     ("DecimalType(" ~> "[0-9]+".r) ~ ("," ~> "[0-9]+".r <~ ")") ^^ { case precision ~ scale =>
-      DecimalType(precision.toInt, scale.toInt)
+      // The captures are `[0-9]+` (an unbounded digit run), so a value outside the 32-bit integer
+      // range would overflow `Int`. Guard the conversion to surface a proper Spark error instead
+      // of a raw `NumberFormatException`, mirroring the parser and JSON paths.
+      val p =
+        try precision.toInt
+        catch {
+          case _: NumberFormatException =>
+            throw DataTypeErrors.decimalPrecisionExceedsMaxPrecisionError(
+              precision,
+              DecimalType.MAX_PRECISION)
+        }
+      val s =
+        try scale.toInt
+        catch {
+          case _: NumberFormatException =>
+            throw DataTypeErrors.datatypeParameterValueOutOfRangeError("scale", scale, "DECIMAL")
+        }
+      DecimalType(p, s)
     }
 
   protected lazy val arrayType: Parser[DataType] =

@@ -133,7 +133,7 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
    * metadata has already been stored, this method will return `false`.
    */
   override def add(batchId: Long, metadata: T): Boolean = {
-    require(metadata != null, "'null' metadata cannot written to a metadata log")
+    require(metadata != null, "'null' metadata cannot be written to a metadata log")
     val res = addNewBatchByStream(batchId) { output => serialize(metadata, output) }
     if (metadataCacheEnabled && res) batchCache.put(batchId, metadata)
     res
@@ -266,10 +266,10 @@ class HDFSMetadataLog[T <: AnyRef : ClassTag](
   }
 
   /** Return the latest batch id without reading the file. */
-  def getLatestBatchId(): Option[Long] = listBatches.sorted.lastOption
+  def getLatestBatchId(): Option[Long] = listBatches.maxOption
 
   override def getLatest(): Option[(Long, T)] = {
-    listBatches.sorted.lastOption.map { batchId =>
+    listBatches.maxOption.map { batchId =>
       logInfo(log"Getting latest batch ${MDC(BATCH_ID, batchId)}")
       (batchId, getExistingBatch(batchId))
     }

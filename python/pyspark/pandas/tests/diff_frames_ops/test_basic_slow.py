@@ -15,13 +15,12 @@
 # limitations under the License.
 #
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.config import set_option, reset_option
+from pyspark.pandas.config import reset_option, set_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class DiffFramesBasicSlowMixin:
@@ -181,7 +180,7 @@ class DiffFramesBasicSlowMixin:
         )
 
 
-class DiffFramesBasicSlowTests(DiffFramesBasicSlowMixin, PandasOnSparkTestCase, SQLTestUtils):
+class DiffFramesBasicSlowTests(DiffFramesBasicSlowMixin, PandasOnSparkTestCase):
     pass
 
 

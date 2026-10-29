@@ -143,6 +143,13 @@ case class UserDefinedGenerator(
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(n, expr1, ..., exprk) - Separates `expr1`, ..., `exprk` into `n` rows. Uses column names col0, col1, etc. by default unless specified otherwise.",
+  arguments = """
+    Arguments:
+      * n - The number of rows to separate the expressions into. Must be a
+          positive integer literal.
+      * exprN - The expressions to separate into rows. Their values are laid out
+          row-major across the `n` output rows.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(2, 1, 2, 3);
@@ -437,6 +444,10 @@ trait ExplodeGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows, or the elements of map `expr` into multiple rows and columns. Unless specified otherwise, uses the default column name `col` for elements of the array or `key` and `value` for the elements of the map.",
+  arguments = """
+    Arguments:
+      * expr - An array or map expression whose elements are separated into rows.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(10, 20));
@@ -522,6 +533,11 @@ trait PosExplodeGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Separates the elements of array `expr` into multiple rows with positions, or the elements of map `expr` into multiple rows and columns with positions. Unless specified otherwise, uses the column name `pos` for position, `col` for elements of the array or `key` and `value` for elements of the map.",
+  arguments = """
+    Arguments:
+      * expr - An array or map expression whose elements are separated into rows,
+          each paired with its position.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(10,20));
@@ -643,6 +659,11 @@ trait InlineGeneratorBuilderBase extends GeneratorBuilder {
 // scalastyle:off line.size.limit line.contains.tab
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Explodes an array of structs into a table. Uses column names col1, col2, etc. by default unless specified otherwise.",
+  arguments = """
+    Arguments:
+      * expr - An array-of-structs expression whose struct fields become the
+          columns of each generated row.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(array(struct(1, 'a'), struct(2, 'b')));
@@ -699,6 +720,127 @@ object InlineGeneratorBuilder extends InlineGeneratorBuilderBase {
 // scalastyle:on line.size.limit line.contains.tab
 object InlineOuterGeneratorBuilder extends InlineGeneratorBuilderBase {
   override def isOuter: Boolean = true
+}
+
+/**
+ * Expands one or more arrays into a table, one row per element, implementing the ANSI SQL
+ * `UNNEST` collection derived table used in the FROM clause.
+ *
+ * When several arrays are supplied they are expanded in parallel: the number of output rows is
+ * the length of the longest array, and shorter arrays are padded with NULLs. A NULL array is
+ * treated as an empty array (contributes no elements). This matches the multi-array semantics of
+ * PostgreSQL and Trino.
+ *
+ * Each array contributes exactly one output column holding its element as-is; unlike `inline`,
+ * arrays of structs are not expanded into one column per field. When `withOrdinality` is set, a
+ * trailing 1-based `BIGINT` ordinality column is appended, matching `WITH ORDINALITY` in
+ * PostgreSQL and Trino (BigQuery's 0-based `WITH OFFSET` is intentionally not adopted).
+ *
+ * {{{
+ *   SELECT * FROM UNNEST(array(10, 20), array(30)) WITH ORDINALITY ->
+ *   10   30     1
+ *   20   NULL   2
+ * }}}
+ *
+ * This generator uses interpreted evaluation ([[CodegenFallback]]); `GenerateExec` therefore
+ * disables whole-stage codegen for the enclosing `Generate`. The per-array/per-ordinality zip with
+ * NULL padding does not map onto the existing [[CollectionGenerator]] codegen path (which emits a
+ * single `ArrayData`/`MapData`), and its interpreted `eval` is already lazy (one row built per
+ * pull). Interpreted generation is the same choice made by other non-`CollectionGenerator`
+ * generators such as [[ReplicateRows]]. A dedicated codegen path (analogous to `arrays_zip`) is
+ * possible future work if UNNEST becomes hot in whole-stage-codegen pipelines.
+ */
+case class Unnest(children: Seq[Expression], withOrdinality: Boolean)
+  extends Generator with CodegenFallback {
+
+  private lazy val arrayElementTypes: Seq[ArrayType] =
+    children.map(_.dataType.asInstanceOf[ArrayType])
+
+  override def checkInputDataTypes(): TypeCheckResult = {
+    if (children.isEmpty) {
+      throw QueryCompilationErrors.wrongNumArgsError(
+        toSQLId(prettyName), Seq("> 0"), children.length)
+    }
+    val nonArray = children.zipWithIndex.collectFirst {
+      case (e, idx) if !e.dataType.isInstanceOf[ArrayType] => (e, idx)
+    }
+    nonArray match {
+      case Some((e, idx)) =>
+        DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_INPUT_TYPE",
+          messageParameters = Map(
+            "paramIndex" -> ordinalNumber(idx),
+            "requiredType" -> toSQLType(ArrayType),
+            "inputSql" -> toSQLExpr(e),
+            "inputType" -> toSQLType(e.dataType)))
+      case None =>
+        TypeCheckResult.TypeCheckSuccess
+    }
+  }
+
+  override def elementSchema: StructType = {
+    // With a single array keep the `explode`-compatible default name `col`; with several arrays
+    // use positional names `col0`, `col1`, and so on. A shorter array yields NULLs in the
+    // padded rows, so a padded column is always nullable regardless of the array's own
+    // `containsNull`.
+    val padded = children.length > 1
+    val arrayFields = arrayElementTypes.zipWithIndex.map { case (at, idx) =>
+      val name = if (children.length == 1) "col" else s"col$idx"
+      StructField(name, at.elementType, nullable = at.containsNull || padded)
+    }
+    val fields = if (withOrdinality) {
+      arrayFields :+ StructField("ordinality", LongType, nullable = false)
+    } else {
+      arrayFields
+    }
+    StructType(fields)
+  }
+
+  override def eval(input: InternalRow): IterableOnce[InternalRow] = {
+    val arrays = children.map(_.eval(input).asInstanceOf[ArrayData])
+    // The number of output rows is the length of the longest array; a null array counts as empty.
+    val numRows = arrays.iterator
+      .map(a => if (a == null) 0 else a.numElements())
+      .foldLeft(0)(math.max)
+    val numArrays = arrays.length
+    val numFields = if (withOrdinality) numArrays + 1 else numArrays
+    // Build each output row lazily so that neither a single wide array nor a correlated LATERAL
+    // UNNEST over many input rows materializes the whole expansion up front; GenerateExec pulls
+    // rows one at a time. The iterator is single-pass but only ever traversed once per input row
+    // (GenerateExec's `outer` emptiness check uses `hasNext`, which does not build a row).
+    (0 until numRows).iterator.map { row =>
+      val fields = new Array[Any](numFields)
+      var col = 0
+      while (col < numArrays) {
+        val arr = arrays(col)
+        fields(col) = if (arr != null && row < arr.numElements() && !arr.isNullAt(row)) {
+          arr.get(row, arrayElementTypes(col).elementType)
+        } else {
+          null
+        }
+        col += 1
+      }
+      if (withOrdinality) {
+        // Widen before incrementing so the 1-based ordinality cannot overflow Int near the top of
+        // the range (the ordinality column is BIGINT).
+        fields(numArrays) = row.toLong + 1L
+      }
+      // Wrap the array by reference (no copy) rather than InternalRow.fromSeq, which re-copies.
+      new GenericInternalRow(fields)
+    }
+  }
+
+  override def prettyName: String = "unnest"
+
+  // Keep the `withOrdinality` flag out of the default `toString`/EXPLAIN rendering (where it would
+  // otherwise appear as a bare `true` argument) and instead surface it as a readable suffix.
+  override def stringArgs: Iterator[Any] = {
+    val childArgs = children.iterator
+    if (withOrdinality) childArgs ++ Iterator("WITH ORDINALITY") else childArgs
+  }
+
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): Unnest = copy(children = newChildren)
 }
 
 @ExpressionDescription(

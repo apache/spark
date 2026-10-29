@@ -29,18 +29,29 @@ import org.apache.spark.sql.catalyst.trees.MultiTransform
  */
 trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
   with AliasAwareOutputExpression {
-  final override def outputPartitioning: Partitioning = {
+  // A `lazy val` because the planner asks a node for its partitioning many times, and this body
+  // projects every partitioning expression through the output aliases, and for a
+  // `KeyedPartitioning` child also builds an `ExpressionSet` per key position and cross-products
+  // the per-position alternatives. Read no live config here, or memoizing would freeze it.
+  @transient final override lazy val outputPartitioning: Partitioning = {
+    val childPartitioning = child.outputPartitioning
     val (keyedPartitionings, otherPartitionings) =
-      flattenPartitioning(child.outputPartitioning).partition(_.isInstanceOf[KeyedPartitioning])
+      PartitioningCollection.flatten(childPartitioning)
+        .partition(_.isInstanceOf[KeyedPartitioning])
 
     val projectedKPs =
       projectKeyedPartitionings(keyedPartitionings.map(_.asInstanceOf[KeyedPartitioning]))
     val projectedOthers = projectOtherPartitionings(otherPartitionings)
 
-    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit) match {
-      case Seq() => UnknownPartitioning(child.outputPartitioning.numPartitions)
+    // Materialize into a strict collection. The projected partitionings are lazy `LazyList`s
+    // (needed so `take` can short-circuit); storing an unforced `LazyList` in the returned
+    // `PartitioningCollection` lets each plan node re-wrap the child's lazy list, and across a
+    // deep projection chain that nesting overflows the stack when the partitioning is later
+    // serialized or deeply traversed.
+    (projectedKPs ++ projectedOthers).take(aliasCandidateLimit).toList match {
+      case Seq() => UnknownPartitioning(childPartitioning.numPartitions)
       case Seq(p) => p
-      case ps => PartitioningCollection(ps)
+      case ps => PartitioningCollection.fromPartitionings(ps)
     }
   }
 
@@ -87,23 +98,16 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
    * achievable granularity. Positions that cannot be expressed in the output are dropped.
    *
    * The resulting [[KeyedPartitioning]]s are the cross-product of the per-position alternatives
-   * restricted to the projectable positions. All share the same `partitionKeys` object (projected
-   * to the same subset of positions), preserving the invariant required by [[GroupPartitionsExec]].
+   * restricted to the projectable positions. All share the same `KeyLayout` object (projected to
+   * the same subset of positions), preserving the invariant required by
+   * [[PartitioningCollection]].
    */
   private def projectKeyedPartitionings(
       kps: Seq[KeyedPartitioning]): LazyList[KeyedPartitioning] = {
     if (kps.isEmpty) return LazyList.empty
+    // All input KPs have matching arity by the [[PartitioningCollection]] invariant (the only
+    // producer of multi-KP inputs here).
     val numPositions = kps.head.expressions.length
-    // The function assumes all input KPs share the same `partitionKeys`, which implies matching
-    // expression arity. This invariant is asserted by [[GroupPartitionsExec]] and is established
-    // by the constructors of [[PartitioningCollection]] feeding this method (a join's
-    // `PartitioningCollection(left.outputPartitioning, right.outputPartitioning)` combines KPs
-    // that have been aligned by [[EnsureRequirements]] to the same join keys). If the invariant
-    // is ever violated upstream, fail early with a clear message instead of throwing an opaque
-    // `IndexOutOfBoundsException` from `kp.expressions(i)` below.
-    assert(kps.tail.forall(_.expressions.length == numPositions),
-      s"All input KeyedPartitionings must share the same expression arity, " +
-        s"but got: ${kps.map(_.expressions.length).mkString(", ")}.")
 
     val alternativesPerPosition: IndexedSeq[LazyList[Expression]] =
       if (hasAlias) {
@@ -132,18 +136,17 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
 
     if (projectablePositions.isEmpty) return LazyList.empty
 
-    // All input KPs share the same partitionKeys by invariant; use the first as the key source.
-    val keySource = kps.head
-    val sharedKeys =
-      if (projectablePositions.length == numPositions) keySource.partitionKeys
-      else keySource.projectKeys(projectablePositions)._2
+    // Dropping a key position coarsens the declared set, which an unknown-keyed claim cannot
+    // survive. The members share one layout, so the head answers for the marker.
+    if (projectablePositions.length < numPositions && kps.head.mayContainUnknownPartitionKeys) {
+      return LazyList.empty
+    }
 
-    val isGrouped = sharedKeys.distinct.size == sharedKeys.size
-    // A KP is narrowed if this node drops positions, or if the input KPs were already narrowed
-    // (i.e. came from a finer-grained partitioning). The flag must be sticky: a subsequent
-    // PartitioningPreservingUnaryExecNode that passes all positions through would otherwise
-    // recompute isNarrowed=false, silently dropping the protection.
-    val isNarrowed = projectablePositions.length < numPositions || keySource.isNarrowed
+    // All input KPs share one layout by invariant, so the first one projects it for every
+    // combination below. Only the expressions differ, and the marker rides the copies unchanged:
+    // the guard above turned away the one shape that could not, a narrowing projection of a marked
+    // collection.
+    val projected = kps.head.project(projectablePositions)
 
     // Cross-product the per-position alternatives to produce all concrete KPs.
     // Note: generateCartesianProduct expects thunks () => Seq[T], but wrapping LazyLists in thunks
@@ -152,17 +155,7 @@ trait PartitioningPreservingUnaryExecNode extends UnaryExecNode
     // so all cross-product combinations are distinct by construction.
     MultiTransform.generateCartesianProduct(
       projectablePositions.map(i => () => alternativesPerPosition(i)))
-      .map(projectedExprs =>
-        new KeyedPartitioning(projectedExprs, sharedKeys, isGrouped, isNarrowed))
-  }
-
-  private def flattenPartitioning(partitioning: Partitioning): Seq[Partitioning] = {
-    partitioning match {
-      case PartitioningCollection(childPartitionings) =>
-        childPartitionings.flatMap(flattenPartitioning)
-      case rest =>
-        rest +: Nil
-    }
+      .map(projectedExprs => projected.copy(expressions = projectedExprs))
   }
 }
 

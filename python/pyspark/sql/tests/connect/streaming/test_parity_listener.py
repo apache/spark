@@ -18,9 +18,10 @@
 import time
 
 import pyspark.cloudpickle
-from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
-from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.errors import AnalysisException
 from pyspark.sql.functions import count, lit
+from pyspark.sql.streaming.listener import StreamingQueryListener
+from pyspark.sql.tests.streaming.test_streaming_listener import StreamingListenerTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import eventually
 
@@ -257,7 +258,13 @@ class StreamingListenerParityTests(StreamingListenerTestsMixin, ReusedConnectTes
 
                 @eventually(timeout=60, catch_assertions=True)
                 def load_event(event_name, table_name):
-                    table = self.spark.read.table(table_name).collect()
+                    try:
+                        table = self.spark.read.table(table_name).collect()
+                    except AnalysisException as e:
+                        # It's possible that the table has not been created yet
+                        if e.getCondition() == "TABLE_OR_VIEW_NOT_FOUND":
+                            return False
+                        raise e
                     if len(table) == 0:
                         return False
                     events[event_name] = pyspark.cloudpickle.loads(table[0][0])

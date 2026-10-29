@@ -24,11 +24,11 @@ import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, Expression, ListQuery, Literal, NamedExpression, Rand}
+import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, AttributeSeq, Expression, ExprId, ListQuery, Literal, NamedExpression, Rand}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin, TreePattern}
-import org.apache.spark.sql.types.IntegerType
+import org.apache.spark.sql.types.{IntegerType, StringType}
 
 class QueryPlanSuite extends SparkFunSuite {
 
@@ -184,5 +184,20 @@ class QueryPlanSuite extends SparkFunSuite {
     // Only 2 nodes contain FILTER pattern: outer Project and Filter
     assert(visited.size == 2)
     assert(visited.forall(_.containsPattern(TreePattern.FILTER)))
+  }
+
+  test("SPARK-58120: normalizePredicates reorders expressions by hashCode via orderCommutative") {
+    val id = AttributeReference("id", IntegerType)(ExprId(0))
+    val data = AttributeReference("data", StringType)(ExprId(1))
+    val output: AttributeSeq = Seq(id, data)
+    val exprs: Seq[Expression] = Seq(id, data)
+
+    val normalizedPredicates = QueryPlan.normalizePredicates(exprs, output)
+    assert(normalizedPredicates.map(_.dataType) == Seq(StringType, IntegerType),
+      "normalizePredicates reorders expressions by hashCode")
+
+    val normalizedExpressions = exprs.map(QueryPlan.normalizeExpressions(_, output))
+    assert(normalizedExpressions.map(_.dataType) == Seq(IntegerType, StringType),
+      "normalizeExpressions preserves original expression order")
   }
 }

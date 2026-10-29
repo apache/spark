@@ -18,7 +18,7 @@ import tempfile
 
 from pyspark import StorageLevel
 from pyspark.errors import AnalysisException, PySparkTypeError
-from pyspark.sql.types import StructType, StructField, IntegerType
+from pyspark.sql.types import IntegerType, StructField, StructType
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 
 
@@ -283,7 +283,7 @@ class CatalogTestsMixin:
             functionsWithPattern = dict(
                 (f.name, f) for f in spark.catalog.listFunctions(pattern="*not_existing_func*")
             )
-            self.assertTrue(len(functionsWithPattern) == 0)
+            self.assertEqual(len(functionsWithPattern), 0)
 
             with self.function("func1", "some_db.func2"):
                 try:
@@ -335,10 +335,10 @@ class CatalogTestsMixin:
         with self.function("func1"):
             spark.sql("CREATE FUNCTION func1 AS 'org.apache.spark.data.bricks'")
             func1 = spark.catalog.getFunction("spark_catalog.default.func1")
-            self.assertTrue(func1.name == "func1")
-            self.assertTrue(func1.namespace == ["default"])
-            self.assertTrue(func1.catalog == "spark_catalog")
-            self.assertTrue(func1.className == "org.apache.spark.data.bricks")
+            self.assertEqual(func1.name, "func1")
+            self.assertEqual(func1.namespace, ["default"])
+            self.assertEqual(func1.catalog, "spark_catalog")
+            self.assertEqual(func1.className, "org.apache.spark.data.bricks")
             self.assertFalse(func1.isTemporary)
 
     def test_list_columns(self):
@@ -526,6 +526,25 @@ class CatalogTestsMixin:
             self.assertTrue(spark.catalog.databaseExists(db))
             spark.catalog.dropDatabase(db, ifExists=False, cascade=True)
             self.assertFalse(spark.catalog.databaseExists(db))
+
+    def test_catalog_create_database_with_properties(self):
+        spark = self.spark
+        db = "py_catalog_api_props_db"
+        with self.database(db):
+            spark.catalog.createDatabase(
+                db,
+                properties={
+                    "comment": "py catalog api comment",
+                    "py_catalog_api_k": "py_catalog_api_v",
+                },
+            )
+            self.assertEqual(spark.catalog.getDatabase(db).description, "py catalog api comment")
+            info = {
+                r.info_name: r.info_value
+                for r in spark.sql(f"DESCRIBE NAMESPACE EXTENDED {db}").collect()
+            }
+            self.assertIn("py_catalog_api_k", info["Properties"])
+            self.assertIn("py_catalog_api_v", info["Properties"])
 
     def test_catalog_list_partitions(self):
         spark = self.spark

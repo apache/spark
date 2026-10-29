@@ -84,7 +84,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
         exception = intercept[AnalysisException] {
           getProvidingClass(provider)
         },
-        condition = "_LEGACY_ERROR_TEMP_1139",
+        condition = "AVRO_DATA_SOURCE_NOT_ENABLED",
         parameters = Map("provider" -> provider)
       )
     }
@@ -95,7 +95,7 @@ class ResolvedDataSourceSuite extends SharedSparkSession {
       exception = intercept[AnalysisException] {
         getProvidingClass("kafka")
       },
-      condition = "_LEGACY_ERROR_TEMP_1140",
+      condition = "KAFKA_DATA_SOURCE_NOT_ENABLED",
       parameters = Map("provider" -> "kafka")
     )
   }

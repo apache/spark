@@ -22,7 +22,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import SparkPandasIndexingError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class IndexingLoc2DMixin:
@@ -231,7 +230,6 @@ class IndexingLoc2DMixin:
 class IndexingLoc2DTests(
     IndexingLoc2DMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

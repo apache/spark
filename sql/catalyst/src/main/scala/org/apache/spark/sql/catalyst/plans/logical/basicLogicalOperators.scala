@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.plans.logical
 
 import org.apache.spark.sql.catalyst.{AliasIdentifier, InternalRow, SQLConfHelper}
-import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode}
+import org.apache.spark.sql.catalyst.analysis.{Analyzer, AnsiStringPromotionTypeCoercion, AnsiTypeCoercion, MultiInstanceRelation, Resolver, TypeCoercion, TypeCoercionBase, UnresolvedUnaryNode, WidenStatefulOpNullability}
 import org.apache.spark.sql.catalyst.catalog.{CatalogStorageFormat, CatalogTable}
 import org.apache.spark.sql.catalyst.catalog.CatalogTable.VIEW_STORING_ANALYZED_PLAN
 import org.apache.spark.sql.catalyst.expressions._
@@ -184,10 +184,41 @@ object Project {
         if (other == target) {
           col
         } else if (Cast.canANSIStoreAssign(other, target)) {
-          Cast(col, target, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+          storeAssignCast(col, other, target, conf)
         } else {
           throw QueryCompilationErrors.invalidColumnOrFieldDataTypeError(columnPath, other, target)
         }
+    }
+  }
+
+  /**
+   * Cast `col` for ANSI store assignment without using character-to-character CAST
+   * truncation (ISO 6.13).
+   *
+   * For CHAR/VARCHAR targets the plan is Cast to unconstrained STRING, then
+   * `stringLengthCheck` (write-side overflow). Avoid replaceCharVarcharWithString
+   * so first-class types stay CHAR/VARCHAR.
+   */
+  private def storeAssignCast(
+      col: Expression,
+      other: DataType,
+      target: DataType,
+      conf: SQLConf): Expression = {
+    val (castTarget, lengthCheckType) = target match {
+      case c: CharType => (c.toStringType, Some(c: DataType))
+      case v: VarcharType => (v.toStringType, Some(v: DataType))
+      case otherType => (otherType, None)
+    }
+    val casted = if (other == castTarget) {
+      col
+    } else {
+      Cast(col, castTarget, Option(conf.sessionLocalTimeZone), ansiEnabled = true)
+    }
+    lengthCheckType match {
+      case Some(dt) if CharVarcharUtils.shouldApplyWriteSideLengthCheck(conf) =>
+        CharVarcharUtils.stringLengthCheck(casted, dt)
+      case _ =>
+        casted
     }
   }
 
@@ -746,7 +777,10 @@ case class Join(
     }
   }
 
-  override def output: Seq[Attribute] = Join.computeOutput(joinType, left.output, right.output)
+  override def output: Seq[Attribute] = {
+    val base = Join.computeOutput(joinType, left.output, right.output)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
 
   override def metadataOutput: Seq[Attribute] = {
     joinType match {
@@ -827,6 +861,32 @@ case class Join(
 
   override protected def withNewChildrenInternal(
     newLeft: LogicalPlan, newRight: LogicalPlan): Join = copy(left = newLeft, right = newRight)
+
+  override def isStateful: Boolean = left.isStreaming && right.isStreaming
+}
+
+/**
+ * A logical plan that combines the columns of two DataFrames that derive from the same
+ * base plan through chains of Project nodes. This node is always unresolved and must be
+ * rewritten by [[ResolveZip]] into a chain of Project nodes over the shared base plan
+ * during analysis. If the two children do not share the same base plan (after stripping
+ * outer Projects), or if either side contains a non-scalar Python UDF, analysis will fail
+ * with ZIP_PLANS_NOT_MERGEABLE.
+ */
+case class Zip(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  override def output: Seq[Attribute] = left.output ++ right.output
+
+  override def maxRows: Option[Long] = left.maxRows
+
+  override def maxRowsPerPartition: Option[Long] = left.maxRowsPerPartition
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(ZIP)
+
+  // Always unresolved -- must be rewritten by ResolveZip during analysis.
+  override lazy val resolved: Boolean = false
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): Zip = copy(left = newLeft, right = newRight)
 }
 
 /**
@@ -878,8 +938,6 @@ case class View(
     isTempView: Boolean,
     child: LogicalPlan,
     options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty) extends UnaryNode {
-  require(!isTempViewStoringAnalyzedPlan || child.resolved)
-
   override def output: Seq[Attribute] = child.output
 
   override def metadataOutput: Seq[Attribute] = Nil
@@ -1223,7 +1281,10 @@ case class Aggregate(
     expressions.forall(_.resolved) && childrenResolved && !hasWindowExpressions
   }
 
-  override def output: Seq[Attribute] = aggregateExpressions.map(_.toAttribute)
+  override def output: Seq[Attribute] = {
+    val base = aggregateExpressions.map(_.toAttribute)
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def metadataOutput: Seq[Attribute] = Nil
   override def maxRows: Option[Long] = {
     if (groupingExpressions.isEmpty) {
@@ -1243,6 +1304,8 @@ case class Aggregate(
   override protected def withNewChildInternal(newChild: LogicalPlan): Aggregate =
     copy(child = newChild)
 
+  override def isStateful: Boolean = child.isStreaming
+
   // Whether this Aggregate operator is group only. For example: SELECT a, a FROM t GROUP BY a
   private[sql] def groupOnly: Boolean = {
     // aggregateExpressions can be empty through Dateset.agg,
@@ -1259,18 +1322,25 @@ object Aggregate {
     schema.forall(f => UnsafeRow.isMutable(f.dataType))
   }
 
+  /**
+   * Returns whether grouping keys of this type can use raw binary equality or schema-aware key
+   * operations in hash aggregation.
+   */
+  def supportsHashAggregateGroupingKey(dataType: DataType): Boolean = {
+    UnsafeRowKeyOperations.supportsDataType(dataType)
+  }
+
   def supportsHashAggregate(
       aggregateBufferAttributes: Seq[Attribute], groupingExpression: Seq[Expression]): Boolean = {
     val aggregationBufferSchema = DataTypeUtils.fromAttributes(aggregateBufferAttributes)
     isAggregateBufferMutable(aggregationBufferSchema) &&
-      groupingExpression.forall(e => UnsafeRowUtils.isBinaryStable(e.dataType))
+      groupingExpression.forall(e => supportsHashAggregateGroupingKey(e.dataType))
   }
 
   def supportsObjectHashAggregate(
       aggregateExpressions: Seq[AggregateExpression],
       groupingExpressions: Seq[Expression]): Boolean = {
-    // We should not use hash aggregation on binary unstable types.
-    if (groupingExpressions.exists(e => !UnsafeRowUtils.isBinaryStable(e.dataType))) {
+    if (groupingExpressions.exists(e => !supportsHashAggregateGroupingKey(e.dataType))) {
       return false
     }
 
@@ -1688,16 +1758,179 @@ case class Unpivot(
 
   def canBeCoercioned: Boolean = values.exists(_.nonEmpty) &&
     values.exists(_.forall(_.forall(_.resolved))) &&
+    // values are coerced by position, so every value group must have one value per value column,
+    // otherwise CheckAnalysis reports UNPIVOT_VALUE_SIZE_MISMATCH
+    values.exists(_.forall(_.length == valueColumnNames.length)) &&
     // when no ids are given, values must be Attributes (column names) to allow detecting ids
     // coercion will add aliases, would disallow detecting ids, so defer coercion after id detection
     ids.exists(_.forall(_.resolved))
 
   def valuesTypeCoercioned: Boolean = canBeCoercioned &&
-    // all inner values at position idx must have the same data type
+    // all inner values at position idx must have the same data type, ignoring nullability;
+    // UnpivotTransformer merges the nullability of the values into the value column
     values.get.head.zipWithIndex.forall { case (v, idx) =>
       values.get.tail.forall(vals => DataTypeUtils.sameType(vals(idx).dataType, v.dataType))
     }
 
+}
+
+/**
+ * Optional user-supplied names for the three columns appended by [[BinBy]]. A `None` falls back
+ * to the default name (`bin_start`, `bin_end`, `bin_distribute_ratio`) when the output schema is
+ * constructed during analysis.
+ */
+case class BinByOutputAliases(
+    binStart: Option[String] = None,
+    binEnd: Option[String] = None,
+    binRatio: Option[String] = None) {
+  def effectiveBinStart: String = binStart.getOrElse("bin_start")
+  def effectiveBinEnd: String = binEnd.getOrElse("bin_end")
+  def effectiveBinRatio: String = binRatio.getOrElse("bin_distribute_ratio")
+}
+
+object BinByOutputAliases {
+  val empty: BinByOutputAliases = BinByOutputAliases()
+}
+
+/**
+ * Unresolved counterpart of [[BinBy]] produced by the parser and DataFrame API. Column positions
+ * accept expressions; `ResolveBinBy` requires them to resolve to top-level attributes. It also
+ * enforces type and foldability constraints and rewrites this into a resolved [[BinBy]].
+ *
+ * @param binWidthExpr       Bin-width expression (DAY-TIME INTERVAL).
+ * @param rangeStartCol      Expression for the row's measurement-window start column.
+ * @param rangeEndCol        Expression for the row's measurement-window end column.
+ * @param originExpr         Optional alignment anchor expression (`ALIGN TO` clause). `None`
+ *                           when the clause is omitted; `ResolveBinBy` defaults the resolved
+ *                           plan's origin to `1970-01-01 00:00:00`.
+ * @param distributeColumns  Expressions for values to proportionally redistribute across sub-rows.
+ * @param outputAliases      Optional renames for the three appended output columns.
+ * @param child              Input relation.
+ */
+case class UnresolvedBinBy(
+    binWidthExpr: Expression,
+    rangeStartCol: Expression,
+    rangeEndCol: Expression,
+    originExpr: Option[Expression],
+    distributeColumns: Seq[Expression],
+    outputAliases: BinByOutputAliases,
+    child: LogicalPlan) extends UnresolvedUnaryNode {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_BIN_BY)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): UnresolvedBinBy =
+    copy(child = newChild)
+}
+
+/**
+ * Aligns range-typed rows to fixed-width bin boundaries by splitting any row whose
+ * `[range_start, range_end)` crosses a boundary and proportionally redistributing values in
+ * `distributeColumns` across the resulting sub-ranges. Emits one or more output rows per input row
+ * plus three appended columns with default names `bin_start`, `bin_end`, `bin_distribute_ratio`.
+ *
+ * Bin boundaries align to `originMicros + k * binWidthMicros` for integer `k`.
+ * For `TIMESTAMP` (LTZ) inputs the boundary arithmetic uses civil-time in the session zone for
+ * multi-day bins; sub-day LTZ bins and `TIMESTAMP_NTZ` bins use UTC microsecond arithmetic.
+ *
+ * @param binWidthMicros      Bin width in microseconds: the folded value of the day-time interval
+ *                            `BIN WIDTH` expression. Always positive.
+ * @param rangeStart          Resolved attribute holding each row's window-start timestamp.
+ * @param rangeEnd            Resolved attribute holding each row's window-end timestamp.
+ * @param originMicros        Alignment anchor in microseconds since the epoch: the folded value of
+ *                            `ALIGN TO`, or the type-specific default when the clause is omitted.
+ * @param distributeColumns   Resolved input columns to proportionally redistribute. Read by the
+ *                            operator to compute the rescaled values; not part of `output`.
+ * @param scaledDistributeColumns
+ *                            Produced output attributes holding the rescaled values (fresh
+ *                            `ExprId`s, same names/types as `distributeColumns`); they replace
+ *                            `distributeColumns` in `output`.
+ * @param appendedAttributes  The three output attributes appended after the child columns.
+ * @param child               Input relation.
+ * @param timeZoneId          Captured session local time zone for LTZ inputs; `None` for NTZ.
+ *                            Required when `rangeStart.dataType` is `TimestampType`; must be
+ *                            `None` when it is `TimestampNTZType`.
+ */
+case class BinBy(
+    binWidthMicros: Long,
+    rangeStart: Attribute,
+    rangeEnd: Attribute,
+    originMicros: Long,
+    distributeColumns: Seq[Attribute],
+    scaledDistributeColumns: Seq[Attribute],
+    appendedAttributes: Seq[Attribute],
+    child: LogicalPlan,
+    timeZoneId: Option[String])
+  extends UnaryNode {
+
+  assert(timeZoneId.isDefined == rangeStart.dataType.isInstanceOf[TimestampType],
+    s"timeZoneId must be set iff rangeStart is TIMESTAMP (LTZ); got rangeStart.dataType=" +
+      s"${rangeStart.dataType}, timeZoneId=$timeZoneId")
+
+  assert(distributeColumns.length == scaledDistributeColumns.length,
+    "BinBy requires one scaled attribute per DISTRIBUTE column, got " +
+      s"${distributeColumns.length} distribute columns and " +
+      s"${scaledDistributeColumns.length} scaled attributes")
+
+  // In `output`, each DISTRIBUTE input is replaced by its scaled produced counterpart.
+  private lazy val distributeReplacements: AttributeMap[Attribute] =
+    AttributeMap(distributeColumns.zip(scaledDistributeColumns))
+
+  override def output: Seq[Attribute] =
+    child.output.map(a => distributeReplacements.getOrElse(a, a)) ++ appendedAttributes
+
+  override def producedAttributes: AttributeSet =
+    AttributeSet(scaledDistributeColumns ++ appendedAttributes)
+
+  override protected def stringArgs: Iterator[Any] = {
+    BinBy.explainStringArgs(
+      rangeStart = rangeStart,
+      rangeEnd = rangeEnd,
+      binWidthMicros = binWidthMicros,
+      originMicros = originMicros,
+      distributeColumns = distributeColumns,
+      scaledDistributeColumns = scaledDistributeColumns,
+      appendedAttributes = appendedAttributes,
+      timeZoneId = timeZoneId)
+  }
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(BIN_BY)
+
+  override protected def withNewChildInternal(newChild: LogicalPlan): BinBy =
+    copy(child = newChild)
+}
+
+object BinBy {
+
+  // Builds the `stringArgs` for EXPLAIN. LTZ formats `alignTo` in the captured zone and appends
+  // `zone=`, NTZ formats in UTC and omits it.
+  private[sql] def explainStringArgs(
+      rangeStart: Attribute,
+      rangeEnd: Attribute,
+      binWidthMicros: Long,
+      originMicros: Long,
+      distributeColumns: Seq[Attribute],
+      scaledDistributeColumns: Seq[Attribute],
+      appendedAttributes: Seq[Attribute],
+      timeZoneId: Option[String]): Iterator[Any] = {
+    val maxFields = SQLConf.get.maxToStringFields
+    val fmt = TimestampFormatter.getFractionFormatter(
+      DateTimeUtils.getZoneId(timeZoneId.getOrElse("UTC")))
+
+    def refs(attrs: Seq[Attribute]): String = {
+      truncatedString(attrs.map(_.simpleString(maxFields)), "[", ", ", "]", maxFields)
+    }
+
+    Iterator(
+      s"range=[${rangeStart.simpleString(maxFields)}, ${rangeEnd.simpleString(maxFields)}]",
+      "binWidth=" + IntervalUtils.toDayTimeIntervalString(
+        binWidthMicros, IntervalStringStyles.ANSI_STYLE,
+        DayTimeIntervalType.DAY, DayTimeIntervalType.SECOND),
+      s"alignTo=${fmt.format(originMicros)}",
+      s"distribute=${refs(distributeColumns)}",
+      s"scaledDistribute=${refs(scaledDistributeColumns)}",
+      s"appends=${refs(appendedAttributes)}") ++
+      timeZoneId.map(z => s"zone=$z")
+  }
 }
 
 /**
@@ -1745,7 +1978,10 @@ object Limit {
  * order.
  */
 case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryNode {
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   override def maxRows: Option[Long] = {
     limitExpr match {
       case IntegerLiteral(limit) => Some(limit)
@@ -1757,6 +1993,8 @@ case class GlobalLimit(limitExpr: Expression, child: LogicalPlan) extends UnaryN
 
   override protected def withNewChildInternal(newChild: LogicalPlan): GlobalLimit =
     copy(child = newChild)
+
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -1921,6 +2159,18 @@ object SampleMethod {
 
 object Sample {
   /**
+   * Resolves the seed of a sample, generating a random one when the user did not specify one.
+   *
+   * Generated seeds are non-negative. A pushed-down sample renders its seed into SQL as
+   * `REPEATABLE (<seed>)`, and the seed in that grammar does not accept a sign. A
+   * user-specified seed is returned unchanged, negative values included.
+   */
+  def resolveSeed(seed: Option[Long]): Long = {
+    // `Utils` in this file is o.a.s.util.collection.Utils, so qualify the one we want here.
+    seed.getOrElse(org.apache.spark.util.Utils.random.nextLong() & Long.MaxValue)
+  }
+
+  /**
    * Convenience constructor that wraps a concrete seed in [[Some]].
    * Use the case-class constructor directly with [[None]] when no seed
    * was specified and a random seed should be generated at execution time.
@@ -1998,10 +2248,16 @@ case class Sample(
  */
 case class Distinct(child: LogicalPlan) extends UnaryNode {
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Distinct =
     copy(child = newChild)
+  // Distinct is rewritten to Aggregate by ReplaceDistinctWithAggregate, hence potentially
+  // stateful (same criteria as Aggregate).
+  override def isStateful: Boolean = child.isStreaming
 }
 
 /**
@@ -2160,26 +2416,76 @@ case class OneRowRelation() extends LeafNode {
   }
 }
 
+/**
+ * How the deduplication keys are specified: either an explicit set of column names
+ * ([[DeduplicateKeyColumns]]) or all of the child's columns ([[DeduplicateAllColumnsAsKey]]).
+ */
+sealed trait DeduplicateKeySpec
+case class DeduplicateKeyColumns(colNames: Seq[String]) extends DeduplicateKeySpec
+case object DeduplicateAllColumnsAsKey extends DeduplicateKeySpec
+
+/**
+ * The original recipe behind a [[Deduplicate]] / [[DeduplicateWithinWatermark]] node, set by the
+ * `ResolveDeduplicate` analyzer rule and retained so a streaming query can recompute its key
+ * attributes at query start in the ordering pinned in the offset log (see
+ * `ResolveDeduplicate.computeKeys`). A `None` spec on a node means it was not built from
+ * `dropDuplicates*` (e.g. an internally/test-constructed node) and its keys must NOT be recomputed.
+ *
+ * @param keySpec which columns form the deduplication key.
+ * @param viaSparkClassic whether this was built via Spark Classic (`Dataset.dropDuplicates*`, true)
+ *   or Spark Connect (`transformDeduplicate`, false). Only consulted when recomputing the keys in
+ *   the legacy order, where the two engines historically differed. See SPARK-57489.
+ */
+case class DeduplicateSpec(
+    keySpec: DeduplicateKeySpec,
+    viaSparkClassic: Boolean)
+
 /** A logical plan for `dropDuplicates`. */
 case class Deduplicate(
     keys: Seq[Attribute],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan,
+    dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
+  // Streaming deduplication filters late rows even when event time is not part of the key.
+  // A watermarked key already preserves event time; let unused alternatives be pruned.
+  override def references: AttributeSet = AttributeSet(keys) ++ AttributeSet(
+    if (child.isStreaming && !keys.exists(_.metadata.contains(EventTimeWatermark.delayKey))) {
+      child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey))
+    } else {
+      Seq.empty
+    })
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): Deduplicate =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
+  // `dedupSpec` is internal metadata used only to recompute keys on streaming restart; keep it out
+  // of the tree string (EXPLAIN output and golden plans).
+  override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
-case class DeduplicateWithinWatermark(keys: Seq[Attribute], child: LogicalPlan) extends UnaryNode {
+case class DeduplicateWithinWatermark(
+    keys: Seq[Attribute],
+    child: LogicalPlan,
+    dedupSpec: Option[DeduplicateSpec] = None) extends UnaryNode {
   // Ensure that references include event time columns so they are not pruned away.
   override def references: AttributeSet = AttributeSet(keys) ++
     AttributeSet(child.output.filter(_.metadata.contains(EventTimeWatermark.delayKey)))
   override def maxRows: Option[Long] = child.maxRows
-  override def output: Seq[Attribute] = child.output
+  override def output: Seq[Attribute] = {
+    val base = child.output
+    if (isStateful) WidenStatefulOpNullability.widenOutputForStatefulOp(base) else base
+  }
   final override val nodePatterns: Seq[TreePattern] = Seq(DISTINCT_LIKE)
   override protected def withNewChildInternal(newChild: LogicalPlan): DeduplicateWithinWatermark =
     copy(child = newChild)
+  override def isStateful: Boolean = child.isStreaming
+  // `dedupSpec` is internal metadata used only to recompute keys on streaming restart; keep it out
+  // of the tree string (EXPLAIN output and golden plans).
+  override protected def stringArgs: Iterator[Any] = Iterator(keys, child)
 }
 
 /**
@@ -2326,6 +2632,11 @@ object LateralJoin {
 
 /**
  * A logical plan for as-of join.
+ * @param direction Which matching right row to keep: the last for [[Backward]], the first for
+ *                  [[Forward]], or the closest key for [[Nearest]].
+ * @param requiresSortMergeAsOfJoin Execution strategy selected during analysis.
+ * @param orderExpression Fallback distance; sort-merge joins do not compute one.
+ * @param evalContext Arithmetic settings captured when the join is constructed.
  */
 case class AsOfJoin(
     left: LogicalPlan,
@@ -2333,33 +2644,53 @@ case class AsOfJoin(
     asOfCondition: Expression,
     condition: Option[Expression],
     joinType: JoinType,
-    orderExpression: Expression,
-    toleranceAssertion: Option[Expression]) extends BinaryNode {
+    tolerance: Option[Expression],
+    direction: AsOfJoinDirection,
+    usingColumns: Option[Seq[String]] = None,
+    matchLeftOperand: Option[Expression] = None,
+    matchOperator: Option[MatchComparisonOperator] = None,
+    matchRightOperand: Option[Expression] = None,
+    leftSortExprs: Seq[Expression] = Nil,
+    rightSortExprs: Seq[Expression] = Nil,
+    requiresSortMergeAsOfJoin: Boolean = false,
+    allowExactMatches: Boolean = true,
+    orderExpression: Option[Expression] = None,
+    evalContext: NumericEvalContext = NumericEvalContext.fromSQLConf(SQLConf.get))
+    extends BinaryNode {
 
   require(Seq(Inner, LeftOuter).contains(joinType),
     s"Unsupported as-of join type $joinType")
 
   override protected def stringArgs: Iterator[Any] = super.stringArgs.take(5)
 
-  override def output: Seq[Attribute] = {
-    joinType match {
-      case LeftOuter =>
-        left.output ++ right.output.map(_.withNullability(true))
-      case _ =>
-        left.output ++ right.output
-    }
+  override def output: Seq[Attribute] =
+    AsOfJoin.computeOutput(joinType, left.output, right.output)
+
+  /** The tolerance must be a nonnegative constant. */
+  def toleranceAssertion: Option[Expression] = tolerance.map { value =>
+    GreaterThanOrEqual(value, Literal.default(value.dataType))
   }
 
   def duplicateResolved: Boolean = left.outputSet.intersect(right.outputSet).isEmpty
 
   override lazy val resolved: Boolean = {
     childrenResolved &&
+      usingColumns.isEmpty &&
+      matchLeftOperand.isEmpty &&
+      matchOperator.isEmpty &&
+      matchRightOperand.isEmpty &&
+      (if (requiresSortMergeAsOfJoin) {
+        leftSortExprs.nonEmpty && rightSortExprs.nonEmpty
+      } else {
+        orderExpression.nonEmpty
+      }) &&
       expressions.forall(_.resolved) &&
       duplicateResolved &&
       asOfCondition.dataType == BooleanType &&
       condition.forall(_.dataType == BooleanType) &&
       toleranceAssertion.forall { assertion =>
-        assertion.foldable && assertion.eval().asInstanceOf[Boolean]
+        assertion.checkInputDataTypes().isSuccess &&
+          assertion.foldable && assertion.eval().asInstanceOf[Boolean]
       }
   }
 
@@ -2373,6 +2704,19 @@ case class AsOfJoin(
 
 object AsOfJoin {
 
+  /**
+   * Computes the output attributes of an [[AsOfJoin]] given its join type and child outputs.
+   */
+  def computeOutput(
+      joinType: JoinType,
+      leftOutput: Seq[Attribute],
+      rightOutput: Seq[Attribute]): Seq[Attribute] = joinType match {
+    case LeftOuter =>
+      leftOutput ++ rightOutput.map(_.withNullability(true))
+    case _ =>
+      leftOutput ++ rightOutput
+  }
+
   def apply(
       left: LogicalPlan,
       right: LogicalPlan,
@@ -2383,18 +2727,301 @@ object AsOfJoin {
       tolerance: Option[Expression],
       allowExactMatches: Boolean,
       direction: AsOfJoinDirection): AsOfJoin = {
-    val asOfCond = makeAsOfCond(leftAsOf, rightAsOf, tolerance, allowExactMatches, direction)
-    val orderingExpr = makeOrderingExpr(leftAsOf, rightAsOf, direction)
-    AsOfJoin(left, right, asOfCond, condition, joinType,
-      orderingExpr, tolerance.map(t => GreaterThanOrEqual(t, Literal.default(t.dataType))))
+    AsOfJoin(
+      left = left,
+      right = right,
+      asOfCondition = Literal.TrueLiteral,
+      condition = condition,
+      joinType = joinType,
+      tolerance = tolerance,
+      direction = direction,
+      matchLeftOperand = Some(leftAsOf),
+      matchRightOperand = Some(rightAsOf),
+      allowExactMatches = allowExactMatches
+    )
   }
 
-  private def makeAsOfCond(
+  /**
+   * Build an [[AsOfJoin]] from a SQL `MATCH_CONDITION (left_expr op right_expr)` clause.
+   * Operand normalization is deferred until analysis when join inputs are resolved. Analysis
+   * then replaces the placeholder `asOfCondition` and `direction`.
+   */
+  def fromMatchCondition(
+      left: LogicalPlan,
+      right: LogicalPlan,
+      leftExpr: Expression,
+      operator: MatchComparisonOperator,
+      rightExpr: Expression,
+      condition: Option[Expression],
+      joinType: JoinType,
+      usingColumns: Option[Seq[String]] = None): AsOfJoin = {
+    AsOfJoin(
+      left,
+      right,
+      asOfCondition = Literal.TrueLiteral,
+      condition = condition,
+      joinType = joinType,
+      tolerance = None,
+      direction = operator.direction,
+      usingColumns = usingColumns,
+      matchLeftOperand = Some(leftExpr),
+      matchOperator = Some(operator),
+      matchRightOperand = Some(rightExpr),
+      requiresSortMergeAsOfJoin = true)
+  }
+
+  /** Whether nearest matching can compare exact gaps between these key types. */
+  def supportsNearestKeys(leftType: DataType, rightType: DataType): Boolean = {
+    (leftType, rightType) match {
+      case (_: DecimalType, _: DecimalType) => true
+      case _ => leftType == rightType && (leftType match {
+        case _: IntegralType | FloatType | DoubleType => true
+        case DateType | _: YearMonthIntervalType | _: DayTimeIntervalType => true
+        case TimestampType | TimestampNTZType | _: AnyTimestampNanoType => true
+        case _ => false
+      })
+    }
+  }
+
+  private[catalyst] def materializeMatchComparison(
+      leftOperand: Expression,
+      rightOperand: Expression,
+      normalizedOp: MatchComparisonOperator)
+      : (Expression, Seq[Expression], Seq[Expression]) = {
+    val (coercedLeft, coercedRight) = coerceMatchStringOperands(leftOperand, rightOperand)
+    val asOfCondition = normalizedOp match {
+      case GreaterThanOrEqualOp => GreaterThanOrEqual(coercedLeft, coercedRight)
+      case GreaterThanOp => GreaterThan(coercedLeft, coercedRight)
+      case LessThanOrEqualOp => LessThanOrEqual(coercedLeft, coercedRight)
+      case LessThanOp => LessThan(coercedLeft, coercedRight)
+    }
+    val (leftSortExprs, rightSortExprs) = matchSortExpressions(coercedLeft, coercedRight)
+    (asOfCondition, leftSortExprs, rightSortExprs)
+  }
+
+  /** Coerces string/non-string operands so sorting and comparison use the same value domain. */
+  private[catalyst] def coerceMatchStringOperands(
+      leftOperand: Expression,
+      rightOperand: Expression): (Expression, Expression) = {
+    val commonType = MatchConditionTypes.stringComparisonCommonType(
+      leftOperand.dataType, rightOperand.dataType)
+    commonType match {
+      case Some(commonType) =>
+        (castMatchOperand(leftOperand, commonType), castMatchOperand(rightOperand, commonType))
+      case None => (leftOperand, rightOperand)
+    }
+  }
+
+  /**
+   * Returns right sort types with mixed NTZ leaves converted to LTZ at their own precision.
+   * NTZ-to-LTZ conversion can change order across DST gaps; precision widening preserves it.
+   */
+  private def rightTimestampSortType(
+      leftType: DataType,
+      rightType: DataType): DataType = (leftType, rightType) match {
+    case (left: StructType, right: StructType) if left.length == right.length =>
+      StructType(left.fields.zip(right.fields).map { case (l, r) =>
+        r.copy(dataType = rightTimestampSortType(l.dataType, r.dataType))
+      })
+    case (left: ArrayType, right: ArrayType) =>
+      right.copy(elementType = rightTimestampSortType(left.elementType, right.elementType))
+    case (left, TimestampNTZType) if TimestampFamily.isLtz(left) =>
+      TimestampType
+    case (left, right: TimestampNTZNanosType) if TimestampFamily.isLtz(left) =>
+      TimestampLTZNanosType(right.precision)
+    case _ => rightType
+  }
+
+  private def castMatchOperand(operand: Expression, targetType: DataType): Expression = {
+    (operand, targetType) match {
+      case _ if operand.dataType == targetType => operand
+      case (tuple: CreateNamedStruct, struct: StructType) =>
+        val values = tuple.valExprs.zip(struct.fields).map { case (value, field) =>
+          castMatchOperand(value, field.dataType)
+        }
+        CreateNamedStruct(tuple.nameExprs.zip(values).flatMap { case (name, value) =>
+          Seq(name, value)
+        })
+      case _ => Cast(operand, targetType)
+    }
+  }
+
+  /**
+   * Shared MATCH_CONDITION operand type rules used by analysis validation and by expression
+   * materialization so the two paths cannot drift.
+   */
+  private[catalyst] object MatchConditionTypes {
+
+    def isValidOperandType(dataType: DataType): Boolean = RowOrdering.isOrderable(dataType)
+
+    /** Whether the `>=` this join builds can compare the two operands. */
+    def areOperandsCompatible(leftType: DataType, rightType: DataType): Boolean = {
+      if (!isValidOperandType(leftType) || !isValidOperandType(rightType)) {
+        false
+      } else if (isCompositeOperand(leftType, rightType)) {
+        areFieldTypesCompatible(leftType, rightType)
+      } else if (isExactlyOneStringPair(leftType, rightType)) {
+        stringComparisonCommonType(leftType, rightType).isDefined
+      } else {
+        TypeCoercion.findWiderTypeForTwo(leftType, rightType).isDefined
+      }
+    }
+
+    /** True when either operand is a STRUCT or ARRAY. */
+    private def isCompositeOperand(
+        leftType: DataType,
+        rightType: DataType): Boolean =
+      Seq(leftType, rightType).exists(t => t.isInstanceOf[StructType] || t.isInstanceOf[ArrayType])
+
+    /** True when exactly one operand is a string. */
+    private def isExactlyOneStringPair(leftType: DataType, rightType: DataType): Boolean =
+      leftType.isInstanceOf[StringType] != rightType.isInstanceOf[StringType]
+
+    /** Common type of a string vs non-string scalar pair, mirroring the comparison's coercion. */
+    private[catalyst] def stringComparisonCommonType(
+        leftType: DataType,
+        rightType: DataType): Option[DataType] = {
+      if (!isExactlyOneStringPair(leftType, rightType)) {
+        None
+      } else {
+        val commonType = if (SQLConf.get.ansiEnabled) {
+          AnsiStringPromotionTypeCoercion.findWiderTypeForString(leftType, rightType)
+        } else {
+          TypeCoercion.findCommonTypeForBinaryComparison(leftType, rightType, SQLConf.get)
+        }
+        commonType.filter(isValidOperandType)
+      }
+    }
+
+    /** STRUCT/ARRAY operands: fields and elements coerce only as the `>=` comparison can. */
+    private def areFieldTypesCompatible(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (ArrayType(_, _), ArrayType(_, _)) => areArrayElementsCompatible(leftType, rightType)
+        case (_: StructType, _: StructType) => comparisonCommonType(leftType, rightType).isDefined
+        case _ => false
+      }
+
+    /** Whether array elements have the common type required by their comparison. */
+    def areArrayElementsCompatible(leftType: DataType, rightType: DataType): Boolean =
+      (leftType, rightType) match {
+        case (ArrayType(leftElem, _), ArrayType(rightElem, _)) =>
+          comparisonCommonType(leftElem, rightElem).isDefined
+        case _ => false
+      }
+
+    /**
+     * Type the `>=` uses for two orderable operands: already structurally equal (names and
+     * nullability ignored), or a tightest common type; no string/decimal promotion.
+     */
+    def comparisonCommonType(left: DataType, right: DataType): Option[DataType] = {
+      if (!isValidOperandType(left) || !isValidOperandType(right)) {
+        None
+      } else if (DataType.equalsStructurally(left, right, ignoreNullability = true)) {
+        Some(left)
+      } else {
+        tightestCommonType(left, right)
+      }
+    }
+
+    /** Tightest common type (ANSI-aware), the only widening a comparison does. */
+    def tightestCommonType(left: DataType, right: DataType): Option[DataType] = {
+      val coercion = if (SQLConf.get.ansiEnabled) AnsiTypeCoercion else TypeCoercion
+      coercion.findTightestCommonType(left, right)
+    }
+  }
+
+  /**
+   * Sort-merge ASOF join sorts each side by these expressions (after equi-keys) so the
+   * right-side buffer is ordered consistently with the MATCH_CONDITION comparison.
+   *
+   * Each side picks its own keys, because the two sides are never compared key by key. A SQL
+   * tuple `(t.a, t.b)` sorts by its parts. A tuple is never NULL, so this keeps the comparison
+   * order. Anything else sorts as one value, so a NULL struct comes before a struct of NULL
+   * fields, the same as in the comparison.
+   * Array operands sort element-wise; length mismatches follow Spark array ordering semantics.
+   */
+  def matchSortExpressions(
+      leftOperand: Expression,
+      rightOperand: Expression): (Seq[Expression], Seq[Expression]) = {
+    val timeZone = DateTimeUtils.getZoneId(SQLConf.get.sessionLocalTimeZone)
+    val rightTarget = if (timeZone.getRules.isFixedOffset) {
+      // A fixed offset preserves the order of NTZ values, including inside composite keys.
+      rightOperand.dataType
+    } else {
+      rightTimestampSortType(leftOperand.dataType, rightOperand.dataType)
+    }
+    // The scan searches the right buffer independently for each left row.
+    (matchSortKeys(leftOperand), matchSortKeys(castMatchOperand(rightOperand, rightTarget)))
+  }
+
+  /** A SQL tuple becomes [[CreateNamedStruct]] and sorts by its parts. */
+  private def matchSortKeys(operand: Expression): Seq[Expression] = operand match {
+    case tuple: CreateNamedStruct if tuple.valExprs.nonEmpty => tuple.valExprs
+    case other => Seq(other)
+  }
+
+  private[catalyst] def normalizeMatchOperands(
+      leftSet: AttributeSet,
+      rightSet: AttributeSet,
+      expr1: Expression,
+      operator: MatchComparisonOperator,
+      expr2: Expression,
+      isDataFrame: Boolean = false): (Expression, Expression, MatchComparisonOperator) = {
+    val expr1Side = operandJoinSide(expr1, leftSet, rightSet)
+    val expr2Side = operandJoinSide(expr2, leftSet, rightSet)
+    (expr1Side, expr2Side) match {
+      case (Some(true), Some(false)) => (expr1, expr2, operator)
+      case (Some(false), Some(true)) => (expr2, expr1, operator.flip)
+      case _ if isDataFrame =>
+        throw QueryCompilationErrors.asOfJoinKeyReferenceError(expr1, expr2)
+      case _ =>
+        throw QueryCompilationErrors.asOfJoinMatchConditionTableReferenceError(expr1, expr2)
+    }
+  }
+
+  private def operandJoinSide(
+      expr: Expression,
+      leftSet: AttributeSet,
+      rightSet: AttributeSet): Option[Boolean] = {
+    val refs = expr.references
+    if (refs.isEmpty) {
+      // Constant operand (literal, current_timestamp(), session variable): no join input.
+      None
+    } else if (refs.subsetOf(leftSet)) {
+      Some(true)
+    } else if (refs.subsetOf(rightSet)) {
+      Some(false)
+    } else {
+      None
+    }
+  }
+
+  /** Builds the subtraction-based distance for a DataFrame fallback join. */
+  private[catalyst] def makeOrderingExpr(
+      leftAsOf: Expression,
+      rightAsOf: Expression,
+      direction: AsOfJoinDirection,
+      evalContext: NumericEvalContext): Expression = {
+    def subtract(left: Expression, right: Expression): Expression = {
+      Subtract(left = left, right = right, evalContext = evalContext)
+    }
+
+    direction match {
+      case Backward => subtract(leftAsOf, rightAsOf)
+      case Forward => subtract(rightAsOf, leftAsOf)
+      case Nearest =>
+        If(GreaterThan(leftAsOf, rightAsOf),
+          subtract(leftAsOf, rightAsOf), subtract(rightAsOf, leftAsOf))
+    }
+  }
+
+  private[catalyst] def makeAsOfCond(
       leftAsOf: Expression,
       rightAsOf: Expression,
       tolerance: Option[Expression],
       allowExactMatches: Boolean,
-      direction: AsOfJoinDirection): Expression = {
+      direction: AsOfJoinDirection,
+      evalContext: NumericEvalContext): Expression = {
     val base = (allowExactMatches, direction) match {
       case (true, Backward) => GreaterThanOrEqual(leftAsOf, rightAsOf)
       case (false, Backward) => GreaterThan(leftAsOf, rightAsOf)
@@ -2405,37 +3032,26 @@ object AsOfJoin {
     }
     tolerance match {
       case Some(tolerance) =>
+        val lowerBound = Subtract(left = leftAsOf, right = tolerance, evalContext = evalContext)
+        val upperBound = Add(left = leftAsOf, right = tolerance, evalContext = evalContext)
         (allowExactMatches, direction) match {
           case (true, Backward) =>
-            And(base, GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)))
+            And(base, GreaterThanOrEqual(rightAsOf, lowerBound))
           case (false, Backward) =>
-            And(base, GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)))
+            And(base, GreaterThan(rightAsOf, lowerBound))
           case (true, Forward) =>
-            And(base, LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+            And(base, LessThanOrEqual(rightAsOf, upperBound))
           case (false, Forward) =>
-            And(base, LessThan(rightAsOf, Add(leftAsOf, tolerance)))
+            And(base, LessThan(rightAsOf, upperBound))
           case (true, Nearest) =>
-            And(GreaterThanOrEqual(rightAsOf, Subtract(leftAsOf, tolerance)),
-              LessThanOrEqual(rightAsOf, Add(leftAsOf, tolerance)))
+            And(GreaterThanOrEqual(rightAsOf, lowerBound),
+              LessThanOrEqual(rightAsOf, upperBound))
           case (false, Nearest) =>
             And(base,
-              And(GreaterThan(rightAsOf, Subtract(leftAsOf, tolerance)),
-                LessThan(rightAsOf, Add(leftAsOf, tolerance))))
+              And(GreaterThan(rightAsOf, lowerBound),
+                LessThan(rightAsOf, upperBound)))
         }
       case None => base
-    }
-  }
-
-  private def makeOrderingExpr(
-      leftAsOf: Expression,
-      rightAsOf: Expression,
-      direction: AsOfJoinDirection): Expression = {
-    direction match {
-      case Backward => Subtract(leftAsOf, rightAsOf)
-      case Forward => Subtract(rightAsOf, leftAsOf)
-      case Nearest =>
-        If(GreaterThan(leftAsOf, rightAsOf),
-          Subtract(leftAsOf, rightAsOf), Subtract(rightAsOf, leftAsOf))
     }
   }
 }

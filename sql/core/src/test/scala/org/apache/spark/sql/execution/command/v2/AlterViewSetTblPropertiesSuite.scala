@@ -26,7 +26,7 @@ import org.apache.spark.sql.execution.command
 class AlterViewSetTblPropertiesSuite
   extends command.AlterViewSetTblPropertiesSuiteBase with ViewCommandSuiteBase {
 
-  test("V2: catalog stores the property on ViewInfo") {
+  test("V2: catalog stores the property on View") {
     val view = s"$catalog.$namespace.v2_set_view_info"
     createView(view)
     sql(s"ALTER VIEW $view SET TBLPROPERTIES ('k' = 'v')")

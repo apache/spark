@@ -636,7 +636,7 @@ select schema_of_xml('<record><time>14:30:45</time></record>', map('rowTag', 're
 -- !query schema
 struct<schema_of_xml(<record><time>14:30:45</time></record>):string>
 -- !query output
-STRUCT<time: TIMESTAMP>
+STRUCT<time: TIME(6)>
 
 
 -- !query
@@ -644,7 +644,7 @@ select schema_of_xml('<record><time>14:30:45.123456</time></record>', map('rowTa
 -- !query schema
 struct<schema_of_xml(<record><time>14:30:45.123456</time></record>):string>
 -- !query output
-STRUCT<time: TIMESTAMP>
+STRUCT<time: TIME(6)>
 
 
 -- !query

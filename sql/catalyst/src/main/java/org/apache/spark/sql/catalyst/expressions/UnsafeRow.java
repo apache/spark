@@ -37,11 +37,11 @@ import org.apache.spark.unsafe.Platform;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.bitset.BitSetMethods;
 import org.apache.spark.unsafe.hash.Murmur3_x86_32;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
-import org.apache.spark.unsafe.types.GeographyVal;
-import org.apache.spark.unsafe.types.GeometryVal;
 
 import static org.apache.spark.unsafe.Platform.BYTE_ARRAY_OFFSET;
 
@@ -96,7 +96,9 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
     PhysicalDataType pdt = PhysicalDataType.apply(dt);
     return pdt instanceof PhysicalPrimitiveType || pdt instanceof PhysicalDecimalType ||
-      pdt instanceof PhysicalCalendarIntervalType;
+      pdt instanceof PhysicalCalendarIntervalType ||
+      pdt instanceof PhysicalTimestampNTZNanosType ||
+      pdt instanceof PhysicalTimestampLTZNanosType;
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -322,6 +324,48 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
     }
   }
 
+  /**
+   * Updates a nanosecond NTZ timestamp column in place. Uses the same variable-length layout as
+   * {@link #setInterval(int, CalendarInterval)}. For null values, do not call {@link #setNullAt};
+   * pass {@code null} here so the variable-length offset is retained for future updates.
+   *
+   * <p>NTZ and LTZ share the byte layout; the duplicated setter/getter pairs track the
+   * {@link SpecializedGetters} interface, where the distinction is preserved at the logical-type
+   * level.
+   */
+  @Override
+  public void setTimestampNTZNanos(int ordinal, TimestampNanosVal value) {
+    setTimestampNanosPayload(ordinal, value);
+  }
+
+  /**
+   * Updates a nanosecond LTZ timestamp column in place. See {@link #setTimestampNTZNanos(int,
+   * TimestampNanosVal)}.
+   */
+  @Override
+  public void setTimestampLTZNanos(int ordinal, TimestampNanosVal value) {
+    setTimestampNanosPayload(ordinal, value);
+  }
+
+  // 16-byte payload in the variable-length region; see TimestampNanosRowValues.
+  private void setTimestampNanosPayload(int ordinal, TimestampNanosVal value) {
+    assertIndexIsValid(ordinal);
+    long cursor = getLong(ordinal) >>> 32;
+    assert cursor > 0 : "invalid cursor " + cursor;
+    long offsetAndSize = (cursor << 32) | TimestampNanosRowValues.SIZE_IN_BYTES;
+    if (value == null) {
+      // Set the null bit directly instead of via setNullAt; setNullAt would zero the field slot
+      // that we immediately overwrite with offsetAndSize below.
+      BitSetMethods.set(baseObject, baseOffset, ordinal);
+      TimestampNanosRowValues.zeroPayload(baseObject, baseOffset, (int) cursor);
+      Platform.putLong(baseObject, getFieldOffset(ordinal), offsetAndSize);
+    } else {
+      TimestampNanosRowValues.writePayload(
+        baseObject, baseOffset, (int) cursor, value.epochMicros, value.nanosWithinMicro);
+      setLong(ordinal, offsetAndSize);
+    }
+  }
+
   @Override
   public Object get(int ordinal, DataType dataType) {
     return SpecializedGettersReader.read(this, ordinal, dataType, true, true);
@@ -420,15 +464,12 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
   }
 
   @Override
-  public GeographyVal getGeography(int ordinal) {
-    byte[] bytes = getBinary(ordinal);
-    return (bytes == null) ? null : GeographyVal.fromBytes(bytes);
-  }
-
-  @Override
-  public GeometryVal getGeometry(int ordinal) {
-    byte[] bytes = getBinary(ordinal);
-    return (bytes == null) ? null : GeometryVal.fromBytes(bytes);
+  public BinaryView getBinaryView(int ordinal) {
+    if (isNullAt(ordinal)) return null;
+    final long offsetAndSize = getLong(ordinal);
+    final int offset = (int) (offsetAndSize >> 32);
+    final int size = (int) offsetAndSize;
+    return BinaryView.fromAddress(baseObject, baseOffset + offset, size);
   }
 
   @Override
@@ -443,6 +484,26 @@ public final class UnsafeRow extends InternalRow implements Externalizable, Kryo
       final int days = (int) ((0xFFFFFFFF00000000L & monthAndDays) >> 32);
       final long microseconds = Platform.getLong(baseObject, baseOffset + offset + 8);
       return new CalendarInterval(months, days, microseconds);
+    }
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampNTZNanos(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final int offset = (int) (getLong(ordinal) >> 32);
+      return TimestampNanosRowValues.readVal(baseObject, baseOffset, offset);
+    }
+  }
+
+  @Override
+  public TimestampNanosVal getTimestampLTZNanos(int ordinal) {
+    if (isNullAt(ordinal)) {
+      return null;
+    } else {
+      final int offset = (int) (getLong(ordinal) >> 32);
+      return TimestampNanosRowValues.readVal(baseObject, baseOffset, offset);
     }
   }
 

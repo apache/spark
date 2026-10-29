@@ -95,8 +95,10 @@ object ArrowVectorReader {
       case v: DecimalVector => new DecimalVectorReader(v)
       case v: VarCharVector => new VarCharVectorReader(v)
       case v: LargeVarCharVector => new LargeVarCharVectorReader(v)
+      case v: ViewVarCharVector => new ViewVarCharVectorReader(v)
       case v: VarBinaryVector => new VarBinaryVectorReader(v)
       case v: LargeVarBinaryVector => new LargeVarBinaryVectorReader(v)
+      case v: ViewVarBinaryVector => new ViewVarBinaryVectorReader(v)
       case v: DurationVector => new DurationVectorReader(v)
       case v: IntervalYearVector => new IntervalYearVectorReader(v)
       case v: DateDayVector => new DateDayVectorReader(v, timeZoneId)
@@ -215,6 +217,11 @@ private[arrow] class LargeVarCharVectorReader(v: LargeVarCharVector)
   override def getString(i: Int): String = Text.decode(vector.get(i))
 }
 
+private[arrow] class ViewVarCharVectorReader(v: ViewVarCharVector)
+    extends TypedArrowVectorReader[ViewVarCharVector](v) {
+  override def getString(i: Int): String = Text.decode(vector.get(i))
+}
+
 private[arrow] class VarBinaryVectorReader(v: VarBinaryVector)
     extends TypedArrowVectorReader[VarBinaryVector](v) {
   override def getBytes(i: Int): Array[Byte] = vector.get(i)
@@ -227,9 +234,19 @@ private[arrow] class LargeVarBinaryVectorReader(v: LargeVarBinaryVector)
   override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
 }
 
+private[arrow] class ViewVarBinaryVectorReader(v: ViewVarBinaryVector)
+    extends TypedArrowVectorReader[ViewVarBinaryVector](v) {
+  override def getBytes(i: Int): Array[Byte] = vector.get(i)
+  override def getString(i: Int): String = SparkStringUtils.getHexString(getBytes(i))
+}
+
 private[arrow] class DurationVectorReader(v: DurationVector)
     extends TypedArrowVectorReader[DurationVector](v) {
-  override def getDuration(i: Int): Duration = vector.getObject(i)
+  // Spark stores day-time intervals as microseconds. Arrow getObject converts via a Long
+  // nanosecond count, which saturates for valid large intervals. Decode the raw microseconds
+  // directly to retain the full Spark interval range.
+  override def getDuration(i: Int): Duration =
+    SparkIntervalUtils.microsToDuration(DurationVector.get(vector.getDataBuffer, i))
   override def getString(i: Int): String = {
     SparkIntervalUtils.toDayTimeIntervalString(
       SparkIntervalUtils.durationToMicros(getDuration(i)),

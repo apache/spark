@@ -425,20 +425,17 @@ class DataFrameNearestByJoinSuite extends QueryTest with SharedSparkSession {
         "type" -> "\"MAP<DOUBLE, DOUBLE>\""))
   }
 
-  test("EXACT mode rejects nondeterministic ranking expression") {
+  test("EXACT mode accepts nondeterministic ranking expression") {
     val (users, products) = prepareForNearestByJoin()
-    checkError(
-      exception = intercept[AnalysisException] {
-        users.nearestByJoin(
-          products,
-          rand() + products("pscore"),
-          numResults = 1,
-          joinType = "inner",
-          mode = "exact",
-          direction = "similarity")
-      },
-      condition = "NEAREST_BY_JOIN.EXACT_WITH_NONDETERMINISTIC_EXPRESSION",
-      matchPVals = true,
-      parameters = Map("expression" -> ".*rand.*pscore.*"))
+    val result = users.nearestByJoin(
+      products,
+      rand() + products("pscore"),
+      numResults = 1,
+      joinType = "inner",
+      mode = "exact",
+      direction = "similarity")
+
+    // Result rows are nondeterministic; only assert that each left row gets exactly one match.
+    assert(result.count() === 3)
   }
 }

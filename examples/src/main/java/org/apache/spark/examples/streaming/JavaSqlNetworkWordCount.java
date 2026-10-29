@@ -48,7 +48,7 @@ public final class JavaSqlNetworkWordCount {
 
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
-      System.err.println("Usage: JavaNetworkWordCount <hostname> <port>");
+      System.err.println("Usage: JavaSqlNetworkWordCount <hostname> <port>");
       System.exit(1);
     }
 

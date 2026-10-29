@@ -77,7 +77,8 @@ private[spark] object HiveUtils extends Logging {
     .doc("Version of the Hive metastore. Available options are " +
       "<code>2.0.0</code> through <code>2.3.10</code>, " +
       "<code>3.0.0</code> through <code>3.1.3</code> and " +
-      "<code>4.0.0</code> through <code>4.1.0</code>.")
+      "<code>4.0.0</code> through <code>4.2.0</code>. " +
+      "Note: Hive 4.2 requires Java 21 or later.")
     .version("1.4.0")
     .stringConf
     .checkValue(isCompatibleHiveVersion, "Unsupported Hive Metastore version")
@@ -198,6 +199,26 @@ private[spark] object HiveUtils extends Logging {
     .version("4.1.0")
     .booleanConf
     .createWithDefault(false)
+
+  val INITIALIZE_METASTORE_FORMAT_CLASSES =
+    buildConf("spark.sql.hive.initializeMetastoreFormatClasses")
+      .doc("When true, an InputFormat/OutputFormat class name stored in the Hive metastore is " +
+        "resolved with its static initializer run at resolution time. When false, the class is " +
+        "still loaded, so a missing class still fails here, but its static initializer is not " +
+        "run. Only the class name is needed when converting metastore metadata, so setting " +
+        "this to false avoids running a format class's static initializer during a metadata " +
+        "operation. Note that the conversion also runs when planning a scan or write and when " +
+        "inferring the schema of a Hive serde table, so with false a format class whose static " +
+        "initializer fails no longer fails fast at resolution time. It fails when the format " +
+        "is instantiated instead, " +
+        "which for a Hive serde scan is on the driver when the input splits are computed, and " +
+        "for a Hive serde write is on an executor. A table read through the built-in " +
+        "Parquet/ORC reader never instantiates the format, so there the initializer never " +
+        "runs. Keep this true (the default) to preserve the fail-fast behavior.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val HIVE_METASTORE_SHARED_PREFIXES = buildStaticConf("spark.sql.hive.metastore.sharedPrefixes")
     .doc("A comma separated list of class prefixes that should be loaded using the classloader " +

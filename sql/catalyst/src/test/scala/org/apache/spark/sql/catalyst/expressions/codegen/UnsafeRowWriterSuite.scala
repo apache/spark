@@ -23,6 +23,69 @@ import org.apache.spark.unsafe.types._
 
 class UnsafeRowWriterSuite extends SparkFunSuite {
 
+  test("writeNullable matches the setNullAt/write split for null and non-null inputs") {
+    // Primitive: a null write sets the null bit, a non-null write stores the value.
+    val intWriter = new UnsafeRowWriter(2)
+    intWriter.resetRowWriter()
+    intWriter.writeNullable(0, 42, false)
+    intWriter.writeNullable(1, -1, true)
+    val intRow = intWriter.getRow
+    assert(!intRow.isNullAt(0) && intRow.getInt(0) == 42)
+    assert(intRow.isNullAt(1))
+
+    // Reference type: the staged value is ignored when isNull is set.
+    val strWriter = new UnsafeRowWriter(1)
+    strWriter.resetRowWriter()
+    strWriter.writeNullable(0, UTF8String.fromString("ignored"), true)
+    assert(strWriter.getRow.isNullAt(0))
+
+    // Wide decimal (precision > 18): a null write must still reserve the fixed-width slot, exactly
+    // like the write(ordinal, null, precision, scale) call the codegen setNull branch used.
+    val decWriter = new UnsafeRowWriter(2)
+    decWriter.resetRowWriter()
+    decWriter.writeNullable(0, null, true, 38, 18)
+    val dec = Decimal(123456789.123456789)
+    assert(dec.changePrecision(38, 18))
+    decWriter.writeNullable(1, dec, false, 38, 18)
+    val decRow = decWriter.getRow
+    assert(decRow.isNullAt(0))
+    assert(decRow.getDecimal(1, 38, 18) == dec)
+
+    // Compact decimal (precision <= 18): the null bit must be set through
+    // write(ordinal, null, precision, scale)'s internal null check rather than an explicit
+    // setNullAt branch, so it lands on the same setNullAt the codegen previously emitted.
+    val compactDecWriter = new UnsafeRowWriter(2)
+    compactDecWriter.resetRowWriter()
+    compactDecWriter.writeNullable(0, null, true, 18, 2)
+    val compactDec = Decimal(123456789.12)
+    assert(compactDec.changePrecision(18, 2))
+    compactDecWriter.writeNullable(1, compactDec, false, 18, 2)
+    val compactDecRow = compactDecWriter.getRow
+    assert(compactDecRow.isNullAt(0))
+    assert(compactDecRow.getDecimal(1, 18, 2) == compactDec)
+
+    // CalendarInterval: a null write reserves the variable-length slot via write(ordinal, null).
+    val intervalWriter = new UnsafeRowWriter(2)
+    intervalWriter.resetRowWriter()
+    intervalWriter.writeNullable(0, null.asInstanceOf[CalendarInterval], true)
+    val interval = new CalendarInterval(1, 2, 3L)
+    intervalWriter.writeNullable(1, interval, false)
+    val intervalRow = intervalWriter.getRow
+    assert(intervalRow.isNullAt(0))
+    assert(intervalRow.getInterval(1) == interval)
+
+    // TimestampNanosVal: like CalendarInterval, a null write must reserve the fixed 16-byte slot
+    // via write(ordinal, null), which is the reserved-slot contract the codegen setNull relied on.
+    val tsNanosWriter = new UnsafeRowWriter(2)
+    tsNanosWriter.resetRowWriter()
+    tsNanosWriter.writeNullable(0, null.asInstanceOf[TimestampNanosVal], true)
+    val tsNanos = new TimestampNanosVal(1234567L, 89.toShort)
+    tsNanosWriter.writeNullable(1, tsNanos, false)
+    val tsNanosRow = tsNanosWriter.getRow
+    assert(tsNanosRow.isNullAt(0))
+    assert(tsNanosRow.getTimestampNTZNanos(1) == tsNanos)
+  }
+
   def checkDecimalSizeInBytes(decimal: Decimal, numBytes: Int): Unit = {
     assert(decimal.toJavaBigDecimal.unscaledValue().toByteArray.length == numBytes)
   }
@@ -56,10 +119,10 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     rowWriter.resetRowWriter()
     rowWriter.setNullAt(0)
     assert(rowWriter.getRow.isNullAt(0))
-    assert(rowWriter.getRow.getGeography(0) === null)
-    val geography = GeographyVal.fromBytes(Array[Byte](1, 2, 3))
+    assert(rowWriter.getRow.getBinaryView(0) === null)
+    val geography = BinaryView.fromBytes(Array[Byte](1, 2, 3))
     rowWriter.write(1, geography)
-    assert(rowWriter.getRow.getGeography(1).getBytes sameElements geography.getBytes)
+    assert(rowWriter.getRow.getBinaryView(1).getBytes sameElements geography.getBytes)
   }
 
   test("write and get geometry through UnsafeRowWriter") {
@@ -67,10 +130,10 @@ class UnsafeRowWriterSuite extends SparkFunSuite {
     rowWriter.resetRowWriter()
     rowWriter.setNullAt(0)
     assert(rowWriter.getRow.isNullAt(0))
-    assert(rowWriter.getRow.getGeometry(0) === null)
-    val geometry = GeometryVal.fromBytes(Array[Byte](1, 2, 3))
+    assert(rowWriter.getRow.getBinaryView(0) === null)
+    val geometry = BinaryView.fromBytes(Array[Byte](1, 2, 3))
     rowWriter.write(1, geometry)
-    assert(rowWriter.getRow.getGeometry(1).getBytes sameElements geometry.getBytes)
+    assert(rowWriter.getRow.getBinaryView(1).getBytes sameElements geometry.getBytes)
   }
 
   test("write and get calendar intervals through UnsafeRowWriter") {

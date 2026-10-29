@@ -31,7 +31,7 @@ abstract class FileScanBuilder(
     sparkSession: SparkSession,
     fileIndex: PartitioningAwareFileIndex,
     dataSchema: StructType)
-  extends ScanBuilder
+    extends ScanBuilder
     with SupportsPushDownRequiredColumns
     with SupportsPushDownCatalystFilters {
   private val partitionSchema = fileIndex.partitionSchema
@@ -73,20 +73,28 @@ abstract class FileScanBuilder(
     val (deterministicFilters, nonDeterminsticFilters) = filters.partition(_.deterministic)
     val (partitionFilters, dataFilters) =
       DataSourceUtils.getPartitionFiltersAndDataFilters(partitionSchema, deterministicFilters)
-    this.partitionFilters = partitionFilters.filter { f =>
+    val (partitionFiltersToPush, postScanPartitionFilters) = partitionFilters.partition { f =>
       // Python UDFs might exist because this rule is applied before ``ExtractPythonUDFs``.
       !SubqueryExpression.hasSubquery(f) && !f.exists(_.isInstanceOf[PythonUDF])
     }
+    this.partitionFilters = partitionFiltersToPush
     this.dataFilters = dataFilters
+    // Expand struct equality predicates into field-level predicates for pushdown only.
+    // The original struct predicates stay in `dataFilters` (returned below as post-scan
+    // filters), so the expanded field predicates only need to be a sound over-approximation.
+    val expandedDataFilters =
+      DataSourceStrategy.expandStructPredicatesForPushdown(
+        dataFilters,
+        sparkSession.sessionState.conf)
     val translatedFilters = mutable.ArrayBuffer.empty[sources.Filter]
-    for (filterExpr <- dataFilters) {
+    for (filterExpr <- expandedDataFilters) {
       val translated = DataSourceStrategy.translateFilter(filterExpr, true)
       if (translated.nonEmpty) {
         translatedFilters += translated.get
       }
     }
     pushedDataFilters = pushDataFilters(translatedFilters.toArray)
-    dataFilters ++ nonDeterminsticFilters
+    dataFilters ++ postScanPartitionFilters ++ nonDeterminsticFilters
   }
 
   override def pushedFilters: Array[Predicate] = pushedDataFilters.map(_.toV2)

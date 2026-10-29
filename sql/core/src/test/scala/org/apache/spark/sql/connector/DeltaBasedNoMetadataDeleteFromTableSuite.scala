@@ -17,6 +17,9 @@
 
 package org.apache.spark.sql.connector
 
+import org.apache.spark.sql.Row
+import org.apache.spark.sql.types.StructType
+
 class DeltaBasedNoMetadataDeleteFromTableSuite extends DeleteFromTableSuiteBase {
 
   override protected def deltaDelete: Boolean = true
@@ -29,4 +32,25 @@ class DeltaBasedNoMetadataDeleteFromTableSuite extends DeleteFromTableSuiteBase 
   }
 
   override def enforceCheckConstraintOnDelete: Boolean = false
+
+  test("SPARK-60673: delete reads non-required metadata columns without writing them") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    executeAndCheckScan(
+      s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 2",
+      // `pk` is used to encode deletes
+      // `id` and `_partition` are used in the condition
+      expectedScanSchema = "pk INT, id INT, _partition STRING")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+
+    checkLastWriteInfo(expectedRowIdSchema = Some(StructType(Array(PK_FIELD))))
+    checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = null))
+  }
 }

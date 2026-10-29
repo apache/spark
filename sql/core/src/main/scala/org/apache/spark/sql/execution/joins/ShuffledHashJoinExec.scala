@@ -270,14 +270,10 @@ case class ShuffledHashJoinExec private (
       buildNullRow: GenericInternalRow,
       isFullOuterJoin: Boolean): Iterator[InternalRow] = {
     val matchedRows = new OpenHashSet[Long]
-    TaskContext.get().addTaskCompletionListener[Unit](_ => {
-      // At the end of the task, update the task's memory usage for this
-      // [[OpenHashSet]] to track matched rows, which has two parts:
-      // [[OpenHashSet._bitset]] and [[OpenHashSet._data]].
-      val bitSetEstimatedSize = matchedRows.getBitSet.capacity / 8
-      val dataEstimatedSize = matchedRows.capacity * 8
-      longMetric("buildDataSize") += bitSetEstimatedSize + dataEstimatedSize
-    })
+    // At the end of the task, update the task's memory usage for this OpenHashSet that tracks
+    // matched rows (its underlying bit-set plus data array).
+    JoinHelper.recordOpenHashSetMemoryUsageOnTaskCompletion(
+      matchedRows, longMetric("buildDataSize"))
 
     def markRowMatched(keyIndex: Int, valueIndex: Int): Unit = {
       val rowIndex: Long = (keyIndex.toLong << 32) | valueIndex
@@ -437,7 +433,7 @@ case class ShuffledHashJoinExec private (
       case BuildRight => streamedResultVars ++ buildResultVars
     }
     val consumeOuterJoinRow = ctx.freshName("consumeOuterJoinRow")
-    ctx.addNewFunction(consumeOuterJoinRow,
+    val consumeOuterJoinRowFuncName = ctx.addNewFunction(consumeOuterJoinRow,
       s"""
          |private void $consumeOuterJoinRow() throws java.io.IOException {
          |  ${metricTerm(ctx, "numOutputRows")}.add(1);
@@ -448,11 +444,11 @@ case class ShuffledHashJoinExec private (
     val isFullOuterJoin = joinType == FullOuter
     val joinWithUniqueKey = codegenBuildSideOrFullOuterJoinWithUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRowFuncName,
       isFullOuterJoin)
     val joinWithNonUniqueKey = codegenBuildSideOrFullOuterJoinNonUniqueKey(
       ctx, (streamedRow, buildRow), (streamedInput, buildInput), streamedKeyEv, streamedKeyAnyNull,
-      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRow,
+      streamedKeyExprCode.value, relationTerm, conditionCheck, consumeOuterJoinRowFuncName,
       isFullOuterJoin)
 
     s"""

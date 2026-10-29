@@ -52,3 +52,9 @@ SELECT TRY_CAST("2021-101-01" AS date);
 -- TRY_CAST string to timestamp
 SELECT TRY_CAST("2021-01-01 00:00:00" AS timestamp);
 SELECT TRY_CAST("2021-101-01 00:00:00" AS timestamp);
+
+-- TRY_CAST string to time
+SELECT TRY_CAST("12:34:56" AS time);
+SELECT TRY_CAST("12:34:56.789012" AS time(6));
+SELECT TRY_CAST("24:00:00" AS time);
+SELECT TRY_CAST("12:34:56 abc" AS time);

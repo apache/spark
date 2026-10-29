@@ -20,7 +20,7 @@ import java.util.concurrent.TimeoutException
 
 import org.apache.spark.annotation.Evolving
 import org.apache.spark.api.java.function.VoidFunction2
-import org.apache.spark.sql.{Dataset, ForeachWriter, WriteConfigMethods}
+import org.apache.spark.sql.{AnalysisException, Dataset, ForeachWriter, WriteConfigMethods}
 
 /**
  * Interface used to write a streaming `Dataset` to external storage systems (e.g. file systems,
@@ -89,6 +89,19 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * @since 2.0.0
    */
   def queryName(queryName: String): this.type
+
+  /**
+   * Assigns a name to this streaming sink for sink evolution capability. When sinks are named,
+   * they can be tracked in checkpoint metadata, enabling query evolution.
+   *
+   * If not specified, sinks are automatically assigned a default name based on their position in
+   * the query, which maintains backward compatibility.
+   *
+   * @param sinkName
+   *   the unique name for this sink (alphanumeric and underscore only)
+   * @since 4.1.0
+   */
+  private[sql] def name(sinkName: String): this.type
 
   /**
    * Specifies the underlying output data source.
@@ -202,8 +215,11 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
    * [[org.apache.spark.sql.streaming.StreamingQuery]] object can be used to interact with the
    * stream.
    *
-   * For v1 table, partitioning columns provided by `partitionBy` will be respected no matter the
-   * table exists or not. A new table will be created if the table not exists.
+   * For v1 table, a new table will be created with the partitioning columns provided by
+   * `partitionBy` if the table does not exist. If the table exists, the partitioning of the table
+   * will be respected, and `partitionBy` must match it, including the order of the columns, if
+   * provided. Otherwise, or if the files already committed to the table have other partition
+   * columns, the query fails to start.
    *
    * For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
    * be respected only if the v2 table does not exist. Besides, the v2 table created by this API
@@ -216,6 +232,24 @@ abstract class DataStreamWriter[T] extends WriteConfigMethods[DataStreamWriter[T
   @Evolving
   @throws[TimeoutException]
   def toTable(tableName: String): StreamingQuery
+
+  /**
+   * Validates that a streaming sink name only contains alphanumeric characters and underscores.
+   *
+   * @param sinkName
+   *   the sink name to validate
+   * @throws AnalysisException
+   *   if the sink name contains invalid characters
+   * @throws IllegalArgumentException
+   *   if the sink name is null or empty
+   */
+  private[sql] def validateSinkName(sinkName: String): Unit = {
+    StreamingNameValidator.validate(sinkName, "Sink") { invalid =>
+      new AnalysisException(
+        errorClass = "STREAMING_QUERY_EVOLUTION_ERROR.INVALID_SINK_NAME",
+        messageParameters = Map("sinkName" -> invalid))
+    }
+  }
 
   ///////////////////////////////////////////////////////////////////////////////////////
   // Covariant Overrides

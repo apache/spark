@@ -201,10 +201,22 @@ class GaussianMixture private (
       val compute = sc.broadcast(ExpectationSum.add(weights, gaussians)_)
 
       // aggregate the cluster contribution for all sample points
+      // Avoid allocating and serializing a large zero value for empty partitions.
       val sums = breezeData.treeAggregate[ExpectationSum](
-        zeroValue = ExpectationSum.zero(k, d),
-        seqOp = (agg: ExpectationSum, v: BV[Double]) => compute.value(agg, v),
-        combOp = (agg1: ExpectationSum, agg2: ExpectationSum) => agg1 += agg2,
+        zeroValue = null.asInstanceOf[ExpectationSum],
+        seqOp = (maybeAgg: ExpectationSum, v: BV[Double]) => {
+          val agg = if (maybeAgg == null) ExpectationSum.zero(k, d) else maybeAgg
+          compute.value(agg, v)
+        },
+        combOp = (agg1: ExpectationSum, agg2: ExpectationSum) => {
+          if (agg1 == null) {
+            agg2
+          } else if (agg2 == null) {
+            agg1
+          } else {
+            agg1 += agg2
+          }
+        },
         depth = 2,
         finalAggregateOnExecutor = true)
 

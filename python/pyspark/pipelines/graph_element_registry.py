@@ -16,15 +16,14 @@
 #
 
 from abc import ABC, abstractmethod
-from pathlib import Path
-
-from pyspark.pipelines.output import Output
-from pyspark.pipelines.flow import Flow
 from contextlib import contextmanager
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Generator, Optional
 
 from pyspark.errors import PySparkRuntimeError
+from pyspark.pipelines.flow import AutoCdcFlow, Flow
+from pyspark.pipelines.output import Output
 
 
 class GraphElementRegistry(ABC):
@@ -41,6 +40,10 @@ class GraphElementRegistry(ABC):
     @abstractmethod
     def register_flow(self, flow: Flow) -> None:
         """Add the given flow to the registry."""
+
+    @abstractmethod
+    def register_auto_cdc_flow(self, flow: AutoCdcFlow) -> None:
+        """Add the given Auto CDC flow to the registry."""
 
     @abstractmethod
     def register_sql(self, sql_text: str, file_path: Path) -> None:

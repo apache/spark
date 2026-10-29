@@ -21,7 +21,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.exceptions import PandasNotImplementedError
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class IndexNameMixin:
@@ -158,7 +157,6 @@ class IndexNameMixin:
 class IndexNameTests(
     IndexNameMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

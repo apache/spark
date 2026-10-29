@@ -54,13 +54,13 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
       "streaming")
 
   /**
-   * Helper method to run tests with source evolution configs enabled.
+   * Helper method to run tests with source evolution enabled. Enabling source evolution
+   * automatically forces offset log format V2 (OffsetMap) for new queries, since named sources
+   * require it.
    */
   private def testWithSourceEvolution(testName: String)(testFun: => Unit): Unit = {
     test(testName) {
-      withSQLConf(
-        "spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true",
-        "spark.sql.streaming.offsetLog.formatVersion" -> "2") {
+      withSQLConf("spark.sql.streaming.queryEvolution.enableSourceEvolution" -> "true") {
         testFun
       }
     }
@@ -86,7 +86,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
         .count()
         .selectExpr("window.start as timestamp", "count as num_events")
 
-      assert(countsDF.schema.toDDL == "timestamp TIMESTAMP,num_events BIGINT NOT NULL")
+      assert(countsDF.schema.toDDL == "timestamp TIMESTAMP,num_events BIGINT")
 
       // Start the query
       val queryName = "sparkConnectStreamingQuery"
@@ -555,6 +555,8 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
     // Remove the listener, length should be 1.
     spark.streams.removeListener(listener)
     assert(spark.streams.listListeners().length == 0)
+    // Wait for the executionThread to complete. See SPARK-58000.
+    Thread.sleep(5000)
   }
 
   test("listener events") {
@@ -617,7 +619,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }
@@ -660,7 +662,7 @@ class ClientStreamingQuerySuite extends QueryTest with RemoteSparkSession with L
           .sql(s"select * from $tableName")
           .collect()
           .toSeq
-        assert(rows.size > 0)
+        assert(rows.nonEmpty)
         assert(rows.map(_.getLong(1)).sum > 0)
         logInfo(s"Rows in $tableName: $rows")
       }

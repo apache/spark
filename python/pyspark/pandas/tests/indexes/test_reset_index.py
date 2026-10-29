@@ -19,9 +19,8 @@ import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.testing import assert_frame_equal, assert_index_equal, assert_series_equal
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class FrameResetIndexMixin:
@@ -147,7 +146,6 @@ class FrameResetIndexMixin:
 class FrameResetIndexTests(
     FrameResetIndexMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

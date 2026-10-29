@@ -123,7 +123,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
   }
 
-  private def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
+  def makeExecutorEvent(executors: Seq[v1.ExecutorSummary]):
       Seq[String] = {
     val events = ListBuffer[String]()
     executors.sortBy { e =>
@@ -158,7 +158,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
              |    '${
                       e.removeReason.map { reason =>
                         s"""<br>Reason: ${StringEscapeUtils.escapeEcmaScript(
-                          reason.replace("\n", " "))}"""
+                          Utility.escape(Utility.escape(reason.replace("\n", " "))))}"""
                       }.getOrElse("")
                    }"' +
              |    'data-bs-html="true">Executor ${e.id} removed</div>'
@@ -260,7 +260,9 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
         UIUtils.prependBaseUri(request, parent.basePath),
         "jobs", // subPath
         killEnabled,
-        jobIdTitle
+        jobIdTitle,
+        parent.actionsViaGetEnabled,
+        parent.csrfToken
       ).table(jobPage)
     } catch {
       case e @ (_ : IllegalArgumentException | _ : IndexOutOfBoundsException) =>
@@ -278,6 +280,7 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     val startDate = appInfo.attempts.head.startTime
     val startTime = startDate.getTime()
     val endTime = appInfo.attempts.head.endTime.getTime()
+    val exitCode = appInfo.attempts.head.exitCode
 
     val activeJobs = new ListBuffer[v1.JobData]()
     val completedJobs = new ListBuffer[v1.JobData]()
@@ -322,9 +325,69 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
       <div>
         <ul class="list-unstyled">
           <li>
+            <strong>User:</strong>
+            {parent.getSparkUser}
+          </li>
+          <li>
+            <strong>Started At:</strong>
+            {UIUtils.formatDate(startDate)}
+          </li>
+          <li>
+            <strong>Total Uptime:</strong>
+            {
+              if (endTime < 0 && parent.sc.isDefined) {
+                UIUtils.formatDuration(System.currentTimeMillis() - startTime)
+              } else if (endTime > 0) {
+                UIUtils.formatDuration(endTime - startTime)
+              }
+            }
+          </li>
+          {
+            exitCode match {
+              case Some(code) if code != 0 =>
+                <li>
+                  <strong>Exit Code:</strong>
+                  {code.toString}
+                </li>
+              case _ => <!-- -->
+            }
+          }
+          <li>
             <strong>Scheduling Mode: </strong>
             {schedulingMode}
           </li>
+          {
+            if (parent.holdEnabled && parent.sc.exists(_.executorHoldSupported)) {
+              val basePathUri = UIUtils.prependBaseUri(request, parent.basePath)
+              val (status, action, confirm) = if (parent.sc.get.executorsHeld) {
+                val numDraining = parent.sc.get.getExecutorIds().size
+                val status = if (numDraining > 0) {
+                  s"Held (draining $numDraining executor${if (numDraining > 1) "s" else ""})"
+                } else {
+                  "Held"
+                }
+                (status, "resume", "Are you sure you want to resume this application?")
+              } else {
+                ("Running", "hold", "Are you sure you want to hold this application? All " +
+                  "executors will be decommissioned after finishing their running tasks.")
+              }
+              val label = action.capitalize
+              // Same form as the kill buttons; see UIUtils.actionFormMethod.
+              <li>
+                <strong>Application:</strong>
+                {status}
+                <form action={s"$basePathUri/jobs/$action/"}
+                      method={UIUtils.actionFormMethod(parent.actionsViaGetEnabled)}
+                      class="d-inline">
+                  <input type="hidden" name="csrfToken" value={parent.csrfToken}/>
+                  <button type="submit"
+                          data-confirm-message={confirm}
+                          class="btn btn-sm btn-outline-secondary confirm-link">{label}</button>
+                </form>
+                {parent.lastHoldRequestStatus.getOrElse("")}
+              </li>
+            }
+          }
           {
             if (shouldShowActiveJobs) {
               <li>
@@ -499,7 +562,9 @@ private[ui] class JobPagedTable(
     basePath: String,
     subPath: String,
     killEnabled: Boolean,
-    jobIdTitle: String
+    jobIdTitle: String,
+    actionsViaGetEnabled: Boolean,
+    csrfToken: String
   ) extends PagedTable[JobTableRowData] {
 
   private val (sortColumn, desc, pageSize) = getTableParameters(request, jobTag, jobIdTitle)
@@ -558,11 +623,17 @@ private[ui] class JobPagedTable(
     val job = jobTableRow.jobData
 
     val killLink = if (killEnabled) {
-      // SPARK-6846 this should be POST-only but YARN AM won't proxy POST
-      val killLinkUri = s"$basePath/jobs/job/kill/?id=${job.jobId}"
-      <a href={killLinkUri}
-         data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
-         class="kill-link float-end">(kill)</a>
+      // The same form the master UI uses for killing applications and drivers; only the
+      // method follows spark.ui.actionsViaGetEnabled, see UIUtils.actionFormMethod.
+      <form action={s"$basePath/jobs/job/kill/"}
+            method={UIUtils.actionFormMethod(actionsViaGetEnabled)}
+            class="d-inline float-end">
+        <input type="hidden" name="id" value={job.jobId.toString}/>
+        <input type="hidden" name="csrfToken" value={csrfToken}/>
+        <button type="submit"
+                data-kill-message={s"Are you sure you want to kill job ${job.jobId} ?"}
+                class="btn btn-sm btn-outline-danger kill-link">Kill</button>
+      </form>
     } else {
       Seq.empty
     }

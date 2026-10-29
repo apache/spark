@@ -31,7 +31,10 @@ A literal (also known as a constant) represents a fixed data value. Spark SQL su
 
 ### String Literal
 
-A string literal is used to specify a character string value.
+A string literal specifies a character string value of type `STRING`.
+`'ab'` is unbounded `STRING`, not `CHAR(2)` or `VARCHAR(2)`.
+There is no `CHAR` or `VARCHAR` literal syntax; use `CAST` to get a constrained type.
+See [Character String Types](sql-ref-character-string-types.html).
 
 #### Syntax
 
@@ -70,6 +73,25 @@ This can be useful when constructing strings that are too long to fit on a singl
 It also allows mixing of string literals and parameter marker into a single string literal.
 
 #### Examples
+
+```sql
+SELECT TYPEOF('ab') AS col;
++------+
+|   col|
++------+
+|string|
++------+
+
+SET spark.sql.charVarchar.standardSemantics.enabled = true;
+SELECT TYPEOF(CAST('ab' AS CHAR(2))) AS col;
++-------+
+|    col|
++-------+
+|char(2)|
++-------+
+```
+
+By default, `CAST(... AS CHAR(n))` and `CAST(... AS VARCHAR(n))` are `STRING`.
 
 ```sql
 SELECT 'Hello, World!' AS col;
@@ -433,7 +455,7 @@ SELECT DATE '2011-11-11' AS col;
 ```sql
 TIME { '[h]h:[m]m[:]' |
        '[h]h:[m]m:[s]s[.]' |
-       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us]'}
+       '[h]h:[m]m:[s]s.[ms][ms][ms][us][us][us][ns][ns][ns]'}
 ```
 **Note:** defaults to `00` if hour, minute or second is not specified.
 
@@ -464,6 +486,12 @@ SELECT TIME'23:59:59.999999' as col;
 +---------------+
 |23:59:59.999999|
 +---------------+
+SELECT TIME'23:59:59.999999999' as col;
++------------------+
+|col               |
++------------------+
+|23:59:59.999999999|
++------------------+
 ```
 
 #### Timestamp Syntax

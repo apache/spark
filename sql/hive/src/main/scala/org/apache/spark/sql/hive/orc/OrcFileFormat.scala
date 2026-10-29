@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.hive.orc
 
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.{Base64, Properties}
 
 import scala.jdk.CollectionConverters._
@@ -43,6 +45,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.NANOS_PER_MILLIS
 import org.apache.spark.sql.execution.datasources._
 import org.apache.spark.sql.execution.datasources.orc.{OrcFilters, OrcOptions, OrcUtils}
 import org.apache.spark.sql.hive.{HiveInspectors, HiveShim}
@@ -139,7 +142,8 @@ case class OrcFileFormat() extends FileFormat
 
     if (getSqlConf(sparkSession).orcFilterPushDown) {
       // Sets pushed predicates
-      OrcFilters.createFilter(requiredSchema, filters).foreach { f =>
+      val pushedFilters = filters.filterNot(hasSubMillisTimestamp)
+      OrcFilters.createFilter(withoutNanosTimestamps(requiredSchema), pushedFilters).foreach { f =>
         hadoopConf.set(OrcFileFormat.SARG_PUSHDOWN, toKryo(f))
         hadoopConf.setBoolean("hive.optimize.index.filter", true)
       }
@@ -197,6 +201,7 @@ case class OrcFileFormat() extends FileFormat
 
     case _: AnsiIntervalType => false
     case _: TimeType => false
+    case _: GeometryType | _: GeographyType => false
     case _: AtomicType => true
 
     case st: StructType => st.forall { f => supportDataType(f.dataType) }
@@ -209,6 +214,43 @@ case class OrcFileFormat() extends FileFormat
     case udt: UserDefinedType[_] => supportDataType(udt.sqlType)
 
     case _ => false
+  }
+
+  // Removes the nanosecond timestamp fields, so that no predicate on them is pushed down. The
+  // search argument reaches Hive's ORC reader through a Kryo round trip (see `toKryo`) that
+  // truncates a java.sql.Timestamp value to milliseconds, while ORC compares it with nanosecond
+  // statistics. Besides, the TIMESTAMP_LTZ(p) value that `OrcFilters` pushes down is for the
+  // `timestamp with local time zone` column of the native ORC writer, while this format writes a
+  // Hive `timestamp` column.
+  private def withoutNanosTimestamps(schema: StructType): StructType = StructType(schema.collect {
+    case f @ StructField(_, st: StructType, _, _) => f.copy(dataType = withoutNanosTimestamps(st))
+    case f if !f.dataType.isInstanceOf[AnyTimestampNanoType] => f
+  })
+
+  // Whether the filter has a TIMESTAMP value with a sub-millisecond part. Such a top-level filter
+  // is not pushed down, because the Kryo round trip of the search argument (see `toKryo`)
+  // truncates the value to milliseconds, while ORC compares it with nanosecond statistics.
+  private def hasSubMillisTimestamp(filter: Filter): Boolean = {
+    import org.apache.spark.sql.sources._
+
+    def isSubMillis(value: Any): Boolean = value match {
+      case t: Timestamp => t.getNanos % NANOS_PER_MILLIS != 0
+      case i: Instant => i.getNano % NANOS_PER_MILLIS != 0
+      case _ => false
+    }
+    filter match {
+      case And(left, right) => hasSubMillisTimestamp(left) || hasSubMillisTimestamp(right)
+      case Or(left, right) => hasSubMillisTimestamp(left) || hasSubMillisTimestamp(right)
+      case Not(child) => hasSubMillisTimestamp(child)
+      case EqualTo(_, value) => isSubMillis(value)
+      case EqualNullSafe(_, value) => isSubMillis(value)
+      case LessThan(_, value) => isSubMillis(value)
+      case LessThanOrEqual(_, value) => isSubMillis(value)
+      case GreaterThan(_, value) => isSubMillis(value)
+      case GreaterThanOrEqual(_, value) => isSubMillis(value)
+      case In(_, values) => values.exists(isSubMillis)
+      case _ => false
+    }
   }
 
   // HIVE-11253 moved `toKryo` from `SearchArgument` to `storage-api` module.
@@ -224,6 +266,29 @@ case class OrcFileFormat() extends FileFormat
 
 private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   extends HiveInspectors {
+  private def toHiveCompatibleDataType(dataType: DataType): DataType = {
+    dataType match {
+      case _: TimestampNTZNanosType | _: TimestampLTZNanosType =>
+        TimestampType
+      // Hive types have no collations, and its type parser rejects `string collate <name>`.
+      case s: StringType =>
+        StringHelper.removeCollation(s)
+      case StructType(fields) =>
+        StructType(fields.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
+      case ArrayType(elementType, containsNull) =>
+        ArrayType(toHiveCompatibleDataType(elementType), containsNull)
+      case MapType(keyType, valueType, valueContainsNull) =>
+        MapType(
+          toHiveCompatibleDataType(keyType),
+          toHiveCompatibleDataType(valueType),
+          valueContainsNull)
+      case other =>
+        other
+    }
+  }
+
+  private[this] val hiveCompatibleSchema = StructType(
+    dataSchema.map(f => f.copy(dataType = toHiveCompatibleDataType(f.dataType))))
 
   def serialize(row: InternalRow): Writable = {
     wrapOrcStruct(cachedOrcStruct, structOI, row)
@@ -233,7 +298,9 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
   private[this] val serializer = {
     val table = new Properties()
     table.setProperty("columns", dataSchema.fieldNames.mkString(","))
-    table.setProperty("columns.types", dataSchema.map(_.dataType.catalogString).mkString(":"))
+    table.setProperty(
+      "columns.types",
+      hiveCompatibleSchema.map(_.dataType.catalogString).mkString(":"))
 
     val serde = new OrcSerde
     serde.initialize(conf, table)
@@ -242,7 +309,7 @@ private[orc] class OrcSerializer(dataSchema: StructType, conf: Configuration)
 
   // Object inspector converted from the schema of the relation to be serialized.
   val structOI = {
-    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(dataSchema.catalogString)
+    val typeInfo = TypeInfoUtils.getTypeInfoFromTypeString(hiveCompatibleSchema.catalogString)
     OrcStruct.createObjectInspector(typeInfo.asInstanceOf[StructTypeInfo])
       .asInstanceOf[SettableStructObjectInspector]
   }
@@ -335,6 +402,8 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
     val unsafeProjection = UnsafeProjection.create(requiredSchema)
     val forcePositionalEvolution = OrcConf.FORCE_POSITIONAL_EVOLUTION.getBoolean(conf)
 
+    def isNanosTimestamp(dt: DataType): Boolean = dt.isInstanceOf[AnyTimestampNanoType]
+
     def unwrap(oi: StructObjectInspector): Iterator[InternalRow] = {
       val (fieldRefs, fieldOrdinals) = requiredSchema.zipWithIndex.map {
         case (field, ordinal) =>
@@ -350,7 +419,17 @@ private[orc] object OrcFileFormat extends HiveInspectors with Logging {
           ref -> ordinal
       }.unzip
 
-      val unwrappers = fieldRefs.map(r => if (r == null) null else unwrapperFor(r))
+      val unwrappers = fieldRefs.zip(requiredSchema).map {
+        case (null, _) => null
+        // Nanos timestamps (including those nested in struct/array/map) need the target Catalyst
+        // type to produce TimestampNanosVal; the data-type-aware unwrapper handles both the
+        // top-level and nested cases, while everything else keeps the primitive fast paths.
+        case (fieldRef, field) if field.dataType.existsRecursively(isNanosTimestamp) =>
+          val unwrapper = unwrapperFor(fieldRef.getFieldObjectInspector, field.dataType)
+          (value: Any, row: InternalRow, ordinal: Int) => row.update(ordinal, unwrapper(value))
+        case (fieldRef, _) =>
+          unwrapperFor(fieldRef)
+      }
 
       iterator.map { value =>
         val raw = deserializer.deserialize(value)

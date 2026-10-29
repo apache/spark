@@ -23,14 +23,17 @@ import scala.collection.mutable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
+import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.SubExprUtils.wrapOuterReference
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
+import org.apache.spark.sql.catalyst.util.toPrettySQL
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.NullType
 
 trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
 
@@ -147,8 +150,20 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
           // When strict DataFrame column resolution is disabled, we also allow name-based
           // resolution as a fallback for tagged attributes.
           val result = withPosition(u) {
-            resolveColumnByName(nameParts)
-              .orElse(LiteralFunctionResolution.resolve(nameParts))
+            // A parameterless built-in function takes precedence over a SQL UDF parameter
+            // that happens to share its name (per the documented SQL name resolution rules).
+            // Real columns from relations -- which don't carry the
+            // SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY -- continue to win as before.
+            // Gated by a legacy kill-switch conf so the pre-fix behavior can be restored.
+            val column = resolveColumnByName(nameParts)
+            val resolved = column match {
+              case Some(c) if isSQLFunctionParameterAlias(c) && !conf.getConf(
+                  SQLConf.LEGACY_ALLOW_UDF_PARAMETER_TO_SHADOW_PARAMETERLESS_FUNCTION) =>
+                LiteralFunctionResolution.resolve(nameParts).orElse(column)
+              case Some(_) => column
+              case None => LiteralFunctionResolution.resolve(nameParts)
+            }
+            resolved
               .map {
                 // We trim unnecessary alias here. Note that, we cannot trim the alias at top-level,
                 // as we should resolve `UnresolvedAttribute` to a named expression. The caller side
@@ -180,7 +195,19 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
             field
           }
           if (newChild.resolved) {
-            ExtractValue(child = newChild, extraction = resolvedField, resolver = resolver)
+            // applyOrNull propagates NULL when the base is NullType instead of throwing
+            // INVALID_EXTRACT_BASE_FIELD_TYPE, consistent with multipart field access (col.a).
+            val extracted = ExtractValue.applyOrNull(
+              child = newChild, extraction = resolvedField, resolver = resolver)
+            // A NullType base yields a bare NULL literal, which would otherwise produce an output
+            // column named `NULL`. Alias it with the extraction's text (e.g. `col[0]`) to keep a
+            // stable column name; CleanupAliases later trims this alias where it's not a top-level
+            // projection output.
+            if (newChild.dataType == NullType) {
+              Alias(extracted, toPrettySQL(u.copy(child = newChild, extraction = resolvedField)))()
+            } else {
+              extracted
+            }
           } else {
             u.copy(child = newChild, extraction = resolvedField)
           }
@@ -482,6 +509,22 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     resolveVariables(resolveOuterRef(e))
   }
 
+  /**
+   * Wrap a top-level [[OuterReference]] of a subquery's Project/Aggregate output in an [[Alias]]
+   * so that it gets a fresh ExprId in the subquery's scope. Without the [[Alias]] the outer
+   * attribute's ExprId leaks through the operator's output (since [[OuterReference.toAttribute]]
+   * strips the wrapper), and downstream operators referencing that leaked ExprId can produce
+   * incorrect expression-id tracking. Expressions that are already a [[NamedExpression]] other
+   * than a bare [[OuterReference]] (e.g. an [[Alias]] from struct star expansion or an explicit
+   * alias) are left unchanged.
+   */
+  protected def aliasIfOuterReference(e: NamedExpression): NamedExpression = e match {
+    case _: Alias => e
+    case outerReference: OuterReference =>
+      Alias(outerReference, toPrettySQL(outerReference.e))()
+    case _ => e
+  }
+
   def resolveExprInAssignment(
       expr: Expression,
       hostPlan: LogicalPlan,
@@ -561,9 +604,10 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   // Candidate threaded through the plan walk:
   //   - expr:   the resolved expression
   //   - depth:  the depth at which it was matched
-  //   - hidden: whether the candidate's references live in `p.metadataOutput`
-  //             at some plan node along the way (e.g. a natural/USING join
-  //             wrapper that hides a join key via `Project.hiddenOutputTag`).
+  //   - hidden: whether the candidate's references are not all visible at some
+  //             plan node along the way, e.g. at a natural/USING join wrapper that
+  //             hides a join key via `Project.hiddenOutputTag` (see the filter in
+  //             `resolveDataFrameColumnRecursively`).
   private case class Candidate(expr: NamedExpression, depth: Int, hidden: Boolean)
 
   private def resolveDataFrameColumnByPlanId(
@@ -597,7 +641,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
       // case, return an empty Seq to delay the failure, so it is possible to be
       // resolved in the next iteration.
       // Always initialize `hidden = false` here; the filter below will set it
-      // correctly based on whether the references live in `p.metadataOutput`.
+      // correctly based on whether the references are all visible at `p`.
       (resolved.map(Candidate(_, currentDepth, hidden = false)).toSeq, true)
     } else {
       val children = p match {
@@ -645,8 +689,23 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
     // via `Project.hiddenOutputTag`). We accept that here but tag the candidate
     // as `hidden` so the top-level merge in `resolveDataFrameColumn` can prefer
     // a regular (p.output) match over hidden (p.metadataOutput) ones.
+    //
+    // A candidate becomes hidden at `p` when its references are not all visible at `p`,
+    // and once hidden it stays hidden further up (`c.hidden`). An attribute is visible
+    // at `p` if it is in `p.output` and `p` does not hide it itself, i.e. it is not in
+    // the part of `p.metadataOutput` that `p` introduces rather than inherits from its
+    // children. An attribute can be in both `p.output` and `p.metadataOutput`:
+    //   - A Project that re-selects a USING join's hidden right key inherits the key in
+    //     its `metadataOutput` (`Project.metadataOutput` falls back to the child's), and
+    //     so does a USING join wrapper above it. The key is visible at both.
+    //   - `AddMetadataColumns` adds a hidden key to the `output` of the USING join
+    //     wrapper that hides it, and a metadata column to the `output` of a relation.
+    //     That node introduces the attribute in its `metadataOutput`, so it stays hidden.
+    val introducedHidden = AttributeSet(p.metadataOutput) --
+      p.children.flatMap(_.metadataOutput)
+    val visible = p.outputSet -- introducedHidden
     val filtered = candidates.flatMap { c =>
-      val hidden = c.hidden || c.expr.references.subsetOf(AttributeSet(p.metadataOutput))
+      val hidden = c.hidden || !c.expr.references.subsetOf(visible)
       if (c.expr.references.subsetOf(AttributeSet(p.output ++ p.metadataOutput))) {
         Some(c.copy(hidden = hidden))
       } else {
@@ -696,4 +755,18 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
        r.expressions.forall(_.references.subsetOf(outputSet))
      }
    }
+
+  /**
+   * True if `e` originates from a SQL UDF input parameter alias, as marked by
+   * `SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY` at parameter-alias
+   * construction sites. Unwraps `OuterReference` so callers that pass post-outer-resolution
+   * expressions still get a correct answer; the metadata lives on the underlying named
+   * expression.
+   */
+  private def isSQLFunctionParameterAlias(e: Expression): Boolean = e match {
+    case OuterReference(inner) => isSQLFunctionParameterAlias(inner)
+    case n: NamedExpression =>
+      n.metadata.contains(SessionCatalog.SQL_FUNCTION_PARAMETER_ALIAS_METADATA_KEY)
+    case _ => false
+  }
 }

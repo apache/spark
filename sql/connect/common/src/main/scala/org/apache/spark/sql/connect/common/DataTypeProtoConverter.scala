@@ -51,19 +51,12 @@ object DataTypeProtoConverter {
       case proto.DataType.KindCase.DECIMAL => toCatalystDecimalType(t.getDecimal)
 
       case proto.DataType.KindCase.STRING => toCatalystStringType(t.getString)
-      case proto.DataType.KindCase.CHAR => CharType(t.getChar.getLength)
-      case proto.DataType.KindCase.VAR_CHAR => VarcharType(t.getVarChar.getLength)
+      case proto.DataType.KindCase.CHAR => toCatalystCharType(t.getChar)
+      case proto.DataType.KindCase.VAR_CHAR => toCatalystVarcharType(t.getVarChar)
 
       case proto.DataType.KindCase.DATE => DateType
       case proto.DataType.KindCase.TIMESTAMP => TimestampType
       case proto.DataType.KindCase.TIMESTAMP_NTZ => TimestampNTZType
-      case proto.DataType.KindCase.TIME =>
-        if (t.getTime.hasPrecision) {
-          TimeType(t.getTime.getPrecision)
-        } else {
-          TimeType()
-        }
-
       case proto.DataType.KindCase.CALENDAR_INTERVAL => CalendarIntervalType
       case proto.DataType.KindCase.YEAR_MONTH_INTERVAL =>
         toCatalystYearMonthIntervalType(t.getYearMonthInterval)
@@ -109,6 +102,12 @@ object DataTypeProtoConverter {
 
   private def toCatalystStringType(t: proto.DataType.String): StringType =
     if (t.getCollation.nonEmpty) StringType(t.getCollation) else StringType
+
+  private def toCatalystCharType(t: proto.DataType.Char): CharType =
+    if (t.hasCollation) CharType(t.getLength, t.getCollation) else CharType(t.getLength)
+
+  private def toCatalystVarcharType(t: proto.DataType.VarChar): VarcharType =
+    if (t.hasCollation) VarcharType(t.getLength, t.getCollation) else VarcharType(t.getLength)
 
   private def toCatalystYearMonthIntervalType(t: proto.DataType.YearMonthInterval) = {
     (t.hasStartField, t.hasEndField) match {
@@ -158,10 +157,18 @@ object DataTypeProtoConverter {
     }
 
     if (t.hasJvmClass) {
-      SparkClassUtils
-        .classForName[UserDefinedType[_]](t.getJvmClass)
-        .getConstructor()
-        .newInstance()
+      // Verify the class is a UserDefinedType before constructing it. newInstance() runs the
+      // class's no-arg constructor, so load it without initializing and check the type first,
+      // rather than instantiating an arbitrary client-provided class name and relying on a
+      // later cast (which happens only after the constructor has already run).
+      val clazz =
+        SparkClassUtils.classForName[UserDefinedType[_]](t.getJvmClass, initialize = false)
+      if (!classOf[UserDefinedType[_]].isAssignableFrom(clazz)) {
+        throw InvalidPlanInput(
+          "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+          Map("udtClass" -> t.getJvmClass))
+      }
+      clazz.getConstructor().newInstance()
     } else {
       if (!t.hasPythonClass || !t.hasSerializedPythonClass || !t.hasSqlType) {
         throw InvalidPlanInput("CONNECT_INVALID_PLAN.PYTHON_UDT_MISSING_FIELDS", Map.empty)
@@ -211,15 +218,23 @@ object DataTypeProtoConverter {
           .build()
 
       case c: CharType =>
+        val charBuilder = proto.DataType.Char.newBuilder().setLength(c.length)
+        c.collation.foreach { collationId =>
+          charBuilder.setCollation(CollationFactory.fetchCollation(collationId).collationName)
+        }
         proto.DataType
           .newBuilder()
-          .setChar(proto.DataType.Char.newBuilder().setLength(c.length).build())
+          .setChar(charBuilder.build())
           .build()
 
       case v: VarcharType =>
+        val varcharBuilder = proto.DataType.VarChar.newBuilder().setLength(v.length)
+        v.collation.foreach { collationId =>
+          varcharBuilder.setCollation(CollationFactory.fetchCollation(collationId).collationName)
+        }
         proto.DataType
           .newBuilder()
-          .setVarChar(proto.DataType.VarChar.newBuilder().setLength(v.length).build())
+          .setVarChar(varcharBuilder.build())
           .build()
 
       // StringType must be matched after CharType and VarcharType
@@ -240,12 +255,6 @@ object DataTypeProtoConverter {
       case TimestampType => ProtoDataTypes.TimestampType
 
       case TimestampNTZType => ProtoDataTypes.TimestampNTZType
-
-      case TimeType(precision) =>
-        proto.DataType
-          .newBuilder()
-          .setTime(proto.DataType.Time.newBuilder().setPrecision(precision).build())
-          .build()
 
       case CalendarIntervalType => ProtoDataTypes.CalendarIntervalType
 

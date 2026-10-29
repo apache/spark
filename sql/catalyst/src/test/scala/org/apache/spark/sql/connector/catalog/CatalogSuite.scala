@@ -77,6 +77,59 @@ class CatalogSuite extends SparkFunSuite {
     assert(loaded.getClass == catalog.getClass)
   }
 
+  test("TableInfo and DelegatingTable carry display-only properties separately") {
+    val displayProperties = new util.HashMap[String, String]()
+    displayProperties.put("catalog-label", "catalog-value")
+    val info = new TableInfo.Builder()
+      .withProperties(util.Map.of("persisted", "stored"))
+      .withDisplayProperties(displayProperties)
+      .build()
+    displayProperties.put("catalog-label", "changed")
+    val table = new DelegatingTable(info, "table")
+
+    assert(table.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+    assert(table.properties() === util.Map.of("persisted", "stored"))
+    intercept[UnsupportedOperationException] {
+      table.displayProperties().put("catalog-label", "changed")
+    }
+    val defaultTable = new DelegatingTable(new TableInfo.Builder().build(), "default")
+    assert(defaultTable.displayProperties().isEmpty)
+  }
+
+  gridTest("display properties survive copies, pinning and alterations")(
+      Seq("InMemoryTableCatalog", "InMemoryRowLevelOperationTableCatalog")) { catalogName =>
+    val catalog = if (catalogName == "InMemoryRowLevelOperationTableCatalog") {
+      new InMemoryRowLevelOperationTableCatalog
+    } else {
+      new InMemoryTableCatalog
+    }
+    // The row-level catalog always copies on load; enable this for InMemoryTableCatalog too.
+    catalog.initialize("test", new CaseInsensitiveStringMap(util.Map.of("copyOnLoad", "true")))
+    val table = catalog.createTable(testIdent, new TableInfo.Builder()
+      .withColumns(columns)
+      .withProperties(util.Map.of("persisted", "stored"))
+      .build()).asInstanceOf[InMemoryBaseTable]
+    table.setDisplayProperties(util.Map.of("catalog-label", "catalog-value"))
+    table.setVersion("3")
+    table.setValidatedVersion("2")
+    val loaded = catalog.loadTable(testIdent).asInstanceOf[InMemoryBaseTable]
+    assert(loaded ne table)
+    assert(loaded.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+    assert(loaded.version() === "3")
+    assert(loaded.validatedVersion() === "2")
+    catalog.pinTable(testIdent, "snapshot")
+
+    val altered = catalog.alterTable(testIdent, TableChange.setProperty("persisted", "updated"))
+      .asInstanceOf[InMemoryBaseTable]
+    assert(altered.validatedVersion() === "2")
+    val current = catalog.loadTable(testIdent)
+    assert(current.properties() === util.Map.of("persisted", "updated"))
+    assert(current.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+    val snapshot = catalog.loadTable(testIdent, "snapshot")
+    assert(snapshot.properties() === util.Map.of("persisted", "stored"))
+    assert(snapshot.displayProperties() === util.Map.of("catalog-label", "catalog-value"))
+  }
+
   test("listTables") {
     val catalog = newCatalog()
     val ident1 = Identifier.of(Array("ns"), "test_table_1")
@@ -151,7 +204,7 @@ class CatalogSuite extends SparkFunSuite {
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("test", "`", ".", "test_table"))
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
     assert(table.properties.asScala == Map())
 
     assert(catalog.tableExists(testIdent))
@@ -175,7 +228,7 @@ class CatalogSuite extends SparkFunSuite {
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("test", "`", ".", "test_table"))
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
     assert(table.properties.asScala == Map())
 
     assert(partCatalog.tableExists(testIdent))
@@ -198,7 +251,7 @@ class CatalogSuite extends SparkFunSuite {
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("test", "`", ".", "test_table"))
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
     assert(table.properties == properties)
 
     assert(catalog.tableExists(testIdent))
@@ -220,7 +273,7 @@ class CatalogSuite extends SparkFunSuite {
 
     val parsed = CatalystSqlParser.parseMultipartIdentifier(table.name)
     assert(parsed == Seq("test", "`", ".", "test_table"))
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
     assert(table.constraints === constraints)
     assert(table.properties.asScala == Map())
 
@@ -419,11 +472,12 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent, TableChange.addColumn(Array("ts"), TimestampType))
 
-    assert(updated.columns === columns :+ Column.create("ts", TimestampType))
+    assert(CatalogV2Util.clearIds(updated.columns) ===
+      columns :+ Column.create("ts", TimestampType))
   }
 
   test("alterTable: add required column") {
@@ -436,12 +490,13 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.addColumn(Array("ts"), TimestampType, false))
 
-    assert(updated.columns === columns :+ Column.create("ts", TimestampType, false))
+    assert(CatalogV2Util.clearIds(updated.columns) ===
+      columns :+ Column.create("ts", TimestampType, false))
   }
 
   test("alterTable: add column with comment") {
@@ -454,13 +509,13 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.addColumn(Array("ts"), TimestampType, false, "comment text"))
 
     val tsColumn = Column.create("ts", TimestampType, false, "comment text", null)
-    assert(updated.columns === (columns :+ tsColumn))
+    assert(CatalogV2Util.clearIds(updated.columns) === (columns :+ tsColumn))
   }
 
   test("alterTable: add nested column") {
@@ -476,14 +531,14 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.addColumn(Array("point", "z"), DoubleType))
 
     val expectedColumns = columns :+ Column.create("point", pointStruct.add("z", DoubleType))
 
-    assert(updated.columns === expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) === expectedColumns)
   }
 
   test("alterTable: add column to primitive field fails") {
@@ -496,7 +551,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -506,7 +561,7 @@ class CatalogSuite extends SparkFunSuite {
       parameters = Map("name" -> "data"))
 
     // the table has not changed
-    assert(catalog.loadTable(testIdent).columns === columns)
+    assert(CatalogV2Util.clearIds(catalog.loadTable(testIdent).columns) === columns)
   }
 
   test("alterTable: add field to missing column fails") {
@@ -519,7 +574,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -540,12 +595,12 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent, TableChange.updateColumnType(Array("id"), LongType))
 
     val expectedColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) sameElements expectedColumns)
   }
 
   test("alterTable: update column nullability") {
@@ -561,14 +616,14 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === originalColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === originalColumns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnNullability(Array("id"), true))
 
     val expectedColumns = Array(
       Column.create("id", IntegerType, true), Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) sameElements expectedColumns)
   }
 
   test("alterTable: update missing column fails") {
@@ -581,7 +636,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -602,7 +657,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "comment text"))
@@ -611,7 +666,7 @@ class CatalogSuite extends SparkFunSuite {
       Column.create("id", IntegerType, true, "comment text", null),
       Column.create("data", StringType)
     )
-    assert(updated.columns sameElements expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) sameElements expectedColumns)
   }
 
   test("alterTable: replace comment") {
@@ -624,7 +679,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     catalog.alterTable(testIdent, TableChange.updateColumnComment(Array("id"), "comment text"))
 
@@ -635,7 +690,7 @@ class CatalogSuite extends SparkFunSuite {
     val updated = catalog.alterTable(testIdent,
       TableChange.updateColumnComment(Array("id"), "replacement comment"))
 
-    assert(updated.columns sameElements expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) sameElements expectedColumns)
   }
 
   test("alterTable: add comment to missing column fails") {
@@ -648,7 +703,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -669,13 +724,13 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent, TableChange.renameColumn(Array("id"), "some_id"))
 
     val expectedColumns = Array(
       Column.create("some_id", IntegerType), Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) sameElements expectedColumns)
   }
 
   test("alterTable: rename nested column") {
@@ -691,7 +746,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.renameColumn(Array("point", "x"), "first"))
@@ -699,7 +754,7 @@ class CatalogSuite extends SparkFunSuite {
     val newPointStruct = new StructType().add("first", DoubleType).add("y", DoubleType)
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
 
-    assert(updated.columns === expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) === expectedColumns)
   }
 
   test("alterTable: rename struct column") {
@@ -715,7 +770,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.renameColumn(Array("point"), "p"))
@@ -723,7 +778,7 @@ class CatalogSuite extends SparkFunSuite {
     val newPointStruct = new StructType().add("x", DoubleType).add("y", DoubleType)
     val expectedColumns = columns :+ Column.create("p", newPointStruct)
 
-    assert(updated.columns === expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) === expectedColumns)
   }
 
   test("alterTable: rename missing column fails") {
@@ -736,7 +791,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -760,7 +815,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.renameColumn(Array("point", "x"), "first"),
@@ -769,7 +824,7 @@ class CatalogSuite extends SparkFunSuite {
     val newPointStruct = new StructType().add("first", DoubleType).add("second", DoubleType)
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
 
-    assert(updated.columns() === expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns()) === expectedColumns)
   }
 
   test("alterTable: delete top-level column") {
@@ -782,13 +837,13 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.deleteColumn(Array("id"), false))
 
     val expectedColumns = Array(Column.create("data", StringType))
-    assert(updated.columns sameElements expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) sameElements expectedColumns)
   }
 
   test("alterTable: delete nested column") {
@@ -804,7 +859,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
 
     val updated = catalog.alterTable(testIdent,
       TableChange.deleteColumn(Array("point", "y"), false))
@@ -812,7 +867,7 @@ class CatalogSuite extends SparkFunSuite {
     val newPointStruct = new StructType().add("x", DoubleType)
     val expectedColumns = columns :+ Column.create("point", newPointStruct)
 
-    assert(updated.columns === expectedColumns)
+    assert(CatalogV2Util.clearIds(updated.columns) === expectedColumns)
   }
 
   test("alterTable: delete missing column fails") {
@@ -825,7 +880,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -836,7 +891,7 @@ class CatalogSuite extends SparkFunSuite {
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("missing_col"), true))
-    assert(table.columns === columns)
+    assert(CatalogV2Util.clearIds(table.columns) === columns)
   }
 
   test("alterTable: delete missing nested column fails") {
@@ -852,7 +907,7 @@ class CatalogSuite extends SparkFunSuite {
       .build()
     val table = catalog.createTable(testIdent, tableInfo)
 
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
 
     checkError(
       exception = intercept[SparkIllegalArgumentException] {
@@ -863,7 +918,7 @@ class CatalogSuite extends SparkFunSuite {
 
     // with if exists it should pass
     catalog.alterTable(testIdent, TableChange.deleteColumn(Array("point", "z"), true))
-    assert(table.columns === tableColumns)
+    assert(CatalogV2Util.clearIds(table.columns) === tableColumns)
   }
 
   test("alterTable: table does not exist") {

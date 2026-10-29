@@ -7,3 +7,6 @@ build/
 dist/
 ./setup.py
 ./setup.cfg
+# Transient copies made by dev/make-distribution.sh while building the sdists.
+/LICENSE
+/NOTICE

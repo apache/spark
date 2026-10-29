@@ -17,15 +17,14 @@
 
 import pandas as pd
 
-from pyspark.sql.types import LongType, StructType, StructField
 from pyspark.pandas.internal import (
-    InternalFrame,
     SPARK_DEFAULT_INDEX_NAME,
     SPARK_INDEX_NAME_FORMAT,
+    InternalFrame,
 )
 from pyspark.pandas.utils import spark_column_equals
+from pyspark.sql.types import LongType, StructField, StructType
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class InternalFrameTestsMixin:
@@ -134,7 +133,7 @@ class InternalFrameTestsMixin:
         )
 
 
-class InternalFrameTests(InternalFrameTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class InternalFrameTests(InternalFrameTestsMixin, PandasOnSparkTestCase):
     pass
 
 

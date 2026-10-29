@@ -82,7 +82,8 @@ case class ShowTablesExtendedExec(
     results.put("Catalog", catalogName)
     results.put("Namespace", identifier.namespace().quoted)
     results.put("Table", identifier.name())
-    val tableType = if (table.properties().containsKey(TableCatalog.PROP_EXTERNAL)) {
+    val tableProperties = table.properties()
+    val tableType = if (tableProperties.containsKey(TableCatalog.PROP_EXTERNAL)) {
       CatalogTableType.EXTERNAL
     } else {
       CatalogTableType.MANAGED
@@ -92,19 +93,18 @@ case class ShowTablesExtendedExec(
     CatalogV2Util.TABLE_RESERVED_PROPERTIES
       .filterNot(_ == TableCatalog.PROP_EXTERNAL)
       .foreach(propKey => {
-        if (table.properties.containsKey(propKey)) {
-          results.put(propKey.capitalize, table.properties.get(propKey))
+        if (tableProperties.containsKey(propKey)) {
+          results.put(propKey.capitalize, tableProperties.get(propKey))
         }
       })
 
-    val properties =
-      conf.redactOptions(table.properties.asScala.toMap).toList
-        .filter(kv => !CatalogV2Util.TABLE_RESERVED_PROPERTIES.contains(kv._1))
-        .sortBy(_._1).map {
-        case (key, value) => key + "=" + value
-      }.mkString("[", ",", "]")
-    if (!table.properties().isEmpty) {
-      results.put("Table Properties", properties.mkString("[", ", ", "]"))
+    val displayedTableProperties =
+      CatalogV2Util.tablePropertiesForDisplay(
+        tableProperties, table.displayProperties(), conf).toList
+        .sortBy(_._1)
+        .map { case (key, value) => key + "=" + value }
+    if (displayedTableProperties.nonEmpty) {
+      results.put("Table Properties", displayedTableProperties.mkString("[", ", ", "]"))
     }
 
     // Partition Provider & Partition Columns

@@ -28,7 +28,8 @@ import org.apache.spark.unsafe.types.UTF8String
 
 class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper {
 
-  val allSupportedRoundModes = Seq(ROUND_HALF_UP, ROUND_HALF_EVEN, ROUND_CEILING, ROUND_FLOOR)
+  val allSupportedRoundModes =
+    Seq(ROUND_HALF_UP, ROUND_HALF_EVEN, ROUND_CEILING, ROUND_FLOOR, ROUND_DOWN)
 
   /** Check that a Decimal has the given string representation, precision and scale */
   private def checkDecimal(d: Decimal, string: String, precision: Int, scale: Int): Unit = {
@@ -258,6 +259,33 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100).quot(Decimal(-33)) === Decimal(BigDecimal("-3")))
   }
 
+  test("SPARK-57937: div with target scale") {
+    // `div(that, scale)` must return the same result as `/` (which divides at
+    // `DecimalType.MAX_SCALE + 1` with ROUND_DOWN) followed by rounding to the same scale.
+    def checkDiv(a: Decimal, b: Decimal, scale: Int): Unit = {
+      val expected = (a / b).toPrecision(DecimalType.MAX_PRECISION, scale)
+      val actual = a.div(b, scale)
+      assert(actual.toJavaBigDecimal.compareTo(expected.toJavaBigDecimal) === 0,
+        s"$a.div($b, $scale)")
+    }
+    assert(Decimal(100).div(Decimal(0), 10) === null)
+    // Half-way cases, both signs.
+    checkDiv(Decimal("1.00"), Decimal("8.00"), 2)
+    checkDiv(Decimal("-1.00"), Decimal("8.00"), 2)
+    checkDiv(Decimal("1.05"), Decimal("-2.00"), 3)
+    // Non-terminating expansions.
+    checkDiv(Decimal("1.00"), Decimal("3.00"), 10)
+    checkDiv(Decimal("-2.00"), Decimal("7.00"), 38)
+    val rnd = new scala.util.Random(42)
+    for (_ <- 1 to 1000) {
+      // decimal(7, 2) operands, rounded to the scale of the decimal(17, 10) result type.
+      val a = Decimal(rnd.nextInt(19999999) - 9999999, 7, 2)
+      val b = Decimal(rnd.nextInt(9999998) + 1, 7, 2)
+      checkDiv(a, b, 10)
+      checkDiv(a, -b, 10)
+    }
+  }
+
   test("negate & abs") {
     assert(-Decimal(100) === Decimal(BigDecimal("-100")))
     assert(-Decimal(-100) === Decimal(BigDecimal("100")))
@@ -418,6 +446,43 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     }
   }
 
+  test("SPARK-60118: UTF8String to Decimal with exponent near Int.MaxValue") {
+    // The number of integral digits (precision - scale) of these values overflows Int.
+    Seq("1e2147483647", "-1E+2147483647", "12e2147483647",
+      "1.5e2147483647").foreach { string =>
+      assert(Decimal.fromString(UTF8String.fromString(string)) === null)
+      checkError(
+        exception = intercept[SparkArithmeticException](
+          Decimal.fromStringANSI(UTF8String.fromString(string))),
+        condition = "NUMERIC_OUT_OF_SUPPORTED_RANGE",
+        parameters = Map("value" -> string))
+    }
+    // Zero fits any decimal type whatever its exponent. "0e38" is the smallest exponent that
+    // used to be rejected, and "0e37" used to get precision 38.
+    Seq("0e37", "0e38", "0e39", "-0E+100", "0e2147483647").foreach { string =>
+      Seq(Decimal.fromString(UTF8String.fromString(string)),
+        Decimal.fromStringANSI(UTF8String.fromString(string))).foreach { d =>
+        assert(d === Decimal(0))
+        assert(d.precision === 1)
+        assert(d.scale === 0)
+      }
+    }
+    Seq(Decimal.fromString(UTF8String.fromString("0.00")),
+      Decimal.fromStringANSI(UTF8String.fromString("0.00"))).foreach { d =>
+      assert(d.precision === 2)
+      assert(d.scale === 2)
+    }
+    // With negative scales allowed, zero keeps its negative scale.
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq(Decimal.fromString(UTF8String.fromString("0e39")),
+        Decimal.fromStringANSI(UTF8String.fromString("0e39"))).foreach { d =>
+        assert(d === Decimal(0))
+        assert(d.precision === 1)
+        assert(d.scale === -39)
+      }
+    }
+  }
+
   // 18 is a max number of digits in Decimal's compact long
   test("SPARK-41554: decrease/increase scale by 18 and more on compact decimal") {
     val unscaledNums = Seq(
@@ -462,6 +527,86 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
       val bd = BigDecimal(unscaled, scaleFrom).setScale(scaleTo, roundMode)
       assert(decimal.toBigDecimal === bd,
         s"unscaled: $unscaled, scaleFrom: $scaleFrom, scaleTo: $scaleTo, mode: $roundMode")
+    }
+  }
+
+  test("SPARK-60119: changePrecision with a source scale far from the target scale") {
+    // A value below 0.01 ulp of the target scale rounds to 0 or +/-1 ulp depending only on its
+    // sign and the rounding mode, so it must round like a small value of the same sign.
+    Seq("1e-2147483647", "-1e-2147483647", "9.99e-100000000", "-1e-100000000",
+      "0e-2147483647").foreach { str =>
+      val bd = new java.math.BigDecimal(str)
+      allSupportedRoundModes.foreach { mode =>
+        val expected = BigDecimal(bd.signum, 50).setScale(2, mode)
+        val d = Decimal(bd)
+        assert(d.changePrecision(10, 2, mode), s"$str, $mode")
+        assert(d.toString === expected.toString, s"$str, $mode")
+      }
+    }
+
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq("1e2147483647", "-1e2147483646", "12e2147483647", "1e100000000").foreach { str =>
+        allSupportedRoundModes.foreach { mode =>
+          val d = Decimal(new java.math.BigDecimal(str))
+          assert(d.toPrecision(10, 2, mode) === null, s"$str, $mode")
+        }
+      }
+      val zero = Decimal(new java.math.BigDecimal("0e2147483647"))
+      assert(zero.changePrecision(10, 2))
+      assert(zero.toString === "0.00")
+
+      // A compact (long) input takes the Long branch first, where the scale change can exceed
+      // the Int range. These switch to the BigDecimal branch, so check their results directly.
+      Seq(
+        (1L, 1, -40, 10, 2, null),
+        (0L, 1, -2147483647, 10, 2, "0.00"),
+        (1L, 1, Int.MinValue, 38, 20, null)).foreach { case (unscaled, p, s, toP, toS, expected) =>
+        allSupportedRoundModes.foreach { mode =>
+          val compact = Decimal.createUnsafe(unscaled, p, s)
+          checkCompact(compact, true)
+          assert(Option(compact.toPrecision(toP, toS, mode)).map(_.toString).orNull === expected,
+            s"$unscaled, ($p, $s) -> ($toP, $toS), $mode")
+        }
+      }
+      // These stay in the Long branch, so compare with the same value in BigDecimal form.
+      Seq(100L, -100L).foreach { unscaled =>
+        allSupportedRoundModes.foreach { mode =>
+          val compact = Decimal.createUnsafe(unscaled, 3, 2)
+          checkCompact(compact, true)
+          val expanded = Decimal(java.math.BigDecimal.valueOf(unscaled, 2))
+          checkCompact(expanded, false)
+          assert(
+            Option(compact.toPrecision(1, -2147483647, mode)).map(_.toString) ===
+              Option(expanded.toPrecision(1, -2147483647, mode)).map(_.toString),
+            s"$unscaled, $mode")
+        }
+      }
+    }
+
+    // Values around the bounds of the shortcuts must round as BigDecimal.setScale does.
+    Seq(false, true).foreach { allowNegativeScale =>
+      withSQLConf(
+        SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> allowNegativeScale.toString) {
+        val targets =
+          Seq((10, 2), (3, 3), (5, 0)) ++ (if (allowNegativeScale) Seq((5, -3)) else Nil)
+        for {
+          // The long mantissas make the scale change large enough to take the shortcuts.
+          mantissa <- Seq("1", "4.9", "5", "5.1", "9.99", "9.995",
+            "1." + "0" * 79 + "1", "4." + "9" * 80, "5." + "0" * 80, "5." + "0" * 79 + "1",
+            "9." + "9" * 80)
+          exponent <- -8 to 12
+          sign <- Seq("", "-")
+          mode <- allSupportedRoundModes
+          (precision, scale) <- targets
+        } {
+          val bd = new java.math.BigDecimal(s"$sign${mantissa}e$exponent")
+          val rounded = BigDecimal(bd).setScale(scale, mode)
+          val expected = if (rounded.precision > precision) null else rounded.toString
+          val d = Decimal(bd).toPrecision(precision, scale, mode)
+          assert(Option(d).map(_.toString).orNull === expected,
+            s"$bd, $mode, ($precision, $scale)")
+        }
+      }
     }
   }
 }

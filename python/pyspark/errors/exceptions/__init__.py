@@ -19,11 +19,12 @@
 def _write_self() -> None:
     import json
     from pathlib import Path
+
     from pyspark.errors import error_classes
 
     ERRORS_DIR = Path(__file__).parents[1]
 
-    with open(ERRORS_DIR / "error-conditions.json", "w") as f:
+    with open(ERRORS_DIR / "error-conditions.json", "w", encoding="utf-8") as f:
         json.dump(
             error_classes.ERROR_CLASSES_MAP,
             f,

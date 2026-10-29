@@ -24,8 +24,9 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch,
 import org.apache.spark.sql.catalyst.catalog.{FunctionResource, RoutineLanguage}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.DescribeCommandSchema
+import org.apache.spark.sql.catalyst.plans.{DescribeCommandSchema, QueryPlan}
 import org.apache.spark.sql.catalyst.trees.BinaryLike
+import org.apache.spark.sql.catalyst.trees.TreePattern.{DELETE_FROM_TABLE, MERGE_INTO_TABLE, REPLACE_DATA, TreePattern, UPDATE_TABLE, WRITE_DELTA}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.{ordinalNumber, toSQLExpr}
@@ -33,7 +34,7 @@ import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.{IdentifierHelper, MultipartIdentifierHelper}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.procedures.BoundProcedure
-import org.apache.spark.sql.connector.expressions.Transform
+import org.apache.spark.sql.connector.expressions.{SortOrder => V2SortOrder, Transform}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.write.{DeltaWrite, RowLevelOperation, RowLevelOperationTable, SupportsDelta, Write}
 import org.apache.spark.sql.connector.write.RowLevelOperation.Command.{DELETE, MERGE, UPDATE}
@@ -42,8 +43,10 @@ import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExtractV2Table}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, MapType, MetadataBuilder, StringType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.collection.BitSet
 
 // For v2 DML commands, it may end up with the v1 fallback code path and need to build a DataFrame
 // which is required by the DS v1 API. We need to keep the analyzed input query plan to build
@@ -106,6 +109,18 @@ trait V2WriteCommand
 
   override def child: LogicalPlan = query
 
+  // `table` is a non-child slot, so the default tree-pattern propagation in TreeNode/QueryPlan
+  // does not see patterns inside it. Add `table`'s bits so that `containsPattern(...)` pruning
+  // correctly reports patterns living in `table` (e.g. `PLAN_WITH_UNRESOLVED_IDENTIFIER`,
+  // `PARAMETER`). Only `OverwriteByExpression` is constructed at parse time with a placeholder
+  // in `table`, but applying this uniformly across all `V2WriteCommand`s keeps the invariant
+  // consistent for any future analyzer-built node that lands a placeholder in the same slot.
+  override protected def getDefaultTreePatternBits: BitSet = {
+    val bits = super.getDefaultTreePatternBits
+    bits.union(table.treePatternBits)
+    bits
+  }
+
   override lazy val resolved: Boolean = table.resolved && query.resolved && outputResolved
 
   def outputResolved: Boolean = {
@@ -139,6 +154,12 @@ trait V2WriteCommand
 
   def withNewQuery(newQuery: LogicalPlan): V2WriteCommand
   def withNewTable(newTable: NamedRelation): V2WriteCommand
+}
+
+/** Trait for streaming write commands that participate in DSv2 transactions. */
+trait V2StreamingWriteCommand extends TransactionalWrite {
+  override def table: NamedRelation
+  def withNewTable(newTable: NamedRelation): V2StreamingWriteCommand
 }
 
 trait V2PartitionCommand extends UnaryCommand {
@@ -428,6 +449,8 @@ case class ReplaceData(
   override protected def withNewChildInternal(newChild: LogicalPlan): ReplaceData = {
     copy(query = newChild)
   }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(REPLACE_DATA)
 }
 
 /**
@@ -538,6 +561,8 @@ case class WriteDelta(
   override protected def withNewChildInternal(newChild: LogicalPlan): WriteDelta = {
     copy(query = newChild)
   }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(WRITE_DELTA)
 }
 
 trait V2CreateTableAsSelectPlan
@@ -612,11 +637,17 @@ trait V2CreateTablePlan extends LogicalPlan {
     name.asInstanceOf[ResolvedIdentifier].identifier
   }
 
+  /** The requested write ordering, empty when the statement did not ask for one. */
+  def writeOrdering: Seq[V2SortOrder]
+
   /**
    * Creates a copy of this node with the new partitioning transforms. This method is used to
    * rewrite the partition transforms normalized according to the table schema.
    */
   def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan
+
+  /** Creates a copy of this node with the new write ordering. */
+  def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan
 }
 
 /**
@@ -627,7 +658,10 @@ case class CreateTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    ignoreIfExists: Boolean)
+    ignoreIfExists: Boolean,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -637,6 +671,10 @@ case class CreateTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -685,13 +723,20 @@ case class CreateTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     ignoreIfExists: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = copy(isAnalyzed = true)
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
@@ -784,7 +829,7 @@ case class CreateStreamingTableAsSelect(
 
 /**
  * Command parsed from `CREATE STREAMING TABLE ...` SQL syntax. This command serves as a logical
- * representation of the matching SQL syntac and cannot be executed. It is instead interpreted by
+ * representation of the matching SQL syntax and cannot be executed. It is instead interpreted by
  * the pipeline submodule during a pipeline execution.
  *
  * Differs from [[CreateStreamingTableAsSelect]] in that the AS [subquery] clause is not provided
@@ -806,6 +851,83 @@ case class CreateStreamingTable(
 }
 
 /**
+ * Command parsed from `CREATE STREAMING TABLE <name> FLOW AUTO CDC ...` SQL syntax.
+ * This command serves as a parse-time placeholder for a pipeline CDC definition and cannot
+ * be executed directly. It is instead interpreted by the pipeline submodule during a pipeline
+ * execution.
+ *
+ * The target of the CDC operation is the streaming table itself (given by [[name]]).
+ *
+ * [[name]] and [[source]] are exposed as the node's children (left and right respectively) so the
+ * analyzer resolves them through the normal plan resolution path, mirroring how
+ * [[CreatePipelineDatasetAsSelect]] exposes its name and query.
+ *
+ * @param name           The streaming table name, which also serves as the CDC target. Exposed as
+ *                       the node's left child.
+ * @param columns        User-specified columns for the streaming table.
+ * @param partitioning   Column-based partitioning for the streaming table.
+ * @param tableSpec      Additional table specs.
+ * @param ifNotExists    Whether the table should only be created if it doesn't already exist.
+ * @param source         The source relation providing the change events, parsed from a general
+ *                       `relationPrimary` (typically a STREAM(...) source marked as a streaming
+ *                       read). Exposed as the node's right child.
+ * @param keys           Column(s) that uniquely identify a row in the target table.
+ * @param deleteCondition An optional expression that marks a source row as a DELETE operation.
+ * @param sequenceByExpr Expression that orders CDC events to resolve out-of-order arrivals.
+ * @param includeColumns An explicit list of source columns to include. [[None]] when no COLUMNS
+ *                       clause was specified. Mutually exclusive with [[excludeColumns]].
+ * @param excludeColumns Source columns to exclude. [[None]] when no COLUMNS clause was specified.
+ *                       Mutually exclusive with [[includeColumns]].
+ * @param storedAsScdType The SCD type of the target table, from `STORED AS SCD TYPE <n>`. 1 for
+ *                       SCD Type 1 (upsert) and 2 for SCD Type 2 (history-tracking). Defaults to
+ *                       1 when no `STORED AS` clause is specified.
+ * @param trackHistoryColumns SCD2-only. An explicit list of columns whose value change opens a
+ *                       new history record, from `TRACK HISTORY ON (...)`. [[None]] when no TRACK
+ *                       HISTORY clause was specified. Mutually exclusive with
+ *                       [[trackHistoryExceptColumns]].
+ * @param trackHistoryExceptColumns SCD2-only. Columns excluded from history tracking, from
+ *                       `TRACK HISTORY ON * EXCEPT (...)`. [[None]] when no TRACK HISTORY clause
+ *                       was specified. Mutually exclusive with [[trackHistoryColumns]].
+ * @param ignoreNullUpdates Whether an `IGNORE NULL UPDATES` clause was specified. When true, null
+ *                       values in an incoming update are ignored and the existing target value is
+ *                       preserved. The bare clause applies to all columns; the two column lists
+ *                       below scope it to a subset.
+ * @param ignoreNullUpdatesColumns The subset of columns for which null updates are ignored, from
+ *                       `IGNORE NULL UPDATES ON (...)`. [[None]] when the clause is absent or names
+ *                       no subset. Mutually exclusive with [[ignoreNullUpdatesExceptColumns]].
+ * @param ignoreNullUpdatesExceptColumns The columns for which null updates overwrite the target
+ *                       (nulls are ignored for all others), from
+ *                       `IGNORE NULL UPDATES ON * EXCEPT (...)`. [[None]] when the clause is absent
+ *                       or names no subset. Mutually exclusive with [[ignoreNullUpdatesColumns]].
+ */
+case class CreateStreamingTableAutoCdc(
+    name: LogicalPlan,
+    columns: Seq[ColumnDefinition],
+    partitioning: Seq[Transform],
+    tableSpec: TableSpecBase,
+    ifNotExists: Boolean,
+    source: LogicalPlan,
+    keys: Seq[UnresolvedAttribute],
+    deleteCondition: Option[Expression],
+    sequenceByExpr: Expression,
+    includeColumns: Option[Seq[UnresolvedAttribute]],
+    excludeColumns: Option[Seq[UnresolvedAttribute]],
+    storedAsScdType: Int,
+    trackHistoryColumns: Option[Seq[UnresolvedAttribute]],
+    trackHistoryExceptColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdates: Boolean,
+    ignoreNullUpdatesColumns: Option[Seq[UnresolvedAttribute]],
+    ignoreNullUpdatesExceptColumns: Option[Seq[UnresolvedAttribute]]
+) extends BinaryCommand with CreatePipelineDataset {
+  override def left: LogicalPlan = name
+  override def right: LogicalPlan = source
+
+  override protected def withNewChildrenInternal(
+      newLeft: LogicalPlan, newRight: LogicalPlan): CreateStreamingTableAutoCdc =
+    copy(name = newLeft, source = newRight)
+}
+
+/**
  * Replace a table with a v2 catalog.
  *
  * If the table does not exist, and orCreate is true, then it will be created.
@@ -818,7 +940,10 @@ case class ReplaceTable(
     columns: Seq[ColumnDefinition],
     partitioning: Seq[Transform],
     tableSpec: TableSpecBase,
-    orCreate: Boolean)
+    orCreate: Boolean,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends UnaryCommand with V2CreateTablePlan {
 
   override def child: LogicalPlan = name
@@ -828,6 +953,10 @@ case class ReplaceTable(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 }
 
@@ -844,7 +973,10 @@ case class ReplaceTableAsSelect(
     tableSpec: TableSpecBase,
     writeOptions: Map[String, String],
     orCreate: Boolean,
-    isAnalyzed: Boolean = false)
+    isAnalyzed: Boolean = false,
+    // Null writeDistributionMode means the statement did not request one.
+    writeDistributionMode: WriteDistributionMode = null,
+    writeOrdering: Seq[V2SortOrder] = Seq.empty)
   extends V2CreateTableAsSelectPlan {
 
   override def markAsAnalyzed(ac: AnalysisContext): LogicalPlan = {
@@ -853,6 +985,10 @@ case class ReplaceTableAsSelect(
 
   override def withPartitioning(rewritten: Seq[Transform]): V2CreateTablePlan = {
     this.copy(partitioning = rewritten)
+  }
+
+  override def withWriteOrdering(rewritten: Seq[V2SortOrder]): V2CreateTablePlan = {
+    this.copy(writeOrdering = rewritten)
   }
 
   override protected def withNameAndQuery(
@@ -1015,6 +1151,8 @@ case class DeleteFromTable(
   override def child: LogicalPlan = table
   override protected def withNewChildInternal(newChild: LogicalPlan): DeleteFromTable =
     copy(table = newChild)
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(DELETE_FROM_TABLE)
 }
 
 /**
@@ -1025,7 +1163,8 @@ case class DeleteFromTable(
  */
 case class DeleteFromTableWithFilters(
     table: LogicalPlan,
-    condition: Seq[Predicate]) extends LeafCommand
+    condition: Seq[Predicate],
+    options: CaseInsensitiveStringMap = CaseInsensitiveStringMap.empty()) extends LeafCommand
 
 /**
  * The logical plan of the UPDATE TABLE command.
@@ -1054,6 +1193,8 @@ case class UpdateTable(
       case r: NamedRelation => r.skipSchemaResolution
       case _ => false
     }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(UPDATE_TABLE)
 }
 
 /**
@@ -1072,7 +1213,6 @@ case class MergeIntoTable(
     with SupportsSubquery
     with TransactionalWrite {
 
-  // Implements WriteWithSchemaEvolution.table and TransactionalWrite.table.
   override val table: LogicalPlan = EliminateSubqueryAliases(targetTable)
 
   override def withNewTable(newTable: NamedRelation): MergeIntoTable = {
@@ -1146,6 +1286,8 @@ case class MergeIntoTable(
       newRight: LogicalPlan): MergeIntoTable = {
     copy(targetTable = newLeft, sourceTable = newRight)
   }
+
+  override protected def nodePatternsInternal(): Seq[TreePattern] = Seq(MERGE_INTO_TABLE)
 }
 
 object MergeIntoTable {
@@ -1340,12 +1482,6 @@ case class Assignment(key: Expression, value: Expression) extends Expression
  */
 trait TransactionalWrite extends LogicalPlan {
   def table: LogicalPlan
-}
-
-/** Trait for streaming write commands that participate in DSv2 transactions. */
-trait StreamingV2WriteCommand extends TransactionalWrite {
-  override def table: NamedRelation
-  def withNewTable(newTable: NamedRelation): StreamingV2WriteCommand
 }
 
 /**
@@ -1806,14 +1942,17 @@ case class AlterViewAs(
     originalText: String,
     query: LogicalPlan,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends Command with AnalysisOnlyCommand with CTEInChildren {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
   override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
     isAnalyzed = true,
-    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq,
+    referredTempVariablesUnderIdentifier =
+      analysisContext.referredTempVariableNamesUnderIdentifier.toSeq)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
@@ -1864,14 +2003,17 @@ case class CreateView(
     replace: Boolean,
     viewSchemaMode: ViewSchemaMode,
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends Command with AnalysisOnlyCommand with CTEInChildren {
 
   override def childrenToAnalyze: Seq[LogicalPlan] = Seq(child, query)
 
   override def markAsAnalyzed(analysisContext: AnalysisContext): LogicalPlan = copy(
     isAnalyzed = true,
-    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq)
+    referredTempFunctions = analysisContext.referredTempFunctionNames.toSeq,
+    referredTempVariablesUnderIdentifier =
+      analysisContext.referredTempVariableNamesUnderIdentifier.toSeq)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): LogicalPlan = {
@@ -1955,14 +2097,28 @@ case class CacheTable(
  * The logical plan of the CACHE TABLE ... AS SELECT command.
  */
 case class CacheTableAsSelect(
-    tempViewName: String,
+    tempViewName: Expression,
     plan: LogicalPlan,
     originalText: String,
     isLazy: Boolean,
     options: Map[String, String],
     isAnalyzed: Boolean = false,
-    referredTempFunctions: Seq[String] = Seq.empty)
+    referredTempFunctions: Seq[String] = Seq.empty,
+    referredTempVariablesUnderIdentifier: Seq[Seq[String]] = Seq.empty)
   extends AnalysisOnlyCommand with CTEInChildren {
+
+  /**
+   * Returns the temp view name string. Must only be called after analysis, when `tempViewName`
+   * has been resolved to a non-null string `Literal`. `CheckAnalysis` enforces this invariant.
+   */
+  def tempViewNameString: String = tempViewName match {
+    case Literal(value, _: StringType) if value != null => value.toString
+    case other =>
+      throw SparkException.internalError(
+        "CacheTableAsSelect.tempViewName must be a non-null string literal after analysis, " +
+          s"but got: ${other.sql}")
+  }
+
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[LogicalPlan]): CacheTableAsSelect = {
     assert(!isAnalyzed)
@@ -1975,7 +2131,10 @@ case class CacheTableAsSelect(
     copy(
       isAnalyzed = true,
       // Collect the referred temporary functions from AnalysisContext
-      referredTempFunctions = ac.referredTempFunctionNames.toSeq)
+      referredTempFunctions = ac.referredTempFunctionNames.toSeq,
+      // Collect the temporary variables read via an IDENTIFIER clause in the SELECT body, so the
+      // text-backed temporary view stays resolvable when re-analyzed on read.
+      referredTempVariablesUnderIdentifier = ac.referredTempVariableNamesUnderIdentifier.toSeq)
   }
 
   override def withCTEDefs(cteDefs: Seq[CTERelationDef]): LogicalPlan = {
@@ -2144,6 +2303,18 @@ case class SetVariable(
   override def child: LogicalPlan = sourceQuery
   override protected def withNewChildInternal(newChild: LogicalPlan): SetVariable =
     copy(sourceQuery = newChild)
+}
+
+/**
+ * The logical plan of an EXECUTE IMMEDIATE command payload. It supervises the already-analyzed
+ * inner command in a non-child slot; it does not execute it. Keeping the payload out of the
+ * children keeps it off the eager-command path and gives EXPLAIN a stable node. Execution happens
+ * only when this node is planned to `ExecuteImmediateExec`, the sole executor of the payload. The
+ * payload is surfaced via [[innerChildren]] so EXPLAIN still shows it.
+ */
+case class ExecuteImmediateCommand(sourceStatement: LogicalPlan) extends LeafCommand {
+  override def output: Seq[Attribute] = sourceStatement.output
+  override def innerChildren: Seq[QueryPlan[_]] = Seq(sourceStatement)
 }
 
 /**

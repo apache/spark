@@ -23,6 +23,38 @@ Note that this migration guide describes the items specific to Structured Stream
 Many items of SQL migration can be applied when migrating Structured Streaming to higher versions.
 Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-guide.html).
 
+## Upgrading from Structured Streaming 4.3 to 4.4
+
+- Since Spark 4.4, streaming queries using `EXCEPT` with a streaming left input are rejected
+  because their optimizer rewrites introduce streaming aggregations after the initial
+  unsupported-operation checks. Existing queries can still restart from their persistent
+  checkpoints using the compatibility value recorded in the offset log.
+
+- Since Spark 4.4, `DataStreamWriter.toTable` writes to an existing V1 table with the partitioning
+  of the table. A query whose `partitionBy` does not match the partitioning of the table, including
+  the order of the columns, fails to start. A query that already committed files to the table in
+  another layout, for example without `partitionBy` to a partitioned table, fails to start with
+  `STREAMING_FILE_SINK_PARTITIONING_MISMATCH`. As a result, such existing queries fail to restart.
+  To recover, write to a new table location with a new checkpoint location, or rewrite the
+  committed files with the partition columns of the table.
+
+## Upgrading from Structured Streaming 4.2 to 4.3
+
+- Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.
+
+- Since Spark 4.3, a streaming query with a file stream sink validates its partition columns at
+  start like batch file writes. The query fails with `INVALID_PARTITION_COLUMN_DATA_TYPE` if a
+  partition column has a type such as `ARRAY`, `MAP`, `STRUCT`, or a string with a non-default
+  collation like `UTF8_LCASE`, with `COLUMN_ALREADY_EXISTS` if the partition columns are
+  duplicated, and with `ALL_PARTITION_COLUMNS_NOT_ALLOWED` if all columns are partition columns.
+  As a result, existing queries with such partition columns fail to restart. For the first case,
+  change the type of the partition column without renaming it to keep the directory layout. For
+  the other cases, change the partition columns and use a new checkpoint location and output path.
+
+## Upgrading from Structured Streaming 4.1 to 4.2
+
+- Since Spark 4.2, restarting a streaming query from a checkpoint whose metadata file is missing while the offset or commit logs contain data fails with `STREAMING_CHECKPOINT_MISSING_METADATA_FILE`, instead of silently generating a new query ID (which can duplicate data in exactly-once sinks). Restore the metadata file or use a new checkpoint location. To restore the previous behavior, set `spark.sql.streaming.checkpoint.verifyMetadataExists.enabled` to `false`. (See [SPARK-55058](https://issues.apache.org/jira/browse/SPARK-55058) for more details.)
+
 ## Upgrading from Structured Streaming 4.0 to 4.1
 
 - Since Spark 4.1, AQE is supported for stateless workloads, and it could affect the behavior of the query after upgrade (especially since AQE is turned on by default). In general, it helps to achieve better performance including resolution of skewed partition, but you can turn off AQE via changing `spark.sql.adaptive.streaming.stateless.enabled` to `false` to restore the behavior if you see regression.

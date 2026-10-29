@@ -364,7 +364,18 @@ public class OneForOneBlockFetcher {
 
     @Override
     public void onComplete(String streamId) throws IOException {
-      listener.onBlockFetchSuccess(blockIds[chunkIndex], channel.closeAndRead());
+      ManagedBuffer buffer;
+      try {
+        buffer = channel.closeAndRead();
+      } catch (IOException e) {
+        // closeAndRead() failed (typically from the channel close) before the buffer was handed
+        // off, so the temp file was never registered for cleanup. Delete it, and close the
+        // channel in case it was left open, mirroring onFailure, instead of leaking them.
+        channel.close();
+        targetFile.delete();
+        throw e;
+      }
+      listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
       if (!downloadFileManager.registerTempFileToClean(targetFile)) {
         targetFile.delete();
       }

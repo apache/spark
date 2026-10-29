@@ -56,6 +56,16 @@ on:
         description: 'Commit the benchmark results to the current branch'
         required: true
         default: false
+      generate-tpcds:
+        type: boolean
+        description: 'Generate TPC-DS data (required for TPC-DS benchmarks and all-benchmark runs)'
+        required: true
+        default: true
+      expected-cpu:
+        type: string
+        description: 'Expected CPU model (e.g. "AMD EPYC 7763"). If set, the job fails early when the runner CPU does not match.'
+        required: false
+        default: ''
 
 jobs:
   matrix-gen:
@@ -73,36 +83,23 @@ jobs:
   # Any TPC-DS related updates on this job need to be applied to tpcds-1g job of build_and_test.yml as well
   tpcds-1g-gen:
     name: "Generate an TPC-DS dataset with SF=1"
-    if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+    if: inputs.generate-tpcds
     runs-on: ubuntu-latest
     env:
       SPARK_LOCAL_IP: localhost
     steps:
       - name: Checkout Spark repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         # In order to get diff files
         with:
           fetch-depth: 0
-      - name: Cache SBT and Maven
-        uses: actions/cache@v5
+      - name: Setup build environment
+        uses: ./.github/actions/setup-build-env
         with:
-          path: |
-            build/apache-maven-*
-            build/*.jar
-            ~/.sbt
-          key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-          restore-keys: |
-            build-
-      - name: Cache Coursier local repository
-        uses: actions/cache@v5
-        with:
-          path: ~/.cache/coursier
-          key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-          restore-keys: |
-            benchmark-coursier-${{ inputs.jdk }}
+          coursier: cache
       - name: Cache TPC-DS generated data
         id: cache-tpcds-sf-1
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: |
             ./tpcds-sf-1
@@ -110,17 +107,20 @@ jobs:
           key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
       - name: Checkout tpcds-kit repository
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: databricks/tpcds-kit
           ref: 1b7fb7529edae091684201fab142d956d6afd881
           path: ./tpcds-kit
       - name: Build tpcds-kit
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        run: cd tpcds-kit/tools && make OS=LINUX
+        run: |
+          # tpcds-kit is old C code (implicit int, K&R declarations) that newer GCC
+          # versions (e.g. GCC 15 on Ubuntu 26.04) reject by default, so pin the C standard.
+          cd tpcds-kit/tools && make OS=LINUX LINUX_CFLAGS="-O3 -std=gnu89"
       - name: Install Java ${{ inputs.jdk }}
         if: steps.cache-tpcds-sf-1.outputs.cache-hit != 'true'
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: zulu
           java-version: ${{ inputs.jdk }}
@@ -152,36 +152,34 @@ jobs:
       SPARK_TPCDS_DATA_TEXT: ${{ github.workspace }}/tpcds-sf-1-text
     steps:
     - name: Checkout Spark repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v7
       # In order to get diff files
       with:
         fetch-depth: 0
-    - name: Cache SBT and Maven
-      uses: actions/cache@v5
+    - name: Check CPU model
+      env:
+        EXPECTED_CPU: ${{ inputs.expected-cpu }}
+      run: |
+        CPU_MODEL=$(grep "model name" /proc/cpuinfo | head -1 | sed 's/model name\s*:\s*//')
+        echo "Runner CPU: $CPU_MODEL"
+        echo "::notice::Runner CPU: $CPU_MODEL"
+        if [ -n "$EXPECTED_CPU" ]; then
+          if echo "$CPU_MODEL" | grep -qF "$EXPECTED_CPU"; then
+            echo "CPU matches expected: $EXPECTED_CPU"
+          else
+            echo "::error::CPU mismatch! Expected '$EXPECTED_CPU' but got '$CPU_MODEL'"
+            exit 1
+          fi
+        fi
+    - name: Setup build environment
+      uses: ./.github/actions/setup-build-env
       with:
-        path: |
-          build/apache-maven-*
-          build/*.jar
-          ~/.sbt
-        key: build-${{ hashFiles('**/pom.xml', 'project/build.properties', 'build/mvn', 'build/sbt', 'build/sbt-launch-lib.bash', 'build/spark-build-info') }}
-        restore-keys: |
-          build-
-    - name: Cache Coursier local repository
-      uses: actions/cache@v5
-      with:
-        path: ~/.cache/coursier
-        key: benchmark-coursier-${{ inputs.jdk }}-${{ hashFiles('**/pom.xml', '**/plugins.sbt') }}
-        restore-keys: |
-          benchmark-coursier-${{ inputs.jdk }}
-    - name: Install Java ${{ inputs.jdk }}
-      uses: actions/setup-java@v5
-      with:
-        distribution: zulu
         java-version: ${{ inputs.jdk }}
+        coursier: cache
     - name: Cache TPC-DS generated data
-      if: contains(inputs.class, 'TPCDSQueryBenchmark') || contains(inputs.class, 'LZ4TPCDSDataBenchmark') || contains(inputs.class, 'ZStandardTPCDSDataBenchmark') || contains(inputs.class, '*')
+      if: inputs.generate-tpcds
       id: cache-tpcds-sf-1
-      uses: actions/cache@v5
+      uses: actions/cache@v6
       with:
         path: |
           ./tpcds-sf-1
@@ -189,7 +187,7 @@ jobs:
         key: tpcds-${{ hashFiles('.github/workflows/benchmark.yml', 'sql/core/src/test/scala/org/apache/spark/sql/TPCDSSchema.scala') }}
     - name: Run benchmarks
       run: |
-        ./build/sbt -Pscala-${{ inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pspark-ganglia-lgpl Test/package
+        ./build/sbt -Pscala-${{ inputs.scala }} -Pyarn -Pkubernetes -Phive -Phive-thriftserver -Phadoop-cloud -Pkinesis-asl -Pcredential-aws -Pspark-ganglia-lgpl Test/package
         # Make less noisy
         cp conf/log4j2.properties.template conf/log4j2.properties
         sed -i 's/rootLogger.level = info/rootLogger.level = warn/g' conf/log4j2.properties
@@ -225,8 +223,7 @@ jobs:
         echo "Error: Failed to push after 5 attempts."
         exit 1
     - name: Upload benchmark results
-      uses: actions/upload-artifact@v6
+      uses: actions/upload-artifact@v7
       with:
         name: benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}-${{ matrix.split }}
         path: target/benchmark-results-${{ inputs.jdk }}-${{ inputs.scala }}.tar
-

@@ -20,25 +20,28 @@ package org.apache.spark.sql.execution.datasources.orc
 import java.io.{File, FileNotFoundException}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.sql.{Date, Timestamp}
-import java.time.{Duration, Period}
+import java.time.{Duration, Instant, Period}
 import java.util.Locale
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.hive.ql.exec.vector.TimestampColumnVector
 import org.apache.logging.log4j.Level
-import org.apache.orc.OrcConf.COMPRESS
+import org.apache.orc.OrcConf.{COMPRESS, FORCE_POSITIONAL_EVOLUTION}
 import org.apache.orc.OrcFile
 import org.apache.orc.OrcProto.ColumnEncoding.Kind.{DICTIONARY_V2, DIRECT, DIRECT_V2}
 import org.apache.orc.OrcProto.Stream.Kind
+import org.apache.orc.TypeDescription
 import org.apache.orc.impl.RecordReaderImpl
 
-import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException}
+import org.apache.spark.{SPARK_VERSION_SHORT, SparkConf, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.{QueryTestBase, Row, SPARK_VERSION_METADATA_KEY}
 import org.apache.spark.sql.execution.datasources.{CommonFileDataSourceSuite, SchemaMergeUtils}
 import org.apache.spark.sql.execution.datasources.orc.OrcCompressionCodec._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.tags.ExtendedSQLTest
 import org.apache.spark.util.Utils
 
 case class OrcData(intField: Int, stringField: String)
@@ -120,6 +123,7 @@ abstract class OrcSuite
           if (recordReader != null) {
             recordReader.close()
           }
+          reader.close()
         }
       }
     }
@@ -190,6 +194,7 @@ abstract class OrcSuite
           if (recordReader != null) {
             recordReader.close()
           }
+          reader.close()
         }
       }
     }
@@ -630,6 +635,7 @@ abstract class OrcSuite
 }
 
 abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
+  import testImplicits._
 
   protected override def beforeAll(): Unit = {
     super.beforeAll()
@@ -663,6 +669,48 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
          |  PATH '${new File(orcTableAsDir.getAbsolutePath).toURI}'
          |)
        """.stripMargin)
+  }
+
+  test("SPARK-58814: positional ORC evolution preserves standard CHAR semantics") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        Seq("ab").toDF("c").write.orc(dir.getCanonicalPath)
+        val result = spark.read
+          .schema("c CHAR(4)")
+          .option(FORCE_POSITIONAL_EVOLUTION.getAttribute, "true")
+          .orc(dir.getCanonicalPath)
+        checkAnswer(result.selectExpr("concat('<', c, '>')"), Row("<ab  >"))
+      }
+
+      withTempPath { dir =>
+        Seq("abcdef").toDF("c").write.orc(dir.getCanonicalPath)
+        val result = spark.read
+          .schema("c CHAR(4)")
+          .option(FORCE_POSITIONAL_EVOLUTION.getAttribute, "true")
+          .orc(dir.getCanonicalPath)
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            result.collect()
+          },
+          condition = "EXCEED_LIMIT_LENGTH",
+          parameters = Map("limit" -> "4"))
+      }
+    }
+  }
+
+  test("SPARK-58814: parallel schema merging preserves first-class CHAR/VARCHAR") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withTempPath { dir =>
+        val input = spark.range(1).selectExpr(
+          "cast('ab' AS CHAR(4)) AS c",
+          "array(cast('xy' AS VARCHAR(3))) AS a")
+        input.write.orc(dir.getCanonicalPath)
+
+        val readBack = spark.read.option("mergeSchema", "true").orc(dir.getCanonicalPath)
+        assert(DataType.equalsIgnoreNullability(readBack.schema, input.schema))
+        checkAnswer(readBack.selectExpr("concat('<', c, '>')", "a"), Row("<ab  >", Seq("xy")))
+      }
+    }
   }
 
   test("Check BloomFilter creation") {
@@ -875,6 +923,77 @@ abstract class OrcSourceSuite extends OrcSuite with SharedSparkSession {
     }
   }
 
+  test("SPARK-57455: plain ORC timestamp stays TimestampType without Spark nanos metadata") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val outputFile = new Path(new File(dir, "part-00000.orc").getCanonicalPath)
+        val schema = TypeDescription.fromString("struct<ts:timestamp>")
+        val writerOptions = OrcFile
+          .writerOptions(spark.sessionState.newHadoopConf())
+          .setSchema(schema)
+        Utils.tryWithResource(OrcFile.createWriter(outputFile, writerOptions)) { writer =>
+          val batch = schema.createRowBatch()
+          val tsCol = batch.cols(0).asInstanceOf[TimestampColumnVector]
+          batch.size = 1
+          tsCol.time(0) = 0L
+          tsCol.nanos(0) = 123000000
+          writer.addRowBatch(batch)
+        }
+
+        val readBack = spark.read.orc(dir.getCanonicalPath)
+        assert(readBack.schema("ts").dataType === TimestampType)
+        assert(readBack.count() === 1)
+      }
+    }
+  }
+
+  test("SPARK-60400: ORC TIMESTAMP is inferred as TIMESTAMP_LTZ regardless of " +
+      "spark.sql.timestampType") {
+    val expected = Seq(
+      Row(Timestamp.from(Instant.ofEpochSecond(0, 123456000))),
+      Row(Timestamp.from(Instant.ofEpochSecond(1))))
+    withTempPath { foreignDir =>
+      // A foreign ORC file has no catalyst type attribute.
+      foreignDir.mkdirs()
+      val outputFile = new Path(new File(foreignDir, "part-00000.orc").getCanonicalPath)
+      val schema = TypeDescription.fromString("struct<ts:timestamp>")
+      val writerOptions = OrcFile
+        .writerOptions(spark.sessionState.newHadoopConf())
+        .setSchema(schema)
+      Utils.tryWithResource(OrcFile.createWriter(outputFile, writerOptions)) { writer =>
+        val batch = schema.createRowBatch()
+        val tsCol = batch.cols(0).asInstanceOf[TimestampColumnVector]
+        batch.size = 2
+        tsCol.time(0) = 123L
+        tsCol.nanos(0) = 123456789
+        tsCol.time(1) = 1000L
+        tsCol.nanos(1) = 0
+        writer.addRowBatch(batch)
+      }
+      withTempPath { sparkDir =>
+        // Spark writes TIMESTAMP_LTZ with the catalyst type attribute `timestamp`.
+        spark.createDataFrame(sparkContext.parallelize(expected),
+          new StructType().add("ts", TimestampType)).write.orc(sparkDir.getCanonicalPath)
+        withSQLConf(SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+          withAllNativeOrcReaders {
+            Seq(foreignDir, sparkDir).foreach { dir =>
+              val df = spark.read.orc(dir.getCanonicalPath)
+              assert(df.schema("ts").dataType === TimestampType)
+              checkAnswer(df, expected)
+              val e = intercept[SparkException] {
+                spark.read.schema("ts TIMESTAMP_NTZ").orc(dir.getCanonicalPath).collect()
+              }
+              checkError(
+                exception = e.getCause.asInstanceOf[SparkUnsupportedOperationException],
+                condition = "UNSUPPORTED_FEATURE.ORC_TYPE_CAST",
+                parameters = Map("orcType" -> "\"TIMESTAMP\"", "toType" -> "\"TIMESTAMP_NTZ\""))
+            }
+          }
+        }
+      }
+    }
+  }
+
   withAllNativeOrcReaders {
     Seq(true, false).foreach { vecReaderNestedColEnabled =>
       val vecReaderEnabled = SQLConf.get.orcVectorizedReaderEnabled
@@ -1075,6 +1194,7 @@ class OrcSourceV1Suite extends OrcSourceSuite {
       .set(SQLConf.USE_V1_SOURCE_LIST, "orc")
 }
 
+@ExtendedSQLTest
 class OrcSourceV2Suite extends OrcSourceSuite {
   override protected def sparkConf: SparkConf =
     super

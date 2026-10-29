@@ -20,7 +20,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesAllAnyMixin:
@@ -83,7 +82,6 @@ class SeriesAllAnyMixin:
 class SeriesAllAnyTests(
     SeriesAllAnyMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

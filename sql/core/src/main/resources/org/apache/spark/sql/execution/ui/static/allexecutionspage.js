@@ -17,7 +17,7 @@
 
 /* global $, uiRoot, appBasePath, createSqlApiBase, getSqlTableColumns,
    withResolvedAppId, statusBadge, jobIdLinks, formatDurationSql,
-   descriptionHtml */
+   formatTotalTaskTime, descriptionHtml */
 
 $(document).ready(function () {
   // Read the cluster-level grouping toggle rendered into the page by Scala
@@ -32,15 +32,39 @@ $(document).ready(function () {
 
     var container = document.getElementById("sql-executions-table");
     container.innerHTML =
+      '<h4 class="title-table">SQL Executions</h4>' +
+      '<div>' +
       '<select id="status-filter" class="form-select form-select-sm ' +
       'd-inline-block w-auto mb-2">' +
       '<option value="">All Statuses</option>' +
       '<option value="RUNNING">Running</option>' +
       '<option value="COMPLETED">Completed</option>' +
       '<option value="FAILED">Failed</option>' +
-      '</select>' +
+      '</select></div>' +
       '<table id="sql-table" class="table table-striped compact cell-border" ' +
       'style="width:100%"></table>';
+
+    function renderSummary(summary) {
+      var summaryBar = document.getElementById("sql-summary-bar");
+      if (!summaryBar || !summary) return;
+      var failureRate = (summary.failureRate || 0) * 100;
+      summaryBar.innerHTML =
+        '<h4 class="title-table">Summary</h4>' +
+        '<table id="sql-summary-table" class="table table-striped compact ' +
+        'cell-border dataTable" style="width:100%"><thead><tr>' +
+        '<th>Total Queries</th>' +
+        '<th>Average Duration</th>' +
+        '<th>Running Queries</th>' +
+        '<th>Failed Queries</th>' +
+        '<th>Failure Rate</th>' +
+        '</tr></thead><tbody><tr>' +
+        '<td>' + (summary.totalQueries || 0) + '</td>' +
+        '<td>' + formatDurationSql(summary.averageDuration || 0) + '</td>' +
+        '<td>' + (summary.runningQueries || 0) + '</td>' +
+        '<td>' + (summary.failedQueries || 0) + '</td>' +
+        '<td>' + failureRate.toFixed(1) + '%</td>' +
+        '</tr></tbody></table>';
+    }
 
     var columns = getSqlTableColumns({ detail: false });
     if (groupSubExecEnabled) {
@@ -80,7 +104,10 @@ $(document).ready(function () {
           }
           d.groupSubExecution = groupSubExecEnabled ? "true" : "false";
         },
-        dataSrc: function (json) { return json.aaData; },
+        dataSrc: function (json) {
+          renderSummary(json.summary);
+          return json.aaData;
+        },
         error: function () {
           $("#sql-table_processing").css("display", "none");
         }
@@ -105,7 +132,8 @@ $(document).ready(function () {
         var html = '<table id="' + childId +
           '" class="table table-sm table-bordered mb-0 sub-exec-table">';
         html += '<thead><tr><th>ID</th><th>Status</th><th>Description</th>' +
-          '<th>Duration</th><th>Succeeded Jobs</th></tr></thead><tbody>';
+          '<th>Duration</th><th>Total Task Time</th>' +
+          '<th>Succeeded Jobs</th></tr></thead><tbody>';
         subs.forEach(function (child) {
           html += '<tr><td><a href="' + basePath + '/SQL/execution/?id=' +
             child.id + '">' + child.id + '</a></td>';
@@ -114,6 +142,7 @@ $(document).ready(function () {
             id: child.id, description: child.description || ""
           }) + '</td>';
           html += '<td>' + formatDurationSql(child.duration) + '</td>';
+          html += '<td>' + formatTotalTaskTime(child.totalTaskTime) + '</td>';
           html += '<td>' + jobIdLinks(child.jobIds || []) + '</td></tr>';
         });
         html += '</tbody></table>';

@@ -22,6 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate._
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.types.AnyTimestampNanoType
 
 /**
  * Replaces logical [[AsOfJoin]] operator using a combination of Join and Aggregate operator.
@@ -48,43 +49,57 @@ import org.apache.spark.sql.catalyst.rules._
  * }}}
  */
 object RewriteAsOfJoin extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan.transformUpWithNewOutput {
-    case j @ AsOfJoin(left, right, asOfCondition, condition, joinType, orderExpression, _) =>
-      val conditionWithOuterReference =
-        condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
-      }
-      val filtered = Filter(conditionWithOuterReference, right)
-
-      val orderExpressionWithOuterReference = orderExpression.transformUp {
-          case a: AttributeReference if left.outputSet.contains(a) =>
-            OuterReference(a)
+  def apply(plan: LogicalPlan): LogicalPlan = {
+    plan.transformUpWithNewOutput {
+      case j: AsOfJoin if !j.requiresSortMergeAsOfJoin =>
+        val left = j.left
+        val right = j.right
+        val asOfCondition = j.asOfCondition
+        val condition = j.condition
+        val joinType = j.joinType
+        val orderExpression = j.orderExpression.get
+        val conditionWithOuterReference =
+          condition.map(And(_, asOfCondition)).getOrElse(asOfCondition).transformUp {
+            case a: AttributeReference if left.outputSet.contains(a) =>
+              OuterReference(a)
         }
-      val rightStruct = CreateStruct(right.output)
-      val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
-        .toAggregateExpression()
-      val aggExpr = Alias(nearestRight, "__nearest_right__")()
-      val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
+        val filtered = Filter(conditionWithOuterReference, right)
 
-      val projectWithScalarSubquery = Project(
-        left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
-        left)
+        val orderExpressionWithOuterReference = orderExpression.transformUp {
+            // A nanosecond timestamp subtraction compares only epochMicros; rank by the exact
+            // epoch-nanosecond difference instead.
+            case s: SubtractTimestamps
+                if s.children.forall(c => AnyTimestampNanoType.acceptsType(c.dataType)) =>
+              Subtract(UnixNanos(s.left), UnixNanos(s.right))
+        }.transformUp {
+            case a: AttributeReference if left.outputSet.contains(a) =>
+              OuterReference(a)
+        }
+        val rightStruct = CreateStruct(right.output)
+        val nearestRight = MinBy(rightStruct, orderExpressionWithOuterReference)
+          .toAggregateExpression()
+        val aggExpr = Alias(nearestRight, "__nearest_right__")()
+        val aggregate = Aggregate(Seq.empty, Seq(aggExpr), filtered)
 
-      val filterRight = joinType match {
-        case LeftOuter => projectWithScalarSubquery
-        case _ =>
-          Filter(IsNotNull(projectWithScalarSubquery.output.last), projectWithScalarSubquery)
-      }
+        val projectWithScalarSubquery = Project(
+          left.output :+ Alias(ScalarSubquery(aggregate, left.output), "__right__")(),
+          left)
 
-      val project = Project(
-        left.output ++ right.output.zipWithIndex.map {
-          case (out, idx) =>
-            Alias(GetStructField(filterRight.output.last, idx), out.name)()
-        },
-        filterRight)
-      val attrMapping = j.output.zip(project.output)
+        val filterRight = joinType match {
+          case LeftOuter => projectWithScalarSubquery
+          case _ =>
+            Filter(IsNotNull(projectWithScalarSubquery.output.last), projectWithScalarSubquery)
+        }
 
-      project -> attrMapping
+        val project = Project(
+          left.output ++ right.output.zipWithIndex.map {
+            case (out, idx) =>
+              Alias(GetStructField(filterRight.output.last, idx), out.name)()
+          },
+          filterRight)
+        val attrMapping = j.output.zip(project.output)
+
+        project -> attrMapping
+    }
   }
 }

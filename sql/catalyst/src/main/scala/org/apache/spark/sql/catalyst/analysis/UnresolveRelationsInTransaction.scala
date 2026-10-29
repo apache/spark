@@ -25,7 +25,7 @@ import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
 
 /**
  * When a transaction is active, converts resolved [[DataSourceV2Relation]] nodes back to
- * [[V2TableReference]] placeholders for all relations loaded by a catalog with the same
+ * [[V2Reference]] placeholders for all relations loaded by a catalog with the same
  * name as the transaction catalog.
  *
  * This forces re-resolution of those relations against the transaction's catalog, which
@@ -54,9 +54,14 @@ class UnresolveRelationsInTransaction(val catalogManager: CatalogManager)
   private def unresolveRelations(
       plan: LogicalPlan,
       catalog: CatalogPlugin): LogicalPlan = {
-    plan.transform {
+    // Walk subqueries too: relations from the transaction's catalog that hide inside scalar /
+    // IN / EXISTS subqueries must also be re-resolved through the txn-aware catalog so the
+    // connector can track every read in the transaction's scope. We use `transformWithSubqueries`
+    // rather than `resolveOperators*` so that subtrees marked `analyzed = true` (e.g. from
+    // cached/pre-analyzed DataFrames or temp views) are still rewritten.
+    plan.transformWithSubqueries {
       case r: DataSourceV2Relation if isLoadedFromCatalog(r, catalog) =>
-        V2TableReference.createForTransaction(r)
+        V2Reference.createForTransaction(r)
     }
   }
 

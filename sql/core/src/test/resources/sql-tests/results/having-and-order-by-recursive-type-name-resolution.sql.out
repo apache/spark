@@ -427,3 +427,11 @@ ORDER BY col1.nums[0]
 struct<sum_val:int>
 -- !query output
 30
+
+
+-- !query
+SELECT NAMED_STRUCT('a', 1) AS col1 FROM VALUES (NULL) t (col1) GROUP BY col1 HAVING col1.a == 1
+-- !query schema
+struct<col1:struct<a:int>>
+-- !query output
+

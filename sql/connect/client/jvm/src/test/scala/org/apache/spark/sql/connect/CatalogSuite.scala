@@ -99,12 +99,12 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         import session.implicits._
         val df1 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
         df1.write.parquet(table1Dir.getPath)
-        spark.catalog.createTable(parquetTableName, table1Dir.getPath).collect()
+        spark.catalog.createTable(parquetTableName, table1Dir.getPath)
         withTable(orcTableName, jsonTableName) {
           withTempPath { table2Dir =>
             val df2 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").zipWithIndex.toDF("name", "id")
             df2.write.orc(table2Dir.getPath)
-            spark.catalog.createTable(orcTableName, table2Dir.getPath, "orc").collect()
+            spark.catalog.createTable(orcTableName, table2Dir.getPath, "orc")
             val orcTable = spark.catalog.getTable(orcTableName)
             assert(!orcTable.isTemporary)
             assert(orcTable.name == orcTableName)
@@ -117,7 +117,6 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
           val schema = new StructType().add("id", LongType).add("a", DoubleType)
           spark.catalog
             .createTable(jsonTableName, "json", schema, Map.empty[String, String])
-            .collect()
           val jsonTable = spark.catalog.getTable("default", jsonTableName)
           assert(!jsonTable.isTemporary)
           assert(jsonTable.name == jsonTableName)
@@ -151,6 +150,40 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
     assert(spark.catalog.listTables().collect().isEmpty)
   }
 
+  test("createTable should be eager") {
+    val tableName = "eager_table"
+    withTable(tableName) {
+      withTempPath { dir =>
+        val session = spark
+        import session.implicits._
+        Seq((1, "a")).toDF("id", "value").write.parquet(dir.getPath)
+        spark.catalog.createTable(tableName, dir.getPath)
+        assert(spark.catalog.tableExists(tableName))
+      }
+    }
+  }
+
+  test("createTable(tableName, path) uses spark.sql.sources.default") {
+    val tableName = "default_source_table"
+    withSQLConf("spark.sql.sources.default" -> "json") {
+      withTable(tableName) {
+        withTempPath { dir =>
+          val session = spark
+          import session.implicits._
+          // Write the data as JSON. If createTable hardcoded the parquet provider, reading the
+          // table back would fail because the files are not parquet.
+          Seq((1, "a")).toDF("id", "value").write.json(dir.getPath)
+          spark.catalog.createTable(tableName, dir.getPath)
+          assert(spark.catalog.tableExists(tableName))
+          val ddl = spark.catalog.getCreateTableString(tableName)
+          assert(ddl.toLowerCase(java.util.Locale.ROOT).contains("using json"))
+          // Reading the table back succeeds only if it was created with the json provider.
+          assert(spark.table(tableName).count() == 1)
+        }
+      }
+    }
+  }
+
   test("Cache Table APIs") {
     val parquetTableName = "parquet_table"
     withTable(parquetTableName) {
@@ -159,7 +192,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         import session.implicits._
         val df1 = Seq("Bob", "Alice", "Nico", "Bob", "Alice").toDF("name")
         df1.write.parquet(table1Dir.getPath)
-        spark.catalog.createTable(parquetTableName, table1Dir.getPath).collect()
+        spark.catalog.createTable(parquetTableName, table1Dir.getPath)
 
         // Test cache and uncacheTable
         spark.catalog.cacheTable(parquetTableName)
@@ -375,7 +408,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         val session = spark
         import session.implicits._
         Seq(1).toDF("id").write.parquet(dir.getPath)
-        spark.catalog.createTable(tbl, dir.getPath).collect()
+        spark.catalog.createTable(tbl, dir.getPath)
         assert(spark.catalog.tableExists(tbl))
         spark.catalog.dropTable(tbl)
         assert(!spark.catalog.tableExists(tbl))
@@ -445,7 +478,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         val session = spark
         import session.implicits._
         Seq(1).toDF("id").write.parquet(dir.getPath)
-        spark.catalog.createTable(t, dir.getPath).collect()
+        spark.catalog.createTable(t, dir.getPath)
         val ddl = spark.catalog.getCreateTableString(t)
         assert(ddl.nonEmpty && ddl.toLowerCase(java.util.Locale.ROOT).contains("create"))
       }
@@ -470,7 +503,7 @@ class CatalogSuite extends ConnectFunSuite with RemoteSparkSession with SQLHelpe
         val session = spark
         import session.implicits._
         Seq(1).toDF("id").write.parquet(dir.getPath)
-        spark.catalog.createTable(t, dir.getPath).collect()
+        spark.catalog.createTable(t, dir.getPath)
         spark.catalog.analyzeTable(t, noScan = true)
       }
     }

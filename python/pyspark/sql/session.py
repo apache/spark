@@ -14,36 +14,38 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+import filecmp
 import os
 import sys
 import warnings
-import filecmp
 from collections.abc import Sized
-from functools import reduce, cached_property
+from functools import cached_property, reduce
 from threading import RLock
 from types import TracebackType
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     ClassVar,
     Dict,
-    Iterable,
     Generic,
+    Iterable,
     List,
     Optional,
+    Set,
     Tuple,
     Type,
     TypeVar,
     Union,
-    Set,
     cast,
     no_type_check,
     overload,
-    TYPE_CHECKING,
 )
+from urllib.parse import urlparse
 
 from pyspark.conf import SparkConf
-from pyspark.util import default_api_mode, is_remote_only
+from pyspark.errors import PySparkRuntimeError, PySparkTypeError, PySparkValueError
+from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.conf import RuntimeConfig
 from pyspark.sql.dataframe import DataFrame
 from pyspark.sql.functions import lit
@@ -57,40 +59,41 @@ from pyspark.sql.types import (
     DataType,
     StructType,
     VariantVal,
-    _make_type_verifier,
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
     _create_converter,
+    _has_nulltype,
+    _infer_schema,
+    _make_type_verifier,
+    _merge_type,
 )
-from pyspark.errors.exceptions.captured import install_exception_handler
 from pyspark.sql.utils import (
+    remote_only,
     to_str,
     try_remote_session_classmethod,
-    remote_only,
 )
-from pyspark.errors import PySparkValueError, PySparkTypeError, PySparkRuntimeError
+from pyspark.util import default_api_mode, is_remote_only
 
 if TYPE_CHECKING:
-    from py4j.java_gateway import JavaClass, JavaObject, JVMView
     import pyarrow as pa
+    from py4j.java_gateway import JavaClass, JavaObject, JVMView
+
     from pyspark.core.context import SparkContext
     from pyspark.core.rdd import RDD
-    from pyspark.sql._typing import AtomicValue, RowLike, OptionalPrimitiveType
+    from pyspark.sql._typing import AtomicValue, OptionalPrimitiveType, RowLike
     from pyspark.sql.catalog import Catalog
-    from pyspark.sql.pandas._typing import ArrayLike, DataFrameLike as PandasDataFrameLike
-    from pyspark.sql.streaming import StreamingQueryManager
-    from pyspark.sql.streaming.query import StreamingCheckpointManager
-    from pyspark.sql.tvf import TableValuedFunction
-    from pyspark.sql.udf import UDFRegistration
-    from pyspark.sql.udtf import UDTFRegistration
-    from pyspark.sql.datasource import DataSourceRegistration
-    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
 
     # Running MyPy type checks will always require pandas and
     # other dependencies so importing here is fine.
     from pyspark.sql.connect.client import SparkConnectClient
     from pyspark.sql.connect.shell.progress import ProgressHandler
+    from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+    from pyspark.sql.datasource import DataSourceRegistration
+    from pyspark.sql.pandas._typing import ArrayLike
+    from pyspark.sql.pandas._typing import DataFrameLike as PandasDataFrameLike
+    from pyspark.sql.streaming import StreamingQueryManager
+    from pyspark.sql.streaming.query import StreamingCheckpointManager
+    from pyspark.sql.tvf import TableValuedFunction
+    from pyspark.sql.udf import UDFRegistration
+    from pyspark.sql.udtf import UDTFRegistration
 
 
 __all__ = ["SparkSession"]
@@ -540,7 +543,26 @@ class SparkSession(SparkConversionMixin):
                                     messageParameters={},
                                 )
 
-                            if url.startswith("local") or (
+                            reuse_local = str(
+                                opts.get(
+                                    "spark.local.connect.reuse",
+                                    os.environ.get("SPARK_LOCAL_CONNECT_REUSE", ""),
+                                )
+                            ).lower() in ("1", "true")
+
+                            if url.startswith("local") and reuse_local:
+                                from pyspark.sql.connect.local_server import (
+                                    reuse_or_start_local_connect_server,
+                                )
+
+                                # Opt-in: reconnect to a persistent local Connect server (starting
+                                # one on the first run) instead of booting a fresh in-process server
+                                # every process. See `pyspark.sql.connect.local_server`.
+                                url = reuse_or_start_local_connect_server(url, opts)
+                                for k in list(opts):
+                                    if k.startswith("spark.local.connect."):
+                                        opts.pop(k)
+                            elif url.startswith("local") or (
                                 is_api_mode_connect and not url.startswith("sc://")
                             ):
                                 os.environ["SPARK_LOCAL_REMOTE"] = "1"
@@ -1321,6 +1343,7 @@ class SparkSession(SparkConversionMixin):
         that script, which would expose those to users.
         """
         import py4j
+
         from pyspark.core.context import SparkContext
 
         try:
@@ -1788,7 +1811,7 @@ class SparkSession(SparkConversionMixin):
         return self.createDataFrame([], schema)
 
     def sql(
-        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List]] = None, **kwargs: Any
+        self, sqlQuery: str, args: Optional[Union[Dict[str, Any], List[Any]]] = None, **kwargs: Any
     ) -> "ParentDataFrame":
         """Returns a :class:`DataFrame` representing the result of the given query.
         When ``kwargs`` is specified, this method formats the given string by using the Python
@@ -2277,10 +2300,14 @@ class SparkSession(SparkConversionMixin):
         .. versionchanged:: 4.0.0
             Supports Spark Classic.
 
+        .. versionchanged:: 4.4.0
+            Supports native data source packages (``.sparkpkg`` files).
+
         Parameters
         ----------
         *path : tuple of str
-            Artifact's URIs to add.
+            Artifact's URIs to add. A native data source package (a ``.sparkpkg`` file) makes
+            the native data sources it contains available to the session.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
             The pyfiles are directly inserted into the path when executing Python functions
@@ -2302,6 +2329,18 @@ class SparkSession(SparkConversionMixin):
                     "condition": "True together",
                 },
             )
+        # Native data source packages are artifacts of the session in the JVM, whatever the
+        # flags, as with Spark Connect. The JVM resolves file URIs, such as
+        # file:///tmp/a.sparkpkg, but resolves a relative path against its own working directory,
+        # so it gets an absolute path instead. Anything else is a path, such as C:/a.sparkpkg on
+        # Windows, or a file name with a colon, such as a:1.sparkpkg.
+        for p in path:
+            if p.endswith(".sparkpkg"):
+                if urlparse(p).scheme == "file":
+                    self._jsparkSession.addArtifact(p)
+                else:
+                    self._jsparkSession.addArtifact(os.path.abspath(p))
+        path = tuple(p for p in path if not p.endswith(".sparkpkg"))
         for p in path:
             normalized_path = os.path.abspath(p)
             target_dir = os.path.join(
@@ -2320,11 +2359,14 @@ class SparkSession(SparkConversionMixin):
                         messageParameters={"normalized_path": normalized_path},
                     )
         if archive:
-            self._sc.addArchive(*path)
+            for p in path:
+                self._sc.addArchive(p)
         elif pyfile:
-            self._sc.addPyFile(*path)
+            for p in path:
+                self._sc.addPyFile(p)
         elif file:
-            self._sc.addFile(*path)  # type: ignore[arg-type]
+            for p in path:
+                self._sc.addFile(p)
 
     addArtifact = addArtifacts
 
@@ -2584,8 +2626,9 @@ class SparkSession(SparkConversionMixin):
 
 
 def _test() -> None:
-    import os
     import doctest
+    import os
+
     import pyspark.sql.session
 
     os.chdir(os.environ["SPARK_HOME"])

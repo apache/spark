@@ -18,9 +18,9 @@
 package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, TransformValues, UnaryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, ArrayTransform, CaseWhen, Coalesce, CreateArray, CreateMap, CreateNamedStruct, EqualTo, ExpectsInputTypes, Expression, GetStructField, If, IsNull, KnownFloatingPointNormalized, LambdaFunction, Literal, NamedLambdaVariable, Or, TransformValues, UnaryExpression}
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
-import org.apache.spark.sql.catalyst.planning.ExtractEquiJoinKeys
+import org.apache.spark.sql.catalyst.planning.{ExtractEquiJoinKeys, ExtractSingleColumnNullAwareAntiJoin}
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Window}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -28,38 +28,46 @@ import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
 
 /**
- * We need to take care of special floating numbers (NaN and -0.0) in several places:
- *   1. When compare values, different NaNs should be treated as same, `-0.0` and `0.0` should be
- *      treated as same.
- *   2. In aggregate grouping keys, different NaNs should belong to the same group, -0.0 and 0.0
- *      should belong to the same group.
- *   3. In join keys, different NaNs should be treated as same, `-0.0` and `0.0` should be
- *      treated as same.
- *   4. In window partition keys, different NaNs should belong to the same partition, -0.0 and 0.0
- *      should belong to the same partition.
+ * Certain pairs of floating point numbers require special handling:
+ *   1. 0.0 / -0.0
+ *   2. NaN / NaN
+ * That's because we want to treat each of these pairs of numbers as equal, even though they have
+ * different binary representations. (Note that IEEE 754 allows multiple distinct bit patterns for
+ * NaN.)
  *
- * Case 1 is fine, as we handle NaN and -0.0 well during comparison. For complex types, we
- * recursively compare the fields/elements, so it's also fine.
+ * There are multiple ways we compare values that require careful handling of the above floating
+ * point pairs:
+ *   1. Directly, via `==` or via methods of `java.lang.{type}`
+ *   2. Via raw bytes in instances of [[org.apache.spark.sql.catalyst.expressions.UnsafeRow]]
+ *   3. Via hash sets
  *
- * Case 2, 3 and 4 are problematic, as Spark SQL turns grouping/join/window partition keys into
- * binary `UnsafeRow` and compare the binary data directly. Different NaNs have different binary
- * representation, and the same thing happens for -0.0 and 0.0.
+ * This special handling is required in several places where we compare values via one of the above
+ * methods:
+ *   1. When comparing values (direct)
+ *   2. When grouping keys for aggregates (`UnsafeRow`)
+ *   3. When joining on keys (`UnsafeRow`)
+ *   4. When partitioning keys for windows (`UnsafeRow`)
+ *   5. When executing array set operations (hash sets)
  *
- * This rule normalizes NaN and -0.0 in window partition keys, join keys and aggregate grouping
- * keys.
+ * Case 1 is handled in [[org.apache.spark.sql.catalyst.util.SQLOrderingUtil]] and in the
+ *  `genEqual` method of [[org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext]].
+ * Case 2 is handled during planning in the `Aggregation` and `StatefulAggregationStrategy` objects
+ *  of [[org.apache.spark.sql.execution.SparkStrategies]].
+ * Cases 3 and 4 are handled by this optimizer rule. Array set operations handle case 5 in their
+ * expression evaluation.
  *
- * Ideally we should do the normalization in the physical operators that compare the
- * binary `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine
- * is not optimized to run on binary data. This rule is created to simplify the implementation, so
- * that we have a single place to do normalization, which is more maintainable.
+ * Ideally we should do the normalization in the physical operators that compare the binary
+ * `UnsafeRow` directly. We don't need this normalization if the Spark SQL execution engine is not
+ * optimized to run on binary data. Array set operations normalize values during expression
+ * evaluation instead, where values enter hash-based comparisons or result arrays.
  *
  * Note that, this rule must be executed at the end of optimizer, because the optimizer may create
  * new joins(the subquery rewrite) and new join conditions(the join reorder).
  */
 object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan match {
-    case _ => plan.transformWithPruning( _.containsAnyPattern(WINDOW, JOIN)) {
+  def apply(plan: LogicalPlan): LogicalPlan =
+    plan.transformWithPruning(_.containsAnyPattern(WINDOW, JOIN)) {
       case w: Window if w.partitionSpec.exists(p => needNormalize(p)) =>
         // Although the `windowExpressions` may refer to `partitionSpec` expressions, we don't need
         // to normalize the `windowExpressions`, as they are executed per input row and should take
@@ -80,11 +88,17 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
         } ++ condition
         j.copy(condition = Some(newConditions.reduce(And)))
 
+      // The specialized NAAJ is a hash join, but its OR condition is not an equi-join shape.
+      case j @ ExtractSingleColumnNullAwareAntiJoin(leftKeys, rightKeys)
+          if leftKeys.exists(needNormalize) =>
+        val equality = EqualTo(normalize(leftKeys.head), normalize(rightKeys.head))
+        j.copy(condition = Some(Or(equality, IsNull(equality))))
+
       // TODO: ideally Aggregate should also be handled here, but its grouping expressions are
       // mixed in its aggregate expressions. It's unreliable to change the grouping expressions
-      // here. For now we normalize grouping expressions in `AggUtils` during planning.
+      // here. For now we normalize grouping expressions during planning. See Case 2 in the
+      // Scaladoc just above.
     }
-  }
 
   /**
    * Short circuit if the underlying expression is already normalized
@@ -94,7 +108,7 @@ object NormalizeFloatingNumbers extends Rule[LogicalPlan] {
     case _ => needNormalize(expr.dataType)
   }
 
-  private def needNormalize(dt: DataType): Boolean = dt match {
+  private[sql] def needNormalize(dt: DataType): Boolean = dt match {
     case FloatType | DoubleType => true
     case StructType(fields) => fields.exists(f => needNormalize(f.dataType))
     case ArrayType(et, _) => needNormalize(et)

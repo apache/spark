@@ -18,7 +18,7 @@
 package org.apache.spark.ml.feature
 
 import org.apache.spark.ml.{Estimator, Model}
-import org.apache.spark.ml.linalg.{Vector, VectorUDT}
+import org.apache.spark.ml.linalg.{SQLDataTypes, Vector}
 import org.apache.spark.ml.param.{IntParam, ParamValidators}
 import org.apache.spark.ml.param.shared.{HasInputCol, HasOutputCol}
 import org.apache.spark.ml.util._
@@ -53,7 +53,8 @@ private[ml] trait LSHParams extends HasInputCol with HasOutputCol {
    * @return A derived schema with [[outputCol]] added.
    */
   protected[this] final def validateAndTransformSchema(schema: StructType): StructType = {
-    SchemaUtils.appendColumn(schema, $(outputCol), DataTypes.createArrayType(new VectorUDT))
+    SchemaUtils.appendColumn(schema, $(outputCol),
+      DataTypes.createArrayType(SQLDataTypes.VectorType))
   }
 }
 
@@ -77,6 +78,12 @@ private[spark] abstract class LSHModel[T <: LSHModel[T]]
   protected[ml] def hashFunction(elems: Vector): Array[Vector]
 
   /**
+   * Returns the hash function used by [[transform]]. The returned function must not capture this
+   * model.
+   */
+  protected[ml] def createTransformFunc: Vector => Array[Vector]
+
+  /**
    * Calculate the distance between two different keys using the distance metric corresponding
    * to the hashFunction.
    * @param x One input vector in the metric space.
@@ -96,7 +103,7 @@ private[spark] abstract class LSHModel[T <: LSHModel[T]]
 
   override def transform(dataset: Dataset[_]): DataFrame = {
     transformSchema(dataset.schema, logging = true)
-    val transformUDF = udf(hashFunction(_: Vector))
+    val transformUDF = udf(createTransformFunc)
     dataset.withColumn($(outputCol), transformUDF(dataset($(inputCol))))
   }
 

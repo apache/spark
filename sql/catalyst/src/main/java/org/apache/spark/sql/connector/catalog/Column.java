@@ -18,12 +18,17 @@
 package org.apache.spark.sql.connector.catalog;
 
 import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Stream;
 import javax.annotation.Nullable;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.internal.connector.ColumnImpl;
 import org.apache.spark.sql.types.DataType;
+import org.apache.spark.sql.types.StructField;
+import org.apache.spark.sql.util.SchemaUtils;
 
 /**
  * An interface representing a column of a {@link Table}. It defines basic properties of a column,
@@ -40,11 +45,11 @@ import org.apache.spark.sql.types.DataType;
 public interface Column {
 
   static Column create(String name, DataType dataType) {
-    return create(name, dataType, true);
+    return builderFor(name, dataType).build();
   }
 
   static Column create(String name, DataType dataType, boolean nullable) {
-    return create(name, dataType, nullable, null, null);
+    return builderFor(name, dataType).nullable(nullable).build();
   }
 
   static Column create(
@@ -53,16 +58,11 @@ public interface Column {
       boolean nullable,
       String comment,
       String metadataInJSON) {
-    return new ColumnImpl(
-        name,
-        dataType,
-        nullable,
-        comment,
-        /* defaultValue = */ null,
-        /* generationExpression = */ null,
-        /* identityColumnSpec = */ null,
-        metadataInJSON,
-        /* id = */ null);
+    return builderFor(name, dataType)
+        .nullable(nullable)
+        .comment(comment)
+        .metadata(metadataInJSON)
+        .build();
   }
 
   static Column create(
@@ -72,16 +72,12 @@ public interface Column {
       String comment,
       ColumnDefaultValue defaultValue,
       String metadataInJSON) {
-    return new ColumnImpl(
-        name,
-        dataType,
-        nullable,
-        comment,
-        defaultValue,
-        /* generationExpression = */ null,
-        /* identityColumnSpec = */ null,
-        metadataInJSON,
-        /* id = */ null);
+    return builderFor(name, dataType)
+        .nullable(nullable)
+        .comment(comment)
+        .defaultValue(defaultValue)
+        .metadata(metadataInJSON)
+        .build();
   }
 
   static Column create(
@@ -91,35 +87,57 @@ public interface Column {
       String comment,
       String generationExpression,
       String metadataInJSON) {
-    return new ColumnImpl(
-        name,
-        dataType,
-        nullable,
-        comment,
-        /* defaultValue = */ null,
-        generationExpression,
-        /* identityColumnSpec = */ null,
-        metadataInJSON,
-        /* id = */ null);
+    return builderFor(name, dataType)
+        .nullable(nullable)
+        .comment(comment)
+        .generationExpression(generationExpression)
+        .metadata(metadataInJSON)
+        .build();
   }
 
   static Column create(
-          String name,
-          DataType dataType,
-          boolean nullable,
-          String comment,
-          IdentityColumnSpec identityColumnSpec,
-          String metadataInJSON) {
-    return new ColumnImpl(
-        name,
-        dataType,
-        nullable,
-        comment,
-        /* defaultValue = */ null,
-        /* generationExpression = */ null,
-        identityColumnSpec,
-        metadataInJSON,
-        /* id = */ null);
+      String name,
+      DataType dataType,
+      boolean nullable,
+      String comment,
+      IdentityColumnSpec identityColumnSpec,
+      String metadataInJSON) {
+    return builderFor(name, dataType)
+        .nullable(nullable)
+        .comment(comment)
+        .identityColumnSpec(identityColumnSpec)
+        .metadata(metadataInJSON)
+        .build();
+  }
+
+  /**
+   * Creates a builder for a new column with the given name and data type.
+   *
+   * @param name the name of the column
+   * @param dataType the data type of the column
+   * @return a new builder
+   * @since 4.2.0
+   */
+  static Builder builderFor(String name, DataType dataType) {
+    return new Builder(name, dataType);
+  }
+
+  /**
+   * Creates a builder with pre-populated info from an existing column.
+   *
+   * @param column the source column
+   * @return a new builder seeded with the column's current state
+   * @since 4.2.0
+   */
+  static Builder builderFrom(Column column) {
+    return new Builder(column.name(), column.dataType())
+        .nullable(column.nullable())
+        .comment(column.comment())
+        .defaultValue(column.defaultValue())
+        .generationExpression(column.columnGenerationExpression())
+        .identityColumnSpec(column.identityColumnSpec())
+        .metadata(column.metadataInJSON())
+        .id(column.id());
   }
 
   /**
@@ -150,13 +168,29 @@ public interface Column {
   ColumnDefaultValue defaultValue();
 
   /**
-   * Returns the generation expression of this table column. Null means no generation expression.
+   * Returns the generation expression of this table column as a SQL string. Null means no
+   * generation expression.
    * <p>
-   * The generation expression is stored as spark SQL dialect. It is up to the data source to verify
-   * expression compatibility and reject writes as necessary.
+   * This returns only the SQL string form. Prefer {@link #columnGenerationExpression()}, which can
+   * also carry a connector {@link org.apache.spark.sql.connector.expressions.Expression} and
+   * captures the semantics unambiguously. It is up to the data source to verify expression
+   * compatibility and reject writes as necessary.
    */
   @Nullable
-  String generationExpression();
+  default String generationExpression() {
+    return columnGenerationExpression() != null ? columnGenerationExpression().getSql() : null;
+  }
+
+  /**
+   * Returns the generation expression of this table column as a {@link GenerationExpression}.
+   * Null means no generation expression.
+   *
+   * @since 4.3.0
+   */
+  @Nullable
+  default GenerationExpression columnGenerationExpression() {
+    return null;
+  }
 
   /**
    * Returns the identity column specification of this table column. Null means no identity column.
@@ -193,12 +227,104 @@ public interface Column {
    * others.
    * <p>
    * This API covers top-level columns only. Nested struct fields, array elements, and map
-   * keys/values do not have separate IDs. Connectors that track nested field IDs can encode
-   * them into the returned top-level Column ID string to detect nested changes, since Spark
-   * only compares string equality.
+   * keys/values carry their own IDs in struct field metadata. Spark validates both top-level and
+   * nested struct field IDs as part of schema compatibility checks (array elements and map/key
+   * values' validation is not supported yet). See {@link StructField#id()}.
    */
   @Nullable
   default String id() {
     return null;
+  }
+
+  /**
+   * A builder for {@link Column}.
+   *
+   * @since 4.2.0
+   */
+  class Builder {
+    private final String name;
+    private DataType dataType;
+    private boolean nullable = true;
+    private String comment = null;
+    private ColumnDefaultValue defaultValue = null;
+    private GenerationExpression genExpr = null;
+    private IdentityColumnSpec identityColumnSpec = null;
+    private String metadataInJSON = null;
+    private String id = null;
+
+    private Builder(String name, DataType dataType) {
+      this.name = Objects.requireNonNull(name, "name must not be null");
+      this.dataType = Objects.requireNonNull(dataType, "dataType must not be null");
+    }
+
+    public Builder nullable(boolean nullable) {
+      this.nullable = nullable;
+      return this;
+    }
+
+    public Builder comment(String comment) {
+      this.comment = comment;
+      return this;
+    }
+
+    public Builder defaultValue(ColumnDefaultValue defaultValue) {
+      this.defaultValue = defaultValue;
+      return this;
+    }
+
+    public Builder generationExpression(String sql) {
+      this.genExpr = sql != null ? new GenerationExpression(sql) : null;
+      return this;
+    }
+
+    public Builder generationExpression(GenerationExpression generationExpr) {
+      this.genExpr = generationExpr;
+      return this;
+    }
+
+    public Builder identityColumnSpec(IdentityColumnSpec identityColumnSpec) {
+      this.identityColumnSpec = identityColumnSpec;
+      return this;
+    }
+
+    public Builder metadata(String metadataInJSON) {
+      this.metadataInJSON = metadataInJSON;
+      return this;
+    }
+
+    public Builder id(String id) {
+      this.id = id;
+      return this;
+    }
+
+    public Builder clearIds() {
+      this.id = null;
+      this.dataType = SchemaUtils.clearFieldIds(dataType);
+      return this;
+    }
+
+    public Column build() {
+      validateState();
+      return new ColumnImpl(
+          name, dataType, nullable, comment, defaultValue,
+          genExpr, identityColumnSpec, metadataInJSON, id);
+    }
+
+    private void validateState() {
+      if (hasConflictingDefinitions()) {
+        throw new SparkIllegalArgumentException(
+            "INTERNAL_ERROR",
+            Map.of("message",
+                "Column '" + name + "' cannot have more than one definition of: " +
+                "default value, generation expression, identity column spec"));
+      }
+    }
+
+    private boolean hasConflictingDefinitions() {
+      long definitionCount = Stream.of(defaultValue, genExpr, identityColumnSpec)
+          .filter(Objects::nonNull)
+          .count();
+      return definitionCount > 1;
+    }
   }
 }

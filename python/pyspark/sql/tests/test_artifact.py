@@ -16,10 +16,12 @@
 #
 import os
 import tempfile
+from pathlib import Path
 
+from pyspark.errors import PySparkRuntimeError
+from pyspark.sql.functions import assert_true, lit, udf
 from pyspark.sql.tests.connect.client.test_artifact import ArtifactTestsMixin
 from pyspark.testing.sqlutils import ReusedSQLTestCase
-from pyspark.errors import PySparkRuntimeError
 
 
 class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
@@ -35,6 +37,37 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
         # Test multi sessions. Should be able to add the same
         # file from different session.
         self.check_add_pyfile(self.spark.newSession())
+
+    def test_add_multiple_pyfiles(self):
+        def check_add_multiple_pyfiles(spark_session):
+            with tempfile.TemporaryDirectory(prefix="check_add_multiple_pyfiles") as d:
+                pyfile_paths = []
+                for name, value in [
+                    ("my_pyfile_a.py", 1),
+                    ("my_pyfile_b.py", 2),
+                    ("my_pyfile_c.py", 3),
+                ]:
+                    pyfile_path = os.path.join(d, name)
+                    with open(pyfile_path, "w") as f:
+                        f.write(f"my_func = lambda: {value}")
+                    pyfile_paths.append(pyfile_path)
+
+                @udf("int")
+                def func(x):
+                    import my_pyfile_a
+                    import my_pyfile_b
+                    import my_pyfile_c
+
+                    return my_pyfile_a.my_func() + my_pyfile_b.my_func() + my_pyfile_c.my_func()
+
+                spark_session.addArtifacts(*pyfile_paths, pyfile=True)
+                spark_session.range(1).select(assert_true(func("id") == lit(6))).show()
+
+        check_add_multiple_pyfiles(self.spark)
+
+        # Test multi sessions. Should be able to add the same
+        # files from different session.
+        check_add_multiple_pyfiles(self.spark.newSession())
 
     def test_add_file(self):
         self.check_add_file(self.spark)
@@ -71,6 +104,47 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                 exception=pe.exception,
                 errorClass="DUPLICATED_ARTIFACT",
                 messageParameters={"normalized_path": pyfile_path},
+            )
+
+    def test_add_native_data_source_package(self):
+        # A new session, so that the packages do not affect the other tests.
+        spark = self.spark.newSession()
+        with tempfile.TemporaryDirectory(prefix="test_add_native_data_source_package") as d:
+
+            def new_file(name):
+                file_path = os.path.join(d, name)
+                with open(file_path, "wb") as f:
+                    f.write(name.encode("utf-8"))
+                return file_path
+
+            spark.addArtifact(new_file("my_source.sparkpkg"))
+            # Packages are added to the session whatever the flags, as with Spark Connect, also
+            # together with other files.
+            spark.addArtifact(new_file("my_file_source.sparkpkg"), file=True)
+            spark.addArtifacts(new_file("my_other_source.sparkpkg"), new_file("other.txt"))
+            # A URI, and paths relative to the working directory of Python, which is not the
+            # one of the JVM, also with a colon, which is not the scheme of a URI.
+            spark.addArtifact(Path(new_file("my_uri_source.sparkpkg")).as_uri())
+            new_file("my_relative_source.sparkpkg")
+            new_file("my_source:1.sparkpkg")
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                spark.addArtifact("my_relative_source.sparkpkg")
+                spark.addArtifact("my_source:1.sparkpkg")
+            finally:
+                os.chdir(cwd)
+            packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
+            self.assertEqual(
+                sorted(packages.apply(i).getName() for i in range(packages.size())),
+                [
+                    "my_file_source.sparkpkg",
+                    "my_other_source.sparkpkg",
+                    "my_relative_source.sparkpkg",
+                    "my_source.sparkpkg",
+                    "my_source:1.sparkpkg",
+                    "my_uri_source.sparkpkg",
+                ],
             )
 
     def test_add_zipped_package(self):

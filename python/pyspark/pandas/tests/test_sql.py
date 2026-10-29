@@ -18,7 +18,6 @@
 from pyspark import pandas as ps
 from pyspark.errors import ParseException
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import assertDataFrameEqual
 
 
@@ -106,7 +105,7 @@ class SQLTestsMixin:
         assertDataFrameEqual(ps.sql("SELECT {tbl.A}, {tbl.B} FROM {tbl}", tbl=psdf), psdf)
 
 
-class SQLTests(SQLTestsMixin, PandasOnSparkTestCase, SQLTestUtils):
+class SQLTests(SQLTestsMixin, PandasOnSparkTestCase):
     pass
 
 

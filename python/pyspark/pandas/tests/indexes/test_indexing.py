@@ -21,7 +21,6 @@ import pandas as pd
 from pyspark import pandas as ps
 from pyspark.pandas.config import option_context
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Indexing, Iteration'
@@ -116,12 +115,51 @@ class FrameIndexingMixin:
             pd.concat([pdf, pdf]).xs(("mammal", "dog", "walks")),
         )
         self.assert_eq(psdf.xs("cat", level=1), pdf.xs("cat", level=1))
+        self.assert_eq(psdf.xs("cat", level="animal"), pdf.xs("cat", level="animal"))
         self.assert_eq(psdf.xs("flies", level=2), pdf.xs("flies", level=2))
+        self.assert_eq(psdf.xs("mammal", level="class"), pdf.xs("mammal", level="class"))
         self.assert_eq(psdf.xs("mammal", level=-3), pdf.xs("mammal", level=-3))
 
-        msg = 'axis should be either 0 or "index" currently.'
-        with self.assertRaisesRegex(NotImplementedError, msg):
-            psdf.xs("num_wings", axis=1)
+        self.assert_eq(psdf.xs("num_wings", axis=1), pdf.xs("num_wings", axis=1))
+
+        columns = pd.MultiIndex.from_tuples(
+            [
+                ("metrics", "num_legs"),
+                ("metrics", "num_wings"),
+            ],
+            names=["group", "feature"],
+        )
+        pdf_with_columns = pdf.copy()
+        pdf_with_columns.columns = columns
+        psdf_with_columns = ps.from_pandas(pdf_with_columns)
+        self.assert_eq(
+            psdf_with_columns.xs("metrics", axis=1),
+            pdf_with_columns.xs("metrics", axis=1),
+        )
+        self.assert_eq(
+            psdf_with_columns.xs("metrics", axis="columns"),
+            pdf_with_columns.xs("metrics", axis="columns"),
+        )
+        self.assert_eq(
+            psdf_with_columns.xs(("metrics", "num_legs"), axis=1),
+            pdf_with_columns.xs(("metrics", "num_legs"), axis=1),
+        )
+        self.assert_eq(
+            psdf_with_columns.xs("num_legs", axis=1, level=1),
+            pdf_with_columns.xs("num_legs", axis=1, level=1),
+        )
+        self.assert_eq(
+            psdf_with_columns.xs("num_legs", axis=1, level="feature"),
+            pdf_with_columns.xs("num_legs", axis=1, level="feature"),
+        )
+        self.assert_eq(
+            psdf_with_columns.xs("num_legs", axis=1, level=-1),
+            pdf_with_columns.xs("num_legs", axis=1, level=-1),
+        )
+        self.assertRaises(KeyError, lambda: psdf_with_columns.xs("unknown", axis=1))
+        self.assertRaises(KeyError, lambda: psdf_with_columns.xs(("metrics", "unknown"), axis=1))
+        self.assertRaises(IndexError, lambda: psdf_with_columns.xs("metrics", axis=1, level=2))
+
         with self.assertRaises(KeyError):
             psdf.xs(("mammal", "dog", "walk"))
         msg = r"'Key length \(4\) exceeds index depth \(3\)'"
@@ -421,7 +459,6 @@ class FrameIndexingMixin:
 class FrameIndexingTests(
     FrameIndexingMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

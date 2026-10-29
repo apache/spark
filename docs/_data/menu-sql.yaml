@@ -51,12 +51,50 @@
     - text: Troubleshooting
       url: sql-data-sources-troubleshooting.html
 - text: Data Source V2
-  url: sql-data-sources-v2.html
+  url: sql-v2-data-sources.html
+  subitems:
+    - text: Overview
+      url: sql-v2-data-sources.html#overview
+    - text: Entry Points
+      url: sql-v2-data-sources.html#entry-points
+    - text: Catalog Interfaces
+      url: sql-v2-data-sources.html#catalog-interfaces
+    - text: Table
+      url: sql-v2-data-sources.html#table
+    - text: View
+      url: sql-v2-data-sources.html#view
+    - text: Read Path
+      url: sql-v2-data-sources.html#read-path
+    - text: Write Path
+      url: sql-v2-data-sources.html#write-path
+    - text: Row-Level DML
+      url: sql-v2-data-sources.html#row-level-dml
+    - text: Expressions
+      url: sql-v2-data-sources.html#expressions
+    - text: Streaming
+      url: sql-v2-data-sources.html#streaming
+    - text: Further Reading
+      url: sql-v2-data-sources.html#further-reading
+- text: Native Data Sources
+  url: sql-native-data-sources.html
+  subitems:
+    - text: Overview
+      url: sql-native-data-sources.html#overview
+    - text: How It Works
+      url: sql-native-data-sources.html#how-it-works
+    - text: Finding Native Data Sources
+      url: sql-native-data-sources.html#finding-native-data-sources
+    - text: Example in Rust
+      url: sql-native-data-sources.html#example-in-rust
+    - text: Example in C++
+      url: sql-native-data-sources.html#example-in-c
 - text: Performance Tuning
   url: sql-performance-tuning.html
   subitems:
     - text: Caching Data
       url: sql-performance-tuning.html#caching-data
+    - text: Arrow Cache Format
+      url: sql-arrow-cache-format.html
     - text: Tuning Partitions
       url: sql-performance-tuning.html#tuning-partitions
     - text: Leveraging Statistics
@@ -76,6 +114,8 @@
       url: sql-distributed-sql-engine.html#running-the-spark-sql-cli
 - text: PySpark Usage Guide for Pandas with Apache Arrow
   url: sql-pyspark-pandas-with-arrow.html
+- text: In-process Python UDFs
+  url: sql-pyspark-inprocess-udf.html
 - text: Migration Guide
   url: sql-migration-guide.html
 - text: SQL Reference
@@ -85,6 +125,9 @@
       url: sql-ref-ansi-compliance.html
     - text: Data Types
       url: sql-ref-datatypes.html
+      subitems:
+        - text: Character String Types (Preview)
+          url: sql-ref-character-string-types.html
     - text: Datetime Pattern
       url: sql-ref-datetime-pattern.html
     - text: Number Pattern

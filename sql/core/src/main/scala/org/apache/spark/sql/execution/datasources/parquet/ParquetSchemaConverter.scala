@@ -30,6 +30,7 @@ import org.apache.parquet.schema.Type.Repetition._
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.VariantMetadata
+import org.apache.spark.sql.execution.datasources.parquet.types.ops.ParquetTypeOps
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.{EdgeInterpolationAlgorithm => SparkEdgeInterpolationAlgorithm}
@@ -60,11 +61,14 @@ class ParquetToSparkSchemaConverter(
     caseSensitive: Boolean = SQLConf.CASE_SENSITIVE.defaultValue.get,
     inferTimestampNTZ: Boolean = SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.defaultValue.get,
     nanosAsLong: Boolean = SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.defaultValue.get,
+    timestampNanosTypesEnabled: Boolean = false,
     useFieldId: Boolean = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get,
     val ignoreVariantAnnotation: Boolean =
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get,
     val respectUnknownTypeAnnotation: Boolean =
-      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get) {
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get,
+    val timeIsAdjustedToUTC: Boolean =
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.defaultValue.get) {
 
   def this(conf: SQLConf) = this(
     assumeBinaryIsString = conf.isParquetBinaryAsString,
@@ -72,10 +76,11 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.caseSensitiveAnalysis,
     inferTimestampNTZ = conf.parquetInferTimestampNTZEnabled,
     nanosAsLong = conf.legacyParquetNanosAsLong,
+    timestampNanosTypesEnabled = conf.timestampNanosTypesEnabled,
     useFieldId = conf.parquetFieldIdReadEnabled,
     ignoreVariantAnnotation = conf.parquetIgnoreVariantAnnotation,
-    respectUnknownTypeAnnotation =
-      conf.parquetReaderRespectUnknownTypeAnnotation)
+    respectUnknownTypeAnnotation = conf.parquetReaderRespectUnknownTypeAnnotation,
+    timeIsAdjustedToUTC = conf.parquetTimeTypeAllowIsAdjustedToUtcRead)
 
   def this(conf: Configuration) = this(
     assumeBinaryIsString = conf.get(SQLConf.PARQUET_BINARY_AS_STRING.key).toBoolean,
@@ -83,13 +88,18 @@ class ParquetToSparkSchemaConverter(
     caseSensitive = conf.get(SQLConf.CASE_SENSITIVE.key).toBoolean,
     inferTimestampNTZ = conf.get(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key).toBoolean,
     nanosAsLong = conf.get(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key).toBoolean,
+    timestampNanosTypesEnabled =
+      conf.getBoolean(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key, false),
     useFieldId = conf.getBoolean(SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key,
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get),
     ignoreVariantAnnotation = conf.getBoolean(SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.key,
       SQLConf.PARQUET_IGNORE_VARIANT_ANNOTATION.defaultValue.get),
     respectUnknownTypeAnnotation = conf.getBoolean(
       SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.key,
-      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get))
+      SQLConf.PARQUET_READER_RESPECT_UNKNOWN_TYPE_ANNOTATION.defaultValue.get),
+    timeIsAdjustedToUTC = conf.getBoolean(
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key,
+      SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.defaultValue.get))
 
   /**
    * Converts Parquet [[MessageType]] `parquetSchema` to a Spark SQL [[StructType]].
@@ -327,11 +337,22 @@ class ParquetToSparkSchemaConverter(
           case timestamp: TimestampLogicalTypeAnnotation
             if timestamp.getUnit == TimeUnit.NANOS && nanosAsLong =>
             LongType
+          case timestamp: TimestampLogicalTypeAnnotation
+            if timestamp.getUnit == TimeUnit.NANOS && timestampNanosTypesEnabled =>
+            if (timestamp.isAdjustedToUTC) {
+              TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION)
+            } else {
+              TimestampNTZNanosType(TimestampNTZNanosType.NANOS_PRECISION)
+            }
           case time: TimeLogicalTypeAnnotation
-            if time.getUnit == TimeUnit.MICROS && !time.isAdjustedToUTC =>
+            if time.getUnit == TimeUnit.MICROS &&
+              (!time.isAdjustedToUTC || timeIsAdjustedToUTC) =>
             TimeType(TimeType.MICROS_PRECISION)
-          case _ =>
-            illegalType()
+          case time: TimeLogicalTypeAnnotation
+            if time.getUnit == TimeUnit.NANOS &&
+              (!time.isAdjustedToUTC || timeIsAdjustedToUTC) =>
+            TimeType(TimeType.NANOS_PRECISION)
+          case _ => illegalType()
         }
 
       case INT96 =>
@@ -644,8 +665,15 @@ class SparkToParquetSchemaConverter(
       field: StructField,
       repetition: Type.Repetition,
       inShredded: Boolean): Type = {
+    // Types Framework: framework FIRST, original match as fallback.
+    ParquetTypeOps(field.dataType).map(_.convertToParquetType(field.name, repetition, inShredded))
+      .getOrElse(convertFieldDefault(field, repetition, inShredded))
+  }
 
-    field.dataType match {
+  private def convertFieldDefault(
+      field: StructField,
+      repetition: Type.Repetition,
+      inShredded: Boolean): Type = field.dataType match {
       // ===================
       // Simple atomic types
       // ===================
@@ -692,10 +720,6 @@ class SparkToParquetSchemaConverter(
         Types.primitive(INT32, repetition)
           .as(LogicalTypeAnnotation.dateType()).named(field.name)
 
-      case _: TimeType =>
-        Types.primitive(INT64, repetition)
-          .as(LogicalTypeAnnotation.timeType(false, TimeUnit.MICROS)).named(field.name)
-
       // NOTE: Spark SQL can write timestamp values to Parquet using INT96, TIMESTAMP_MICROS or
       // TIMESTAMP_MILLIS. TIMESTAMP_MICROS is recommended but INT96 is the default to keep the
       // behavior same as before.
@@ -735,6 +759,7 @@ class SparkToParquetSchemaConverter(
       case TimestampNTZType =>
         Types.primitive(INT64, repetition)
           .as(LogicalTypeAnnotation.timestampType(false, TimeUnit.MICROS)).named(field.name)
+
       case BinaryType =>
         Types.primitive(BINARY, repetition).named(field.name)
 
@@ -916,7 +941,6 @@ class SparkToParquetSchemaConverter(
       case _ =>
         throw QueryCompilationErrors.cannotConvertDataTypeToParquetTypeError(field)
     }
-  }
 }
 
 private[sql] object ParquetSchemaConverter {

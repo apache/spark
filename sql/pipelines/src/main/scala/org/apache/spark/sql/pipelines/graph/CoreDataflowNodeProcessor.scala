@@ -32,9 +32,9 @@ import org.apache.spark.sql.pipelines.graph.DataflowGraphTransformer.{
  * Processor that is responsible for analyzing each flow and sort the nodes in
  * topological order
  */
-class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
+class CoreDataflowNodeProcessor(rawGraph: DataflowGraph, sessionCaseSensitive: Boolean) {
 
-  private val flowResolver = new FlowResolver(rawGraph)
+  private val flowResolver = new FlowResolver(rawGraph, sessionCaseSensitive)
 
   // Map of input identifier to resolved [[Input]].
   private val resolvedInputs = new ConcurrentHashMap[TableIdentifier, Input]()
@@ -86,7 +86,8 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
           identifier = table.identifier,
           specifiedSchema = table.specifiedSchema,
           incomingFlowIdentifiers = flowsToTable.map(_.identifier).toSet,
-          availableFlows = resolvedFlowsToTable
+          availableFlows = resolvedFlowsToTable,
+          sessionCaseSensitive = sessionCaseSensitive
         )
         resolvedInputs.put(table.identifier, virtualTableInput)
         Seq(table)
@@ -110,7 +111,7 @@ class CoreDataflowNodeProcessor(rawGraph: DataflowGraph) {
   }
 }
 
-private class FlowResolver(rawGraph: DataflowGraph) {
+private class FlowResolver(rawGraph: DataflowGraph, sessionCaseSensitive: Boolean) {
 
   /** Helper used to track which confs were set by which flows. */
   private case class FlowConf(key: String, value: String, flowIdentifier: TableIdentifier)
@@ -176,7 +177,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
           } else {
             f
           }
-          convertResolvedToTypedFlow(flowToResolve, maybeNewFuncResult)
+          resolveFlow(flowToResolve, maybeNewFuncResult)
 
         // If the flow failed due to an UnresolvedDatasetException, it means that one of the
         // flow's inputs wasn't available. After other flows are resolved, these inputs
@@ -199,8 +200,17 @@ private class FlowResolver(rawGraph: DataflowGraph) {
       }
   }
 
-  private def convertResolvedToTypedFlow(
+  private def resolveFlow(
       flow: UnresolvedFlow,
+      funcResult: FlowFunctionResult): ResolvedFlow = {
+    flow match {
+      case acf: AutoCdcFlow => new AutoCdcMergeFlow(acf, funcResult, sessionCaseSensitive)
+      case utf: UntypedFlow => transformUntypedFlowToResolvedFlow(utf, funcResult)
+    }
+  }
+
+  private def transformUntypedFlowToResolvedFlow(
+      flow: UntypedFlow,
       funcResult: FlowFunctionResult): ResolvedFlow = {
     flow match {
       case _ if flow.once => new AppendOnceFlow(flow, funcResult)
@@ -210,7 +220,7 @@ private class FlowResolver(rawGraph: DataflowGraph) {
         // then get their results overwritten.
         val mustBeAppend = rawGraph.flowsTo(flow.destinationIdentifier).size > 1
         new StreamingFlow(flow, funcResult, mustBeAppend = mustBeAppend)
-      case _: UnresolvedFlow => new CompleteFlow(flow, funcResult)
+      case _ => new CompleteFlow(flow, funcResult)
     }
   }
 }

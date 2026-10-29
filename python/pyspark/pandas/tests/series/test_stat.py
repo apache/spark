@@ -21,7 +21,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesStatMixin:
@@ -320,6 +319,10 @@ class SeriesStatMixin:
         self.assert_eq(pser.rank(method="min"), psser.rank(method="min").sort_index())
         self.assert_eq(pser.rank(method="max"), psser.rank(method="max").sort_index())
         self.assert_eq(pser.rank(method="first"), psser.rank(method="first").sort_index())
+        self.assert_eq(
+            pser.rank(method="first", ascending=False),
+            psser.rank(method="first", ascending=False).sort_index(),
+        )
         self.assert_eq(pser.rank(method="dense"), psser.rank(method="dense").sort_index())
 
         non_numeric_pser = pd.Series(["a", "c", "b", "d"], name="x", index=[10, 11, 12, 13])
@@ -344,6 +347,38 @@ class SeriesStatMixin:
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
             psser.rank(method="nothing")
+
+        # pct=True
+        pser = pd.Series([1, 2, 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(pct=True), psser.rank(pct=True).sort_index())
+
+        # na_option
+        pser = pd.Series([1, float("nan"), 2, 3], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(na_option="top"), psser.rank(na_option="top").sort_index())
+        self.assert_eq(pser.rank(na_option="bottom"), psser.rank(na_option="bottom").sort_index())
+        self.assert_eq(
+            pser.rank(pct=True, na_option="top"),
+            psser.rank(pct=True, na_option="top").sort_index(),
+        )
+        self.assert_eq(
+            pser.rank(na_option="top", ascending=False),
+            psser.rank(na_option="top", ascending=False).sort_index(),
+        )
+        self.assert_eq(
+            pser.rank(na_option="bottom", ascending=False),
+            psser.rank(na_option="bottom", ascending=False).sort_index(),
+        )
+
+        # axis=0 is accepted (no-op for Series)
+        pser = pd.Series([1, 2, 3, 1], name="x")
+        psser = ps.from_pandas(pser)
+        self.assert_eq(pser.rank(axis=0), psser.rank(axis=0).sort_index())
+
+        # invalid na_option
+        with self.assertRaisesRegex(ValueError, "na_option must be one of"):
+            psser.rank(na_option="bad")
 
         msg = "method must be one of 'average', 'min', 'max', 'first', 'dense'"
         with self.assertRaisesRegex(ValueError, msg):
@@ -728,7 +763,6 @@ class SeriesStatMixin:
 class SeriesStatTests(
     SeriesStatMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

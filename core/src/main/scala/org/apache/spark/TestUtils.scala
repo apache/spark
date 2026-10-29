@@ -387,11 +387,7 @@ private[spark] object TestUtils extends SparkTestUtils {
   /**
    * Lists files recursively.
    */
-  def recursiveList(f: File): Array[File] = {
-    require(f.isDirectory)
-    val current = f.listFiles
-    current ++ current.filter(_.isDirectory).flatMap(recursiveList)
-  }
+  def recursiveList(f: File): Array[File] = Utils.recursiveList(f)
 
   /**
    * Returns the list of files at 'path' recursively. This skips files that are ignored normally

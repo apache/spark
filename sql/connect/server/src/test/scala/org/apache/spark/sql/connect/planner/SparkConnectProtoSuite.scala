@@ -17,20 +17,23 @@
 package org.apache.spark.sql.connect.planner
 
 import java.nio.file.{Files, Paths}
+import java.util.concurrent.ConcurrentLinkedQueue
 
 import scala.jdk.CollectionConverters._
 
 import com.google.protobuf.ByteString
 
-import org.apache.spark.{SparkClassNotFoundException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkClassNotFoundException, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.connect.proto
 import org.apache.spark.connect.proto.Expression
 import org.apache.spark.connect.proto.Join.JoinType
+import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnsafeProjection}
+import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnresolvedInSubqueryPlanId, UnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
@@ -43,7 +46,9 @@ import org.apache.spark.sql.connect.dsl.plans._
 import org.apache.spark.sql.connector.catalog.{Column => ColumnV2, Identifier, InMemoryTableCatalog, TableCatalog}
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits.CatalogHelper
 import org.apache.spark.sql.execution.arrow.ArrowConverters
+import org.apache.spark.sql.execution.ui.SparkListenerSQLExecutionStart
 import org.apache.spark.sql.functions._
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
@@ -975,6 +980,267 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
       sparkTestRelation.withColumns(Map("id" -> lit(1024), "col_not_exist" -> lit(2048))))
   }
 
+  test("SPARK-60096: IN-subquery with an unattached plan id is an invalid Connect plan") {
+    // A Connect `col.isin(<subquery>)` inside `when(...)` whose plan id is not attached by any
+    // WithRelations leaves an UnresolvedInSubqueryPlanId in the plan.
+    val unattachedPlanId = 42L
+    val inSubquery = Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(unattachedPlanId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN)
+          .addInSubqueryValues("id".protoAttr))
+      .build()
+    val caseWhen = Expression
+      .newBuilder()
+      .setUnresolvedFunction(
+        Expression.UnresolvedFunction
+          .newBuilder()
+          .setFunctionName("when")
+          .addArguments(inSubquery)
+          .addArguments(Expression.newBuilder().setLiteral(toLiteralProto(1)).build())
+          .addArguments(Expression.newBuilder().setLiteral(toLiteralProto(0)).build()))
+      .build()
+    val connectPlan = connectTestRelation.select(caseWhen.as("x"))
+
+    val transformed = transform(connectPlan)
+
+    // The planner leaves an UnresolvedInSubqueryPlanId in the tree: no analyzer rule resolves
+    // it (plan-id references are wired up only at proto-transform time via WithRelations).
+    val survivingInSubqueries = transformed.collect { case plan =>
+      plan.expressions.flatMap(_.collect { case u: UnresolvedInSubqueryPlanId => u })
+    }.flatten
+    assert(survivingInSubqueries.map(_.planId) == Seq(unattachedPlanId))
+    assert(!transformed.resolved)
+
+    // CheckAnalysis now rejects the surviving plan-id subquery as an invalid Spark Connect plan
+    // instead of the previous INTERNAL_ERROR / XX000 "Found the unresolved operator".
+    checkError(
+      exception = intercept[AnalysisException] {
+        analyzePlan(transformed)
+      },
+      condition = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      sqlState = Some("56K00"),
+      parameters = Map("planId" -> unattachedPlanId.toString))
+  }
+
+  // `id IN <plan id>`: a Connect IN-subquery whose plan is referenced by plan id.
+  private def inSubqueryProto(planId: Long): Expression = {
+    Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(planId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_IN)
+          .addInSubqueryValues("id".protoAttr))
+      .build()
+  }
+
+  // Wraps `root` in a WithRelations that attaches a range plan with the given plan id.
+  private def withAttachedRange(root: proto.Relation, attachedPlanId: Long): proto.Relation = {
+    val reference = proto.Relation
+      .newBuilder()
+      .setCommon(proto.RelationCommon.newBuilder().setPlanId(attachedPlanId))
+      .setRange(proto.Range.newBuilder().setStart(0).setEnd(3).setStep(1))
+      .build()
+    proto.Relation
+      .newBuilder()
+      .setWithRelations(proto.WithRelations.newBuilder().setRoot(root).addReferences(reference))
+      .build()
+  }
+
+  // `rootWithSubquery` builds a root that analyzes an IN-subquery on the given plan id eagerly,
+  // before WithRelations substitutes the referenced plans.
+  private def checkEagerlyAnalyzedSubquery(rootWithSubquery: Long => proto.Relation): Unit = {
+    // The plan id is attached, so the failure is a server-side issue.
+    val attachedPlanId = 7L
+    val e = intercept[SparkException] {
+      transform(withAttachedRange(rootWithSubquery(attachedPlanId), attachedPlanId))
+    }
+    assert(e.getCondition == "INTERNAL_ERROR")
+    assert(e.getMessage.contains(s"plan id $attachedPlanId is attached in WithRelations"))
+    assert(
+      e.getCause.asInstanceOf[AnalysisException].getCondition ==
+        "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED")
+
+    // The plan id is not attached, so the failure remains an invalid Spark Connect plan.
+    val unattachedPlanId = 8L
+    checkError(
+      exception = intercept[AnalysisException] {
+        transform(withAttachedRange(rootWithSubquery(unattachedPlanId), attachedPlanId))
+      },
+      condition = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      sqlState = Some("56K00"),
+      parameters = Map("planId" -> unattachedPlanId.toString))
+  }
+
+  test("SPARK-60096: sampleBy with an attached IN-subquery is an internal error") {
+    // sampleBy(when(id IN <plan id>, 'a').otherwise('b'), {'a': 0.5}) runs a filter, which
+    // analyzes the column eagerly.
+    checkEagerlyAnalyzedSubquery { planId =>
+      val caseWhen = Expression
+        .newBuilder()
+        .setUnresolvedFunction(
+          Expression.UnresolvedFunction
+            .newBuilder()
+            .setFunctionName("when")
+            .addArguments(inSubqueryProto(planId))
+            .addArguments(Expression.newBuilder().setLiteral(toLiteralProto("a")).build())
+            .addArguments(Expression.newBuilder().setLiteral(toLiteralProto("b")).build()))
+        .build()
+      proto.Relation
+        .newBuilder()
+        .setSampleBy(
+          proto.StatSampleBy
+            .newBuilder()
+            .setInput(connectTestRelation)
+            .setCol(caseWhen)
+            .setSeed(1)
+            .addFractions(proto.StatSampleBy.Fraction
+              .newBuilder()
+              .setStratum(toLiteralProto("a"))
+              .setFraction(0.5)))
+        .build()
+    }
+  }
+
+  gridTest("joinAsOf resolves Connect keys with both analyzers")(Seq(false, true)) { singlePass =>
+    withSQLConf(
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      for ((leftType, rightType, comparisonType) <- Seq(
+          (IntegerType, LongType, LongType),
+          (TimestampNTZType, TimestampType, TimestampType),
+          (TimestampType, TimestampNTZType, TimestampType),
+          (StringType, StringType, StringType))) {
+        val left = createLocalRelationProto(
+          attrs = Seq(AttributeReference("lk", leftType)()),
+          data = Seq.empty)
+        val right = createLocalRelationProto(
+          attrs = Seq(AttributeReference("rk", rightType)()),
+          data = Seq.empty)
+        val relation = proto.Relation
+          .newBuilder()
+          .setAsOfJoin(
+            proto.AsOfJoin
+              .newBuilder()
+              .setLeft(left)
+              .setRight(right)
+              .setLeftAsOf("lk".protoAttr)
+              .setRightAsOf("rk".protoAttr)
+              .setJoinType("inner")
+              .setAllowExactMatches(true)
+              .setDirection("backward"))
+          .build()
+        val analyzed = spark.sessionState.executePlan(transform(relation)).analyzed
+        val join = analyzed.collectFirst { case j: AsOfJoin => j }.get
+        assert(join.leftSortExprs.head.dataType == leftType)
+        val rightSortType = if (comparisonType == TimestampType) TimestampType else rightType
+        assert(join.rightSortExprs.head.dataType == rightSortType)
+        assert(join.asOfCondition.children.map(_.dataType) == Seq(comparisonType, comparisonType))
+
+        withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+          comparePlans(RewriteAsOfJoin(analyzed), analyzed)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60096: joinAsOf with an attached IN-subquery is an internal error") {
+    // joinAsOf(right, id, rid, joinExprs = id IN <plan id>) analyzes the join condition eagerly.
+    val right = createLocalRelationProto(Seq(AttributeReference("rid", IntegerType)()), Seq.empty)
+    checkEagerlyAnalyzedSubquery { planId =>
+      proto.Relation
+        .newBuilder()
+        .setAsOfJoin(
+          proto.AsOfJoin
+            .newBuilder()
+            .setLeft(connectTestRelation)
+            .setRight(right)
+            .setLeftAsOf("id".protoAttr)
+            .setRightAsOf("rid".protoAttr)
+            .setJoinExpr(inSubqueryProto(planId))
+            .setJoinType("inner")
+            .setAllowExactMatches(true)
+            .setDirection("backward"))
+        .build()
+    }
+  }
+
+  // Transforms `rel` and returns the SQL executions started meanwhile.
+  private def sqlExecutionsStartedDuring(rel: proto.Relation): (LogicalPlan, Seq[String]) = {
+    val started = new ConcurrentLinkedQueue[String]()
+    val listener = new SparkListener {
+      override def onOtherEvent(event: SparkListenerEvent): Unit = event match {
+        case e: SparkListenerSQLExecutionStart => started.add(e.description)
+        case _ =>
+      }
+    }
+    spark.sparkContext.listenerBus.waitUntilEmpty()
+    spark.sparkContext.addSparkListener(listener)
+    try {
+      val plan = transform(rel)
+      spark.sparkContext.listenerBus.waitUntilEmpty()
+      (plan, started.asScala.toSeq)
+    } finally {
+      spark.sparkContext.removeSparkListener(listener)
+    }
+  }
+
+  test("SPARK-60096: withColumns with an attached subquery does not analyze eagerly") {
+    // withColumns(x = <scalar subquery on plan id>) cannot be analyzed before WithRelations
+    // substitutes the plan id. A failed eager attempt would post a failed SQL execution.
+    val planId = 9L
+    val scalarSubquery = Expression
+      .newBuilder()
+      .setSubqueryExpression(
+        proto.SubqueryExpression
+          .newBuilder()
+          .setPlanId(planId)
+          .setSubqueryType(proto.SubqueryExpression.SubqueryType.SUBQUERY_TYPE_SCALAR))
+      .build()
+    val withColumns = proto.Relation
+      .newBuilder()
+      .setWithColumns(
+        proto.WithColumns
+          .newBuilder()
+          .setInput(connectTestRelation)
+          .addAliases(Expression.Alias.newBuilder().addName("x").setExpr(scalarSubquery)))
+      .build()
+
+    val (plan, started) = sqlExecutionsStartedDuring(withAttachedRange(withColumns, planId))
+    assert(started.isEmpty)
+    val analyzed = spark.sessionState.executePlan(plan).analyzed
+    assert(analyzed.output.map(_.name) == Seq("id", "name", "x"))
+  }
+
+  test("SPARK-60096: withColumnsRenamed over an attached subquery does not analyze eagerly") {
+    // withColumnsRenamed over filter(id IN <plan id>) cannot be analyzed before WithRelations
+    // substitutes the plan id. A failed eager attempt would post a failed SQL execution.
+    val planId = 10L
+    val renamed = proto.Relation
+      .newBuilder()
+      .setWithColumnsRenamed(
+        proto.WithColumnsRenamed
+          .newBuilder()
+          .setInput(connectTestRelation.where(inSubqueryProto(planId)))
+          .addRenames(
+            proto.WithColumnsRenamed.Rename.newBuilder().setColName("id").setNewColName("id2")))
+      .build()
+
+    val (plan, started) = sqlExecutionsStartedDuring(withAttachedRange(renamed, planId))
+    assert(started.isEmpty)
+    val analyzed = spark.sessionState.executePlan(plan).analyzed
+    assert(analyzed.output.map(_.name) == Seq("id2", "name"))
+  }
+
   test("Test cast") {
     comparePlans(
       connectTestRelation.select("id".protoAttr.cast(
@@ -984,6 +1250,23 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
     comparePlans(
       connectTestRelation.select("id".protoAttr.cast("string")),
       sparkTestRelation.select(col("id").cast("string")))
+  }
+
+  test("SPARK-57618: cast TIMESTAMP_NTZ to TIME") {
+    // The cast logic itself lives in Catalyst (covered by CastSuite*); this confirms the
+    // TIMESTAMP_NTZ -> TIME pair round-trips through the Connect planner. The target TIME type is
+    // carried as a type string and parsed server-side, so this does not depend on TIME being
+    // serializable in the Connect schema proto (only the NTZ column is). The reverse direction
+    // (TIME -> TIMESTAMP_NTZ) is not exercisable here until the TIME type is supported by the
+    // Connect DataType proto converter; it is covered by the Catalyst suites.
+    val connectRel =
+      createLocalRelationProto(Seq(AttributeReference("ts", TimestampNTZType)()), Seq.empty)
+    val sparkRel = spark.createDataFrame(
+      new java.util.ArrayList[Row](),
+      StructType(Seq(StructField("ts", TimestampNTZType))))
+    comparePlans(
+      connectRel.select("ts".protoAttr.cast("time")),
+      sparkRel.select(col("ts").cast("time")))
   }
 
   test("Test colRegex") {
@@ -998,6 +1281,59 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   test("Test Hint") {
     comparePlans(connectTestRelation.hint("COALESCE", 3), sparkTestRelation.hint("COALESCE", 3))
+  }
+
+  test("Test BIN BY") {
+    withSQLConf(SQLConf.BIN_BY_ENABLED.key -> "true") {
+      val schema = new StructType()
+        .add("start", TimestampNTZType)
+        .add("end", TimestampNTZType)
+        .add("value", DoubleType)
+        .add("value2", FloatType)
+      val input = createLocalRelationProto(DataTypeUtils.toAttributes(schema), Seq.empty)
+      val classic = spark.createDataFrame(new java.util.ArrayList[Row](), schema)
+      val binBy = proto.BinBy
+        .newBuilder()
+        .setInput(input)
+        .setRangeStart("start".protoAttr)
+        .setRangeEnd("end".protoAttr)
+        .setBinWidth(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(
+              proto.Expression.ExpressionString.newBuilder().setExpression("INTERVAL 5 MINUTES")))
+        .addDistributeUniform("value".protoAttr)
+        .addDistributeUniform("value2".protoAttr)
+      comparePlans(
+        proto.Relation.newBuilder().setBinBy(binBy).build(),
+        classic.binBy(
+          rangeStart = col("start"),
+          rangeEnd = col("end"),
+          binWidth = expr("INTERVAL 5 MINUTES"),
+          distributeUniform = Array(col("value"), col("value2"))))
+
+      val origin = "TIMESTAMP_NTZ '2024-01-01 00:02:00'"
+      binBy
+        .setAlignTo(
+          proto.Expression
+            .newBuilder()
+            .setExpressionString(
+              proto.Expression.ExpressionString.newBuilder().setExpression(origin)))
+        .setBinStartName("bin.start")
+        .setBinEndName("bin`end")
+        .setBinDistributeRatioName("")
+      comparePlans(
+        proto.Relation.newBuilder().setBinBy(binBy).build(),
+        classic.binBy(
+          rangeStart = col("start"),
+          rangeEnd = col("end"),
+          binWidth = expr("INTERVAL 5 MINUTES"),
+          distributeUniform = Array(col("value"), col("value2")),
+          alignTo = expr(origin),
+          binStartName = "bin.start",
+          binEndName = "bin`end",
+          binDistributeRatioName = ""))
+    }
   }
 
   test("Test Unpivot") {
@@ -1149,10 +1485,18 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
 
   // Compares proto plan with LogicalPlan.
   private def comparePlans(connectPlan: proto.Relation, sparkPlan: LogicalPlan): Unit = {
-    def normalizeDataframeId(plan: LogicalPlan): LogicalPlan = plan transform {
+    def normalizeForComparison(plan: LogicalPlan): LogicalPlan = plan transform {
       case cm: CollectMetrics => cm.copy(dataframeId = 0)
+      // Spark Connect and Spark Classic record different DeduplicateSpec.viaSparkClassic; it only
+      // drives the legacy key-order fallback for streaming restarts, not the resolved plan, so
+      // ignore it when comparing the two engines.
+      case d: Deduplicate => d.copy(dedupSpec = None)
+      case d: DeduplicateWithinWatermark => d.copy(dedupSpec = None)
     }
     val connectAnalyzed = analyzePlan(transform(connectPlan))
-    comparePlans(normalizeDataframeId(connectAnalyzed), normalizeDataframeId(sparkPlan), false)
+    comparePlans(
+      normalizeForComparison(connectAnalyzed),
+      normalizeForComparison(sparkPlan),
+      false)
   }
 }

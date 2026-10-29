@@ -1,3 +1,11 @@
+-- We run these tests with fixed-point analyzer separately because for some cases with recursive
+-- types, fixed-point analyzer either fails to resolve the query completely or resolves it to a
+-- slightly different logical plan due to spark.sql.analyzer.singlePassResolver.preventUsingAliasesFromNonDirectChildren
+-- not being set in all tests.
+
+--SET spark.sql.analyzer.singlePassResolver.enabledTentatively=false
+--SET spark.sql.analyzer.singlePassResolver.dualRunWithLegacy=false
+
 -- This test file contains queries that test recursive types name resolution in ORDER BY and HAVING clauses.
 
 -- Alias type: String, Table column type: Struct
@@ -141,3 +149,10 @@ FROM VALUES (NAMED_STRUCT('nums', ARRAY(10, 20))) t (col1)
 GROUP BY col1
 HAVING col1.nums[0] + col1.nums[1] > 25
 ORDER BY col1.nums[0];
+
+-- SPARK-57186: Alias type: Struct, Table column type: NullType (void).
+-- Unlike the STRING/ARRAY/MAP input bases above, which throw INVALID_EXTRACT_BASE_FIELD_TYPE for
+-- this shadowing pattern, a NullType input column that shadows the struct alias yields NULL
+-- (NULL propagation). The HAVING predicate is therefore NULL and the row is filtered out, giving
+-- an empty result. NullType is intentionally the one base type that does not error here.
+SELECT NAMED_STRUCT('a', 1) AS col1 FROM VALUES (NULL) t (col1) GROUP BY col1 HAVING col1.a == 1;

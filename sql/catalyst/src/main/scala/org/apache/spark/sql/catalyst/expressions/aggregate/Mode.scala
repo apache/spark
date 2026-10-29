@@ -20,61 +20,47 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import org.apache.spark.SparkIllegalArgumentException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{ExpressionBuilder, UnresolvedWithinGroup}
-import org.apache.spark.sql.catalyst.expressions.{Ascending, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, BoundReference, Descending, Expression, ExpressionDescription, ImplicitCastInputTypes, SortOrder, UnsafeProjection}
 import org.apache.spark.sql.catalyst.expressions.Cast.toSQLExpr
+import org.apache.spark.sql.catalyst.optimizer.NormalizeFloatingNumbers
 import org.apache.spark.sql.catalyst.trees.UnaryLike
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.{ArrayData, CollationFactory, GenericArrayData, MapData, UnsafeRowUtils}
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, MapType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{AbstractDataType, AnyDataType, ArrayType, BooleanType, DataType, DoubleType, FloatType, MapType, StringType, StructType}
 import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
-case class Mode(
-    child: Expression,
-    mutableAggBufferOffset: Int = 0,
-    inputAggBufferOffset: Int = 0,
-    reverseOpt: Option[Boolean] = None)
-  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
-    with SupportsOrderingWithinGroup with UnaryLike[Expression] {
-
-  def this(child: Expression) = this(child, 0, 0)
-
-  def this(child: Expression, reverse: Boolean) = {
-    this(child, 0, 0, Some(reverse))
+private[aggregate] object ModeKeyNormalizer {
+  def forType(dataType: DataType): Any => Any = dataType match {
+    case DoubleType => NormalizeFloatingNumbers.DOUBLE_NORMALIZER
+    case FloatType => NormalizeFloatingNumbers.FLOAT_NORMALIZER
+    case dt if NormalizeFloatingNumbers.needNormalize(dt) =>
+      val ref = BoundReference(0, dt, nullable = true)
+      val proj = UnsafeProjection.create(NormalizeFloatingNumbers.normalize(ref))
+      (value: Any) => InternalRow.copyValue(proj(InternalRow(value)).get(0, dt))
+    case _ => (value: Any) => InternalRow.copyValue(value)
   }
+}
 
-  // Returns null for empty inputs
-  override def nullable: Boolean = true
+/**
+ * Shared collation-aware buffer folding for the `mode` family of aggregates.
+ *
+ * The aggregation buffer keeps the original (float-normalized) values as keys, so under a
+ * non-binary collation two collation-equal strings (e.g. 'b' and 'B' under UTF8_LCASE) land
+ * in separate buffer entries. At eval time [[getCollationAwareBuffer]] folds those entries
+ * into one group keyed on the collation key, summing their counts and keeping the first-seen
+ * original value as the group's representative. Binary-stable types skip the fold entirely
+ * (zero overhead) and complex types (struct/array/map) are handled recursively.
+ *
+ * Mixed into both [[Mode]] and [[PandasMode]] so the two share one implementation.
+ */
+private[aggregate] trait ModeCollationAware { self: Expression =>
+  protected def child: Expression
 
-  override def dataType: DataType = child.dataType
-
-  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
-
-  override def prettyName: String = "mode"
-
-  override def update(
-      buffer: OpenHashMap[AnyRef, Long],
-      input: InternalRow): OpenHashMap[AnyRef, Long] = {
-    val key = child.eval(input)
-
-    if (key != null) {
-      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
-    }
-    buffer
-  }
-
-  override def merge(
-      buffer: OpenHashMap[AnyRef, Long],
-      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
-    other.foreach { case (key, count) =>
-      buffer.changeValue(key, count, _ + count)
-    }
-    buffer
-  }
-
-  private def getCollationAwareBuffer(
+  protected def getCollationAwareBuffer(
       childDataType: DataType,
       buffer: OpenHashMap[AnyRef, Long]): Iterable[(AnyRef, Long)] = {
     def groupAndReduceBuffer(groupingFunction: AnyRef => _): Iterable[(AnyRef, Long)] = {
@@ -92,10 +78,17 @@ case class Mode(
   }
 
   protected[sql] def collationAwareTransform(data: AnyRef, dataType: DataType): AnyRef = {
+    // A null carries no collation, so it forms its own group. Guarding here (rather than only
+    // at the top-level key) also covers nulls nested in complex types: a null struct field,
+    // array element, or map value must not reach the string/collation-key path below, which
+    // throws on null. PandasMode stores a top-level null key when `ignoreNA` is false; Mode
+    // never stores one, so its behavior is unchanged.
+    if (data == null) return null
     dataType match {
+      // Key a binary value by content (see BinaryKey), not by array reference.
+      case _ if data.isInstanceOf[Array[Byte]] => new BinaryKey(data.asInstanceOf[Array[Byte]])
       case _ if UnsafeRowUtils.isBinaryStable(dataType) => data
-      case st: StructType =>
-        processStructTypeWithBuffer(data.asInstanceOf[InternalRow].toSeq(st).zip(st.fields))
+      case st: StructType => processStructTypeWithBuffer(data.asInstanceOf[InternalRow], st)
       case at: ArrayType => processArrayTypeWithBuffer(at, data.asInstanceOf[ArrayData])
       case mt: MapType => processMapTypeWithBuffer(mt, data.asInstanceOf[MapData])
       case st: StringType =>
@@ -111,26 +104,79 @@ case class Mode(
     }
   }
 
-  private def processStructTypeWithBuffer(
-      tuples: Seq[(Any, StructField)]): Seq[Any] = {
-    tuples.map(t => collationAwareTransform(t._1.asInstanceOf[AnyRef], t._2.dataType))
+  // The results below are used only as grouping keys, so they just need consistent
+  // element-wise equals/hashCode; a Scala immutable Seq/Map provides that. Each builds its
+  // result in a single pass (one array/map allocation) rather than chaining map/zip/toMap
+  // over per-element intermediate collections.
+
+  private def processStructTypeWithBuffer(row: InternalRow, st: StructType): Seq[Any] = {
+    val fields = st.fields
+    Array.tabulate(fields.length) { i =>
+      val fieldType = fields(i).dataType
+      collationAwareTransform(row.get(i, fieldType).asInstanceOf[AnyRef], fieldType)
+    }.toImmutableArraySeq
   }
 
-  private def processArrayTypeWithBuffer(
-      a: ArrayType,
-      data: ArrayData): Seq[Any] = {
-    (0 until data.numElements()).map(i =>
-      collationAwareTransform(data.get(i, a.elementType), a.elementType))
+  private def processArrayTypeWithBuffer(a: ArrayType, data: ArrayData): Seq[Any] = {
+    Array.tabulate(data.numElements()) { i =>
+      collationAwareTransform(data.get(i, a.elementType), a.elementType)
+    }.toImmutableArraySeq
   }
 
   private def processMapTypeWithBuffer(mt: MapType, data: MapData): Map[Any, Any] = {
-    val transformedKeys = (0 until data.numElements()).map { i =>
-      collationAwareTransform(data.keyArray().get(i, mt.keyType), mt.keyType)
+    val keys = data.keyArray()
+    val values = data.valueArray()
+    (0 until data.numElements()).iterator.map { i =>
+      collationAwareTransform(keys.get(i, mt.keyType), mt.keyType) ->
+        collationAwareTransform(values.get(i, mt.valueType), mt.valueType)
+    }.toMap
+  }
+}
+
+case class Mode(
+    child: Expression,
+    mutableAggBufferOffset: Int = 0,
+    inputAggBufferOffset: Int = 0,
+    reverseOpt: Option[Boolean] = None)
+  extends TypedAggregateWithHashMapAsBuffer with ImplicitCastInputTypes
+    with SupportsOrderingWithinGroup with UnaryLike[Expression] with ModeCollationAware {
+
+  def this(child: Expression) = this(child, 0, 0)
+
+  def this(child: Expression, reverse: Boolean) = {
+    this(child, 0, 0, Some(reverse))
+  }
+
+  // Returns null for empty inputs
+  override def nullable: Boolean = true
+
+  override def dataType: DataType = child.dataType
+
+  override def inputTypes: Seq[AbstractDataType] = Seq(AnyDataType)
+
+  override def prettyName: String = "mode"
+
+  @transient private lazy val keyNormalizer: Any => Any =
+    ModeKeyNormalizer.forType(child.dataType)
+
+  override def update(
+      buffer: OpenHashMap[AnyRef, Long],
+      input: InternalRow): OpenHashMap[AnyRef, Long] = {
+    val key = child.eval(input)
+
+    if (key != null) {
+      buffer.changeValue(toBufferKey(keyNormalizer(key)), 1L, _ + 1L)
     }
-    val transformedValues = (0 until data.numElements()).map { i =>
-      collationAwareTransform(data.valueArray().get(i, mt.valueType), mt.valueType)
+    buffer
+  }
+
+  override def merge(
+      buffer: OpenHashMap[AnyRef, Long],
+      other: OpenHashMap[AnyRef, Long]): OpenHashMap[AnyRef, Long] = {
+    other.foreach { case (key, count) =>
+      buffer.changeValue(key, count, _ + count)
     }
-    transformedKeys.zip(transformedValues).toMap
+    buffer
   }
 
   override def eval(buffer: OpenHashMap[AnyRef, Long]): Any = {
@@ -151,7 +197,10 @@ case class Mode(
     // The new map is then used in the rest of the Mode evaluation logic.
     //
     // It is expected to work for all simple and complex types with collated fields.
+    //
+    // Unwrap binary keys (see `toBufferKey`) before they are ordered or returned.
     val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+      .view.map { case (key, count) => (fromBufferKey(key), count) }
 
     reverseOpt.map { reverse =>
       val defaultKeyOrdering = if (reverse) {
@@ -208,7 +257,6 @@ case class Mode(
     copy(child = newChild)
 }
 
-// TODO: SPARK-48701: PandasMode (all collations)
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
@@ -217,6 +265,14 @@ case class Mode(
     _FUNC_() WITHIN GROUP (ORDER BY col) - Returns the most frequent value for the values within `col` (specified in ORDER BY clause). NULL values are ignored.
       If all the values are NULL, or there are 0 rows, returns NULL. When multiple values have the same greatest frequency only one value will be returned.
       The value will be chosen based on sort direction. Return the smallest value if sort direction is asc or the largest value if sort direction is desc from multiple values with the same frequency.""",
+  arguments = """
+    Arguments:
+      * col - The column to compute the most frequent value of.
+        An expression of any type.
+      * deterministic - Whether to return a deterministic result when there are multiple most
+          frequent values.
+        An expression that evaluates to a boolean. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10), (10) AS tab(col);
@@ -283,7 +339,7 @@ case class PandasMode(
     ignoreNA: Boolean = true,
     mutableAggBufferOffset: Int = 0,
     inputAggBufferOffset: Int = 0) extends TypedAggregateWithHashMapAsBuffer
-  with ImplicitCastInputTypes with UnaryLike[Expression] {
+  with ImplicitCastInputTypes with UnaryLike[Expression] with ModeCollationAware {
 
   def this(child: Expression) = this(child, true, 0, 0)
 
@@ -299,13 +355,16 @@ case class PandasMode(
 
   override def prettyName: String = "pandas_mode"
 
+  @transient private lazy val keyNormalizer: Any => Any =
+    ModeKeyNormalizer.forType(child.dataType)
+
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
     val key = child.eval(input)
 
     if (key != null) {
-      buffer.changeValue(InternalRow.copyValue(key).asInstanceOf[AnyRef], 1L, _ + 1L)
+      buffer.changeValue(toBufferKey(keyNormalizer(key)), 1L, _ + 1L)
     } else if (!ignoreNA) {
       buffer.changeValue(null, 1L, _ + 1L)
     }
@@ -326,11 +385,16 @@ case class PandasMode(
       return new GenericArrayData(Array.empty)
     }
 
+    // Fold collation-equal keys into one group before selecting the mode(s), so that under a
+    // non-binary collation values such as 'b' and 'B' (equal under UTF8_LCASE) are counted
+    // together. Binary-stable types return the buffer unchanged (no overhead). Mirrors Mode.eval.
+    // Unwrap binary keys (see `toBufferKey`) before they are returned.
+    val collationAwareBuffer = getCollationAwareBuffer(child.dataType, buffer)
+      .view.map { case (key, count) => (fromBufferKey(key), count) }
+
     val modes = collection.mutable.ArrayBuffer.empty[AnyRef]
     var maxCount = -1L
-    val iter = buffer.iterator
-    while (iter.hasNext) {
-      val (key, count) = iter.next()
+    collationAwareBuffer.foreach { case (key, count) =>
       if (maxCount < count) {
         modes.clear()
         modes.append(key)

@@ -20,11 +20,11 @@
 # Utility for checking whether generated codes in PySpark are out of sync.
 #   usage: ./dev/check-protos.py
 
-import os
-import sys
 import filecmp
-import tempfile
+import os
 import subprocess
+import sys
+import tempfile
 
 # Location of your Spark git development area
 SPARK_HOME = os.environ.get("SPARK_HOME", os.getcwd())

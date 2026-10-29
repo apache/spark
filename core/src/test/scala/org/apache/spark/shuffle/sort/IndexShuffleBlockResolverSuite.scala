@@ -278,6 +278,22 @@ class IndexShuffleBlockResolverSuite extends SparkFunSuite {
     val checksumsFromFile = resolver.getChecksums(checksumFile, 10)
     assert(checksumsInMemory === checksumsFromFile)
   }
+
+  test("SPARK-57504: getChecksums returns null instead of throwing NPE when the " +
+    "checksum file cannot be opened") {
+    val resolver = new IndexShuffleBlockResolver(conf, blockManager)
+    // If opening the checksum file fails, getChecksums is meant to return null: it
+    // already catches IOException/EOFException. But the old non-null-safe
+    // `finally { in.close() }` threw NPE when the failure came from the stream
+    // constructor (`in` was still null), masking the original error. The sibling
+    // methods checkIndexAndDataFile and getMergedBlockData already handle this
+    // correctly. Force a constructor failure with a file that appears to exist but
+    // cannot be opened.
+    val unopenableChecksumFile = new File(tempDir, "missing.checksum") {
+      override def exists(): Boolean = true
+    }
+    assert(resolver.getChecksums(unopenableChecksumFile, 10) === null)
+  }
 }
 
 class SslIndexShuffleBlockResolverSuite extends IndexShuffleBlockResolverSuite {

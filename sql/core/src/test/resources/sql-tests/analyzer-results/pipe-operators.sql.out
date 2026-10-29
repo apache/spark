@@ -1346,8 +1346,8 @@ org.apache.spark.sql.catalyst.parser.ParseException
   "errorClass" : "PARSE_SYNTAX_ERROR",
   "sqlState" : "42601",
   "messageParameters" : {
-    "error" : "'@'",
-    "hint" : ""
+    "error" : "'@v'",
+    "hint" : ": extra input '@v'"
   }
 }
 
@@ -2040,9 +2040,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "errorClass" : "INVALID_TABLESAMPLE_FRACTION",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "msg" : "Sampling fraction (-1.0) must be on interval [0, 1]"
+    "fraction" : "-1.0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -2105,9 +2106,10 @@ table t
 -- !query analysis
 org.apache.spark.sql.catalyst.parser.ParseException
 {
-  "errorClass" : "_LEGACY_ERROR_TEMP_0064",
+  "errorClass" : "INVALID_TABLESAMPLE_FRACTION",
+  "sqlState" : "22023",
   "messageParameters" : {
-    "msg" : "Sampling fraction (2.0) must be on interval [0, 1]"
+    "fraction" : "2.0"
   },
   "queryContext" : [ {
     "objectType" : "",
@@ -3488,6 +3490,203 @@ org.apache.spark.sql.catalyst.parser.ParseException
     "fragment" : "select 3 as x, 4 as y\n|> aggregate group by all"
   } ]
 }
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 5
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "5",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "5"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "GROUP_BY_POS_OUT_OF_RANGE",
+  "sqlState" : "42805",
+  "messageParameters" : {
+    "index" : "0",
+    "size" : "2"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 52,
+    "fragment" : "0"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 59,
+    "fragment" : "2 as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x, 2 grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 55,
+    "stopIndex" : 59,
+    "fragment" : "2 grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by (2) as grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 61,
+    "fragment" : "(2) as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by -1 as grp
+-- !query analysis
+org.apache.spark.sql.catalyst.parser.ParseException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.PIPE_OPERATOR_AGGREGATE_UNSUPPORTED_CASE",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "case" : "aliases on GROUP BY ordinals"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 52,
+    "stopIndex" : 60,
+    "fragment" : "-1 as grp"
+  } ]
+}
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by x as grp
+-- !query analysis
+Aggregate [x#x], [x#x AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 1 + 1 as grp
+-- !query analysis
+Aggregate [(1 + 1)], [(1 + 1) AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2L as grp
+-- !query analysis
+Aggregate [2], [2 AS grp#xL, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=true
+-- !query analysis
+SetCommand (spark.sql.legacy.allowAliasedPipeAggregateOrdinals,Some(true))
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query analysis
+Aggregate [2], [2 AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+set spark.sql.legacy.allowAliasedPipeAggregateOrdinals=false
+-- !query analysis
+SetCommand (spark.sql.legacy.allowAliasedPipeAggregateOrdinals,Some(false))
+
+
+-- !query
+set spark.sql.groupByOrdinal=false
+-- !query analysis
+SetCommand (spark.sql.groupByOrdinal,Some(false))
+
+
+-- !query
+select 3 as x, 4 as y
+|> aggregate sum(y) group by 2 as grp
+-- !query analysis
+Aggregate [2], [2 AS grp#x, sum(y#x) AS sum(y)#xL]
++- Project [3 AS x#x, 4 AS y#x]
+   +- OneRowRelation
+
+
+-- !query
+set spark.sql.groupByOrdinal=true
+-- !query analysis
+SetCommand (spark.sql.groupByOrdinal,Some(true))
 
 
 -- !query

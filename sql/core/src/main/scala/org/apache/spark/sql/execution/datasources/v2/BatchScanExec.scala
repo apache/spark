@@ -27,10 +27,25 @@ import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.catalyst.util.truncatedString
 import org.apache.spark.sql.connector.catalog.Table
 import org.apache.spark.sql.connector.read._
+import org.apache.spark.sql.connector.write.RowLevelOperation.Command.DELETE
+import org.apache.spark.sql.connector.write.RowLevelOperationTable
+import org.apache.spark.sql.execution.EmptyRDDWithPartitions
+import org.apache.spark.sql.execution.datasources.StorageFilterPlanning
+import org.apache.spark.sql.execution.metric.{SQLLastAttemptMetrics, SQLMetric, SQLMetrics}
+import org.apache.spark.sql.internal.connector.{StorageFilterImpl, StorageFilterRequestImpl}
+import org.apache.spark.sql.types.BooleanType
 import org.apache.spark.util.ArrayImplicits._
 
 /**
  * Physical plan node for scanning a batch of data from a data source v2.
+ *
+ * @param storageFilters Predicates the scan's readers may evaluate, to skip reading the other
+ *                       columns of the rows they reject, see [[SupportsStorageFilters]]. Non-empty
+ *                       only for a scan that declared their columns. Each task's readers get them
+ *                       ANDed into one filter, in a [[StorageFilterRequest]]. They stay in the
+ *                       post-scan `Filter` too.
+ * @param appendsCheckedColumn Whether the readers mark the rows they checked in a boolean column,
+ *                             the last of `output`, see `StorageFilterPlanning.checkedColumn`.
  */
 case class BatchScanExec(
     output: Seq[AttributeReference],
@@ -38,45 +53,93 @@ case class BatchScanExec(
     runtimeFilters: Seq[Expression],
     ordering: Option[Seq[SortOrder]] = None,
     @transient table: Table,
-    keyGroupedPartitioning: Option[Seq[Expression]] = None
+    keyGroupedPartitioning: Option[Seq[Expression]] = None,
+    storageFilters: Seq[Expression] = Nil,
+    appendsCheckedColumn: Boolean = false
   ) extends DataSourceV2ScanExecBase {
 
+  // The readers are asked for the column only with storage filters, and append it last.
+  require(!appendsCheckedColumn ||
+    (storageFilters.nonEmpty && output.lastOption.exists(_.dataType == BooleanType)),
+    "A checked column comes with storage filters, last in the output")
+
+  // The output the scan was planned for, without the checked column the readers append.
+  private def scanOutput: Seq[AttributeReference] =
+    if (appendsCheckedColumn) output.init else output
+
   @transient lazy val batch: Batch = if (scan == null) null else scan.toBatch
+
+  override protected lazy val sparkMetrics: Map[String, SQLMetric] = {
+    val name = "number of output rows"
+    val metric = table match {
+      // Use SLAM for the scan-output count when this scan reads on behalf of a row-level DELETE,
+      // so that the driver-side derivation `numDeletedRows = numScannedRows - numCopiedRows` in
+      // `ReplaceDataExec.getWriteSummary` stays correct under stage retries.
+      case rlot: RowLevelOperationTable if rlot.operation.command() == DELETE =>
+        SQLLastAttemptMetrics.createMetric(sparkContext, name)
+      case _ =>
+        SQLMetrics.createMetric(sparkContext, name)
+    }
+    Map("numOutputRows" -> metric)
+  }
 
   // TODO: unify the equal/hashCode implementation for all data source v2 query plans.
   override def equals(other: Any): Boolean = other match {
     case other: BatchScanExec =>
       this.batch != null && this.batch == other.batch &&
           this.runtimeFilters == other.runtimeFilters &&
-          this.keyGroupedPartitioning == other.keyGroupedPartitioning
+          this.prunedKeyGroupedPartitioning == other.prunedKeyGroupedPartitioning &&
+          this.storageFilters == other.storageFilters &&
+          this.appendsCheckedColumn == other.appendsCheckedColumn
     case _ =>
       false
   }
 
-  override def hashCode(): Int = Objects.hash(batch, runtimeFilters, keyGroupedPartitioning)
+  override def hashCode(): Int = Objects.hash(
+    batch, runtimeFilters, prunedKeyGroupedPartitioning, storageFilters, appendsCheckedColumn)
+
+  /**
+   * The reported partitioning keys restricted to those still present in `output`. A key may
+   * reference a column pruned out of the scan, which is kept as long as any key survives (see
+   * V2ScanPartitioningAndOrdering). Such a dangling key carries no information, since the physical
+   * outputPartitioning projects it away, so `doCanonicalize`, `equals` and `hashCode` all use
+   * this view to stay consistent about ignoring it.
+   */
+  @transient lazy val prunedKeyGroupedPartitioning: Option[Seq[Expression]] =
+    keyGroupedPartitioning.map(_.filter(_.references.subsetOf(outputSet)))
 
   @transient override lazy val inputPartitions: Seq[InputPartition] =
     batch.planInputPartitions().toImmutableArraySeq
 
-  // Visible for testing
+  // Visible for testing. Runtime filtering resolves the scan's columns by name, which the checked
+  // column must not take part in.
   @transient private[sql] lazy val filteredPartitions: Seq[Option[InputPartition]] =
     PushDownUtils.replanWithRuntimeFilters(
       scan,
       runtimeFilters,
       table,
-      output,
-      outputPartitioning,
+      scanOutput,
+      reportedKeyedPartitioning,
       inputPartitions)
 
   override lazy val readerFactory: PartitionReaderFactory = batch.createReaderFactory()
 
+  // What every task's readers get, the storage filters ANDed into one. A runtime bloom arrives as
+  // a ScalarSubquery over the build side, which SparkPlan has computed by the time this is forced.
+  // The readers get its result, so the task does not carry the subquery's plan.
+  @transient private lazy val storageFilterRequest: Option[StorageFilterRequest] =
+    storageFilters.map(StorageFilterPlanning.withSubqueryResults)
+      .reduceOption(And)
+      .map(c => StorageFilterRequestImpl(StorageFilterImpl(c, scanOutput), appendsCheckedColumn))
+
   override lazy val inputRDD: RDD[InternalRow] = {
     val rdd = if (filteredPartitions.isEmpty && outputPartitioning == SinglePartition) {
       // return an empty RDD with 1 partition if dynamic filtering removed the only split
-      sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
+      new EmptyRDDWithPartitions(sparkContext, 1)
     } else {
       new DataSourceRDD(
-        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics)
+        sparkContext, filteredPartitions, readerFactory, supportsColumnar, customMetrics,
+        storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
     }
     postDriverMetrics(scan.reportDriverMetrics())
     rdd
@@ -88,14 +151,30 @@ case class BatchScanExec(
       runtimeFilters = QueryPlan.normalizePredicates(
         runtimeFilters.filterNot(_ == DynamicPruningExpression(Literal.TrueLiteral)),
         output),
-      keyGroupedPartitioning = keyGroupedPartitioning.map(QueryPlan.normalizePredicates(_, output)))
+      keyGroupedPartitioning = prunedKeyGroupedPartitioning.map(
+        _.map(QueryPlan.normalizeExpressions(_, output))),
+      // Storage filters change what the scan returns, so a scan carrying one must not be reused for
+      // a plain scan of the same table.
+      storageFilters = QueryPlan.normalizePredicates(storageFilters, output))
   }
 
   override def simpleString(maxFields: Int): String = {
     val truncatedOutputString = truncatedString(output, "[", ", ", "]", maxFields)
     val runtimeFiltersString = s"RuntimeFilters: ${runtimeFilters.mkString("[", ",", "]")}"
-    val result = s"$nodeName$truncatedOutputString ${scan.description()} $runtimeFiltersString"
+    val storageFiltersString = storageFiltersDescription.map(" " + _).getOrElse("")
+    val result = s"$nodeName$truncatedOutputString ${scan.description()} " +
+      s"$runtimeFiltersString$storageFiltersString"
     redact(result)
+  }
+
+  override def verboseStringWithOperatorId(): String = {
+    val verbose = super.verboseStringWithOperatorId()
+    storageFiltersDescription.map(d => verbose + redact(d) + "\n").getOrElse(verbose)
+  }
+
+  // Only when the scan has some, since an empty one would change every other scan's description.
+  private def storageFiltersDescription: Option[String] = Option.when(storageFilters.nonEmpty) {
+    s"StorageFilters: ${storageFilters.mkString("[", ",", "]")}"
   }
 
   override def nodeName: String = {

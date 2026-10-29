@@ -19,7 +19,6 @@ import numpy as np
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class FrameCorrwithMixin:
@@ -66,7 +65,6 @@ class FrameCorrwithMixin:
 class FrameCorrwithTests(
     FrameCorrwithMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

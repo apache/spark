@@ -98,6 +98,13 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
     checkAnswer(sql("CALL cat.ns.sum((1 + 1) * 2, in2 => (2 + 1) / 3)"), Row(5) :: Nil)
   }
 
+  test("SPARK-59962: an argument reading a value twice") {
+    // NULLIF reads the scalar subquery twice. Pre-evaluating it in a `Project` over the
+    // `ResolvedProcedure` would leave a plan `InvokeProcedures` does not expect.
+    catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundSum)
+    checkAnswer(sql("CALL cat.ns.sum(nullif((SELECT 5), 3), 1)"), Row(6) :: Nil)
+  }
+
   test("type coercion") {
     catalog.createProcedure(Identifier.of(Array("ns"), "sum"), UnboundLongSum)
     checkAnswer(sql("CALL cat.ns.sum(1, 2)"), Row(3) :: Nil)
@@ -596,6 +603,19 @@ class ProcedureSuite extends SharedSparkSession with BeforeAndAfter {
       Row("Procedure:   zero_params") ::
       Row("Description: zero parameter procedure") ::
       Row("Parameters:  ()") :: Nil)
+  }
+
+  test("SPARK-55982: DROP NAMESPACE CASCADE removes procedures") {
+    sql("CREATE NAMESPACE cat.dropns")
+    catalog.createProcedure(Identifier.of(Array("dropns"), "sum"), UnboundSum)
+    // Procedure resolves before drop.
+    checkAnswer(sql("CALL cat.dropns.sum(1, 2)"), Row(3) :: Nil)
+    sql("DROP NAMESPACE cat.dropns CASCADE")
+    // After cascade drop, the procedure must no longer resolve.
+    checkError(
+      exception = intercept[AnalysisException](sql("CALL cat.dropns.sum(1, 2)")),
+      condition = "FAILED_TO_LOAD_ROUTINE",
+      parameters = Map("routineName" -> "`cat`.`dropns`.`sum`"))
   }
 
   object UnboundBindFailProcedure extends UnboundProcedure {

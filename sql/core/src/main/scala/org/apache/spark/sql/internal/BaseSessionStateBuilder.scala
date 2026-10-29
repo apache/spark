@@ -22,14 +22,14 @@ import org.apache.spark.sql.artifact.ArtifactManager
 import org.apache.spark.sql.catalyst.analysis.{Analyzer, EvalSubqueriesForTimeTravel, FunctionRegistry, InvokeProcedures, ReplaceCharWithVarchar, ResolveDataSource, ResolveEventTimeWatermark, ResolveExecuteImmediate, ResolveMetricView, ResolveSessionCatalog, ResolveSetCatalogCommand, ResolveTranspose, TableFunctionRegistry}
 import org.apache.spark.sql.catalyst.analysis.resolver.ResolverExtension
 import org.apache.spark.sql.catalyst.catalog.{FunctionExpressionBuilder, SessionCatalog}
-import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields}
+import org.apache.spark.sql.catalyst.expressions.{Expression, ExtractSemiStructuredFields, ParseSql}
 import org.apache.spark.sql.catalyst.normalizer.NormalizeCTEIds
 import org.apache.spark.sql.catalyst.optimizer.Optimizer
 import org.apache.spark.sql.catalyst.parser.ParserInterface
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.classic.{SparkSession, Strategy, StreamingCheckpointManager, StreamingQueryManager, UDFRegistration}
-import org.apache.spark.sql.connector.catalog.CatalogManager
+import org.apache.spark.sql.connector.catalog.DefaultCatalogManager
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.{ColumnarRule, CommandExecutionMode, QueryExecution, SparkOptimizer, SparkPlanner, SparkSqlParser}
 import org.apache.spark.sql.execution.adaptive.AdaptiveRulesHolder
@@ -94,7 +94,12 @@ abstract class BaseSessionStateBuilder(
    */
   protected lazy val functionRegistry: FunctionRegistry = {
     parentState.map(_.functionRegistry.clone())
-      .getOrElse(extensions.registerFunctions(FunctionRegistry.builtin.clone()))
+      .getOrElse {
+        val registry = FunctionRegistry.builtin.clone()
+        // sql/core-only builtins that need SparkSqlParser.
+        ParseSql.register(registry)
+        extensions.registerFunctions(registry)
+      }
   }
 
   /**
@@ -161,7 +166,7 @@ abstract class BaseSessionStateBuilder(
   protected lazy val v2SessionCatalog = new V2SessionCatalog(catalog)
 
   protected lazy val catalogManager = {
-    val cm = new CatalogManager(v2SessionCatalog, catalog)
+    val cm = new DefaultCatalogManager(v2SessionCatalog, catalog)
     parentState.foreach(ps => cm.copySessionPathFrom(ps.catalogManager))
     cm
   }
@@ -330,6 +335,9 @@ abstract class BaseSessionStateBuilder(
 
       override def extendedOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
         super.extendedOperatorOptimizationRules ++ customOperatorOptimizationRules
+
+      override def preOperatorOptimizationRules: Seq[Rule[LogicalPlan]] =
+        super.preOperatorOptimizationRules ++ customPreOperatorOptimizationRules
     }
   }
 
@@ -341,6 +349,16 @@ abstract class BaseSessionStateBuilder(
    */
   protected def customOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
     extensions.buildOptimizerRules(session)
+  }
+
+  /**
+   * Custom rules that run in a single pass before the main operator optimization batch.
+   * Prefer overriding this instead of creating your own Optimizer.
+   *
+   * Note that this may NOT depend on the `optimizer` function.
+   */
+  protected def customPreOperatorOptimizationRules: Seq[Rule[LogicalPlan]] = {
+    extensions.buildPreOperatorOptimizationRules(session)
   }
 
   /**

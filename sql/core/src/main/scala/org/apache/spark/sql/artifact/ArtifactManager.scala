@@ -33,13 +33,15 @@ import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
 
 import org.apache.spark.{JobArtifactSet, JobArtifactState, SparkContext, SparkEnv, SparkException, SparkRuntimeException, SparkUnsupportedOperationException}
 import org.apache.spark.internal.{Logging, LogKeys}
-import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST}
+import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourcePackage
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
-import org.apache.spark.util.{ChildFirstURLClassLoader, StubClassLoader, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, RuntimeDependencyResolver, StubClassLoader, Utils}
+import org.apache.spark.util.RuntimeDependencyResolver.{AllowRequestedRepositories, RepositoryPolicy}
 
 /**
  * This class handles the storage of artifacts as well as preparing the artifacts for use.
@@ -69,6 +71,23 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
   protected[artifact] val (artifactPath, artifactURI): (Path, String) =
     (ArtifactUtils.concatenatePaths(artifactRootPath, session.sessionUUID),
       s"$artifactRootURI/${session.sessionUUID}")
+
+  private val ivyCachePath = artifactPath.resolve(".ivy-cache")
+
+  private lazy val runtimeDependencyResolver = {
+    val sparkConf = session.sparkContext.getConf
+    val ivyPath = Files.createDirectories(ivyCachePath).toString
+    new RuntimeDependencyResolver(
+      ivySettingsPath = sparkConf.get(JAR_IVY_SETTING_PATH),
+      ivyPath = Some(ivyPath),
+      localIvyPath = sparkConf.getOption(JAR_IVY_REPO_PATH.key))
+  }
+
+  private[sql] lazy val ivyConnectTimeoutMs: Int =
+    session.sparkContext.getConf.get(JAR_IVY_CONNECT_TIMEOUT).toInt
+
+  private[sql] lazy val ivyReadTimeoutMs: Int =
+    session.sparkContext.getConf.get(JAR_IVY_READ_TIMEOUT).toInt
 
   // The base directory/URI where all class file artifacts are stored for this `sessionUUID`.
   protected[artifact] val (classDir, replClassURI): (Path, String) =
@@ -134,6 +153,28 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * @return
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
+
+  /**
+   * Returns the native data source packages added to this session, as the local files of the
+   * driver, and the UUID under which the executors store them, if the session is isolated.
+   */
+  private[sql] def getNativeDataSourcePackages: (Seq[File], Option[String]) = {
+    val packages = sparkContextRelativePaths.asScala.collect {
+      case (SparkContextResourceType.FILE, path, _)
+          if path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION) =>
+        artifactPath.resolve(path).toFile
+    }.toSeq
+    (packages, Option(state).map(_.uuid))
+  }
+
+  /** Returns whether a file with the given name was added to this session as a file artifact. */
+  private[sql] def hasFileArtifact(fileName: String): Boolean = {
+    val path = Paths.get("files", fileName)
+    sparkContextRelativePaths.asScala.exists {
+      case (SparkContextResourceType.FILE, relativePath, _) => relativePath == path
+      case _ => false
+    }
+  }
 
   protected[sql] def getCachedBlockId(hash: String): Option[CacheId] = {
     Option(hashToCachedIdMap.get(hash)).map(_.id)
@@ -323,6 +364,21 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     }
   }
 
+  private[sql] def resolveArtifacts(
+      uri: URI,
+      repositoryPolicy: RepositoryPolicy = AllowRequestedRepositories,
+      connectTimeoutMs: Int = ivyConnectTimeoutMs,
+      readTimeoutMs: Int = ivyReadTimeoutMs,
+      isCancelled: () => Boolean = () => false): Seq[Artifact] = {
+    uri.getScheme match {
+      case "ivy" =>
+        runtimeDependencyResolver
+          .resolve(uri, connectTimeoutMs, readTimeoutMs, repositoryPolicy, isCancelled)
+          .map(path => Artifact.newJarArtifact(path.getFileName, new Artifact.LocalFile(path)))
+      case _ => Artifact.parseArtifacts(uri)
+    }
+  }
+
   def classloader: ClassLoader = synchronized {
     cachedClassLoader.getOrElse {
       val loader = buildClassLoader
@@ -369,11 +425,26 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     loader
   }
 
+  private def copyArtifacts(targetPath: Path): Unit = {
+    Files.createDirectories(targetPath)
+    Utils.tryWithResource(Files.newDirectoryStream(artifactPath)) { entries =>
+      // The Ivy cache is session-local scratch data. A cloned session recreates it lazily.
+      entries.asScala.filterNot(_ == ivyCachePath).foreach { source =>
+        val target = targetPath.resolve(source.getFileName)
+        if (Files.isDirectory(source)) {
+          Utils.copyDirectory(source.toFile, target.toFile)
+        } else {
+          Utils.copyFile(source.toFile, target.toFile)
+        }
+      }
+    }
+  }
+
   private[sql] def clone(newSession: SparkSession): ArtifactManager = {
     val sparkContext = session.sparkContext
     val newArtifactManager = new ArtifactManager(newSession)
     if (artifactPath.toFile.exists()) {
-      Utils.copyDirectory(artifactPath.toFile, newArtifactManager.artifactPath.toFile)
+      copyArtifacts(newArtifactManager.artifactPath)
     }
 
     // Share cached blocks with the cloned session by copying the references and incrementing
@@ -504,10 +575,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     val localPath = serverLocalStagingPath
     val fs = destFSPath.getFileSystem(hadoopConf)
     if (fs.isInstanceOf[LocalFileSystem]) {
-      val allowDestLocalConf =
-        session.sessionState.conf.getConf(SQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
-          .getOrElse(
-            session.conf.get("spark.connect.copyFromLocalToFs.allowDestLocal").contains("true"))
+      val allowDestLocalConf = session.sessionState.conf.getConf(
+        StaticSQLConf.ARTIFACT_COPY_FROM_LOCAL_TO_FS_ALLOW_DEST_LOCAL)
 
       if (!allowDestLocalConf) {
         // To avoid security issue, by default,
@@ -517,7 +586,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         // We can temporarily allow the behavior by setting spark config
         // `spark.sql.artifact.copyFromLocalToFs.allowDestLocal`
         // to `true` when starting spark driver, we should only enable it for testing
-        // purpose.
+        // purpose. It is a static conf, so it cannot be set from a session.
         throw new SparkUnsupportedOperationException("_LEGACY_ERROR_TEMP_3161")
       }
     }
@@ -571,6 +640,9 @@ object ArtifactManager extends Logging {
         sparkContext.postEnvironmentUpdate()
       }
     }
+
+    // Forget the native data source packages read from the artifacts folder
+    Utils.tryLogNonFatalError(NativeDataSourcePackage.forgetPackagesIn(artifactPath.toFile))
 
     // Clean up artifacts folder
     try {

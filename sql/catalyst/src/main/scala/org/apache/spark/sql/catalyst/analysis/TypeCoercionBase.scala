@@ -95,7 +95,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
    */
   object DefaultValueExpressionCoercion extends Rule[LogicalPlan] {
     override def apply(plan: LogicalPlan): LogicalPlan = plan resolveOperators {
-      case createTable @ CreateTable(_, cols, _, _, _) if createTable.resolved &&
+      case createTable @ CreateTable(_, cols, _, _, _, _, _) if createTable.resolved &&
         cols.exists(_.defaultValue.isDefined) =>
         val newCols = cols.map { c =>
           c.copy(defaultValue = c.defaultValue.map(d =>
@@ -108,7 +108,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         }
         createTable.copy(columns = newCols)
 
-      case replaceTable @ ReplaceTable(_, cols, _, _, _) if replaceTable.resolved &&
+      case replaceTable @ ReplaceTable(_, cols, _, _, _, _, _) if replaceTable.resolved &&
         cols.exists(_.defaultValue.isDefined) =>
         val newCols = cols.map { c =>
           c.copy(defaultValue = c.defaultValue.map(d =>
@@ -134,7 +134,7 @@ abstract class TypeCoercionBase extends TypeCoercionHelper {
         }
         addColumns.copy(columnsToAdd = newCols)
 
-      case alterColumns @ AlterColumns(_, specs) if alterColumns.resolved &&
+      case alterColumns @ AlterColumns(_, specs, _) if alterColumns.resolved &&
         specs.exists(_.newDefaultExpression.isDefined) =>
         val newSpecs = specs.map { c =>
           val dataType = c.column.asInstanceOf[ResolvedFieldName].field.dataType

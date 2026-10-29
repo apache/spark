@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCoercionSuite
 import org.apache.spark.sql.catalyst.expressions.aggregate.{CollectList, CollectSet}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType.{DAY, HOUR, MINUTE, SECOND}
@@ -54,6 +55,26 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
   test("cast from long #2") {
     checkEvaluation(cast(123L, DecimalType(3, 1)), null)
     checkEvaluation(cast(123L, DecimalType(2, 0)), null)
+  }
+
+  test("SPARK-57211: legacy mode cast malformed string to nanosecond timestamp returns null") {
+    Seq("123", "2015-03-18 123142", "2015-03-18X", "abdef").foreach { str =>
+      foreachNanosPrecision { precision =>
+        checkEvaluation(
+          cast(Literal(str), TimestampLTZNanosType(precision), UTC_OPT), null)
+        checkEvaluation(
+          cast(Literal(str), TimestampNTZNanosType(precision)), null)
+      }
+    }
+  }
+
+  test("SPARK-57838: legacy mode cast string beyond the epoch-microsecond range to nanos") {
+    // Same NULL as the micro types: the value does not fit the Long epoch-microseconds.
+    Seq("+294247-01-10 04:00:54.775808", "-290308-12-21 19:59:05.224191999").foreach { str =>
+      checkEvaluation(cast(Literal(str), TimestampNTZType), null)
+      checkEvaluation(cast(Literal(str), TimestampNTZNanosType(9)), null)
+      checkEvaluation(cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), UTC_OPT), null)
+    }
   }
 
   test("cast from int #2") {
@@ -547,8 +568,20 @@ class CastWithAnsiOffSuite extends CastSuiteBase {
       Decimal("60000000000000000000000000000000000000"))
     checkEvaluation(cast("6E+38", DecimalType(38, 0)), null)
     checkEvaluation(cast("6E+37", DecimalType(38, 1)), null)
+    Seq("1e2147483647", "1.5e2147483647", "12e2147483647").foreach { s =>
+      checkEvaluation(cast(s, DecimalType(10, 2)), null)
+    }
 
     checkEvaluation(cast("abcd", DecimalType(38, 1)), null)
+  }
+
+  test("SPARK-60119: cast string with a huge exponent to decimal with negative scale allowed") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq("1e2147483647", "-1e2147483646", "12e2147483647", "1e100000000").foreach { str =>
+        checkEvaluation(cast(str, DecimalType(10, 2)), null)
+      }
+      checkEvaluation(cast("0e2147483647", DecimalType(10, 2)), Decimal("0.00"))
+    }
   }
 
   test("data type casting II") {

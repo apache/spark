@@ -1,0 +1,379 @@
+-- FVT Category 2: ASOF JOIN semantic behavior (FVT-ASOF-2-*)
+
+--SET spark.sql.join.asofJoin.enabled=true
+
+CREATE OR REPLACE TEMP VIEW trades(trade_time, symbol, quantity) AS
+  VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100),
+         (TIMESTAMP '2026-06-29 10:00:11', 'AAPL', 200),
+         (TIMESTAMP '2026-06-29 10:00:12', 'MSFT',  50),
+         (TIMESTAMP '2026-06-29 09:59:59', 'GOOG',  30);
+
+CREATE OR REPLACE TEMP VIEW quotes(quote_time, symbol, bid_price) AS
+  VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 180.10),
+         (TIMESTAMP '2026-06-29 10:00:07', 'AAPL', 180.15),
+         (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 180.20),
+         (TIMESTAMP '2026-06-29 10:00:08', 'MSFT', 420.50);
+
+CREATE OR REPLACE TEMP VIEW deploys(deploy_ts, seq, service, version) AS
+  VALUES (TIMESTAMP '2026-06-29 10:00:00', 1, 'api', 'v1.0'),
+         (TIMESTAMP '2026-06-29 10:00:00', 2, 'api', 'v1.1'),
+         (TIMESTAMP '2026-06-29 10:05:00', 1, 'api', 'v1.2');
+
+CREATE OR REPLACE TEMP VIEW requests(req_ts, seq, service) AS
+  VALUES (TIMESTAMP '2026-06-29 10:00:00', 5, 'api'),
+         (TIMESTAMP '2026-06-29 10:03:00', 1, 'api');
+
+CREATE OR REPLACE TEMP VIEW using_left(k, lts) AS
+  VALUES (1, 10), (2, 20), (8, 30);
+
+CREATE OR REPLACE TEMP VIEW using_right(k, rts) AS
+  VALUES (1, 5), (2, 12), (8, 15);
+
+CREATE OR REPLACE TEMP VIEW using_keys(k) AS
+  VALUES (1), (2);
+
+-- FVT-ASOF-2-001: >= selects largest preceding right row
+SELECT t.trade_time, q.quote_time
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol AND t.symbol = 'AAPL'
+    AND t.trade_time = TIMESTAMP '2026-06-29 10:00:11';
+
+-- FVT-ASOF-2-002: > excludes exact equality
+SELECT t.trade_time, q.quote_time
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X'),
+            (TIMESTAMP '2026-06-29 09:00:00', 'X') AS q(quote_time, symbol)
+  MATCH_CONDITION (t.trade_time > q.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-003: >= at exact equality selects equal row
+SELECT t.trade_time, q.quote_time
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X'),
+            (TIMESTAMP '2026-06-29 09:00:00', 'X') AS q(quote_time, symbol)
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-004: <= at exact equality selects equal row
+SELECT t.trade_time, q.quote_time
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X'),
+            (TIMESTAMP '2026-06-29 11:00:00', 'X') AS q(quote_time, symbol)
+  MATCH_CONDITION (t.trade_time <= q.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-005: < at exact equality picks next-following row
+SELECT t.trade_time, q.quote_time
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X') AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:00', 'X'),
+            (TIMESTAMP '2026-06-29 11:00:00', 'X') AS q(quote_time, symbol)
+  MATCH_CONDITION (t.trade_time < q.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-006: NULL left operand, INNER drops row
+SELECT count(*) AS cnt
+FROM VALUES (CAST(NULL AS TIMESTAMP), 'AAPL', 100) AS t(trade_time, symbol, quantity) ASOF JOIN
+     quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-2-007: NULL left operand, LEFT retains with NULL right columns
+SELECT t.trade_time, t.symbol, t.quantity, q.quote_time, q.symbol, q.bid_price
+FROM VALUES (CAST(NULL AS TIMESTAMP), 'AAPL', 100) AS t(trade_time, symbol, quantity) LEFT ASOF JOIN
+     quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-2-008: NULL right operand never satisfies MATCH_CONDITION
+SELECT count(*) AS cnt
+FROM trades t ASOF JOIN
+     (SELECT CAST(NULL AS TIMESTAMP) AS quote_time, symbol, bid_price FROM quotes) q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-2-009: ON filters right search space before closest-match
+SELECT t.symbol, q.bid_price
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol AND q.bid_price > 200
+ORDER BY t.symbol;
+
+-- FVT-ASOF-2-011: INNER cardinality bound
+SELECT count(*) AS asof_cnt
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+SELECT count(*) AS trades_cnt FROM trades;
+
+-- FVT-ASOF-2-012: LEFT cardinality equals left input
+SELECT count(*) AS cnt
+FROM trades t LEFT ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-2-013: tie at boundary — assert cardinality only
+SELECT count(*) AS cnt
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:10', 'AAPL') AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 1.0),
+            (TIMESTAMP '2026-06-29 10:00:10', 'AAPL', 2.0) AS q(quote_time, symbol, bid_price)
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-014: tie broken by trailing field of STRUCT operand
+SELECT r.req_ts, r.seq, d.version
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', 5, 'api') AS r(req_ts, seq, service) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:00', 1, 'api', 'v1.0'),
+            (TIMESTAMP '2026-06-29 10:00:00', 2, 'api', 'v1.1') AS d(deploy_ts, seq, service, version)
+  MATCH_CONDITION ((r.req_ts, r.seq) >= (d.deploy_ts, d.seq))
+  ON r.service = d.service;
+
+-- FVT-ASOF-2-015: GOOG unmatched — INNER drops, LEFT retains
+SELECT count(*) AS inner_cnt
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol
+WHERE t.symbol = 'GOOG';
+
+SELECT count(*) AS left_cnt
+FROM trades t LEFT ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol
+WHERE t.symbol = 'GOOG';
+
+-- FVT-ASOF-2-016: non-equi range predicate in ON
+SELECT t.symbol, q.bid_price
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON abs(unix_timestamp(t.trade_time) - unix_timestamp(q.quote_time)) < 30
+ORDER BY t.symbol, t.trade_time;
+
+-- FVT-ASOF-2-017: disjunction in ON
+SELECT count(*) AS cnt
+FROM VALUES (CAST(NULL AS STRING), TIMESTAMP '2026-06-29 10:00:00') AS t(symbol, trade_time) ASOF JOIN
+     VALUES (CAST(NULL AS STRING), TIMESTAMP '2026-06-29 09:00:00') AS q(symbol, quote_time)
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol OR (t.symbol IS NULL AND q.symbol IS NULL);
+
+-- FVT-ASOF-2-018: ON predicate with expression over both tables
+SELECT t.symbol, q.bid_price
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON substr(t.symbol, 1, 1) = substr(q.symbol, 1, 1)
+ORDER BY t.symbol, t.trade_time;
+
+-- FVT-ASOF-2-019: ON TRUE matches whole right
+SELECT count(*) AS cnt
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON TRUE;
+
+-- FVT-ASOF-2-020: ON FALSE empties right search space
+SELECT count(*) AS inner_cnt
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON FALSE;
+
+SELECT count(*) AS left_cnt
+FROM trades t LEFT ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON FALSE;
+
+-- FVT-ASOF-2-021: correlated subquery in ON
+SELECT t.symbol, q.bid_price
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol
+    AND q.bid_price > (SELECT avg(bid_price) FROM quotes qq WHERE qq.symbol = q.symbol)
+ORDER BY t.symbol, t.trade_time;
+
+-- FVT-ASOF-2-010: USING is equivalent to ON symbol equality
+SELECT count(*) AS on_cnt
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+SELECT count(*) AS using_cnt
+FROM trades ASOF JOIN quotes
+  MATCH_CONDITION (trades.trade_time >= quotes.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-022: operand-order symmetry inside MATCH_CONDITION
+SELECT t.trade_time, q.quote_time
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (q.quote_time <= t.trade_time)
+  ON t.symbol = q.symbol AND t.symbol = 'AAPL'
+    AND t.trade_time = TIMESTAMP '2026-06-29 10:00:11';
+
+-- FVT-ASOF-2-023: join operand asymmetry — driving side changes row count
+SELECT count(*) AS trades_driving_cnt
+FROM trades t ASOF JOIN quotes q
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+SELECT count(*) AS quotes_driving_cnt
+FROM quotes q ASOF JOIN trades t
+  MATCH_CONDITION (q.quote_time <= t.trade_time)
+  ON q.symbol = t.symbol;
+
+-- FVT-ASOF-2-024: NULL equi-key in ON never matches
+SELECT count(*) AS cnt
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', CAST(NULL AS STRING)) AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 09:00:00', CAST(NULL AS STRING)) AS q(quote_time, symbol)
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  ON t.symbol = q.symbol;
+
+-- FVT-ASOF-2-025: NULL equi-key in USING never matches
+SELECT count(*) AS cnt
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:00', CAST(NULL AS STRING)) AS t(trade_time, symbol) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 09:00:00', CAST(NULL AS STRING)) AS q(quote_time, symbol)
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  USING (symbol);
+
+-- FVT-ASOF-2-026: multiple USING columns
+SELECT t.trade_time, q.quote_time
+FROM VALUES (TIMESTAMP '2026-06-29 10:00:05', 'AAPL', 100) AS t(trade_time, symbol, quantity) ASOF JOIN
+     VALUES (TIMESTAMP '2026-06-29 10:00:00', 'AAPL', 100) AS q(quote_time, symbol, quantity)
+  MATCH_CONDITION (t.trade_time >= q.quote_time)
+  USING (symbol, quantity);
+
+-- FVT-ASOF-2-027: a hidden USING column of the right input is a MATCH_CONDITION operand
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-028: a hidden USING column of the left input is a MATCH_CONDITION operand
+SELECT l.lts, r.rts
+FROM (using_left l LEFT JOIN using_keys d USING (k)) ASOF JOIN using_right r
+  MATCH_CONDITION (d.k <= r.rts);
+
+-- FVT-ASOF-2-029: same as FVT-ASOF-2-027, with an inner USING join
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-030: a hidden USING column is a MATCH_CONDITION operand of an ASOF JOIN with USING
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k) USING (k);
+
+-- FVT-ASOF-2-031: the SELECT list also outputs the hidden MATCH_CONDITION column
+SELECT l.lts, r.rts, d.k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-032: the SELECT list uses the hidden MATCH_CONDITION column in an expression
+SELECT l.lts, d.k + 1 AS next_k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-033: GROUP BY the hidden MATCH_CONDITION column
+SELECT d.k, count(*) AS cnt
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k >= d.k)
+GROUP BY d.k;
+
+-- FVT-ASOF-2-034: WHERE on the hidden MATCH_CONDITION column
+SELECT l.lts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k >= d.k)
+WHERE d.k > 1;
+
+-- FVT-ASOF-2-035: an aggregate that doesn't use the hidden MATCH_CONDITION column
+SELECT count(*) AS cnt
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-036: a WHERE that doesn't use the hidden MATCH_CONDITION column
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+WHERE l.lts > 15;
+
+-- FVT-ASOF-2-037: an ASOF JOIN with a hidden MATCH_CONDITION column under a table alias
+SELECT s.lts, s.rts
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= d.k)) AS s;
+
+-- FVT-ASOF-2-038: an ASOF JOIN with a hidden MATCH_CONDITION column feeds another join
+SELECT l.lts, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k)
+JOIN using_keys x ON l.k = x.k;
+
+-- FVT-ASOF-2-039: the SELECT list uses a hidden ON column in an expression
+SELECT d.k AS dk, r.rts
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts)
+  ON l.k = d.k;
+
+-- FVT-ASOF-2-040: a bare FROM query does not output the hidden MATCH_CONDITION column
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= d.k);
+
+-- FVT-ASOF-2-041: a LEFT ASOF JOIN with a hidden MATCH_CONDITION column keeps unmatched left rows
+SELECT l.lts, r.rts
+FROM using_left l LEFT ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k <= d.k);
+
+-- FVT-ASOF-2-042: a LEFT ASOF JOIN makes a NOT NULL hidden MATCH_CONDITION column nullable
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.k <= d.k);
+
+-- FVT-ASOF-2-043: an ASOF JOIN with USING passes up the hidden columns of its inputs
+SELECT l.lts, d.k
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-044: a qualified star reads a hidden column from below an ASOF JOIN with USING
+SELECT d.*
+FROM using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-045: a hidden column from below an ASOF JOIN with USING is a MATCH_CONDITION operand
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN (VALUES (1), (2)) AS x(k) MATCH_CONDITION (d.k >= x.k);
+
+-- FVT-ASOF-2-046: a hidden MATCH_CONDITION column whose table is also on the other side
+SELECT d.k, x.k
+FROM (using_right r LEFT JOIN using_keys d USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k);
+
+-- FVT-ASOF-2-047: same as FVT-ASOF-2-045, with the hidden column's table also on the other side
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  ASOF JOIN using_keys x MATCH_CONDITION (d.k >= x.k);
+
+-- FVT-ASOF-2-048: a JOIN above an ASOF JOIN with USING joins on a hidden column of its inputs
+SELECT l.lts, x.k
+FROM (using_left l ASOF JOIN (using_right r LEFT JOIN using_keys d USING (k))
+        MATCH_CONDITION (l.lts >= r.rts) USING (k))
+  JOIN (VALUES (1), (2), (8)) AS x(k) ON d.k = x.k;
+
+-- FVT-ASOF-2-049: a LEFT ASOF JOIN with USING makes a NOT NULL hidden column of its inputs nullable
+SELECT l.lts, d.k
+FROM using_left l LEFT ASOF JOIN (using_right r JOIN using_keys d USING (k))
+  MATCH_CONDITION (l.lts >= r.rts) USING (k);
+
+-- FVT-ASOF-2-050: same as FVT-ASOF-2-046, with the hidden column on the right side. The first CTE
+-- reference keeps its IDs, so the copy on the left is the one that gets new IDs.
+WITH c AS (SELECT * FROM using_keys)
+SELECT x.k, d.k
+FROM using_keys x
+  ASOF JOIN (using_right r LEFT JOIN c d USING (k)) MATCH_CONDITION (x.k >= d.k);
+
+-- FVT-ASOF-2-051: a hidden MATCH_CONDITION column meets a copy of its table in a JOIN below
+SELECT d.k, z.k
+FROM ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  ASOF JOIN (VALUES (1), (2)) AS z(k) MATCH_CONDITION (d.k >= z.k);
+
+-- FVT-ASOF-2-052: same as FVT-ASOF-2-051, with that JOIN on the right side
+SELECT z.k, d.k
+FROM (VALUES (1), (2)) AS z(k)
+  ASOF JOIN ((using_right r LEFT JOIN using_keys d USING (k)) JOIN using_keys y ON y.k = 1)
+  MATCH_CONDITION (z.k >= d.k);

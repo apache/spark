@@ -447,7 +447,7 @@ case class CatalogTable(
     ignoredProperties: Map[String, String] = Map.empty,
     viewOriginalText: Option[String] = None,
     // Multi-part identifier [catalog, namespace..., name] for tables synthesized from a v2
-    // `MetadataTable` whose namespace has more than one part -- the v1 `identifier:
+    // `DelegatingTable` whose namespace has more than one part -- the v1 `identifier:
     // TableIdentifier` (single-string database) cannot carry that losslessly. `None` for
     // v1-native tables; callers should use `fullIdent` which falls back to `identifier.nameParts`.
     multipartIdentifier: Option[Seq[String]] = None)
@@ -675,7 +675,7 @@ case class CatalogTable(
     if (comment.isDefined) map += "Comment" -> JString(comment.get)
     if (collation.isDefined) map += "Collation" -> JString(collation.get)
 
-    if (isViewLike) {
+    if (tableType == CatalogTableType.VIEW) {
       if (viewText.isDefined) {
         map += "View Text" -> JString(viewText.get)
       }
@@ -710,6 +710,15 @@ case class CatalogTable(
       if (viewQueryOutputColumns != JNull) {
         map += "View Query Output Columns" -> viewQueryOutputColumns
       }
+    } else if (tableType == CatalogTableType.METRIC_VIEW) {
+      // METRIC_VIEW stores a YAML body in `viewText`, not a SQL query. The schema-binding
+      // fields used by plain VIEW (View Schema Mode, View Catalog and Namespace, SQL Path,
+      // View Query Output Columns) do not apply, so emit only `View Text` plus a `Language`
+      // tag so consumers can dispatch on the view_text format.
+      if (viewText.isDefined) {
+        map += "View Text" -> JString(viewText.get)
+      }
+      map += "Language" -> JString("YAML")
     }
     if (tableProperties != JNull) map += "Table Properties" -> tableProperties
     stats.foreach { s =>
@@ -963,17 +972,17 @@ case class CatalogColumnStat(
    */
   def toMap(colName: String): Map[String, String] = {
     val map = new scala.collection.mutable.HashMap[String, String]
-    map.put(s"${colName}.${CatalogColumnStat.KEY_VERSION}", CatalogColumnStat.VERSION.toString)
+    map.put(s"$colName.${CatalogColumnStat.KEY_VERSION}", CatalogColumnStat.VERSION.toString)
     distinctCount.foreach { v =>
-      map.put(s"${colName}.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
+      map.put(s"$colName.${CatalogColumnStat.KEY_DISTINCT_COUNT}", v.toString)
     }
     nullCount.foreach { v =>
-      map.put(s"${colName}.${CatalogColumnStat.KEY_NULL_COUNT}", v.toString)
+      map.put(s"$colName.${CatalogColumnStat.KEY_NULL_COUNT}", v.toString)
     }
-    avgLen.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_AVG_LEN}", v.toString) }
-    maxLen.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_LEN}", v.toString) }
-    min.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
-    max.foreach { v => map.put(s"${colName}.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
+    avgLen.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_AVG_LEN}", v.toString) }
+    maxLen.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_MAX_LEN}", v.toString) }
+    min.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_MIN_VALUE}", v) }
+    max.foreach { v => map.put(s"$colName.${CatalogColumnStat.KEY_MAX_VALUE}", v) }
     histogram.foreach { h =>
       CatalogTable.splitLargeTableProp(
         s"$colName.${CatalogColumnStat.KEY_HISTOGRAM}",
@@ -1087,15 +1096,15 @@ object CatalogColumnStat extends Logging {
 
     try {
       Some(CatalogColumnStat(
-        distinctCount = map.get(s"${colName}.${KEY_DISTINCT_COUNT}").map(v => BigInt(v.toLong)),
-        min = map.get(s"${colName}.${KEY_MIN_VALUE}"),
-        max = map.get(s"${colName}.${KEY_MAX_VALUE}"),
-        nullCount = map.get(s"${colName}.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
-        avgLen = map.get(s"${colName}.${KEY_AVG_LEN}").map(_.toLong),
-        maxLen = map.get(s"${colName}.${KEY_MAX_LEN}").map(_.toLong),
+        distinctCount = map.get(s"$colName.${KEY_DISTINCT_COUNT}").map(v => BigInt(v.toLong)),
+        min = map.get(s"$colName.${KEY_MIN_VALUE}"),
+        max = map.get(s"$colName.${KEY_MAX_VALUE}"),
+        nullCount = map.get(s"$colName.${KEY_NULL_COUNT}").map(v => BigInt(v.toLong)),
+        avgLen = map.get(s"$colName.${KEY_AVG_LEN}").map(_.toLong),
+        maxLen = map.get(s"$colName.${KEY_MAX_LEN}").map(_.toLong),
         histogram = CatalogTable.readLargeTableProp(map, s"$colName.$KEY_HISTOGRAM")
           .map(HistogramSerializer.deserialize),
-        version = map(s"${colName}.${KEY_VERSION}").toInt
+        version = map(s"$colName.${KEY_VERSION}").toInt
       ))
     } catch {
       case NonFatal(e) =>

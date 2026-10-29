@@ -19,8 +19,6 @@ package org.apache.spark.sql.execution.datasources.parquet;
 
 import org.apache.spark.sql.execution.vectorized.Dictionary;
 
-import java.math.BigInteger;
-
 public final class ParquetDictionary implements Dictionary {
   private org.apache.parquet.column.Dictionary dictionary;
   private boolean needTransform = false;
@@ -68,7 +66,7 @@ public final class ParquetDictionary implements Dictionary {
       // whenever dictionary is available.
       // Here we lazily decode it to the original signed long value then convert to decimal(20, 0).
       long signed = dictionary.decodeToLong(id);
-      return new BigInteger(Long.toUnsignedString(signed)).toByteArray();
+      return VectorizedReaderBase.unsignedLongToBytesBigEndian(signed);
     } else {
       return dictionary.decodeToBinary(id).getBytesUnsafe();
     }

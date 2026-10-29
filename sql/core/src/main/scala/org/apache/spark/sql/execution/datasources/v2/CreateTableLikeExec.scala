@@ -46,6 +46,10 @@ import org.apache.spark.sql.errors.QueryCompilationErrors
  * ROW FORMAT / STORED AS converted to hive properties (if given), and
  * [[TableCatalog.PROP_OWNER]] set to the current user. Source table properties are intentionally
  * excluded so that connectors can decide which custom properties to clone via [[sourceTable]].
+ *
+ * The source's declared write distribution and ordering are likewise not copied onto the
+ * [[TableInfo]]; a connector that wants to carry them forward should read them from
+ * [[sourceTable]].
  */
 case class CreateTableLikeExec(
     targetCatalog: TableCatalog,
@@ -81,15 +85,18 @@ case class CreateTableLikeExec(
     Seq.empty
   }
 
-  // Derive target columns from source; for V1Table sources apply CharVarcharUtils to preserve
-  // CHAR/VARCHAR types as declared rather than collapsed to StringType.
-  private def targetColumns: Array[Column] =
+  // Derive target columns from source without propagating source field IDs to the new table.
+  // For V1Table sources, apply CharVarcharUtils to preserve CHAR/VARCHAR types as declared
+  // rather than collapsed to StringType.
+  private def targetColumns: Array[Column] = {
     sourceTable match {
       case v1: V1Table =>
-        CatalogV2Util.structTypeToV2Columns(CharVarcharUtils.getRawSchema(v1.catalogTable.schema))
+        val rawSchema = CharVarcharUtils.getRawSchema(v1.catalogTable.schema)
+        CatalogV2Util.structTypeToV2Columns(rawSchema, keepIds = false)
       case _ =>
-        sourceTable.columns
+        CatalogV2Util.clearIds(sourceTable.columns)
     }
+  }
 
   // Source table properties are intentionally excluded; connectors read sourceTable
   // to clone any additional format-specific or custom state they need.

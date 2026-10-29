@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -34,12 +35,14 @@ import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.catalyst.types.*;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
+import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.execution.RowToColumnConverter;
 import org.apache.spark.sql.types.*;
 import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarBatch;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 import org.apache.spark.unsafe.types.VariantVal;
 
@@ -106,6 +109,9 @@ public class ColumnVectorUtils {
       } else if (pdt instanceof PhysicalCalendarIntervalType) {
         // The value of `numRows` is irrelevant.
         col.setCalendarInterval((CalendarInterval) row.get(fieldIdx, t));
+      } else if (pdt instanceof PhysicalTimestampNTZNanosType ||
+          pdt instanceof PhysicalTimestampLTZNanosType) {
+        col.setTimestampNanosVal((TimestampNanosVal) row.get(fieldIdx, t));
       } else if (pdt instanceof PhysicalVariantType) {
         col.setVariant((VariantVal)row.get(fieldIdx, t));
       } else if (pdt instanceof PhysicalStructType) {
@@ -171,7 +177,8 @@ public class ColumnVectorUtils {
 
   private static void appendValue(WritableColumnVector dst, DataType t, Object o) {
     if (o == null) {
-      if (t instanceof CalendarIntervalType || t instanceof VariantType) {
+      if (t instanceof CalendarIntervalType || t instanceof VariantType ||
+          t instanceof AnyTimestampNanoType) {
         dst.appendStruct(true);
       } else {
         dst.appendNull();
@@ -219,15 +226,22 @@ public class ColumnVectorUtils {
         dst.appendStruct(false);
         dst.getChild(0).appendByteArray(v.getValue(), 0, v.getValue().length);
         dst.getChild(1).appendByteArray(v.getMetadata(), 0, v.getMetadata().length);
+      } else if (t instanceof AnyTimestampNanoType) {
+        TimestampNanosVal v = (TimestampNanosVal) o;
+        dst.appendStruct(false);
+        dst.getChild(0).appendLong(v.epochMicros);
+        dst.getChild(1).appendShort(v.nanosWithinMicro);
       } else if (t instanceof DateType) {
         dst.appendInt(DateTimeUtils.fromJavaDate((Date) o));
       } else if (t instanceof TimestampType) {
         dst.appendLong(DateTimeUtils.fromJavaTimestamp((Timestamp) o));
       } else if (t instanceof TimestampNTZType) {
         dst.appendLong(DateTimeUtils.localDateTimeToMicros((LocalDateTime) o));
+      } else if (t instanceof TimeType) {
+        dst.appendLong(DateTimeUtils.localTimeToNanos((LocalTime) o));
       } else {
         throw new SparkUnsupportedOperationException(
-          "_LEGACY_ERROR_TEMP_3192", Map.of("dt", t.toString()));
+          "UNSUPPORTED_DATATYPE", Map.of("typeName", QueryExecutionErrors.toSQLType(t)));
       }
     }
   }

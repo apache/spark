@@ -23,6 +23,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import org.apache.spark.sql.types.*;
 import org.apache.spark.unsafe.Platform;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -32,6 +33,15 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   private static final boolean bigEndianPlatform =
     ByteOrder.nativeOrder().equals(ByteOrder.BIG_ENDIAN);
+
+  // Below this count, byte-fill methods (putBytes / putBooleans / putNulls / putNotNulls)
+  // write bytes in an inline loop. At or above this count, they call Platform.setMemory
+  // which lowers to a native memset. The JNI fixed cost of setMemory dominates for very
+  // short fills; on the benchmarked hardware (Apple M4 Max + OpenJDK 21) the crossover
+  // sits between 64 and 512, so 128 is a conservative choice that avoids regression at
+  // small counts (common for random null patterns where RLE runs are short) while
+  // retaining the bulk of the asymptotic gain.
+  private static final int SET_MEMORY_THRESHOLD = 128;
 
   /**
    * Allocates columns to store elements of each field of the schema off heap.
@@ -100,6 +110,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
     super.close();
   }
 
+  @Override
+  public boolean isFree() {
+    return nulls == 0 && data == 0 && lengthData == 0 && offsetData == 0;
+  }
+
   //
   // APIs dealing with nulls
   //
@@ -119,9 +134,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNulls(int rowId, int count) {
     if (isAllNull()) return; // Skip writing nulls to all-null vector.
-    long offset = nulls + rowId;
-    for (int i = 0; i < count; ++i, ++offset) {
-      Platform.putByte(null, offset, (byte) 1);
+    if (count < SET_MEMORY_THRESHOLD) {
+      long offset = nulls + rowId;
+      for (int i = 0; i < count; ++i, ++offset) {
+        Platform.putByte(null, offset, (byte) 1);
+      }
+    } else {
+      Platform.setMemory(nulls + rowId, (byte) 1, count);
     }
     numNulls += count;
   }
@@ -129,9 +148,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   public void putNotNulls(int rowId, int count) {
     if (!hasNull()) return;
-    long offset = nulls + rowId;
-    for (int i = 0; i < count; ++i, ++offset) {
-      Platform.putByte(null, offset, (byte) 0);
+    if (count < SET_MEMORY_THRESHOLD) {
+      long offset = nulls + rowId;
+      for (int i = 0; i < count; ++i, ++offset) {
+        Platform.putByte(null, offset, (byte) 0);
+      }
+    } else {
+      Platform.setMemory(nulls + rowId, (byte) 0, count);
     }
   }
 
@@ -151,9 +174,13 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBooleans(int rowId, int count, boolean value) {
-    byte v = (byte)((value) ? 1 : 0);
-    for (int i = 0; i < count; ++i) {
-      Platform.putByte(null, data + rowId + i, v);
+    byte v = (byte) (value ? 1 : 0);
+    if (count < SET_MEMORY_THRESHOLD) {
+      for (int i = 0; i < count; ++i) {
+        Platform.putByte(null, data + rowId + i, v);
+      }
+    } else {
+      Platform.setMemory(data + rowId, v, count);
     }
   }
 
@@ -193,8 +220,12 @@ public final class OffHeapColumnVector extends WritableColumnVector {
 
   @Override
   public void putBytes(int rowId, int count, byte value) {
-    for (int i = 0; i < count; ++i) {
-      Platform.putByte(null, data + rowId + i, value);
+    if (count < SET_MEMORY_THRESHOLD) {
+      for (int i = 0; i < count; ++i) {
+        Platform.putByte(null, data + rowId + i, value);
+      }
+    } else {
+      Platform.setMemory(data + rowId, value, count);
     }
   }
 
@@ -246,6 +277,11 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   @Override
   protected UTF8String getBytesAsUTF8String(int rowId, int count) {
     return UTF8String.fromAddress(null, data + rowId, count);
+  }
+
+  @Override
+  protected BinaryView getBytesAsBinaryView(int rowId, int count) {
+    return BinaryView.fromAddress(null, data + rowId, count);
   }
 
   @Override
@@ -668,7 +704,7 @@ public final class OffHeapColumnVector extends WritableColumnVector {
   }
 
   @Override
-  public OffHeapColumnVector reserveNewColumn(int capacity, DataType type) {
+  protected OffHeapColumnVector reserveNewInternalColumn(int capacity, DataType type) {
     return new OffHeapColumnVector(capacity, type);
   }
 }

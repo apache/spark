@@ -32,16 +32,17 @@ import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName
 import org.apache.parquet.schema.Type.Repetition
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.{SparkContext, SparkIllegalArgumentException, TestUtils}
+import org.apache.spark.{SparkContext, SparkException, SparkIllegalArgumentException, SparkThrowable, TestUtils}
 import org.apache.spark.internal.io.FileCommitProtocol.TaskCommitMessage
 import org.apache.spark.internal.io.HadoopMapReduceCommitProtocol
 import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.catalyst.plans.logical.{AppendData, LogicalPlan, OverwriteByExpression}
-import org.apache.spark.sql.execution.QueryExecution
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
+import org.apache.spark.sql.execution.{QueryExecution, SparkPlan, SparkStrategy}
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
-import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, LogicalRelation}
+import org.apache.spark.sql.execution.datasources.{DataSourceUtils, HadoopFsRelation, InsertIntoHadoopFsRelationCommand, LogicalRelation}
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
@@ -195,6 +196,39 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
       .write
       .format("org.apache.spark.sql.test")
       .save()
+  }
+
+  test("SPARK-57164: DataFrameReader.schema(String) parses nanos timestamp types") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      foreachNanosPrecision { p =>
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            LastOptions.clear()
+            spark.read
+              .format("org.apache.spark.sql.test")
+              .schema(s"c $spelling")
+              .load()
+            val captured = LastOptions.schema.get
+            assert(captured("c").dataType === expected)
+        }
+      }
+    }
+    // With the preview flag off, schema(String) rejects the nanos spelling at parse time.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+      checkError(
+        exception = intercept[SparkException] {
+          spark.read.format("org.apache.spark.sql.test").schema("c TIMESTAMP_NTZ(9)")
+        },
+        condition = "FEATURE_NOT_ENABLED",
+        parameters = Map(
+          "featureName" -> "Nanosecond-precision timestamp types",
+          "configKey" -> "spark.sql.timestampNanosTypes.enabled",
+          "configValue" -> "true"))
+    }
   }
 
   test("options") {
@@ -981,6 +1015,74 @@ class DataFrameReaderWriterSuite extends SharedSparkSession with BeforeAndAfter 
         checkAnswer(spark.table("same_name"), spark.range(10).toDF())
         checkAnswer(spark.table("default.same_name"), spark.range(20).toDF())
       }
+    }
+  }
+
+  Seq(
+    // Rejected by the analysis of the CTAS.
+    ("a nonexistent partition column", "COLUMN_NOT_DEFINED_IN_TABLE",
+      () => spark.range(5).write.partitionBy("nonexistent")),
+    // Rejected by the data schema check of FileFormatWriter.
+    ("an unsupported data type", "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE",
+      () => Seq(1 -> Map("a" -> 1)).toDF("id", "m").write.format("csv")),
+    // Rejected by the write option check of ParquetFileFormat.prepareWrite.
+    ("an invalid write option", "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      () => spark.range(5).write.format("parquet").option("compression", "bogus"))
+  ).foreach { case (reason, condition, newWriter) =>
+    test(s"SPARK-60387: saveAsTable with mode Overwrite keeps the existing table when it fails " +
+        s"on $reason") {
+      withTempPath { path =>
+        // A managed table and an external table
+        Seq(Map.empty[String, String], Map("path" -> path.getCanonicalPath)).foreach { options =>
+          withTable("t") {
+            Seq((1, 1), (2, 2)).toDF("i", "p").write.options(options).partitionBy("p")
+              .saveAsTable("t")
+            val e = intercept[SparkThrowable] {
+              newWriter().mode(SaveMode.Overwrite).options(options).saveAsTable("t")
+            }
+            assert(e.getCondition === condition)
+            checkAnswer(spark.table("t"), Seq(Row(1, 1), Row(2, 2)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60387: saveAsTable with mode Overwrite keeps the existing table when " +
+      "a CreatableRelationProvider rejects the data type") {
+    val format = classOf[DefaultSource].getName
+    withTable("t") {
+      spark.range(3).write.format(format).saveAsTable("t")
+      val e = intercept[SparkThrowable] {
+        sql("SELECT INTERVAL '1' DAY AS a").write.mode(SaveMode.Overwrite).format(format)
+          .saveAsTable("t")
+      }
+      assert(e.getCondition === "UNSUPPORTED_DATA_TYPE_FOR_DATASOURCE")
+      assert(spark.catalog.tableExists("t"))
+    }
+  }
+
+  test("SPARK-60387: saveAsTable with mode Overwrite replaces the table when the planned " +
+      "write does not run the callback") {
+    // Plans the write command without its tags, like an extension that replaces the command.
+    object PlanWriteWithoutTags extends SparkStrategy {
+      override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        case c: InsertIntoHadoopFsRelationCommand
+            if c.getTagValue(InsertIntoHadoopFsRelationCommand.BEFORE_WRITE_JOB).isDefined =>
+          DataWritingCommandExec(c.copy(), planLater(c.query)) :: Nil
+        case _ => Nil
+      }
+    }
+    withTable("t") {
+      spark.range(3).write.saveAsTable("t")
+      val originalStrategies = spark.experimental.extraStrategies
+      try {
+        spark.experimental.extraStrategies = PlanWriteWithoutTags +: originalStrategies
+        spark.range(5, 7).write.mode(SaveMode.Overwrite).saveAsTable("t")
+      } finally {
+        spark.experimental.extraStrategies = originalStrategies
+      }
+      checkAnswer(spark.table("t"), spark.range(5, 7).toDF())
     }
   }
 

@@ -565,6 +565,8 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
       val left = Literal(convert(7))
       val right = Literal(convert(3))
       checkEvaluation(Pmod(left, right), convert(1))
+      // Exercises the integral `n > 0` fast path (`Byte`/`Short` via `Int`, and `Long`).
+      checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(3))), convert(2))
       checkEvaluation(Pmod(Literal.create(null, left.dataType), right), null)
       checkEvaluation(Pmod(left, Literal.create(null, right.dataType)), null)
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
@@ -574,14 +576,32 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
         checkExceptionInExpression[ArithmeticException](
           Pmod(left, Literal(convert(0))), "Remainder by zero")
       }
+      // Negative divisor (n < 0): `pmod` is only guaranteed non-negative for a positive divisor.
+      // These cases have negative dividends, so the expected values are <= 0 (released behavior).
+      // They guard the r < 0, n < 0 path where `r + n` still needs `% n` -- dropping it goes out
+      // of range (pmod(-3, -5) would be -8).
+      checkEvaluation(Pmod(Literal(convert(-3)), Literal(convert(-5))), convert(-3))
+      checkEvaluation(Pmod(Literal(convert(-7)), Literal(convert(-3))), convert(-1))
     }
-    checkEvaluation(Pmod(Literal(-7), Literal(3)), 2)
     checkEvaluation(Pmod(Literal(7.2D), Literal(4.1D)), 3.1000000000000005)
+    checkEvaluation(Pmod(Literal(-1e-20D), Literal(1.0D)), 0.0D)
+    checkEvaluation(Pmod(Literal(-1e-10f), Literal(1.0f)), 0.0f)
     checkEvaluation(Pmod(Literal(Decimal(0.7)), Literal(Decimal(0.2))), Decimal(0.1))
     checkEvaluation(Pmod(Literal(2L), Literal(Long.MaxValue)), 2L)
+    checkEvaluation(Pmod(Literal(-6), Literal(3)), 0)
+    checkEvaluation(Pmod(Literal(-6L), Literal(3L)), 0L)
+    // The remainder is below -2^62, so a wrong shift count or narrowing to Int changes it.
+    checkEvaluation(
+      Pmod(Literal(Long.MinValue / 2 - 1), Literal(Long.MaxValue)), 4611686018427387902L)
     checkEvaluation(Pmod(positiveShort, negativeShort), positiveShort.toShort)
     checkEvaluation(Pmod(positiveInt, negativeInt), positiveInt)
     checkEvaluation(Pmod(positiveLong, negativeLong), positiveLong)
+    // Pre-existing Int/Long wrap-around, pinned so the released results stay exact: the retained
+    // `(r + n) % n` overflows for n < -2^30 / n < -2^62. Without overflow `(r + n) % n == r`, so
+    // these are the only inputs that tell the two apart. These assertions characterize the current
+    // released behavior; fixing the wrap-around is tracked by SPARK-59934.
+    checkEvaluation(Pmod(Literal(-1), Literal(Int.MinValue)), Int.MaxValue)
+    checkEvaluation(Pmod(Literal(-1L), Literal(Long.MinValue)), Long.MaxValue)
 
     Seq("true", "false").foreach { failOnError =>
       withSQLConf(SQLConf.ANSI_ENABLED.key -> failOnError) {
@@ -907,6 +927,41 @@ class ArithmeticExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
           checkEvaluation(operator(Literal.create(null, one.dataType), zero), null)
           checkEvaluation(operator(one, Literal.create(null, zero.dataType)), null)
           checkExceptionInExpression[ArithmeticException](operator(one, zero), "Remainder by zero")
+        }
+      }
+    }
+  }
+
+  test("SPARK-57198: skip the divide-by-zero check when the divisor is a non-zero literal") {
+    def codeOf(e: Expression): String = e.genCode(new CodegenContext).code.toString
+
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        // A non-zero literal divisor makes the zero check dead code; codegen must not emit it.
+        Seq(
+          Divide(Literal(1.0), Literal(2.0)),
+          Remainder(Literal(7), Literal(3)),
+          IntegralDivide(Literal(7L), Literal(3L)),
+          Pmod(Literal(7), Literal(3))).foreach { e =>
+          val code = codeOf(e)
+          assert(!code.contains("ByZeroError"),
+            s"expected no by-zero check for a non-zero literal divisor in $e:\n$code")
+        }
+
+        // A variable (non-foldable) divisor keeps the check: in ANSI mode the by-zero error must
+        // still be generated.
+        Seq(
+          Divide(
+            BoundReference(0, DoubleType, nullable = false),
+            BoundReference(1, DoubleType, nullable = false)),
+          Pmod(
+            BoundReference(0, IntegerType, nullable = false),
+            BoundReference(1, IntegerType, nullable = false))).foreach { e =>
+          val code = codeOf(e)
+          if (ansi) {
+            assert(code.contains("ByZeroError"),
+              s"expected a by-zero check for a variable divisor in $e:\n$code")
+          }
         }
       }
     }

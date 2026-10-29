@@ -35,11 +35,29 @@ class InMemoryRowLevelOperationTableCatalog
   // All transactions in order (committed and aborted), allowing per-statement
   // validation in SQL scripting tests.
   val observedTransactions: ArrayBuffer[Txn] = new ArrayBuffer[Txn]()
+  // Test-only knob. When true, the next transaction created by `beginTransaction` will reject
+  // register-scans calls (`registerScans` returns false unconditionally). Reset after consumed.
+  var nextTxnRejectRegisteredScansAttempt: Boolean = false
+
+  // Each `loadTable` returns a fresh snapshot pinned at the current table version (id is
+  // preserved). This is the "pin at table loading" semantics that lets version-aware
+  // `Table.equals` catch staleness: a cached relation holds a copy frozen at V1; a later load
+  // returns a copy at V2, and the two compare unequal so cache substitution fails before
+  // `Transaction.registerScans` is consulted.
+  override def loadTable(ident: Identifier): Table = {
+    liveTable(ident) match {
+      case rlot: InMemoryRowLevelOperationTable => rlot.copy()
+      case other => other
+    }
+  }
 
   override def beginTransaction(info: TransactionInfo): Transaction = {
     assert(transaction == null || transaction.currentState != Active)
-    this.transaction = new Txn(new TxnTableCatalog(this))
-    transaction
+    val txn = new Txn(new TxnTableCatalog(this))
+    txn.rejectRegisteredScansAttempt = nextTxnRejectRegisteredScansAttempt
+    nextTxnRejectRegisteredScansAttempt = false
+    this.transaction = txn
+    txn
   }
 
   override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
@@ -71,8 +89,7 @@ class InMemoryRowLevelOperationTableCatalog
     }
 
     val columnsWithIds = InMemoryBaseTable.assignMissingIds(
-      oldColumns = table.columns(),
-      newColumns = CatalogV2Util.structTypeToV2Columns(schema))
+      CatalogV2Util.structTypeToV2Columns(schema))
 
     val newTable = InMemoryRowLevelOperationTable.withColumns(
       name = table.name,
@@ -80,8 +97,10 @@ class InMemoryRowLevelOperationTableCatalog
       partitioning = partitioning,
       properties = properties,
       constraints = constraints,
-      tableId = table.id)
+      tableId = table.id,
+      schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, schema)
+    newTable.copyTableStateFrom(table)
 
     tables.put(ident, newTable)
 
@@ -121,8 +140,10 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
       schema = schema,
       partitioning = table.partitioning,
       properties = properties,
-      constraints = table.constraints)
+      constraints = table.constraints,
+      schemaAlignmentConfig = table.schemaAlignmentConfig)
     newTable.alterTableWithData(table.data, table.schema)
+    newTable.copyTableStateFrom(table)
     tables.put(ident, newTable)
     newTable
   }
@@ -131,4 +152,29 @@ class PartialSchemaEvolutionCatalog extends InMemoryRowLevelOperationTableCatalo
   override def computeAlterTableSchema(
       currentSchema: StructType,
       changes: Seq[TableChange]): StructType = currentSchema
+}
+
+/**
+ * A catalog that creates [[InMemoryTruncatableOnlyTable]] instances - tables that implement
+ * [[TruncatableTable]] but NOT [[SupportsDeleteV2]]. Used to test the [[TruncateTableExec]]
+ * planning path for DELETE statements with no WHERE clause.
+ */
+class InMemoryTruncatableOnlyTableCatalog extends InMemoryTableCatalog {
+  import CatalogV2Implicits._
+
+  override def loadTable(ident: Identifier): Table = liveTable(ident)
+
+  override def createTable(ident: Identifier, tableInfo: TableInfo): Table = {
+    if (tables.containsKey(ident)) {
+      throw new TableAlreadyExistsException(ident.asMultipartIdentifier)
+    }
+    InMemoryTableCatalog.maybeSimulateFailedTableCreation(tableInfo.properties)
+    val tableName = s"$name.${ident.quoted}"
+    val columns = tableInfo.columns
+    val table = new InMemoryTruncatableOnlyTable(
+      tableName, columns, tableInfo.partitions, tableInfo.properties, tableInfo.constraints())
+    tables.put(ident, table)
+    namespaces.putIfAbsent(ident.namespace.toList, Map())
+    table
+  }
 }

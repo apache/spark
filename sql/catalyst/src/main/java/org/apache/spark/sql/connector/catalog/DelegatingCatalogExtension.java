@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -53,9 +54,20 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
   @Override
   public void initialize(String name, CaseInsensitiveStringMap options) {}
 
+  /**
+   * Returns the delegate's capabilities, except
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   * This class passes a {@link TableInfo} on through the {@code Column[]} overloads, which cannot
+   * carry a requested write distribution and ordering. A subclass that overrides each
+   * {@link TableInfo} overload it can be reached through may add the capability back; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   */
   @Override
   public Set<TableCatalogCapability> capabilities() {
-    return asTableCatalog().capabilities();
+    Set<TableCatalogCapability> capabilities = new HashSet<>(asTableCatalog().capabilities());
+    capabilities.remove(
+      TableCatalogCapability.SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING);
+    return capabilities;
   }
 
   @Override
@@ -109,6 +121,13 @@ public abstract class DelegatingCatalogExtension implements CatalogExtension {
       Transform[] partitions,
       Map<String, String> properties) throws TableAlreadyExistsException, NoSuchNamespaceException {
     return asTableCatalog().createTable(ident, columns, partitions, properties);
+  }
+
+  @Override
+  public Table createTableLike(
+      Identifier ident, TableInfo tableInfo, Table sourceTable)
+      throws TableAlreadyExistsException, NoSuchNamespaceException {
+    return asTableCatalog().createTableLike(ident, tableInfo, sourceTable);
   }
 
   @Override

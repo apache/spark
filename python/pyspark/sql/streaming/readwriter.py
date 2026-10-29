@@ -18,24 +18,25 @@
 import re
 import sys
 from collections.abc import Iterator
-from typing import cast, overload, Any, Callable, List, Optional, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union, cast, overload
 
+from pyspark.errors import (
+    PySparkAttributeError,
+    PySparkRuntimeError,
+    PySparkTypeError,
+    PySparkValueError,
+)
 from pyspark.sql.readwriter import OptionUtils, to_str
 from pyspark.sql.streaming.query import StreamingQuery
 from pyspark.sql.types import Row, StructType
 from pyspark.sql.utils import ForeachBatchFunction
-from pyspark.errors import (
-    PySparkTypeError,
-    PySparkValueError,
-    PySparkAttributeError,
-    PySparkRuntimeError,
-)
 
 if TYPE_CHECKING:
     from py4j.java_gateway import JavaObject
-    from pyspark.sql.session import SparkSession
-    from pyspark.sql._typing import SupportsProcess, OptionalPrimitiveType
+
+    from pyspark.sql._typing import OptionalPrimitiveType, SupportsProcess
     from pyspark.sql.dataframe import DataFrame
+    from pyspark.sql.session import SparkSession
 
 __all__ = ["DataStreamReader", "DataStreamWriter"]
 
@@ -987,8 +988,12 @@ class DataStreamReader(OptionUtils):
             return self._df(self._jreader.changes(tableName))
         else:
             raise PySparkTypeError(
-                errorClass="NOT_STR",
-                messageParameters={"arg_name": "tableName", "arg_type": type(tableName).__name__},
+                errorClass="NOT_EXPECTED_TYPE",
+                messageParameters={
+                    "arg_name": "tableName",
+                    "expected_type": "str",
+                    "arg_type": type(tableName).__name__,
+                },
             )
 
 
@@ -1448,8 +1453,8 @@ class DataStreamWriter:
         elif once is not None:
             if once is not True:
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_TRUE",
-                    messageParameters={"arg_name": "once", "arg_value": str(once)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "once", "allowed_values": "[True]"},
                 )
 
             jTrigger = getattr(
@@ -1479,8 +1484,8 @@ class DataStreamWriter:
         else:
             if availableNow is not True:
                 raise PySparkValueError(
-                    errorClass="VALUE_NOT_TRUE",
-                    messageParameters={"arg_name": "availableNow", "arg_value": str(availableNow)},
+                    errorClass="VALUE_NOT_ALLOWED",
+                    messageParameters={"arg_name": "availableNow", "allowed_values": "[True]"},
                 )
             jTrigger = getattr(
                 self._spark._sc._jvm, "org.apache.spark.sql.streaming.Trigger"
@@ -1687,7 +1692,7 @@ class DataStreamWriter:
         """
 
         from pyspark.core.rdd import _wrap_function
-        from pyspark.serializers import CPickleSerializer, AutoBatchedSerializer
+        from pyspark.serializers import AutoBatchedSerializer, CPickleSerializer
 
         func = self._construct_foreach_function(f)
         serializer = AutoBatchedSerializer(CPickleSerializer())
@@ -1738,6 +1743,7 @@ class DataStreamWriter:
         >>> # if in Spark Connect, my_value = -1, else my_value = 100
         """
         from py4j.java_gateway import java_import
+
         from pyspark.java_gateway import ensure_callback_server_started
 
         gw = self._spark._sc._gateway
@@ -1885,8 +1891,11 @@ class DataStreamWriter:
         -----
         This API is evolving.
 
-        For v1 table, partitioning columns provided by `partitionBy` will be respected no matter
-        the table exists or not. A new table will be created if the table not exists.
+        For v1 table, a new table will be created with the partitioning columns provided by
+        `partitionBy` if the table does not exist. If the table exists, the partitioning of the
+        table will be respected, and `partitionBy` must match it, including the order of the
+        columns, if provided. Otherwise, or if the files already committed to the table have other
+        partition columns, the query fails to start.
 
         For v2 table, `partitionBy` will be ignored if the table already exists. `partitionBy` will
         be respected only if the v2 table does not exist. Besides, the v2 table created by this API
@@ -1934,8 +1943,9 @@ class DataStreamWriter:
 def _test() -> None:
     import doctest
     import os
-    from pyspark.sql import SparkSession
+
     import pyspark.sql.streaming.readwriter
+    from pyspark.sql import SparkSession
 
     os.chdir(os.environ["SPARK_HOME"])
 

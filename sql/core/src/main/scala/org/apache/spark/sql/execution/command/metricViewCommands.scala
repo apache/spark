@@ -29,6 +29,7 @@ import org.apache.spark.sql.connector.catalog.CatalogV2Util
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.LogicalRelation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.metricview.serde.MetricView
 import org.apache.spark.sql.metricview.util.MetricViewPlanner
 import org.apache.spark.sql.types.StructType
@@ -149,9 +150,8 @@ object MetricViewHelper {
   /**
    * Analyzes a metric-view YAML body so the create / alter path can capture the source plan
    * and its dependencies. Returns the analyzed plan together with the parsed [[MetricView]]
-   * descriptor (the latter is grabbed off the un-analyzed [[MetricViewPlaceholder]] before
-   * the analyzer rewrites it away, so callers needing the descriptor for property emission
-   * don't have to re-parse the YAML).
+   * descriptor (returned alongside the placeholder by [[MetricViewPlanner.planWrite]] so
+   * callers needing the descriptor for property emission don't have to re-parse the YAML).
    *
    * `nameParts` is the multi-part target identifier (catalog + namespace + table). The synthetic
    * [[CatalogTable]] used as analysis context still carries a [[TableIdentifier]] (capped at
@@ -189,15 +189,25 @@ object MetricViewHelper {
       schema = new StructType(),
       viewOriginalText = Some(viewText),
       viewText = Some(viewText))
-    val placeholder = MetricViewPlanner.planWrite(
+    // `planWrite` returns the placeholder (carrying pre-parsed `inputColumns`) and the
+    // parsed YAML descriptor separately, so the caller can read the descriptor for
+    // property emission (e.g. `metric_view.*` keys) without keeping it on the placeholder.
+    val (placeholder, metricView) = MetricViewPlanner.planWrite(
       tableMeta, viewText, session.sessionState.sqlParser)
-    // Grab the parsed descriptor BEFORE analysis -- the placeholder gets replaced by
-    // ResolvedMetricView during analyzer rules, after which `MetricView` is no longer
-    // recoverable from the plan tree.
-    val metricView = placeholder.desc
-    val analyzed = analyzer.executeAndCheck(placeholder, new QueryPlanningTracker)
+    val (analyzed, referredTempVariablesUnderIdentifier) =
+      analyzer.executeAndCheckReferredTempVariablesUnderIdentifier(
+        placeholder, new QueryPlanningTracker)
+    // A variable read via an IDENTIFIER clause in the metric-view source is absent from the
+    // analyzed plan, so it is captured during analysis and passed to the validator explicitly,
+    // honoring `spark.sql.legacy.allowSessionVariableInPersistedView` like other persisted views.
+    val referredVarsUnderIdentifier =
+      if (session.sessionState.conf.getConf(SQLConf.VARIABLES_UNDER_IDENTIFIER_IN_VIEW)) {
+        Nil
+      } else {
+        referredTempVariablesUnderIdentifier
+      }
     ViewHelper.verifyTemporaryObjectsNotExists(
-      isTemporary = false, nameParts, analyzed, Seq.empty)
+      isTemporary = false, nameParts, analyzed, Seq.empty, referredVarsUnderIdentifier)
     (analyzed, metricView)
   }
 }

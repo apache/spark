@@ -25,6 +25,7 @@ import java.util.Arrays;
 import java.util.function.Function;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 import com.esotericsoftware.kryo.Kryo;
@@ -292,11 +293,23 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Private helper method to calculate the number of code points in the UTF-8 string. Counting
    * the code points is a linear time operation, as we need to scan the entire UTF-8 string.
    * Hence, this method should generally only be called once for non-empty UTF-8 strings.
+   *
+   * Because the scan reads every lead byte, it also caches ASCII-ness for free (see
+   * {@link #isFullAscii()}): any lead byte >= 0x80 (a multi-byte or invalid byte) is non-ASCII.
+   * The flag is only set when still UNKNOWN, preserving a value already computed elsewhere.
    */
   private int getNumChars() {
     int len = 0;
-    for (int i = 0; i < numBytes; i += numBytesForFirstByte(getByte(i))) {
+    boolean ascii = true;
+    int i = 0;
+    while (i < numBytes) {
+      byte b = getByte(i);
+      ascii &= b >= 0;
+      i += numBytesForFirstByte(b);
       len += 1;
+    }
+    if (isFullAscii == IsFullAscii.UNKNOWN) {
+      isFullAscii = ascii ? IsFullAscii.FULL_ASCII : IsFullAscii.NOT_ASCII;
     }
     return len;
   }
@@ -634,20 +647,28 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return EMPTY_UTF8;
     }
 
-    int i = 0;
-    int c = 0;
-    while (i < numBytes && c < start) {
-      i += numBytesForFirstByte(getByte(i));
-      c += 1;
-    }
-
-    int j = i;
-    if (until == Integer.MAX_VALUE) {
-      i = numBytes;
+    int i;
+    int j;
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII fast-path: code point index == byte index, so locate directly. The scan below
+      // clamps a negative start to 0 and stops at numBytes; replicate that with min/max.
+      j = Math.max(start, 0);
+      i = (until == Integer.MAX_VALUE) ? numBytes : Math.min(until, numBytes);
     } else {
-      while (i < numBytes && c < until) {
+      i = 0;
+      int c = 0;
+      while (i < numBytes && c < start) {
         i += numBytesForFirstByte(getByte(i));
         c += 1;
+      }
+      j = i;
+      if (until == Integer.MAX_VALUE) {
+        i = numBytes;
+      } else {
+        while (i < numBytes && c < until) {
+          i += numBytesForFirstByte(getByte(i));
+          c += 1;
+        }
       }
     }
 
@@ -702,6 +723,9 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Returns the byte at (byte) position `byteIndex`. If byte index is invalid, returns 0.
    */
   public byte getByte(int byteIndex) {
+    if (byteIndex < 0 || byteIndex >= numBytes) {
+      return 0;
+    }
     return Platform.getByte(base, offset + byteIndex);
   }
 
@@ -711,8 +735,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * If `byteIndex` of the first byte in the code point is known, use `codePointFrom` instead.
    */
   public int getChar(int charIndex) {
-    if (charIndex < 0 || charIndex >= numChars()) {
-      throw new IndexOutOfBoundsException();
+    Objects.checkIndex(charIndex, numChars());
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, and checkIndex guarantees it is in range.
+      return codePointFrom(charIndex);
     }
     int charCount = 0, byteCount = 0;
     while (charCount < charIndex) {
@@ -724,28 +750,37 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
   /**
    * Returns the code point starting from the byte at position `byteIndex`.
-   * If byte index is invalid, throws exception.
+   * If byte index is invalid, throws exception. If the sequence is truncated (the leader byte
+   * declares more bytes than remain), the missing continuation bytes are treated as 0.
    */
   public int codePointFrom(int byteIndex) {
-    if (byteIndex < 0 || byteIndex >= numBytes) {
-      throw new IndexOutOfBoundsException();
-    }
+    Objects.checkIndex(byteIndex, numBytes);
     byte b = getByte(byteIndex);
     int numBytes = numBytesForFirstByte(b);
     return switch (numBytes) {
       case 1 ->
         b & 0x7F;
       case 2 ->
-        ((b & 0x1F) << 6) | (getByte(byteIndex + 1) & 0x3F);
+        ((b & 0x1F) << 6) | continuationByte(byteIndex + 1);
       case 3 ->
-        ((b & 0x0F) << 12) | ((getByte(byteIndex + 1) & 0x3F) << 6) |
-        (getByte(byteIndex + 2) & 0x3F);
+        ((b & 0x0F) << 12) | (continuationByte(byteIndex + 1) << 6) |
+        continuationByte(byteIndex + 2);
       case 4 ->
-        ((b & 0x07) << 18) | ((getByte(byteIndex + 1) & 0x3F) << 12) |
-        ((getByte(byteIndex + 2) & 0x3F) << 6) | (getByte(byteIndex + 3) & 0x3F);
+        ((b & 0x07) << 18) | (continuationByte(byteIndex + 1) << 12) |
+        (continuationByte(byteIndex + 2) << 6) | continuationByte(byteIndex + 3);
       default ->
         throw new IllegalStateException("Error in UTF-8 code point");
     };
+  }
+
+  /**
+   * Returns the low 6 bits of the UTF-8 continuation byte at `byteIndex`, or 0 when `byteIndex`
+   * is past the end of the string. The bounds check stops a truncated trailing multi-byte
+   * sequence (a leader byte whose declared width exceeds the bytes that remain) from reading
+   * past the end of the backing memory.
+   */
+  private int continuationByte(int byteIndex) {
+    return byteIndex < numBytes ? getByte(byteIndex) & 0x3F : 0;
   }
 
   public boolean matchAt(final UTF8String s, int pos) {
@@ -944,7 +979,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * @return a new UTF8String in the position of [start, end] of current UTF8String bytes.
    */
   public UTF8String copyUTF8String(int start, int end) {
-    int len = end - start + 1;
+    // Clamp to the bytes that actually remain so an out-of-range `end` (for example, derived
+    // from a truncated trailing multi-byte sequence) can't copy past the end of the backing
+    // memory.
+    int len = Math.min(end - start + 1, numBytes - start);
     byte[] newBytes = new byte[len];
     copyMemory(base, offset + start, newBytes, BYTE_ARRAY_OFFSET, len);
     return UTF8String.fromBytes(newBytes);
@@ -1051,11 +1089,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     int trimIdx = 0;
 
     while (searchIdx < numBytes) {
-      UTF8String searchChar = copyUTF8String(
-          searchIdx, searchIdx + numBytesForFirstByte(this.getByte(searchIdx)) - 1);
-      int searchCharBytes = searchChar.numBytes;
-      // try to find the matching for the searchChar in the trimString set
-      if (trimString.find(searchChar, 0) >= 0) {
+      byte leadByte = this.getByte(searchIdx);
+      // Clamp to the remaining bytes so a truncated trailing leader is handled as copyUTF8String
+      // would have been.
+      int searchCharBytes = Math.min(numBytesForFirstByte(leadByte), numBytes - searchIdx);
+      // try to find the matching for the search char in the trimString set
+      if (trimString.find(this.base, this.offset + searchIdx, searchCharBytes, 0) >= 0) {
         trimIdx += searchCharBytes;
       } else {
         // no matching, exit the search
@@ -1133,11 +1172,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     // the source string.
     int trimEnd = numBytes - 1;
     while (numChars > 0) {
-      UTF8String searchChar = copyUTF8String(
-          stringCharPos[numChars - 1],
-          stringCharPos[numChars - 1] + stringCharLen[numChars - 1] - 1);
-      if (trimString.find(searchChar, 0) >= 0) {
-        trimEnd -= stringCharLen[numChars - 1];
+      int pos = stringCharPos[numChars - 1];
+      // Advance by the bytes the character actually occupies. A truncated trailing leader is
+      // shorter than the width its leader byte declares, so clamp to the remaining bytes.
+      int searchCharBytes = Math.min(stringCharLen[numChars - 1], numBytes - pos);
+      if (trimString.find(this.base, this.offset + pos, searchCharBytes, 0) >= 0) {
+        trimEnd -= searchCharBytes;
       } else {
         break;
       }
@@ -1160,7 +1200,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     int i = 0; // position in byte
     while (i < numBytes) {
-      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes);
+      int len = Math.min(numBytesForFirstByte(getByte(i)), numBytes - i);
       int targetOffset = Math.max(result.length - i - len, 0);
       copyMemory(this.base, this.offset + i, result,
         BYTE_ARRAY_OFFSET + targetOffset, len);
@@ -1180,24 +1220,38 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       return this;
     }
 
-    if (numBytes == 1) {
-      byte[] newBytes = new byte[times];
-      byte b = getByte(0);
-      Arrays.fill(newBytes, b);
-      return fromBytes(newBytes);
-    }
-
     byte[] newBytes = new byte[Math.multiplyExact(numBytes, times)];
-    copyMemory(this.base, this.offset, newBytes, BYTE_ARRAY_OFFSET, numBytes);
+    fillRepeated(newBytes, 0, this.base, this.offset, numBytes, times);
+    return UTF8String.fromBytes(newBytes);
+  }
 
+  /**
+   * Writes `count` back-to-back copies of the `patternNumBytes` bytes at
+   * `(patternBase, patternOffset)` into `data` starting at byte index `destPos`, using exponential
+   * doubling so the fill takes O(log count) copies rather than O(count). Returns the byte index
+   * just past the written region.
+   */
+  private static int fillRepeated(
+      byte[] data, int destPos, Object patternBase, long patternOffset, int patternNumBytes,
+      int count) {
+    if (count <= 0 || patternNumBytes == 0) {
+      return destPos;
+    }
+    if (patternNumBytes == 1) {
+      // Single-byte pattern (e.g. padding with a space or '0'): one Arrays.fill beats the loop.
+      int end = destPos + count;
+      Arrays.fill(data, destPos, end, Platform.getByte(patternBase, patternOffset));
+      return end;
+    }
+    copyMemory(patternBase, patternOffset, data, BYTE_ARRAY_OFFSET + destPos, patternNumBytes);
     int copied = 1;
-    while (copied < times) {
-      int toCopy = Math.min(copied, times - copied);
-      System.arraycopy(newBytes, 0, newBytes, copied * numBytes, numBytes * toCopy);
+    while (copied < count) {
+      int toCopy = Math.min(copied, count - copied);
+      System.arraycopy(data, destPos, data, destPos + copied * patternNumBytes,
+        patternNumBytes * toCopy);
       copied += toCopy;
     }
-
-    return UTF8String.fromBytes(newBytes);
+    return destPos + count * patternNumBytes;
   }
 
   /**
@@ -1246,9 +1300,123 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     return -1;
   }
 
+  /**
+   * Finds the {@code occurrence}-th occurrence of {@code pattern} in this string,
+   * starting the search at the specified position.
+   * When {@code start} is positive, the search proceeds forward from the
+   * {@code start}-th character (1-based). When {@code start} is negative, the
+   * search proceeds backward: {@code start} specifies the first character to
+   * compare, counting from the end of the string. For example,
+   * {@code start = -3} points at the 3rd character from the end, and the first
+   * candidate substring is the one that begins at that character.
+   * Overlapping matches are supported (e.g. "aa" in "aaa" returns 0, 1 for
+   * occurrence 1, 2 respectively).
+   *
+   * @param pattern    the substring to search for
+   * @param start      1-based start position; if negative, search direction is reversed
+   * @param occurrence which occurrence to return (must be >= 1)
+   * @return 0-based character index of the match, or -1 if not found
+   */
+  public int indexOf(UTF8String pattern, int start, int occurrence) {
+    assert occurrence > 0;
+    if (pattern.numBytes() == 0) {
+      return indexOfEmpty(start);
+    }
+    if (start == 0) {
+      return -1;
+    }
+
+    int charCount = 0;
+    int byteIdx;
+    // `charsToSkip` is a long because negating `start` overflows for Integer.MIN_VALUE.
+    long charsToSkip;
+    if (start > 0) {
+      byteIdx = 0; // position in byte
+      charsToSkip = start - 1; // skip character count
+      while (byteIdx < numBytes && charCount < charsToSkip) {
+        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        charCount += 1;
+      }
+    } else {
+      // For negative start, skip |start| characters from the end to position
+      // byteIdx at the starting byte of the first character to compare.
+      charsToSkip = -(long) start;
+      byteIdx = numBytes;
+      while (byteIdx > 0 && charCount < charsToSkip) {
+        byteIdx = prevCharStart(byteIdx);
+        charCount++;
+      }
+    }
+    // If start position is out of range, return -1 immediately
+    if (charCount < charsToSkip) return -1;
+
+    // For forward search, byteIdx is the starting byte offset of the current character,
+    // and charCount tracks the 0-based character index of that character.
+    // For backward search, byteIdx points to the starting byte of the current candidate match.
+    if (start > 0) {
+      // Search for the occurrence-th match, starting from the current byteIdx.
+      while (occurrence > 0) {
+        // If byteIdx equals numBytes, it indicates that we have
+        // reached the end of the string, yet we still enter the loop
+        // and return -1 when the 'not found' condition is met.
+        while (byteIdx <= numBytes) {
+          if (pattern.numBytes + byteIdx > numBytes) {
+            return -1;
+          }
+
+          if (ByteArrayMethods.arrayEquals(base, offset + byteIdx,
+                  pattern.base, pattern.offset, pattern.numBytes)) {
+            break;
+          }
+          byteIdx += numBytesForFirstByte(getByte(byteIdx));
+          charCount += 1;
+        }
+
+        occurrence--;
+        if (occurrence == 0) return charCount;
+
+        byteIdx += numBytesForFirstByte(getByte(byteIdx));
+        charCount += 1;
+      }
+    } else {
+      // trying to match pattern starting at byteIdx, scanning leftwards
+      while (occurrence > 0) {
+        while (byteIdx >= 0) {
+          // Only attempt to match if there is enough room for the pattern.
+          if (byteIdx + pattern.numBytes <= numBytes &&
+            ByteArrayMethods.arrayEquals(base, offset + byteIdx, pattern.base, pattern.offset,
+              pattern.numBytes)) {
+            break;
+          }
+          byteIdx = prevCharStart(byteIdx);
+        }
+        if (byteIdx < 0) return -1;
+
+        occurrence--;
+        if (occurrence == 0) return bytePosToChar(byteIdx);
+
+        byteIdx = prevCharStart(byteIdx);
+      }
+    }
+    return -1;
+  }
+
+  private int prevCharStart(int byteIdx) {
+    byteIdx--;
+    // Skip UTF-8 continuation bytes to reach the start of a character
+    while (byteIdx > 0 && (getByte(byteIdx) & 0xC0) == 0x80) {
+      byteIdx--;
+    }
+    return byteIdx;
+  }
+
   public int charPosToByte(int charPos) {
     if (charPos < 0) {
       return -1;
+    }
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: byte index == char index, clamped to the end of the string.
+      return Math.min(charPos, numBytes);
     }
 
     int i = 0;
@@ -1261,6 +1429,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
   }
 
   public int bytePosToChar(int bytePos) {
+    if (isFullAscii == IsFullAscii.FULL_ASCII) {
+      // ASCII: char index == byte index, clamped to [0, numBytes].
+      return Math.max(0, Math.min(bytePos, numBytes));
+    }
     int i = 0;
     int c = 0;
     while (i < numBytes && i < bytePos) {
@@ -1274,9 +1446,13 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * Find the `str` from left to right.
    */
   public int find(UTF8String str, int start) {
-    assert (str.numBytes > 0);
-    while (start <= numBytes - str.numBytes) {
-      if (ByteArrayMethods.arrayEquals(base, offset + start, str.base, str.offset, str.numBytes)) {
+    return find(str.base, str.offset, str.numBytes, start);
+  }
+
+  private int find(Object strBase, long strOffset, int strNumBytes, int start) {
+    assert (strNumBytes > 0);
+    while (start <= numBytes - strNumBytes) {
+      if (ByteArrayMethods.arrayEquals(base, offset + start, strBase, strOffset, strNumBytes)) {
         return start;
       }
       start += 1;
@@ -1328,11 +1504,12 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
 
     } else {
       int idx = numBytes - delim.numBytes + 1;
-      count = -count;
-      while (count > 0) {
+      // `remaining` is a long because negating `count` overflows for Integer.MIN_VALUE.
+      long remaining = -(long) count;
+      while (remaining > 0) {
         idx = rfind(delim, idx - 1);
         if (idx >= 0) {
-          count --;
+          remaining --;
         } else {
           // can not find enough delim
           return this;
@@ -1355,6 +1532,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String rpad(int len, UTF8String pad) {
+    // If the requested length is not positive, the result is empty. This is also what the
+    // `spaces <= 0` branch below computes, but it has to be checked up front: for
+    // `len == Integer.MIN_VALUE` the subtraction wraps to a positive value and the padding
+    // branch is taken instead.
+    if (len <= 0) return EMPTY_UTF8;
     int spaces = len - this.numChars(); // number of char need to pad
     if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
@@ -1369,13 +1551,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET, this.numBytes);
-      int offset = this.numBytes;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, this.numBytes, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
 
       return UTF8String.fromBytes(data);
@@ -1389,6 +1565,11 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    *   ('hi', 1, '??') =&gt; 'h'
    */
   public UTF8String lpad(int len, UTF8String pad) {
+    // If the requested length is not positive, the result is empty. This is also what the
+    // `spaces <= 0` branch below computes, but it has to be checked up front: for
+    // `len == Integer.MIN_VALUE` the subtraction wraps to a positive value and the padding
+    // branch is taken instead.
+    if (len <= 0) return EMPTY_UTF8;
     int spaces = len - this.numChars(); // number of char need to pad
     if (spaces <= 0 || pad.numBytes() == 0) {
       // no padding at all, return the substring of the current string
@@ -1403,13 +1584,7 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
         Math.toIntExact((long) numBytes + (long) pad.numBytes * count + remain.numBytes);
       byte[] data = new byte[resultSize];
 
-      int offset = 0;
-      int idx = 0;
-      while (idx < count) {
-        copyMemory(pad.base, pad.offset, data, BYTE_ARRAY_OFFSET + offset, pad.numBytes);
-        ++ idx;
-        offset += pad.numBytes;
-      }
+      int offset = fillRepeated(data, 0, pad.base, pad.offset, pad.numBytes, count);
       copyMemory(remain.base, remain.offset, data, BYTE_ARRAY_OFFSET + offset, remain.numBytes);
       offset += remain.numBytes;
       copyMemory(this.base, this.offset, data, BYTE_ARRAY_OFFSET + offset, numBytes());
@@ -1600,9 +1775,10 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
       charCount = Character.charCount(codePoint);
       String subStr = srcStr.substring(k, k + charCount);
       String translated = dict.get(subStr);
-      if (null == translated) {
+      if (translated == null) {
+        // No mapping for this character: keep the original.
         sb.append(subStr);
-      } else if (!"\0".equals(translated)) {
+      } else if (!translated.isEmpty()) {
         sb.append(translated);
       }
     }
@@ -2024,18 +2200,21 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
     }
 
     for (j = 0, j_bytes = 0; j < m; j_bytes += num_bytes_j, j++) {
-      num_bytes_j = numBytesForFirstByte(t.getByte(j_bytes));
+      byte t_byte = t.getByte(j_bytes);
+      num_bytes_j = numBytesForFirstByte(t_byte);
       d[0] = j + 1;
 
-      for (i = 0, i_bytes = 0; i < n; i_bytes += numBytesForFirstByte(s.getByte(i_bytes)), i++) {
-        if (s.getByte(i_bytes) != t.getByte(j_bytes) ||
-              num_bytes_j != numBytesForFirstByte(s.getByte(i_bytes))) {
+      for (i = 0, i_bytes = 0; i < n; i++) {
+        byte s_byte = s.getByte(i_bytes);
+        int num_bytes_i = numBytesForFirstByte(s_byte);
+        if (s_byte != t_byte || num_bytes_j != num_bytes_i) {
           cost = 1;
         } else {
           cost = (ByteArrayMethods.arrayEquals(t.base, t.offset + j_bytes, s.base,
               s.offset + i_bytes, num_bytes_j)) ? 0 : 1;
         }
         d[i + 1] = Math.min(Math.min(d[i] + 1, p[i + 1] + 1), p[i] + cost);
+        i_bytes += num_bytes_i;
       }
 
       swap = p;

@@ -327,7 +327,7 @@ case class CounterDiffWithStartTime(
     2. The current start time is greater than the previous start time, if start_time was provided.
   """,
   group = "window_funcs",
-  since = "4.2.0"
+  since = "4.3.0"
 )
 // scalastyle:on line.size.limit line.contains.tab
 object CounterDiffExpressionBuilder extends ExpressionBuilder {

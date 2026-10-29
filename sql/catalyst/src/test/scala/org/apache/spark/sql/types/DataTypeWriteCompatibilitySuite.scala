@@ -27,6 +27,7 @@ import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLType
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.StoreAssignmentPolicy
+import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig.AnsiStoreAssignmentCastCheck
 
 class StrictDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBaseSuite {
   override def storeAssignmentPolicy: SQLConf.StoreAssignmentPolicy.Value =
@@ -150,6 +151,153 @@ class ANSIDataTypeWriteCompatibilitySuite extends DataTypeWriteCompatibilityBase
         "srcType" -> "\"STRING\"",
         "targetType" -> "\"INT\"")
     )
+  }
+
+  test("RUNTIME does not relax struct field ordering") {
+    val writeStruct = StructType(Seq(
+      StructField("first", FloatType, nullable = false),
+      StructField("second", StringType, nullable = false)))
+    val readStruct = StructType(Seq(
+      StructField("first", FloatType, nullable = false),
+      StructField("renamed", IntegerType, nullable = false)))
+
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException](
+        DataTypeUtils.canWrite("", writeStruct, readStruct, byName = true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
+          errMsg => errs += errMsg,
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)
+      ),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`",
+        "order" -> "1",
+        "expected" -> "`renamed`",
+        "found" -> "`second`")
+    )
+  }
+
+  test("RUNTIME does not relax array element nullability") {
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException](
+        DataTypeUtils.canWrite("", ArrayType(LongType, containsNull = true),
+          ArrayType(LongType, containsNull = false), byName = true,
+          analysis.caseSensitiveResolution, "arr", storeAssignmentPolicy,
+          errMsg => errs += errMsg,
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_ARRAY_ELEMENTS",
+      parameters = Map("tableName" -> "``", "colName" -> "`arr`"))
+  }
+
+  test("RUNTIME does not relax map value nullability") {
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException](
+        DataTypeUtils.canWrite("", MapType(StringType, LongType, valueContainsNull = true),
+          MapType(StringType, LongType, valueContainsNull = false), byName = true,
+          analysis.caseSensitiveResolution, "m", storeAssignmentPolicy,
+          errMsg => errs += errMsg,
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_MAP_VALUES",
+      parameters = Map("tableName" -> "``", "colName" -> "`m`"))
+  }
+
+  test("RUNTIME does not relax struct field nullability") {
+    val writeType = StructType(Seq(StructField("x", LongType, nullable = true)))
+    val readType = StructType(Seq(StructField("x", LongType, nullable = false)))
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException](
+        DataTypeUtils.canWrite("", writeType, readType, byName = true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
+          errMsg => errs += errMsg,
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.NULLABLE_COLUMN",
+      parameters = Map("tableName" -> "``", "colName" -> "`t`.`x`"))
+  }
+
+  test("RUNTIME allows complex-to-string casts") {
+    Seq(
+      ArrayType(IntegerType),
+      MapType(StringType, IntegerType),
+      StructType(Seq(StructField("a", IntegerType)))).foreach { writeType =>
+      assert(
+        DataTypeUtils.canWrite("", writeType, StringType, byName = true,
+          analysis.caseSensitiveResolution, "c", storeAssignmentPolicy,
+          _ => (),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME),
+        s"$writeType -> string should be allowed under RUNTIME")
+    }
+  }
+
+  test("RUNTIME rejects unsupported datetime-to-variant casts") {
+    val unsupportedTypes = Seq(
+      TimeType(TimeType.DEFAULT_PRECISION),
+      TimeType(TimeType.MAX_PRECISION),
+      TimestampLTZNanosType(TimestampLTZNanosType.MAX_PRECISION),
+      TimestampNTZNanosType(TimestampNTZNanosType.MAX_PRECISION))
+    val arrays = unsupportedTypes.map(ArrayType(_))
+    val nestedArrays = unsupportedTypes.map(t => ArrayType(ArrayType(t)))
+    (unsupportedTypes ++ arrays ++ nestedArrays).foreach { writeType =>
+      val errs = new mutable.ArrayBuffer[String]()
+      checkError(
+        exception = intercept[AnalysisException](
+          DataTypeUtils.canWrite("", writeType, VariantType, byName = true,
+            analysis.caseSensitiveResolution, "v", storeAssignmentPolicy,
+            errMsg => errs += errMsg,
+            ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
+        condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+        parameters = Map(
+          "tableName" -> "``",
+          "colName" -> "`v`",
+          "srcType" -> toSQLType(writeType),
+          "targetType" -> toSQLType(VariantType)))
+    }
+  }
+
+  test("RUNTIME allows supported array-to-variant casts") {
+    Seq(ArrayType(DateType), ArrayType(ArrayType(TimestampType))).foreach { writeType =>
+      assert(
+        DataTypeUtils.canWrite("", writeType, VariantType, byName = true,
+          analysis.caseSensitiveResolution, "v", storeAssignmentPolicy,
+          _ => (),
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME),
+        s"$writeType -> variant should be allowed under RUNTIME")
+    }
+  }
+
+  test("RUNTIME does not relax UDT field-name validation") {
+    // A UDT backed by STRUCT<b, a> written by name into STRUCT<a, b> must be rejected on the
+    // field-name mismatch; deferring the ANSI cast check must not unwrap the UDT and silently swap
+    // fields positionally.
+    val udtType = new UserDefinedType[Any] {
+      override def sqlType: DataType = StructType(Seq(
+        StructField("b", IntegerType, nullable = false),
+        StructField("a", IntegerType, nullable = false)))
+      override def userClass: java.lang.Class[Any] = null
+      override def serialize(obj: Any): Any = null
+      override def deserialize(datum: Any): Any = null
+    }
+    val readType = StructType(Seq(
+      StructField("a", IntegerType, nullable = false),
+      StructField("b", IntegerType, nullable = false)))
+    val errs = new mutable.ArrayBuffer[String]()
+    checkError(
+      exception = intercept[AnalysisException](
+        DataTypeUtils.canWrite("", udtType, readType, byName = true,
+          analysis.caseSensitiveResolution, "t", storeAssignmentPolicy,
+          errMsg => errs += errMsg,
+          ansiStoreAssignmentCastCheck = AnsiStoreAssignmentCastCheck.RUNTIME)),
+      condition = "INCOMPATIBLE_DATA_FOR_TABLE.UNEXPECTED_COLUMN_NAME",
+      parameters = Map(
+        "tableName" -> "``",
+        "colName" -> "`t`",
+        "order" -> "0",
+        "expected" -> "`a`",
+        "found" -> "`b`"))
   }
 
   private val stringPoint2 = StructType(Seq(
@@ -316,6 +464,50 @@ abstract class DataTypeWriteCompatibilityBaseSuite extends SparkFunSuite {
             matchPVals = true
           )
         }
+      }
+    }
+  }
+
+  test("SPARK-57564: Check TIME type write compatibility") {
+    // Expectations are derived from the policy-bound `canCast` (canUpCast for the strict suite,
+    // canANSIStoreAssign for the ANSI suite), so this single test stays correct under both
+    // subclasses: strict allows only TIME -> identical TIME, while ANSI additionally allows
+    // writes across datetime types and across TIME precisions.
+    def checkPair(write: DataType, read: DataType): Unit = {
+      if (canCast(write, read)) {
+        assertAllowed(write, read, "t",
+          s"Should allow writing $write to $read because cast is safe")
+      } else {
+        val errs = new mutable.ArrayBuffer[String]()
+        checkError(
+          exception = intercept[AnalysisException] (
+            DataTypeUtils.canWrite("", write, read, true, analysis.caseSensitiveResolution,
+              "t", storeAssignmentPolicy, errMsg => errs += errMsg)
+          ),
+          condition = "INCOMPATIBLE_DATA_FOR_TABLE.CANNOT_SAFELY_CAST",
+          parameters = Map(
+            "tableName" -> "``",
+            "colName" -> "`t`",
+            "srcType" -> toSQLType(write),
+            "targetType" -> toSQLType(read)
+          )
+        )
+      }
+    }
+
+    val timeTypes = Seq(TimeType(0), TimeType(3), TimeType(6))
+    // TIME -> TIME across all precision combinations (both directions via full cross product).
+    timeTypes.foreach { w =>
+      timeTypes.foreach { r =>
+        checkPair(w, r)
+      }
+    }
+    // TIME <-> other datetime types, both directions.
+    val otherDateTimeTypes = Seq(DateType, TimestampType, TimestampNTZType)
+    timeTypes.foreach { t =>
+      otherDateTimeTypes.foreach { o =>
+        checkPair(t, o)
+        checkPair(o, t)
       }
     }
   }

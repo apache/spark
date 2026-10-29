@@ -18,15 +18,18 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Date, SQLException, Timestamp, Types}
+import java.sql.Types.TIMESTAMP
+import java.time.LocalDateTime
 import java.util.Locale
 
 import scala.util.control.NonFatal
 
 import org.apache.spark.{SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.SQLConfHelper
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
 import org.apache.spark.sql.connector.expressions.{Expression, Extract, Literal}
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JdbcUtils}
 import org.apache.spark.sql.jdbc.OracleDialect._
 import org.apache.spark.sql.types._
 
@@ -44,7 +47,9 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   // scalastyle:on line.size.limit
   private val supportedAggregateFunctions =
     Set("MAX", "MIN", "SUM", "COUNT", "AVG") ++ distinctUnsupportedAggregateFunctions
-  private val supportedFunctions = supportedAggregateFunctions ++ Set("TRUNC")
+  private val supportedFunctions =
+    supportedAggregateFunctions ++
+      Set("TRUNC", CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)
 
   override def isSupportedFunction(funcName: String): Boolean =
     supportedFunctions.contains(funcName)
@@ -52,6 +57,15 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
   override def isObjectNotFoundException(e: SQLException): Boolean = {
     e.getMessage.contains("ORA-00942") ||
       e.getMessage.contains("ORA-39165")
+  }
+
+  override def isNotSelectableObjectException(e: SQLException): Boolean = {
+    // ORA-04044: object is not a table (e.g. a synonym to a procedure/function/package).
+    e.getMessage.contains("ORA-04044") ||
+      // ORA-00980: synonym translation is no longer valid (synonym whose target is missing).
+      e.getMessage.contains("ORA-00980") ||
+      // ORA-04063: object is invalid (e.g. a view over a dropped base table).
+      e.getMessage.contains("ORA-04063")
   }
 
   class OracleSQLBuilder extends JDBCSQLBuilder {
@@ -75,7 +89,22 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     override def visitSQLFunction(funcName: String, inputs: Array[String]): String = {
       funcName match {
         case "TRUNC" =>
-          s"TRUNC(${inputs(0)}, 'IW')"
+          // Map Spark's trunc format strings to Oracle equivalents.
+          // inputs(1) arrives quoted, e.g. "'MONTH'" (see JDBCSQLBuilder.visitLiteral).
+          // Case-insensitive: Spark's parseTruncLevel uppercases before matching.
+          val fmt = inputs(1).toUpperCase(Locale.ROOT)
+          val oracleFormat = fmt match {
+            case "'WEEK'" => "'IW'"
+            case "'MONTH'" | "'MM'" | "'MON'" => "'MM'"
+            case "'QUARTER'" => "'Q'"
+            case "'YEAR'" | "'YYYY'" | "'YY'" => "'YYYY'"
+            case _ =>
+              // Unmapped formats: don't push down. compileExpression catches the
+              // exception and returns None, so Spark evaluates trunc locally.
+              throw new IllegalArgumentException(
+                s"Unsupported Oracle TRUNC format: ${inputs(1)}")
+          }
+          s"TRUNC(${inputs(0)}, $oracleFormat)"
         case _ => super.visitSQLFunction(funcName, inputs)
       }
     }
@@ -92,6 +121,29 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         super.visitAggregateFunction(funcName, isDistinct, inputs)
       }
 
+    override def visitIn(v: String, list: java.util.List[String]): String = {
+      if (list.size() <= 1000) {
+        super.visitIn(v, list)
+      } else {
+        val chunks = new java.util.ArrayList[String]()
+        var i = 0
+        while (i < list.size()) {
+          val end = Math.min(i + 1000, list.size())
+          val ins = new java.lang.StringBuilder(v).append(" IN (")
+          var j = i
+          while (j < end) {
+            if (j > i) ins.append(", ")
+            ins.append(list.get(j))
+            j += 1
+          }
+          ins.append(")")
+          chunks.add(ins.toString)
+          i = end
+        }
+        chunks.toArray.mkString("(", " OR ", ")")
+      }
+    }
+
     override def visitBinaryComparison(name: String, le: Expression, re: Expression): String = {
       (le, re) match {
         case (lit: Literal[_], _) if lit.dataType == BinaryType =>
@@ -99,7 +151,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
         case (_, lit: Literal[_]) if lit.dataType == BinaryType =>
           compareBlob(le, name, lit)
         case _ =>
-          super.visitBinaryComparison(name, le, re);
+          super.visitBinaryComparison(name, le, re)
       }
     }
 
@@ -131,6 +183,8 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     sqlType match {
       case Types.NUMERIC =>
         val scale = if (null != md) md.build().getLong("scale") else 0L
+        val defaultScale = if (conf.legacyOracleNumberMappingEnabled) 10
+          else DecimalType.DEFAULT_SCALE
         size match {
           // Handle NUMBER fields that have no precision/scale in special way
           // because JDBC ResultSetMetaData converts this to 0 precision and -127 scale
@@ -138,12 +192,12 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
           // https://github.com/apache/spark/pull/8780#issuecomment-145598968
           // and
           // https://github.com/apache/spark/pull/8780#issuecomment-144541760
-          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case 0 => Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
           // Handle FLOAT fields in a special way because JDBC ResultSetMetaData converts
           // this to NUMERIC with -127 scale
           // Not sure if there is a more robust way to identify the field as a float (or other
           // numeric types that do not specify a scale.
-          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, 10))
+          case _ if scale == -127L => Option(DecimalType(DecimalType.MAX_PRECISION, defaultScale))
           case _ => None
         }
       case TIMESTAMP_TZ | TIMESTAMP_LTZ =>
@@ -159,9 +213,21 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
       case BINARY_DOUBLE => Some(DoubleType) // Value for OracleTypes.BINARY_DOUBLE
       case INTERVAL_YM => Some(YearMonthIntervalType())
       case INTERVAL_DS => Some(DayTimeIntervalType())
+      case TIMESTAMP if !conf.legacyOracleTimestampNTZMappingEnabled && typeName != null &&
+          typeName.toUpperCase(Locale.ROOT).matches("DATE|TIMESTAMP") =>
+        val metadata = if (md != null) md.build() else Metadata.empty
+        // Absent scale metadata: Oracle TIMESTAMP defaults to TIMESTAMP(6).
+        val scale = if (metadata.contains("scale")) metadata.getLong("scale").toInt else 6
+        val preferNanos = metadata.contains("preferTimestampNanos") &&
+          metadata.getBoolean("preferTimestampNanos")
+        val resolved = JdbcUtils.resolveTimestampType(
+          isTimestampNTZ = true, scale = scale, preferTimestampNanos = preferNanos)
+        Some(resolved)
       case _ => None
     }
   }
+
+  override def timestampNTZAsWallClock: Boolean = !conf.legacyOracleTimestampNTZMappingEnabled
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     // For more details, please see
@@ -188,6 +254,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     // Appendix A Reference Information.
     case stringValue: String => s"'${escapeSql(stringValue)}'"
     case timestampValue: Timestamp => "{ts '" + timestampValue + "'}"
+    case localDateTimeValue: LocalDateTime => "{ts '" + Timestamp.valueOf(localDateTimeValue) + "'}"
     case dateValue: Date => "{d '" + dateValue + "'}"
     case arrayValue: Array[Any] => arrayValue.map(compileValue).mkString(", ")
     case binaryValue: Array[Byte] =>

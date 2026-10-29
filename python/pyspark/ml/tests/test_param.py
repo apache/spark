@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -16,8 +15,8 @@
 # limitations under the License.
 #
 
-import inspect
 import array as pyarray
+import inspect
 
 import numpy as np
 
@@ -36,9 +35,9 @@ from pyspark.ml.feature import (
 from pyspark.ml.linalg import DenseVector, SparseVector, Vectors
 from pyspark.ml.param import Param, Params, TypeConverters
 from pyspark.ml.param.shared import HasInputCol, HasMaxIter, HasSeed
-from pyspark.ml.regression import LinearRegressionModel, GeneralizedLinearRegressionModel
+from pyspark.ml.regression import GeneralizedLinearRegressionModel, LinearRegressionModel
 from pyspark.ml.wrapper import JavaParams
-from pyspark.testing.mlutils import check_params, PySparkTestCase, SparkSessionTestCase
+from pyspark.testing.mlutils import PySparkTestCase, SparkSessionTestCase, check_params
 
 
 class ParamTypeConversionTests(PySparkTestCase):
@@ -194,14 +193,14 @@ class ParamTests(SparkSessionTestCase):
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
-        self.assertTrue(maxIter.parent == testParams.uid)
+        self.assertEqual(maxIter.parent, testParams.uid)
 
     def test_param(self):
         testParams = TestParams()
         maxIter = testParams.maxIter
         self.assertEqual(maxIter.name, "maxIter")
         self.assertEqual(maxIter.doc, "max number of iterations (>= 0).")
-        self.assertTrue(maxIter.parent == testParams.uid)
+        self.assertEqual(maxIter.parent, testParams.uid)
 
     def test_hasparam(self):
         testParams = TestParams()
@@ -387,10 +386,10 @@ class DefaultValuesTests(PySparkTestCase):
     def test_java_params(self):
         import re
 
-        import pyspark.ml.feature
         import pyspark.ml.classification
         import pyspark.ml.clustering
         import pyspark.ml.evaluation
+        import pyspark.ml.feature
         import pyspark.ml.pipeline
         import pyspark.ml.recommendation
         import pyspark.ml.regression

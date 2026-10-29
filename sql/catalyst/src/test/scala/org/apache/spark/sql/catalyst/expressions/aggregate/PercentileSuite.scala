@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.ArrayData
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.collection.OpenHashMap
 
 class PercentileSuite extends SparkFunSuite {
@@ -113,6 +114,154 @@ class PercentileSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-57557: Percentile and median support TIME type") {
+    // The return type mirrors the input TIME type, preserving precision.
+    assert(new Percentile(BoundReference(0, TimeType(), nullable = false), Literal(0.5))
+      .dataType === TimeType())
+    assert(Median(BoundReference(0, TimeType(3), nullable = false)).dataType === TimeType(3))
+
+    // The exact median of two TIME values interpolates (continuous distribution): the midpoint is
+    // returned as the internal Long value (nanos-of-day), e.g. median(0L, 10L) -> 5L.
+    val agg = new Percentile(BoundReference(0, TimeType(), nullable = false), Literal(0.5))
+    val buffer = agg.createAggregationBuffer()
+    agg.update(buffer, InternalRow(0L))
+    agg.update(buffer, InternalRow(10L))
+    assert(agg.eval(buffer) === 5L)
+  }
+
+  private def nanosTs(epochMicros: Long, nanosWithinMicro: Int): TimestampNanosVal =
+    TimestampNanosVal.fromParts(epochMicros, nanosWithinMicro.toShort)
+
+  private def evalNanos(agg: PercentileBase, values: Seq[TimestampNanosVal]): Any = {
+    val buffer = agg.createAggregationBuffer()
+    values.foreach(v => agg.update(buffer, InternalRow(v)))
+    agg.eval(buffer)
+  }
+
+  test("SPARK-60542: percentile family over nanosecond timestamps keeps the input type") {
+    Seq(7, 8, 9).flatMap(p => Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p))).foreach {
+      dt =>
+        val child = BoundReference(0, dt, nullable = true)
+        Seq(new Percentile(child, Literal(0.5)), PercentileDisc(child, Literal(0.5))).foreach {
+          agg =>
+            assert(agg.checkInputDataTypes() === TypeCheckSuccess)
+            assert(agg.dataType === dt)
+        }
+        val percentages = CreateArray(Seq(Literal(0.25), Literal(0.75)))
+        assert(new Percentile(child, percentages).dataType === ArrayType(dt, false))
+        assert(Median(child).dataType === dt)
+        assert(PercentileCont(child, Literal(0.5)).dataType === dt)
+    }
+  }
+
+  test("SPARK-60542: percentile over nanosecond timestamps interpolates exactly") {
+    // 2020-01-01 12:00:00.123456 UTC.
+    val micros = 1577880000123456L
+    val p9 = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
+    // Both inputs map to the same double, so a double interpolation can't return .123456790.
+    assert(evalNanos(new Percentile(p9, Literal(0.5)),
+      Seq(nanosTs(micros, 789), nanosTs(micros, 791))) === nanosTs(micros, 790))
+    // The exact midpoint .1234567895 is floored to the precision.
+    assert(evalNanos(new Percentile(p9, Literal(0.5)),
+      Seq(nanosTs(micros, 789), nanosTs(micros, 790))) === nanosTs(micros, 789))
+    // The result carries into the next microsecond.
+    assert(evalNanos(new Percentile(p9, Literal(0.5)),
+      Seq(nanosTs(micros, 999), nanosTs(micros + 1, 1))) === nanosTs(micros + 1, 0))
+    // Pre-epoch: the midpoint of -1000ns and 1ns is -499.5ns, floored to -500ns.
+    assert(evalNanos(new Percentile(p9, Literal(0.5)),
+      Seq(nanosTs(-1, 0), nanosTs(0, 1))) === nanosTs(-1, 500))
+    // 0001-01-01 00:00:00 and 9999-12-31 23:59:59.999999999: the span overflows a long in nanos.
+    assert(evalNanos(new Percentile(p9, Literal(0.5)),
+      Seq(nanosTs(-62135596800000000L, 0), nanosTs(253402300799999999L, 999))) ===
+      nanosTs(95633351999999999L, 999))
+    // Single value, p = 0 and p = 1, and an array of percentages.
+    val values = Seq(nanosTs(micros, 100), nanosTs(micros, 200), nanosTs(micros, 900))
+    assert(evalNanos(new Percentile(p9, Literal(0.5)), values.take(1)) === values.head)
+    assert(evalNanos(new Percentile(p9, Literal(0.0)), values) === values.head)
+    assert(evalNanos(new Percentile(p9, Literal(1.0)), values) === values.last)
+    val percentages = CreateArray(Seq(Literal(0.25), Literal(0.75)))
+    assert(evalNanos(new Percentile(p9, percentages), values).asInstanceOf[ArrayData]
+      .toSeq[TimestampNanosVal](TimestampNTZNanosType(9)) ===
+      Seq(nanosTs(micros, 150), nanosTs(micros, 550)))
+    // Descending order (percentile_cont ... ORDER BY c DESC) mirrors the ascending result.
+    val twoValues = Seq(nanosTs(0, 0), nanosTs(0, 3))
+    assert(evalNanos(new Percentile(p9, Literal(0.25), reverse = true), twoValues) ===
+      nanosTs(0, 2))
+    assert(evalNanos(new Percentile(p9, Literal(0.75)), twoValues) === nanosTs(0, 2))
+
+    // Results are floored to the 100ns (p = 7) and 10ns (p = 8) grids.
+    val p7 = BoundReference(0, TimestampLTZNanosType(7), nullable = true)
+    assert(evalNanos(new Percentile(p7, Literal(0.5)),
+      Seq(nanosTs(micros, 100), nanosTs(micros, 400))) === nanosTs(micros, 200))
+    assert(evalNanos(new Percentile(p7, Literal(0.5)),
+      Seq(nanosTs(-1, 0), nanosTs(0, 100))) === nanosTs(-1, 500))
+    val p8 = BoundReference(0, TimestampNTZNanosType(8), nullable = true)
+    assert(evalNanos(new Percentile(p8, Literal(0.5)),
+      Seq(nanosTs(micros, 10), nanosTs(micros, 40))) === nanosTs(micros, 20))
+  }
+
+  test("SPARK-60542: percentile over nanosecond timestamps uses an exact position") {
+    val p9 = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
+    // 90 * 0.7 is 62.99999999999999 as a double, but the exact position is the 63rd input value.
+    val spaced = (0 to 90).map(nanosTs(0, _))
+    assert(evalNanos(new Percentile(p9, Literal(0.7)), spaced) === spaced(63))
+    assert(evalNanos(new Percentile(p9, Literal(0.3)), Seq(nanosTs(0, 0), nanosTs(0, 10))) ===
+      nanosTs(0, 3))
+    // 3 * 0.7 is 2.0999999999999996 as a double; ascending 0.7 and descending 0.3 agree.
+    val values = Seq(nanosTs(0, 100), nanosTs(0, 200), nanosTs(0, 300), nanosTs(1, 300))
+    val p7 = BoundReference(0, TimestampLTZNanosType(7), nullable = true)
+    Seq(p9, p7).foreach { child =>
+      assert(evalNanos(new Percentile(child, Literal(0.7)), values) === nanosTs(0, 400))
+      assert(evalNanos(new Percentile(child, Literal(0.3), reverse = true), values) ===
+        nanosTs(0, 400))
+    }
+    // A tenth of a one-year gap is a whole number of nanoseconds.
+    val year = 365L * 24 * 60 * 60 * 1000 * 1000
+    assert(evalNanos(new Percentile(p9, Literal(0.7)),
+      Seq(nanosTs(0, 0), nanosTs(0, 1), nanosTs(0, 2), nanosTs(year, 2))) ===
+      nanosTs(year / 10, 2))
+  }
+
+  test("SPARK-60542: NaN percentage over nanosecond timestamps matches other types") {
+    // NaN passes the range check; as for other types, the first value in sort order is returned.
+    val child = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
+    val values = Seq(nanosTs(0, 100), nanosTs(0, 200), nanosTs(0, 300))
+    val nan = Literal(Double.NaN)
+    assert(evalNanos(new Percentile(child, nan), values) === values.head)
+    assert(evalNanos(new Percentile(child, nan, reverse = true), values) === values.last)
+    assert(evalNanos(new Percentile(child, CreateArray(Seq(Literal(0.5), nan))), values)
+      .asInstanceOf[ArrayData].toSeq[TimestampNanosVal](TimestampNTZNanosType(9)) ===
+      Seq(values(1), values.head))
+    assert(evalNanos(PercentileDisc(child, nan), values) === values.head)
+    assert(evalNanos(PercentileDisc(child, nan, legacyCalculation = true), values) === values.head)
+    val doubles = new Percentile(BoundReference(0, DoubleType, nullable = true), nan)
+    val buffer = doubles.createAggregationBuffer()
+    Seq(1.0, 2.0, 3.0).foreach(v => doubles.update(buffer, InternalRow(v)))
+    assert(doubles.eval(buffer) === 1.0)
+  }
+
+  test("SPARK-60542: percentile_disc over nanosecond timestamps returns an input value") {
+    val child = BoundReference(0, TimestampNTZNanosType(9), nullable = true)
+    val values = (1 to 4).map(nanosTs(1577880000123456L, _))
+    assert(evalNanos(PercentileDisc(child, Literal(0.6)), values) === values(2))
+    assert(evalNanos(PercentileDisc(child, Literal(0.6), legacyCalculation = true), values) ===
+      values(1))
+    assert(evalNanos(PercentileDisc(child, Literal(0.6), reverse = true), values) === values(1))
+  }
+
+  test("SPARK-60542: percentile over nanosecond timestamps merges serialized buffers") {
+    val child = BoundReference(0, TimestampLTZNanosType(9), nullable = true)
+    val agg = new Percentile(child, Literal(0.5))
+    val buffer1 = agg.createAggregationBuffer()
+    Seq(nanosTs(-1, 999), null).foreach(v => agg.update(buffer1, InternalRow(v)))
+    val buffer2 = agg.createAggregationBuffer()
+    agg.update(buffer2, InternalRow(nanosTs(0, 3)))
+    val merged = agg.merge(
+      agg.deserialize(agg.serialize(buffer1)), agg.deserialize(agg.serialize(buffer2)))
+    assert(agg.eval(merged) === nanosTs(0, 1))
+    assert(agg.eval(agg.createAggregationBuffer()) === null)
+  }
+
   test("class Percentile, low level interface, update, merge, eval...") {
     val childExpression = Cast(BoundReference(0, IntegerType, nullable = true), DoubleType)
     val inputAggregationBufferOffset = 1
@@ -175,8 +324,9 @@ class PercentileSuite extends SparkFunSuite {
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\")"),
+            "requiredType" -> ("((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\") or \"TIME\" " +
+              "or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )
@@ -198,8 +348,9 @@ class PercentileSuite extends SparkFunSuite {
           errorSubClass = "UNEXPECTED_INPUT_TYPE",
           messageParameters = Map(
             "paramIndex" -> ordinalNumber(0),
-            "requiredType" -> ("(\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
-              "or \"INTERVAL YEAR TO MONTH\")"),
+            "requiredType" -> ("((\"NUMERIC\" or \"INTERVAL DAY TO SECOND\" " +
+              "or \"INTERVAL YEAR TO MONTH\") or \"TIME\" " +
+              "or \"(TIMESTAMP_LTZ(P) OR TIMESTAMP_NTZ(P) WITH P IN [7, 9])\")"),
             "inputSql" -> "\"a\"",
             "inputType" -> toSQLType(dataType)
           )

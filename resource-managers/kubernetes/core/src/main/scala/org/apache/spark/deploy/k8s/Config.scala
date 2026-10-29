@@ -21,7 +21,8 @@ import java.util.concurrent.TimeUnit
 
 import org.apache.spark.deploy.k8s.Constants._
 import org.apache.spark.internal.Logging
-import org.apache.spark.internal.config.{ConfigBuilder, DYN_ALLOCATION_ENABLED}
+import org.apache.spark.internal.config.{ConfigBindingPolicy, ConfigBuilder, DYN_ALLOCATION_ENABLED}
+import org.apache.spark.network.util.ByteUnit
 
 private[spark] object Config extends Logging {
 
@@ -88,6 +89,18 @@ private[spark] object Config extends Logging {
       .checkValues(Set("IPv4", "IPv6", "IPv4,IPv6", "IPv6,IPv4"))
       .createWithDefault("IPv4")
 
+  val KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES =
+    ConfigBuilder("spark.kubernetes.driver.service.publishNotReadyAddresses")
+      .doc("If true, the driver service publishes DNS records for the driver pod even " +
+        "while the pod is not ready, so executors can resolve the driver service " +
+        "during startup when a readiness probe is configured on the driver pod. " +
+        "When enabled, the driver pod readiness wait before executor allocation " +
+        "is skipped as well.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val KUBERNETES_DRIVER_OWN_PVC =
     ConfigBuilder("spark.kubernetes.driver.ownPersistentVolumeClaim")
       .doc("If true, driver pod becomes the owner of on-demand persistent volume claims " +
@@ -120,12 +133,44 @@ private[spark] object Config extends Logging {
       .booleanConf
       .createWithDefault(false)
 
+  val KUBERNETES_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver and executor " +
+        "containers' security context. When false (default), a container cannot gain " +
+        "more privileges than its parent process. Set to true to opt out of this " +
+        "restriction. Driver and executor can be configured individually via the " +
+        "container type-specific config.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
+  val KUBERNETES_DRIVER_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.driver.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the driver container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
+  val KUBERNETES_EXECUTOR_ALLOW_PRIVILEGE_ESCALATION =
+    ConfigBuilder("spark.kubernetes.executor.securityContext.allowPrivilegeEscalation")
+      .doc("Sets the allowPrivilegeEscalation field of the executor container's security " +
+        "context. When false (default), the container cannot gain more privileges than " +
+        "its parent process. Set to true to opt out of this restriction. Falls back to " +
+        s"${KUBERNETES_ALLOW_PRIVILEGE_ESCALATION.key} if not set.")
+      .version("4.3.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .fallbackConf(KUBERNETES_ALLOW_PRIVILEGE_ESCALATION)
+
   val KUBERNETES_EXECUTOR_USE_DRIVER_POD_IP =
     ConfigBuilder("spark.kubernetes.executor.useDriverPodIP")
       .doc("If true, executor pods use Driver pod IP directly instead of Driver Service.")
       .version("4.1.0")
       .booleanConf
-      .createWithDefault(false)
+      .createWithDefault(true)
 
   val KUBERNETES_NAMESPACE =
     ConfigBuilder("spark.kubernetes.namespace")
@@ -195,16 +240,17 @@ private[spark] object Config extends Logging {
   object ExecutorRollPolicy extends Enumeration {
     val ID, ADD_TIME, TOTAL_GC_TIME, TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS,
       PEAK_JVM_ONHEAP_MEMORY, PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED,
-      OUTLIER, OUTLIER_NO_FALLBACK = Value
+      ACTIVE_TASKS, OUTLIER, OUTLIER_NO_FALLBACK = Value
   }
 
   val EXECUTOR_ROLL_POLICY =
     ConfigBuilder("spark.kubernetes.executor.rollPolicy")
       .doc("Executor roll policy: Valid values are ID, ADD_TIME, TOTAL_GC_TIME, " +
         "TOTAL_DURATION, AVERAGE_DURATION, FAILED_TASKS, PEAK_JVM_ONHEAP_MEMORY, " +
-        "PEAK_JVM_OFFHEAP_MEMORY, OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
+        "PEAK_JVM_OFFHEAP_MEMORY, TOTAL_SHUFFLE_WRITE, DISK_USED, ACTIVE_TASKS, " +
+        "OUTLIER (default), and OUTLIER_NO_FALLBACK. " +
         "When executor roll happens, Spark uses this policy to choose " +
-        "an executor and decommission it. The built-in policies are based on executor summary." +
+        "an executor and decommission it. The built-in policies are based on executor summary. " +
         "ID policy chooses an executor with the smallest executor ID. " +
         "ADD_TIME policy chooses an executor with the smallest add-time. " +
         "TOTAL_GC_TIME policy chooses an executor with the biggest total task GC time. " +
@@ -215,10 +261,19 @@ private[spark] object Config extends Logging {
         "memory. PEAK_JVM_OFFHEAP_MEMORY policy chooses an executor with the biggest peak JVM " +
         "off-heap memory. " +
         "TOTAL_SHUFFLE_WRITE policy chooses an executor with the biggest total shuffle write. " +
-        "DISK_USED policy chooses an executor with the biggest used disk size. " +
-        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than" +
+        "DISK_USED policy chooses an executor with the biggest disk size used by its " +
+        "stored blocks (e.g., disk-persisted RDD blocks). " +
+        "ACTIVE_TASKS policy chooses an executor with the smallest number of active tasks. " +
+        "If there is a tie, it chooses an executor with the smallest add-time. " +
+        "It is recommended to use it with " +
+        "spark.kubernetes.executor.minTasksPerExecutorBeforeRolling " +
+        "because newly started executors usually have no active tasks. " +
+        "OUTLIER policy chooses an executor with outstanding statistics which is bigger than " +
         "at least two standard deviation from the mean in average task time, " +
-        "total task time, total task GC time, and the number of failed tasks if exists. " +
+        "total task time, total task GC time, the number of failed tasks, " +
+        "peak JVM on-heap memory, peak JVM off-heap memory, total shuffle write, " +
+        "and disk used if exists. " +
+        "The dimensions are checked in this order and the first outlier found is chosen. " +
         "If there is no outlier it works like TOTAL_DURATION policy. " +
         "OUTLIER_NO_FALLBACK policy picks an outlier using the OUTLIER policy above. " +
         "If there is no outlier then no executor will be rolled.")
@@ -240,15 +295,15 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.resizeInterval")
-      .doc("Interval between executor resize operations. To disable, set 0 (default)")
+      .doc("Interval between executor resize operations. To disable, set 0.")
       .version("4.2.0")
       .timeConf(TimeUnit.SECONDS)
       .checkValue(_ >= 0, "Interval should be non-negative")
-      .createWithDefault(0)
+      .createWithDefaultString("1m")
 
   val EXECUTOR_RESIZE_THRESHOLD =
     ConfigBuilder("spark.kubernetes.executor.resizeThreshold")
-      .doc("The threshold to resize.")
+      .doc("The threshold to resize. It should be in (0, 1).")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v < 1, "The threshold should be in (0, 1)")
@@ -256,11 +311,20 @@ private[spark] object Config extends Logging {
 
   val EXECUTOR_RESIZE_FACTOR =
     ConfigBuilder("spark.kubernetes.executor.resizeFactor")
-      .doc("The factor to resize.")
+      .doc("The factor to resize. It should be in (0, 1].")
       .version("4.2.0")
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
       .createWithDefault(0.1)
+
+  val EXECUTOR_RESIZE_MAX_MEMORY =
+    ConfigBuilder("spark.kubernetes.executor.resizeMaxMemory")
+      .doc("The upper bound of the executor container memory limit that the resize plugin " +
+        "can grow to. By default, it is Long.MaxValue, which means no upper bound.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The maximum memory should be positive")
+      .createWithDefault(Long.MaxValue)
 
   val PVC_RESIZE_INTERVAL =
     ConfigBuilder("spark.kubernetes.executor.pvc.resizeInterval")
@@ -288,6 +352,15 @@ private[spark] object Config extends Logging {
       .doubleConf
       .checkValue(v => 0 < v && v <= 1, "The factor should be in (0, 1]")
       .createWithDefault(1.0)
+
+  val PVC_RESIZE_MAX_STORAGE =
+    ConfigBuilder("spark.kubernetes.executor.pvc.resizeMaxStorage")
+      .doc("The upper bound of the PVC storage request that the resize plugin can grow to. " +
+        "By default, it is Long.MaxValue, which means no upper bound.")
+      .version("4.4.0")
+      .bytesConf(ByteUnit.BYTE)
+      .checkValue(_ > 0, "The maximum storage should be positive")
+      .createWithDefault(Long.MaxValue)
 
   val KUBERNETES_AUTH_DRIVER_CONF_PREFIX = "spark.kubernetes.authenticate.driver"
   val KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX = "spark.kubernetes.authenticate.executor"
@@ -339,8 +412,10 @@ private[spark] object Config extends Logging {
 
   val KUBERNETES_EXECUTOR_SERVICE_ACCOUNT_NAME =
     ConfigBuilder(s"$KUBERNETES_AUTH_EXECUTOR_CONF_PREFIX.serviceAccountName")
-      .doc("Service account that is used when running the executor pod." +
-        "If this parameter is not setup, the fallback logic will use the driver's service account.")
+      .doc("Service account that is used when running the executor pod. " +
+        "If this parameter is not setup, the fallback logic will use the value of " +
+        "spark.kubernetes.authenticate.driver.serviceAccountName. Both are ignored when the " +
+        "executor pod template already names a non-empty service account.")
       .version("3.1.0")
       .stringConf
       .createOptional
@@ -554,7 +629,10 @@ private[spark] object Config extends Logging {
         "allocate the recovery-mode executors which accept only a single task per executor JVM. " +
         "In other words, the recovery-mode executors replace the OOM-terminated executors to " +
         "survive from the resource-hungry tasks for the remaining tasks and stages. " +
-        "If set to `false`, Spark will not use the recovery-mode executors.")
+        "If set to `false`, Spark will not use the recovery-mode executors. " +
+        "Note that when spark.task.cpus is 0.5 or less, a recovery-mode executor announces a " +
+        "single CPU core and therefore accepts floor(1 / spark.task.cpus) concurrent tasks " +
+        "instead of only one.")
       .version("4.2.0")
       .booleanConf
       .createOptional
@@ -872,7 +950,9 @@ private[spark] object Config extends Logging {
   val KUBERNETES_ANNOTATE_EXIT_EXCEPTION =
     ConfigBuilder("spark.kubernetes.driver.annotateExitException")
       .doc("If set to true, Spark will store the exit exception failed applications in" +
-        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation.")
+        s" the Kubernetes API server using the $EXIT_EXCEPTION_ANNOTATION annotation. Note that" +
+        " the annotation is visible to anyone who can get the driver pod. The parts of the exit" +
+        " exception matching `spark.redaction.string.regex` are redacted.")
       .version("4.1.0")
       .booleanConf
       .createWithDefault(false)

@@ -19,13 +19,15 @@ package org.apache.spark.sql
 
 import java.nio.charset.StandardCharsets
 import java.text.SimpleDateFormat
-import java.time.{Duration, LocalDateTime, Period}
+import java.time.{Duration, LocalDateTime, Period, ZoneOffset}
 import java.util.Locale
 
 import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{SparkException, SparkRuntimeException,
   SparkUnsupportedOperationException, SparkUpgradeException}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLType
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -45,6 +47,37 @@ class CsvFunctionsSuite extends SharedSparkSession {
     checkAnswer(
       df.select(from_csv($"value", lit(schema), Map[String, String]().asJava)),
       Row(Row(1)) :: Nil)
+  }
+
+  test("SPARK-57164: from_csv with a nanos timestamp DDL schema string") {
+    val df = Seq("2020-01-01T00:00:00.123456789").toDF("value")
+    // Fix the session timezone so the TIMESTAMP_LTZ expected value is deterministic.
+    withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      foreachNanosPrecision { p =>
+        val nano = TimestampNanosTestUtils.nanoOfSecTruncator(p)(123456789)
+        Seq(
+          s"TIMESTAMP_NTZ($p)" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP_LTZ($p)" -> TimestampLTZNanosType(p),
+          s"TIMESTAMP($p) WITHOUT TIME ZONE" -> TimestampNTZNanosType(p),
+          s"TIMESTAMP($p) WITH LOCAL TIME ZONE" -> TimestampLTZNanosType(p)).foreach {
+          case (spelling, expected) =>
+            val parsed = df.select(
+              from_csv($"value", lit(s"c $spelling"), Map.empty[String, String].asJava).as("v"))
+            // The schema string resolves to the nanos type ...
+            assert(parsed.schema("v").dataType.asInstanceOf[StructType]("c").dataType === expected)
+            // ... and the CSV datasource correctly parses the nanosecond timestamp, truncating
+            // sub-precision digits toward zero.
+            val expectedValue = expected match {
+              case _: TimestampNTZNanosType => LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano)
+              case _: TimestampLTZNanosType =>
+                LocalDateTime.of(2020, 1, 1, 0, 0, 0, nano).toInstant(ZoneOffset.UTC)
+            }
+            checkAnswer(parsed, Row(Row(expectedValue)))
+        }
+      }
+    }
   }
 
   test("from_csv with non struct schema") {
@@ -404,6 +437,117 @@ class CsvFunctionsSuite extends SharedSparkSession {
   test("Support to_csv in SQL") {
     val df1 = Seq(Tuple1(Tuple1(1))).toDF("a")
     checkAnswer(df1.selectExpr("to_csv(a)"), Row("1") :: Nil)
+  }
+
+  test("SPARK-59801: CSV functions with non-foldable options") {
+    val df = Seq(("1,2", (1, 2), ",")).toDF("csv", "a", "delimiter")
+
+    def errorParameters(functionName: String): Map[String, String] = Map(
+      "funcName" -> s"`$functionName`",
+      "paramName" -> "`options`",
+      "paramType" -> "\"MAP<STRING, STRING>\"")
+
+    val nonFoldableQueries = Seq(
+      "from_csv" -> "from_csv(csv, 'a INT, b INT', map('delimiter', delimiter))",
+      "to_csv" -> "to_csv(a, map('delimiter', delimiter))",
+      "schema_of_csv" -> "schema_of_csv('1,2', map('delimiter', delimiter))")
+    nonFoldableQueries.foreach { case (functionName, query) =>
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters(functionName),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
+
+    val runtimeReplaceableOptions = Seq(
+      "nvl(NULL, '|')",
+      "decode(encode('|', 'UTF-8'), 'UTF-8')")
+    runtimeReplaceableOptions.foreach { option =>
+      checkAnswer(
+        df.selectExpr(s"to_csv(a, map('delimiter', $option))"),
+        Row("1|2") :: Nil)
+    }
+
+    val evaluableNonFoldableOptions = Seq(
+      "elt(1, '|', ',')",
+      "transform(array('|'), x -> x)[0]",
+      "CASE WHEN length('|') = 1 THEN '|' ELSE raise_error('bad') END")
+    evaluableNonFoldableOptions.foreach { option =>
+      val query = s"to_csv(a, map('delimiter', $option))"
+      checkError(
+        exception = intercept[AnalysisException] {
+          df.selectExpr(query)
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters("to_csv"),
+        context = ExpectedContext(
+          fragment = query,
+          start = 0,
+          stop = query.length - 1))
+    }
+
+    val lambdaQuery =
+      "to_csv(named_struct('a', 1, 'b', 2), map('delimiter', x))"
+    val outerReferenceQuery =
+      """SELECT (SELECT to_csv(named_struct('a', 1, 'b', 2),
+        |  map('delimiter', delimiter)))
+        |FROM VALUES ('|') t(delimiter)
+        |""".stripMargin
+
+    def checkUnsafeOptions(): Unit = {
+      Seq(
+        "to_csv(a, map('delimiter', delimiter))",
+        "to_csv(a, map('delimiter', uuid()))").foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException] {
+            df.selectExpr(query)
+          },
+          condition = "NON_FOLDABLE_ARGUMENT",
+          parameters = errorParameters("to_csv"),
+          context = ExpectedContext(
+            fragment = query,
+            start = 0,
+            stop = query.length - 1))
+      }
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(
+            s"""SELECT transform(array('|'),
+               |  x -> $lambdaQuery)
+               |""".stripMargin).collect()
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters("to_csv"),
+        context = ExpectedContext(fragment = lambdaQuery))
+
+      checkError(
+        exception = intercept[AnalysisException] {
+          sql(outerReferenceQuery).collect()
+        },
+        condition = "NON_FOLDABLE_ARGUMENT",
+        parameters = errorParameters("to_csv"),
+        context = ExpectedContext(
+          fragment = """to_csv(named_struct('a', 1, 'b', 2),
+            |  map('delimiter', delimiter))""".stripMargin,
+          start = 15,
+          stop = 81))
+    }
+
+    checkUnsafeOptions()
+    withSQLConf(SQLConf.LEGACY_ALLOW_NON_FOLDABLE_OPTIONS.key -> "true") {
+      evaluableNonFoldableOptions.foreach { option =>
+        checkAnswer(
+          df.selectExpr(s"to_csv(a, map('delimiter', $option))"),
+          Row("1|2") :: Nil)
+      }
+      checkUnsafeOptions()
+    }
   }
 
   test("parse timestamps with locale") {
@@ -836,6 +980,47 @@ class CsvFunctionsSuite extends SharedSparkSession {
       Seq(Row(s"""{null, $largeInput}""")))
   }
 
+  test("from_csv with variant: variantRespectInferSchema controls scalar inference") {
+    // from_csv shares the CSV parser, so it observes inferSchema only when
+    // variantRespectInferSchema is enabled: with inferSchema off the variant scalar stays a
+    // string, otherwise it is inferred. Without the flag, from_csv ignores inferSchema entirely.
+    val df = Seq("100").toDF("value")
+
+    // With variantRespectInferSchema enabled and inferSchema off the scalar is preserved as a
+    // string. inferSchema defaults to false, so setting the flag alone behaves the same.
+    for (options <- Seq(
+        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true",
+          "inferSchema" -> "false"),
+        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true"))) {
+      checkAnswer(
+        df.select(from_csv($"value", StructType.fromDDL("v variant"), options).cast("string")),
+        Seq(Row("""{{"_c0":"100"}}""")))
+    }
+
+    // Without variantRespectInferSchema, the scalar is inferred regardless of inferSchema.
+    // Both the default and explicitly configured inferSchema setting should result in inferred
+    // scalar values. Values should also be inferred when both options are enabled.
+    for (options <- Seq(
+        Map("singleVariantColumn" -> "v"),
+        Map("singleVariantColumn" -> "v", "inferSchema" -> "true"),
+        Map("singleVariantColumn" -> "v", "variantRespectInferSchema" -> "true",
+          "inferSchema" -> "true"))) {
+      checkAnswer(
+        df.select(from_csv($"value", StructType.fromDDL("v variant"), options).cast("string")),
+        Seq(Row("""{{"_c0":100}}""")))
+    }
+
+    // Explicit VariantType columns should behave the same. schema_of_variant tells the string
+    // "100" from the inferred long.
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant', " +
+        "map('variantRespectInferSchema', 'true', 'inferSchema', 'false')).a)"),
+      Seq(Row("STRING")))
+    checkAnswer(
+      df.selectExpr("schema_of_variant(from_csv(value, 'a variant').a)"),
+      Seq(Row("BIGINT")))
+  }
+
   test("from_csv with variant: extreme negative scale decimal does not hang") {
     // A value like "1E99999" parses to a BigDecimal with scale=-99999.
     // Calling setScale(0) on it would hang, so it should fall through to string.
@@ -903,7 +1088,10 @@ class CsvFunctionsSuite extends SharedSparkSession {
       (3, LocalTime.of(14, 30, 45, 123000000), "14:30:45.123"),
       (4, LocalTime.of(14, 30, 45, 123400000), "14:30:45.1234"),
       (5, LocalTime.of(14, 30, 45, 123450000), "14:30:45.12345"),
-      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456")
+      (6, LocalTime.of(14, 30, 45, 123456000), "14:30:45.123456"),
+      (7, LocalTime.of(14, 30, 45, 123456700), "14:30:45.1234567"),
+      (8, LocalTime.of(14, 30, 45, 123456780), "14:30:45.12345678"),
+      (9, LocalTime.of(14, 30, 45, 123456789), "14:30:45.123456789")
     )
 
     testData.foreach { case (precision, time, timeStr) =>

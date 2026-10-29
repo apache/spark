@@ -14,23 +14,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from pyspark.sql.connect.client.retries import Retrying, RetryException
-
-from threading import RLock
-import uuid
-from collections.abc import Generator
-from typing import Optional, Any, Iterator, Iterable, Tuple, Callable, cast, ClassVar
-from concurrent.futures import Future, ThreadPoolExecutor
 import os
+import uuid
 import weakref
+from collections.abc import Generator
+from concurrent.futures import Future, ThreadPoolExecutor
+from threading import RLock
+from typing import Any, Callable, ClassVar, Iterable, Iterator, Optional, Tuple, cast
 
 import grpc
 from grpc_status import rpc_status
 
-from pyspark.sql.connect.logging import logger
 import pyspark.sql.connect.proto as pb2
 import pyspark.sql.connect.proto.base_pb2_grpc as grpc_lib
 from pyspark.errors import PySparkRuntimeError
+from pyspark.sql.connect.client.retries import RetryException, Retrying
+from pyspark.sql.connect.logging import logger
 from pyspark.util import disable_gc
 
 
@@ -72,6 +71,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
         stub: grpc_lib.SparkConnectServiceStub,
         retrying: Callable[[], Retrying],
         metadata: Iterable[Tuple[str, str]],
+        reattachable_execute_plan_timeout: Optional[float] = None,
+        reattach_execute_timeout: Optional[float] = None,
     ):
         self._request = request
         self._retrying = retrying
@@ -86,6 +87,8 @@ class ExecutePlanResponseReattachableIterator(Generator):
             self._operation_id = str(uuid.uuid4())
 
         self._stub = stub
+        self._reattachable_execute_plan_timeout = reattachable_execute_plan_timeout
+        self._reattach_execute_timeout = reattach_execute_timeout
         request.request_options.append(
             pb2.ExecutePlanRequest.RequestOption(
                 reattach_options=pb2.ReattachOptions(reattachable=True)
@@ -108,7 +111,11 @@ class ExecutePlanResponseReattachableIterator(Generator):
         self._metadata = metadata
         with disable_gc():
             self._iterator: Optional[Iterator[pb2.ExecutePlanResponse]] = iter(
-                self._stub.ExecutePlan(self._initial_request, metadata=metadata)
+                self._stub.ExecutePlan(
+                    self._initial_request,
+                    metadata=metadata,
+                    timeout=self._reattachable_execute_plan_timeout,
+                )
             )
 
         # Current item from this iterator.
@@ -256,7 +263,9 @@ class ExecutePlanResponseReattachableIterator(Generator):
             # we get a new iterator with ReattachExecute if it was unset.
             self._iterator = iter(
                 self._stub.ReattachExecute(
-                    self._create_reattach_execute_request(), metadata=self._metadata
+                    self._create_reattach_execute_request(),
+                    metadata=self._metadata,
+                    timeout=self._reattach_execute_timeout,
                 )
             )
 
@@ -283,9 +292,23 @@ class ExecutePlanResponseReattachableIterator(Generator):
                     )
                 # Try a new ExecutePlan, and throw upstream for retry.
                 self._iterator = iter(
-                    self._stub.ExecutePlan(self._initial_request, metadata=self._metadata)
+                    self._stub.ExecutePlan(
+                        self._initial_request,
+                        metadata=self._metadata,
+                        timeout=self._reattachable_execute_plan_timeout,
+                    )
                 )
-                raise RetryException()
+                raise RetryException() from e
+            elif e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+                # The per-RPC deadline fired. The server-side operation is still alive; clear
+                # the iterator and raise RetryException so the retry loop opens a fresh
+                # ReattachExecute stream with a new deadline countdown to resume results.
+                logger.debug(
+                    f"Deadline exceeded on stream for operation {self._operation_id}; "
+                    f"will reattach. (last response: {self._last_returned_response_id})"
+                )
+                self._iterator = None
+                raise RetryException() from e
             else:
                 # Remove the iterator, so that a new one will be created after retry.
                 self._iterator = None

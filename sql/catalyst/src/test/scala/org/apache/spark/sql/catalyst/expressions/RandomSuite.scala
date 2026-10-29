@@ -64,4 +64,22 @@ class RandomSuite extends SparkFunSuite with ExpressionEvalHelper {
     testUniform(10.0F, 20.0F, 17.604954F)
     testUniform(10L, 20.0F, 17.604954F)
   }
+
+  test("SPARK-58208: Uniform preserves its time zone when copied") {
+    val uniform = Uniform(
+      Literal(10), Literal(20), Literal(0), hideSeed = false, timeZoneId = Some("UTC"))
+    assert(uniform.resolved)
+
+    val copied = uniform.freshCopyIfContainsStatefulExpression().asInstanceOf[Uniform]
+    assert(copied ne uniform)
+    assert(copied.timeZoneId == uniform.timeZoneId)
+    assert(copied.resolved)
+
+    Seq(uniform.withNewSeed(1), uniform.withShiftedSeed(1)).foreach {
+      case copied: Uniform =>
+        assert(copied.timeZoneId == uniform.timeZoneId)
+        assert(copied.resolved)
+      case other => fail(s"Expected Uniform but got ${other.getClass.getName}")
+    }
+  }
 }

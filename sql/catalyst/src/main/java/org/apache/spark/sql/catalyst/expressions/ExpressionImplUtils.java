@@ -17,15 +17,22 @@
 
 package org.apache.spark.sql.catalyst.expressions;
 
+import com.ibm.icu.text.Normalizer2;
+
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.security.spec.AlgorithmParameterSpec;
 import java.text.BreakIterator;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
+import java.util.zip.CRC32;
 import javax.crypto.Cipher;
+import javax.crypto.Mac;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -144,6 +151,28 @@ public class ExpressionImplUtils {
     else return null;
   }
 
+  /**
+   * Normalizes the given string using the given Unicode normalization form, per the
+   * decomposition/composition algorithm in Unicode Standard Annex #15. Uses ICU4J, the same
+   * library backing Spark's collation support, instead of the JDK's {@code java.text.Normalizer}
+   * so the result is pinned to Spark's bundled ICU4J/Unicode data (see {@code icu4j.version} in
+   * pom.xml) and does not vary across JVM vendors or versions.
+   *
+   * @param input the input string to normalize.
+   * @param form the normalization form, one of NFC, NFD, NFKC, NFKD (case-insensitive).
+   * @return the normalized string.
+   */
+  public static UTF8String normalize(UTF8String input, UTF8String form) {
+    Normalizer2 normalizer = switch (form.toString().toUpperCase(Locale.ROOT)) {
+      case "NFC" -> Normalizer2.getNFCInstance();
+      case "NFD" -> Normalizer2.getNFDInstance();
+      case "NFKC" -> Normalizer2.getNFKCInstance();
+      case "NFKD" -> Normalizer2.getNFKDInstance();
+      default -> throw QueryExecutionErrors.invalidNormalizeFormError(form.toString());
+    };
+    return UTF8String.fromString(normalizer.normalize(input.toString()));
+  }
+
   public static byte[] aesEncrypt(byte[] input,
                                   byte[] key,
                                   UTF8String mode,
@@ -175,6 +204,42 @@ public class ExpressionImplUtils {
             null,
             aad
     );
+  }
+
+  /**
+   * Computes a keyed-hash message authentication code (HMAC) of the given message using the
+   * given key and hash algorithm.
+   * @param key The secret key.
+   * @param message The message to authenticate.
+   * @param algorithm The hash algorithm. Supported values (case-insensitive):
+   *                  SHA-224, SHA-256, SHA-384, SHA-512, SHA-1, MD5.
+   * @return The raw HMAC bytes.
+   */
+  public static byte[] hmac(byte[] key, byte[] message, UTF8String algorithm) {
+    String macName = hmacName(algorithm.toString());
+    try {
+      Mac mac = Mac.getInstance(macName);
+      mac.init(new SecretKeySpec(key, macName));
+      return mac.doFinal(message);
+    } catch (GeneralSecurityException | IllegalArgumentException e) {
+      throw QueryExecutionErrors.hmacCryptoError(e.getMessage());
+    }
+  }
+
+  /**
+   * Maps a user-facing hash algorithm name to its JCA {@link Mac} algorithm name. Supported
+   * algorithms are SHA-224, SHA-256, SHA-384, SHA-512, SHA-1 and MD5 (case-insensitive).
+   */
+  private static String hmacName(String algorithm) {
+    return switch (algorithm.toUpperCase(Locale.ROOT)) {
+      case "SHA-224", "SHA224" -> "HmacSHA224";
+      case "SHA-256", "SHA256" -> "HmacSHA256";
+      case "SHA-384", "SHA384" -> "HmacSHA384";
+      case "SHA-512", "SHA512" -> "HmacSHA512";
+      case "SHA-1", "SHA1" -> "HmacSHA1";
+      case "MD5" -> "HmacMD5";
+      default -> throw QueryExecutionErrors.hmacUnsupportedAlgorithmError(algorithm);
+    };
   }
 
   /**
@@ -341,5 +406,187 @@ public class ExpressionImplUtils {
 
     String sp = str.toString().replaceAll(qtChar, qtCharRep);
     return UTF8String.fromString(qtChar + sp + qtChar);
+  }
+
+  /**
+   * Inverse hyperbolic sine for the {@code asinh} expression, using the fdlibm
+   * {@code s_asinh.c} algorithm (odd function, so the sign of {@code x} is
+   * preserved). Shared by the eval and codegen paths so the generated Java is a
+   * single call rather than an inline five-branch if/else.
+   */
+  public static double asinh(double x) {
+    double ax = Math.abs(x);
+    double w;
+    if (Double.isInfinite(ax) || Double.isNaN(ax)) {
+      w = ax;
+    } else if (ax < 1.0 / (1 << 28)) {
+      w = ax;
+    } else if (ax > (1 << 28)) {
+      w = StrictMath.log(ax) + StrictMath.log(2.0);
+    } else if (ax > 2.0) {
+      w = StrictMath.log(2.0 * ax + 1.0 / (Math.sqrt(x * x + 1.0) + ax));
+    } else {
+      double t = x * x;
+      w = StrictMath.log1p(ax + t / (1.0 + Math.sqrt(1.0 + t)));
+    }
+    return Math.copySign(w, x);
+  }
+
+  /**
+   * Inverse hyperbolic cosine for the {@code acosh} expression, using the
+   * fdlibm {@code e_acosh.c} algorithm (returns {@code NaN} for {@code x < 1}).
+   * Shared by the eval and codegen paths so the generated Java is a single call
+   * rather than an inline five-branch if/else.
+   */
+  public static double acosh(double x) {
+    if (x < 1.0) {
+      return Double.NaN;
+    } else if (x >= (1 << 28)) {
+      return StrictMath.log(x) + StrictMath.log(2.0);
+    } else if (x == 1.0) {
+      return 0.0;
+    } else if (x > 2.0) {
+      return StrictMath.log(2.0 * x - 1.0 / (x + Math.sqrt(x * x - 1.0)));
+    } else {
+      double t = x - 1.0;
+      return StrictMath.log1p(t + Math.sqrt(2.0 * t + t * t));
+    }
+  }
+
+  /**
+   * Returns the single-character string for the {@code chr} expression: the
+   * ASCII/Latin-1 character for {@code longVal & 0xFF}. A negative argument
+   * yields the empty string. Shared by the eval and codegen paths so the
+   * generated Java is a single call rather than an inline if/else chain.
+   */
+  public static UTF8String chr(long longVal) {
+    if (longVal < 0) {
+      return UTF8String.EMPTY_UTF8;
+    } else if ((longVal & 0xFF) == 0) {
+      return UTF8String.fromString(String.valueOf(Character.MIN_VALUE));
+    } else {
+      char c = (char) (longVal & 0xFF);
+      return UTF8String.fromString(String.valueOf(c));
+    }
+  }
+
+  /**
+   * Compiles {@code regex} with the given {@code flags} for the regexp expression
+   * family, translating a {@link PatternSyntaxException} into the user-facing
+   * INVALID_PARAMETER_VALUE.PATTERN error. Shared by the regexp eval and codegen
+   * paths so the generated Java is a single call instead of an inline try/catch
+   * around {@code Pattern.compile}.
+   */
+  public static Pattern compileRegexPattern(String regex, int flags, String funcName) {
+    try {
+      return Pattern.compile(regex, flags);
+    } catch (PatternSyntaxException e) {
+      throw QueryExecutionErrors.invalidPatternError(funcName, e.getPattern(), e);
+    }
+  }
+
+  /**
+   * Computes the CRC32 checksum of {@code bytes} for the {@code crc32} expression.
+   * Shared by the eval and codegen paths so the per-stage generated Java is a
+   * single call rather than an inline allocate / update / getValue sequence.
+   */
+  public static long crc32(byte[] bytes) {
+    CRC32 checksum = new CRC32();
+    checksum.update(bytes, 0, bytes.length);
+    return checksum.getValue();
+  }
+
+  /**
+   * Returns the numeric value of the first character of the input string, or 0 if it is empty.
+   * Shared by the Ascii expression's eval and codegen paths so the generated Java is a single
+   * call rather than an inline substring/if-else block.
+   */
+  public static int ascii(UTF8String str) {
+    // only pick the first character to reduce the `toString` cost
+    UTF8String firstCharStr = str.substring(0, 1);
+    if (firstCharStr.numChars() > 0) {
+      return firstCharStr.toString().codePointAt(0);
+    } else {
+      return 0;
+    }
+  }
+
+  /**
+   * Builds the number pattern for the given scale (the default grouping pattern followed by
+   * {@code scale} decimal places) and applies it to the given {@link DecimalFormat}. Shared by the
+   * FormatNumber expression's eval and codegen paths so the generated Java is a single call and
+   * the pattern buffer does not need to be threaded through mutable state.
+   */
+  public static void applyNumberFormatScale(
+      DecimalFormat numberFormat, String defaultFormat, int scale) {
+    StringBuilder pattern = new StringBuilder(defaultFormat);
+    if (scale > 0) {
+      pattern.append('.');
+      for (int i = 0; i < scale; i++) {
+        pattern.append('0');
+      }
+    }
+    numberFormat.applyLocalizedPattern(pattern.toString());
+  }
+
+  /**
+   * Returns the Jaro-Winkler similarity between two strings.
+   * The result is a double between 0 and 1, where 1 means identical.
+   *
+   * Note: This implementation uses String.charAt() which operates on UTF-16 code units.
+   * Strings containing supplementary characters (surrogate pairs) may produce
+   * inaccurate results.
+   */
+  public static double jaroWinklerSimilarity(UTF8String left, UTF8String right) {
+    String s1 = left.toString();
+    String s2 = right.toString();
+
+    int len1 = s1.length();
+    int len2 = s2.length();
+
+    if (len1 == 0 && len2 == 0) return 1.0;
+    if (len1 == 0 || len2 == 0) return 0.0;
+
+    int matchWindow = Math.max(0, Math.max(len1, len2) / 2 - 1);
+
+    boolean[] s1Matched = new boolean[len1];
+    boolean[] s2Matched = new boolean[len2];
+
+    int matches = 0;
+    int transpositions = 0;
+
+    for (int i = 0; i < len1; i++) {
+      int start = Math.max(0, i - matchWindow);
+      int end = Math.min(i + matchWindow + 1, len2);
+      for (int j = start; j < end; j++) {
+        if (s2Matched[j] || s1.charAt(i) != s2.charAt(j)) continue;
+        s1Matched[i] = true;
+        s2Matched[j] = true;
+        matches++;
+        break;
+      }
+    }
+
+    if (matches == 0) return 0.0;
+
+    int k = 0;
+    for (int i = 0; i < len1; i++) {
+      if (!s1Matched[i]) continue;
+      while (!s2Matched[k]) k++;
+      if (s1.charAt(i) != s2.charAt(k)) transpositions++;
+      k++;
+    }
+
+    double jaro = ((double) matches / len1
+        + (double) matches / len2
+        + (double) (matches - transpositions / 2.0) / matches) / 3.0;
+
+    int prefix = 0;
+    for (int i = 0; i < Math.min(4, Math.min(len1, len2)); i++) {
+      if (s1.charAt(i) == s2.charAt(i)) prefix++;
+      else break;
+    }
+
+    return jaro + prefix * 0.1 * (1.0 - jaro);
   }
 }

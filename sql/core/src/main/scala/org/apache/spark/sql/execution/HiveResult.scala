@@ -23,6 +23,7 @@ import java.time._
 import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, FractionTimeFormatter, STUtils, TimeFormatter, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.IntervalStringStyles.HIVE_STYLE
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{durationToMicros, periodToMonths, toDayTimeIntervalString, toYearMonthIntervalString}
@@ -31,7 +32,6 @@ import org.apache.spark.sql.execution.datasources.v2.{DescribeTableExec, ShowTab
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.unsafe.types.{CalendarInterval, VariantVal}
 import org.apache.spark.util.ArrayImplicits._
 
@@ -127,7 +127,6 @@ object HiveResult extends SQLConfHelper {
     case (b, BooleanType) => b.toString
     case (d: Date, DateType) => formatters.date.format(d)
     case (ld: LocalDate, DateType) => formatters.date.format(ld)
-    case (lt: LocalTime, _: TimeType) => formatters.time.format(lt)
     case (t: Timestamp, TimestampType) => formatters.timestamp.format(t)
     case (i: Instant, TimestampType) => formatters.timestamp.format(i)
     case (l: LocalDateTime, TimestampNTZType) => formatters.timestamp.format(l)
@@ -163,11 +162,11 @@ object HiveResult extends SQLConfHelper {
     case (v: VariantVal, VariantType) => v.toString
     case (g: Geometry, dt: GeometryType) =>
       val internalGeom = STUtils.serializeGeomFromWKB(g, dt)
-      val s = STUtils.stAsEwkt(internalGeom).toString
+      val s = STUtils.stGeomAsEwkt(internalGeom).toString
       if (nested) "\"" + s + "\"" else s
     case (g: Geography, dt: GeographyType) =>
       val internalGeog = STUtils.serializeGeogFromWKB(g, dt)
-      val s = STUtils.stAsEwkt(internalGeog).toString
+      val s = STUtils.stGeogAsEwkt(internalGeog).toString
       if (nested) "\"" + s + "\"" else s
     case (other, u: UserDefinedType[_]) => u.stringifyValue(other)
   }

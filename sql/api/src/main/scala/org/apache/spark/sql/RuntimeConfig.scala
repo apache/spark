@@ -61,20 +61,21 @@ abstract class RuntimeConfig {
 
   /**
    * Returns the value of Spark runtime configuration property for the given key. If the key is
-   * not set yet, return its default value if possible, otherwise `NoSuchElementException` will be
-   * thrown.
+   * not explicitly set, return its built-in default value if one exists, otherwise
+   * `NoSuchElementException` will be thrown.
    *
    * @throws java.util.NoSuchElementException
-   *   if the key is not set and does not have a default value
+   *   if the key is not set and does not have a built-in default value
    * @since 2.0.0
    */
-  @throws[NoSuchElementException]("if the key is not set and there is no default value")
+  @throws[NoSuchElementException]("if the key is not set and there is no built-in default value")
   def get(key: String): String
 
   /**
    * Returns the value of Spark runtime configuration property for the given key. If the key is
-   * not set yet, return the user given `default`. This is useful when its default value defined
-   * by Apache Spark is not the desired one.
+   * not explicitly set, return the user given `default` instead of the key's built-in default
+   * value (if any). This is useful when the built-in default value defined by Apache Spark is not
+   * the desired one.
    *
    * @since 2.0.0
    */
@@ -113,7 +114,8 @@ abstract class RuntimeConfig {
 
   /**
    * Returns the value of Spark runtime configuration property for the given key. If the key is
-   * not set yet, return its default value if possible, otherwise `None` will be returned.
+   * not explicitly set, return `Some` of its built-in default value if one exists, otherwise
+   * `None` will be returned.
    *
    * @since 2.0.0
    */

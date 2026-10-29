@@ -152,7 +152,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       expectErrorContains: String = null,
       expectErrorWithoutEvolutionContains: String = null,
       confs: Seq[(String, String)] = Seq.empty,
-      partitionCols: Seq[String] = Seq.empty,
+      partitionCols: Seq[String] = Seq("dep"),
       disableAutoSchemaEvolution: Boolean = false,
       requiresNestedTypeCoercion: Boolean = false): Unit = {
 
@@ -276,6 +276,7 @@ trait MergeIntoSchemaEvolutionSuiteBase extends RowLevelOperationSuiteBase {
       expectErrorContains: String = null,
       expectErrorWithoutEvolutionContains: String = null,
       confs: Seq[(String, String)] = Seq.empty,
+      // Nested struct test schemas do not contain a top-level "dep" column to partition by.
       partitionCols: Seq[String] = Seq.empty,
       requiresNestedTypeCoercion: Boolean = false): Unit = {
     def readJson(json: Seq[String], schema: StructType): DataFrame = {

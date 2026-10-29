@@ -14,94 +14,136 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import uuid
-
+import functools
 import json
-import threading
 import os
+import sys
+import threading
+import urllib
+import uuid
 import warnings
 from collections.abc import Callable, Sized
-import functools
 from threading import RLock
+from types import TracebackType
 from typing import (
-    Optional,
+    TYPE_CHECKING,
     Any,
-    Iterator,
-    Union,
+    ClassVar,
     Dict,
+    Iterable,
+    Iterator,
     List,
-    Tuple,
+    Mapping,
+    Optional,
     Set,
+    Tuple,
+    Type,
+    Union,
     cast,
     overload,
-    Iterable,
-    Mapping,
-    TYPE_CHECKING,
-    ClassVar,
 )
 
 import numpy as np
 import pandas as pd
 import pyarrow as pa
 from pandas.api.types import is_datetime64_dtype, is_timedelta64_dtype
-import urllib
 
-from pyspark.sql.connect.dataframe import DataFrame
-from pyspark.sql.dataframe import DataFrame as ParentDataFrame
-from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.client import SparkConnectClient, DefaultChannelBuilder
-from pyspark.sql.connect.conf import RuntimeConf
-from pyspark.sql.connect.plan import (
-    SQL,
-    Range,
-    LocalRelation,
-    LogicalPlan,
-    ChunkedCachedLocalRelation,
-    CachedRelation,
-    CachedRemoteRelation,
-    SubqueryAlias,
-)
-from pyspark.sql.connect.functions import builtin as F
-from pyspark.sql.connect.profiler import ProfilerCollector
-from pyspark.sql.connect.readwriter import DataFrameReader
-from pyspark.sql.connect.streaming.readwriter import DataStreamReader
-from pyspark.sql.connect.streaming.query import StreamingQueryManager
-from pyspark.sql.pandas.conversion import create_arrow_batch_from_pandas
-from pyspark.sql.pandas.types import (
-    to_arrow_schema,
-    _deduplicate_field_names,
-    from_arrow_schema,
-    from_arrow_type,
-    _check_arrow_table_timestamps_localize,
-)
-from pyspark.sql.profiler import Profile
-from pyspark.sql.session import classproperty, SparkSession as PySparkSession
-from pyspark.sql.types import (
-    _infer_schema,
-    _has_nulltype,
-    _merge_type,
-    _create_converter,
-    Row,
-    DataType,
-    DayTimeIntervalType,
-    StructType,
-    AtomicType,
-    TimestampType,
-    MapType,
-    StringType,
-    VariantVal,
-)
-from pyspark.sql.conversion import LocalDataToArrowConversion
-from pyspark.sql.utils import to_str
 from pyspark.errors import (
     AnalysisException,
+    PySparkAssertionError,
     PySparkAttributeError,
     PySparkNotImplementedError,
     PySparkRuntimeError,
-    PySparkValueError,
     PySparkTypeError,
-    PySparkAssertionError,
+    PySparkValueError,
 )
+from pyspark.sql.connect.client import DefaultChannelBuilder, SparkConnectClient
+from pyspark.sql.connect.conf import RuntimeConf
+from pyspark.sql.connect.dataframe import DataFrame
+from pyspark.sql.connect.functions import builtin as F
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.plan import (
+    SQL,
+    CachedRelation,
+    CachedRemoteRelation,
+    ChunkedCachedLocalRelation,
+    LocalRelation,
+    LogicalPlan,
+    Range,
+    SubqueryAlias,
+)
+from pyspark.sql.connect.profiler import ProfilerCollector
+from pyspark.sql.connect.readwriter import DataFrameReader
+from pyspark.sql.connect.streaming.query import StreamingQueryManager
+from pyspark.sql.connect.streaming.readwriter import DataStreamReader
+from pyspark.sql.dataframe import DataFrame as ParentDataFrame
+from pyspark.sql.pandas.conversion import create_arrow_table_from_pandas
+from pyspark.sql.pandas.types import (
+    _check_arrow_table_timestamps_localize,
+    _deduplicate_field_names,
+    from_arrow_schema,
+    from_arrow_type,
+    to_arrow_schema,
+)
+from pyspark.sql.profiler import Profile
+from pyspark.sql.session import SparkSession as PySparkSession
+from pyspark.sql.session import classproperty
+from pyspark.sql.types import (
+    ArrayType,
+    AtomicType,
+    CharType,
+    DataType,
+    DayTimeIntervalType,
+    MapType,
+    Row,
+    StringType,
+    StructField,
+    StructType,
+    TimestampType,
+    VarcharType,
+    VariantVal,
+    _create_converter,
+    _has_nulltype,
+    _infer_schema,
+    _merge_type,
+)
+from pyspark.sql.utils import to_str
+
+
+def _replace_char_varchar_with_collation_preserving_string(
+    data_type: DataType,
+) -> DataType:
+    """Lower CHAR/VARCHAR recursively for Arrow storage, preserving explicit collations."""
+    if isinstance(data_type, (CharType, VarcharType)):
+        if data_type.collation is None:
+            return StringType()
+        return StringType(data_type.collation)
+    if isinstance(data_type, ArrayType):
+        return ArrayType(
+            _replace_char_varchar_with_collation_preserving_string(data_type.elementType),
+            data_type.containsNull,
+        )
+    if isinstance(data_type, MapType):
+        return MapType(
+            _replace_char_varchar_with_collation_preserving_string(data_type.keyType),
+            _replace_char_varchar_with_collation_preserving_string(data_type.valueType),
+            data_type.valueContainsNull,
+        )
+    if isinstance(data_type, StructType):
+        return StructType(
+            [
+                StructField(
+                    field.name,
+                    _replace_char_varchar_with_collation_preserving_string(field.dataType),
+                    field.nullable,
+                    field.metadata,
+                )
+                for field in data_type.fields
+            ]
+        )
+    return data_type
+
+
 from pyspark.core.connect.rdd import RDD as ConnectRDD, _loads, _PAYLOAD_COL
 
 
@@ -115,6 +157,8 @@ def _materialize_connect_rdd_with_schema(
     prefers_large_types: bool,
 ) -> DataFrame:
     """Decode pickled Connect-RDD rows into a typed SQL DataFrame (distributed ``mapInArrow``)."""
+
+    from pyspark.sql.conversion import LocalDataToArrowConversion
 
     deduped = cast(StructType, _deduplicate_field_names(struct))
     converter = _create_converter(deduped)
@@ -140,11 +184,11 @@ if TYPE_CHECKING:
     from pyspark.core.connect.context import SparkContext
     from pyspark.sql.connect._typing import OptionalPrimitiveType
     from pyspark.sql.connect.catalog import Catalog
+    from pyspark.sql.connect.datasource import DataSourceRegistration
+    from pyspark.sql.connect.shell.progress import ProgressHandler
+    from pyspark.sql.connect.tvf import TableValuedFunction
     from pyspark.sql.connect.udf import UDFRegistration
     from pyspark.sql.connect.udtf import UDTFRegistration
-    from pyspark.sql.connect.tvf import TableValuedFunction
-    from pyspark.sql.connect.shell.progress import ProgressHandler
-    from pyspark.sql.connect.datasource import DataSourceRegistration
 
 
 class SparkSession:
@@ -805,15 +849,11 @@ class SparkSession:
             if len(data.columns) == 0:
                 _table = pa.Table.from_batches([pa.RecordBatch.from_pandas(data)])
             else:
-                _table = pa.Table.from_batches(
-                    [
-                        create_arrow_batch_from_pandas(
-                            [(c, st) for (_, c), st in zip(data.items(), spark_types)],
-                            timezone=cast(str, timezone),
-                            safecheck=safecheck == "true",
-                            prefers_large_types=prefers_large_types,
-                        )
-                    ]
+                _table = create_arrow_table_from_pandas(
+                    [(c, st) for (_, c), st in zip(data.items(), spark_types)],
+                    timezone=cast(str, timezone),
+                    safecheck=safecheck == "true",
+                    prefers_large_types=prefers_large_types,
                 )
 
             if isinstance(schema, StructType):
@@ -922,7 +962,13 @@ class SparkSession:
             # Spark Connect will try its best to build the Arrow table with the
             # inferred schema in the client side, and then rename the columns and
             # cast the datatypes in the server side.
-            _table = LocalDataToArrowConversion.convert(_data, _schema, prefers_large_types)
+            arrow_compatible_schema = cast(
+                StructType,
+                _replace_char_varchar_with_collation_preserving_string(_schema),
+            )
+            _table = LocalDataToArrowConversion.convert(
+                _data, arrow_compatible_schema, prefers_large_types
+            )
 
         # TODO: Beside the validation on number of columns, we should also check
         # whether the Arrow Schema is compatible with the user provided Schema.
@@ -954,7 +1000,9 @@ class SparkSession:
             configs["spark.sql.session.localRelationChunkSizeBytes"]  # type: ignore[arg-type]
         )
         max_batch_of_chunks_size_bytes = int(
-            configs["spark.sql.session.localRelationBatchOfChunksSizeBytes"]  # type: ignore[arg-type]
+            configs[  # type: ignore[arg-type]
+                "spark.sql.session.localRelationBatchOfChunksSizeBytes"
+            ]
         )
         plan: LogicalPlan = local_relation
         if cache_threshold <= _table.nbytes:
@@ -981,7 +1029,7 @@ class SparkSession:
     def sql(
         self,
         sqlQuery: str,
-        args: Optional[Union[Dict[str, Any], List]] = None,
+        args: Optional[Union[Dict[str, Any], List[Any]]] = None,
         **kwargs: Any,
     ) -> "ParentDataFrame":
         _args = []
@@ -1140,6 +1188,17 @@ class SparkSession:
             if self is getattr(SparkSession._active_session, "session", None):
                 SparkSession._active_session.session = None
 
+            # Only touch the SQLContext cache if the module was ever imported; if no
+            # SQLContext was created there is nothing to reset, and we avoid importing it.
+            _connect_context = sys.modules.get("pyspark.sql.connect.context")
+            if _connect_context is not None:
+                _ConnectSQLContext = _connect_context.SQLContext
+                if (
+                    _ConnectSQLContext._instantiatedContext is not None
+                    and _ConnectSQLContext._instantiatedContext.sparkSession is self
+                ):
+                    _ConnectSQLContext._instantiatedContext = None
+
             if "SPARK_LOCAL_REMOTE" in os.environ:
                 # When local mode is in use, follow the regular Spark session's
                 # behavior by terminating the Spark Connect server,
@@ -1157,6 +1216,55 @@ class SparkSession:
                 del os.environ["SPARK_CONNECT_MODE_ENABLED"]
                 if "SPARK_REMOTE" in os.environ:
                     del os.environ["SPARK_REMOTE"]
+
+    def __enter__(self) -> "SparkSession":
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        .. versionadded:: 4.3.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.remote("local[*]").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        """
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
+        """
+        Enable 'with SparkSession.builder.(...).getOrCreate() as session: app' syntax.
+
+        .. versionadded:: 4.3.0
+
+        Examples
+        --------
+        >>> with SparkSession.builder.remote("local[*]").getOrCreate() as session:
+        ...     session.range(5).show()  # doctest: +SKIP
+        +---+
+        | id|
+        +---+
+        |  0|
+        |  1|
+        |  2|
+        |  3|
+        |  4|
+        +---+
+        """
+        self.stop()
 
     @property
     def is_stopped(self) -> bool:
@@ -1181,7 +1289,7 @@ class SparkSession:
     streams.__doc__ = PySparkSession.streams.__doc__
 
     def __getattr__(self, name: str) -> Any:
-        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession", "newSession"]:
+        if name in ["_jsc", "_jconf", "_jvm", "_jsparkSession"]:
             raise PySparkAttributeError(
                 errorClass="JVM_ATTRIBUTE_NOT_SUPPORTED", messageParameters={"attr_name": name}
             )
@@ -1503,6 +1611,35 @@ class SparkSession:
         new_session = object.__new__(SparkSession)
         new_session._client = cloned_client
         new_session._session_id = cloned_client._session_id
+        new_session.release_session_on_close = True
+        return new_session
+
+    def newSession(self) -> "SparkSession":
+        """
+        Returns a new :class:`SparkSession` as a new session, that has separate SQLConf,
+        registered temporary views and UDFs, but shared table cache.
+
+        Unlike :meth:`cloneSession`, the returned session starts with empty state: no
+        configuration, temporary views, registered functions, or catalog state are copied
+        over from this session. This matches the Scala Connect ``newSession()`` semantics,
+        which creates a completely fresh session against the same server. Note one
+        difference from classic ``newSession()``: configurations set through
+        ``SparkSession.builder.config(...)`` when this session was created are not
+        reapplied to the new session; it starts from the server defaults.
+
+        .. versionadded:: 4.3.0
+
+        Returns
+        -------
+        :class:`SparkSession`
+            A new SparkSession bound to a fresh, independent server-side session.
+        """
+        new_client = self._client.newSession()
+        # Create a new SparkSession bound to the fresh, independent session directly.
+        new_session = object.__new__(SparkSession)
+        new_session._client = new_client
+        new_session._session_id = new_client._session_id
+        new_session.release_session_on_close = True
         return new_session
 
 
@@ -1510,11 +1647,12 @@ SparkSession.__doc__ = PySparkSession.__doc__
 
 
 def _test() -> None:
+    import doctest
     import os
     import sys
-    import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.session
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.session.__dict__.copy()
     globs["spark"] = (

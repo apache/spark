@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.catalyst.expressions.aggregate
 
+import java.math.{BigDecimal => JBigDecimal, RoundingMode}
 import java.util
 
 import org.apache.spark.sql.catalyst.InternalRow
@@ -31,6 +32,7 @@ import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.TypeCollection.NumericAndAnsiInterval
+import org.apache.spark.unsafe.types.TimestampNanosVal
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.collection.OpenHashMap
 
@@ -58,6 +60,10 @@ abstract class PercentileBase
     case arrayData: ArrayData => arrayData.toDoubleArray()
   }
 
+  // Nanosecond timestamps are interpolated exactly, at an exact position.
+  @transient
+  private lazy val isNanos = child.dataType.isInstanceOf[AnyTimestampNanoType]
+
   // Returns null for empty inputs
   override def nullable: Boolean = true
 
@@ -65,6 +71,8 @@ abstract class PercentileBase
     val resultType = child.dataType match {
       case _: YearMonthIntervalType => YearMonthIntervalType()
       case _: DayTimeIntervalType => DayTimeIntervalType()
+      case t: TimeType => t
+      case t: AnyTimestampNanoType => t
       case _ => DoubleType
     }
     if (returnPercentileArray) ArrayType(resultType, false) else resultType
@@ -75,7 +83,11 @@ abstract class PercentileBase
       case _: ArrayType => ArrayType(DoubleType, false)
       case _ => DoubleType
     }
-    Seq(NumericAndAnsiInterval, percentageExpType, IntegralType)
+    // AnyTimestampNanoType goes last, so the implicit cast fallback for other inputs is unchanged.
+    Seq(
+      TypeCollection(NumericAndAnsiInterval, AnyTimeType, AnyTimestampNanoType),
+      percentageExpType,
+      IntegralType)
   }
 
   // Check the inputTypes are valid, and the percentageExpression satisfies:
@@ -120,6 +132,9 @@ abstract class PercentileBase
     case n: Number => n.doubleValue
   }
 
+  // Nanosecond timestamps are kept as is, so that no sub-microsecond digit is lost.
+  protected def toPercentileValue(key: AnyRef): Any = if (isNanos) key else toDoubleValue(key)
+
   override def update(
       buffer: OpenHashMap[AnyRef, Long],
       input: InternalRow): OpenHashMap[AnyRef, Long] = {
@@ -153,7 +168,7 @@ abstract class PercentileBase
     generateOutput(getPercentiles(buffer))
   }
 
-  private def getPercentiles(buffer: OpenHashMap[AnyRef, Long]): Seq[Double] = {
+  private def getPercentiles(buffer: OpenHashMap[AnyRef, Long]): Seq[Any] = {
     if (buffer.isEmpty) {
       return Seq.empty
     }
@@ -171,10 +186,11 @@ abstract class PercentileBase
     percentages.map(getPercentile(accumulatedCounts, _)).toImmutableArraySeq
   }
 
-  private def generateOutput(percentiles: Seq[Double]): Any = {
+  private def generateOutput(percentiles: Seq[Any]): Any = {
     val results = child.dataType match {
-      case _: YearMonthIntervalType => percentiles.map(_.toInt)
-      case _: DayTimeIntervalType => percentiles.map(_.toLong)
+      case _: YearMonthIntervalType => percentiles.map(_.asInstanceOf[Double].toInt)
+      case _: DayTimeIntervalType => percentiles.map(_.asInstanceOf[Double].toLong)
+      case _: TimeType => percentiles.map(_.asInstanceOf[Double].toLong)
       case _ => percentiles
     }
     if (percentiles.isEmpty) {
@@ -193,12 +209,21 @@ abstract class PercentileBase
    */
   protected def getPercentile(
       accumulatedCounts: Seq[(AnyRef, Long)],
-      percentile: Double): Double = {
+      percentile: Double): Any = {
     val position = (accumulatedCounts.last._2 - 1) * percentile
+    // A double position can land just below a whole number (e.g. 90 * 0.7), which flooring a
+    // nanosecond result would turn into a whole step. A NaN percentage keeps the double position
+    // (the first value), as for other types.
+    lazy val exactPosition = JBigDecimal.valueOf(accumulatedCounts.last._2 - 1)
+      .multiply(JBigDecimal.valueOf(percentile))
 
     // We may need to do linear interpolation to get the exact percentile
-    val lower = position.floor.toLong
-    val higher = position.ceil.toLong
+    val (lower, higher) = if (isNanos && !percentile.isNaN) {
+      (exactPosition.setScale(0, RoundingMode.FLOOR).longValueExact(),
+        exactPosition.setScale(0, RoundingMode.CEILING).longValueExact())
+    } else {
+      (position.floor.toLong, position.ceil.toLong)
+    }
 
     // Use binary search to find the lower and the higher position.
     val countsArray = accumulatedCounts.map(_._2).toArray[Long]
@@ -208,22 +233,52 @@ abstract class PercentileBase
     val lowerKey = accumulatedCounts(lowerIndex)._1
     if (higher == lower) {
       // no interpolation needed because position does not have a fraction
-      return toDoubleValue(lowerKey)
+      return toPercentileValue(lowerKey)
     }
 
     val higherKey = accumulatedCounts(higherIndex)._1
     if (higherKey == lowerKey) {
       // no interpolation needed because lower position and higher position has the same key
-      return toDoubleValue(lowerKey)
+      return toPercentileValue(lowerKey)
     }
 
     if (discrete) {
       // We end up here only if spark.sql.legacy.percentileDiscCalculation=true
-      toDoubleValue(lowerKey)
+      toPercentileValue(lowerKey)
+    } else if (isNanos) {
+      interpolateNanos(lowerKey.asInstanceOf[TimestampNanosVal],
+        higherKey.asInstanceOf[TimestampNanosVal],
+        exactPosition.subtract(JBigDecimal.valueOf(lower)))
     } else {
-      // Linear interpolation to get the exact percentile
-      (higher - position) * toDoubleValue(lowerKey) + (position - lower) * toDoubleValue(higherKey)
+      // Linear interpolation to get the exact percentile. Computed as lower + fraction *
+      // (higher - lower) to stay monotonic; the delta can overflow to Infinity only for adjacent
+      // values straddling zero near Double.MaxValue, an extreme case where the old form was also
+      // inaccurate.
+      toDoubleValue(lowerKey) +
+        (position - lower) * (toDoubleValue(higherKey) - toDoubleValue(lowerKey))
     }
+  }
+
+  // Exact `lower + fraction * (higher - lower)` in epoch nanoseconds (a double can't hold them),
+  // floored to the input precision.
+  private def interpolateNanos(
+      lower: TimestampNanosVal,
+      higher: TimestampNanosVal,
+      fraction: JBigDecimal): TimestampNanosVal = {
+    import PercentileBase.NANOS_PER_MICRO
+    def toEpochNanos(v: TimestampNanosVal): JBigDecimal =
+      JBigDecimal.valueOf(v.epochMicros).multiply(NANOS_PER_MICRO).add(
+        JBigDecimal.valueOf(v.nanosWithinMicro.toLong))
+    val lowerNanos = toEpochNanos(lower)
+    val nanos = toEpochNanos(higher).subtract(lowerNanos)
+      .multiply(fraction)
+      .add(lowerNanos)
+      .setScale(0, RoundingMode.FLOOR)
+    val micros = nanos.divide(NANOS_PER_MICRO, 0, RoundingMode.FLOOR)
+    val nanosWithinMicro = nanos.subtract(micros.multiply(NANOS_PER_MICRO)).intValueExact()
+    DateTimeUtils.truncateTimestampNanosToPrecision(
+      TimestampNanosVal.fromParts(micros.longValueExact(), nanosWithinMicro.toShort),
+      TimestampFamily.fractionalPrecision(child.dataType).get)
   }
 
   /**
@@ -236,6 +291,10 @@ abstract class PercentileBase
       case ix => ix
     }
   }
+}
+
+object PercentileBase {
+  private val NANOS_PER_MICRO = JBigDecimal.valueOf(DateTimeConstants.NANOS_PER_MICROS)
 }
 
 /**
@@ -255,9 +314,10 @@ abstract class PercentileBase
 @ExpressionDescription(
   usage =
     """
-      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric
-       or ANSI interval column `col` at the given percentage. The value of percentage must be
-       between 0.0 and 1.0. The value of frequency should be positive integral
+      _FUNC_(col, percentage [, frequency]) - Returns the exact percentile value of numeric,
+       ANSI interval, TIME or nanosecond-precision timestamp column `col` at the given percentage.
+       The value of percentage must be between 0.0 and 1.0. The value of frequency should be
+       positive integral
 
       _FUNC_(col, array(percentage1 [, percentage2]...) [, frequency]) - Returns the exact
       percentile value array of numeric column `col` at the given percentage(s). Each value
@@ -265,6 +325,16 @@ abstract class PercentileBase
       positive integral
 
       """,
+  arguments = """
+    Arguments:
+      * col - The column to compute the percentile of.
+          An expression that evaluates to a numeric, ANSI interval, time, or nanosecond-precision
+          timestamp (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]).
+      * percentage - The percentile(s) to compute, each between 0.0 and 1.0. Either a
+          single numeric value or an array of numeric values. Must be foldable.
+      * frequency - Optional. The number of times each value should be counted.
+          An expression that evaluates to a positive integral value. Defaults to 1.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col, 0.3) FROM VALUES (0), (10) AS tab(col);
@@ -328,7 +398,14 @@ case class Percentile(
 }
 
 @ExpressionDescription(
-  usage = "_FUNC_(col) - Returns the median of numeric or ANSI interval column `col`.",
+  usage = "_FUNC_(col) - Returns the median of numeric, ANSI interval, TIME or " +
+    "nanosecond-precision timestamp column `col`.",
+  arguments = """
+    Arguments:
+      * col - The column to compute the median of.
+        An expression that evaluates to a numeric, interval, time, or nanosecond-precision
+        timestamp (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]).
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(col) FROM VALUES (0), (10) AS tab(col);
@@ -352,8 +429,8 @@ case class Median(child: Expression)
 }
 
 /**
- * Return a percentile value based on a continuous distribution of
- * numeric or ANSI interval column at the given percentage (specified in ORDER BY clause).
+ * Return a percentile value based on a continuous distribution of numeric, ANSI interval, TIME or
+ * nanosecond-precision timestamp column at the given percentage (specified in ORDER BY clause).
  * The value of percentage must be between 0.0 and 1.0.
  */
 case class PercentileCont(left: Expression, right: Expression, reverse: Boolean = false)
@@ -453,7 +530,7 @@ case class PercentileDisc(
 
   override protected def getPercentile(
       accumulatedCounts: Seq[(AnyRef, Long)],
-      percentile: Double): Double = {
+      percentile: Double): Any = {
     if (legacyCalculation) {
       super.getPercentile(accumulatedCounts, percentile)
     } else {
@@ -468,7 +545,7 @@ case class PercentileDisc(
       val higherIndex = binarySearchCount(countsArray, 0, accumulatedCounts.size, higher)
       val higherKey = accumulatedCounts(higherIndex)._1
 
-      toDoubleValue(higherKey)
+      toPercentileValue(higherKey)
     }
   }
 
@@ -480,8 +557,15 @@ case class PercentileDisc(
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
-    "a continuous distribution of numeric or ANSI interval column `col` at the given " +
-    "`percentage` (specified in ORDER BY clause).",
+    "a continuous distribution of numeric, ANSI interval, TIME or nanosecond-precision timestamp " +
+    "column `col` at the given `percentage` (specified in ORDER BY clause).",
+  arguments = """
+    Arguments:
+      * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
+      * col - The column to compute the percentile of, specified in the ORDER BY clause.
+          An expression that evaluates to a numeric, ANSI interval, time, or nanosecond-precision
+          timestamp (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]).
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);
@@ -506,8 +590,15 @@ object PercentileContBuilder extends ExpressionBuilder {
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = "_FUNC_(percentage) WITHIN GROUP (ORDER BY col) - Return a percentile value based on " +
-    "a discrete distribution of numeric or ANSI interval column `col` at the given " +
-    "`percentage` (specified in ORDER BY clause).",
+    "a discrete distribution of numeric, ANSI interval, TIME or nanosecond-precision timestamp " +
+    "column `col` at the given `percentage` (specified in ORDER BY clause).",
+  arguments = """
+    Arguments:
+      * percentage - The percentile to compute, between 0.0 and 1.0. Must be foldable.
+      * col - The column to compute the percentile of, specified in the ORDER BY clause.
+          An expression that evaluates to a numeric, ANSI interval, time, or nanosecond-precision
+          timestamp (TIMESTAMP_LTZ(p) / TIMESTAMP_NTZ(p), p in [7, 9]).
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_(0.25) WITHIN GROUP (ORDER BY col) FROM VALUES (0), (10) AS tab(col);

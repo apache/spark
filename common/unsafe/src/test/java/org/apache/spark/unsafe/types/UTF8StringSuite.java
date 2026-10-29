@@ -71,6 +71,36 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void numCharsCachesAsciiness() {
+    // numChars() determines ASCII-ness as a byproduct of its scan and caches it. Verify it
+    // agrees with getIsFullAscii() (reached via a fresh isFullAscii()), including for invalid
+    // UTF-8 where the code-point count equals the byte count but a byte is >= 0x80 (not ASCII).
+    byte[][] inputs = new byte[][] {
+      {0x68, 0x65, 0x6c, 0x6c, 0x6f},                     // "hello" - full ASCII
+      {},                                                 // empty
+      {0x61, (byte) 0x80},                                // 'a' + stray continuation (invalid)
+      {(byte) 0x80},                                      // lone continuation byte (invalid)
+      {(byte) 0xC3, (byte) 0xA9},                         // valid 2-byte char U+00E9
+      {0x61, (byte) 0xE5, (byte) 0xA4, (byte) 0xA7, 0x62} // 'a' + 3-byte char + 'b'
+    };
+    for (byte[] bytes : inputs) {
+      // Reference: a fresh string computes ASCII-ness via getIsFullAscii().
+      boolean expected = fromBytes(bytes).isFullAscii();
+      // Under test: numChars() runs first and must cache the identical answer.
+      UTF8String s = fromBytes(bytes);
+      s.numChars();
+      assertEquals(expected, s.isFullAscii(),
+        "numChars() cached wrong ASCII flag for " + Arrays.toString(bytes));
+    }
+
+    // The specific invalid case a naive `numChars == numBytes` test would misflag as ASCII:
+    // the count equals the byte count, but the 0x80 byte is not ASCII.
+    UTF8String invalid = fromBytes(new byte[] {0x61, (byte) 0x80});
+    assertEquals(invalid.numBytes(), invalid.numChars());
+    assertFalse(invalid.isFullAscii());
+  }
+
+  @Test
   public void emptyStringTest() {
     assertEquals(EMPTY_UTF8, fromString(""));
     assertEquals(EMPTY_UTF8, fromBytes(new byte[0]));
@@ -229,6 +259,44 @@ public class UTF8StringSuite {
   }
 
   @Test
+  public void asciiLocateFastPathMatchesScan() {
+    // substring, getChar, charPosToByte and bytePosToChar take an ASCII fast-path when the
+    // isFullAscii flag is already FULL_ASCII. For each input, compare a cold instance (flag
+    // UNKNOWN -> general scan) against a warmed instance (isFullAscii() called -> fast-path for
+    // ASCII) and assert identical results. Covers ASCII, empty, multi-byte, and invalid UTF-8.
+    byte[][] inputs = new byte[][] {
+      "hello world".getBytes(StandardCharsets.UTF_8), // full ASCII -> exercises the fast-path
+      {}, // empty (vacuously ASCII)
+      {0x61, (byte) 0xC3, (byte) 0xA9, 0x62}, // 'a' + U+00E9 (2-byte) + 'b' (not ASCII)
+      {0x61, (byte) 0x80, 0x62} // invalid UTF-8, stray continuation (not ASCII)
+    };
+    int[] positions = {Integer.MIN_VALUE, -3, -1, 0, 1, 2, 3, 5, 100, Integer.MAX_VALUE};
+
+    for (byte[] bytes : inputs) {
+      UTF8String cold = fromBytes(bytes);
+      UTF8String warm = fromBytes(bytes);
+      warm.isFullAscii(); // warm the cached flag; fast-path branches read it without recomputing
+      String label = Arrays.toString(bytes);
+
+      for (int a : positions) {
+        for (int b : positions) {
+          assertEquals(cold.substring(a, b), warm.substring(a, b),
+            "substring(" + a + ", " + b + ") on " + label);
+        }
+        assertEquals(cold.charPosToByte(a), warm.charPosToByte(a),
+          "charPosToByte(" + a + ") on " + label);
+        assertEquals(cold.bytePosToChar(a), warm.bytePosToChar(a),
+          "bytePosToChar(" + a + ") on " + label);
+      }
+
+      for (int idx = 0; idx < warm.numChars(); idx++) {
+        assertEquals(cold.getChar(idx), warm.getChar(idx),
+          "getChar(" + idx + ") on " + label);
+      }
+    }
+  }
+
+  @Test
   public void trims() {
     assertEquals(fromString("1"), fromString("1").trim());
     assertEquals(fromString("1"), fromString("1\t").trimAll());
@@ -279,6 +347,72 @@ public class UTF8StringSuite {
     assertEquals(-1, fromString("数据砖头").indexOf(fromString("数"), 3));
     assertEquals(0, fromString("数据砖头").indexOf(fromString("数"), 0));
     assertEquals(3, fromString("数据砖头").indexOf(fromString("头"), 0));
+
+    // Tests for indexOf with start and occurrence parameters
+    // Forward search
+    assertEquals(1, fromString("abcabc").indexOf(fromString("b"), 1, 1));
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), 1, 2));
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), 3, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("b"), 10, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("b"), 0, 1));
+
+    // Backward search (negative start)
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), -1, 1));
+    assertEquals(1, fromString("abcabc").indexOf(fromString("b"), -1, 2));
+    assertEquals(4, fromString("abcabc").indexOf(fromString("b"), -2, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("b"), -10, 1));
+
+    // Overlapping matches ("aa" in "aaaa")
+    assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), 1, 1));
+    assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), 1, 2));
+    assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), 1, 3));
+    assertEquals(-1, fromString("aaaa").indexOf(fromString("aa"), 1, 4));
+    assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), -1, 1));
+    assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), -1, 2));
+    assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), -1, 3));
+    assertEquals(2, fromString("aaaa").indexOf(fromString("aa"), -2, 1));
+    assertEquals(1, fromString("aaaa").indexOf(fromString("aa"), -2, 2));
+    assertEquals(0, fromString("aaaa").indexOf(fromString("aa"), -2, 3));
+
+    // Multi-byte characters
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), 1, 1));
+    assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), 1, 2));
+    assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), -1, 1));
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -1, 2));
+    assertEquals(4, fromString("你好世界你好").indexOf(fromString("你好"), -2, 1));
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -2, 2));
+    assertEquals(0, fromString("你好世界你好").indexOf(fromString("你好"), -3, 1));
+    assertEquals(-1, fromString("你好世界你好").indexOf(fromString("你好"), -3, 2));
+
+    // Empty substring (behavior depends on indexOfEmpty, currently returns 0)
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 1, 1));
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, 5, 1));
+    assertEquals(0, fromString("hello").indexOf(EMPTY_UTF8, -1, 1));
+
+    // Boundary cases
+    assertEquals(0, fromString("x").indexOf(fromString("x"), 1, 1));
+    assertEquals(-1, fromString("x").indexOf(fromString("x"), 1, 2));
+    assertEquals(0, fromString("x").indexOf(fromString("x"), -1, 1));
+    assertEquals(-1, fromString("x").indexOf(fromString("x"), -1, 2));
+    assertEquals(-1, EMPTY_UTF8.indexOf(fromString("a"), 1, 1));
+    assertEquals(-1, EMPTY_UTF8.indexOf(fromString("a"), -1, 1));
+    assertEquals(4, fromString("hello").indexOf(fromString("o"), 5, 1));
+    assertEquals(-1, fromString("hello").indexOf(fromString("o"), 6, 1));
+    assertEquals(0, fromString("hello").indexOf(fromString("h"), -5, 1));
+    assertEquals(-1, fromString("hello").indexOf(fromString("h"), -6, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE, 1));
+    assertEquals(-1, fromString("abcabc").indexOf(fromString("abc"), Integer.MIN_VALUE + 1, 1));
+
+    // Target larger than string
+    assertEquals(-1, fromString("ab").indexOf(fromString("abc"), 1, 1));
+    assertEquals(-1, fromString("ab").indexOf(fromString("abc"), -1, 1));
+
+    // Backward search with multi-character patterns
+    assertEquals(2, fromString("abcde").indexOf(fromString("cd"), -3, 1));
+    assertEquals(1, fromString("abcde").indexOf(fromString("bc"), -3, 1));
+    assertEquals(0, fromString("abcde").indexOf(fromString("ab"), -3, 1));
+    assertEquals(-1, fromString("abcde").indexOf(fromString("de"), -3, 1));
+    assertEquals(2, fromString("abcde").indexOf(fromString("cde"), -1, 1));
   }
 
   @Test
@@ -317,6 +451,10 @@ public class UTF8StringSuite {
     // overlapped delim
     assertEquals(fromString("||"), fromString("||||||").subStringIndex(fromString("|||"), 3));
     assertEquals(fromString("|||"), fromString("||||||").subStringIndex(fromString("|||"), -4));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), Integer.MIN_VALUE));
+    assertEquals(fromString("www.apache.org"),
+      fromString("www.apache.org").subStringIndex(fromString("."), Integer.MIN_VALUE + 1));
   }
 
   @Test
@@ -325,6 +463,30 @@ public class UTF8StringSuite {
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.reverse());
     assertEquals(fromString("者行孙"), fromString("孙行者").reverse());
     assertEquals(fromString("者行孙 olleh"), fromString("hello 孙行者").reverse());
+    // Malformed UTF-8: a truncated trailing multi-byte sequence must be reversed as orphan
+    // bytes without reading past the end of the string. The backing arrays carry an extra
+    // trailing byte so a regression that over-reads would produce a deterministically wrong
+    // result rather than reading uninitialized memory.
+    // 'A' followed by an incomplete 2-byte leader (0xCE).
+    byte[] truncated2 = new byte[]{0x41, (byte) 0xCE, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xCE, 0x41}),
+      fromBytes(truncated2, 0, 2).reverse());
+    // 'A' followed by an incomplete 3-byte leader (0xE4 0xB8).
+    byte[] truncated3 = new byte[]{0x41, (byte) 0xE4, (byte) 0xB8, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xE4, (byte) 0xB8, 0x41}),
+      fromBytes(truncated3, 0, 3).reverse());
+    // 'A' followed by an incomplete 4-byte leader (0xF0 0x90).
+    byte[] truncated4 = new byte[]{0x41, (byte) 0xF0, (byte) 0x90, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xF0, (byte) 0x90, 0x41}),
+      fromBytes(truncated4, 0, 3).reverse());
+    // A complete 3-byte character (U+4E16) followed by an incomplete 2-byte leader (0xCE).
+    byte[] truncatedMid = new byte[]{(byte) 0xE4, (byte) 0xB8, (byte) 0x96, (byte) 0xCE, 0x42};
+    assertEquals(
+      fromBytes(new byte[]{(byte) 0xCE, (byte) 0xE4, (byte) 0xB8, (byte) 0x96}),
+      fromBytes(truncatedMid, 0, 4).reverse());
   }
 
   @Test
@@ -332,6 +494,7 @@ public class UTF8StringSuite {
     assertEquals(fromString("数d数d数d数d数d"), fromString("数d").repeat(5));
     assertEquals(fromString("数d"), fromString("数d").repeat(1));
     assertEquals(EMPTY_UTF8, fromString("数d").repeat(-1));
+    assertEquals(fromString("aaaaa"), fromString("a").repeat(5)); // single-byte Arrays.fill path
   }
 
   @Test
@@ -379,6 +542,30 @@ public class UTF8StringSuite {
     assertEquals(fromString("数据砖头"), fromString("数据砖头").rpad(5, EMPTY_UTF8));
     assertEquals(fromString("数据砖"), fromString("数据砖头").rpad(3, EMPTY_UTF8));
     assertEquals(EMPTY_UTF8, EMPTY_UTF8.rpad(3, EMPTY_UTF8));
+
+    // SPARK-58708: `len - numChars()` wraps for len == Integer.MIN_VALUE, which used to send
+    // a non-positive length down the padding branch and fail with an ArithmeticException.
+    for (int len : new int[]{0, -1, -100, Integer.MIN_VALUE}) {
+      assertEquals(EMPTY_UTF8, fromString("hello").lpad(len, fromString("??")));
+      assertEquals(EMPTY_UTF8, fromString("hello").rpad(len, fromString("??")));
+      assertEquals(EMPTY_UTF8, fromString("hello").lpad(len, EMPTY_UTF8));
+      assertEquals(EMPTY_UTF8, fromString("hello").rpad(len, EMPTY_UTF8));
+    }
+  }
+
+  @Test
+  public void padExponentialDoubling() {
+    // Exercise the doubling fill with counts that trigger multiple doubling steps and the
+    // toCopy clamp (counts 3, 4 and 5), plus a multi-byte pad.
+    assertEquals(fromString("abababax"), fromString("x").lpad(8, fromString("ab")));
+    assertEquals(fromString("xabababa"), fromString("x").rpad(8, fromString("ab")));
+    assertEquals(fromString("abababababx"), fromString("x").lpad(11, fromString("ab")));
+    assertEquals(fromString("Zababababab"), fromString("Z").rpad(11, fromString("ab")));
+    assertEquals(fromString("数数数数x"), fromString("x").lpad(5, fromString("数")));
+    assertEquals(fromString("x数数数数"), fromString("x").rpad(5, fromString("数")));
+    // Single-byte pad takes the Arrays.fill fast path.
+    assertEquals(fromString("-----x"), fromString("x").lpad(6, fromString("-")));
+    assertEquals(fromString("x-----"), fromString("x").rpad(6, fromString("-")));
   }
 
   @Test
@@ -498,7 +685,7 @@ public class UTF8StringSuite {
         "r", "1",
         "n", "2",
         "l", "3",
-        "t", "\0"
+        "t", ""
       )));
     assertEquals(
       fromString("translate"),
@@ -506,10 +693,10 @@ public class UTF8StringSuite {
     assertEquals(
       fromString("asae"),
       fromString("translate").translate(Map.of(
-        "r", "\0",
-        "n", "\0",
-        "l", "\0",
-        "t", "\0"
+        "r", "",
+        "n", "",
+        "l", "",
+        "t", ""
       )));
     assertEquals(
       fromString("aa世b"),
@@ -517,6 +704,10 @@ public class UTF8StringSuite {
         "花", "a",
         "界", "b"
       )));
+    // A literal U+0000 replacement value is preserved (not treated as deletion).
+    UTF8String withNul = fromString("abc").translate(Map.of("b", "\0"));
+    assertEquals(3, withNul.numChars());
+    assertEquals(fromString("a\0c"), withNul);
   }
 
   @Test
@@ -1204,6 +1395,61 @@ public class UTF8StringSuite {
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(-1));
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length()));
     assertThrows(IndexOutOfBoundsException.class, () -> s.codePointFrom(str.length() + 1));
+
+    // Truncated trailing multi-byte sequence: the leader declares more bytes than remain.
+    // codePointFrom should decode only the bytes present (missing continuation bytes count as
+    // 0) and not read past the end. Each backing array has extra trailing bytes, so an
+    // over-read regression would show up in the result.
+    // 2-byte leader 0xCE with no continuation byte present.
+    assertEquals((0xCE & 0x1F) << 6,
+      fromBytes(new byte[] {(byte) 0xCE, 0x42}, 0, 1).codePointFrom(0));
+    // 3-byte leader 0xE4 with no continuation bytes present.
+    assertEquals((0xE4 & 0x0F) << 12,
+      fromBytes(new byte[] {(byte) 0xE4, 0x42, 0x43}, 0, 1).codePointFrom(0));
+    // 3-byte leader 0xE4 0xB8 with the final continuation byte missing.
+    assertEquals(((0xE4 & 0x0F) << 12) | ((0xB8 & 0x3F) << 6),
+      fromBytes(new byte[] {(byte) 0xE4, (byte) 0xB8, 0x42}, 0, 2).codePointFrom(0));
+    // 4-byte leader 0xF1 with no continuation bytes present.
+    assertEquals((0xF1 & 0x07) << 18,
+      fromBytes(new byte[] {(byte) 0xF1, 0x42, 0x43, 0x44}, 0, 1).codePointFrom(0));
+    // 4-byte leader 0xF1 with two continuation bytes present and only the last one missing,
+    // so just the final read crosses the end.
+    assertEquals(((0xF1 & 0x07) << 18) | ((0x9F & 0x3F) << 12) | ((0x8F & 0x3F) << 6),
+      fromBytes(new byte[] {(byte) 0xF1, (byte) 0x9F, (byte) 0x8F, 0x42}, 0, 3).codePointFrom(0));
+  }
+
+  @Test
+  public void copyUTF8StringClampsToRemainingBytes() {
+    // Here `end` runs one byte past the string, as it would for a truncated trailing sequence.
+    // copyUTF8String should clamp to the available bytes; the extra backing byte would show up
+    // in the result if it over-read.
+    byte[] backing = new byte[] {0x41, 0x42, 0x43};
+    UTF8String s = fromBytes(backing, 0, 2); // views "AB"
+    // `end` (2) is one past the last valid byte index (1); only the two real bytes are copied.
+    assertEquals(fromString("AB"), s.copyUTF8String(0, 2));
+    // Same with a non-zero start, so the clamp uses `numBytes - start`, not `numBytes`.
+    assertEquals(fromString("B"), s.copyUTF8String(1, 2));
+    // In-bounds copies are unaffected.
+    assertEquals(fromString("AB"), s.copyUTF8String(0, 1));
+    assertEquals(fromString("B"), s.copyUTF8String(1, 1));
+  }
+
+  @Test
+  public void trimTruncatedTrailingSequence() {
+    // trimLeft/trimRight build the search character through copyUTF8String, so an over-read would
+    // make it longer than the bytes that remain. The backing arrays carry an extra trailing byte
+    // to make any over-read deterministic.
+    // A lone truncated 2-byte leader (0xC2): the clamped search char is just the leader, which
+    // matches the 1-byte trim set and is trimmed away.
+    UTF8String lone = fromBytes(new byte[] {(byte) 0xC2, 0x42}, 0, 1);
+    UTF8String trim2 = fromBytes(new byte[] {(byte) 0xC2});
+    assertEquals(EMPTY_UTF8, lone.trimLeft(trim2));
+    assertEquals(EMPTY_UTF8, lone.trimRight(trim2));
+    // 'A' followed by a truncated 3-byte leader (0xE4). Trimming the leader from the right must
+    // keep 'A': the trailing character occupies only one real byte, so only that byte is removed.
+    UTF8String prefixed = fromBytes(new byte[] {0x41, (byte) 0xE4, 0x42}, 0, 2);
+    UTF8String trim3 = fromBytes(new byte[] {(byte) 0xE4});
+    assertEquals(fromString("A"), prefixed.trimRight(trim3));
   }
 
   @Test

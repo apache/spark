@@ -25,6 +25,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.json4s.jackson.JsonMethods._
 import org.scalatest.BeforeAndAfter
+import org.scalatest.concurrent.Eventually._
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark._
@@ -368,7 +369,8 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
           "== Optimized Logical Plan ==", "== Physical Plan ==")),
         ("codegen", Seq("WholeStageCodegen subtrees")),
         ("cost", Seq("== Optimized Logical Plan ==", "Statistics(sizeInBytes")),
-        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments"))).foreach {
+        ("formatted", Seq("== Physical Plan ==", "Output", "Arguments")),
+        ("none", Seq(SQLExecution.NO_PLAN_DESCRIPTION))).foreach {
       case (mode, expected) =>
         checkPlanDescription(mode, expected)
     }
@@ -568,7 +570,6 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("driver side SQL metrics") {
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
 
     val expectedAccumValue = 12345L
     val expectedAccumValue2 = 54321L
@@ -578,22 +579,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       override lazy val executedPlan = physicalPlan
     }
 
-    SQLExecution.withNewExecutionId(dummyQueryExecution) {
-      physicalPlan.execute().collect()
+    val execId = runAndWaitForExecution {
+      SQLExecution.withNewExecutionId(dummyQueryExecution) {
+        physicalPlan.execute().collect()
+      }
     }
 
-    // Wait until the new execution is started and being tracked.
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
-    }
-
-    // Wait for listener to finish computing the metrics for the execution.
-    while (statusStore.executionsList().isEmpty ||
-        statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
-    }
-
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val driverMetric = physicalPlan.metrics("dummy")
     val driverMetric2 = physicalPlan.metrics("dummy2")
@@ -843,7 +834,6 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("SPARK-34338: Report metrics from Datasource v2 scan") {
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
     val physicalPlan = BatchScanExec(toAttributes(schema), new CustomMetricScanBuilder(), Seq.empty,
@@ -853,22 +843,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       override lazy val executedPlan = physicalPlan
     }
 
-    SQLExecution.withNewExecutionId(dummyQueryExecution) {
-      physicalPlan.execute().collect()
+    val execId = runAndWaitForExecution {
+      SQLExecution.withNewExecutionId(dummyQueryExecution) {
+        physicalPlan.execute().collect()
+      }
     }
 
-    // Wait until the new execution is started and being tracked.
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
-    }
-
-    // Wait for listener to finish computing the metrics for the execution.
-    while (statusStore.executionsList().isEmpty ||
-      statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
-    }
-
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val expectedMetric = physicalPlan.metrics("custom_metric")
     val expectedValue = "custom_metric: 12345, 12345"
@@ -882,7 +862,6 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
 
   test("SPARK-39635: Report driver metrics from Datasource v2 scan") {
     val statusStore = spark.sharedState.statusStore
-    val oldCount = statusStore.executionsList().size
 
     val schema = new StructType().add("i", "int").add("j", "int")
     val physicalPlan = BatchScanExec(toAttributes(schema), new CustomDriverMetricScanBuilder(),
@@ -892,22 +871,12 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
       override lazy val executedPlan = physicalPlan
     }
 
-    SQLExecution.withNewExecutionId(dummyQueryExecution) {
-      physicalPlan.execute().collect()
+    val execId = runAndWaitForExecution {
+      SQLExecution.withNewExecutionId(dummyQueryExecution) {
+        physicalPlan.execute().collect()
+      }
     }
 
-    // Wait until the new execution is started and being tracked.
-    while (statusStore.executionsCount() < oldCount) {
-      Thread.sleep(100)
-    }
-
-    // Wait for listener to finish computing the metrics for the execution.
-    while (statusStore.executionsList().isEmpty ||
-      statusStore.executionsList().last.metricValues == null) {
-      Thread.sleep(100)
-    }
-
-    val execId = statusStore.executionsList().last.executionId
     val metrics = statusStore.executionMetrics(execId)
     val expectedMetric = physicalPlan.metrics("custom_driver_metric_partition_count")
     val expectedValue = "2"
@@ -918,25 +887,14 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
   test("SPARK-36030: Report metrics from Datasource v2 write") {
     withTempDir { dir =>
       val statusStore = spark.sharedState.statusStore
-      val oldCount = statusStore.executionsList().size
 
       val cls = classOf[CustomMetricsDataSource].getName
-      spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
-        .write.format(cls)
-        .option("path", dir.getCanonicalPath).mode("append").save()
-
-      // Wait until the new execution is started and being tracked.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsCount() >= oldCount)
+      val execId = runAndWaitForExecution {
+        spark.range(10).select($"id" as Symbol("i"), -$"id" as Symbol("j"))
+          .write.format(cls)
+          .option("path", dir.getCanonicalPath).mode("append").save()
       }
 
-      // Wait for listener to finish computing the metrics for the execution.
-      eventually(timeout(10.seconds), interval(10.milliseconds)) {
-        assert(statusStore.executionsList().nonEmpty &&
-          statusStore.executionsList().last.metricValues != null)
-      }
-
-      val execId = statusStore.executionsList().last.executionId
       val metrics = statusStore.executionMetrics(execId)
       val customMetric = metrics.find(_._2 == "custom_metric: 12345, 12345")
       val innerMetric = metrics.find(_._2 == "inner_metric: 54321, 54321")
@@ -1119,8 +1077,19 @@ class SQLAppStatusListenerMemoryLeakSuite extends SparkFunSuite {
         val statusStore = spark.sharedState.statusStore
         assert(statusStore.executionsCount() <= 50)
         assert(statusStore.planGraphCount() <= 50)
-        // No live data should be left behind after all executions end.
-        assert(statusStore.listener.get.noLiveData())
+        // No live data should be left behind after all executions end. A SQL execution's live
+        // entries are removed only once its end-event count reaches jobs.size + 1 (the
+        // SparkListenerJobEnd(s) plus SparkListenerSQLExecutionEnd). For a failed job the
+        // DAGScheduler notifies the job waiter -- unblocking the failing action on this thread --
+        // *before* it posts SparkListenerJobEnd to the listener bus (see
+        // DAGScheduler.failJobAndIndependentStages). That trailing JobEnd can therefore still be in
+        // flight when this thread calls waitUntilEmpty() above; if it is enqueued just after the
+        // bus is drained, the failed execution never reaches the cleanup threshold and lingers in
+        // liveExecutions. Poll with eventually() so the trailing end event is delivered and the
+        // live entries drain, rather than asserting once immediately.
+        eventually(timeout(5.seconds), interval(10.milliseconds)) {
+          assert(statusStore.listener.get.noLiveData())
+        }
       }
     }
   }

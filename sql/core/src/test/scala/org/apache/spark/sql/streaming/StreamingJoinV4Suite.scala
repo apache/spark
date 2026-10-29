@@ -20,6 +20,8 @@ package org.apache.spark.sql.streaming
 import org.apache.hadoop.fs.Path
 import org.scalatest.Tag
 
+import org.apache.spark.SparkIllegalArgumentException
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.execution.datasources.v2.state.StateSourceOptions
 import org.apache.spark.sql.execution.streaming.checkpointing.CheckpointFileManager
 import org.apache.spark.sql.execution.streaming.operators.stateful.join.StreamingSymmetricHashJoinExec
@@ -88,6 +90,82 @@ class StreamingInnerJoinV4Suite
     )
   }
 
+  test("state format version 4 promotes RocksDB merge operator version 1 for new joins") {
+    withTempDir { checkpointDir =>
+      withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+        val input1 = MemoryStream[Int]
+        val input2 = MemoryStream[Int]
+        val df1 = input1.toDF().select($"value" as "key", ($"value" * 2) as "leftValue")
+        val df2 = input2.toDF().select($"value" as "key", ($"value" * 3) as "rightValue")
+        val joined = df1.join(df2, "key")
+
+        def checkMergeOperatorVersion(query: StreamExecution): Unit = {
+          val join = query.lastExecution.executedPlan.collectFirst {
+            case join: StreamingSymmetricHashJoinExec => join
+          }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+          assert(join.stateFormatVersion == 4)
+          assert(SQLConf.get.getConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION) == 1,
+            "the guardrail must not mutate the caller's session")
+        }
+
+        testStream(joined)(
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 1),
+          AddData(input2, 1),
+          CheckAnswer((1, 2, 3)),
+          Execute { query =>
+            checkMergeOperatorVersion(query)
+            assert(query.offsetLog.getLatest().flatMap(_._2.metadataOpt)
+              .flatMap(_.conf.get(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key))
+              .contains("2"))
+          },
+          StopStream,
+          StartStream(checkpointLocation = checkpointDir.getCanonicalPath),
+          AddData(input1, 2),
+          AddData(input2, 2),
+          CheckNewAnswer((2, 4, 6)),
+          Execute(checkMergeOperatorVersion),
+          StopStream
+        )
+      }
+    }
+  }
+
+  test("state format version 4 rejects an incompatible merge operator in a physical plan") {
+    val input1 = MemoryStream[Int]
+    val input2 = MemoryStream[Int]
+    val joined = input1.toDF().join(input2.toDF(), "value")
+
+    testStream(joined)(
+      AddData(input1, 1),
+      CheckAnswer(),
+      Execute { query =>
+        val join = query.lastExecution.executedPlan.collectFirst {
+          case join: StreamingSymmetricHashJoinExec => join
+        }.getOrElse(fail("StreamingSymmetricHashJoinExec not found"))
+        withSQLConf(SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key -> "1") {
+          // New streams promote v1 to v2 before planning. copy() rebuilds this join with the
+          // caller's v1 setting so the incompatible-plan validation remains covered.
+          val error = intercept[SparkIllegalArgumentException] {
+            join.copy()
+          }
+          checkError(
+            exception = error,
+            condition = "STREAM_STREAM_JOIN_INCOMPATIBLE_STATE_STORE_CONFIGS",
+            sqlState = Some("42K06"),
+            parameters = Map(
+              "stateFormatVersionConfig" -> SQLConf.STREAMING_JOIN_STATE_FORMAT_VERSION.key,
+              "stateFormatVersion" -> "4",
+              "mergeOperatorVersionConfig" ->
+                SQLConf.STATE_STORE_ROCKSDB_MERGE_OPERATOR_VERSION.key,
+              "mergeOperatorVersion" -> "1",
+              "requiredMergeOperatorVersion" -> "2"))
+        }
+      },
+      StopStream
+    )
+  }
+
   // V4 uses different column families (keyWithTsToValues, tsWithKey)
   // with timestamp-based key encoder specs instead of V3's
   // keyToNumValues/keyWithIndexToValue.
@@ -112,16 +190,16 @@ class StreamingInnerJoinV4Suite
         CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
       val keySchemaWithTimestamp = new StructType()
-        .add("field0", IntegerType, nullable = false)
-        .add("__event_time", LongType, nullable = false)
+        .add("field0", IntegerType)
+        .add("__event_time", LongType)
 
       val leftValueSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("leftValue", IntegerType, nullable = false)
+        .add("key", IntegerType)
+        .add("leftValue", IntegerType)
         .add("matched", BooleanType)
       val rightValueSchema: StructType = new StructType()
-        .add("key", IntegerType, nullable = false)
-        .add("rightValue", IntegerType, nullable = false)
+        .add("key", IntegerType)
+        .add("rightValue", IntegerType)
         .add("matched", BooleanType)
 
       val dummyValueSchema =
@@ -465,7 +543,52 @@ class StreamingInnerJoinV4Suite
 @SlowSQLTest
 class StreamingOuterJoinV4Suite
   extends StreamingOuterJoinBase
-  with TestWithV4StateFormat
+  with TestWithV4StateFormat {
+
+  import testImplicits._
+
+  for (history <- Seq("continuous", "restart")) {
+    test(s"V4 eviction includes newly admitted rows below the previous bound, $history") {
+      val leftInput = MemoryStream[(Int, Int)]
+      val rightInput = MemoryStream[(Int, Int)]
+      val left = leftInput.toDF().toDF("leftKey", "time")
+        .select($"leftKey", timestamp_seconds($"time").as("leftTime"))
+        .withWatermark("leftTime", "0 seconds")
+      val right = rightInput.toDF().toDF("rightKey", "time")
+        .select($"rightKey", timestamp_seconds($"time").as("rightTime"))
+        .withWatermark("rightTime", "0 seconds")
+      val joined = left.join(right,
+        expr("leftKey = rightKey AND leftTime > rightTime + INTERVAL 5 SECONDS"),
+        "left_outer")
+        .select($"leftKey", $"rightKey", $"leftTime".cast("long"), $"rightTime".cast("long"))
+
+      withSQLConf(SQLConf.STREAMING_NO_DATA_MICRO_BATCHES_ENABLED.key -> "false") {
+        withTempDir { checkpointDir =>
+          val start = StartStream(checkpointLocation = checkpointDir.getCanonicalPath)
+          // All watermarks below are in seconds. inputW is the minimum of the two sides'
+          // maximum event times before the batch and drives eviction. Late input uses the
+          // previous batch's inputW. The condition gives leftStateW = inputW + 5, but no
+          // rightStateW: old right rows can still match future left rows.
+          val setup = Seq(start,
+            // Batch 1: inputW = 0, leftStateW = 5, rightStateW = None.
+            MultiAddData(leftInput, (9, 20))(rightInput, (9, 10)),
+            CheckNewAnswer(Row(9, 9, 20, 10)),
+            // Batch 2: inputW = 10, leftStateW = 15, rightStateW = None.
+            AddData(rightInput, (2, 20)), CheckNewAnswer()) ++
+            (if (history == "restart") Seq(StopStream, start) else Nil)
+          // Batch 3: inputW = 20, leftStateW = 25, rightStateW = None.
+          // Late input uses inputW = 10 from batch 2, so the 12-second row is accepted.
+          // The old scan started above batch 2's leftStateW = 15, skipping this row.
+          testStream(joined)((setup ++ Seq(
+            MultiAddData(leftInput, (1, 12))(rightInput, (2, 30)),
+            CheckNewAnswer(Row(1, null, 12, null)),
+            // Batch 4: inputW = 20, leftStateW = 25, rightStateW = None. No duplicate output.
+            AddData(rightInput, (2, 50)), CheckNewAnswer(), StopStream)): _*)
+        }
+      }
+    }
+  }
+}
 
 @SlowSQLTest
 class StreamingFullOuterJoinV4Suite

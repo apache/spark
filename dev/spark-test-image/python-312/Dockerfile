@@ -15,6 +15,17 @@
 # limitations under the License.
 #
 
+# Reads the JEP and CDI versions from this checkout, just as the Spark build does. Only the
+# version files reach the image below, so its layers change only when a version does.
+FROM ubuntu:noble AS spark-versions
+COPY --from=root pom.xml /pom.xml
+RUN mkdir /versions && \
+    for name in jep arrow; do \
+      sed -n "s:.*<${name}.version>\(.*\)</${name}.version>.*:\1:p" /pom.xml | head -n 1 \
+        > "/versions/${name}" && \
+      test -s "/versions/${name}" || exit 1; \
+    done
+
 # Image for building and testing Spark branches. Based on Ubuntu 24.04.
 # See also in https://hub.docker.com/_/ubuntu
 FROM ubuntu:noble
@@ -44,10 +55,12 @@ RUN apt-get update && apt-get install -y \
     libssl-dev \
     openjdk-17-jdk-headless \
     python3.12 \
+    python3.12-dev \
     python3.12-venv \
     pkg-config \
     tzdata \
     software-properties-common \
+    zstd \
     zlib1g-dev \
     && apt-get autoremove --purge -y \
     && apt-get clean \
@@ -58,12 +71,28 @@ ENV VIRTUAL_ENV=/opt/spark-venv
 RUN python3.12 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
-ARG BASIC_PIP_PKGS="numpy pyarrow>=23.0.0 six==1.16.0 pandas==2.3.3 scipy plotly<6.0.0 mlflow>=2.8.1 coverage matplotlib openpyxl memory-profiler>=0.61.0 scikit-learn>=1.3.2 pystack>=1.6.0 psutil"
-ARG CONNECT_PIP_PKGS="grpcio==1.76.0 grpcio-status==1.76.0 protobuf==6.33.5 googleapis-common-protos==1.71.0 zstandard==0.25.0 graphviz==0.20.3"
-# Python deps for Kafka streaming tests
-ARG KAFKA_TEST_PKGS="testcontainers[kafka]>=3.7.0 kafka-python-ng>=2.0.2"
+COPY --from=root pyproject.toml ./pyproject.toml
 
-RUN python3.12 -m pip install $BASIC_PIP_PKGS unittest-xml-reporting $CONNECT_PIP_PKGS $KAFKA_TEST_PKGS lxml && \
-    python3.12 -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu && \
-    python3.12 -m pip install torcheval && \
+RUN python3.12 -m pip install -U pip
+
+RUN python3.12 -m pip install --group ml_torch --index-url https://download.pytorch.org/whl/cpu && \
+    python3.12 -m pip install --group ci_classic_standard --group ci_connect_standard && \
     python3.12 -m pip cache purge
+
+# Exercise in-process UDFs in the existing pyspark-sql job. JEP needs Python
+# headers and a JDK when building its JNI library; no separate test job is needed.
+COPY --from=spark-versions /versions/jep /tmp/spark-jep-version
+RUN JAVA_HOME="$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")" \
+    python3.12 -m pip install --no-cache-dir "jep==$(cat /tmp/spark-jep-version)" cffi && \
+    rm /tmp/spark-jep-version
+# Keep the provided CDI dependency outside Spark's distribution JAR directory.
+COPY --from=spark-versions /versions/arrow /tmp/spark-arrow-version
+RUN ARROW_VERSION="$(cat /tmp/spark-arrow-version)" && \
+    mkdir -p /opt/spark-test-jars && \
+    curl --fail --location --retry 3 \
+      "https://repo.maven.apache.org/maven2/org/apache/arrow/arrow-c-data/${ARROW_VERSION}/arrow-c-data-${ARROW_VERSION}.jar" \
+      --output /opt/spark-test-jars/arrow-c-data.jar && \
+    rm /tmp/spark-arrow-version
+ENV ARROW_C_DATA_JAR=/opt/spark-test-jars/arrow-c-data.jar
+# Missing or broken JEP must fail this CI image's tests instead of skipping them.
+ENV INPROCESS_TESTS=1

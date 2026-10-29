@@ -23,7 +23,8 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.{SparkException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Add, AggregateWindowFunction, Ascending, Attribute, BoundReference, CurrentRow, DateAdd, DateAddYMInterval, DecimalAddNoOverflowCheck, Descending, Expression, ExtractANSIIntervalDays, FrameLessOffsetWindowFunction, FrameType, IdentityProjection, IntegerLiteral, MutableProjection, NamedExpression, OffsetWindowFunction, PythonFuncExpression, RangeFrame, RowFrame, RowOrdering, SortOrder, SpecifiedWindowFrame, TimestampAddInterval, TimestampAddYMInterval, UnaryMinus, UnboundedFollowing, UnboundedPreceding, UnsafeProjection, WindowExpression}
-import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, DeclarativeAggregate, Max, Min}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{CalendarIntervalType, DateType, DayTimeIntervalType, DecimalType, IntegerType, TimestampNTZType, TimestampType, YearMonthIntervalType}
@@ -44,6 +45,29 @@ trait WindowEvaluatorFactoryBase {
    */
   def numSegmentTreeFrames: Option[SQLMetric] = None
   def numSegmentTreeFallbackFrames: Option[SQLMetric] = None
+
+  /**
+   * Fail fast if the buffered partition has more rows than its frames can handle.
+   *
+   * Most frames track the row index within a partition and the window bounds in 32-bit `Int`s
+   * (including the row index the driver passes to [[WindowFunctionFrame.write]]). A partition
+   * with more than `Int.MaxValue` rows would overflow those counters and silently produce wrong
+   * results, so throw a clear user-facing error instead, unless every frame declares
+   * [[WindowFunctionFrame.supportsLargePartition]] (e.g. LEAD/LAG).
+   */
+  protected def checkPartitionSizeLimit(
+      numRows: Long, frames: Array[WindowFunctionFrame]): Unit = {
+    if (numRows > Int.MaxValue && frames.exists(!_.supportsLargePartition)) {
+      throw QueryExecutionErrors.windowFunctionPartitionSizeExceedsLimitError(numRows)
+    }
+  }
+
+  /**
+   * Counter for [[SlidingWindowMinMaxFunctionFrame]] observability. Incremented each time a
+   * monotonic deque frame is prepared. Default `None` means the subclass does not integrate with
+   * the deque path.
+   */
+  def numMonotonicDequeFrames: Option[SQLMetric] = None
 
   /**
    * Create the resulting projection.
@@ -281,16 +305,79 @@ trait WindowEvaluatorFactoryBase {
 
           // Shrinking Frame.
           case ("AGGREGATE", frameType, lower, UnboundedFollowing, _) =>
-            target: InternalRow => {
-              new UnboundedFollowingWindowFunctionFrame(
-                target,
-                processor,
-                createBoundOrdering(frameType, lower, timeZone))
+            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+              val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
+              // Shrinking-frame queries `[lower, n)` on `WindowSegmentTree` touch the LRU
+              // for exactly two blocks per query: (1) the lower-edge partial block, and
+              // (2) the partition's last block (the right-partial `mergeBlockRange(bhi, 0,
+              // ...)` calls `ensureBlockLevels(bhi)` on every multi-block query). Middle
+              // blocks of `[lower, n)` are answered directly from `blockAggregates` and
+              // never go through the LRU. The lower-edge block advances monotonically with
+              // the output row, so once the cursor crosses a boundary the previous block
+              // is never revisited; the last block stays hot because every query touches
+              // it. Hint = 2 keeps both resident; routing through `estimateMaxCachedBlocks`
+              // would produce 8 by default (no `IntegerLiteral` upper match) -- correct
+              // numerically but misleading about what the shrinking path actually needs.
+              // Note: tuning this down to 1 would thrash, evicting the last block on every
+              // query and forcing it to be rebuilt.
+              val cacheHint = Some(2)
+              target: InternalRow => {
+                val tc = TaskContext.get()
+                if (tc == null) {
+                  throw SparkException.internalError(
+                    "WindowEvaluatorFactoryBase.shrinkingSegTreeFrameFactory requires " +
+                      "an active TaskContext")
+                }
+                val tmm = tc.taskMemoryManager()
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                new SegmentTreeWindowFunctionFrame(
+                  target,
+                  processor,
+                  segFns,
+                  childOutput,
+                  frameType,
+                  lb,
+                  ubound = None,
+                  fallbackFactory = () =>
+                    new UnboundedFollowingWindowFunctionFrame(target, processor, lb),
+                  (e, s) => MutableProjection.create(e, s),
+                  conf,
+                  cacheHint,
+                  tmm,
+                  numSegmentTreeFrames,
+                  numSegmentTreeFallbackFrames)
+              }
+            } else {
+              target: InternalRow => {
+                new UnboundedFollowingWindowFunctionFrame(
+                  target,
+                  processor,
+                  createBoundOrdering(frameType, lower, timeZone))
+              }
             }
 
           // Moving Frame.
           case ("AGGREGATE", frameType, lower, upper, _) =>
-            if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
+            val isMinMaxOnly = functions.nonEmpty && functions.forall {
+              case _: Min => true
+              case _: Max => true
+              case _ => false
+            } && aggFilters.forall(_.isEmpty) &&
+              conf.getConf(SQLConf.WINDOW_MONOTONIC_DEQUE_ENABLED)
+            if (isMinMaxOnly) {
+              target: InternalRow => {
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                val ub = createBoundOrdering(frameType, upper, timeZone)
+                new SlidingWindowMinMaxFunctionFrame(
+                  target,
+                  processor,
+                  lb,
+                  ub,
+                  functions,
+                  childOutput,
+                  numMonotonicDequeFrames)
+              }
+            } else if (eligibleForSegTree(functions, aggFilters, frameType, conf)) {
               val segFns = functions.map(_.asInstanceOf[DeclarativeAggregate])
               val cacheHint = estimateMaxCachedBlocks(lower, upper, frameType, blockSize)
               target: InternalRow => {
@@ -305,14 +392,18 @@ trait WindowEvaluatorFactoryBase {
                       "an active TaskContext")
                 }
                 val tmm = tc.taskMemoryManager()
+                val lb = createBoundOrdering(frameType, lower, timeZone)
+                val ub = createBoundOrdering(frameType, upper, timeZone)
                 new SegmentTreeWindowFunctionFrame(
                   target,
                   processor,
                   segFns,
                   childOutput,
                   frameType,
-                  createBoundOrdering(frameType, lower, timeZone),
-                  createBoundOrdering(frameType, upper, timeZone),
+                  lb,
+                  ubound = Some(ub),
+                  fallbackFactory = () =>
+                    new SlidingWindowFunctionFrame(target, processor, lb, ub),
                   (e, s) => MutableProjection.create(e, s),
                   conf,
                   cacheHint,

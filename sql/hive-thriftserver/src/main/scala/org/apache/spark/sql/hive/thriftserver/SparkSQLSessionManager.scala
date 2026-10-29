@@ -21,7 +21,7 @@ import scala.util.control.NonFatal
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hive.service.cli.SessionHandle
-import org.apache.hive.service.cli.session.SessionManager
+import org.apache.hive.service.cli.session.{HiveSessionImpl, SessionManager}
 import org.apache.hive.service.rpc.thrift.TProtocolVersion
 import org.apache.hive.service.server.HiveServer2
 
@@ -29,7 +29,7 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.hive.thriftserver.ReflectionUtils._
 import org.apache.spark.sql.hive.thriftserver.server.SparkSQLOperationManager
-import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 
 
 private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession: SparkSession)
@@ -40,6 +40,12 @@ private[hive] class SparkSQLSessionManager(hiveServer: HiveServer2, sparkSession
 
   override def init(hiveConf: HiveConf): Unit = {
     setSuperField(this, "operationManager", sparkSqlOperationManager)
+    // Stash the toggle on a static field instead of writing it into HiveConf. Storing it on
+    // per-session HiveConf would let a JDBC client flip it from the same `set:` overlay the
+    // system: gate is meant to guard (via `set:hiveconf:<key>=true`).
+    HiveSessionImpl.setAllowSettingSystemProperties(
+      sparkSession.sessionState.conf.getConf(
+        StaticSQLConf.LEGACY_HIVE_THRIFT_SERVER_ALLOW_SETTING_SYSTEM_PROPERTIES))
     super.init(hiveConf)
   }
 

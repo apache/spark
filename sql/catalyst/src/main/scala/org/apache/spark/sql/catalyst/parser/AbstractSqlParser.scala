@@ -72,6 +72,16 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     }
   }
 
+  /** Creates a TemporalIdentifier for a given SQL string */
+  override def parseTemporalTableIdentifier(sqlText: String): TemporalIdentifier = {
+    parse(sqlText) { parser =>
+      val ctx = parser.singleTemporalTableIdentifier()
+      withErrorHandling(ctx, Some(sqlText)) {
+        astBuilder.visitSingleTemporalTableIdentifier(ctx)
+      }
+    }
+  }
+
   /** Creates LogicalPlan for a given SQL string of query. */
   override def parseQuery(sqlText: String): LogicalPlan =
     parse(sqlText) { parser =>
@@ -109,6 +119,16 @@ abstract class AbstractSqlParser extends AbstractParser with ParserInterface {
     withErrorHandling(ctx, Some(sqlText)) {
       astBuilder.visitSingleRoutineParamList(ctx)
     }
+  }
+
+  /**
+   * Default splitter implementation that defers directly to [[SqlStatementSplitter]].
+   * Subclasses that perform additional input preprocessing (e.g. variable
+   * substitution) should override this to apply that preprocessing before
+   * splitting so the splitter sees the same tokens the parser would.
+   */
+  override def splitStatements(sqlText: String): SqlStatementSplitResult = {
+    SqlStatementSplitter.split(sqlText)
   }
 
   /**

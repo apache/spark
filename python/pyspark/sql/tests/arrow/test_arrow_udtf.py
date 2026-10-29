@@ -14,17 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-import unittest
 import logging
+import unittest
 from typing import Iterator, Optional
 
-from pyspark.errors import PySparkAttributeError
-from pyspark.errors import PythonException
+from pyspark.errors import PySparkAttributeError, PythonException
 from pyspark.sql.functions import arrow_udtf, lit
-from pyspark.sql.types import Row, StructType, StructField, IntegerType
+from pyspark.sql.types import IntegerType, Row, StructField, StructType
+from pyspark.testing import assertDataFrameEqual
 from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.utils import have_pyarrow, pyarrow_requirement_message
-from pyspark.testing import assertDataFrameEqual
 from pyspark.util import is_remote_only
 
 if have_pyarrow:
@@ -211,9 +210,8 @@ class ArrowUDTFTestsMixin:
 
         with self.assertRaisesRegex(
             PythonException,
-            r"(?s)Result column 'x' does not exist in the output\. "
-            r"Expected schema: x: int32\ny: string, "
-            r"got: wrong_col: int32\nanother_wrong_col: double\.",
+            r"(?s)\[RESULT_COLUMN_NAMES_MISMATCH\].*"
+            r"Missing: x, y\..*Unexpected: another_wrong_col, wrong_col\.",
         ):
             result_df = MismatchedSchemaUDTF()
             result_df.collect()
@@ -375,8 +373,8 @@ class ArrowUDTFTestsMixin:
         # Should fail with Arrow cast exception since string cannot be cast to int
         with self.assertRaisesRegex(
             PythonException,
-            "Result type of column 'id' does not match "
-            "the expected type. Expected: int32, got: string.",
+            r"(?s)\[RESULT_COLUMN_TYPES_MISMATCH\].*"
+            r"column 'id' \(expected int32, actual string\)",
         ):
             result_df = StringToIntUDTF()
             result_df.collect()
@@ -690,7 +688,7 @@ class ArrowUDTFTestsMixin:
                 yield result_table
 
         from pyspark.sql.functions import udtf
-        from pyspark.sql.types import StructType, StructField, IntegerType
+        from pyspark.sql.types import IntegerType, StructField, StructType
 
         @udtf(returnType=StructType([StructField("multiplied", IntegerType())]))
         class MultiplyUDTF:

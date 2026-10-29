@@ -18,33 +18,46 @@
 package org.apache.spark.sql.jdbc
 
 import java.math.BigDecimal
-import java.sql.{Date, DriverManager, Timestamp}
+import java.sql.{Connection, Date, DriverManager, ResultSet, SQLException, Statement, Timestamp}
 import java.time.{Instant, LocalDate, LocalDateTime}
 import java.time.format.DateTimeFormatter
-import java.util.{Calendar, GregorianCalendar, Properties, TimeZone}
+import java.util.{Calendar, GregorianCalendar, Locale, Properties, TimeZone}
+import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.logging.log4j.Level
+import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkSQLException}
+import org.apache.spark.{
+  SparkArithmeticException, SparkException,
+  SparkIllegalArgumentException, SparkSQLException, TaskContext
+}
+import org.apache.spark.executor.InputMetrics
 import org.apache.spark.sql.{AnalysisException, DataFrame, Observation, Row}
 import org.apache.spark.sql.catalyst.{analysis, TableIdentifier}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
-import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils}
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils, DateTimeUtils}
+import org.apache.spark.sql.connector.catalog.Identifier
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
+import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScanBuilder
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SharedSparkSession {
@@ -88,6 +101,7 @@ class JDBCSuite extends SharedSparkSession {
       jdbcClientType: String): Metadata = new MetadataBuilder()
     .putLong("scale", 0)
     .putBoolean("isTimestampNTZ", false)
+    .putBoolean("preferTimestampNanos", false)
     .putBoolean("isSigned", dataType.isInstanceOf[NumericType])
     .putString("jdbcClientType", jdbcClientType)
     .build()
@@ -473,6 +487,73 @@ class JDBCSuite extends SharedSparkSession {
     assert(lastPredicate == """"PartitionColumn" >= '2020-08-02'""")
   }
 
+  test("columnPartition supports TimestampNTZType partition column") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", TimestampNTZType)
+    ))
+
+    // (lowerBound, upperBound, numPartitions, expected where clauses in partition order).
+    val cases = Seq(
+      ("2018-07-06 10:00:00", "2018-07-06 16:00:00", "3", Seq(
+        """"PartitionColumn" < '2018-07-06 12:00:00' or "PartitionColumn" is null""",
+        """"PartitionColumn" >= '2018-07-06 12:00:00' AND """ +
+          """"PartitionColumn" < '2018-07-06 14:00:00'""",
+        """"PartitionColumn" >= '2018-07-06 14:00:00'""")),
+      // Fractional-second bounds parse, and the zoneless midpoint keeps sub-second precision.
+      ("2018-07-06 10:00:00.100", "2018-07-06 10:00:00.300", "2", Seq(
+        """"PartitionColumn" < '2018-07-06 10:00:00.2' or "PartitionColumn" is null""",
+        """"PartitionColumn" >= '2018-07-06 10:00:00.2'"""))
+    )
+
+    // NTZ bounds are zoneless, so the generated predicates must be identical regardless of the
+    // session time zone (unlike TimestampType, which shifts by the zone).
+    Seq("UTC", "America/Los_Angeles", "Asia/Kolkata").foreach { tz =>
+      cases.foreach { case (lowerBound, upperBound, numPartitions, expected) =>
+        val partitions = JDBCRelation.columnPartition(
+          schema,
+          analysis.caseInsensitiveResolution,
+          tz,
+          new JDBCOptions(url, "table", Map(
+            "lowerBound" -> lowerBound,
+            "upperBound" -> upperBound,
+            "numPartitions" -> numPartitions,
+            "partitionColumn" -> "PartitionColumn")))
+
+        val clauses = partitions.map(_.asInstanceOf[JDBCPartition].whereClause)
+        assert(clauses === expected.toArray,
+          s"NTZ partition clauses should be time-zone independent, but differed for tz=$tz " +
+            s"(bounds $lowerBound..$upperBound)")
+      }
+    }
+  }
+
+  test("columnPartition rejects zoned bounds for a TimestampNTZType partition column") {
+    val schema = StructType(Seq(
+      StructField("PartitionColumn", TimestampNTZType)
+    ))
+    // allowTimeZone = false: a bound carrying a zone offset is rejected rather than silently
+    // shifted, so NTZ bounds stay zoneless.
+    val e = intercept[SparkIllegalArgumentException] {
+      JDBCRelation.columnPartition(
+        schema,
+        analysis.caseInsensitiveResolution,
+        "America/Los_Angeles",
+        new JDBCOptions(url, "table", Map(
+          "lowerBound" -> "2018-07-06 10:00:00+05:00",
+          "upperBound" -> "2018-07-06 16:00:00+05:00",
+          "numPartitions" -> "2",
+          "partitionColumn" -> "PartitionColumn")))
+    }
+    checkError(
+      exception = e,
+      condition = "INVALID_JDBC_PARTITION_BOUND",
+      sqlState = Some("42616"),
+      parameters = Map(
+        "option" -> "\"lowerBound\"",
+        "value" -> "\"2018-07-06 10:00:00+05:00\"",
+        "dataType" -> "\"TIMESTAMP_NTZ\""))
+  }
+
   test("overflow of partition bound difference does not give negative stride") {
     val df = sql("SELECT * FROM partsoverflow")
     checkNumPartitions(df, expectedNumPartitions = 3)
@@ -710,12 +791,11 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("H2 time types") {
+    // With timeType.enabled=true (default in tests), TIME columns use TimeType
     val rows = sql("SELECT * FROM timetypes").collect()
+    assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
+    // DATE and TIMESTAMP columns unchanged
     val cal = new GregorianCalendar(java.util.Locale.ROOT)
-    cal.setTime(rows(0).getAs[java.sql.Timestamp](0))
-    assert(cal.get(Calendar.HOUR_OF_DAY) === 12)
-    assert(cal.get(Calendar.MINUTE) === 34)
-    assert(cal.get(Calendar.SECOND) === 56)
     cal.setTime(rows(0).getAs[java.sql.Timestamp](1))
     assert(cal.get(Calendar.YEAR) === 1996)
     assert(cal.get(Calendar.MONTH) === 0)
@@ -732,24 +812,171 @@ class JDBCSuite extends SharedSparkSession {
   }
 
   test("SPARK-34357: test TIME types") {
-    val rows = spark.read.jdbc(
-      urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
-    val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
-      .cache().collect()
-    val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
-    assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
-    assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      val rows = spark.read.jdbc(
+        urlWithUserAndPass, "TEST.TIMETYPES", new Properties()).collect()
+      val cachedRows = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+        .cache().collect()
+      val expectedTimeAtEpoch = java.sql.Timestamp.valueOf("1970-01-01 12:34:56.0")
+      assert(rows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(rows(1).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+      assert(cachedRows(0).getAs[java.sql.Timestamp](0) === expectedTimeAtEpoch)
+    }
   }
 
   test("SPARK-47396: TIME WITHOUT TIME ZONE preferTimestampNTZ") {
-    spark.catalog.clearCache()
-    val df = spark.read.format("jdbc")
-      .option("preferTimestampNTZ", true)
-      .option("url", urlWithUserAndPass)
-      .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
-      .load()
-    assert(df.head().get(0).isInstanceOf[LocalDateTime])
+    withSQLConf(SQLConf.TIME_TYPE_ENABLED.key -> "false") {
+      spark.catalog.clearCache()
+      val df = spark.read.format("jdbc")
+        .option("preferTimestampNTZ", true)
+        .option("url", urlWithUserAndPass)
+        .option("query", "SELECT A FROM TEST.TIMETYPES limit 1")
+        .load()
+      assert(df.head().get(0).isInstanceOf[LocalDateTime])
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME maps to TimeType when timeType.enabled") {
+    val df = spark.read.jdbc(
+      urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+    // With timeType.enabled=true (default in tests), TIME column maps to TimeType
+    assert(df.schema("A").dataType.isInstanceOf[TimeType])
+    val rows = df.collect()
+    assert(rows(0).getAs[java.time.LocalTime](0) === java.time.LocalTime.of(12, 34, 56))
+  }
+
+  test("SPARK-57555: legacy.jdbc.timeMapping escape hatch keeps TIME as TimestampType") {
+    // The escape hatch forces the legacy TIME-to-timestamp mapping even when the TIME type is
+    // enabled, so workloads relying on the old behavior are not silently broken.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType === TimestampType)
+    }
+    // Sanity check: without the escape hatch the column is read as TimeType.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "true",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "false") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType.isInstanceOf[TimeType])
+    }
+    // The escape hatch has no effect when the TIME type is disabled: the column is read as
+    // TimestampType regardless of the escape hatch.
+    withSQLConf(
+      SQLConf.TIME_TYPE_ENABLED.key -> "false",
+      SQLConf.LEGACY_JDBC_TIME_MAPPING_ENABLED.key -> "true") {
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIMETYPES", new Properties())
+      assert(df.schema("A").dataType === TimestampType)
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME write round-trip") {
+    val url = urlWithUserAndPass
+    val tableName = "TEST.TIME_ROUNDTRIP"
+    val time1 = java.time.LocalTime.of(9, 30, 0)
+    val time2 = java.time.LocalTime.of(23, 59, 59, 123456000)
+    val schema = new StructType().add("t", TimeType(TimeType.DEFAULT_PRECISION))
+    val rows = Seq(
+      Row(time1),
+      Row(time2)
+    )
+    val df = spark.createDataFrame(spark.sparkContext.parallelize(rows), schema)
+    df.write.jdbc(url, tableName, new Properties())
+    try {
+      val readBack = spark.read.jdbc(url, tableName, new Properties())
+      assert(readBack.schema.fields(0).dataType.isInstanceOf[TimeType])
+      val result = readBack.orderBy(readBack.columns(0)).collect()
+      assert(result(0).getAs[java.time.LocalTime](0) === time1)
+      assert(result(1).getAs[java.time.LocalTime](0) === time2)
+    } finally {
+      val conn = java.sql.DriverManager.getConnection(url)
+      conn.createStatement().execute(s"DROP TABLE IF EXISTS $tableName")
+      conn.close()
+    }
+  }
+
+  test("SPARK-57555: JDBC TIME preserves sub-second precision") {
+    val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+    try {
+      conn.createStatement().execute(
+        "CREATE TABLE TEST.TIME_PRECISION (t TIME(6))")
+      conn.createStatement().execute(
+        "INSERT INTO TEST.TIME_PRECISION VALUES (TIME '14:30:45.123456')")
+      val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TIME_PRECISION", new Properties())
+      val result = df.collect()
+      assert(result(0).getAs[java.time.LocalTime](0) ===
+        java.time.LocalTime.of(14, 30, 45, 123456000))
+    } finally {
+      conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TIME_PRECISION")
+      conn.close()
+    }
+  }
+
+  test("SPARK-57460: JDBC TIMESTAMP keeps microsecond mapping by default") {
+    // Without preferTimestampNanos, a driver TIMESTAMP(9) still infers as microsecond
+    // TimestampType even when the nanos preview feature is enabled.
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_DEFAULT (t TIMESTAMP(9))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_DEFAULT VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read.jdbc(urlWithUserAndPass, "TEST.TS_DEFAULT", new Properties())
+        assert(df.schema("T").dataType === TimestampType)
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_DEFAULT")
+        conn.close()
+      }
+    }
+  }
+
+  test("SPARK-57460: JDBC TIMESTAMP reads nanosecond LTZ precision when requested") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_NANOS_LTZ (t TIMESTAMP(9))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_NANOS_LTZ VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read
+          .option("preferTimestampNanos", "true")
+          .jdbc(urlWithUserAndPass, "TEST.TS_NANOS_LTZ", new Properties())
+        assert(df.schema("T").dataType === TimestampLTZNanosType(9))
+        val result = df.collect()
+        // H2 stores TIMESTAMP as local wall-clock; the LTZ read binds it to the session zone.
+        val expected = java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456789)
+          .atZone(java.time.ZoneId.systemDefault()).toInstant
+        assert(result(0).getAs[java.time.Instant](0) === expected)
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_NANOS_LTZ")
+        conn.close()
+      }
+    }
+  }
+
+  test("SPARK-57460: JDBC TIMESTAMP reads nanosecond NTZ precision when requested") {
+    withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true") {
+      val conn = java.sql.DriverManager.getConnection(urlWithUserAndPass)
+      try {
+        conn.createStatement().execute("CREATE TABLE TEST.TS_NANOS_NTZ (t TIMESTAMP(8))")
+        conn.createStatement().execute(
+          "INSERT INTO TEST.TS_NANOS_NTZ VALUES (TIMESTAMP '2020-02-02 04:13:14.123456789')")
+        val df = spark.read
+          .option("preferTimestampNanos", "true")
+          .option("preferTimestampNTZ", "true")
+          .jdbc(urlWithUserAndPass, "TEST.TS_NANOS_NTZ", new Properties())
+        // Reported scale 8 -> precision 8. H2 rounds the stored value to 8 fractional digits
+        // (.123456789 -> .12345679); Spark's read path only floors to precision, so the value is
+        // preserved at 8 digits.
+        assert(df.schema("T").dataType === TimestampNTZNanosType(8))
+        val result = df.collect()
+        assert(result(0).getAs[java.time.LocalDateTime](0) ===
+          java.time.LocalDateTime.of(2020, 2, 2, 4, 13, 14, 123456790))
+      } finally {
+        conn.createStatement().execute("DROP TABLE IF EXISTS TEST.TS_NANOS_NTZ")
+        conn.close()
+      }
+    }
   }
 
   test("test DATE types") {
@@ -835,6 +1062,238 @@ class JDBCSuite extends SharedSparkSession {
     assert(JdbcDialects.get("test.invalid") === NoopDialect)
   }
 
+  test("Get built-in JDBC dialects by name") {
+    Seq(
+      "mysql" -> "jdbc:mysql:",
+      "postgresql" -> "jdbc:postgresql:",
+      "db2" -> "jdbc:db2:",
+      "sqlserver" -> "jdbc:sqlserver:",
+      "derby" -> "jdbc:derby:",
+      "oracle" -> "jdbc:oracle:",
+      "teradata" -> "jdbc:teradata:",
+      "h2" -> "jdbc:h2:",
+      "snowflake" -> "jdbc:snowflake:",
+      "databricks" -> "jdbc:databricks:"
+    ).foreach { case (name, url) =>
+      val dialect = JdbcDialects.getBuiltInDialect(name)
+      assert(dialect eq JdbcDialects.get(url))
+      assert(dialect eq JdbcDialects.getBuiltInDialect(name.toUpperCase(Locale.ROOT)))
+    }
+
+    checkError(
+      exception = intercept[SparkIllegalArgumentException] {
+        JdbcDialects.getBuiltInDialect("unknown")
+      },
+      condition = "UNSUPPORTED_BUILT_IN_JDBC_DIALECT",
+      parameters = Map(
+        "name" -> "unknown",
+        "supportedNames" ->
+          "databricks, db2, derby, h2, mysql, oracle, postgresql, snowflake, sqlserver, teradata"))
+  }
+
+  test("Register existing JDBC dialects for additional URL prefixes") {
+    val mysqlPrefix = "jdbc:aws-wrapper:mysql:"
+    val postgresPrefix = "jdbc:aws-wrapper:postgresql:"
+    val mysqlUrl = "jdbc:aws-wrapper:mysql://127.0.0.1/db"
+    val postgresUrl = "jdbc:aws-wrapper:postgresql://127.0.0.1/db"
+    assert(JdbcDialects.get(mysqlUrl) === NoopDialect)
+    assert(JdbcDialects.get(postgresUrl) === NoopDialect)
+    try {
+      JdbcDialects.registerDialectForUrlPrefix(
+        mysqlPrefix, JdbcDialects.getBuiltInDialect("mysql"))
+      JdbcDialects.registerDialectForUrlPrefix(
+        postgresPrefix, JdbcDialects.getBuiltInDialect("postgresql"))
+      assert(JdbcDialects.get(mysqlUrl) === MySQLDialect())
+      assert(JdbcDialects.get(postgresUrl) === PostgresDialect())
+      assert(JdbcDialects.get(mysqlUrl.toUpperCase(Locale.ROOT)) === MySQLDialect())
+
+      JdbcDialects.registerDialectForUrlPrefix(
+        mysqlPrefix, JdbcDialects.getBuiltInDialect("postgresql"))
+      assert(JdbcDialects.get(mysqlUrl) === PostgresDialect())
+    } finally {
+      JdbcDialects.unregisterDialectForUrlPrefix(mysqlPrefix)
+      JdbcDialects.unregisterDialectForUrlPrefix(postgresPrefix)
+    }
+    assert(JdbcDialects.get(mysqlUrl) === NoopDialect)
+    assert(JdbcDialects.get(postgresUrl) === NoopDialect)
+  }
+
+  test("A registered JDBC dialect takes precedence over an additional URL prefix") {
+    val prefix = "jdbc:aws-wrapper:mysql:"
+    val dialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean =
+        url.toLowerCase(Locale.ROOT).startsWith(prefix)
+    }
+    JdbcDialects.registerDialectForUrlPrefix(
+      prefix, JdbcDialects.getBuiltInDialect("mysql"))
+    JdbcDialects.registerDialect(dialect)
+    try {
+      assert(JdbcDialects.get("jdbc:aws-wrapper:mysql://127.0.0.1/db") === dialect)
+    } finally {
+      JdbcDialects.unregisterDialect(dialect)
+      JdbcDialects.unregisterDialectForUrlPrefix(prefix)
+    }
+  }
+
+  test("The longest registered JDBC dialect URL prefix takes precedence") {
+    val shortPrefix = "jdbc:test:"
+    val longPrefix = "jdbc:test:mysql:"
+    try {
+      JdbcDialects.registerDialectForUrlPrefix(
+        longPrefix, JdbcDialects.getBuiltInDialect("mysql"))
+      JdbcDialects.registerDialectForUrlPrefix(
+        shortPrefix, JdbcDialects.getBuiltInDialect("postgresql"))
+      assert(JdbcDialects.get("jdbc:test:mysql://127.0.0.1/db") === MySQLDialect())
+    } finally {
+      JdbcDialects.unregisterDialectForUrlPrefix(shortPrefix)
+      JdbcDialects.unregisterDialectForUrlPrefix(longPrefix)
+    }
+  }
+
+  test("Register JDBC dialect URL prefixes concurrently") {
+    val numPrefixes = 16
+    val prefixes = (0 until numPrefixes).map(i => s"jdbc:concurrent-$i:")
+    val pool = Executors.newFixedThreadPool(numPrefixes)
+    val startLatch = new CountDownLatch(1)
+    try {
+      val registrations = prefixes.map { prefix =>
+        pool.submit(new Runnable {
+          override def run(): Unit = {
+            startLatch.await()
+            JdbcDialects.registerDialectForUrlPrefix(
+              prefix, JdbcDialects.getBuiltInDialect("mysql"))
+          }
+        })
+      }
+      startLatch.countDown()
+      registrations.foreach(_.get(30, TimeUnit.SECONDS))
+
+      prefixes.foreach { prefix =>
+        assert(JdbcDialects.get(s"${prefix}//127.0.0.1/db") === MySQLDialect())
+      }
+    } finally {
+      prefixes.foreach(JdbcDialects.unregisterDialectForUrlPrefix)
+      pool.shutdownNow()
+    }
+  }
+
+  test("JDBC dialect URL prefix validation") {
+    Seq("mysql:", "jdbc:mysql").foreach { prefix =>
+      val error = intercept[IllegalArgumentException] {
+        JdbcDialects.registerDialectForUrlPrefix(
+          prefix, JdbcDialects.getBuiltInDialect("mysql"))
+      }
+      assert(error.getMessage.contains("URL prefixes must start with 'jdbc:' and end with ':'"))
+    }
+  }
+
+  test("JDBC dialect matching does not inspect the URL authority or path") {
+    assert(JdbcDialects.get("jdbc:unknown:mysql://127.0.0.1/db") === NoopDialect)
+    assert(JdbcDialects.get("jdbc:p6spy:mysql://127.0.0.1/db") === NoopDialect)
+    assert(JdbcDialects.get("jdbc:postgresql://host.mysql.com/db") === PostgresDialect())
+    assert(JdbcDialects.get("jdbc:mysql://host.postgresql.com/db") === MySQLDialect())
+  }
+
+  test("SPARK-57447: (H2|MySQL|Postgres)Dialect escape a single quote in indexExists") {
+    // indexExists builds a lookup query with the index name as a SQL string literal, so a single
+    // quote in the name must be escaped to keep the WHERE clause well-formed.
+    Seq(
+      "jdbc:h2:mem:testdb0" -> "INDEX_NAME = 'i''1'",
+      "jdbc:mysql://127.0.0.1/db" -> "key_name = 'i''1'",
+      "jdbc:postgresql://127.0.0.1/db" -> "indexname = 'i''1'"
+    ).foreach { case (jdbcUrl, expectedClause) =>
+      val dialect = JdbcDialects.get(jdbcUrl)
+      val conn = mock(classOf[Connection])
+      val stmt = mock(classOf[Statement])
+      val rs = mock(classOf[ResultSet])
+      when(conn.createStatement()).thenReturn(stmt)
+      when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+      val options = new JDBCOptions(jdbcUrl, "test.people", Map.empty[String, String])
+      dialect.indexExists(conn, "i'1", Identifier.of(Array("test"), "people"), options)
+
+      val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+      verify(stmt).executeQuery(sqlCaptor.capture())
+      assert(sqlCaptor.getValue.contains(expectedClause),
+        s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+    }
+  }
+
+  test("SPARK-57960: (H2|Postgres)Dialect escape a single quote in indexExists table/schema name") {
+    // indexExists also embeds the table (and, for H2, schema) name as a SQL string literal, so a
+    // single quote in the identifier must be escaped too, consistent with the index-name escaping.
+    val ident = Identifier.of(Array("sch'ema"), "ta'ble")
+    Seq(
+      "jdbc:h2:mem:testdb0" -> Seq("TABLE_SCHEMA = 'sch''ema'", "TABLE_NAME = 'ta''ble'"),
+      "jdbc:postgresql://127.0.0.1/db" -> Seq("tablename = 'ta''ble'")
+    ).foreach { case (jdbcUrl, expectedClauses) =>
+      val dialect = JdbcDialects.get(jdbcUrl)
+      val conn = mock(classOf[Connection])
+      val stmt = mock(classOf[Statement])
+      val rs = mock(classOf[ResultSet])
+      when(conn.createStatement()).thenReturn(stmt)
+      when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+      val options = new JDBCOptions(jdbcUrl, "test.people", Map.empty[String, String])
+      dialect.indexExists(conn, "idx", ident, options)
+
+      val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+      verify(stmt).executeQuery(sqlCaptor.capture())
+      expectedClauses.foreach { expectedClause =>
+        assert(sqlCaptor.getValue.contains(expectedClause),
+          s"Unexpected lookup SQL for $jdbcUrl: ${sqlCaptor.getValue}")
+      }
+    }
+  }
+
+  test("rename table query quotes the new table name by jdbc dialect") {
+    // The base JdbcDialect.renameTable quotes both sides; the Postgres and Derby overrides left
+    // the new name unquoted, so a name needing quotes could not be renamed to.
+    val ident = (ns: String, name: String) => Identifier.of(Array(ns), name)
+    assert(JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "ALTER TABLE \"s\".\"t1\" RENAME TO \"new tbl\"")
+    assert(JdbcDialects.get("jdbc:derby:memory:db")
+      .renameTable(ident("s", "t1"), ident("s", "new tbl")) ===
+      "RENAME TABLE \"s\".\"t1\" TO \"new tbl\"")
+  }
+
+  test("MySQLDialect quotes the table name in dropIndex and listIndexes") {
+    // createIndex and indexExists put the table name at identifier position via quoteIdentifier;
+    // dropIndex and listIndexes build the same position and now match them.
+    val dialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    val ident = Identifier.of(Array.empty[String], "ta ble")
+
+    assert(dialect.dropIndex("i 1", ident) === "DROP INDEX `i 1` ON `ta ble`")
+
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[Statement])
+    val rs = mock(classOf[ResultSet])
+    when(conn.createStatement()).thenReturn(stmt)
+    when(stmt.executeQuery(anyString())).thenReturn(rs)
+
+    val options =
+      new JDBCOptions("jdbc:mysql://127.0.0.1/db", "ta ble", Map.empty[String, String])
+    dialect.listIndexes(conn, ident, options)
+
+    val sqlCaptor = ArgumentCaptor.forClass(classOf[String])
+    verify(stmt).executeQuery(sqlCaptor.capture())
+    assert(sqlCaptor.getValue.contains("SHOW INDEXES FROM `ta ble`"),
+      s"Unexpected listIndexes SQL: ${sqlCaptor.getValue}")
+  }
+
+  test("MsSqlServerDialect escapes a single quote in the renamed column name") {
+    // getRenameColumnQuery passes the qualified "table.column" name to sp_rename as a SQL string
+    // literal, so a single quote in the column name must be escaped to keep the literal
+    // well-formed. The table name arrives already quoted from JDBCTableCatalog.
+    val dialect = JdbcDialects.get("jdbc:sqlserver://127.0.0.1;databaseName=db")
+    assert(dialect.getRenameColumnQuery("\"tbl\"", "it's", "fine", 0) ===
+      "EXEC sp_rename '\"tbl\".\"it''s\"', \"fine\", 'COLUMN'")
+    // A name without a single quote produces the same statement as before.
+    assert(dialect.getRenameColumnQuery("\"db\".\"tbl\"", "ID", "RENAMED", 0) ===
+      "EXEC sp_rename '\"db\".\"tbl\".\"ID\"', \"RENAMED\", 'COLUMN'")
+  }
+
   test("quote column names by jdbc dialect") {
     val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
     val postgresDialect = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
@@ -890,6 +1349,160 @@ class JDBCSuite extends SharedSparkSession {
           """OR ("col0" IS NULL AND 'abc' IS NULL))) AND ("col1" = 'def')""")
     }
     assert(doCompileFilter(EqualTo("col0.nested", 3)).isEmpty)
+  }
+
+  test("SPARK-53454: AlwaysTrue/AlwaysFalse compile to portable SQL in JDBCSQLBuilder") {
+    val dialect = JdbcDialects.get("jdbc:")
+    assert(dialect.compileExpression(new AlwaysTrue).get === "(1 = 1)")
+    assert(dialect.compileExpression(new AlwaysFalse).get === "(1 = 0)")
+
+    // The result must stay valid when AlwaysTrue/AlwaysFalse is nested as an operand
+    // of a larger expression, not just as a standalone WHERE predicate. Without the
+    // surrounding parentheses the bare `1 = 1` would inline into invalid SQL such as
+    // `a = 1 = 1`.
+    val ref = FieldReference("a")
+    val eqTrue = new Predicate("=", Array[V2Expression](ref, new AlwaysTrue))
+    val eqFalse = new Predicate("=", Array[V2Expression](ref, new AlwaysFalse))
+    assert(dialect.compileExpression(eqTrue).get === "\"a\" = (1 = 1)")
+    assert(dialect.compileExpression(eqFalse).get === "\"a\" = (1 = 0)")
+  }
+
+  test("SPARK-57243: IS [NOT] NULL parenthesizes a predicate operand") {
+    val dialect = JdbcDialects.get("jdbc:")
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    val a = FieldReference("a")
+    val b = FieldReference("b")
+
+    // Every binary comparison operand is parenthesized for both IS NULL and IS NOT NULL, and is
+    // not pushed down on MsSqlServer (no boolean type), so Spark evaluates it locally.
+    for (op <- Seq("=", "<>", "<", "<=", ">", ">=");
+         (isNullOp, keyword) <- Seq("IS_NULL" -> "IS NULL", "IS_NOT_NULL" -> "IS NOT NULL")) {
+      val cmp = new Predicate(op, Array[V2Expression](a, b))
+      val expr = new Predicate(isNullOp, Array[V2Expression](cmp))
+      assert(dialect.compileExpression(expr).get === s"""("a" $op "b") $keyword""")
+      assert(msSqlServer.compileExpression(expr).isEmpty)
+    }
+
+    // `<=>` (null-safe equal) is also a comparison, so the operand is parenthesized; it never
+    // returns NULL so IS NULL over it is always false, but the rendering is still wrapped.
+    val nullSafeIsNull =
+      new Predicate("IS_NULL", Array[V2Expression](new Predicate("<=>", Array[V2Expression](a, b))))
+    val nullSafeSql = dialect.compileExpression(nullSafeIsNull).get
+    assert(nullSafeSql.startsWith("(") && nullSafeSql.endsWith(") IS NULL"))
+    assert(msSqlServer.compileExpression(nullSafeIsNull).isEmpty)
+
+    // A bare column reference is not parenthesized and is pushed down even on MsSqlServer.
+    val bareIsNull = new Predicate("IS_NULL", Array[V2Expression](a))
+    assert(dialect.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+    assert(msSqlServer.compileExpression(bareIsNull).get === "\"a\" IS NULL")
+  }
+
+  test("SPARK-57988: IS [NOT] NULL parenthesizes IN and other non-comparison predicate operands") {
+    val dialect = JdbcDialects.get("jdbc:")
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    val msSqlServer = JdbcDialects.get("jdbc:sqlserver://127.0.0.1/db")
+    val a = FieldReference("a")
+    val b = FieldReference("b")
+    val one = LiteralValue(1, IntegerType)
+    val two = LiteralValue(2, IntegerType)
+
+    // An IN operand must be parenthesized: `"a" IN (1, 2) IS NULL` is invalid SQL (PostgreSQL,
+    // for example, rejects it), and BooleanSimplification produces IsNotNull(In(...)) from
+    // `x IN (...) OR x NOT IN (...)`. MsSqlServer has no boolean type, so IS [NOT] NULL over any
+    // predicate operand is not pushed down there at all.
+    val in = new Predicate("IN", Array[V2Expression](a, one, two))
+    for ((isNullOp, keyword) <- Seq("IS_NULL" -> "IS NULL", "IS_NOT_NULL" -> "IS NOT NULL")) {
+      val expr = new Predicate(isNullOp, Array[V2Expression](in))
+      assert(dialect.compileExpression(expr).get === s"""("a" IN (1, 2)) $keyword""")
+      assert(msSqlServer.compileExpression(expr).isEmpty)
+    }
+
+    // The boolean connectives are parenthesized as well.
+    val eqA = new Predicate("=", Array[V2Expression](a, one))
+    val eqB = new Predicate("=", Array[V2Expression](b, two))
+    val and = new Predicate("AND", Array[V2Expression](eqA, eqB))
+    val or = new Predicate("OR", Array[V2Expression](eqA, eqB))
+    val not = new Predicate("NOT", Array[V2Expression](eqA))
+    assert(dialect.compileExpression(new Predicate("IS_NULL", Array[V2Expression](and))).get ===
+      """(("a" = 1) AND ("b" = 2)) IS NULL""")
+    assert(dialect.compileExpression(new Predicate("IS_NOT_NULL", Array[V2Expression](or))).get ===
+      """(("a" = 1) OR ("b" = 2)) IS NOT NULL""")
+    assert(dialect.compileExpression(new Predicate("IS_NULL", Array[V2Expression](not))).get ===
+      """(NOT ("a" = 1)) IS NULL""")
+    Seq(and, or, not).foreach { p =>
+      val isNull = new Predicate("IS_NULL", Array[V2Expression](p))
+      assert(msSqlServer.compileExpression(isNull).isEmpty)
+    }
+
+    // LIKE-family operators render with a trailing ESCAPE clause and must be delimited too.
+    // LiteralValue for StringType must use UTF8String (Spark's internal string type).
+    for ((op, pattern) <- Seq(
+        "STARTS_WITH" -> "abc%", "ENDS_WITH" -> "%abc", "CONTAINS" -> "%abc%")) {
+      val like = new Predicate(op,
+        Array[V2Expression](a, LiteralValue(UTF8String.fromString("abc"), StringType)))
+      val isNullLike = new Predicate("IS_NULL", Array[V2Expression](like))
+      assert(dialect.compileExpression(isNullLike).get ===
+        raw"""("a" LIKE '$pattern' ESCAPE '\') IS NULL""")
+      assert(msSqlServer.compileExpression(isNullLike).isEmpty)
+    }
+
+    // Arithmetic operands are parenthesized; they are value expressions, not predicates, so
+    // MsSqlServer still pushes them down.
+    val plus = new GeneralScalarExpression("+", Array[V2Expression](a, b))
+    val isNullPlus = new Predicate("IS_NULL", Array[V2Expression](plus))
+    assert(dialect.compileExpression(isNullPlus).get === """("a" + "b") IS NULL""")
+    assert(msSqlServer.compileExpression(isNullPlus).get === """("a" + "b") IS NULL""")
+
+    // Self-delimiting operands are left unwrapped: function calls render as `f(...)` already.
+    val abs = new GeneralScalarExpression("ABS", Array[V2Expression](a))
+    assert(h2.compileExpression(new Predicate("IS_NULL", Array[V2Expression](abs))).get ===
+      """ABS("a") IS NULL""")
+  }
+
+  test("SPARK-57332: escape backslash in LIKE pattern for STARTS_WITH/ENDS_WITH/CONTAINS") {
+    // Default dialect: standard SQL string literals take backslash verbatim, so the LIKE escape
+    // character `\` appears once in the ESCAPE clause and a literal backslash in the value is
+    // doubled once (by escapeSpecialCharsForLikePattern) to be matched literally.
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    def defaultSQL(f: Filter): String = defaultDialect.compileExpression(f.toV2).getOrElse("")
+    // "c" LIKE 'ab\\%' ESCAPE '\'
+    assert(defaultSQL(StringStartsWith("c", "ab\\")) === """"c" LIKE 'ab\\%' ESCAPE '\'""")
+    // "c" LIKE '%\\ab' ESCAPE '\'
+    assert(defaultSQL(StringEndsWith("c", "\\ab")) === """"c" LIKE '%\\ab' ESCAPE '\'""")
+    // "c" LIKE '%a\\b%' ESCAPE '\'
+    assert(defaultSQL(StringContains("c", "a\\b")) === """"c" LIKE '%a\\b%' ESCAPE '\'""")
+
+    // MySQL treats backslash as an escape character inside string literals, so every backslash is
+    // doubled again: the ESCAPE clause uses `\\` and a literal backslash in the value becomes four
+    // backslashes (escapeSpecialCharsForLikePattern doubles it, then
+    // escapeStringLiteralForLikePattern doubles each of those). The wildcard escaping for
+    // `%`/`_` is unchanged from the default.
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    def mySQLSQL(f: Filter): String = mySQLDialect.compileExpression(f.toV2).getOrElse("")
+    // `c` LIKE 'ab\\\\%' ESCAPE '\\'
+    assert(mySQLSQL(StringStartsWith("c", "ab\\")) === """`c` LIKE 'ab\\\\%' ESCAPE '\\'""")
+    // `c` LIKE '%\\\\ab' ESCAPE '\\'
+    assert(mySQLSQL(StringEndsWith("c", "\\ab")) === """`c` LIKE '%\\\\ab' ESCAPE '\\'""")
+    // `c` LIKE '%a\\\\b%' ESCAPE '\\'
+    assert(mySQLSQL(StringContains("c", "a\\b")) === """`c` LIKE '%a\\\\b%' ESCAPE '\\'""")
+    // Wildcards stay escaped: the `\` that escapeSpecialCharsForLikePattern puts before `%`/`_` is
+    // itself doubled for MySQL's string-literal layer, so it parses back to `\%`/`\_` (literal
+    // wildcards) before the LIKE engine, matching the default dialect's semantics.
+    // `c` LIKE 'a\\%b\\_%' ESCAPE '\\'
+    assert(mySQLSQL(StringStartsWith("c", "a%b_")) === """`c` LIKE 'a\\%b\\_%' ESCAPE '\\'""")
+  }
+
+  test("SPARK-57446: escape single quotes in JDBC comment queries") {
+    val defaultDialect = JdbcDialects.get("jdbc:")
+    assert(defaultDialect.getTableCommentQuery("t", "a'b") ===
+      "COMMENT ON TABLE t IS 'a''b'")
+    assert(defaultDialect.getSchemaCommentQuery("s", "a'b") ===
+      """COMMENT ON SCHEMA "s" IS 'a''b'""")
+
+    // MySQL overrides getTableCommentQuery with its own ALTER TABLE syntax.
+    val mySQLDialect = JdbcDialects.get("jdbc:mysql://127.0.0.1/db")
+    assert(mySQLDialect.getTableCommentQuery("t", "a'b") ===
+      "ALTER TABLE t COMMENT = 'a''b'")
   }
 
   test("Dialect unregister") {
@@ -1030,6 +1643,13 @@ class JDBCSuite extends SharedSparkSession {
     assert(mySqlDialect.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT")
   }
 
+  test("MySQL blocks casts to double") {
+    val dialect = MySQLDialect()
+    val cast = new V2Cast(FieldReference("value"), IntegerType, DoubleType)
+
+    assert(dialect.compileExpression(cast).isEmpty)
+  }
+
   test("PostgresDialect type mapping") {
     val Postgres = JdbcDialects.get("jdbc:postgresql://127.0.0.1/db")
     val md = new MetadataBuilder().putLong("scale", 0).putBoolean("isTimestampNTZ", false)
@@ -1039,6 +1659,10 @@ class JDBCSuite extends SharedSparkSession {
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
       Some(ArrayType(CharType(64))))
+    assert(Postgres.getCatalystType(java.sql.Types.CHAR, "char", 1, md) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.CHAR, "bpchar", 5, md) === None)
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_char", 1, md) ==
+      Some(ArrayType(StringType)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -1058,13 +1682,39 @@ class JDBCSuite extends SharedSparkSession {
       0, metadata) == Some(FloatType))
   }
 
+  test("OracleDialect classifies broken synonyms and invalid objects as not selectable") {
+    val dialect = OracleDialect()
+    val notSelectable = Seq(
+      new SQLException("ORA-00980: synonym translation is no longer valid", "42000", 980),
+      new SQLException(
+        "ORA-04044: procedure, function, package, or type is not allowed here", "42000", 4044),
+      new SQLException(
+        "ORA-04063: view \"S.V\" has errors", "72000", 4063))
+    notSelectable.foreach { e =>
+      assert(dialect.isNotSelectableObjectException(e), e.getMessage)
+      assert(!dialect.isObjectNotFoundException(e), e.getMessage)
+    }
+
+    // Missing objects and genuine syntax errors are not classified as not selectable.
+    val tableNotFound = new SQLException("ORA-00942: table or view does not exist", "42000", 942)
+    assert(!dialect.isNotSelectableObjectException(tableNotFound))
+    assert(dialect.isObjectNotFoundException(tableNotFound))
+    val syntaxError = new SQLException("ORA-00900: invalid SQL statement", "42000", 900)
+    assert(!dialect.isNotSelectableObjectException(syntaxError))
+    assert(dialect.isSyntaxErrorBestEffort(syntaxError))
+  }
+
   test("OracleDialect jdbc type mapping") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle")
     val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
-    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    // Bare NUMBER (precision=0) uses DEFAULT_SCALE (18) by default
     assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
-      Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    // FLOAT (scale=-127) also uses DEFAULT_SCALE
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+      Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    // Explicit precision/scale columns are NOT affected (falls through to None)
+    assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 10, null) == None)
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_FLOAT, "BINARY_FLOAT", 0, null) ==
       Some(FloatType))
     assert(oracleDialect.getCatalystType(OracleDialect.BINARY_DOUBLE, "BINARY_DOUBLE", 0, null) ==
@@ -1073,6 +1723,268 @@ class JDBCSuite extends SharedSparkSession {
       Some(TimestampType))
     assert(oracleDialect.getCatalystType(OracleDialect.TIMESTAMP_LTZ, "TIMESTAMP", 0, null) ==
       Some(TimestampType))
+  }
+
+  test("SPARK-57925: Oracle bare NUMBER legacy config restores scale=10") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val metadata = new MetadataBuilder().putString("name", "test_column").putLong("scale", -127)
+    withSQLConf(SQLConf.LEGACY_ORACLE_NUMBER_MAPPING_ENABLED.key -> "true") {
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+      assert(oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "float", 1, metadata) ==
+        Some(DecimalType(DecimalType.MAX_PRECISION, 10)))
+    }
+  }
+
+  test("SPARK-57925: Oracle bare NUMBER boundary - fraction preserved, large int overflows") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    val result = oracleDialect.getCatalystType(java.sql.Types.NUMERIC, "numeric", 0, null)
+    assert(result == Some(DecimalType(DecimalType.MAX_PRECISION, DecimalType.DEFAULT_SCALE)))
+    val p = DecimalType.MAX_PRECISION
+    val newScale = DecimalType.DEFAULT_SCALE // 18
+    val oldScale = 10
+
+    // High-precision fraction: 18 fractional digits (14 significant).
+    // New Decimal(38,18) preserves it; old Decimal(38,10) would truncate to 10 digits.
+    val highPrecFraction = new java.math.BigDecimal("0.000012345678912345")
+    val preserved = Decimal(highPrecFraction, p, newScale)
+    assert(preserved.toBigDecimal.scale == newScale)
+    assert(preserved.toString == "0.000012345678912345")
+
+    // Large integer: 23 digits.
+    // Old Decimal(38,10) fits (28 integer digits);
+    // new Decimal(38,18) overflows (20 integer digits).
+    val largeInt = new java.math.BigDecimal("12345678901234567890123")
+    // Old mapping: fits
+    val legacyDecimal = Decimal(largeInt, p, oldScale)
+    assert(legacyDecimal.toString.startsWith("12345678901234567890123"))
+    // New mapping: overflows
+    val ex = intercept[SparkArithmeticException] {
+      Decimal(largeInt, p, newScale)
+    }
+    assert(ex.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION")
+
+    // Legacy config restores 28 integer digits via type mapping
+    withSQLConf(SQLConf.LEGACY_ORACLE_NUMBER_MAPPING_ENABLED.key -> "true") {
+      val legacyResult = oracleDialect.getCatalystType(
+        java.sql.Types.NUMERIC, "numeric", 0, null)
+      val legacyDt = legacyResult.get.asInstanceOf[DecimalType]
+      assert(legacyDt.precision - legacyDt.scale == 28,
+        "legacy integer range should be 28 digits")
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ wall-clock follows the legacy flag, even wrapped") {
+    val custom = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
+    }
+    val dialects = Seq[JdbcDialect](
+      OracleDialect(),
+      new AggregatedDialect(List(custom, OracleDialect())),
+      new AggregatedDialect(List(OracleDialect(), custom)))
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+      dialects.foreach(d => assert(d.timestampNTZAsWallClock, s"dialect=$d"))
+    }
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      dialects.foreach(d => assert(!d.timestampNTZAsWallClock, s"dialect=$d"))
+    }
+    // Dialects that don't opt in keep the java.sql.Timestamp conversion.
+    assert(!NoopDialect.timestampNTZAsWallClock)
+  }
+
+  test("SPARK-58876: Oracle NTZ mapping and the preferTimestampNTZ read option") {
+    // preferTimestampNTZ reaches the dialect only through the options passed to getSchema, so
+    // resolve a mocked Oracle TIMESTAMP column via getSchema under each (prefer, flag) combination.
+    def resolve(preferTimestampNTZ: Boolean): StructField = {
+      val rsmd = mock(classOf[java.sql.ResultSetMetaData])
+      when(rsmd.getColumnCount).thenReturn(1)
+      when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
+      when(rsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.TIMESTAMP)
+      when(rsmd.getColumnTypeName(anyInt())).thenReturn("TIMESTAMP")
+      when(rsmd.getPrecision(anyInt())).thenReturn(0)
+      when(rsmd.getScale(anyInt())).thenReturn(0)
+      when(rsmd.isSigned(anyInt())).thenReturn(false)
+      when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
+      val rs = mock(classOf[ResultSet])
+      when(rs.getMetaData).thenReturn(rsmd)
+      val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+        Map("preferTimestampNTZ" -> preferTimestampNTZ.toString))
+      JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(), options).fields.head
+    }
+
+    // Non-legacy always maps to NTZ regardless of preferTimestampNTZ; the legacy flag defers to the
+    // shared mapping, which honors preferTimestampNTZ.
+    for {
+      legacy <- Seq(true, false)
+      prefer <- Seq(true, false)
+    } {
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
+        val field = resolve(prefer)
+        val expectedType = if (legacy && !prefer) TimestampType else TimestampNTZType
+        val hint = s"legacy=$legacy prefer=$prefer"
+        assert(field.dataType === expectedType, hint)
+      }
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ reads wall-clock via frozen options after a flag flip") {
+    val schema = new StructType().add("t", TimestampNTZType, nullable = true)
+    val options = withSQLConf(
+        SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+      new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
+    }
+    val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+      val rs = mock(classOf[ResultSet])
+      when(rs.next()).thenReturn(true, false)
+      when(rs.getObject(1, classOf[java.time.LocalDateTime])).thenReturn(ldt)
+      val rows = JdbcUtils.resultSetToSparkInternalRows(
+        rs, OracleDialect(), schema, new InputMetrics, options = Some(options)).toArray
+      assert(rows.length === 1)
+      assert(rows.head.getLong(0) === DateTimeUtils.localDateTimeToMicros(ldt))
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ writes pick the setter from the snapshotted options") {
+    val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+    val schema = new StructType().add("t", TimestampNTZType, nullable = true)
+    for (legacy <- Seq(true, false)) {
+      val options = withSQLConf(
+          SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
+        new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
+      }
+      val stmt = mock(classOf[java.sql.PreparedStatement])
+      val conn = mock(classOf[Connection])
+      when(conn.prepareStatement(anyString())).thenReturn(stmt)
+      val dialect = new JdbcDialect {
+        override def canHandle(url: String): Boolean = false
+        override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+      }
+      TaskContext.setTaskContext(TaskContext.empty())
+      try {
+        JdbcUtils.savePartition("t", Iterator(Row(ldt)), schema, "INSERT INTO t VALUES (?)",
+          batchSize = 1, dialect, Connection.TRANSACTION_NONE, options)
+      } finally {
+        TaskContext.unset()
+      }
+      if (legacy) {
+        verify(stmt).setTimestamp(1, dialect.convertTimestampNTZToJavaTimestamp(ldt))
+        verify(stmt, never()).setObject(anyInt(), any())
+      } else {
+        verify(stmt).setObject(1, ldt)
+        verify(stmt, never()).setTimestamp(anyInt(), any())
+      }
+    }
+  }
+
+  test("SPARK-59273: read CHAR/VARCHAR values and arrays") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val charArray = mock(classOf[java.sql.Array])
+      when(charArray.getArray).thenReturn(Array[AnyRef]("c", "dd"))
+      val varcharArray = mock(classOf[java.sql.Array])
+      when(varcharArray.getArray).thenReturn(Array[AnyRef]("e", "ff"))
+      val rs = mock(classOf[ResultSet])
+      when(rs.next()).thenReturn(true, false)
+      when(rs.getString(1)).thenReturn("a  ")
+      when(rs.getString(2)).thenReturn("bb")
+      when(rs.getArray(3)).thenReturn(charArray)
+      when(rs.getArray(4)).thenReturn(varcharArray)
+      val schema = StructType(Seq(
+        StructField("c", CharType(3)),
+        StructField("v", VarcharType(3)),
+        StructField("ca", ArrayType(CharType(2))),
+        StructField("va", ArrayType(VarcharType(2)))))
+
+      val rows = JdbcUtils.resultSetToSparkInternalRows(
+        rs, NoopDialect, schema, new InputMetrics, options = None).toArray
+      assert(rows.length === 1)
+      assert(rows.head.getUTF8String(0).toString === "a  ")
+      assert(rows.head.getUTF8String(1).toString === "bb")
+      assert(rows.head.getArray(2).toObjectArray(CharType(2)).map(_.toString).toSeq ===
+        Seq("c", "dd"))
+      assert(rows.head.getArray(3).toObjectArray(VarcharType(2)).map(_.toString).toSeq ===
+        Seq("e", "ff"))
+    }
+  }
+
+  test("SPARK-59273: first-class modes take precedence in JDBC schema inference") {
+    Seq(
+      SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key,
+      SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key).foreach { firstClassConfig =>
+      withSQLConf(
+          firstClassConfig -> "true",
+          SQLConf.LEGACY_CHAR_VARCHAR_AS_STRING.key -> "true") {
+        val df = spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", "TEST.STRTYPES")
+          .load()
+
+        assert(df.schema("B").dataType === VarcharType(20))
+        assert(df.schema("D").dataType === CharType(20))
+        checkAnswer(df.select("B", "D"), Row("Sensitive", "Twenty-byte CHAR    "))
+      }
+    }
+  }
+
+  test("SPARK-59273: write CHAR/VARCHAR values") {
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      val tableName = "char_varchar_write"
+      sql("SELECT CAST('a' AS CHAR(3)) AS c, CAST('bb' AS VARCHAR(3)) AS v")
+        .write.format("jdbc")
+        .mode("overwrite")
+        .option("url", urlWithUserAndPass)
+        .option("dbtable", tableName)
+        .save()
+
+      val rs = conn.createStatement().executeQuery(s"""SELECT "c", "v" FROM $tableName""")
+      assert(rs.next())
+      assert(rs.getString(1) === "a  ")
+      assert(rs.getString(2) === "bb")
+      rs.close()
+    }
+  }
+
+  test("SPARK-58876: Oracle compileValue renders a LocalDateTime as a JDBC timestamp literal") {
+    // Filters on an NTZ-mapped Oracle column push down a LocalDateTime; it must become a valid
+    // Oracle literal rather than LocalDateTime.toString.
+    val oracleDialect = JdbcDialects.get("jdbc:oracle")
+    assert(oracleDialect.compileValue(LocalDateTime.of(2018, 7, 6, 6, 0, 0)) ===
+      "{ts '2018-07-06 06:00:00.0'}")
+  }
+
+  test("SPARK-58876: Oracle TIMESTAMP(7-9) resolves to nanosecond NTZ under the nanos preview") {
+    // scale/preferTimestampNanos reach the dialect only as metadata getSchema stamps, so resolve a
+    // mocked Oracle TIMESTAMP column via getSchema for each (scale, option, preview) combination.
+    def resolve(scale: Int, preferNanos: Boolean, nanosEnabled: Boolean): StructField = {
+      val rsmd = mock(classOf[java.sql.ResultSetMetaData])
+      when(rsmd.getColumnCount).thenReturn(1)
+      when(rsmd.getColumnLabel(anyInt())).thenReturn("T")
+      when(rsmd.getColumnType(anyInt())).thenReturn(java.sql.Types.TIMESTAMP)
+      when(rsmd.getColumnTypeName(anyInt())).thenReturn("TIMESTAMP")
+      when(rsmd.getPrecision(anyInt())).thenReturn(0)
+      when(rsmd.getScale(anyInt())).thenReturn(scale)
+      when(rsmd.isSigned(anyInt())).thenReturn(false)
+      when(rsmd.isNullable(anyInt())).thenReturn(java.sql.ResultSetMetaData.columnNullable)
+      val rs = mock(classOf[ResultSet])
+      when(rs.getMetaData).thenReturn(rsmd)
+      withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> nanosEnabled.toString) {
+        val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+          Map("preferTimestampNanos" -> preferNanos.toString))
+        JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(), options).fields.head
+      }
+    }
+    // Sub-microsecond scales (7-9) widen to the nanosecond NTZ type only when both the read option
+    // and the preview are on; every coarser scale and either flag off stays microsecond NTZ.
+    (TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION).foreach { s =>
+      val f = resolve(s, preferNanos = true, nanosEnabled = true)
+      assert(f.dataType === TimestampNTZNanosType(s), s"scale=$s")
+    }
+    Seq(
+      resolve(6, preferNanos = true, nanosEnabled = true),
+      resolve(9, preferNanos = false, nanosEnabled = true),
+      resolve(9, preferNanos = true, nanosEnabled = false)).foreach { f =>
+      assert(f.dataType === TimestampNTZType)
+    }
   }
 
   test("SPARK-42469: OracleDialect Limit query test") {
@@ -1086,6 +1998,31 @@ class JDBCSuite extends SharedSparkSession {
         .build()
         .trim() ==
       "SELECT tab.* FROM (SELECT a,b FROM test    ) tab WHERE rownum <= 123")
+  }
+
+  test("SPARK-56504: JdbcSQLQueryBuilder preserves table sample in pushed join sides") {
+    // JDBC url is a required option but is not used in this test.
+    val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
+    val dialect = JdbcDialects.get("jdbc:h2://host:port")
+    val left = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("a"))
+      .withTableSampleClause("TABLESAMPLE SYSTEM (50)")
+    val right = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withColumns(Array("b"))
+      .withTableSampleClause("TABLESAMPLE BERNOULLI (25)")
+
+    val query = dialect
+      .getJdbcSQLQueryBuilder(options)
+      .withJoin(left, right, "L", "R", Array("a", "b"), "INNER JOIN", "L.a = R.b")
+      .build()
+      .replaceAll("\\s+", " ")
+
+    assert(query.contains("SELECT a FROM test TABLESAMPLE SYSTEM (50)"))
+    assert(query.contains("SELECT b FROM test TABLESAMPLE BERNOULLI (25)"))
+    assert(query.contains("INNER JOIN"))
+    assert(query.contains("ON L.a = R.b"))
   }
 
   test("MsSqlServerDialect jdbc type mapping") {
@@ -1131,6 +2068,15 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
+  test("MsSqlServerDialect maps native JSON JDBC type to StringType") {
+    val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
+    val metadata = new MetadataBuilder()
+    assert(msSqlServerDialect.getCatalystType(
+      MsSqlServerDialect.JSON, "json", 0, metadata).get == StringType)
+    assert(msSqlServerDialect.getCatalystType(
+      java.sql.Types.OTHER, "json", 0, metadata).isEmpty)
+  }
+
   test("SPARK-42469: MsSqlServerDialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:h2://host:port", "dbtable" -> "test"))
@@ -1144,8 +2090,7 @@ class JDBCSuite extends SharedSparkSession {
       "SELECT TOP (123) a,b FROM test")
   }
 
-  // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-  ignore("SPARK-42534: DB2Dialect Limit query test") {
+  test("SPARK-42534: DB2Dialect Limit query test") {
     // JDBC url is a required option but is not used in this test.
     val options = new JDBCOptions(Map("url" -> "jdbc:db2://host:port", "dbtable" -> "test"))
     assert(
@@ -1412,6 +2357,128 @@ class JDBCSuite extends SharedSparkSession {
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
+  test("SPARK-60479: dialects compile CHAR_READ_SIDE_PADDING") {
+    val pad = new GeneralScalarExpression(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val eq = new Predicate("=",
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val rpad = new GeneralScalarExpression("RPAD",
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val rpadEq = new Predicate("=",
+      Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+
+    Seq(
+      "jdbc:h2:mem:testdb0",
+      "jdbc:postgresql://127.0.0.1/db",
+      "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:oracle://127.0.0.1/db").foreach { url =>
+      assert(
+        JdbcDialects.get(url).compileExpression(eq).get === """("flag") = 'Y    '""", url)
+    }
+    Seq(
+      "jdbc:mysql://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db",
+      "jdbc:derby:memory:db").foreach { url =>
+      assert(JdbcDialects.get(url).compileExpression(eq).isEmpty, url)
+    }
+
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    assert(h2.compileExpression(rpadEq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
+
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracle.compileExpression(rpadEq).isEmpty)
+
+    val y = LiteralValue(UTF8String.fromString("Y    "), StringType)
+    val n = LiteralValue(UTF8String.fromString("N    "), StringType)
+    val inSmall = new Predicate("IN", Array[V2Expression](pad, y, n))
+    assert(oracle.compileExpression(inSmall).get === """"flag" IN ('Y    ', 'N    ')""")
+    val notIn = new Predicate("NOT", Array[V2Expression](inSmall))
+    assert(oracle.compileExpression(notIn).get === """NOT ("flag" IN ('Y    ', 'N    '))""")
+
+    val many = (1 to 1001).map { i =>
+      LiteralValue(UTF8String.fromString(f"$i%05d"), StringType)
+    }
+    val inLarge = new Predicate("IN", (pad +: many).toArray[V2Expression])
+    val largeSql = oracle.compileExpression(inLarge).get
+    assert(largeSql.startsWith("(") && largeSql.endsWith(")"))
+    assert(largeSql.contains(" OR "))
+    assert(" IN \\(".r.findAllMatchIn(largeSql).length === 2)
+    many.foreach { lit =>
+      assert(largeSql.contains(lit.value.toString))
+    }
+
+    val leftoverEq = new Predicate("=",
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val isNull = new Predicate("IS_NULL", Array[V2Expression](FieldReference("flag")))
+    val caseWhen = new GeneralScalarExpression("CASE_WHEN",
+      Array[V2Expression](leftoverEq, LiteralValue(1, IntegerType)))
+    val agg = new Aggregation(Array(new Sum(caseWhen, false)), Array.empty)
+    val sort = SortValue(leftoverEq, SortDirection.ASCENDING, NullOrdering.NULLS_LAST)
+    val options = new JDBCOptions("jdbc:derby:memory:db", "t", Map.empty[String, String])
+    val builder = JDBCScanBuilder(spark, new StructType().add("flag", StringType), options)
+    val logAppender = new LogAppender("compile V2")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      val leftover = builder.pushPredicates(Array(leftoverEq, isNull))
+      assert(leftover.exists(_.name() == "="))
+      assert(!leftover.exists(_.name() == "IS_NULL"))
+      assert(builder.pushedPredicates().exists(_.name() == "IS_NULL"))
+      assert(!builder.pushAggregation(agg))
+      assert(!builder.pushTopN(Array(sort), 1))
+    }
+    assert(!logAppender.loggingEvents.exists { ev =>
+      ev.getMessage.getFormattedMessage.contains("Error occurs while compiling V2 expression")
+    })
+  }
+
+  test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
+    val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    val dateRef = FieldReference("d")
+
+    // LiteralValue for StringType must use UTF8String (Spark's internal string type)
+    // to match what V2ExpressionBuilder produces in the real pushdown path.
+    def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
+      Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
+
+    val monthSql = oracleDialect.compileExpression(truncExpr("MONTH")).get
+    assert(monthSql.contains("'MM'"),
+      s"trunc(d, 'MONTH') should produce Oracle 'MM', got: $monthSql")
+    assert(!monthSql.contains("'IW'"),
+      s"trunc(d, 'MONTH') should NOT produce 'IW', got: $monthSql")
+
+    val weekSql = oracleDialect.compileExpression(truncExpr("WEEK")).get
+    assert(weekSql.contains("'IW'"),
+      s"trunc(d, 'WEEK') should produce Oracle 'IW', got: $weekSql")
+
+    val yearSql = oracleDialect.compileExpression(truncExpr("YEAR")).get
+    assert(yearSql.contains("'YYYY'"),
+      s"trunc(d, 'YEAR') should produce Oracle 'YYYY', got: $yearSql")
+
+    val quarterSql = oracleDialect.compileExpression(truncExpr("QUARTER")).get
+    assert(quarterSql.contains("'Q'"),
+      s"trunc(d, 'QUARTER') should produce Oracle 'Q', got: $quarterSql")
+
+    // Case-insensitive: lowercase formats must also map correctly
+    val weekLowerSql = oracleDialect.compileExpression(truncExpr("week")).get
+    assert(weekLowerSql.contains("'IW'"),
+      s"trunc(d, 'week') (lowercase) should produce Oracle 'IW', got: $weekLowerSql")
+
+    // Unmapped formats should NOT be pushed down (compileExpression returns None)
+    assert(oracleDialect.compileExpression(truncExpr("DAY")).isEmpty,
+      "Unmapped format 'DAY' should not be pushed down (compileExpression should return None)")
+
+    // Alias formats (MM, MON, YYYY, YY) should also map correctly
+    val mmSql = oracleDialect.compileExpression(truncExpr("MM")).get
+    assert(mmSql.contains("'MM'"), s"trunc(d, 'MM') should produce Oracle 'MM', got: $mmSql")
+    val yySql = oracleDialect.compileExpression(truncExpr("YY")).get
+    assert(yySql.contains("'YYYY'"), s"trunc(d, 'YY') should produce Oracle 'YYYY', got: $yySql")
+  }
+
   private def assertEmptyQuery(sqlString: String): Unit = {
     assert(sql(sqlString).collect().isEmpty)
   }
@@ -1638,7 +2705,7 @@ class JDBCSuite extends SharedSparkSession {
     modifiedParameters += ("customKey" -> "a-value")
     modifiedParameters += ("dbTable" -> "t1")
     testJdbcOptions(new JDBCOptions(modifiedParameters))
-    assert ((modifiedParameters -- parameters.keys).size == 0)
+    assert ((modifiedParameters -- parameters.keys).isEmpty)
   }
 
   test("SPARK-19318: jdbc data source options should be treated case-insensitive.") {
@@ -1921,6 +2988,52 @@ class JDBCSuite extends SharedSparkSession {
     checkAnswer(df2, expectedResult)
   }
 
+  test("support TimestampNTZType partition column end-to-end") {
+    val tableName = "timestamp_ntz_partition_table"
+    // Write a genuine TimestampNTZType column through Spark so it round-trips as a zoneless
+    // wall-clock value (a raw JDBC TIMESTAMP column would pick up a JVM-time-zone shift on read).
+    val df = Seq(
+      "2018-07-06T05:50:00",
+      "2018-07-06T08:10:08",
+      "2018-07-08T13:32:01",
+      "2018-07-12T09:51:15"
+    ).map(LocalDateTime.parse).toDF("t")
+    df.write.format("jdbc")
+      .mode("overwrite")
+      .option("url", urlWithUserAndPass)
+      .option("dbtable", tableName)
+      .save()
+
+    // Bounds are zoneless, so both the generated predicates and the results must be identical
+    // regardless of the JVM default time zone.
+    DateTimeTestUtils.outstandingZoneIds.foreach { zoneId =>
+      DateTimeTestUtils.withDefaultTimeZone(zoneId) {
+        val readDf = spark.read.format("jdbc")
+          .option("url", urlWithUserAndPass)
+          .option("dbtable", tableName)
+          .option("preferTimestampNTZ", true)
+          .option("partitionColumn", "t")
+          .option("lowerBound", "2018-07-04 03:30:00")
+          .option("upperBound", "2018-07-27 14:11:05")
+          .option("numPartitions", 2)
+          .load()
+
+        assert(readDf.schema("t").dataType === TimestampNTZType)
+
+        readDf.logicalPlan match {
+          case LogicalRelationWithTable(JDBCRelation(_, parts, _, _), _) =>
+            val whereClauses = parts.map(_.asInstanceOf[JDBCPartition].whereClause).toSet
+            assert(whereClauses === Set(
+              """"t" < '2018-07-15 20:50:32.5' or "t" is null""",
+              """"t" >= '2018-07-15 20:50:32.5'"""),
+              s"NTZ partition predicates should be time-zone independent, but differed for " +
+                s"zone=$zoneId")
+        }
+        checkAnswer(readDf, df)
+      }
+    }
+  }
+
   test("throws an exception for unsupported partition column types") {
     val errMsg = intercept[AnalysisException] {
       spark.read.format("jdbc")
@@ -2008,7 +3121,8 @@ class JDBCSuite extends SharedSparkSession {
         spark.read.format("jdbc").options(opts).load()
       },
       condition = "FAILED_JDBC.CONNECTION",
-      parameters = Map("url" -> url)
+      // getRedactUrl() keeps only the "jdbc:<subprotocol>:" prefix and redacts the rest.
+      parameters = Map("url" -> s"jdbc:mysql:${Utils.REDACTION_REPLACEMENT_TEXT}")
     )
   }
 
@@ -2126,7 +3240,8 @@ class JDBCSuite extends SharedSparkSession {
     when(mockDialect.getCatalystType(anyInt(), anyString(), anyInt(), any[MetadataBuilder]))
       .thenReturn(None)
 
-    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect)
+    val options = new JDBCOptions(url, "t", Map.empty[String, String])
+    val schema = JdbcUtils.getSchema(mockConn, mockRs, mockDialect, options)
     val fields = schema.fields
     assert(fields.length === 1)
     assert(fields(0).dataType === StringType)
@@ -2246,6 +3361,13 @@ class JDBCSuite extends SharedSparkSession {
       .getJDBCType(BinaryType).map(_.databaseTypeDefinition).get == "BINARY")
   }
 
+  test("SPARK-58193: DatabricksDialect syntax error detection") {
+    val dialect = DatabricksDialect()
+    assert(dialect.isSyntaxErrorBestEffort(
+      new SQLException("[parse_syntax_error] Syntax error at or near 'SQL'", "07000")))
+    assert(!dialect.isSyntaxErrorBestEffort(new SQLException("Connection reset", "08001")))
+  }
+
   test("SPARK-45425: Mapped TINYINT to ShortType for MsSqlServerDialect") {
     val msSqlServerDialect = JdbcDialects.get("jdbc:sqlserver")
     val metadata = new MetadataBuilder().putLong("scale", 1)
@@ -2301,7 +3423,8 @@ class JDBCSuite extends SharedSparkSession {
           "hint" -> hint))
       }.getMessage
       assert(e.contains(s"Invalid value `$hint` for option `hint`." +
-        s" It should start with `/*+ ` and end with ` */`."))
+        s" It should start with `/*+ ` and end with ` */`," +
+        s" for example `/*+ INDEX(t1 id_idx) */`."))
     }
 
     // dialect supported check
@@ -2318,9 +3441,7 @@ class JDBCSuite extends SharedSparkSession {
     }
     // not supported
     Seq(
-      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-      // "jdbc:db2://host:port",
-      "jdbc:derby:memory", "jdbc:h2://host:port",
+      "jdbc:db2://host:port", "jdbc:derby:memory", "jdbc:h2://host:port",
       "jdbc:sqlserver://host:port", "jdbc:postgresql://host:5432/postgres",
       "jdbc:snowflake://host:443?account=test", "jdbc:teradata://host:port").foreach { url =>
       val options = new JDBCOptions(baseParameters + ("url" -> url))
@@ -2341,8 +3462,7 @@ class JDBCSuite extends SharedSparkSession {
       "jdbc:mysql",
       "jdbc:postgresql",
       "jdbc:sqlserver",
-      // TODO(SPARK-55707): Re-enable DB2 JDBC Driver tests
-      // "jdbc:db2",
+      "jdbc:db2",
       "jdbc:h2",
       "jdbc:teradata",
       "jdbc:databricks"
@@ -2361,7 +3481,8 @@ class JDBCSuite extends SharedSparkSession {
           }
         },
         condition = "FAILED_JDBC.CONNECTION",
-        parameters = Map("url" -> url)
+        // getRedactUrl() keeps only the "jdbc:<subprotocol>:" prefix and redacts the rest.
+        parameters = Map("url" -> s"$connectionUrl:${Utils.REDACTION_REPLACEMENT_TEXT}")
       )
     }
   }

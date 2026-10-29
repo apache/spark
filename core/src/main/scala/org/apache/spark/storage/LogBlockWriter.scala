@@ -20,6 +20,7 @@ package org.apache.spark.storage
 import java.io.BufferedOutputStream
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.file.Files
 
 import org.apache.commons.io.output.CountingOutputStream
 
@@ -61,7 +62,7 @@ private[spark] class LogBlockWriter(
   private def initialize(): Unit = {
     try {
       val dir = new File(Utils.getLocalDir(sparkConf))
-      tmpFile = File.createTempFile(s"spark_log_$logBlockType", "", dir)
+      tmpFile = Files.createTempFile(dir.toPath, s"spark_log_$logBlockType", "").toFile
       val fos = new FileOutputStream(tmpFile, false)
       val bos = new BufferedOutputStream(fos, bufferSize)
       cos = new CountingOutputStream(bos)

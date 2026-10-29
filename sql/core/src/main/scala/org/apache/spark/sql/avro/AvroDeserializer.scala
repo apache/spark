@@ -25,18 +25,19 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.avro.{LogicalTypes, Schema, SchemaBuilder}
 import org.apache.avro.Conversions.DecimalConversion
-import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, TimestampMicros, TimestampMillis}
+import org.apache.avro.LogicalTypes.{LocalTimestampMicros, LocalTimestampMillis, LocalTimestampNanos, TimestampMicros, TimestampMillis, TimestampNanos}
 import org.apache.avro.Schema.Type._
 import org.apache.avro.generic._
 import org.apache.avro.util.Utf8
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.avro.AvroUtils.{nonNullUnionBranches, toFieldStr, AvroMatchedField}
 import org.apache.spark.sql.catalyst.{InternalRow, NoopFilters, StructFilters}
 import org.apache.spark.sql.catalyst.expressions.{SpecificInternalRow, UnsafeArrayData}
-import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, DateTimeUtils, GenericArrayData}
+import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CharVarcharUtils, DateTimeUtils, GenericArrayData}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_DAY
 import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
-import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.DataSourceUtils
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.types._
@@ -44,6 +45,21 @@ import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * A deserializer to deserialize data in avro format to data in catalyst format.
+ *
+ * from_avro assigns CHAR/VARCHAR STRING values (pad, then trim-and-EXCEED_LIMIT_LENGTH).
+ * File scans leave that to ApplyCharTypePadding. ENUM symbols and to_avro encoding are
+ * unchanged. CHAR/VARCHAR map keys are length-checked without rewrite whenever
+ * standardSemantics is on (from_avro and scans), matching JSON/XML object names.
+ *
+ * @param dataSchema The schema `rootCatalystType` was projected from, for a read that prunes
+ *                   columns. A positional field match pairs a Catalyst field with the Avro field
+ *                   at the same position, and that position is the one in the full schema rather
+ *                   than in the projection: without this, reading only the third column would take
+ *                   the first Avro field. `None` when the Catalyst type is not a projection;
+ *                   unused when field matching is by name.
+ * @param applyCharVarcharAssignment When true (from_avro), assign CHAR/VARCHAR STRING values.
+ * @param charVarcharStandardSemanticsOverride Analysis-time standardSemantics for from_avro;
+ *                                             `None` reads the live session conf (file scans).
  */
 private[sql] class AvroDeserializer(
     rootAvroType: Schema,
@@ -53,7 +69,10 @@ private[sql] class AvroDeserializer(
     filters: StructFilters,
     useStableIdForUnionType: Boolean,
     stableIdPrefixForUnionType: String,
-    recursiveFieldMaxDepth: Int) {
+    recursiveFieldMaxDepth: Int,
+    dataSchema: Option[StructType],
+    applyCharVarcharAssignment: Boolean = false,
+    charVarcharStandardSemanticsOverride: Option[Boolean] = None) {
 
   def this(
       rootAvroType: Schema,
@@ -70,7 +89,31 @@ private[sql] class AvroDeserializer(
       new NoopFilters,
       useStableIdForUnionType,
       stableIdPrefixForUnionType,
-      recursiveFieldMaxDepth)
+      recursiveFieldMaxDepth,
+      dataSchema = None)
+  }
+
+  def this(
+      rootAvroType: Schema,
+      rootCatalystType: DataType,
+      datetimeRebaseMode: String,
+      useStableIdForUnionType: Boolean,
+      stableIdPrefixForUnionType: String,
+      recursiveFieldMaxDepth: Int,
+      applyCharVarcharAssignment: Boolean,
+      charVarcharStandardSemanticsOverride: Option[Boolean]) = {
+    this(
+      rootAvroType,
+      rootCatalystType,
+      positionalFieldMatch = false,
+      RebaseSpec(LegacyBehaviorPolicy.withName(datetimeRebaseMode)),
+      new NoopFilters,
+      useStableIdForUnionType,
+      stableIdPrefixForUnionType,
+      recursiveFieldMaxDepth,
+      dataSchema = None,
+      applyCharVarcharAssignment,
+      charVarcharStandardSemanticsOverride)
   }
 
   private lazy val decimalConversions = new DecimalConversion()
@@ -80,6 +123,10 @@ private[sql] class AvroDeserializer(
 
   private val timestampRebaseFunc = DataSourceUtils.createTimestampRebaseFuncInRead(
     datetimeRebaseSpec, "Avro")
+
+  // Lazy so converter setup cannot observe a default false if this field moves (JacksonParser).
+  private lazy val charVarcharStandardSemantics =
+    charVarcharStandardSemanticsOverride.getOrElse(SQLConf.get.charVarcharStandardSemantics)
 
   private val converter: Any => Option[Any] = try {
     rootCatalystType match {
@@ -91,7 +138,8 @@ private[sql] class AvroDeserializer(
         val resultRow = new SpecificInternalRow(st.map(_.dataType))
         val fieldUpdater = new RowUpdater(resultRow)
         val applyFilters = filters.skipRow(resultRow, _)
-        val writer = getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters)
+        val writer =
+          getRecordWriter(rootAvroType, st, Nil, Nil, applyFilters, positionsInDataSchema(st))
         (data: Any) => {
           val record = data.asInstanceOf[GenericRecord]
           val skipRow = writer(fieldUpdater, record)
@@ -204,11 +252,35 @@ private[sql] class AvroDeserializer(
       }
 
       case (LONG, _: TimeType) => avroType.getLogicalType match {
+        // The time-micros logical type stores microseconds-since-midnight, while TimeType
+        // is represented internally as nanoseconds-since-midnight, so convert micros to nanos.
         case _: LogicalTypes.TimeMicros => (updater, ordinal, value) =>
           val micros = value.asInstanceOf[Long]
-          updater.setLong(ordinal, micros)
+          updater.setLong(ordinal, DateTimeUtils.microsToNanos(micros))
         case other => throw new IncompatibleSchemaException(errorPrefix +
           s"Avro logical type $other cannot be converted to SQL type ${TimeType().sql}.")
+      }
+
+      case (LONG, t: TimestampLTZNanosType) => avroType.getLogicalType match {
+        // The timestamp-nanos logical type stores epoch-nanoseconds (Long), while the value is
+        // represented internally as (epochMicros, nanosWithinMicro). Floor semantics keep
+        // nanosWithinMicro in [0, 999] for pre-epoch values. Nanos timestamps are always proleptic
+        // Gregorian, so they are exempt from datetime rebasing.
+        case _: TimestampNanos => (updater, ordinal, value) =>
+          updater.set(ordinal,
+            DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type " +
+          s"${TimestampLTZNanosType().sql}.")
+      }
+
+      case (LONG, t: TimestampNTZNanosType) => avroType.getLogicalType match {
+        case _: LocalTimestampNanos => (updater, ordinal, value) =>
+          updater.set(ordinal,
+            DateTimeUtils.epochNanosToTimestampNanos(value.asInstanceOf[Long], t.precision))
+        case other => throw new IncompatibleSchemaException(errorPrefix +
+          s"Avro logical type $other cannot be converted to SQL type " +
+          s"${TimestampNTZNanosType().sql}.")
       }
 
       // Before we upgrade Avro to 1.8 for logical type support, spark-avro converts Long to Date.
@@ -225,7 +297,7 @@ private[sql] class AvroDeserializer(
       case (DOUBLE, DoubleType) => (updater, ordinal, value) =>
         updater.setDouble(ordinal, value.asInstanceOf[Double])
 
-      case (STRING, StringType) => (updater, ordinal, value) =>
+      case (STRING, st: StringType) => (updater, ordinal, value) =>
         val str = value match {
           case s: String => UTF8String.fromString(s)
           case s: Utf8 =>
@@ -233,9 +305,16 @@ private[sql] class AvroDeserializer(
             System.arraycopy(s.getBytes, 0, bytes, 0, s.getByteLength)
             UTF8String.fromBytes(bytes)
         }
-        updater.set(ordinal, str)
+        // File scans leave CHAR padding to ApplyCharTypePadding. from_avro assigns STRING
+        // values only; ENUM symbols stay as-is so a padded CHAR cannot invent a symbol.
+        val assigned = if (applyCharVarcharAssignment) {
+          CharVarcharUtils.applyTextParseSemantics(str, st)
+        } else {
+          str
+        }
+        updater.set(ordinal, assigned)
 
-      case (ENUM, StringType) => (updater, ordinal, value) =>
+      case (ENUM, _: StringType) => (updater, ordinal, value) =>
         updater.set(ordinal, UTF8String.fromString(value.toString))
 
       case (FIXED, BinaryType) => (updater, ordinal, value) =>
@@ -251,7 +330,8 @@ private[sql] class AvroDeserializer(
             bytes
           case b: Array[Byte] => b
           case other =>
-            throw new RuntimeException(errorPrefix + s"$other is not a valid avro binary.")
+            throw new IncompatibleSchemaException(
+              errorPrefix + s"$other is not a valid Avro binary.")
         }
         updater.set(ordinal, bytes)
 
@@ -283,8 +363,8 @@ private[sql] class AvroDeserializer(
       case (RECORD, st: StructType) =>
         // Avro datasource doesn't accept filters with nested attributes. See SPARK-32328.
         // We can always return `false` from `applyFilters` for nested records.
-        val writeRecord =
-          getRecordWriter(avroType, st, avroPath, catalystPath, applyFilters = _ => false)
+        val writeRecord = getRecordWriter(
+          avroType, st, avroPath, catalystPath, applyFilters = _ => false, Array.empty)
         (updater, ordinal, value) =>
           val row = new SpecificInternalRow(st)
           writeRecord(new RowUpdater(row), value.asInstanceOf[GenericRecord])
@@ -305,8 +385,9 @@ private[sql] class AvroDeserializer(
             val element = iter.next()
             if (element == null) {
               if (!containsNull) {
-                throw new RuntimeException(
-                  s"Array value at path ${toFieldStr(avroElementPath)} is not allowed to be null")
+                throw new SparkRuntimeException(
+                  errorClass = "AVRO_CANNOT_READ_NULL_FIELD",
+                  messageParameters = Map("name" -> toFieldStr(avroElementPath)))
               } else {
                 elementUpdater.setNullAt(i)
               }
@@ -318,11 +399,14 @@ private[sql] class AvroDeserializer(
 
           updater.set(ordinal, result)
 
-      case (MAP, MapType(keyType, valueType, valueContainsNull)) if keyType == StringType =>
+      case (MAP, MapType(keyType: StringType, valueType, valueContainsNull)) =>
+        // Decode keys as unbounded STRING so CHAR/VARCHAR assignment never rewrites them.
+        // Identity length-check matches JSON/XML map keys (no pad/trim).
         val keyWriter = newWriter(SchemaBuilder.builder().stringType(), StringType,
           avroPath :+ "key", catalystPath :+ "key")
         val valueWriter = newWriter(avroType.getValueType, valueType,
           avroPath :+ "value", catalystPath :+ "value")
+        val mapKeyChecker = makeAvroMapKeyChecker(keyType)
         (updater, ordinal, value) =>
           val map = value.asInstanceOf[java.util.Map[AnyRef, AnyRef]]
           val keyArray = createArrayData(keyType, map.size())
@@ -335,10 +419,12 @@ private[sql] class AvroDeserializer(
             val entry = iter.next()
             assert(entry.getKey != null)
             keyWriter(keyUpdater, i, entry.getKey)
+            mapKeyChecker.foreach(_(keyArray.getUTF8String(i)))
             if (entry.getValue == null) {
               if (!valueContainsNull) {
-                throw new RuntimeException(
-                  s"Map value at path ${toFieldStr(avroPath :+ "value")} is not allowed to be null")
+                throw new SparkRuntimeException(
+                  errorClass = "AVRO_CANNOT_READ_NULL_FIELD",
+                  messageParameters = Map("name" -> toFieldStr(avroPath :+ "value")))
               } else {
                 valueUpdater.setNullAt(i)
               }
@@ -424,15 +510,44 @@ private[sql] class AvroDeserializer(
     }
   }
 
+  /**
+   * The position of each `projection` field in `dataSchema`, which is what a positional field match
+   * resolves against. Empty when there is no data schema to resolve against, or when field matching
+   * is by name and the positions are unused.
+   *
+   * This takes a data schema position for an Avro field position, which `recursiveFieldMaxDepth`
+   * can break: `SchemaConverters` drops a field it will not recurse into, so the data schema is a
+   * gapped view of the Avro schema and every field after the gap resolves one position early.
+   * Positional matching is already wrong for such a schema without this method, because the fields
+   * after the gap shift by one whatever the projection is.
+   */
+  private def positionsInDataSchema(projection: StructType): Array[Int] = dataSchema match {
+    case Some(schema) if positionalFieldMatch =>
+      projection.map(field => schema.fieldIndex(field.name)).toArray
+    case _ => Array.empty
+  }
+
+  /**
+   * Creates a writer that reads a record's fields into `catalystType`'s fields.
+   *
+   * @param dataSchemaPositions The positions a positional field match resolves `catalystType`'s
+   *                            fields against, empty to use each field's own position. Only the
+   *                            root record passes them: a nested record is never a projection,
+   *                            because V1 nested pruning is limited to Parquet and ORC
+   *                            (`SchemaPruning.canPruneDataSchema`) and V2's
+   *                            `FileScanBuilder.supportsNestedSchemaPruning` is false for Avro.
+   */
   private def getRecordWriter(
       avroType: Schema,
       catalystType: StructType,
       avroPath: Seq[String],
       catalystPath: Seq[String],
-      applyFilters: Int => Boolean): (CatalystDataUpdater, GenericRecord) => Boolean = {
+      applyFilters: Int => Boolean,
+      dataSchemaPositions: Array[Int])
+      : (CatalystDataUpdater, GenericRecord) => Boolean = {
 
     val avroSchemaHelper = new AvroUtils.AvroSchemaHelper(
-      avroType, catalystType, avroPath, catalystPath, positionalFieldMatch)
+      avroType, catalystType, avroPath, catalystPath, positionalFieldMatch, dataSchemaPositions)
 
     avroSchemaHelper.validateNoExtraCatalystFields(ignoreNullable = true)
     // no need to validateNoExtraAvroFields since extra Avro fields are ignored
@@ -460,6 +575,28 @@ private[sql] class AvroDeserializer(
         i += 1
       }
       skipRow
+    }
+  }
+
+  /**
+   * Length-check CHAR/VARCHAR Avro map keys without pad/trim. Built once per map converter.
+   * Gated on standardSemantics only (not from_avro assignment): scans must reject off-width
+   * keys too, otherwise ApplyCharTypePadding can rewrite CHAR keys and HashMap.put last-wins.
+   * UNSUPPORTED_AVRO_CHAR_VARCHAR_MAP_KEY lets from_avro PERMISSIVE swallow the whole record.
+   */
+  private def makeAvroMapKeyChecker(keyType: DataType): Option[UTF8String => Unit] = {
+    if (!charVarcharStandardSemantics) {
+      None
+    } else {
+      keyType match {
+        case _: CharType | _: VarcharType =>
+          Some { key =>
+            if (CharVarcharUtils.charVarcharMapKeyViolatesLength(key, keyType)) {
+              throw QueryExecutionErrors.unsupportedAvroCharVarcharMapKey(key, keyType)
+            }
+          }
+        case _ => None
+      }
     }
   }
 

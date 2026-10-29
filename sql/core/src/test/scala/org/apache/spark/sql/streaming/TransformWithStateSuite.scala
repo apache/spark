@@ -1344,13 +1344,13 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
       CheckNewAnswer(("a", -1), ("b", 31)), // State for "a" should timeout and emit -1
       Execute { q =>
         // Filter for idle progress events and then verify the custom metrics for stateful operator
-        val progData = q.recentProgress.filter(prog => prog.stateOperators.size > 0)
+        val progData = q.recentProgress.filter(prog => prog.stateOperators.nonEmpty)
         assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).size > 0)
+          prog.stateOperators(0).customMetrics.get("numValueStateVars") > 0).nonEmpty)
         assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).size > 0)
+          prog.stateOperators(0).customMetrics.get("numRegisteredTimers") > 0).nonEmpty)
         assert(progData.filter(prog =>
-          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).size > 0)
+          prog.stateOperators(0).customMetrics.get("numDeletedTimers") > 0).nonEmpty)
       }
     )
   }
@@ -1787,14 +1787,14 @@ abstract class TransformWithStateSuite extends StateStoreMetricsTest
             TransformWithStateSuiteUtils.NUM_SHUFFLE_PARTITIONS.toString,
           SQLConf.STREAMING_STATE_STORE_ENCODING_FORMAT.key -> encoding) {
           withTempDir { checkpointDir =>
-            // When Avro is used, we want to set the StructFields to nullable
-            val shouldBeNullable = encoding == "avro"
             val metadataPathPostfix = "state/0/_stateSchema/default"
             val stateSchemaPath = new Path(checkpointDir.toString,
               s"$metadataPathPostfix")
             val hadoopConf = spark.sessionState.newHadoopConf()
             val fm = CheckpointFileManager.create(stateSchemaPath, hadoopConf)
 
+            // When Avro is used, we want to set the StructFields to nullable
+            val shouldBeNullable = encoding == "avro"
             val keySchema = new StructType().add("value", StringType)
             val schema0 = StateStoreColFamilySchema(
               "countState", 0,

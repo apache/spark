@@ -394,19 +394,21 @@ private[spark] object SchemaUtils {
   }
 
   /**
-   * Validates schema compatibility by recursively checking type and nullability changes.
+   * Validates schema compatibility by recursively checking ID, type and nullability changes.
    *
    * @param schema the schema to validate against
    * @param otherSchema the other schema to check for compatibility
    * @param resolver the resolver that controls whether the validation is case sensitive
    * @param mode the validation mode that controls what changes are allowed
+   * @param checkFieldIds whether to validate top-level and nested field IDs
    * @return sequence of error messages describing incompatibilities, empty if fully compatible
    */
   def validateSchemaCompatibility(
       schema: StructType,
       otherSchema: StructType,
       resolver: Resolver,
-      mode: SchemaValidationMode): Seq[String] = {
+      mode: SchemaValidationMode,
+      checkFieldIds: Boolean): Seq[String] = {
     checkSchemaColumnNameDuplication(schema, resolver)
     checkSchemaColumnNameDuplication(otherSchema, resolver)
     val errors = mutable.ArrayBuffer[String]()
@@ -418,6 +420,7 @@ private[spark] object SchemaUtils {
       colPath = Seq.empty,
       resolver,
       mode,
+      checkFieldIds,
       errors)
     errors.toSeq
   }
@@ -430,6 +433,7 @@ private[spark] object SchemaUtils {
       colPath: Seq[String],
       resolver: Resolver,
       mode: SchemaValidationMode,
+      checkFieldIds: Boolean,
       errors: mutable.ArrayBuffer[String]): Unit = {
     if (nullable && !otherNullable) {
       errors += s"${colPath.fullyQuoted} is no longer nullable"
@@ -439,29 +443,41 @@ private[spark] object SchemaUtils {
 
     (dataType, otherDataType) match {
       case (StructType(fields), StructType(otherFields)) =>
-        val fieldsByName = index(fields, resolver)
-        val otherFieldsByName = index(otherFields, resolver)
+        val otherCandidates = index(otherFields, resolver)
 
-        fieldsByName.foreach { case (normalizedName, field) =>
-          otherFieldsByName.get(normalizedName) match {
-            case Some(otherField) =>
+        // Iterates the fields rather than the index so that every field is reported even when two
+        // of them fold to one key, and so that the errors come out in schema order.
+        fields.foreach { field =>
+          matchField(otherCandidates, field.name, resolver) match {
+            case Seq(otherField) =>
+              val nameParts = colPath :+ field.name
+              if (checkFieldIds) {
+                for (id <- field.id; otherId <- otherField.id if id != otherId) {
+                  errors += s"${nameParts.fullyQuoted} field ID has changed from $id to $otherId"
+                }
+              }
               validateTypeCompatibility(
                 field.dataType,
                 otherField.dataType,
                 field.nullable,
                 otherField.nullable,
-                colPath :+ field.name,
+                nameParts,
                 resolver,
                 mode,
+                checkFieldIds,
                 errors)
-            case None =>
+            case Seq() =>
               errors += s"${formatField(colPath, field)} has been removed"
+            case several =>
+              errors += s"${(colPath :+ field.name).fullyQuoted} matches more than one field: " +
+                several.map(_.name).mkString("[", ", ", "]")
           }
         }
 
         if (mode == PROHIBIT_CHANGES || (mode == ALLOW_NEW_TOP_LEVEL_FIELDS && colPath.nonEmpty)) {
-          otherFieldsByName.foreach { case (normalizedName, otherField) =>
-            if (!fieldsByName.contains(normalizedName)) {
+          val candidates = index(fields, resolver)
+          otherFields.foreach { otherField =>
+            if (matchField(candidates, otherField.name, resolver).isEmpty) {
               errors += s"${formatField(colPath, otherField)} has been added"
             }
           }
@@ -476,6 +492,7 @@ private[spark] object SchemaUtils {
           colPath :+ "element",
           resolver,
           mode,
+          checkFieldIds,
           errors)
 
       case (MapType(keyType, valueType, valueContainsNull),
@@ -488,6 +505,7 @@ private[spark] object SchemaUtils {
           colPath :+ "key",
           resolver,
           mode,
+          checkFieldIds,
           errors)
         validateTypeCompatibility(
           valueType,
@@ -497,6 +515,7 @@ private[spark] object SchemaUtils {
           colPath :+ "value",
           resolver,
           mode,
+          checkFieldIds,
           errors)
 
       case _ if dataType != otherDataType =>
@@ -515,12 +534,83 @@ private[spark] object SchemaUtils {
     if (field.nullable) s"$name $dataType" else s"$name $dataType NOT NULL"
   }
 
-  private def index(fields: Array[StructField], resolver: Resolver): Map[String, StructField] = {
-    if (isCaseSensitiveAnalysis(resolver)) {
-      fields.map(field => field.name -> field).toMap
-    } else {
-      fields.map(field => field.name.toLowerCase(Locale.ROOT) -> field).toMap
-    }
+  /**
+   * Folds a name to the key that collects the fields a name may refer to.
+   *
+   * This is the first half of the identity rule name resolution is built on: `AttributeSeq` looks
+   * attributes up by this key and only then filters the candidates with the resolver. The fold
+   * alone is therefore not an identity: it can collect several fields a schema is allowed to keep
+   * apart, and the resolver alone can equate names the fold separates (`equalsIgnoreCase` equates
+   * U+017F LONG S with `s`, which this fold does not).
+   *
+   * In particular this key is NOT single-valued within a schema. `checkColumnNameDuplication` folds
+   * with the JVM default locale rather than with `Locale.ROOT`, so under a Turkish, Azeri or
+   * Lithuanian default locale it admits two names that fold to one key here. Callers must narrow a
+   * multi-candidate match with the resolver instead of assuming there is at most one.
+   */
+  def foldName(name: String, caseSensitiveAnalysis: Boolean): String = {
+    if (caseSensitiveAnalysis) name else name.toLowerCase(Locale.ROOT)
+  }
+
+  private def index(
+      fields: Array[StructField],
+      resolver: Resolver): Map[String, Seq[StructField]] = {
+    val caseSensitive = isCaseSensitiveAnalysis(resolver)
+    fields.groupBy(field => foldName(field.name, caseSensitive))
+      .map { case (folded, group) => folded -> group.toSeq }
+  }
+
+  /**
+   * Returns the fields `name` can refer to, the way column resolution decides it: fold to collect
+   * candidates, then narrow them with the resolver.
+   *
+   * Both halves are always applied. A fold collision is not ambiguous by itself, because the
+   * resolver can still tell the candidates apart, and picking one by position instead would pair a
+   * captured field with a field resolution would not have chosen. Equally, a lone candidate the
+   * fold collects is not a match until the resolver agrees: the fold equates U+0130 CAPITAL I WITH
+   * DOT with `i` plus a combining dot while `equalsIgnoreCase` does not, so accepting it here would
+   * call a schema compatible when no query can read that name out of it.
+   */
+  private def matchField(
+      candidatesByFoldedName: Map[String, Seq[StructField]],
+      name: String,
+      resolver: Resolver): Seq[StructField] = {
+    val caseSensitive = isCaseSensitiveAnalysis(resolver)
+    candidatesByFoldedName
+      .getOrElse(foldName(name, caseSensitive), Nil)
+      .filter(f => resolver(f.name, name))
+  }
+
+  /**
+   * Recursively clears field IDs from a data type.
+   */
+  def clearFieldIds(dataType: DataType): DataType = dataType match {
+    case s: StructType =>
+      StructType(s.fields.map { field =>
+        val fieldWithoutId = field.clearId()
+        val newDataType = clearFieldIds(field.dataType)
+        if (newDataType ne field.dataType) {
+          fieldWithoutId.copy(dataType = newDataType)
+        } else {
+          fieldWithoutId
+        }
+      })
+
+    case a: ArrayType =>
+      val newElementType = clearFieldIds(a.elementType)
+      if (newElementType ne a.elementType) a.copy(elementType = newElementType) else a
+
+    case m: MapType =>
+      val newKeyType = clearFieldIds(m.keyType)
+      val newValueType = clearFieldIds(m.valueType)
+      if ((newKeyType ne m.keyType) || (newValueType ne m.valueType)) {
+        m.copy(keyType = newKeyType, valueType = newValueType)
+      } else {
+        m
+      }
+
+    case other =>
+      other
   }
 }
 

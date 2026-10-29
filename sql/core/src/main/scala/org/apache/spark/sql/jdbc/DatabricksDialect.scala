@@ -18,9 +18,11 @@
 package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, SQLException}
+import java.util.Locale
 
 import scala.collection.mutable.ArrayBuilder
 
+import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
 import org.apache.spark.sql.execution.datasources.jdbc.JDBCOptions
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.types._
@@ -53,9 +55,12 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
     case _ => None
   }
 
-  // See https://docs.databricks.com/aws/en/error-messages/sqlstates
+  // See https://docs.databricks.com/aws/en/error-messages/sqlstates.
+  // The driver may report syntax errors with a non-class-42 SQLState.
   override def isSyntaxErrorBestEffort(exception: SQLException): Boolean = {
-    Option(exception.getSQLState).exists(_.startsWith("42"))
+    Option(exception.getSQLState).exists(_.startsWith("42")) ||
+      Option(exception.getMessage)
+        .exists(_.toUpperCase(Locale.ROOT).contains("SYNTAX_ERROR"))
   }
 
   override def quoteIdentifier(colName: String): String = {
@@ -71,10 +76,10 @@ private case class DatabricksDialect() extends JdbcDialect with NoLegacyJDBCErro
 
   override def supportsOffset: Boolean = true
 
-  override def supportsTableSample: Boolean = true
-
-  override def getTableSample(sample: TableSampleInfo): String = {
-    s"TABLESAMPLE (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})"
+  override def compileTableSample(sample: TableSampleInfo): Option[String] = {
+    if (sample.withReplacement || sample.sampleMethod == SampleMethod.System) return None
+    Some(s"TABLESAMPLE ${sample.sampleMethod.toString.toUpperCase(Locale.ROOT)}" +
+      s" (${(sample.upperBound - sample.lowerBound) * 100}) REPEATABLE (${sample.seed})")
   }
 
   override def supportsHint: Boolean = true

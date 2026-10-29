@@ -21,6 +21,7 @@ import java.sql.Timestamp
 import java.time.{Duration, Period}
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -197,6 +198,49 @@ class HistogramNumericSuite extends SparkFunSuite with SQLHelper {
     // Add some non-empty row
     agg.update(buffer, InternalRow(0))
     assert(agg.eval(buffer) != null)
+  }
+
+  test("SPARK-57557: HistogramNumeric supports TIME type") {
+    // With propagateInputType, the histogram's 'x' field preserves the input TIME type and the
+    // bin centers are returned as Long nanos-of-day.
+    withSQLConf(SQLConf.HISTOGRAM_NUMERIC_PROPAGATE_INPUT_TYPE.key -> "true") {
+      val agg = new HistogramNumeric(BoundReference(0, TimeType(), nullable = true), Literal(5))
+      val xType = agg.dataType match {
+        case ArrayType(StructType(Array(
+            StructField("x", t, _, _), StructField("y", _, _, _))), _) => t
+      }
+      assert(xType === TimeType())
+      val buffer = agg.createAggregationBuffer()
+      Seq(0L, 10L, 20L).foreach(v => agg.update(buffer, InternalRow(v)))
+      val result = agg.eval(buffer).asInstanceOf[GenericArrayData]
+      assert(result.numElements() > 0)
+      assert(result.getStruct(0, 2).get(0, TimeType()).isInstanceOf[Long])
+    }
+  }
+
+  test("SPARK-60337: HistogramNumeric rejects nanosecond timestamps") {
+    // The histogram holds doubles, so a nanosecond timestamp is rejected rather than implicitly
+    // cast to DATE.
+    for {
+      ansiEnabled <- Seq("true", "false")
+      dataType <- (7 to 9).flatMap(p => Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)))
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val agg = new HistogramNumeric(UnresolvedAttribute("a"), Literal(3))
+        checkError(
+          exception = intercept[AnalysisException] {
+            LocalRelation(AttributeReference("a", dataType)()).select(agg).analyze
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          parameters = Map(
+            "sqlExpr" -> "\"histogram_numeric(a, 3)\"",
+            "paramIndex" -> "first",
+            "requiredType" -> ("(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" " +
+              "or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> s"\"${dataType.sql}\""))
+      }
+    }
   }
 
   test("class HistogramNumeric, exercise many different numeric input types") {

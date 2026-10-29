@@ -72,7 +72,7 @@ class CatalogTableProperty(val key: String, val value: String)
  * @param name
  *   name of the database.
  * @param catalog
- *   name of the catalog that the table belongs to.
+ *   name of the catalog that the database belongs to.
  * @param description
  *   description of the database.
  * @param locationUri
@@ -222,9 +222,9 @@ class Column(
  * @param name
  *   name of the function.
  * @param catalog
- *   name of the catalog that the table belongs to.
+ *   name of the catalog that the function belongs to.
  * @param namespace
- *   the namespace that the table belongs to.
+ *   the namespace that the function belongs to.
  * @param description
  *   description of the function; description can be null.
  * @param className

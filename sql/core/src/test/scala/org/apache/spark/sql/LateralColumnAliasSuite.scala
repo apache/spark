@@ -1022,8 +1022,8 @@ class LateralColumnAliasSuite extends LateralColumnAliasSuiteBase {
           "(partition by dept order by salary rows between n preceding and current row) as rank " +
           s"from $testTable where dept in (1, 6)")
       },
-      condition = "_LEGACY_ERROR_TEMP_0064",
-      parameters = Map("msg" -> "Frame bound value must be a literal."),
+      condition = "INVALID_SQL_SYNTAX.INVALID_WINDOW_FRAME_BOUND",
+      parameters = Map.empty,
       context = ExpectedContext(fragment = "n preceding", start = 87, stop = 97)
     )
 

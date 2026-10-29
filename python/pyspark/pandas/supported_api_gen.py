@@ -22,16 +22,16 @@ Generate 'Supported pandas APIs' documentation file
 import warnings
 from enum import Enum, unique
 from inspect import getmembers, isclass, isfunction, signature
-from typing import Any, Dict, List, NamedTuple, Set, TextIO, Tuple
 from types import FunctionType
+from typing import Any, Dict, List, NamedTuple, Set, TextIO, Tuple
 
-import pyspark.pandas as ps
-import pyspark.pandas.groupby as psg
-import pyspark.pandas.window as psw
 import pandas as pd
 import pandas.core.groupby as pdg
 import pandas.core.window as pdw
 
+import pyspark.pandas as ps
+import pyspark.pandas.groupby as psg
+import pyspark.pandas.window as psw
 from pyspark.loose_version import LooseVersion
 from pyspark.pandas.exceptions import PandasNotImplementedError
 
@@ -419,7 +419,7 @@ def _write_rst(
     all_supported_status : Dict
         Collected support status data.
     """
-    with open(output_rst_file_path, "w") as w_fd:
+    with open(output_rst_file_path, "w", encoding="utf-8") as w_fd:
         w_fd.write(RST_HEADER)
         for module_info, supported_status in all_supported_status.items():
             module, module_path = module_info

@@ -21,11 +21,11 @@ import scala.collection.mutable
 import scala.reflect.classTag
 
 import org.apache.spark.sql.{AnalysisException, Row}
-import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, LocalTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.{BinaryEncoder, BoxedBooleanEncoder, BoxedByteEncoder, BoxedDoubleEncoder, BoxedFloatEncoder, BoxedIntEncoder, BoxedLongEncoder, BoxedShortEncoder, CalendarIntervalEncoder, CharEncoder, DateEncoder, DayTimeIntervalEncoder, EncoderField, GeographyEncoder, GeometryEncoder, InstantEncoder, IterableEncoder, JavaDecimalEncoder, LocalDateEncoder, LocalDateTimeEncoder, MapEncoder, NullEncoder, RowEncoder => AgnosticRowEncoder, StringEncoder, TimestampEncoder, UDTEncoder, VarcharEncoder, VariantEncoder, YearMonthIntervalEncoder}
+import org.apache.spark.sql.catalyst.types.ops.TypeApiOps
 import org.apache.spark.sql.errors.DataTypeErrorsBase
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.types.ops.TypeApiOps
 import org.apache.spark.util.ArrayImplicits._
 
 /**
@@ -50,6 +50,8 @@ import org.apache.spark.util.ArrayImplicits._
  *   TimestampType -> java.time.Instant if spark.sql.datetime.java8API.enabled is true
  *
  *   TimestampNTZType -> java.time.LocalDateTime
+ *   TimestampNTZNanosType -> java.time.LocalDateTime
+ *   TimestampLTZNanosType -> java.time.Instant
  *   TimeType -> java.time.LocalTime
  *
  *   DayTimeIntervalType -> java.time.Duration
@@ -70,14 +72,31 @@ object RowEncoder extends DataTypeErrorsBase {
     encoderForDataType(schema, lenient).asInstanceOf[AgnosticEncoder[Row]]
   }
 
+  /**
+   * Builds an encoder for a schema that the engine produced, such as the result schema of a Spark
+   * Connect query. Whether CHAR/VARCHAR are first-class types is decided by the session that
+   * produced the schema, so they are always accepted here. A client cannot read that session's
+   * configuration, and refusing the type would make the result undecodable.
+   */
+  private[sql] def encoderForResultSchema(schema: StructType): AgnosticEncoder[Row] =
+    encoderForDataType(schema, lenient = false, charVarcharFirstClassTypes = true)
+      .asInstanceOf[AgnosticEncoder[Row]]
+
   private[sql] def encoderForDataType(dataType: DataType, lenient: Boolean): AgnosticEncoder[_] =
+    encoderForDataType(dataType, lenient, SqlApiConf.get.charVarcharFirstClassTypes)
+
+  private def encoderForDataType(
+      dataType: DataType,
+      lenient: Boolean,
+      charVarcharFirstClassTypes: Boolean): AgnosticEncoder[_] =
     TypeApiOps(dataType)
       .map(_.getEncoder)
-      .getOrElse(encoderForDataTypeDefault(dataType, lenient))
+      .getOrElse(encoderForDataTypeDefault(dataType, lenient, charVarcharFirstClassTypes))
 
   private def encoderForDataTypeDefault(
       dataType: DataType,
-      lenient: Boolean): AgnosticEncoder[_] =
+      lenient: Boolean,
+      charVarcharFirstClassTypes: Boolean): AgnosticEncoder[_] =
     dataType match {
       case NullType => NullEncoder
       case BooleanType => BoxedBooleanEncoder
@@ -89,42 +108,41 @@ object RowEncoder extends DataTypeErrorsBase {
       case DoubleType => BoxedDoubleEncoder
       case dt: DecimalType => JavaDecimalEncoder(dt, lenientSerialization = true)
       case BinaryType => BinaryEncoder
-      case c: CharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        CharEncoder(c.length)
-      case v: VarcharType if SqlApiConf.get.preserveCharVarcharTypeInfo =>
-        VarcharEncoder(v.length)
+      case c: CharType if charVarcharFirstClassTypes =>
+        CharEncoder(c)
+      case v: VarcharType if charVarcharFirstClassTypes =>
+        VarcharEncoder(v)
       case s: StringType if StringHelper.isPlainString(s) => StringEncoder
       case TimestampType if SqlApiConf.get.datetimeJava8ApiEnabled => InstantEncoder(lenient)
       case TimestampType => TimestampEncoder(lenient)
       case TimestampNTZType => LocalDateTimeEncoder
       case DateType if SqlApiConf.get.datetimeJava8ApiEnabled => LocalDateEncoder(lenient)
       case DateType => DateEncoder(lenient)
-      case _: TimeType => LocalTimeEncoder
       case CalendarIntervalType => CalendarIntervalEncoder
       case _: DayTimeIntervalType => DayTimeIntervalEncoder
       case _: YearMonthIntervalType => YearMonthIntervalEncoder
       case _: VariantType => VariantEncoder
       case p: PythonUserDefinedType =>
         // TODO check if this works.
-        encoderForDataType(p.sqlType, lenient)
+        encoderForDataType(p.sqlType, lenient, charVarcharFirstClassTypes)
       case udt: UserDefinedType[_] => UDTEncoder(udt, udt.getClass)
       case ArrayType(elementType, containsNull) =>
         IterableEncoder(
           classTag[mutable.ArraySeq[_]],
-          encoderForDataType(elementType, lenient),
+          encoderForDataType(elementType, lenient, charVarcharFirstClassTypes),
           containsNull,
           lenientSerialization = true)
       case MapType(keyType, valueType, valueContainsNull) =>
         MapEncoder(
           classTag[scala.collection.Map[_, _]],
-          encoderForDataType(keyType, lenient),
-          encoderForDataType(valueType, lenient),
+          encoderForDataType(keyType, lenient, charVarcharFirstClassTypes),
+          encoderForDataType(valueType, lenient, charVarcharFirstClassTypes),
           valueContainsNull)
       case StructType(fields) =>
         AgnosticRowEncoder(fields.map { field =>
           EncoderField(
             field.name,
-            encoderForDataType(field.dataType, lenient),
+            encoderForDataType(field.dataType, lenient, charVarcharFirstClassTypes),
             field.nullable,
             field.metadata)
         }.toImmutableArraySeq)

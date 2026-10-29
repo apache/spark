@@ -449,7 +449,10 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       (3, "14:30:45.123"),
       (4, "14:30:45.1234"),
       (5, "14:30:45.12345"),
-      (6, "14:30:45.123456")
+      (6, "14:30:45.123456"),
+      (7, "14:30:45.1234567"),
+      (8, "14:30:45.12345678"),
+      (9, "23:59:59.999999999")
     )
 
     testData.foreach { case (precision, timeStr) =>
@@ -517,6 +520,19 @@ class XmlExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       XmlToStructs(schema, Map("rowTag" -> "record"), xmlResult, UTC_OPT),
       InternalRow(times)
     )
+  }
+
+  test("XmlToStructs and StructsToXml are stateful and produce fresh copies") {
+    val schema = StructType(StructField("a", IntegerType) :: Nil)
+
+    val xmlToStructs = XmlToStructs(schema, Map.empty, Literal("<a>1</a>"), UTC_OPT)
+    assert(xmlToStructs.stateful)
+    assert(xmlToStructs.freshCopyIfContainsStatefulExpression() ne xmlToStructs)
+
+    val struct = Literal.create(InternalRow(1), schema)
+    val structsToXml = StructsToXml(Map.empty, struct, UTC_OPT)
+    assert(structsToXml.stateful)
+    assert(structsToXml.freshCopyIfContainsStatefulExpression() ne structsToXml)
   }
 
 }

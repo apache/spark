@@ -89,6 +89,55 @@ object MathUtils {
 
   def floorMod(a: Long, b: Long): Long = withOverflow(Math.floorMod(a, b))
 
+  // Positive modulo (`pmod`): for `n > 0` the result lies in `[0, n)` (for the float/double
+  // overloads, when both inputs are finite); for integral `n < 0` it takes the sign of the
+  // dividend `a` (unlike `floorMod`, which takes the sign of `n`). Matches the `pmod` SQL
+  // function and `HashPartitioning`, and is shared by `Pmod`'s eval and codegen so the two never
+  // diverge.
+  //
+  // Integral `n > 0` computes `Math.floorMod(a, n)` with a branchless sign fix-up instead of
+  // calling it, because `Math.floorMod` adjusts with a data-dependent conditional (SPARK-59696).
+  // The `n < 0` path can silently wrap for `Int`/`Long` when `r + n` overflows (large-magnitude
+  // negative `n`), e.g. `pmod(-1, Int.MinValue)` returns `Int.MaxValue`; tracked by SPARK-59934.
+  // `Byte`/`Short` delegate to `Int` (too narrow for `r + n` to overflow); the float/double
+  // overloads keep `% n` because `r + n` can round up to exactly `n`.
+
+  def pmod(a: Int, n: Int): Int = {
+    val r = a % n
+    if (n > 0) r + (n & (r >> 31)) else if (r >= 0) r else (r + n) % n
+  }
+
+  def pmod(a: Long, n: Long): Long = {
+    val r = a % n
+    if (n > 0) r + (n & (r >> 63)) else if (r >= 0) r else (r + n) % n
+  }
+
+  def pmod(a: Byte, n: Byte): Byte = pmod(a.toInt, n.toInt).toByte
+
+  def pmod(a: Short, n: Short): Short = pmod(a.toInt, n.toInt).toShort
+
+  def pmod(a: Float, n: Float): Float = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  def pmod(a: Double, n: Double): Double = {
+    val r = a % n
+    if (r < 0) (r + n) % n else r
+  }
+
+  // Casts a rounded double (the result of Math.ceil/Math.floor) to long, throwing an arithmetic
+  // overflow error when the value cannot be represented as a long. NaN is passed through to the
+  // JVM cast (which yields 0), matching the previous behavior. Shared by the eval and codegen
+  // paths of `Ceil`/`Floor` so the two never diverge.
+  def doubleToLong(value: Double, context: QueryContext): Long = {
+    if (!value.isNaN &&
+      (value < Long.MinValue.toDouble || value >= Long.MaxValue.toDouble)) {
+      throw ExecutionErrors.arithmeticOverflowError("long overflow", context = context)
+    }
+    value.toLong
+  }
+
   def withOverflow[A](f: => A, hint: String = "", context: QueryContext = null): A = {
     try {
       f

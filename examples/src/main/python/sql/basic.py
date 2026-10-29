@@ -21,16 +21,15 @@ Run with:
   ./bin/spark-submit examples/src/main/python/sql/basic.py
 """
 # $example on:init_session$
-from pyspark.sql import SparkSession
 # $example off:init_session$
-
 # $example on:schema_inferring$
-from pyspark.sql import Row
-# $example off:schema_inferring$
+from pyspark.sql import Row, SparkSession
 
+# $example off:schema_inferring$
 # $example on:programmatic_schema$
 # Import data types
-from pyspark.sql.types import StringType, StructType, StructField
+from pyspark.sql.types import StringType, StructField, StructType
+
 # $example off:programmatic_schema$
 
 

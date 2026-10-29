@@ -23,16 +23,19 @@ import java.util.concurrent.Semaphore
 import scala.concurrent.duration._
 
 import org.apache.hadoop.hive.conf.HiveConf
+import org.apache.hadoop.hive.conf.HiveConf.ConfVars
 import org.apache.hive.service.cli.OperationState
 import org.apache.hive.service.cli.session.{HiveSession, HiveSessionImpl}
 import org.apache.hive.service.rpc.thrift.{TProtocolVersion, TTypeId}
 import org.mockito.Mockito.{doReturn, mock, spy, when, RETURNS_DEEP_STUBS}
 import org.mockito.invocation.InvocationOnMock
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.hive.thriftserver.ui.HiveThriftServer2EventManager
+import org.apache.spark.sql.internal.StaticSQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{GeographyType, GeometryType, IntegerType, NullType, StringType, StructField, StructType, TimestampLTZNanosType, TimestampNTZNanosType}
 
 class SparkExecuteStatementOperationSuite extends SharedSparkSession {
 
@@ -74,6 +77,21 @@ class SparkExecuteStatementOperationSuite extends SharedSparkSession {
     assert(geomType === TTypeId.STRING_TYPE)
     val geogType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
     assert(geogType === TTypeId.STRING_TYPE)
+  }
+
+  test("SPARK-57463 nanosecond-precision timestamp types are mapped to STRING_TYPE " +
+    "in ThriftServer") {
+    for (p <- TimestampNTZNanosType.MIN_PRECISION to TimestampNTZNanosType.MAX_PRECISION) {
+      val tableSchema = StructType(Seq(
+        StructField("ntz", TimestampNTZNanosType(p)),
+        StructField("ltz", TimestampLTZNanosType(p))))
+      val columns = SparkExecuteStatementOperation.toTTableSchema(tableSchema)
+      assert(columns.getColumnsSize == 2)
+      val ntzType = columns.getColumns.get(0).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      assert(ntzType === TTypeId.STRING_TYPE)
+      val ltzType = columns.getColumns.get(1).getTypeDesc.getTypes.get(0).getPrimitiveEntry.getType
+      assert(ltzType === TTypeId.STRING_TYPE)
+    }
   }
 
   Seq(
@@ -118,6 +136,24 @@ class SparkExecuteStatementOperationSuite extends SharedSparkSession {
       run.join()
       assert(executeStatementOperation.getStatus.getState === finalState)
     }
+  }
+
+  test("SPARK-59118 HiveThriftServer2.init refuses to start when doAs is not enforced") {
+    // The guard is only worth anything if init() actually calls it.
+    val hiveConf = new HiveConf()
+    hiveConf.setVar(ConfVars.HIVE_SERVER2_AUTHENTICATION, "KERBEROS")
+    hiveConf.setBoolVar(ConfVars.HIVE_SERVER2_ENABLE_DOAS, true)
+    val e = intercept[SparkException] {
+      new HiveThriftServer2(spark).init(hiveConf)
+    }
+    checkError(
+      e,
+      condition = "HIVE_THRIFT_SERVER_INEFFECTIVE_DOAS",
+      sqlState = Some("42616"),
+      parameters = Map(
+        "doAsConf" -> ConfVars.HIVE_SERVER2_ENABLE_DOAS.varname,
+        "allowIneffectiveDoAsConf" ->
+          StaticSQLConf.HIVE_THRIFT_SERVER_ALLOW_INEFFECTIVE_DOAS.key))
   }
 
   private class MySparkExecuteStatementOperation(

@@ -54,10 +54,26 @@ import org.apache.spark.sql.types.{AbstractDataType, BinaryType, DataType}
     _FUNC_(child, mode) - Returns the intersected TupleSketch compact binary representation.
       `child` should be a binary TupleSketch representation created with a double type summary.
       `mode` is the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * child - The binary TupleSketch representation, created with a double type summary, to
+        intersect.
+        An expression that evaluates to a binary.
+      * mode - The aggregation mode for numeric summaries during intersection (sum, min, max,
+        alwaysone).
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (1, 5.0D), (2, 10.0D), (3, 15.0D) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_double(key, summary) as sketch FROM VALUES (2, 3.0D), (3, 7.0D), (4, 12.0D) tab(key, summary));
        2.0
+      > SELECT tuple_sketch_estimate_double(_FUNC_(sketch)) FROM VALUES (CAST(NULL AS BINARY)) tab(sketch);
+       0.0
+  """,
+  note = """
+    NULL input sketches are ignored. If a group has no non-NULL input sketch, the result is
+    an empty sketch. The empty sketch is not neutral for a later intersection: intersecting
+    it with any other sketch returns an empty sketch.
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -143,10 +159,26 @@ case class TupleIntersectionAggDouble(
     _FUNC_(child, mode) - Returns the intersected TupleSketch compact binary representation.
       `child` should be a binary TupleSketch representation created with an integer type summary.
       `mode` is the aggregation mode for numeric summaries during intersection (sum, min, max, alwaysone). Default is sum. """,
+  arguments = """
+    Arguments:
+      * child - The binary TupleSketch representation, created with an integer type summary, to
+        intersect.
+        An expression that evaluates to a binary.
+      * mode - The aggregation mode for numeric summaries during intersection (sum, min, max,
+        alwaysone).
+        An expression that evaluates to a string. Must be a constant.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM (SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (1, 1), (2, 2), (3, 3) tab(key, summary) UNION ALL SELECT tuple_sketch_agg_integer(key, summary) as sketch FROM VALUES (2, 2), (3, 3), (4, 4) tab(key, summary));
        2.0
+      > SELECT tuple_sketch_estimate_integer(_FUNC_(sketch)) FROM VALUES (CAST(NULL AS BINARY)) tab(sketch);
+       0.0
+  """,
+  note = """
+    NULL input sketches are ignored. If a group has no non-NULL input sketch, the result is
+    an empty sketch. The empty sketch is not neutral for a later intersection: intersecting
+    it with any other sketch returns an empty sketch.
   """,
   group = "agg_funcs",
   since = "4.2.0")
@@ -297,6 +329,9 @@ abstract class TupleIntersectionAggBase[S <: Summary]
       input: TupleSketchState[S]): TupleSketchState[S] = {
 
     (intersectionBuffer, input) match {
+      // Untouched input states do not contribute to the intersection.
+      case (_, IntersectionTupleAggregationBuffer(intersection)) if !intersection.hasResult() =>
+        intersectionBuffer
       // The input was serialized then deserialized.
       case (
             intersectionBuffer @ IntersectionTupleAggregationBuffer(intersection),

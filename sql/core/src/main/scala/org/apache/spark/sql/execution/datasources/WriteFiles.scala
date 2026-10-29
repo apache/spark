@@ -28,9 +28,8 @@ import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.Attribute
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, UnaryNode}
 import org.apache.spark.sql.connector.write.WriterCommitMessage
-import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
+import org.apache.spark.sql.execution.{EmptyRDDWithPartitions, SparkPlan, UnaryExecNode}
 import org.apache.spark.sql.execution.datasources.FileFormatWriter.ConcurrentOutputWriterSpec
-import org.apache.spark.util.ArrayImplicits._
 
 /**
  * The write files spec holds all information of [[V1WriteCommand]] if its provider is
@@ -82,7 +81,7 @@ case class WriteFilesExec(
     // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
     // partition rdd to make sure we at least set up one write task to write the metadata.
     val rddWithNonEmptyPartitions = if (rdd.partitions.length == 0) {
-      session.sparkContext.parallelize(Array.empty[InternalRow].toImmutableArraySeq, 1)
+      new EmptyRDDWithPartitions(session.sparkContext, 1)
     } else {
       rdd
     }

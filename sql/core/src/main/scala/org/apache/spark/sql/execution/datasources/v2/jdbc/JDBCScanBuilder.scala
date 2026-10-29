@@ -21,11 +21,13 @@ import scala.util.control.NonFatal
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
-import org.apache.spark.sql.connector.read.{ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
+import org.apache.spark.sql.connector.read.{SampleMethod, ScanBuilder, SupportsPushDownAggregates, SupportsPushDownJoin, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters}
 import org.apache.spark.sql.execution.datasources.PartitioningUtils
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRDD, JDBCRelation}
 import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
@@ -57,7 +59,7 @@ case class JDBCScanBuilder(
 
   private var finalSchema = schema
 
-  private var tableSample: Option[TableSampleInfo] = None
+  private var tableSampleClause: Option[String] = None
 
   private var pushedLimit = 0
 
@@ -65,11 +67,25 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
+  private def containsUnsupportedCharPad(expr: Expression): Boolean = {
+    if (dialect.isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
+      false
+    } else {
+      def walk(e: Expression): Boolean = e match {
+        case g: GeneralScalarExpression
+            if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => true
+        case _ => Option(e.children()).exists(_.exists(walk))
+      }
+      walk(expr)
+    }
+  }
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
+      val (unsupportedCharPad, rest) = predicates.partition(containsUnsupportedCharPad)
+      val (pushed, unSupported) = rest.partition(dialect.compileExpression(_).isDefined)
       this.pushedPredicate = pushed
-      unSupported
+      unSupported ++ unsupportedCharPad
     } else {
       predicates
     }
@@ -93,6 +109,10 @@ case class JDBCScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
+    if (aggregation.aggregateExpressions.exists(containsUnsupportedCharPad) ||
+        aggregation.groupByExpressions.exists(containsUnsupportedCharPad)) {
+      return false
+    }
 
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileExpression)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
@@ -147,7 +167,7 @@ case class JDBCScanBuilder(
       JDBCOptions.JDBC_QUERY_STRING
 
     filteredJDBCOptions == otherSideFilteredJDBCOptions
-  };
+  }
 
   /**
    * Helper method to calculate StructType based on the SupportsPushDownJoin.ColumnWithAlias and
@@ -185,6 +205,12 @@ case class JDBCScanBuilder(
       return false
     }
 
+    // Join pushdown uses the query option, which cannot be combined with partitionColumn.
+    if (jdbcOptions.partitionColumn.isDefined) {
+      logDebug("Skipping JDBC join pushdown because partitionColumn is defined.")
+      return false
+    }
+
     val joinTypeStringOption = joinType match {
       case JoinType.INNER_JOIN => Some("INNER JOIN")
       case JoinType.LEFT_OUTER_JOIN => Some("LEFT JOIN")
@@ -194,6 +220,10 @@ case class JDBCScanBuilder(
     if (!joinTypeStringOption.isDefined) {
       logError(log"Failed to push down join to JDBC due to unsupported join type " +
         log"${MDC(JOIN_TYPE, joinType)}")
+      return false
+    }
+
+    if (containsUnsupportedCharPad(condition)) {
       return false
     }
 
@@ -251,7 +281,7 @@ case class JDBCScanBuilder(
     pushedPredicate = Array.empty[Predicate]
     // Table sample is pushed down already as well, so we need to reset it to None to not push it
     // down again when join pushdown is triggered again on this JDBCScanBuilder.
-    tableSample = None
+    tableSampleClause = None
 
     true
   }
@@ -262,23 +292,26 @@ case class JDBCScanBuilder(
     val quotedAliases = columnsWithAliases
       .map(col => Option(col.alias()).map(dialect.quoteIdentifier))
 
-    // Only filters can be pushed down before join pushdown, so we need to craft SQL query
-    // that contains filters as well.
-    // Joins on top of samples are not supported so we don't need to provide tableSample here.
-    dialect
+    val builder = dialect
       .getJdbcSQLQueryBuilder(jdbcOptions)
       .withPredicates(pushedPredicate, JDBCPartition(whereClause = null, idx = 1))
       .withAliasedColumns(quotedColumns, quotedAliases)
+
+    tableSampleClause.foreach(builder.withTableSampleClause)
+    builder
   }
 
   override def pushTableSample(
       lowerBound: Double,
       upperBound: Double,
       withReplacement: Boolean,
-      seed: Long): Boolean = {
-    if (jdbcOptions.pushDownTableSample && dialect.supportsTableSample) {
-      this.tableSample = Some(TableSampleInfo(lowerBound, upperBound, withReplacement, seed))
-      return true
+      seed: Long,
+      sampleMethod: SampleMethod): Boolean = {
+    if (jdbcOptions.pushDownTableSample) {
+      val sample = TableSampleInfo(
+        lowerBound, upperBound, withReplacement, seed, V2ExpressionUtils.toCatalyst(sampleMethod))
+      this.tableSampleClause = dialect.compileTableSample(sample)
+      return this.tableSampleClause.isDefined
     }
     false
   }
@@ -306,6 +339,7 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
+      if (orders.exists(containsUnsupportedCharPad)) return false
       val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit
@@ -343,7 +377,7 @@ case class JDBCScanBuilder(
     // be used in sql string.
     JDBCScan(JDBCRelation(schema, parts, jdbcOptions, additionalMetrics)(session),
       finalSchema, pushedPredicate, pushedAggregateList, pushedGroupBys,
-      tableSample, pushedLimit, sortOrders, pushedOffset)
+      tableSampleClause, pushedLimit, sortOrders, pushedOffset)
   }
 
 }

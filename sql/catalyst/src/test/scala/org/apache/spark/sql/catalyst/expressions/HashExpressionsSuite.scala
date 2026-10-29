@@ -33,7 +33,8 @@ import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjecti
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CollationFactory, DateTimeUtils, GenericArrayData, IntervalUtils}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, StructType, _}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.hash.Murmur3_x86_32
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -89,6 +90,17 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       2180413220L)
     checkEvaluation(Crc32(Literal.create(null, BinaryType)), null)
     checkConsistencyBetweenInterpretedAndCodegen(Crc32, BinaryType)
+  }
+
+  test("xxh3_64 and xxh3_128") {
+    // Concrete values match the reference implementation; XXH3Suite covers the full vector set.
+    checkEvaluation(Xxh364(Literal("Spark".getBytes(StandardCharsets.UTF_8))), 80997306238743657L)
+    checkEvaluation(Xxh3128(Literal("Spark".getBytes(StandardCharsets.UTF_8))),
+      "7d57dd84c60c86ca1f4e82ab91a12b5e")
+    checkEvaluation(Xxh364(Literal.create(null, BinaryType)), null)
+    checkEvaluation(Xxh3128(Literal.create(null, BinaryType)), null)
+    checkConsistencyBetweenInterpretedAndCodegen(Xxh364, BinaryType)
+    checkConsistencyBetweenInterpretedAndCodegen(Xxh3128, BinaryType)
   }
 
   def checkHiveHash(input: Any, dataType: DataType, expected: Long): Unit = {
@@ -883,6 +895,114 @@ class HashExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Murmur3Hash(Seq(time), 10), 545499634)
     checkEvaluation(XxHash64(Seq(time), 10), -3550518982366774761L)
     checkEvaluation(HiveHash(Seq(time)), -1567775210)
+  }
+
+  test("HashExpression supports nanosecond timestamp types") {
+    // (epochMicros, nanosWithinMicro) pairs covering zero/mid/max nanos, negative micros, and
+    // the Long epoch-micro boundaries.
+    val values = Seq(
+      TimestampNanosVal.fromParts(0L, 0.toShort),
+      TimestampNanosVal.fromParts(1L, 1.toShort),
+      TimestampNanosVal.fromParts(1234567890L, 999.toShort),
+      TimestampNanosVal.fromParts(-1L, 500.toShort),
+      TimestampNanosVal.fromParts(Long.MinValue, 0.toShort),
+      TimestampNanosVal.fromParts(Long.MaxValue, 999.toShort))
+
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9),
+        TimestampNTZNanosType(7), TimestampLTZNanosType(7)).foreach { dt =>
+      (values :+ null).foreach { v =>
+        // 1) Literal child: the value is embedded as a constant, so this asserts that the
+        // interpreted and codegen paths agree. (The unsafe projection here only round-trips the
+        // scalar hash result, not the nanos input -- that path is covered below.)
+        val lit = Literal.create(v, dt)
+        checkEvaluation(Murmur3Hash(Seq(lit), 42), Murmur3Hash(Seq(lit), 42).eval())
+        checkEvaluation(XxHash64(Seq(lit), 42L), XxHash64(Seq(lit), 42L).eval())
+        checkEvaluation(HiveHash(Seq(lit)), HiveHash(Seq(lit)).eval())
+
+        // 2) BoundReference over a row: drives the ordinal row-read (getTimestampNTZNanos /
+        // getTimestampLTZNanos) and the UnsafeRow round-trip of the nanos value itself -- the
+        // real GROUP BY / shuffle / join input path that the literal case above skips.
+        val row = InternalRow(v)
+        val ref = BoundReference(0, dt, nullable = true)
+        checkEvaluation(Murmur3Hash(Seq(ref), 42), Murmur3Hash(Seq(ref), 42).eval(row), row)
+        checkEvaluation(XxHash64(Seq(ref), 42L), XxHash64(Seq(ref), 42L).eval(row), row)
+        checkEvaluation(HiveHash(Seq(ref)), HiveHash(Seq(ref)).eval(row), row)
+      }
+    }
+  }
+
+  test("nanosecond timestamp hash is consistent with equality") {
+    val dt = TimestampNTZNanosType(9)
+    def lit(micros: Long, nanos: Short): Literal =
+      Literal.create(TimestampNanosVal.fromParts(micros, nanos), dt)
+
+    val a = lit(1234567890L, 123)
+    val aCopy = lit(1234567890L, 123)
+    val diffNanos = lit(1234567890L, 124) // same micros, different sub-micro nanos
+    val diffMicros = lit(1234567891L, 123) // different micros, same nanos
+
+    Seq[Expression => Any](
+      e => Murmur3Hash(Seq(e), 42).eval(),
+      e => XxHash64(Seq(e), 42L).eval(),
+      e => HiveHash(Seq(e)).eval()).foreach { hash =>
+      // Equal values hash equally.
+      assert(hash(a) === hash(aCopy))
+      // Both fields contribute to the hash (guards against a dropped epochMicros/nanos field).
+      assert(hash(a) !== hash(diffNanos))
+      assert(hash(a) !== hash(diffMicros))
+    }
+  }
+
+  test("SPARK-58236: CalendarInterval hash folds all fields and agrees across codegen") {
+    def lit(months: Int, days: Int, micros: Long): Literal =
+      Literal.create(new CalendarInterval(months, days, micros), CalendarIntervalType)
+
+    // Murmur3Hash and XxHash64 treat months, days and microseconds as independent fields, so
+    // changing any one of them changes the hash. HiveHash mirrors Hive's day-time interval
+    // instead, dropping months and folding days into microseconds, so it joins only the
+    // interpreted-vs-codegen check below.
+    val base = lit(1, 5, 7L)
+    Seq[Expression => Any](
+      e => Murmur3Hash(Seq(e), 42).eval(),
+      e => XxHash64(Seq(e), 42L).eval()).foreach { hash =>
+      assert(hash(base) === hash(lit(1, 5, 7L)))
+      assert(hash(base) !== hash(lit(2, 5, 7L))) // months
+      assert(hash(base) !== hash(lit(1, 6, 7L))) // days
+      assert(hash(base) !== hash(lit(1, 5, 8L))) // microseconds
+    }
+
+    // The interpreted and codegen paths must agree, above all when days is the only non-zero
+    // field. checkEvaluation runs both and asserts they match, catching a codegen path that
+    // omits days.
+    Seq(lit(0, 5, 0L), lit(0, -5, 0L), lit(3, 5, 0L), lit(1, 5, 7L)).foreach { interval =>
+      checkEvaluation(Murmur3Hash(Seq(interval), 42), Murmur3Hash(Seq(interval), 42).eval())
+      checkEvaluation(XxHash64(Seq(interval), 42L), XxHash64(Seq(interval), 42L).eval())
+      checkEvaluation(HiveHash(Seq(interval)), HiveHash(Seq(interval)).eval())
+    }
+  }
+
+  test("nanosecond timestamp hash matches expected golden values") {
+    // The expected values are composed independently of the expression under test -- directly
+    // from the primitive hashers (and the separate hashTimestamp for Hive) with an explicit
+    // epochMicros-then-nanosWithinMicro folding order. So a wrong seed/constant or a swapped
+    // field order in the dispatch is caught, rather than masked by comparing the expression
+    // against itself.
+    val micros = 1234567890L
+    val nanos: Short = 789
+    val v = TimestampNanosVal.fromParts(micros, nanos)
+    val seed = 42
+    Seq(TimestampNTZNanosType(9), TimestampLTZNanosType(9)).foreach { dt =>
+      val lit = Literal.create(v, dt)
+      checkEvaluation(
+        Murmur3Hash(Seq(lit), seed),
+        Murmur3_x86_32.hashInt(nanos, Murmur3_x86_32.hashLong(micros, seed)))
+      checkEvaluation(
+        XxHash64(Seq(lit), seed.toLong),
+        XXH64.hashInt(nanos, XXH64.hashLong(micros, seed.toLong)))
+      checkEvaluation(
+        HiveHash(Seq(lit)),
+        ((HiveHashFunction.hashTimestamp(micros) * 37) + nanos).toInt)
+    }
   }
 
   private def testHash(inputSchema: StructType): Unit = {

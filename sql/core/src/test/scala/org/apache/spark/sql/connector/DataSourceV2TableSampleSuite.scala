@@ -17,8 +17,19 @@
 
 package org.apache.spark.sql.connector
 
-import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.connector.catalog.{InMemoryTableWithJoinAndSampleCatalog, InMemoryTableWithLegacyTableSampleCatalog, InMemoryTableWithTableSampleCatalog}
+import org.apache.spark.sql.{AnalysisException, DataFrame, Row}
+import org.apache.spark.sql.catalyst.expressions.Expression
+import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
+import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.catalog.{
+  InMemoryTableWithJoinAndSampleCatalog,
+  InMemoryTableWithLegacyJoinAndSampleCatalog,
+  InMemoryTableWithLegacyTableSampleCatalog,
+  InMemoryTableWithTableSampleAndInferredCatalog,
+  InMemoryTableWithTableSampleAndInferredFilters,
+  InMemoryTableWithTableSampleCatalog}
+import org.apache.spark.sql.execution.FilterExec
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 
 class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
@@ -156,7 +167,7 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     }
   }
 
-  test("SPARK-55978: join pushdown is skipped when a side has a pushed sample") {
+  test("SPARK-56504: join pushdown includes left side pushed sample") {
     val joinSampleCatalog = "testjoinsample"
     registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
     val t1 = s"$joinSampleCatalog.ns.t1"
@@ -171,13 +182,128 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
         val dfNoSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
         checkJoinPushed(dfNoSample)
 
-        // With SYSTEM sample on one side: join pushdown should be skipped
+        // The connector preserves its previously pushed sample when pushing down the join.
+        val dfWithSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(dfWithSample)
+        checkSamplePushed(dfWithSample, pushed = true)
+        checkPushedInfo(dfWithSample, "LEFT SAMPLE: SYSTEM SAMPLE (50.0)")
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-56504: join pushdown includes right and both side pushed samples") {
+    val joinSampleCatalog = "testjoinsampleboth"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val rightSample = sql(
+          s"SELECT * FROM $t1 JOIN $t2 TABLESAMPLE BERNOULLI (50 PERCENT) " +
+          s"ON $t1.id = $t2.id")
+        checkJoinPushed(rightSample)
+        checkSamplePushed(rightSample, pushed = true)
+        checkPushedInfo(rightSample, "RIGHT SAMPLE: BERNOULLI SAMPLE (50.0)")
+
+        val bothSamples = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
+          s"JOIN $t2 TABLESAMPLE BERNOULLI (50 PERCENT) ON $t1.id = $t2.id")
+        checkJoinPushed(bothSamples)
+        checkSamplePushed(bothSamples, pushed = true)
+        checkPushedInfo(
+          bothSamples,
+          "LEFT SAMPLE: SYSTEM SAMPLE (50.0)",
+          "RIGHT SAMPLE: BERNOULLI SAMPLE (50.0)")
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-55978: 100% SYSTEM sample does not block join pushdown") {
+    val joinSampleCatalog = "testjoinsample100"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        // At fraction = 1 the sample is a no-op on the result set, so this connector
+        // can safely preserve it while pushing down the join.
         val dfWithSample = sql(
           s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
           s"JOIN $t2 ON $t1.id = $t2.id")
-        checkJoinNotPushed(dfWithSample)
-        // The sample should still be pushed down though
-        checkSamplePushed(dfWithSample, pushed = true)
+        checkJoinPushed(dfWithSample)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-56504: connector rejects join pushdown when it cannot preserve pushed samples") {
+    val joinSampleCatalog = "testlegjoinandsample"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithLegacyJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val noSample = sql(s"SELECT * FROM $t1 JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(noSample)
+
+        val noOpSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (100 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinPushed(noOpSample)
+
+        val realSample = sql(
+          s"SELECT * FROM $t1 TABLESAMPLE SYSTEM (50 PERCENT) " +
+          s"JOIN $t2 ON $t1.id = $t2.id")
+        checkJoinNotPushed(realSample)
+        checkSamplePushed(realSample, pushed = true)
+      }
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $t1")
+      sql(s"DROP TABLE IF EXISTS $t2")
+    }
+  }
+
+  test("SPARK-55978: with-replacement sample blocks join pushdown even at fraction 1") {
+    val joinSampleCatalog = "testjoinsamplerepl"
+    registerCatalog(joinSampleCatalog, classOf[InMemoryTableWithJoinAndSampleCatalog])
+    val t1 = s"$joinSampleCatalog.ns.t1"
+    val t2 = s"$joinSampleCatalog.ns.t2"
+    sql(s"CREATE TABLE $t1 (id bigint, data string) USING _")
+    sql(s"CREATE TABLE $t2 (id bigint, data string) USING _")
+    try {
+      sql(s"INSERT INTO $t1 VALUES (1, 'a'), (2, 'b'), (3, 'c')")
+      sql(s"INSERT INTO $t2 VALUES (2, 'x'), (3, 'y'), (4, 'z')")
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        // SQL TABLESAMPLE always sets withReplacement=false, so use the
+        // DataFrame API. Poisson sampling at fraction 1 still emits each
+        // input row 0, 1, 2, ... times, so the sample is not a no-op and
+        // join pushdown must remain blocked.
+        val df = spark.table(t1).sample(withReplacement = true, fraction = 1.0)
+          .join(spark.table(t2), "id")
+        checkJoinNotPushed(df)
+        checkSamplePushed(df, pushed = true)
       }
     } finally {
       sql(s"DROP TABLE IF EXISTS $t1")
@@ -206,5 +332,51 @@ class DataSourceV2TableSampleSuite extends DatasourceV2SQLBase
     } finally {
       sql(s"DROP TABLE IF EXISTS $tableName")
     }
+  }
+
+  test("inferred filters do not block TABLESAMPLE pushdown") {
+    registerCatalog("testsampleinferred", classOf[InMemoryTableWithTableSampleAndInferredCatalog])
+    val table = "testsampleinferred.ns.sample_tbl"
+    val inferred = "id > 0L"
+    val prop = InMemoryTableWithTableSampleAndInferredFilters.INFERRED_FILTER_PROP
+    sql(s"CREATE TABLE $table (id bigint, data string) USING _ " +
+      s"TBLPROPERTIES ('$prop' = '$inferred')")
+    try {
+      sql(s"INSERT INTO $table VALUES (1, 'a'), (2, 'b'), (3, 'c'), (4, 'd'), (5, 'e')")
+      val df = sql(s"SELECT * FROM $table TABLESAMPLE SYSTEM (100 PERCENT) WHERE id >= 3")
+      checkSamplePushed(df, pushed = true)
+      checkAnswer(df, Seq(Row(3L, "c"), Row(4L, "d"), Row(5L, "e")))
+      assertInferredOnLogicalPlan(df, inferred)
+      assertInferredNotInFilterExec(df, inferred)
+    } finally {
+      sql(s"DROP TABLE IF EXISTS $table")
+    }
+  }
+
+  private def assertInferredOnLogicalPlan(df: DataFrame, inferred: String): Unit = {
+    val plan = df.queryExecution.optimizedPlan
+    val scan = plan.collectFirst { case s: DataSourceV2ScanRelation => s }.getOrElse {
+      fail(s"expected DataSourceV2ScanRelation in:\n${plan.treeString}")
+    }
+    assert(scan.inferredFilters.exists(containsFilter(_, inferred)),
+      s"inferred filter $inferred missing on scan ${scan.inferredFilters}; " +
+        s"plan:\n${plan.treeString}")
+    val filters = plan.collect { case filter: Filter => filter.condition }
+    assert(!filters.exists(containsFilter(_, inferred)),
+      s"inferred filter $inferred should remain scan metadata:\n${plan.treeString}")
+  }
+
+  private def assertInferredNotInFilterExec(df: DataFrame, inferred: String): Unit = {
+    val execFilters = df.queryExecution.executedPlan.collect {
+      case filter: FilterExec => filter.condition
+    }
+    assert(!execFilters.exists(containsFilter(_, inferred)),
+      s"inferred filter $inferred should not reach FilterExec:\n" +
+        df.queryExecution.executedPlan)
+  }
+
+  private def containsFilter(condition: Expression, filter: String): Boolean = {
+    val expected = CatalystSqlParser.parseExpression(filter).sql
+    condition.exists(_.sql == expected)
   }
 }

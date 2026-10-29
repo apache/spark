@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.catalog
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkFunSuite, SparkIllegalArgumentException}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.constraints.Constraint.ValidationStatus
 import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, LiteralValue, NamedReference}
@@ -37,12 +37,13 @@ class ConstraintSuite extends SparkFunSuite {
     assert(con1.validationStatus() == ValidationStatus.VALID)
 
     val con2 = Constraint.check("con2")
-    .predicate(
-      new Predicate(
-        "=",
-        Array[Expression](
-          FieldReference(Seq("a", "b.c", "d")),
-          LiteralValue(1, IntegerType))))
+      .predicateSql("a.`b.c`.d = 1")
+      .predicate(
+        new Predicate(
+          "=",
+          Array[Expression](
+            FieldReference(Seq("a", "b.c", "d")),
+            LiteralValue(1, IntegerType))))
       .enforced(false)
       .validationStatus(ValidationStatus.VALID)
       .rely(true)
@@ -68,6 +69,22 @@ class ConstraintSuite extends SparkFunSuite {
     val con4 = Constraint.check("con4").predicateSql("a = 1").build()
     assert(con4.toDDL == "CONSTRAINT con4 CHECK (a = 1) ENFORCED NORELY")
     assert(con4.validationStatus() == ValidationStatus.UNVALIDATED)
+  }
+
+  test("CHECK constraint requires predicateSql") {
+    // predicateSql is the canonical representation of a CHECK condition and must always be present,
+    // even when a structured predicate is provided.
+    val noCondition = Constraint.check("con1")
+    val predicateOnly = Constraint.check("con2").predicate(
+      new Predicate(
+        "=",
+        Array[Expression](FieldReference(Seq("a")), LiteralValue(1, IntegerType))))
+    Seq(noCondition, predicateOnly).foreach { builder =>
+      checkError(
+        exception = intercept[SparkIllegalArgumentException](builder.build()),
+        condition = "INTERNAL_ERROR",
+        parameters = Map("message" -> "Predicate SQL can't be null in CHECK"))
+    }
   }
 
   test("UNIQUE constraint toDDL") {
@@ -142,5 +159,18 @@ class ConstraintSuite extends SparkFunSuite {
       "REFERENCES other_table (other_id) " +
       "NOT ENFORCED NORELY")
     assert(fk2.validationStatus() == ValidationStatus.INVALID)
+  }
+
+  test("SPARK-60344: toDDL quotes the constraint name if needed") {
+    val columns = Array[NamedReference](FieldReference(Seq("a")))
+    val check = Constraint.check("c 1").predicateSql("a > 0").build()
+    assert(check.toDDL == "CONSTRAINT `c 1` CHECK (a > 0) ENFORCED NORELY")
+    val unique = Constraint.unique("uk-1", columns).build()
+    assert(unique.toDDL == "CONSTRAINT `uk-1` UNIQUE (a) ENFORCED NORELY")
+    val pk = Constraint.primaryKey("pk`1", columns).build()
+    assert(pk.toDDL == "CONSTRAINT `pk``1` PRIMARY KEY (a) ENFORCED NORELY")
+    val fk = Constraint.foreignKey(
+      "fk.1", columns, Identifier.of(Array("ns"), "t"), columns).build()
+    assert(fk.toDDL == "CONSTRAINT `fk.1` FOREIGN KEY (a) REFERENCES ns.t (a) ENFORCED NORELY")
   }
 }

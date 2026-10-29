@@ -28,6 +28,7 @@ import scala.util.{Random, Try}
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
@@ -284,17 +285,60 @@ object RandomDataGenerator {
           },
           specialTs.map { s => LocalDateTime.parse(s.replace(" ", "T")) }
         )
-      case _: TimeType =>
+      case t: TimestampNTZNanosType =>
+        // Honor the declared precision: e.g. TimestampNTZNanosType(7) values must have at most
+        // 7 fractional-second digits, so the low (9-p) digits of nano-of-second are zeroed for
+        // both the uniform random and the specialNanosTs corpus.
+        val truncate = TimestampNanosTestUtils.nanoOfSecTruncator(t.precision)
+        randomNumeric[LocalDateTime](
+          rand,
+          (rand: Random) => {
+            // Uniform micros for the high-order Long + an independent [0, 999] for the
+            // sub-microsecond nanos. plusNanos is safe here because microsToLocalDateTime
+            // returns a value whose nano-of-second is a multiple of 1000, so adding [0, 999]
+            // never crosses a microsecond boundary.
+            val ldt = DateTimeUtils.microsToLocalDateTime(uniformMicrosRand(rand))
+              .plusNanos(rand.nextInt(NANOS_PER_MICROS.toInt).toLong)
+            ldt.withNano(truncate(ldt.getNano))
+          },
+          TimestampNanosTestUtils.specialNanosTs
+            .map(TimestampNanosTestUtils.parseSpecialNanosNTZ)
+            .map(ldt => ldt.withNano(truncate(ldt.getNano)))
+        )
+      case t: TimestampLTZNanosType =>
+        val truncate = TimestampNanosTestUtils.nanoOfSecTruncator(t.precision)
+        randomNumeric[Instant](
+          rand,
+          (rand: Random) => {
+            val instant = DateTimeUtils.microsToInstant(uniformMicrosRand(rand))
+              .plusNanos(rand.nextInt(NANOS_PER_MICROS.toInt).toLong)
+            Instant.ofEpochSecond(instant.getEpochSecond, truncate(instant.getNano).toLong)
+          },
+          TimestampNanosTestUtils.specialNanosTs
+            .map(s => TimestampNanosTestUtils.parseSpecialNanosLTZ(s, ZoneId.systemDefault()))
+            .map(i => Instant.ofEpochSecond(i.getEpochSecond, truncate(i.getNano).toLong))
+        )
+      case t: TimeType =>
+        // Honor the declared precision: both the uniform random draw and the special values are
+        // truncated to `t.precision` so the generated TIME(p) values carry at most p
+        // fractional-second digits (mirrors the nanosecond-timestamp branches above).
         val specialTimes = Seq(
           "00:00:00",
-          "23:59:59.999999"
-        )
+          "23:59:59.999999",
+          "23:59:59.999999999"
+        ).map(LocalTime.parse)
+          .map(lt => DateTimeUtils.nanosToLocalTime(
+            DateTimeUtils.truncateTimeToPrecision(
+              DateTimeUtils.localTimeToNanos(lt), t.precision)))
         randomNumeric[LocalTime](
           rand,
           (rand: Random) => {
-            DateTimeUtils.nanosToLocalTime(rand.between(0, 24 * 60 * 60 * 1000 * 1000L) * 1000L)
+            // The full valid range is [0, 86_399_999_999_999] nanoseconds since midnight.
+            val nanos = DateTimeUtils.truncateTimeToPrecision(
+              rand.between(0L, 24 * 60 * 60 * 1000 * 1000 * 1000L), t.precision)
+            DateTimeUtils.nanosToLocalTime(nanos)
           },
-          specialTimes.map(LocalTime.parse)
+          specialTimes
         )
       case CalendarIntervalType => Some(() => {
         val months = rand.nextInt(1000)

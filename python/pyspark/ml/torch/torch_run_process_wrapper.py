@@ -66,10 +66,11 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, sigterm_handler)
 
     t.start()
-    task.stdin.close()  # type: ignore[union-attr]
+    assert task.stdin is not None and task.stdout is not None
+    task.stdin.close()
     try:
-        for line in task.stdout:  # type: ignore[union-attr]
-            decoded = line.decode()
+        for line in task.stdout:
+            decoded = line.decode("utf-8")
             print(decoded.rstrip())
         task.wait()
     finally:

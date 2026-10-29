@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.util.DateTimeConstants.MILLIS_PER_SECOND
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils.{withDefaultTimeZone, UTC}
+import org.apache.spark.sql.catalyst.util.TimestampNanosTestUtils.foreachNanosPrecision
 import org.apache.spark.sql.errors.QueryErrorsBase
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -474,10 +475,54 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     checkExceptionInExpression[ArithmeticException](
       cast("6E+37", DecimalType(38, 1)),
       "cannot be represented as Decimal(38, 1)")
+    Seq("1e2147483647", "1.5e2147483647", "12e2147483647").foreach { s =>
+      checkExceptionInExpression[ArithmeticException](
+        cast(s, DecimalType(10, 2)),
+        "NUMERIC_OUT_OF_SUPPORTED_RANGE")
+    }
 
     checkExceptionInExpression[NumberFormatException](
       cast("abcd", DecimalType(38, 1)),
       castErrMsg("abcd", DecimalType(38, 1)))
+  }
+
+  test("SPARK-60119: cast string with a huge exponent to decimal with negative scale allowed") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq("1e2147483647", "-1e2147483646", "12e2147483647", "1e100000000").foreach { str =>
+        checkExceptionInExpression[ArithmeticException](
+          cast(str, DecimalType(10, 2)),
+          "cannot be represented as Decimal(10, 2)")
+      }
+      checkEvaluation(cast("0e2147483647", DecimalType(10, 2)), Decimal("0.00"))
+
+      // The value is shown in plain notation unless its scale is hugely negative.
+      Seq("1e2147483647" -> "1E+2147483647", "1e40" -> ("1" + "0" * 40)).foreach {
+        case (str, value) =>
+          def expr: Expression = cast(str, DecimalType(10, 2))
+          if (!isTryCast) {
+            def checkOutOfRange(eval: => Any): Unit = {
+              checkError(
+                exception = intercept[SparkArithmeticException](eval),
+                condition = "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION",
+                parameters = Map(
+                  "value" -> value,
+                  "precision" -> "10",
+                  "scale" -> "2",
+                  "config" -> """"spark.sql.ansi.enabled""""),
+                queryContext = Array(ExpectedContext(fragment = "", start = -1, stop = -1)))
+            }
+            // Interpreted, and both codegen paths without falling back to interpreted.
+            checkOutOfRange(evaluateWithoutCodegen(expr))
+            withSQLConf(
+              SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.CODEGEN_ONLY.toString) {
+              checkOutOfRange(evaluateWithMutableProjection(expr))
+              checkOutOfRange(evaluateWithUnsafeProjection(expr))
+            }
+          } else {
+            checkEvaluation(expr, null)
+          }
+      }
+    }
   }
 
   protected def checkCastToBooleanError(l: Literal, to: DataType, tryCastResult: Any): Unit = {
@@ -800,6 +845,36 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
     }
   }
 
+  test("SPARK-57211: ANSI mode cast string to nanosecond timestamp with parse error") {
+    val invalidInputs = Seq(
+      "123", "2015-03-18 123142", "2015-03-18X", "2015/03/18", "abdef", "2015-031-8")
+    DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
+      foreachNanosPrecision { precision =>
+        invalidInputs.foreach { str =>
+          checkExceptionInExpression[DateTimeException](
+            cast(Literal(str), TimestampLTZNanosType(precision), Option(zid.getId)),
+            castErrMsg(str, TimestampLTZNanosType(precision)))
+          checkExceptionInExpression[DateTimeException](
+            cast(Literal(str), TimestampNTZNanosType(precision)),
+            castErrMsg(str, TimestampNTZNanosType(precision)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57838: ANSI mode cast string beyond the epoch-microsecond range to nanos") {
+    // Same error as the micro types: the value does not fit the Long epoch-microseconds.
+    Seq("+294247-01-10 04:00:54.775808", "-290308-12-21 19:59:05.224191999").foreach { str =>
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(str), TimestampNTZType), castErrMsg(str, TimestampNTZType))
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(str), TimestampNTZNanosType(9)), castErrMsg(str, TimestampNTZNanosType(9)))
+      checkExceptionInExpression[DateTimeException](
+        cast(Literal(s"${str}Z"), TimestampLTZNanosType(9), DateTimeTestUtils.UTC_OPT),
+        castErrMsg(s"${str}Z", TimestampLTZNanosType(9)))
+    }
+  }
+
   test("ANSI mode: cast string to date with parse error") {
     DateTimeTestUtils.outstandingZoneIds.foreach { zid =>
       def checkCastWithParseError(str: String): Unit = {
@@ -847,6 +922,15 @@ class CastWithAnsiOnSuite extends CastSuiteBase with QueryErrorsBase {
       checkExceptionInExpression[DateTimeException](
         cast(invalidInput, TimeType()),
         castErrMsg(invalidInput, TimeType()))
+    }
+  }
+
+  test("SPARK-57588: cast invalid string input to time reports the target precision") {
+    for (precision <- TimeType.MIN_PRECISION to TimeType.MAX_PRECISION) {
+      val invalidInput = "not a time"
+      checkExceptionInExpression[DateTimeException](
+        cast(invalidInput, TimeType(precision)),
+        castErrMsg(invalidInput, TimeType(precision)))
     }
   }
 

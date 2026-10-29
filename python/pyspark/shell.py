@@ -25,8 +25,9 @@ import atexit
 import builtins
 import os
 import platform
-import warnings
 import sys
+import warnings
+from urllib.parse import urlparse
 
 import pyspark
 from pyspark.core.context import SparkContext
@@ -34,7 +35,6 @@ from pyspark.logger import SPARK_LOG_SCHEMA  # noqa: F401
 from pyspark.sql import SparkSession
 from pyspark.sql.context import SQLContext
 from pyspark.sql.utils import is_remote
-from urllib.parse import urlparse
 
 if getattr(builtins, "__IPYTHON__", False):
     # (Only) during PYTHONSTARTUP execution, IPython temporarily adds the parent
@@ -138,6 +138,6 @@ print("SparkSession available as 'spark'.")
 # which allows us to execute the user's PYTHONSTARTUP file:
 _pythonstartup = os.environ.get("OLD_PYTHONSTARTUP")
 if _pythonstartup and os.path.isfile(_pythonstartup):
-    with open(_pythonstartup) as f:
+    with open(_pythonstartup, encoding="utf-8") as f:
         code = compile(f.read(), _pythonstartup, "exec")
         exec(code)

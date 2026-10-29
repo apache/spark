@@ -134,6 +134,12 @@ class IntervalColumnBuilder extends ComplexColumnBuilder(new IntervalColumnStats
 private[columnar]
 class VariantColumnBuilder extends ComplexColumnBuilder(new VariantColumnStats, VARIANT)
 
+private[columnar] class TimestampNTZNanosColumnBuilder
+  extends ComplexColumnBuilder(new TimestampNanosColumnStats, TIMESTAMP_NTZ_NANOS)
+
+private[columnar] class TimestampLTZNanosColumnBuilder
+  extends ComplexColumnBuilder(new TimestampNanosColumnStats, TIMESTAMP_LTZ_NANOS)
+
 private[columnar] class CompactDecimalColumnBuilder(dataType: DecimalType)
   extends NativeColumnBuilder(new DecimalColumnStats(dataType), COMPACT_DECIMAL(dataType))
 
@@ -193,6 +199,8 @@ private[columnar] object ColumnBuilder {
       case BinaryType => new BinaryColumnBuilder
       case CalendarIntervalType => new IntervalColumnBuilder
       case VariantType => new VariantColumnBuilder
+      case _: TimestampNTZNanosType => new TimestampNTZNanosColumnBuilder
+      case _: TimestampLTZNanosType => new TimestampLTZNanosColumnBuilder
       case dt: DecimalType if dt.precision <= Decimal.MAX_LONG_DIGITS =>
         new CompactDecimalColumnBuilder(dt)
       case dt: DecimalType => new DecimalColumnBuilder(dt)

@@ -19,7 +19,6 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.math.{BigDecimal, RoundingMode}
 import java.util.concurrent.TimeUnit._
-import java.util.zip.CRC32
 
 import scala.annotation.tailrec
 
@@ -40,7 +39,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.SchemaUtils
 import org.apache.spark.unsafe.Platform
 import org.apache.spark.unsafe.hash.Murmur3_x86_32
-import org.apache.spark.unsafe.types.{CalendarInterval, UTF8String}
+import org.apache.spark.unsafe.types.{CalendarInterval, TimestampNanosVal, UTF8String}
 import org.apache.spark.util.ArrayImplicits._
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -53,6 +52,11 @@ import org.apache.spark.util.ArrayImplicits._
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns an MD5 128-bit checksum as a hex string of `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the MD5 checksum of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -94,6 +98,13 @@ case class Md5(child: Expression)
   usage = """
     _FUNC_(expr, bitLength) - Returns a checksum of SHA-2 family as a hex string of `expr`.
       SHA-224, SHA-256, SHA-384, and SHA-512 are supported. Bit length of 0 is equivalent to 256.
+  """,
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the SHA-2 checksum of.
+        An expression that evaluates to a binary.
+      * bitLength - The bit length of the SHA-2 result (224, 256, 384, or 512).
+        An expression that evaluates to an integer.
   """,
   examples = """
     Examples:
@@ -161,6 +172,11 @@ case class Sha2(left: Expression, right: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a sha1 hash value as a hex string of the `expr`.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the SHA-1 hash of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -196,6 +212,11 @@ case class Sha1(child: Expression)
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr) - Returns a cyclic redundancy check value of the `expr` as a bigint.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the cyclic redundancy check value of.
+        An expression that evaluates to a binary.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark');
@@ -214,26 +235,91 @@ case class Crc32(child: Expression)
   override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
 
   protected override def nullSafeEval(input: Any): Any = {
-    val checksum = new CRC32
-    checksum.update(input.asInstanceOf[Array[Byte]], 0, input.asInstanceOf[Array[Byte]].length)
-    checksum.getValue
+    ExpressionImplUtils.crc32(input.asInstanceOf[Array[Byte]])
   }
 
   override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
-    val CRC32 = "java.util.zip.CRC32"
-    val checksum = ctx.freshName("checksum")
+    val utils = classOf[ExpressionImplUtils].getName
     nullSafeCodeGen(ctx, ev, value => {
-      s"""
-        $CRC32 $checksum = new $CRC32();
-        $checksum.update($value, 0, $value.length);
-        ${ev.value} = $checksum.getValue();
-      """
+      s"${ev.value} = $utils.crc32($value);"
     })
   }
 
   override protected def withNewChildInternal(newChild: Expression): Crc32 = copy(child = newChild)
 }
 
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns a 64-bit hash value of the argument using the XXH3 algorithm.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the XXH3 hash of.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       80997306238743657
+  """,
+  since = "4.4.0",
+  group = "hash_funcs")
+case class Xxh364(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes {
+  override def nullIntolerant: Boolean = true
+
+  override def dataType: DataType = LongType
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  protected override def nullSafeEval(input: Any): Any =
+    XXH3.hash64(input.asInstanceOf[Array[Byte]])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = classOf[XXH3].getName
+    nullSafeCodeGen(ctx, ev, value => s"${ev.value} = $cls.hash64($value);")
+  }
+
+  override def prettyName: String = "xxh3_64"
+
+  override protected def withNewChildInternal(newChild: Expression): Xxh364 = copy(child = newChild)
+}
+
+@ExpressionDescription(
+  usage = "_FUNC_(expr) - Returns a 128-bit XXH3 hash of the argument as a hex string.",
+  arguments = """
+    Arguments:
+      * expr - The expression to compute the XXH3 hash of.
+        An expression that evaluates to a binary.
+  """,
+  examples = """
+    Examples:
+      > SELECT _FUNC_('Spark');
+       7d57dd84c60c86ca1f4e82ab91a12b5e
+  """,
+  since = "4.4.0",
+  group = "hash_funcs")
+case class Xxh3128(child: Expression)
+  extends UnaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
+  override def nullIntolerant: Boolean = true
+
+  override def inputTypes: Seq[DataType] = Seq(BinaryType)
+
+  override def contextIndependentFoldable: Boolean = child.contextIndependentFoldable
+
+  protected override def nullSafeEval(input: Any): Any =
+    XXH3.hash128Hex(input.asInstanceOf[Array[Byte]])
+
+  override def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val cls = classOf[XXH3].getName
+    defineCodeGen(ctx, ev, c => s"$cls.hash128Hex($c)")
+  }
+
+  override def prettyName: String = "xxh3_128"
+
+  override protected def withNewChildInternal(newChild: Expression): Xxh3128 =
+    copy(child = newChild)
+}
 
 /**
  * A function that calculates hash value for a group of expressions.  Note that the `seed` argument
@@ -250,8 +336,8 @@ case class Crc32(child: Expression)
  *                             and hash it.
  *  - decimal:                 if it's a small decimal, i.e. precision <= 18, turn it into long
  *                             and hash it. Else, turn it into bytes and hash it.
- *  - calendar interval:       hash `microseconds` first, and use the result as seed
- *                             to hash `months`.
+ *  - calendar interval:       hash `microseconds` first, use the result as seed to hash `days`,
+ *                             then use that result as seed to hash `months`.
  *  - interval day to second:  it store long value of `microseconds`, use murmur3 to hash the long
  *                             input with seed.
  *  - interval year to month:  it store int value of `months`, use murmur3 to hash the int
@@ -427,7 +513,13 @@ abstract class HashExpression[E] extends Expression {
 
   protected def genHashCalendarInterval(input: String, result: String): String = {
     val microsecondsHash = s"$hasherClassName.hashLong($input.microseconds, $result)"
-    s"$result = $hasherClassName.hashInt($input.months, $microsecondsHash);"
+    val daysHash = s"$hasherClassName.hashInt($input.days, $microsecondsHash)"
+    s"$result = $hasherClassName.hashInt($input.months, $daysHash);"
+  }
+
+  protected def genHashTimestampNanos(input: String, result: String): String = {
+    val epochMicrosHash = s"$hasherClassName.hashLong($input.epochMicros, $result)"
+    s"$result = $hasherClassName.hashInt($input.nanosWithinMicro, $epochMicrosHash);"
   }
 
   protected def genHashString(
@@ -549,6 +641,8 @@ abstract class HashExpression[E] extends Expression {
     case ByteType | ShortType | IntegerType | DateType => genHashInt(input, result)
     case LongType | _: TimeType => genHashLong(input, result)
     case TimestampType | TimestampNTZType => genHashTimestamp(input, result)
+    case _: AnyTimestampNanoType =>
+      genHashTimestampNanos(input, result)
     case FloatType => genHashFloat(input, result)
     case DoubleType => genHashDouble(input, result)
     case d: DecimalType => genHashDecimal(ctx, d, input, result)
@@ -636,6 +730,7 @@ abstract class InterpretedHashFunction {
           hashUnsafeBytes(bytes, Platform.BYTE_ARRAY_OFFSET, bytes.length, seed)
         }
       case c: CalendarInterval => hashInt(c.months, hashInt(c.days, hashLong(c.microseconds, seed)))
+      case t: TimestampNanosVal => hashInt(t.nanosWithinMicro, hashLong(t.epochMicros, seed))
       case a: Array[Byte] =>
         hashUnsafeBytes(a, Platform.BYTE_ARRAY_OFFSET, a.length, seed)
       case s: UTF8String =>
@@ -739,6 +834,11 @@ abstract class InterpretedHashFunction {
  */
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a hash value of the arguments.",
+  arguments = """
+    Arguments:
+      * exprN - The values to hash. There can be one or more of them, each an
+          expression of any data type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
@@ -810,6 +910,11 @@ case class CollationAwareMurmur3Hash(children: Seq[Expression], seed: Int)
 @ExpressionDescription(
   usage = "_FUNC_(expr1, expr2, ...) - Returns a 64-bit hash value of the arguments. " +
     "Hash seed is 42.",
+  arguments = """
+    Arguments:
+      * exprN - The values to hash. There can be one or more of them, each an
+          expression of any data type.
+  """,
   examples = """
     Examples:
       > SELECT _FUNC_('Spark', array(123), 2);
@@ -975,6 +1080,12 @@ case class HiveHash(children: Seq[Expression]) extends HashExpression[Int] {
   override protected def genHashTimestamp(input: String, result: String): String =
     s"""
       $result = (int) ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestamp($input);
+     """
+
+  override protected def genHashTimestampNanos(input: String, result: String): String =
+    s"""
+      $result = (int)
+        ${HiveHashFunction.getClass.getName.stripSuffix("$")}.hashTimestampNanos($input);
      """
 
   override protected def genHashString(
@@ -1145,6 +1256,17 @@ object HiveHashFunction extends InterpretedHashFunction {
   }
 
   /**
+   * Extends [[hashTimestamp]] with the sub-microsecond nanoseconds carried by a
+   * [[TimestampNanosVal]], folding the extra field in with the same `* 37 + field` idiom used by
+   * [[hashCalendarInterval]]. Hive has no nanosecond-precision timestamp type, so this is a
+   * Spark-defined, self-consistent hash (equal values hash equally) rather than a Hive-compatible
+   * one.
+   */
+  def hashTimestampNanos(t: TimestampNanosVal): Long = {
+    (hashTimestamp(t.epochMicros) * 37) + t.nanosWithinMicro
+  }
+
+  /**
    * Hive allows input intervals to be defined using units below but the intervals
    * have to be from the same category:
    * - year, month (stored as HiveIntervalYearMonth)
@@ -1242,6 +1364,7 @@ object HiveHashFunction extends InterpretedHashFunction {
 
       case d: Decimal => normalizeDecimal(d.toJavaBigDecimal).hashCode()
       case timestamp: Long if dataType.isInstanceOf[TimestampType] => hashTimestamp(timestamp)
+      case timestampNanos: TimestampNanosVal => hashTimestampNanos(timestampNanos)
       case calendarInterval: CalendarInterval => hashCalendarInterval(calendarInterval)
       case _ => super.hash(value, dataType, 0, isCollationAware, legacyCollationAwareHashing)
     }

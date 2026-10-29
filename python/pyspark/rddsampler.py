@@ -15,11 +15,10 @@
 # limitations under the License.
 #
 
-import sys
-import random
 import math
+import random
+import sys
 from typing import Generic, Hashable, Iterable, Iterator, Optional, TypeVar
-
 
 T = TypeVar("T")
 K = TypeVar("K", bound=Hashable)

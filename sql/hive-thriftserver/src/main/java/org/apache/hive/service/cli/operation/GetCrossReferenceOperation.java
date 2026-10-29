@@ -20,12 +20,16 @@ package org.apache.hive.service.cli.operation;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ForeignKeysRequest;
 import org.apache.hadoop.hive.metastore.api.SQLForeignKey;
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HiveOperationType;
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject;
+import org.apache.hadoop.hive.ql.security.authorization.plugin.HivePrivilegeObject.HivePrivilegeObjectType;
 import org.apache.hadoop.hive.serde2.thrift.Type;
 import org.apache.hive.service.cli.*;
 import org.apache.hive.service.cli.session.HiveSession;
 import org.apache.hive.service.rpc.thrift.TRowSet;
 import org.apache.hive.service.rpc.thrift.TTableSchema;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -117,6 +121,27 @@ public class GetCrossReferenceOperation extends MetadataOperation {
     setState(OperationState.RUNNING);
     try {
        IMetaStoreClient metastoreClient = getParentSession().getMetaStoreClient();
+      if (isAuthV2Enabled()) {
+        List<HivePrivilegeObject> privObjs = new ArrayList<>();
+        if (parentTableName != null) {
+          privObjs.add(new HivePrivilegeObject(
+              HivePrivilegeObjectType.TABLE_OR_VIEW, parentSchemaName, parentTableName));
+        }
+        if (foreignTableName != null) {
+          privObjs.add(new HivePrivilegeObject(
+              HivePrivilegeObjectType.TABLE_OR_VIEW, foreignSchemaName, foreignTableName));
+        }
+        String cmdStr = "catalog : " + parentCatalogName
+            + ", parentSchema : " + parentSchemaName + ", parentTable : " + parentTableName
+            + ", foreignSchema : " + foreignSchemaName + ", foreignTable : " + foreignTableName;
+        if (privObjs.isEmpty()) {
+          // Neither table is specified, so the request cannot be scoped to any privilege object;
+          // reject it instead of skipping the authorization check.
+          throw new HiveSQLException(
+              "Access denied: neither parent nor foreign table specified. " + cmdStr);
+        }
+        authorizeMetaGets(HiveOperationType.GET_COLUMNS, privObjs, cmdStr);
+      }
      ForeignKeysRequest fkReq = new ForeignKeysRequest(parentSchemaName, parentTableName, foreignSchemaName, foreignTableName);
      List<SQLForeignKey> fks = metastoreClient.getForeignKeys(fkReq);
       if (fks == null) {

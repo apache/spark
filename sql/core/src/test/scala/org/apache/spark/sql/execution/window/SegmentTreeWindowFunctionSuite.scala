@@ -99,6 +99,19 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
       baseDF.select($"id", $"pk", avg($"v").over(winSpec(-3, 3)).as("agg")))
   }
 
+  // First / Last basic equivalence (respect-nulls; the default for
+  // first()/last()). Order-correctness depends on the segment-tree
+  // combine being left-to-right; see WindowSegmentTree.EligibleAggregates.
+  test("FIRST over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", first($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
+  test("LAST over ROWS BETWEEN 3 PRECEDING AND 3 FOLLOWING") {
+    checkEquivalence(() =>
+      baseDF.select($"id", $"pk", last($"v").over(winSpec(-3, 3)).as("agg")))
+  }
+
   test("MIN + MAX + SUM share a single window frame") {
     checkEquivalence(() =>
       baseDF.select(
@@ -227,6 +240,94 @@ class SegmentTreeWindowFunctionSuite extends SharedSparkSession {
         max($"v").over(winSpec(-4, 4)).as("mx"),
         sum($"v").over(winSpec(-4, 4)).as("sm"),
         count($"v").over(winSpec(-4, 4)).as("cn")))
+  }
+
+  // First / Last respect-nulls: NULL is a valid value. If the first row in the
+  // frame is NULL, FIRST returns NULL. The seg-tree merge must preserve this.
+  test("FIRST/LAST respect-nulls with mixed NULL frame contents") {
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v").over(winSpec(-4, 4)).as("fv"),
+        last($"v").over(winSpec(-4, 4)).as("lv")))
+  }
+
+  // First / Last IGNORE NULLS: per-row updates only set valueSet on non-null
+  // values. A per-block partial of (null, false) for an all-NULL block must
+  // be correctly skipped when merged with a later non-null block.
+  test("FIRST/LAST ignore-nulls with mixed NULL frame contents") {
+    val df = spark.range(0, 60).selectExpr(
+      "id",
+      "(id % 3) AS pk",
+      "CASE WHEN id % 3 = 0 THEN NULL ELSE CAST(id AS INT) END AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v", ignoreNulls = true).over(winSpec(-4, 4)).as("fv_ign"),
+        last($"v", ignoreNulls = true).over(winSpec(-4, 4)).as("lv_ign")))
+  }
+
+  // All-NULL column edge case for First/Last in both modes.
+  // Respect-nulls: returns NULL. Ignore-nulls: also returns NULL (no
+  // non-null candidate ever sets valueSet).
+  test("all-NULL column: FIRST/LAST in both modes") {
+    val df = spark.range(0, 30).selectExpr(
+      "id", "(id % 3) AS pk", "CAST(NULL AS INT) AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v").over(winSpec(-3, 3)).as("fv"),
+        last($"v").over(winSpec(-3, 3)).as("lv"),
+        first($"v", ignoreNulls = true).over(winSpec(-3, 3)).as("fv_ign"),
+        last($"v", ignoreNulls = true).over(winSpec(-3, 3)).as("lv_ign")))
+  }
+
+  // Adversarial NULL distribution for IGNORE NULLS: per-block aggregates need
+  // to compose correctly when an entire block is all-NULL. With block size
+  // 65536 and partition size 120 we cannot literally produce a fully-NULL
+  // block via the standard fixture, but a long stretch of consecutive NULLs
+  // exercises the same merge path (per-row updates produce intermediate
+  // valueSet=false buffers which then merge with a later valueSet=true buffer
+  // via mergeExpressions). Combined with a wide frame to force tree queries
+  // crossing the all-NULL stretch.
+  test("FIRST/LAST ignore-nulls: stretches of consecutive NULLs cross-merge correctly") {
+    val df = spark.range(0, 90).selectExpr(
+      "id",
+      "0 AS pk",
+      // First 30 rows non-null, next 30 all NULL, last 30 non-null again.
+      "CASE WHEN id BETWEEN 30 AND 59 THEN NULL ELSE CAST(id AS INT) END AS v")
+    checkEquivalence(() =>
+      df.select($"id", $"pk",
+        first($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("fv_ign"),
+        last($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("lv_ign")))
+  }
+
+  // Multi-block First/Last: the correctness of First/Last on the segment tree
+  // relies on the combine being applied strictly left-to-right (First keeps the
+  // left operand, Last the right). The default 65536 block size answers every
+  // small-partition query inside a single block (queryDescend only), so the
+  // cross-block combine spine (left partial -> ascending full blocks -> right
+  // partial in WindowSegmentTree.query) is never exercised by the fixtures
+  // above. Force blockSize=16 on a 40-row partition so a wide frame crosses
+  // three blocks, and make the middle block (rows 16..31) entirely NULL so the
+  // all-NULL (null, false) block partial is produced and merged for real -- the
+  // exact path the IGNORE NULLS rationale depends on. Differential vs the
+  // legacy frame in both respect-nulls and ignore-nulls modes.
+  test("FIRST/LAST multi-block combine with an all-NULL middle block") {
+    val df = spark.range(0, 40).selectExpr(
+      "id",
+      "0 AS pk",
+      // Blocks (size 16): [0,16) non-null, [16,32) all NULL, [32,40) non-null.
+      "CASE WHEN id BETWEEN 16 AND 31 THEN NULL ELSE CAST(id AS INT) END AS v")
+    withSegTreeBlock() {
+      checkEquivalence(() =>
+        df.select($"id", $"pk",
+          first($"v").over(winSpec(-20, 20)).as("fv"),
+          last($"v").over(winSpec(-20, 20)).as("lv"),
+          first($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("fv_ign"),
+          last($"v", ignoreNulls = true).over(winSpec(-20, 20)).as("lv_ign")))
+    }
   }
 
   test("Double NaN and +/-Infinity propagate correctly through MIN/MAX/SUM") {

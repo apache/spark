@@ -99,6 +99,9 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
   override val catalogName: String = "mssql"
   override val db = new MsSQLServerDatabaseOnDocker
 
+  // MsSqlServer has no boolean type, so IS [NOT] NULL over a predicate is not pushed down.
+  override protected def supportsIsNullOverPredicate: Boolean = false
+
   override def sparkConf: SparkConf = super.sparkConf
     .set("spark.sql.catalog.mssql", classOf[JDBCTableCatalog].getName)
     .set("spark.sql.catalog.mssql.url", db.getJdbcUrl(dockerIp, externalPort))
@@ -290,5 +293,32 @@ class MsSqlServerIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JD
     val rows = df.collect()
     assert(rows.length == 1)
     assert(rows(0).getString(0) === "amy")
+  }
+
+  test("SPARK-60479: CHAR read-side padding with NULL") {
+    val table = s"$catalogName.char_pad"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, 'YES')")
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getInt(0) === 1)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getInt(0) === 2)
+      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y', 'N')")
+      checkFilterPushed(notIn)
+      val notInRows = notIn.collect().map(_.getInt(0)).toSet
+      assert(notInRows === Set(3))
+      val cnt = sql(s"SELECT COUNT(flag) FROM $table")
+      assert(cnt.collect()(0).getLong(0) === 2)
+      val grp = sql(s"SELECT flag IS NULL, COUNT(*) FROM $table GROUP BY flag")
+      val grpRows = grp.collect().map(r => (r.getBoolean(0), r.getLong(1))).toSet
+      assert(grpRows === Set((false, 1L), (true, 1L)))
+    }
   }
 }

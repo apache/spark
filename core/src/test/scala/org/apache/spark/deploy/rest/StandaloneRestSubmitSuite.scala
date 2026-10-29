@@ -31,11 +31,11 @@ import org.json4s.JsonAST._
 import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark._
-import org.apache.spark.deploy.{SparkSubmit, SparkSubmitArguments}
+import org.apache.spark.deploy.{DriverEnvironment, SparkSubmit, SparkSubmitArguments}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.DriverState._
 import org.apache.spark.deploy.master.RecoveryState
-import org.apache.spark.internal.config.{MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
+import org.apache.spark.internal.config.{MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS, MASTER_REST_SERVER_FILTERS, MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE, MASTER_REST_SERVER_MAX_THREADS, MASTER_REST_SERVER_VIRTUAL_THREADS}
 import org.apache.spark.rpc._
 import org.apache.spark.util.ArrayImplicits._
 import org.apache.spark.util.Utils
@@ -267,6 +267,30 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     assert(errorResponse.message.contains("Master is not ready."))
   }
 
+  test("SPARK-59916: hold and resume an application") {
+    val masterUrl = startDummyServer()
+    val httpUrl = masterUrl.replace("spark://", "http://")
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    Seq("hold" -> "held", "resume" -> "resumed").foreach { case (action, message) =>
+      val path = s"$httpUrl/$v/submissions/$action"
+      val (response, code) = sendHttpRequestWithResponse(s"$path/my-app", "POST")
+      assert(code === HttpServletResponse.SC_OK)
+      val holdResponse = getHoldResponse(response)
+      assert(holdResponse.action === Utils.getFormattedClassName(holdResponse))
+      assert(holdResponse.serverSparkVersion === SPARK_VERSION)
+      assert(holdResponse.message === message)
+      assert(holdResponse.appId === "my-app")
+      assert(holdResponse.success)
+
+      // A request without an application ID is rejected.
+      Seq(path, s"$path/").foreach { badPath =>
+        val (badResponse, badCode) = sendHttpRequestWithResponse(badPath, "POST")
+        assert(badCode === HttpServletResponse.SC_BAD_REQUEST)
+        getErrorResponse(badResponse)
+      }
+    }
+  }
+
   /* ---------------------------------------- *
    |     Aberrant client / server behavior    |
    * ---------------------------------------- */
@@ -431,20 +455,30 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
 
   test("client does not send 'SPARK_ENV_LOADED' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_ENV_LOADED" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
   test("client does not send 'SPARK_HOME' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_HOME" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
   }
 
   test("client does not send 'SPARK_CONF_DIR' env var by default") {
     val environmentVariables = Map("SPARK_VAR" -> "1", "SPARK_CONF_DIR" -> "1")
-    val filteredVariables = RestSubmissionClient.filterSystemEnvironment(environmentVariables)
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
     assert(filteredVariables == Map("SPARK_VAR" -> "1"))
+  }
+
+  test("SPARK-59404: client does not send 'SPARK_LOCAL_(IP|HOSTNAME)' env vars by default") {
+    val environmentVariables = Map(
+      "SPARK_VAR" -> "1",
+      "SPARK_LOCAL_IP" -> "1",
+      "SPARK_LOCAL_HOSTNAME" -> "1",
+      "SPARK_LOCAL_DIRS" -> "1")
+    val filteredVariables = DriverEnvironment.filterSystemEnvironment(environmentVariables)
+    assert(filteredVariables == Map("SPARK_VAR" -> "1", "SPARK_LOCAL_DIRS" -> "1"))
   }
 
   test("SPARK-49033: Support server-side environment variable replacement in REST Submission API") {
@@ -457,6 +491,23 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     val servlet = new StandaloneSubmitRequestServlet(null, null, null)
     val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
     assert(desc.command.environment.get("AWS_ENDPOINT_URL") === Some("2.13"))
+  }
+
+  test("SPARK-59404: server-side filter drops 'SPARK_LOCAL_(IP|HOSTNAME)' from the request") {
+    val request = new CreateSubmissionRequest
+    request.appResource = ""
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    // A client that does not go through RestSubmissionClient can send anything, so the
+    // server drops these itself rather than trusting the client to have done it.
+    request.environmentVariables = Map(
+      "SPARK_LOCAL_IP" -> "10.0.0.1",
+      "SPARK_LOCAL_HOSTNAME" -> "submitter",
+      "SPARK_LOCAL_DIRS" -> "/tmp/spark")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, null)
+    val desc = servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    assert(desc.command.environment === Map("SPARK_LOCAL_DIRS" -> "/tmp/spark"))
   }
 
   test("SPARK-49034: Support server-side sparkProperties replacement in REST Submission API") {
@@ -547,6 +598,28 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-57453: Support allowedAppResourcePatterns") {
+    val conf = new SparkConf()
+      .set(MASTER_REST_SERVER_ALLOWED_APP_RESOURCE_PATTERNS.key, "file:/opt/spark/jars/.*\\.jar")
+    val servlet = new StandaloneSubmitRequestServlet(null, null, conf)
+    val request = new CreateSubmissionRequest
+    request.mainClass = ""
+    request.appArgs = Array.empty[String]
+    request.sparkProperties = Map.empty[String, String]
+    request.environmentVariables = Map.empty[String, String]
+
+    // An application resource matching the allowed pattern is accepted.
+    request.appResource = "file:/opt/spark/jars/app.jar"
+    servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+
+    // An application resource not matching the allowed pattern is rejected.
+    request.appResource = "file:/tmp/evil.jar"
+    val e = intercept[SubmitRestMissingFieldException] {
+      servlet.buildDriverDescription(request, "spark://master:7077", 6066)
+    }
+    assert(e.getMessage === "Valid application jar path is required")
+  }
+
   test("SPARK-50381: Support spark.master.rest.maxThreads") {
     val conf = new SparkConf()
     val localhost = Utils.localHostName()
@@ -575,6 +648,62 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     } else {
       assert(pool.getVirtualThreadsExecutor == null)
     }
+  }
+
+  test("SPARK-58049: Reject an over-sized request body with SC_REQUEST_ENTITY_TOO_LARGE") {
+    val conf = new SparkConf()
+    conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, "1k")
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
+    server = Some(_server)
+    val port = _server.start()
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    val path = s"http://$localhost:$port/$v/submissions/create"
+    val (response, code) = sendHttpRequestWithResponse(path, "POST", "x" * 4096)
+    assert(code === HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
+    getErrorResponse(response)
+  }
+
+  test("SPARK-58049: Reject an over-sized request body without Content-Length") {
+    val conf = new SparkConf()
+    conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, "1k")
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
+    server = Some(_server)
+    val port = _server.start()
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    val path = s"http://$localhost:$port/$v/submissions/create"
+    val (response, code) = sendHttpRequestWithResponse(path, "POST", "x" * 4096, chunked = true)
+    assert(code === HttpServletResponse.SC_REQUEST_ENTITY_TOO_LARGE)
+    getErrorResponse(response)
+  }
+
+  test("SPARK-58049: Accept a request body exactly at the limit") {
+    val json = constructSubmitRequest("spark://localhost:7077").toJson
+    val limit = json.getBytes(StandardCharsets.UTF_8).length
+    val conf = new SparkConf()
+    conf.set(MASTER_REST_SERVER_MAX_REQUEST_BODY_SIZE.key, limit.toString)
+    val localhost = Utils.localHostName()
+    val securityManager = new SecurityManager(conf)
+    rpcEnv =
+      Some(RpcEnv.create("rest-with-maxRequestBodySize", localhost, 0, conf, securityManager))
+    val fakeMasterRef = rpcEnv.get.setupEndpoint("fake-master", new DummyMaster(rpcEnv.get))
+    val _server = new StandaloneRestServer(localhost, 0, conf, fakeMasterRef, "spark://fake:7077")
+    server = Some(_server)
+    val port = _server.start()
+    val v = RestSubmissionServer.PROTOCOL_VERSION
+    val path = s"http://$localhost:$port/$v/submissions/create"
+    val (response, code) = sendHttpRequestWithResponse(path, "POST", json)
+    assert(code === HttpServletResponse.SC_OK)
+    getSubmitResponse(response)
   }
 
   /* --------------------- *
@@ -675,6 +804,15 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
     }
   }
 
+  /** Return the response as a hold response, or fail with error otherwise. */
+  private def getHoldResponse(response: SubmitRestProtocolResponse): HoldApplicationResponse = {
+    response match {
+      case h: HoldApplicationResponse => h
+      case e: ErrorResponse => fail(s"Server returned error: ${e.message}")
+      case r => fail(s"Expected hold response. Actual: ${r.toJson}")
+    }
+  }
+
   /** Return the response as a clear response, or fail with error otherwise. */
   private def getClearResponse(response: SubmitRestProtocolResponse): ClearResponse = {
     response match {
@@ -718,11 +856,15 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
   private def sendHttpRequest(
       url: String,
       method: String,
-      body: String = ""): HttpURLConnection = {
+      body: String = "",
+      chunked: Boolean = false): HttpURLConnection = {
     val conn = new URI(url).toURL.openConnection().asInstanceOf[HttpURLConnection]
     conn.setRequestMethod(method)
     if (body.nonEmpty) {
       conn.setDoOutput(true)
+      if (chunked) {
+        conn.setChunkedStreamingMode(0)
+      }
       val out = new DataOutputStream(conn.getOutputStream)
       out.write(body.getBytes(StandardCharsets.UTF_8))
       out.close()
@@ -737,8 +879,9 @@ class StandaloneRestSubmitSuite extends SparkFunSuite {
   private def sendHttpRequestWithResponse(
       url: String,
       method: String,
-      body: String = ""): (SubmitRestProtocolResponse, Int) = {
-    val conn = sendHttpRequest(url, method, body)
+      body: String = "",
+      chunked: Boolean = false): (SubmitRestProtocolResponse, Int) = {
+    val conn = sendHttpRequest(url, method, body, chunked)
     (new RestSubmissionClient("spark://host:port").readResponse(conn), conn.getResponseCode)
   }
 }
@@ -764,6 +907,8 @@ private class DummyMaster(
       context.reply(KillDriverResponse(self, driverId, success = true, killMessage))
     case RequestKillAllDrivers =>
       context.reply(KillAllDriversResponse(self, success = true, killMessage))
+    case RequestApplicationHold(_, hold) =>
+      context.reply(ApplicationHoldResponse(success = true, if (hold) "held" else "resumed"))
     case RequestDriverStatus(driverId) =>
       context.reply(DriverStatusResponse(found = true, Some(state), None, None, exception))
     case RequestClearCompletedDriversAndApps =>
@@ -829,6 +974,10 @@ private class FaultyStandaloneRestServer(
   protected override val submitRequestServlet = new MalformedSubmitServlet
   protected override val killRequestServlet = new InvalidKillServlet
   protected override val killAllRequestServlet = new InvalidKillAllServlet
+  protected override val holdRequestServlet =
+    new StandaloneHoldRequestServlet(masterEndpoint, masterConf, hold = true)
+  protected override val resumeRequestServlet =
+    new StandaloneHoldRequestServlet(masterEndpoint, masterConf, hold = false)
   protected override val statusRequestServlet = new ExplodingStatusServlet
   protected override val clearRequestServlet = new ExplodingClearServlet
   protected override val readyzRequestServlet = new ExplodingReadyzServlet

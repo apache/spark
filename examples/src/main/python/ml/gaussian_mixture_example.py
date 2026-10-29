@@ -22,6 +22,7 @@ Run with:
 """
 # $example on$
 from pyspark.ml.clustering import GaussianMixture
+
 # $example off$
 from pyspark.sql import SparkSession
 

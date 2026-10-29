@@ -145,6 +145,14 @@ object TypeCoercion extends TypeCoercionBase {
       => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
     case (TimestampType, st: StringType)
       => if (conf.castDatetimeToString) Some(st) else Some(TimestampType)
+    // Mirror the micros TimestampType (LTZ) arms above: nanos TIMESTAMP_LTZ(p) honors
+    // castDatetimeToString. Nanos TIMESTAMP_NTZ(p) intentionally has no arm here and, exactly like
+    // micros TimestampNTZType, falls through to the config-blind canPromoteAsInBinaryComparison
+    // line below -- so the LTZ and NTZ families stay consistent across micros and nanos.
+    case (st: StringType, tsNanos: TimestampLTZNanosType)
+      => if (conf.castDatetimeToString) Some(st) else Some(tsNanos)
+    case (tsNanos: TimestampLTZNanosType, st: StringType)
+      => if (conf.castDatetimeToString) Some(st) else Some(tsNanos)
     case (st: StringType, NullType) => Some(st)
     case (NullType, st: StringType) => Some(st)
 
@@ -194,6 +202,10 @@ object TypeCoercion extends TypeCoercionBase {
   private def implicitCast(inType: DataType, expectedType: AbstractDataType): Option[DataType] = {
     // Note that ret is nullable to avoid typing a lot of Some(...) in this local scope.
     // We wrap immediately an Option after this.
+    // CHAR/VARCHAR promotion is checked first: the acceptsType case below would otherwise
+    // accept the constrained type unchanged, since CharType and VarcharType extend StringType.
+    charVarcharToPlainString(inType, expectedType).foreach(dt => return Some(dt))
+
     @Nullable val ret: DataType = (inType, expectedType) match {
       // If the expected type is already a parent of the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => inType
@@ -219,7 +231,10 @@ object TypeCoercion extends TypeCoercionBase {
       // For any other numeric types, implicitly cast to each other, e.g. long -> int, int -> long
       case (_: NumericType, target: NumericType) => target
 
-      // Implicit cast between date time types
+      // Implicit cast between date time types. A nanos timestamp is never implicitly cast to a
+      // lower-precision timestamp or to TIME; a direct DATE target is still allowed.
+      case (_: DatetimeType, d @ (_: DatetimeType | AnyTimestampType))
+          if isNanosNarrowing(inType, d.defaultConcreteType) => null
       case (_: DatetimeType, d: DatetimeType) => d
       case (_: DatetimeType, AnyTimestampType) => AnyTimestampType.defaultConcreteType
 
@@ -239,7 +254,7 @@ object TypeCoercion extends TypeCoercionBase {
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
       case (_, TypeCollection(types)) =>
-        types.flatMap(implicitCast(inType, _)).headOption.orNull
+        pickTypeCollectionCast(inType, types.flatMap(implicitCast(inType, _))).orNull
 
       // Implicit cast between array types.
       //

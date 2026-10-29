@@ -55,14 +55,14 @@ private[ui] class LogPage(parent: MasterWebUI) extends WebUIPage("logPage") with
         End of Log
       </div>
 
-    val logParams = "?self&logType=%s".format(logType)
-    val jsOnload = "window.onload = " +
-      s"initLogPage('$logParams', $curLogLength, $startByte, $endByte, $logLength, $byteLength);"
+    val logParams = "?self&logType=%s".format(UIUtils.encodeLogParam(logType))
+    val jsOnload = UIUtils.logPageOnloadScript(
+      logParams, curLogLength, startByte, endByte, logLength, byteLength)
 
     val content =
       <script type="module" src={UIUtils.prependBaseUri(request, "/static/utils.js")}></script> ++
       <div>
-        <p><a href="/">Back to Master</a></p>
+        <p><a href={UIUtils.prependBaseUri(request, "/")}>Back to Master</a></p>
         {range}
         <div class="log-content overflow-auto p-1" style="height:80vh;">
           <div>{moreButton}</div>

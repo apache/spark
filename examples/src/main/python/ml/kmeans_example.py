@@ -25,8 +25,8 @@ This example requires NumPy (http://www.numpy.org/).
 # $example on$
 from pyspark.ml.clustering import KMeans
 from pyspark.ml.evaluation import ClusteringEvaluator
-# $example off$
 
+# $example off$
 from pyspark.sql import SparkSession
 
 if __name__ == "__main__":

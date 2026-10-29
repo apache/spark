@@ -218,15 +218,16 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
     executeBroadcastBcast.get.asInstanceOf[broadcast.Broadcast[T]]
   }
 
+  @transient
   private val executeColumnarRDD = LazyTry {
     doExecuteColumnar()
   }
 
   /**
-   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doColumnarExecute`
+   * Returns the result of this query as an RDD[ColumnarBatch] by delegating to `doExecuteColumnar`
    * after preparations.
    *
-   * Concrete implementations of SparkPlan should override `doColumnarExecute` if `supportsColumnar`
+   * Concrete implementations of SparkPlan should override `doExecuteColumnar` if `supportsColumnar`
    * returns true.
    */
   final def executeColumnar(): RDD[ColumnarBatch] = executeQuery {
@@ -277,6 +278,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   @transient
   private val runningSubqueries = new ArrayBuffer[ExecSubqueryExpression]
 
+  @transient private val prepareLock = new Object()
+
   /**
    * Finds scalar subquery expressions in this plan node and starts evaluating them.
    */
@@ -293,7 +296,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   /**
    * Blocks the thread until all subqueries finish evaluation and update the results.
    */
-  protected def waitForSubqueries(): Unit = synchronized {
+  protected def waitForSubqueries(): Unit = prepareLock.synchronized {
     // fill in the result of subqueries
     runningSubqueries.foreach { sub =>
       sub.updateResult()
@@ -312,7 +315,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
   final def prepare(): Unit = {
     // doPrepare() may depend on it's children, we should call prepare() on all the children first.
     children.foreach(_.prepare())
-    synchronized {
+    prepareLock.synchronized {
       if (!prepared) {
         prepareSubqueries()
         doPrepare()
@@ -329,7 +332,7 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging with Serializ
    * @note `prepare` method has already walked down the tree, so the implementation doesn't have
    * to call children's `prepare` methods.
    *
-   * This will only be called once, protected by `this`.
+   * This will only be called once, protected by [[prepareLock]].
    */
   protected def doPrepare(): Unit = {}
 

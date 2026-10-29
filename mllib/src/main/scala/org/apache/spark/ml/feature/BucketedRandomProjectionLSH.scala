@@ -71,6 +71,14 @@ class BucketedRandomProjectionLSHModel private[ml](
   // For ml connect only
   private[ml] def this() = this("", Matrices.empty)
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize
+    if (randMatrix != null) {
+      size += randMatrix.getSizeInBytes
+    }
+    size
+  }
+
   private[ml] def this(uid: String, randUnitVectors: Array[Vector]) = {
     this(uid, Matrices.fromVectors(randUnitVectors.toImmutableArraySeq))
   }
@@ -87,10 +95,14 @@ class BucketedRandomProjectionLSHModel private[ml](
 
   @Since("2.1.0")
   override protected[ml] def hashFunction(elems: Vector): Array[Vector] = {
-    val hashVec = new DenseVector(Array.ofDim[Double](randMatrix.numRows))
-    BLAS.gemv(1.0 / $(bucketLength), randMatrix, elems, 0.0, hashVec)
-    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
-    hashVec.values.map(h => Vectors.dense(h.floor))
+    BucketedRandomProjectionLSHModel.hashFunction(elems, randMatrix, $(bucketLength))
+  }
+
+  override protected[ml] def createTransformFunc: Vector => Array[Vector] = {
+    val localRandMatrix = randMatrix
+    val localBucketLength = $(bucketLength)
+    elems => BucketedRandomProjectionLSHModel.hashFunction(
+      elems, localRandMatrix, localBucketLength)
   }
 
   @Since("2.1.0")
@@ -197,7 +209,7 @@ class BucketedRandomProjectionLSH(override val uid: String)
 
   @Since("2.1.0")
   override def transformSchema(schema: StructType): StructType = {
-    SchemaUtils.checkColumnType(schema, $(inputCol), new VectorUDT)
+    SchemaUtils.checkColumnType(schema, $(inputCol), SQLDataTypes.VectorType)
     validateAndTransformSchema(schema)
   }
 
@@ -214,6 +226,17 @@ object BucketedRandomProjectionLSH extends DefaultParamsReadable[BucketedRandomP
 
 @Since("2.1.0")
 object BucketedRandomProjectionLSHModel extends MLReadable[BucketedRandomProjectionLSHModel] {
+
+  private def hashFunction(
+      elems: Vector,
+      randMatrix: Matrix,
+      bucketLength: Double): Array[Vector] = {
+    val hashVec = new DenseVector(Array.ofDim[Double](randMatrix.numRows))
+    BLAS.gemv(1.0 / bucketLength, randMatrix, elems, 0.0, hashVec)
+    // TODO: Output vectors of dimension numHashFunctions in SPARK-18450
+    hashVec.values.map(h => Vectors.dense(h.floor))
+  }
+
   // TODO: Save using the existing format of Array[Vector] once SPARK-12878 is resolved.
   private[ml] case class Data(randUnitVectors: Matrix)
 

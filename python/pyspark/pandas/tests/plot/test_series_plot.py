@@ -17,11 +17,11 @@
 
 import unittest
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.plot import PandasOnSparkPlotAccessor, BoxPlotBase
+from pyspark.pandas.plot import BoxPlotBase, PandasOnSparkPlotAccessor
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
 from pyspark.testing.utils import have_plotly, plotly_requirement_message
 

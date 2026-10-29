@@ -55,8 +55,8 @@ import org.apache.spark.util.ArrayImplicits._
 // scalastyle:off line.size.limit
 @ExpressionDescription(
   usage = """
-    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric or
-      ansi interval column `col` which is the smallest value in the ordered `col` values (sorted
+    _FUNC_(col, percentage [, accuracy]) - Returns the approximate `percentile` of the numeric,
+      ansi interval or TIME column `col` which is the smallest value in the ordered `col` values (sorted
       from least to greatest) such that no more than `percentage` of `col` values is less than
       the value or equal to that value. The value of percentage must be between 0.0 and 1.0.
       The `accuracy` parameter (default: 10000) is a positive numeric literal which controls
@@ -65,6 +65,16 @@ import org.apache.spark.util.ArrayImplicits._
       When `percentage` is an array, each value of the percentage array must be between 0.0 and 1.0.
       In this case, returns the approximate percentile array of column `col` at the given
       percentage array.
+  """,
+  arguments = """
+    Arguments:
+      * col - The numeric, ANSI interval or TIME column whose percentile is
+          computed.
+      * percentage - A value (or array of values) between 0.0 and 1.0 specifying
+          the percentile(s) to compute.
+      * accuracy - Optional. A positive numeric literal (default: 10000) that
+          controls approximation accuracy at the cost of memory. Higher values
+          yield better accuracy; `1.0/accuracy` is the relative error.
   """,
   examples = """
     Examples:
@@ -102,10 +112,10 @@ case class ApproximatePercentile(
   private lazy val accuracy: Long = accuracyNum.longValue
 
   override def inputTypes: Seq[AbstractDataType] = {
-    // Support NumericType, DateType, TimestampType and TimestampNTZType since their internal types
-    // are all numeric, and can be easily cast to double for processing.
+    // Support NumericType, DateType, TimestampType, TimestampNTZType and TimeType since their
+    // internal types are all numeric, and can be easily cast to double for processing.
     Seq(TypeCollection(NumericType, DateType, TimestampType, TimestampNTZType,
-      YearMonthIntervalType, DayTimeIntervalType),
+      YearMonthIntervalType, DayTimeIntervalType, AnyTimeType),
       TypeCollection(DoubleType, ArrayType(DoubleType, containsNull = false)), IntegralType)
   }
 
@@ -183,7 +193,7 @@ case class ApproximatePercentile(
       // Convert the value to a double value
       val doubleValue = child.dataType match {
         case DateType | _: YearMonthIntervalType => value.asInstanceOf[Int].toDouble
-        case TimestampType | TimestampNTZType | _: DayTimeIntervalType =>
+        case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
           value.asInstanceOf[Long].toDouble
         case n: NumericType =>
           PhysicalNumericType.numeric(n)
@@ -205,7 +215,8 @@ case class ApproximatePercentile(
     val doubleResult = buffer.getPercentiles(percentages)
     val result = child.dataType match {
       case DateType | _: YearMonthIntervalType => doubleResult.map(_.toInt)
-      case TimestampType | TimestampNTZType | _: DayTimeIntervalType => doubleResult.map(_.toLong)
+      case TimestampType | TimestampNTZType | _: DayTimeIntervalType | _: TimeType =>
+        doubleResult.map(_.toLong)
       case ByteType => doubleResult.map(_.toByte)
       case ShortType => doubleResult.map(_.toShort)
       case IntegerType => doubleResult.map(_.toInt)

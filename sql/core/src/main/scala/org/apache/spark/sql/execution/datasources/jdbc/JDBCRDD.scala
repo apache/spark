@@ -31,7 +31,6 @@ import org.apache.spark.sql.connector.catalog.Identifier
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.{DataSourceMetricsMixin, ExternalEngineDatasourceRDD}
-import org.apache.spark.sql.execution.datasources.v2.TableSampleInfo
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
 import org.apache.spark.sql.types._
@@ -80,12 +79,16 @@ object JDBCRDD extends Logging {
       case e: SQLException if ident.isDefined &&
         dialect.isObjectNotFoundException(e) =>
         throw QueryCompilationErrors.noSuchTableError(catalogName.get, ident.get)
+      case e: SQLException if ident.isDefined &&
+        dialect.isNotSelectableObjectException(e) =>
+        throw QueryCompilationErrors.objectNotSelectableError(catalogName.get, ident.get, e)
       case e: SQLException if dialect.isSyntaxErrorBestEffort(e) =>
         throw new SparkException(
           errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_OUTPUT_SCHEMA_RESOLUTION",
           messageParameters = Map(
             "jdbcQuery" -> fullQuery,
-            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+            "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+            "externalEngineSqlState" -> getSQLState(e)
           ),
           cause = e)
     }
@@ -103,8 +106,7 @@ object JDBCRDD extends Logging {
     Using.resource(conn.prepareStatement(query)) { statement =>
       statement.setQueryTimeout(options.queryTimeout)
       Using.resource(statement.executeQuery()) { rs =>
-        JdbcUtils.getSchema(conn, rs, dialect, alwaysNullable = true,
-          isTimestampNTZ = options.preferTimestampNTZ)
+        JdbcUtils.getSchema(conn, rs, dialect, options, alwaysNullable = true)
       }
     }
   }
@@ -114,6 +116,13 @@ object JDBCRDD extends Logging {
     JdbcUtils.withConnection(options) {
       getQueryOutputSchema(query, options, dialect, _)
     }
+  }
+
+  /**
+   * Gets the SQLSTATE of the provided SQL exception or "unknown" if it is not defined.
+   */
+  private def getSQLState(e: SQLException): String = {
+    Option(e.getSQLState).filter(_.nonEmpty).getOrElse("unknown")
   }
 
   /**
@@ -141,7 +150,7 @@ object JDBCRDD extends Logging {
    * @param options - JDBC options that contains url, table and other information.
    * @param outputSchema - The schema of the columns or aggregate columns to SELECT.
    * @param groupByColumns - The pushed down group by columns.
-   * @param sample - The pushed down tableSample.
+   * @param sampleClause - The pushed down table sample SQL clause.
    * @param limit - The pushed down limit. If the value is 0, it means no limit or limit
    *                is not pushed down.
    * @param sortOrders - The sort orders cooperates with limit to realize top N.
@@ -158,7 +167,7 @@ object JDBCRDD extends Logging {
       options: JDBCOptions,
       outputSchema: Option[StructType] = None,
       groupByColumns: Option[Array[String]] = None,
-      sample: Option[TableSampleInfo] = None,
+      sampleClause: Option[String] = None,
       limit: Int = 0,
       sortOrders: Array[String] = Array.empty[String],
       offset: Int = 0,
@@ -184,7 +193,7 @@ object JDBCRDD extends Logging {
       options,
       databaseMetadata = JDBCDatabaseMetadata.fromJDBCConnectionFactory(connectionFactory),
       groupByColumns,
-      sample,
+      sampleClause,
       limit,
       sortOrders,
       offset,
@@ -209,7 +218,7 @@ class JDBCRDD(
     options: JDBCOptions,
     databaseMetadata: JDBCDatabaseMetadata,
     groupByColumns: Option[Array[String]],
-    sample: Option[TableSampleInfo],
+    sampleClause: Option[String],
     limit: Int,
     sortOrders: Array[String],
     offset: Int,
@@ -252,8 +261,8 @@ class JDBCRDD(
       builder = builder.withGroupByColumns(groupByKeys)
     }
 
-    sample.foreach { tableSampleInfo =>
-      builder = builder.withTableSample(tableSampleInfo)
+    sampleClause.foreach { clause =>
+      builder = builder.withTableSampleClause(clause)
     }
 
     builder.build()
@@ -376,7 +385,8 @@ class JDBCRDD(
             errorClass = "JDBC_EXTERNAL_ENGINE_SYNTAX_ERROR.DURING_QUERY_EXECUTION",
             messageParameters = Map(
               "jdbcQuery" -> sqlText,
-              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", "")
+              "externalEngineError" -> e.getMessage.replaceAll("\\.+$", ""),
+              "externalEngineSqlState" -> JDBCRDD.getSQLState(e)
             ),
             cause = e)
       }
@@ -388,7 +398,8 @@ class JDBCRDD(
         dialect,
         schema,
         inputMetrics,
-        Some(fetchAndTransformToInternalRowsMetric))
+        Some(fetchAndTransformToInternalRowsMetric),
+        Some(options))
 
     CompletionIterator[InternalRow, Iterator[InternalRow]](
       new InterruptibleIterator(context, rowsIterator), close())

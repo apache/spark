@@ -2,13 +2,68 @@
 unsafe projection
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 25.0.2+10-LTS on Linux 6.14.0-1017-azure
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
 AMD EPYC 7763 64-Core Processor
 unsafe projection:                        Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-single long                                        1325           1325           0        202.7           4.9       1.0X
-single nullable long                               2427           2429           3        110.6           9.0       0.5X
-7 primitive types                                  7476           7484          11         35.9          27.9       0.2X
-7 nullable primitive types                        10587          10608          29         25.4          39.4       0.1X
+single long                                        1326           1326           0        202.4           4.9       1.0X
+single nullable long                               3004           3012          11         89.4          11.2       0.4X
+7 primitive types                                  7459           7466           9         36.0          27.8       0.2X
+7 nullable primitive types                        11264          11270           8         23.8          42.0       0.1X
+
+
+================================================================================================
+wide unsafe projection on boolean fields
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+single row with 400 boolean fields:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+single row with 400 boolean fields                 6596           6601           6          0.6        1572.7       1.0X
+
+
+================================================================================================
+wide unsafe projection on byte fields
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+single row with 400 byte fields:          Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+single row with 400 byte fields                    6843           6846           4          0.6        1631.6       1.0X
+
+
+================================================================================================
+wide unsafe projection on short fields
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+single row with 400 short fields:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+single row with 400 short fields                   6799           6799           1          0.6        1621.0       1.0X
+
+
+================================================================================================
+wide unsafe projection on integer fields
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+single row with 400 integer fields:       Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+single row with 400 integer fields                 6725           6730           8          0.6        1603.3       1.0X
+
+
+================================================================================================
+wide unsafe projection on float fields
+================================================================================================
+
+OpenJDK 64-Bit Server VM 25.0.4+7-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 7763 64-Core Processor
+single row with 400 float fields:         Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+single row with 400 float fields                   6676           6678           2          0.6        1591.8       1.0X
 
 

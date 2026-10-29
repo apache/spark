@@ -90,6 +90,11 @@ final class UnsafeSorterBoundedSpillMerger {
    * <p>If {@code inMemIterator} is non-null, it is included in the final merge round
    * (not spilled to disk in intermediate rounds).</p>
    *
+   * <p>This method does not mutate the input {@code spillWriters} list; intermediate
+   * rounds reassign a local variable to fresh lists. Callers are still responsible for
+   * passing a defensive snapshot if they need to protect against concurrent mutation
+   * of the underlying list (see {@link UnsafeExternalSorter#prepareBoundedMerge}).</p>
+   *
    * @param spillWriters the list of spill writers to merge
    * @param inMemIterator optional in-memory sorted iterator to include in the final merge
    * @return a sorted iterator over all records
@@ -98,7 +103,7 @@ final class UnsafeSorterBoundedSpillMerger {
       List<UnsafeSorterSpillWriter> spillWriters,
       @Nullable UnsafeSorterIterator inMemIterator) throws IOException {
 
-    List<UnsafeSorterSpillWriter> spillsToMerge = new ArrayList<>(spillWriters);
+    List<UnsafeSorterSpillWriter> spillsToMerge = spillWriters;
     int round = 0;
 
     while (spillsToMerge.size() > mergeFactor) {

@@ -19,10 +19,11 @@ package org.apache.spark.sql.catalyst.optimizer
 
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.dsl.plans._
-import org.apache.spark.sql.catalyst.expressions.{CaseWhen, If, IsNull, KnownFloatingPointNormalized}
-import org.apache.spark.sql.catalyst.plans.PlanTest
+import org.apache.spark.sql.catalyst.expressions.{ArrayDistinct, ArrayExcept, ArrayIntersect, ArraysOverlap, ArrayUnion, CaseWhen, If, IsNull, KnownFloatingPointNormalized}
+import org.apache.spark.sql.catalyst.plans.{LeftAnti, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
+import org.apache.spark.sql.types.DoubleType
 
 class NormalizeFloatingPointNumbersSuite extends PlanTest {
 
@@ -75,6 +76,23 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val joinCond = Some(KnownFloatingPointNormalized(NormalizeNaNAndZero(a))
       === KnownFloatingPointNormalized(NormalizeNaNAndZero(b)))
     val correctAnswer = testRelation1.join(testRelation2, condition = joinCond)
+
+    comparePlans(doubleOptimized, correctAnswer)
+  }
+
+  test("normalize floating points in null-aware anti join keys") {
+    val equality = a === b
+    val query = testRelation1.join(
+      testRelation2, joinType = LeftAnti, condition = Some(equality || IsNull(equality)))
+
+    val optimized = Optimize.execute(query)
+    val doubleOptimized = Optimize.execute(optimized)
+    val normalizedEquality = KnownFloatingPointNormalized(NormalizeNaNAndZero(a)) ===
+      KnownFloatingPointNormalized(NormalizeNaNAndZero(b))
+    val correctAnswer = testRelation1.join(
+      testRelation2,
+      joinType = LeftAnti,
+      condition = Some(normalizedEquality || IsNull(normalizedEquality)))
 
     comparePlans(doubleOptimized, correctAnswer)
   }
@@ -132,5 +150,18 @@ class NormalizeFloatingPointNumbersSuite extends PlanTest {
     val normalizedExpr = NormalizeFloatingNumbers.normalize(nestedExpr)
     assert(nestedExpr.dataType == normalizedExpr.dataType)
   }
-}
 
+  test("SPARK-59602: array set operations are not normalized by a plan rewrite") {
+    val relation = LocalRelation($"a".array(DoubleType), $"b".array(DoubleType))
+    val Seq(array1, array2) = relation.output
+    val query = relation.select(
+      ArrayDistinct(array1).as("distinct"),
+      ArrayUnion(array1, array2).as("union"),
+      ArrayIntersect(array1, array2).as("intersect"),
+      ArrayExcept(array1, array2).as("except"),
+      ArraysOverlap(array1, array2).as("overlap"))
+
+    comparePlans(SimpleTestOptimizer.FinishAnalysis(query), query)
+    comparePlans(Optimize.execute(query), query)
+  }
+}

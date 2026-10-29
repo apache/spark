@@ -105,16 +105,6 @@ object ParserUtils extends SparkParserUtils {
     Option(value).toSeq.map(x => key -> string(x))
   }
 
-  /** Validate the condition. If it doesn't throw a parse exception. */
-  def validate(f: => Boolean, message: String, ctx: ParserRuleContext): Unit = {
-    if (!f) {
-      throw new ParseException(
-        errorClass = "_LEGACY_ERROR_TEMP_0064",
-        messageParameters = Map("msg" -> message),
-        ctx)
-    }
-  }
-
   /** the column name pattern in quoted regex without qualifier */
   val escapedIdentifier = "`((?s).+)`".r
 
@@ -134,7 +124,7 @@ object ParserUtils extends SparkParserUtils {
           case term: TerminalNodeImpl =>
             val termText = term.getText
             val tt = term.getSymbol.getType
-            val current = if ((SqlBaseParser.ADD <= tt && tt <= SqlBaseParser.ZONE) ||
+            val current = if ((SqlBaseParser.ABSENT <= tt && tt <= SqlBaseParser.ZONE) ||
               (SqlBaseParser.BIGINT_LITERAL <= tt && tt <= SqlBaseParser.BIGDECIMAL_LITERAL)) {
               termText.toUpperCase(Locale.ROOT)
             } else {

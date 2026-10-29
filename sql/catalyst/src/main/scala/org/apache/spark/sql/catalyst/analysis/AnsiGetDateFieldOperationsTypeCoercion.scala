@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.catalyst.expressions.{Cast, Expression, GetDateField}
-import org.apache.spark.sql.types.{AnyTimestampTypeExpression, DateType}
+import org.apache.spark.sql.types.{AnyTimestampNanoTypeExpression, AnyTimestampTypeExpression, DateType}
 
 /**
  * ANSI type coercion helper that matches against [[GetDateField]] expressions in order to type
@@ -26,7 +26,9 @@ import org.apache.spark.sql.types.{AnyTimestampTypeExpression, DateType}
  */
 object AnsiGetDateFieldOperationsTypeCoercion {
   def apply(expression: Expression): Expression = expression match {
-    case g: GetDateField if AnyTimestampTypeExpression.unapply(g.child) =>
+    case g: GetDateField
+        if AnyTimestampTypeExpression.unapply(g.child) ||
+          AnyTimestampNanoTypeExpression.unapply(g.child) =>
       g.withNewChildren(Seq(Cast(g.child, DateType)))
 
     case other => other

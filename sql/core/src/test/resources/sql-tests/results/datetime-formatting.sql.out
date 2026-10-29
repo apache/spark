@@ -450,3 +450,19 @@ select date_format(timestamp_ntz'2023-08-18 09:13:14.123456', 'yyyy-MM-dd HH:mm:
 struct<date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS):string,date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS):string,date_format(TIMESTAMP_NTZ '2023-08-18 09:13:14.123456', yyyy-MM-dd HH:mm:ss.SSSSSS):string>
 -- !query output
 2023-08-18 09:13:14.123456	2023-08-18 09:13:14.123456	2023-08-18 09:13:14.123456
+
+
+-- !query
+select to_char(TIME'12:13:14', 'HH:mm:ss'), to_varchar(TIME'12:13:14', 'HH:mm:ss')
+-- !query schema
+struct<date_format(TIME '12:13:14', HH:mm:ss):string,date_format(TIME '12:13:14', HH:mm:ss):string>
+-- !query output
+12:13:14	12:13:14
+
+
+-- !query
+select to_char(TIME'23:59:59.123456', 'HH:mm:ss.SSSSSS'), to_varchar(TIME'23:59:59.123456', 'HH:mm:ss.SSSSSS')
+-- !query schema
+struct<date_format(TIME '23:59:59.123456', HH:mm:ss.SSSSSS):string,date_format(TIME '23:59:59.123456', HH:mm:ss.SSSSSS):string>
+-- !query output
+23:59:59.123456	23:59:59.123456

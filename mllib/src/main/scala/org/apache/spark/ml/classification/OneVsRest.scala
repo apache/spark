@@ -17,8 +17,6 @@
 
 package org.apache.spark.ml.classification
 
-import java.util.UUID
-
 import scala.concurrent.Future
 import scala.concurrent.duration.Duration
 import scala.language.existentials
@@ -42,6 +40,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ArrayImplicits._
+import org.apache.spark.util.SizeEstimator
 import org.apache.spark.util.ThreadUtils
 
 private[ml] trait ClassifierTypeTrait {
@@ -148,6 +147,17 @@ final class OneVsRestModel private[ml] (
   @Since("2.4.0")
   val numFeatures: Int = models.head.numFeatures
 
+  private[spark] override def estimatedSize: Long = {
+    var size = estimateMatadataSize(excluded = Seq(
+      // classifier: Param[ClassifierType]
+      classifier))
+    // labelMetadata: Metadata
+    size += SizeEstimator.estimate(labelMetadata)
+    // models: Array[_ <: ClassificationModel[_, _]]
+    size += models.iterator.map(_.estimatedSize).sum
+    size
+  }
+
   /** @group setParam */
   @Since("2.1.0")
   def setFeaturesCol(value: String): this.type = set(featuresCol, value)
@@ -189,10 +199,10 @@ final class OneVsRestModel private[ml] (
     val isProbModel = models.head.isInstanceOf[ProbabilisticClassificationModel[_, _]]
 
     // use a temporary raw prediction column to avoid column conflict
-    val tmpRawPredName = "mbc$raw" + UUID.randomUUID().toString
+    val tmpRawPredName = Identifiable.randomUID("mbc$raw")
 
     // add an accumulator column to store predictions of all the models
-    val accColName = "mbc$acc" + UUID.randomUUID().toString
+    val accColName = Identifiable.randomUID("mbc$acc")
     val newDataset = dataset.withColumn(accColName, lit(Array.emptyDoubleArray))
     val columns = newDataset.schema.fieldNames.map(col)
 

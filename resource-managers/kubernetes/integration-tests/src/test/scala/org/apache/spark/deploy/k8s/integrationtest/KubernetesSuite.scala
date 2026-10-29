@@ -44,7 +44,7 @@ class KubernetesSuite extends SparkFunSuite
   with BeforeAndAfterAll with BeforeAndAfter with BasicTestsSuite with SparkConfPropagateSuite
   with SecretsTestsSuite with PythonTestsSuite with ClientModeTestsSuite with PodTemplateSuite
   with VolumeSuite with PVTestsSuite with DepsTestsSuite with DecommissionSuite with RTestsSuite
-  with Logging with Eventually with Matchers {
+  with ExecutorResizeSuite with Logging with Eventually with Matchers {
 
 
   import KubernetesSuite._
@@ -87,12 +87,17 @@ class KubernetesSuite extends SparkFunSuite
       .asScala
       .headOption
     driverPodOption.foreach { driverPod =>
-      logInfo("BEGIN driver POD log\n" +
+      val driverPodLog = try {
         kubernetesTestComponents.kubernetesClient
           .pods()
           .inNamespace(kubernetesTestComponents.namespace)
           .withName(driverPod.getMetadata.getName)
-          .getLog)
+          .getLog
+      } catch {
+        case e: KubernetesClientException =>
+          s"Error fetching log (pod is likely not ready) $e"
+      }
+      logInfo("BEGIN driver POD log\n" + driverPodLog)
       logInfo("END driver POD log")
     }
     kubernetesTestComponents.kubernetesClient
@@ -653,6 +658,7 @@ private[spark] object KubernetesSuite {
   val SPARK_MINI_READ_WRITE_TEST = "org.apache.spark.examples.MiniReadWriteTest"
   val SPARK_REMOTE_MAIN_CLASS: String = "org.apache.spark.examples.SparkRemoteFileTest"
   val SPARK_DRIVER_MAIN_CLASS: String = "org.apache.spark.examples.DriverSubmissionTest"
+  val SPARK_SQL_CLI_MAIN_CLASS: String = "org.apache.spark.examples.sql.JavaSparkSQLCli"
   val TIMEOUT = PatienceConfiguration.Timeout(Span(3, Minutes))
   val INTERVAL = PatienceConfiguration.Interval(Span(1, Seconds))
 }

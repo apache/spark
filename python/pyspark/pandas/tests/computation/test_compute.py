@@ -18,10 +18,9 @@
 import numpy as np
 import pandas as pd
 
-from pyspark.sql import functions as sf
 from pyspark import pandas as ps
+from pyspark.sql import functions as sf
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 # This file contains test cases for 'Computations / Descriptive Stats'
@@ -199,9 +198,14 @@ class FrameComputeMixin:
         msg = "should be an int"
         with self.assertRaisesRegex(TypeError, msg):
             psdf.diff(1.5)
-        msg = 'axis should be either 0 or "index" currently.'
-        with self.assertRaisesRegex(NotImplementedError, msg):
-            psdf.diff(axis=1)
+
+        # axis=1: difference across columns
+        self.assert_eq(pdf.diff(axis=1), psdf.diff(axis=1))
+        self.assert_eq(pdf.diff(periods=2, axis=1), psdf.diff(periods=2, axis=1))
+        self.assert_eq(pdf.diff(periods=-1, axis=1), psdf.diff(periods=-1, axis=1))
+
+        with self.assertRaisesRegex(TypeError, msg):
+            psdf.diff(1.5, axis=1)
 
         # multi-index columns
         columns = pd.MultiIndex.from_tuples([("x", "Col1"), ("x", "Col2"), ("y", "Col3")])
@@ -358,6 +362,70 @@ class FrameComputeMixin:
         # Test invalid axis value
         with self.assertRaisesRegex(ValueError, "No axis named"):
             psdf.rank(axis=2)
+
+    def test_rank_pct_na_option(self):
+        pdf = pd.DataFrame(
+            {"A": [1, 2, np.nan, 3], "B": [4, np.nan, 2, 1]},
+            columns=["A", "B"],
+        )
+        psdf = ps.from_pandas(pdf)
+
+        # pct=True
+        self.assert_eq(pdf.rank(pct=True).sort_index(), psdf.rank(pct=True).sort_index())
+
+        # na_option='top'
+        self.assert_eq(
+            pdf.rank(na_option="top").sort_index(), psdf.rank(na_option="top").sort_index()
+        )
+
+        # na_option='bottom'
+        self.assert_eq(
+            pdf.rank(na_option="bottom").sort_index(), psdf.rank(na_option="bottom").sort_index()
+        )
+
+        # pct + na_option combined
+        self.assert_eq(
+            pdf.rank(pct=True, na_option="top").sort_index(),
+            psdf.rank(pct=True, na_option="top").sort_index(),
+        )
+        self.assert_eq(
+            pdf.rank(pct=True, na_option="bottom").sort_index(),
+            psdf.rank(pct=True, na_option="bottom").sort_index(),
+        )
+
+        # na_option with ascending=False
+        self.assert_eq(
+            pdf.rank(na_option="top", ascending=False).sort_index(),
+            psdf.rank(na_option="top", ascending=False).sort_index(),
+        )
+        self.assert_eq(
+            pdf.rank(na_option="bottom", ascending=False).sort_index(),
+            psdf.rank(na_option="bottom", ascending=False).sort_index(),
+        )
+
+        # all methods
+        for method in ["average", "min", "max", "first", "dense"]:
+            self.assert_eq(
+                pdf.rank(method=method, pct=True).sort_index(),
+                psdf.rank(method=method, pct=True).sort_index(),
+            )
+            self.assert_eq(
+                pdf.rank(method=method, na_option="bottom").sort_index(),
+                psdf.rank(method=method, na_option="bottom").sort_index(),
+            )
+
+        # axis=1 with pct and na_option
+        self.assert_eq(
+            pdf.rank(axis=1, pct=True).sort_index(), psdf.rank(axis=1, pct=True).sort_index()
+        )
+        self.assert_eq(
+            pdf.rank(axis=1, na_option="top").sort_index(),
+            psdf.rank(axis=1, na_option="top").sort_index(),
+        )
+
+        # invalid na_option
+        with self.assertRaisesRegex(ValueError, "na_option must be one of"):
+            psdf.rank(na_option="invalid")
 
     def test_nunique(self):
         pdf = pd.DataFrame({"A": [1, 2, 3], "B": [np.nan, 3, np.nan]}, index=np.random.rand(3))
@@ -570,7 +638,6 @@ class FrameComputeMixin:
 class FrameComputeTests(
     FrameComputeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

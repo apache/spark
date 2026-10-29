@@ -17,14 +17,17 @@
 
 package org.apache.spark.sql.connector.catalog;
 
+import org.apache.spark.SparkIllegalArgumentException;
 import org.apache.spark.annotation.Evolving;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.catalyst.analysis.NoSuchNamespaceException;
 import org.apache.spark.sql.catalyst.analysis.NoSuchTableException;
 import org.apache.spark.sql.catalyst.analysis.TableAlreadyExistsException;
+import org.apache.spark.sql.catalyst.util.WriteDistributionAndOrdering;
 import org.apache.spark.sql.errors.QueryCompilationErrors;
 import org.apache.spark.sql.errors.QueryExecutionErrors;
 import org.apache.spark.sql.types.StructType;
+import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -34,7 +37,7 @@ import java.util.Set;
  * Catalog API for connectors that expose tables.
  * <p>
  * Connectors that expose <i>only</i> tables implement this interface. Connectors that expose
- * both tables and views must implement {@link TableViewCatalog} (which extends both this
+ * both tables and views must implement {@link RelationCatalog} (which extends both this
  * interface and {@link ViewCatalog} and adds the cross-cutting contract for the combined
  * case); the methods on this interface remain table-only -- they do not interact with views.
  * <p>
@@ -101,6 +104,45 @@ public interface TableCatalog extends CatalogPlugin {
    * @return the set of capabilities for this TableCatalog
    */
   default Set<TableCatalogCapability> capabilities() { return Set.of(); }
+
+  /**
+   * Returns the connector-specific option keys that select the table state (such as a branch, tag,
+   * snapshot, or version) and therefore must be known when the table is loaded. Keys that Spark
+   * parses and handles itself, such as time travel, must not be listed here.
+   * <p>
+   * Spark may need to resolve the same table more than once while analyzing or refreshing a query.
+   * Spark reuses one table instance only for references whose table-state options match and passes
+   * only the declared options to {@code loadTable}. The complete user option map remains on each
+   * resolved relation for subsequent scan and write planning.
+   * <p>
+   * The default implementation returns an empty set, treating all options as unable to select a
+   * different table state. Option key matching is case-insensitive, while option values remain
+   * case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> tableStateOptionKeys() { return Set.of(); }
+
+  /**
+   * Returns the connector-specific option keys needed to load a changelog or determine its
+   * metadata, such as branch, tag, or schema selection. Parameters that Spark parses into
+   * {@link ChangelogContext}, such as the range and post-processing options, must not be listed.
+   * <p>
+   * Spark passes only the declared options to {@link #loadChangelog} and uses them, together with
+   * the changelog context, to identify reusable changelog state. The complete user option map
+   * remains on each resolved relation for subsequent scan planning.
+   * <p>
+   * The default implementation returns {@link #tableStateOptionKeys()}. An override declares the
+   * complete set of changelog state option keys; Spark does not add the table state option keys.
+   * Option key matching is case-insensitive, while option values remain case-sensitive.
+   *
+   * @return a non-null set of case-insensitive option keys
+   *
+   * @since 4.3.0
+   */
+  default Set<String> changelogStateOptionKeys() { return tableStateOptionKeys(); }
 
   /**
    * List the tables in a namespace from the catalog.
@@ -194,23 +236,77 @@ public interface TableCatalog extends CatalogPlugin {
   }
 
   /**
-   * Load a {@link Changelog} for the given table, representing the row-level changes within the
-   * range specified by {@code changelogInfo}.
+   * Load table metadata by {@link Identifier identifier} from the catalog, forwarding the
+   * user-specified options that may affect table state.
    * <p>
-   * The default implementation throws an analysis exception indicating that the catalog does
-   * not support CDC. Catalogs that support CDC must override this method.
+   * The default implementation ignores {@code stateOptions} and delegates to the existing
+   * {@code loadTable} overloads based on {@code context}. Catalogs that want to receive the user
+   * options while loading a table for a read or write must override
+   * {@link #tableStateOptionKeys()} and this method.
+   * Spark passes only the options declared by {@link #tableStateOptionKeys()}. Spark retains the
+   * complete user option map on the resolved relation for subsequent scan and write planning.
+   * <p>
+   * An override replaces that dispatch and must honor {@code context} itself: apply the time
+   * travel in {@link TableContext#timeTravel()}, and authorize the requested
+   * {@link TableContext#writePrivileges()} as it would in {@link #loadTable(Identifier, Set)}.
+   * Spark does not re-check either afterwards.
    *
    * @param ident a table identifier
-   * @param changelogInfo the CDC query parameters (range, deduplication mode, etc.)
+   * @param context the parsed load parameters (time travel, write privileges)
+   * @param stateOptions options declared to affect table state; Spark-parsed state such as time
+   *                     travel is provided through {@code context} instead
+   * @return the table's metadata
+   * @throws NoSuchTableException If the table doesn't exist
+   *
+   * @since 4.3.0
+   */
+  default Table loadTable(
+      Identifier ident,
+      TableContext context,
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
+    if (context.timeTravel().isPresent()) {
+      TimeTravel timeTravel = context.timeTravel().get();
+      if (timeTravel instanceof TimeTravel.AsOfVersion v) {
+        return loadTable(ident, v.version());
+      } else if (timeTravel instanceof TimeTravel.AsOfTimestamp ts) {
+        return loadTable(ident, ts.micros());
+      } else {
+        throw new SparkIllegalArgumentException(
+            "INTERNAL_ERROR",
+            Map.of("message", "Unsupported time travel spec: " + timeTravel));
+      }
+    } else if (!context.writePrivileges().isEmpty()) {
+      return loadTable(ident, context.writePrivileges());
+    } else {
+      return loadTable(ident);
+    }
+  }
+
+  /**
+   * Load a {@link Changelog} for the given table, representing the row-level changes within the
+   * range specified by {@code context}.
+   * <p>
+   * Spark passes only the options declared by {@link #changelogStateOptionKeys()}. The range and
+   * post-processing parameters are supplied through {@code context}. The complete user option
+   * map is retained for {@link Changelog#newScanBuilder(CaseInsensitiveStringMap)}.
+   * <p>
+   * The default implementation throws {@link UnsupportedOperationException} to indicate that
+   * the catalog does not support CDC. Catalogs that support CDC must override this method.
+   *
+   * @param ident a table identifier
+   * @param context the CDC query context (range, deduplication mode, etc.)
+   * @param stateOptions options declared to affect changelog state; Spark-parsed parameters are
+   *                     provided through {@code context} instead
    * @return a Changelog instance for the requested table and range
    * @throws NoSuchTableException If the table doesn't exist
    *
    * @since 4.2.0
    */
-  default Changelog loadChangelog(Identifier ident, ChangelogInfo changelogInfo)
-      throws NoSuchTableException {
-    throw new UnsupportedOperationException(
-        name() + " does not support Change Data Capture (CDC)");
+  default Changelog loadChangelog(
+      Identifier ident,
+      ChangelogContext context,
+      CaseInsensitiveStringMap stateOptions) throws NoSuchTableException {
+    throw new UnsupportedOperationException(name() + " does not support Change Data Capture (CDC)");
   }
 
   /**
@@ -270,19 +366,31 @@ public interface TableCatalog extends CatalogPlugin {
 
   /**
    * Create a table in the catalog.
+   * <p>
+   * The default implementation rejects a requested write distribution or ordering; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   * A catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} or
+   * {@code CREATE OR REPLACE TABLE} here only after Spark has dropped the existing table; a
+   * {@link StagingTableCatalog} gets {@code stageReplace} or {@code stageCreateOrReplace}
+   * instead, before anything is dropped.
    *
    * @param ident a table identifier
    * @param tableInfo information about the table
    * @return metadata for the new table. This can be null if getting the metadata for the new table
-   *         is expensive. Spark will call {@link #loadTable(Identifier)} if needed (e.g. CTAS).
+   *         is expensive. Spark will call
+   *         {@link #loadTable(Identifier, TableContext, CaseInsensitiveStringMap)} if needed
+   *         (e.g. CTAS), forwarding the catalog-declared table-state options and required
+   *         privileges.
    *
    * @throws TableAlreadyExistsException If a table already exists for the identifier
-   * @throws UnsupportedOperationException If a requested partition transform is not supported
+   * @throws UnsupportedOperationException If a requested partition transform, write distribution
+   *         or write ordering is not supported
    * @throws NoSuchNamespaceException If the identifier namespace does not exist (optional)
    * @since 4.1.0
    */
   default Table createTable(Identifier ident, TableInfo tableInfo)
       throws TableAlreadyExistsException, NoSuchNamespaceException {
+    WriteDistributionAndOrdering.rejectRequested(this, ident, tableInfo);
     return createTable(ident, tableInfo.columns(), tableInfo.partitions(), tableInfo.properties());
   }
 
@@ -297,13 +405,17 @@ public interface TableCatalog extends CatalogPlugin {
    * excluded from {@code tableInfo}; connectors may read {@code sourceTable.properties()} to
    * clone additional format-specific or custom state as appropriate for their implementation.
    * <p>
+   * The source table's write distribution and ordering are not copied either:
+   * {@code tableInfo.writeDistributionMode()} is null and {@code tableInfo.writeOrdering()} is
+   * empty. Connectors that want to carry them forward may read them from {@code sourceTable}.
+   * <p>
    * The default implementation throws {@link UnsupportedOperationException}. Connectors that
    * support {@code CREATE TABLE ... LIKE ...} must override this method.
    *
    * @param ident a table identifier for the new table
    * @param tableInfo complete description of the new table: columns, partitioning, constraints,
    *                  explicit properties (user overrides + owner); source table properties
-   *                  are NOT included
+   *                  and the source's write distribution and ordering are NOT included
    * @param sourceTable the resolved source table; connectors may read format-specific properties
    *                    or other custom state from this object to clone additional metadata
    * @return metadata for the new table

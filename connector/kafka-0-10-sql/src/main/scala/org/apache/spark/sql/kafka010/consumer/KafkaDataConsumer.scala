@@ -97,14 +97,21 @@ private[kafka010] class InternalKafkaConsumer(
       // - `offset` is out of range so that Kafka returns nothing. `OffsetOutOfRangeException` will
       //   be thrown.
       // - Cannot fetch any data before timeout. `TimeoutException` will be thrown.
-      // - Fetched something but all of them are not invisible. This is a valid case and let the
-      //   caller handles this.
+      // - Fetched something but all of them are invisible. This is a valid case and let the
+      //   caller handle this.
       if (offset < range.earliest || offset >= range.latest) {
         throw new OffsetOutOfRangeException(
           Map(topicPartition -> java.lang.Long.valueOf(offset)).asJava)
       } else if (offset == offsetAfterPoll) {
         throw new TimeoutException(
           s"Cannot fetch record for offset $offset in $pollTimeoutMs milliseconds")
+      } else {
+        logDebug(log"Polled zero visible records for ${MDC(TOPIC_PARTITION, topicPartition)} " +
+          log"in group ${MDC(GROUP_ID, groupId)} after ${MDC(TIMEOUT, pollTimeoutMs)} " +
+          log"milliseconds, while the offset changed from ${MDC(OFFSET, offset)} to " +
+          log"${MDC(UNTIL_OFFSET, offsetAfterPoll)}. This can happen when fetched records are " +
+          log"invisible, for example transaction markers or aborted messages with " +
+          log"`isolation.level=read_committed`.")
       }
     }
     fetchedData
@@ -399,7 +406,7 @@ private[kafka010] class KafkaDataConsumer(
     require(offset < untilOffset,
       s"offset must always be less than untilOffset [offset: $offset, untilOffset: $untilOffset]")
 
-    val consumer = getOrRetrieveConsumer()
+    var consumer = getOrRetrieveConsumer()
     val fetchedData = getOrRetrieveFetchedData(offset)
 
     logDebug(s"Get $groupId $topicPartition nextOffset ${fetchedData.nextOffsetInFetchedData} " +
@@ -443,6 +450,9 @@ private[kafka010] class KafkaDataConsumer(
             throwOnDataLoss(toFetchOffset, untilOffset, topicPartition, groupId, e)
           } else {
             logOnDataLoss(topicPartition, groupId, s"Cannot fetch offset $toFetchOffset", e)
+            // [SPARK-60076] The consumer was released while handling the out-of-range offset,
+            // so reacquire it before recovery.
+            consumer = getOrRetrieveConsumer()
           }
 
           val oldToFetchOffsetd = toFetchOffset

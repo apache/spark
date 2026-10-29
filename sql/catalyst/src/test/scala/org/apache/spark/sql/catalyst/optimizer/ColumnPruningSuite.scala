@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, PlanTest}
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.RuleExecutor
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{StringType, StructType}
+import org.apache.spark.sql.types.{DoubleType, StringType, StructType, TimestampType}
 
 class ColumnPruningSuite extends PlanTest {
 
@@ -481,5 +481,34 @@ class ColumnPruningSuite extends PlanTest {
     val correctAnswer = relation.select($"a", $"c")
 
     comparePlans(CustomOptimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
+  test("Column pruning for BinBy") {
+    // Two range inputs, one DISTRIBUTE column, one unused pass-through.
+    val tsStart = AttributeReference("ts_start", TimestampType, nullable = false)()
+    val tsEnd = AttributeReference("ts_end", TimestampType, nullable = false)()
+    val value = AttributeReference("value", DoubleType, nullable = false)()
+    val label = AttributeReference("label", StringType, nullable = true)()
+    val relation = LocalRelation(tsStart, tsEnd, value, label)
+
+    // Produced attributes: scaled DISTRIBUTE column + three appended columns.
+    val scaledValue = AttributeReference("value", DoubleType, nullable = true)()
+    val binStart = AttributeReference("bin_start", TimestampType, nullable = true)()
+    val binEnd = AttributeReference("bin_end", TimestampType, nullable = true)()
+    val binRatio = AttributeReference("bin_distribute_ratio", DoubleType, nullable = true)()
+
+    val query = relation
+      .binBy(tsStart, tsEnd, Seq(value), Seq(scaledValue), Seq(binStart, binEnd, binRatio))
+      .select(binStart)
+
+    val optimized = Optimize.execute(query)
+
+    // `label` is pruned from the child; the range and DISTRIBUTE inputs the kernel reads stay.
+    val correctAnswer = relation
+      .select(tsStart, tsEnd, value)
+      .binBy(tsStart, tsEnd, Seq(value), Seq(scaledValue), Seq(binStart, binEnd, binRatio))
+      .select(binStart)
+
+    comparePlans(optimized, correctAnswer, checkAnalysis = false)
   }
 }

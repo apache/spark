@@ -823,7 +823,9 @@ org.apache.spark.SparkException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 14,
+    "fragment" : "foo51()"
   } ]
 }
 
@@ -956,7 +958,9 @@ org.apache.spark.SparkRuntimeException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 24,
+    "fragment" : "foo9a('Nonsense')"
   } ]
 }
 
@@ -1209,7 +1213,9 @@ org.apache.spark.SparkArithmeticException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 17,
+    "fragment" : "foo9f(999)"
   } ]
 }
 
@@ -1232,7 +1238,9 @@ org.apache.spark.SparkArithmeticException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 21,
+    "fragment" : "foo9f(999 + 1)"
   } ]
 }
 
@@ -1271,7 +1279,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "foo9g('hello', '7')"
   } ]
 }
 
@@ -1294,7 +1304,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "foo9g(123.23, 'q')"
   } ]
 }
 
@@ -1333,7 +1345,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 26,
+    "fragment" : "foo9h('hello', '7')"
   } ]
 }
 
@@ -1356,7 +1370,9 @@ org.apache.spark.SparkNumberFormatException
   "queryContext" : [ {
     "objectType" : "",
     "objectName" : "",
-    "fragment" : ""
+    "startIndex" : 8,
+    "stopIndex" : 25,
+    "fragment" : "foo9h(123.23, 'q')"
   } ]
 }
 
@@ -3156,7 +3172,7 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "UNSUPPORTED_SUBQUERY_EXPRESSION_CATEGORY.UNSUPPORTED_CORRELATED_SCALAR_SUBQUERY",
   "sqlState" : "0A000",
   "messageParameters" : {
-    "treeNode" : "Join Inner, (spark_catalog.default.foo3_1g(x#x) = 2)\n:  +- Project [outer(x#x)]\n:     +- OneRowRelation\n:- SubqueryAlias spark_catalog.default.t1\n:  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n:     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:        +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t2\n   +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
+    "treeNode" : "Join Inner, (spark_catalog.default.foo3_1g(x#x) = 2)\n:  +- Project [outer(x#x) AS x#x]\n:     +- OneRowRelation\n:- SubqueryAlias spark_catalog.default.t1\n:  +- View (`spark_catalog`.`default`.`t1`, [c1#x, c2#x])\n:     +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n:        +- LocalRelation [col1#x, col2#x]\n+- SubqueryAlias spark_catalog.default.t2\n   +- View (`spark_catalog`.`default`.`t2`, [c1#x, c2#x])\n      +- Project [cast(col1#x as int) AS c1#x, cast(col2#x as int) AS c2#x]\n         +- LocalRelation [col1#x, col2#x]\n"
   }
 }
 

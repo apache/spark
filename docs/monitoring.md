@@ -128,10 +128,16 @@ The compaction tries to exclude the events which point to the outdated data. As 
 * Events for the executor which is terminated
 * Events for the SQL execution which is finished, and related job/stage/tasks events
 
+Spark History Server skips the compaction if it cannot read all the events in the target files, since it
+would not be able to tell which events are still needed. As the target files always start from the oldest one,
+compaction of that application then stays skipped. If an event log line in the target files is longer than
+<code>spark.history.fs.eventLog.maxLineLength</code>, compaction is skipped until the limit is increased and
+a new event log file is rolled.
+
 Once rewriting is done, original log files will be deleted, via best-effort manner. The History Server may not be able to delete
 the original log files, but it will not affect the operation of the History Server.
 
-Please note that Spark History Server may not compact the old event log files if figures out not a lot of space
+Please note that Spark History Server may not compact the old event log files if it figures out that not a lot of space
 would be reduced during compaction. For streaming query we normally expect compaction
 will run as each micro-batch will trigger one or more jobs which will be finished shortly, but compaction won't run
 in many cases for batch query.
@@ -439,6 +445,26 @@ Security options for the Spark History Server are covered more detail in the
     <td>3.0.0</td>
   </tr>
   <tr>
+    <td>spark.history.fs.eventLog.maxLineLength</td>
+    <td>256m</td>
+    <td>
+      Maximum UTF-8 byte length of a single event log line during replay, excluding the line
+      ending. Longer lines are skipped with a warning, which bounds the memory replay
+      can use when an event log is corrupt or unexpectedly large. Buffer growth, UTF-16 storage
+      and JSON parsing can require several times this limit in heap space. Buffer capacity grows
+      in steps: reducing 256m to 200m or 150m may not reduce the retained buffer; use 128m to
+      reach a smaller capacity. Values at or below
+      0, or above 536870912, use the maximum supported limit of 536870912 bytes (512 MiB).
+      This cap avoids JVM array-size limits but does not guarantee sufficient heap space.
+      If a longer line is in the event log files to compact, compaction of the rolling event
+      log files of that application is skipped until the limit is increased and a new event log
+      file is rolled.<br/>
+      Introduced in 4.3.0; also available in 3.5.10, 4.0.5, 4.1.4 and 4.2.1; and in all
+      versions after 4.3.0.
+    </td>
+    <td>4.3.0</td>
+  </tr>
+  <tr>
     <td>spark.history.fs.eventLog.rolling.maxFilesToRetain</td>
     <td>Int.MaxValue</td>
     <td>
@@ -457,6 +483,14 @@ Security options for the Spark History Server are covered more detail in the
       Whether to look up rolling event log locations on demand manner before listing files.
     </td>
     <td>4.1.0</td>
+  </tr>
+  <tr>
+    <td>spark.history.fs.eventLog.onDemandLoadEnabled</td>
+    <td>true</td>
+    <td>
+      Whether to look up single event log locations on demand manner before listing files.
+    </td>
+    <td>4.3.0</td>
   </tr>
   <tr>
     <td>spark.history.store.hybridStore.enabled</td>
@@ -649,6 +683,19 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <td>A list of all(active and dead) executors for the given application.</td>
   </tr>
   <tr>
+    <td><code>/applications/[app-id]/holdstatus</code></td>
+    <td>
+      Whether the given application is held, as <code>supported</code> (whether the deployment
+      allows holding), <code>held</code>, and <code>draining</code> (the number of executors
+      that have not exited yet). An application is held and resumed through the
+      <code>/jobs/hold/</code> and <code>/jobs/resume/</code> endpoints of its web UI,
+      which require modify permissions and the per-UI <code>csrfToken</code> parameter
+      rendered into the jobs page, and accept GET in addition to POST only when
+      <code>spark.ui.actionsViaGetEnabled</code> is on, while reading this status only
+      requires view permissions. Not available via the history server.
+    </td>
+  </tr>
+  <tr>
     <td><code>/applications/[app-id]/storage/rdd</code></td>
     <td>A list of stored RDDs for the given application.</td>
   </tr>
@@ -713,6 +760,30 @@ can be identified by their `[attempt-id]`. In the API listed below, when running
     <br>
     <code>?planDescription=[true (default) | false]</code> enables/disables Physical <code>planDescription</code> on demand for the given query when Physical Plan size is high.
     </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/sessions</code></td>
+    <td>A list of all Spark Connect sessions for a given application.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists sessions in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/sessions/[session-id]?userId=[user-id]</code></td>
+    <td>Details for the given Spark Connect session. A session is identified by the composite
+    <code>(userId, sessionId)</code>, so <code>userId</code> is required and must be passed as an
+    unpadded base64url-encoded string.</td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/operations</code></td>
+    <td>A list of all Spark Connect operations for a given application.
+    <br>
+    <code>?offset=[offset]&length=[len]</code> lists operations in the given range.
+    </td>
+  </tr>
+  <tr>
+    <td><code>/applications/[app-id]/connect/operations/detail?jobTag=[job-tag]</code></td>
+    <td>Details for the Spark Connect operation with the given job tag.</td>
   </tr>
   <tr>
     <td><code>/applications/[app-id]/environment</code></td>
@@ -1304,6 +1375,11 @@ This is the component with the largest amount of instrumented metrics
   - queue.eventLog.numDroppedEvents.count
   - queue.eventLog.size
   - queue.executorManagement.listenerProcessingTime (timer)
+  - queue.executorManagement.numDroppedEvents.count
+  - queue.executorManagement.size
+  - queue.shared.listenerProcessingTime (timer)
+  - queue.shared.numDroppedEvents.count
+  - queue.shared.size
 
 - namespace=appStatus (all metrics of type=counter)
   - **note:** Introduced in Spark 3.0. Conditional to a configuration parameter:

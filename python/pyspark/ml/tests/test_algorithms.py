@@ -15,8 +15,8 @@
 # limitations under the License.
 #
 import os
-from shutil import rmtree
 import tempfile
+from shutil import rmtree
 
 import numpy as np
 
@@ -26,9 +26,9 @@ from pyspark.ml.classification import (
     MultilayerPerceptronClassifier,
     OneVsRest,
 )
-from pyspark.ml.clustering import DistributedLDAModel, KMeans, LocalLDAModel, LDA, LDAModel
+from pyspark.ml.clustering import LDA, DistributedLDAModel, KMeans, LDAModel, LocalLDAModel
 from pyspark.ml.fpm import FPGrowth
-from pyspark.ml.linalg import Vectors, DenseVector
+from pyspark.ml.linalg import DenseVector, Vectors
 from pyspark.ml.recommendation import ALS
 from pyspark.ml.regression import GeneralizedLinearRegression, LinearRegression
 from pyspark.sql import Row
@@ -190,9 +190,9 @@ class KMeansTests(SparkSessionTestCase):
         kmeans = KMeans(k=3, seed=1, distanceMeasure="cosine")
         model = kmeans.fit(df)
         result = model.transform(df).collect()
-        self.assertTrue(result[0].prediction == result[1].prediction)
-        self.assertTrue(result[2].prediction == result[3].prediction)
-        self.assertTrue(result[4].prediction == result[5].prediction)
+        self.assertEqual(result[0].prediction, result[1].prediction)
+        self.assertEqual(result[2].prediction, result[3].prediction)
+        self.assertEqual(result[4].prediction, result[5].prediction)
 
 
 class LDATest(SparkSessionTestCase):

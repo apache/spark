@@ -18,12 +18,11 @@ package org.apache.spark.sql.execution.datasources.v2.orc
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
+import org.apache.hadoop.hive.ql.io.sarg.SearchArgument
 import org.apache.hadoop.mapreduce.{JobID, TaskAttemptID, TaskID, TaskType}
 import org.apache.hadoop.mapreduce.lib.input.FileSplit
 import org.apache.hadoop.mapreduce.task.TaskAttemptContextImpl
 import org.apache.orc.{OrcConf, OrcFile, Reader, TypeDescription}
-import org.apache.orc.mapred.OrcStruct
-import org.apache.orc.mapreduce.OrcInputFormat
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.memory.MemoryMode
@@ -73,12 +72,12 @@ case class OrcPartitionReaderFactory(
         s.dataType, sqlConf.orcVectorizedReaderNestedColumnEnabled))
   }
 
-  private def pushDownPredicates(orcSchema: TypeDescription, conf: Configuration): Unit = {
+  private def pushDownPredicates(orcSchema: TypeDescription): Option[SearchArgument] = {
     if (orcFilterPushDown && filters.nonEmpty) {
       val fileSchema = OrcUtils.toCatalystSchema(orcSchema)
-      OrcFilters.createFilter(fileSchema, filters.toImmutableArraySeq).foreach { f =>
-        OrcInputFormat.setSearchArgument(conf, f, fileSchema.fieldNames)
-      }
+      OrcFilters.createFilter(fileSchema, filters.toImmutableArraySeq, Some(readDataSchema))
+    } else {
+      None
     }
   }
 
@@ -89,7 +88,8 @@ case class OrcPartitionReaderFactory(
     }
     val filePath = file.toPath
 
-    val orcSchema = Utils.tryWithResource(createORCReader(filePath, conf)._1)(_.getSchema)
+    val (orcSchemaReader, readerOptions) = createORCReader(filePath, conf)
+    val orcSchema = Utils.tryWithResource(orcSchemaReader)(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
 
@@ -104,11 +104,10 @@ case class OrcPartitionReaderFactory(
       val taskConf = new Configuration(conf)
 
       val fileSplit = new FileSplit(filePath, file.start, file.length, Array.empty)
-      val attemptId = new TaskAttemptID(new TaskID(new JobID(), TaskType.MAP, 0), 0)
-      val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
-      val orcRecordReader = new OrcInputFormat[OrcStruct]
-        .createRecordReader(fileSplit, taskAttemptContext)
+      val orcRecordReader = OrcUtils.createOrcMapreduceRecordReader(
+        filePath, taskConf, fileSplit, readerOptions, pushDownPredicates(orcSchema))
+
       val deserializer = new OrcDeserializer(readDataSchema, requestedColIds)
       val fileReader = new PartitionReader[InternalRow] {
         override def next(): Boolean = orcRecordReader.nextKeyValue()
@@ -129,7 +128,7 @@ case class OrcPartitionReaderFactory(
       return buildColumnarReaderWithAggregates(file, conf)
     }
     val filePath = file.toPath
-    lazy val (reader, readerOptions) = createORCReader(filePath, conf)
+    val (reader, readerOptions) = createORCReader(filePath, conf)
     val orcSchema = Utils.tryWithResource(reader)(_.getSchema)
     val resultedColPruneInfo = OrcUtils.requestedColumnIds(
       isCaseSensitive, dataSchema, readDataSchema, orcSchema, conf)
@@ -150,7 +149,8 @@ case class OrcPartitionReaderFactory(
       val taskAttemptContext = new TaskAttemptContextImpl(taskConf, attemptId)
 
       val batchReader = new OrcColumnarBatchReader(capacity, memoryMode)
-      batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail)
+      batchReader.initialize(fileSplit, taskAttemptContext, readerOptions.getOrcTail,
+        pushDownPredicates(orcSchema).orNull)
       val requestedPartitionColIds =
         Array.fill(readDataSchema.length)(-1) ++ Range(0, partitionSchema.length)
 
@@ -171,11 +171,7 @@ case class OrcPartitionReaderFactory(
 
     val fs = filePath.getFileSystem(conf)
     val readerOptions = OrcFile.readerOptions(conf).filesystem(fs)
-    val reader = OrcFile.createReader(filePath, readerOptions)
-
-    pushDownPredicates(reader.getSchema, conf)
-
-    (reader, readerOptions)
+    (OrcFile.createReader(filePath, readerOptions), readerOptions)
   }
 
   /**

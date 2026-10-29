@@ -1,0 +1,776 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.parquet
+
+import java.io.File
+import java.nio.{ByteBuffer, ByteOrder}
+
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.example.data.simple.SimpleGroupFactory
+import org.apache.parquet.hadoop.ParquetFileWriter.Mode
+import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.api.Binary
+import org.apache.parquet.schema.{LogicalTypeAnnotation, MessageType, Types}
+import org.apache.parquet.schema.LogicalTypeAnnotation.TimeUnit
+import org.apache.parquet.schema.PrimitiveType.PrimitiveTypeName.{INT64, INT96}
+
+import org.apache.spark.{SparkArithmeticException, SparkException, SparkUpgradeException}
+import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types._
+
+class ParquetTimestampNanosSuite extends QueryTest with ParquetTest with SharedSparkSession {
+
+  private def withNanosEnabled(f: => Unit): Unit = {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true")(f)
+  }
+
+  private def writeForeignNanosParquet(
+      file: File,
+      isAdjustedToUTC: Boolean,
+      values: Seq[Option[Long]]): Unit = {
+    val schema: MessageType = Types.buildMessage()
+      .optional(INT64)
+      .as(LogicalTypeAnnotation.timestampType(isAdjustedToUTC, TimeUnit.NANOS))
+      .named("ts")
+      .named("spark_schema")
+    val conf = spark.sessionState.newHadoopConf()
+    val writer = ExampleParquetWriter.builder(new Path(file.toURI))
+      .withType(schema)
+      .withConf(conf)
+      .withWriteMode(Mode.OVERWRITE)
+      .build()
+    try {
+      val factory = new SimpleGroupFactory(schema)
+      values.foreach { v =>
+        val group = factory.newGroup()
+        v.foreach(x => group.add("ts", x))
+        writer.write(group)
+      }
+    } finally {
+      writer.close()
+    }
+  }
+
+  // Builds a 12-byte INT96 value: nanoseconds-of-day (little-endian long) followed by the Julian
+  // day (little-endian int), the on-disk layout ParquetRowConverter.binaryToSQLTimestamp reads.
+  private def int96Binary(julianDay: Int, timeOfDayNanos: Long): Binary = {
+    val buf = ByteBuffer.allocate(12).order(ByteOrder.LITTLE_ENDIAN)
+    buf.putLong(timeOfDayNanos)
+    buf.putInt(julianDay)
+    Binary.fromConstantByteArray(buf.array())
+  }
+
+  // Writes a foreign INT96 timestamp column (a raw INT96 with no logical annotation, the layout
+  // Impala/Hive emit). INT96 carries no time-zone family in the schema, so the requested read type
+  // decides LTZ vs NTZ. dictionaryEnabled toggles dictionary vs plain encoding so both the
+  // vectorized updater's dictionary-decode and plain-read branches can be exercised.
+  private def writeForeignInt96Parquet(
+      file: File,
+      values: Seq[Binary],
+      dictionaryEnabled: Boolean): Unit = {
+    val schema: MessageType = Types.buildMessage()
+      .optional(INT96)
+      .named("ts")
+      .named("spark_schema")
+    val conf = spark.sessionState.newHadoopConf()
+    val writer = ExampleParquetWriter.builder(new Path(file.toURI))
+      .withType(schema)
+      .withConf(conf)
+      .withDictionaryEncoding(dictionaryEnabled)
+      .withWriteMode(Mode.OVERWRITE)
+      .build()
+    try {
+      val factory = new SimpleGroupFactory(schema)
+      values.foreach { v =>
+        val group = factory.newGroup()
+        group.add("ts", v)
+        writer.write(group)
+      }
+    } finally {
+      writer.close()
+    }
+  }
+
+  test("SPARK-57102: Spark write/read round-trips nanos value and precision") {
+    withNanosEnabled {
+      Seq("true", "false").foreach { vectorized =>
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> vectorized) {
+          Seq(7, 8, 9).foreach { p =>
+            withTempPath { dir =>
+              val frac = "123456789".take(p)
+              val df = spark.sql(
+                s"""SELECT * FROM VALUES
+                   |  (TIMESTAMP_NTZ '2020-01-01 12:34:56.$frac',
+                   |   TIMESTAMP_LTZ '2020-01-01 12:34:56.$frac'),
+                   |  (TIMESTAMP_NTZ '1969-12-31 23:59:59.$frac',
+                   |   TIMESTAMP_LTZ '1969-12-31 23:59:59.$frac'),
+                   |  (CAST(NULL AS TIMESTAMP_NTZ($p)), CAST(NULL AS TIMESTAMP_LTZ($p)))
+                   |  AS t(ntz, ltz)""".stripMargin)
+              assert(df.schema("ntz").dataType === TimestampNTZNanosType(p))
+              assert(df.schema("ltz").dataType === TimestampLTZNanosType(p))
+
+              df.write.parquet(dir.getCanonicalPath)
+              val read = spark.read.parquet(dir.getCanonicalPath)
+
+              assert(read.schema("ntz").dataType === TimestampNTZNanosType(p))
+              assert(read.schema("ltz").dataType === TimestampLTZNanosType(p))
+              checkAnswer(read, df.collect().toSeq)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: read a foreign TIMESTAMP(NANOS) file as nanosecond timestamp types") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withAllParquetReaders {
+          val values = Seq(Some(123L), Some(1000000123L), Some(-1L), None)
+
+          withTempPath { dir =>
+            val file = new File(dir, "ntz.parquet")
+            writeForeignNanosParquet(file, isAdjustedToUTC = false, values)
+            val read = spark.read.parquet(file.getCanonicalPath)
+            assert(read.schema("ts").dataType === TimestampNTZNanosType(9))
+            checkAnswer(read, spark.sql(
+              """SELECT * FROM VALUES
+                |  (TIMESTAMP_NTZ '1970-01-01 00:00:00.000000123'),
+                |  (TIMESTAMP_NTZ '1970-01-01 00:00:01.000000123'),
+                |  (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999999'),
+                |  (CAST(NULL AS TIMESTAMP_NTZ(9)))
+                |  AS t(ts)""".stripMargin).collect().toSeq)
+          }
+
+          withTempPath { dir =>
+            val file = new File(dir, "ltz.parquet")
+            writeForeignNanosParquet(file, isAdjustedToUTC = true, values)
+            val read = spark.read.parquet(file.getCanonicalPath)
+            assert(read.schema("ts").dataType === TimestampLTZNanosType(9))
+            checkAnswer(read, spark.sql(
+              """SELECT * FROM VALUES
+                |  (TIMESTAMP_LTZ '1970-01-01 00:00:00.000000123'),
+                |  (TIMESTAMP_LTZ '1970-01-01 00:00:01.000000123'),
+                |  (TIMESTAMP_LTZ '1969-12-31 23:59:59.999999999'),
+                |  (CAST(NULL AS TIMESTAMP_LTZ(9)))
+                |  AS t(ts)""".stripMargin).collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("INT96 vectorized read preserves sub-microsecond nanos from a foreign file") {
+    // Spark only writes micro-aligned INT96, so neither a Spark round-trip nor the widening suite
+    // (which writes through Spark) ever carries sub-microsecond digits. A foreign file (Impala/
+    // Hive) can: INT96 stores nanoseconds-of-day, and the default vectorized reader
+    // (Int96AsTimestampNanosUpdater#putInt96AsNanos) must recover the sub-micro remainder rather
+    // than floor to micros. Julian day 2440588 is 1970-01-01; 45296123456789 ns-of-day is
+    // 12:34:56.123456789, whose .789 remainder a micros floor would drop. Runs both families,
+    // both readers (withAllParquetReaders) and dictionary on/off (the updater's dictionary-decode
+    // and plain-read branches); the row-based decode is pinned in TimestampNanosParquetOpsSuite.
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val binary = int96Binary(julianDay = 2440588, timeOfDayNanos = 45296123456789L)
+        Seq(true, false).foreach { dictionaryEnabled =>
+          withAllParquetReaders {
+            withTempPath { dir =>
+              val file = new File(dir, "int96.parquet")
+              writeForeignInt96Parquet(file, Seq.fill(4)(binary), dictionaryEnabled)
+              Seq(
+                TimestampNTZNanosType(9) -> "TIMESTAMP_NTZ '1970-01-01 12:34:56.123456789'",
+                TimestampLTZNanosType(9) -> "TIMESTAMP_LTZ '1970-01-01 12:34:56.123456789'"
+              ).foreach { case (readType, literal) =>
+                withClue(s"readType=$readType dictionary=$dictionaryEnabled") {
+                  val read = spark.read
+                    .schema(StructType(Seq(StructField("ts", readType))))
+                    .parquet(file.getCanonicalPath)
+                  assert(read.schema("ts").dataType === readType)
+                  val expected = spark.sql(s"SELECT $literal AS ts").collect().head
+                  checkAnswer(read, Seq.fill(4)(expected))
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("INT96 read of an ancient value fails under EXCEPTION rebase for LTZ") {
+    // A pre-1582 (Julian) INT96 read as the LTZ family under int96RebaseModeInRead=EXCEPTION must
+    // refuse the ambiguous value instead of silently rebasing -- exercising the vectorized
+    // updater's failIfRebase arm (Int96AsTimestampNanosUpdater rebase=true, failIfRebase=true) end
+    // to end; the row-path rebase is pinned in TimestampNanosParquetOpsSuite. Julian day 2200000
+    // is ~year 1311. Both readers are covered by withAllParquetReaders.
+    withNanosEnabled {
+      withSQLConf(
+        SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC",
+        SQLConf.PARQUET_INT96_REBASE_MODE_IN_READ.key -> LegacyBehaviorPolicy.EXCEPTION.toString) {
+        val ancient = int96Binary(julianDay = 2200000, timeOfDayNanos = 0L)
+        withAllParquetReaders {
+          withTempPath { dir =>
+            val file = new File(dir, "int96_ancient.parquet")
+            writeForeignInt96Parquet(file, Seq(ancient), dictionaryEnabled = false)
+            // The vectorized reader throws the SparkUpgradeException directly, while the row-based
+            // reader wraps it in a SparkException (FAILED_READ_FILE); catch their common ancestor
+            // and look for the upgrade exception anywhere in the cause chain.
+            val e = intercept[Exception] {
+              spark.read
+                .schema(StructType(Seq(StructField("ts", TimestampLTZNanosType(9)))))
+                .parquet(file.getCanonicalPath)
+                .collect()
+            }
+            assert(
+              Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+                .exists(_.isInstanceOf[SparkUpgradeException]),
+              s"expected a SparkUpgradeException in the cause chain of: $e")
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: explicit lower-precision read schema truncates sub-precision nanos") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withAllParquetReaders {
+          // Foreign file with full 9-digit precision: .123456789 after the epoch, and -1ns (which
+          // floors to epochMicros = -1, nanosWithinMicro = 999).
+          val values = Seq(Some(123456789L), Some(-1L))
+
+          withTempPath { dir =>
+            val file = new File(dir, "ntz.parquet")
+            writeForeignNanosParquet(file, isAdjustedToUTC = false, values)
+            // Reading with an explicit TIMESTAMP_NTZ(7) schema must floor the sub-microsecond
+            // digits to precision 7, matching DateTimeUtils.localDateTimeToTimestampNanos.
+            val read = spark.read.schema("ts TIMESTAMP_NTZ(7)").parquet(file.getCanonicalPath)
+            assert(read.schema("ts").dataType === TimestampNTZNanosType(7))
+            checkAnswer(read, spark.sql(
+              """SELECT * FROM VALUES
+                |  (TIMESTAMP_NTZ '1970-01-01 00:00:00.123456700'),
+                |  (TIMESTAMP_NTZ '1969-12-31 23:59:59.999999900')
+                |  AS t(ts)""".stripMargin).collect().toSeq)
+          }
+
+          withTempPath { dir =>
+            val file = new File(dir, "ltz.parquet")
+            writeForeignNanosParquet(file, isAdjustedToUTC = true, values)
+            // precision 8 drops only the last digit.
+            val read = spark.read.schema("ts TIMESTAMP_LTZ(8)").parquet(file.getCanonicalPath)
+            assert(read.schema("ts").dataType === TimestampLTZNanosType(8))
+            checkAnswer(read, spark.sql(
+              """SELECT * FROM VALUES
+                |  (TIMESTAMP_LTZ '1970-01-01 00:00:00.123456780'),
+                |  (TIMESTAMP_LTZ '1969-12-31 23:59:59.999999990')
+                |  AS t(ts)""".stripMargin).collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: requesting a nanos type over a non-NANOS Parquet column fails clearly") {
+    withNanosEnabled {
+      withSQLConf(
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false",
+        SQLConf.PARQUET_OUTPUT_TIMESTAMP_TYPE.key ->
+          SQLConf.ParquetOutputTimestampType.TIMESTAMP_MILLIS.toString) {
+        withTempPath { dir =>
+          // Write a TIMESTAMP(MILLIS) column: a coarser non-NANOS encoding, not the INT64
+          // TIMESTAMP(MICROS) the nanos reader now widens to nanos.
+          spark.sql("SELECT TIMESTAMP '2020-01-01 12:34:56.123' AS ts")
+            .write.parquet(dir.getCanonicalPath)
+          // Forcing a nanosecond read schema leaves no matching converter case (only NANOS and
+          // same-family MICROS are accepted), so it falls through to the generic
+          // PARQUET_CONVERSION_FAILURE error - the same path every other type uses, not a confusing
+          // one.
+          val e = intercept[SparkException] {
+            spark.read.schema("ts TIMESTAMP_LTZ(7)").parquet(dir.getCanonicalPath).collect()
+          }
+          var cause: Throwable = e
+          while (cause != null && (cause.getMessage == null ||
+              !cause.getMessage.contains("PARQUET_CONVERSION_FAILURE"))) {
+            cause = cause.getCause
+          }
+          assert(cause != null,
+            s"Expected a PARQUET_CONVERSION_FAILURE error, but got: ${e.getMessage}")
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: legacy nanosAsLong reads a foreign TIMESTAMP(NANOS) file as LongType") {
+    withTempPath { dir =>
+      val file = new File(dir, "foreign.parquet")
+      writeForeignNanosParquet(file, isAdjustedToUTC = false, Seq(Some(123L), Some(-1L)))
+      withSQLConf(
+        SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+        SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true",
+        SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+        val read = spark.read.parquet(file.getCanonicalPath)
+        assert(read.schema("ts").dataType === LongType)
+        checkAnswer(read, Seq(Row(123L), Row(-1L)))
+      }
+    }
+  }
+
+  test("SPARK-57102: reading a foreign TIMESTAMP(NANOS) file fails when the feature is disabled") {
+    Seq(true, false).foreach { isAdjustedToUTC =>
+      withTempPath { dir =>
+        val file = new File(dir, "foreign.parquet")
+        writeForeignNanosParquet(file, isAdjustedToUTC, Seq(Some(123L)))
+        withSQLConf(
+          SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false",
+          SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "false") {
+          checkError(
+            exception = intercept[AnalysisException] {
+              spark.read.parquet(file.getCanonicalPath).schema
+            },
+            condition = "PARQUET_TYPE_ILLEGAL",
+            parameters = Map("parquetType" -> s"INT64 (TIMESTAMP(NANOS,$isAdjustedToUTC))"))
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: writing a timestamp outside the INT64 epoch-nanos range fails loudly") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        Seq("TIMESTAMP_NTZ", "TIMESTAMP_LTZ").foreach { typeName =>
+          withTempPath { dir =>
+            val df = spark.sql(s"SELECT $typeName '9999-12-31 23:59:59.999999999' AS ts")
+            val e = intercept[SparkException] {
+              df.write.parquet(dir.getCanonicalPath)
+            }
+            var cause: Throwable = e
+            while (cause != null && !cause.isInstanceOf[SparkArithmeticException]) {
+              cause = cause.getCause
+            }
+            assert(
+              cause != null,
+              s"Expected a DATETIME_OVERFLOW error for $typeName, but got: ${e.getMessage}")
+            // NTZ renders without a zone; LTZ renders as a UTC instant with a trailing `Z`.
+            val renderedValue =
+              if (typeName == "TIMESTAMP_NTZ") "9999-12-31T23:59:59.999999999"
+              else "9999-12-31T23:59:59.999999999Z"
+            checkError(
+              exception = cause.asInstanceOf[SparkArithmeticException],
+              condition = "DATETIME_OVERFLOW",
+              parameters = Map("operation" ->
+                (s"write the timestamp value $renderedValue as Parquet INT64 " +
+                  "epoch-nanoseconds (supported range: 1677-09-21T00:12:43.145224192Z to " +
+                  "2262-04-11T23:47:16.854775807Z)")))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57838: Parquet INT64 nanos at the exact int64 epoch-nanos limits") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        val min = "1677-09-21 00:12:43.145224192"
+        val max = "2262-04-11 23:47:16.854775807"
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          val df = spark.sql(
+            s"""SELECT * FROM VALUES
+               |  (TIMESTAMP_NTZ '$min', TIMESTAMP_LTZ '$min'),
+               |  (TIMESTAMP_NTZ '$max', TIMESTAMP_LTZ '$max')
+               |  AS t(ntz, ltz)""".stripMargin)
+          df.write.parquet(path)
+          def filterAt(ts: String): String =
+            s"ntz = TIMESTAMP_NTZ '$ts' AND ltz = TIMESTAMP_LTZ '$ts'"
+          withAllParquetReaders {
+            val read = spark.read.parquet(path)
+            checkAnswer(read, df.collect().toSeq)
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+              Seq(min, max).foreach { ts =>
+                checkAnswer(read.where(filterAt(ts)), df.where(filterAt(ts)).collect().toSeq)
+              }
+            }
+          }
+          // The filters on the limits are pushed down and encode them exactly: with record-level
+          // filtering, Parquet alone returns exactly the matching row.
+          withSQLConf(
+            SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+            SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "true",
+            SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+            Seq(min, max).foreach { ts =>
+              assert(stripSparkFilter(spark.read.parquet(path).where(filterAt(ts))).count() === 1)
+            }
+          }
+        }
+        // One nanosecond past either limit fails to write.
+        Seq(
+          "1677-09-21 00:12:43.145224191" -> "1677-09-21T00:12:43.145224191",
+          "2262-04-11 23:47:16.854775808" -> "2262-04-11T23:47:16.854775808").foreach {
+          case (ts, rendered) =>
+            Seq("TIMESTAMP_NTZ" -> rendered, "TIMESTAMP_LTZ" -> s"${rendered}Z").foreach {
+              case (typeName, renderedValue) =>
+                withTempPath { dir =>
+                  val e = intercept[SparkException] {
+                    spark.sql(s"SELECT $typeName '$ts' AS ts").write.parquet(dir.getCanonicalPath)
+                  }
+                  val cause = Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+                    .collectFirst { case a: SparkArithmeticException => a }
+                  assert(cause.isDefined, s"Expected DATETIME_OVERFLOW, but got: ${e.getMessage}")
+                  checkError(
+                    exception = cause.get,
+                    condition = "DATETIME_OVERFLOW",
+                    parameters = Map("operation" ->
+                      (s"write the timestamp value $renderedValue as Parquet INT64 " +
+                        "epoch-nanoseconds (supported range: 1677-09-21T00:12:43.145224192Z to " +
+                        "2262-04-11T23:47:16.854775807Z)")))
+                }
+            }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: datetime rebase configs do not affect TIMESTAMP(NANOS) reads") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withAllParquetReaders {
+          withTempPath { dir =>
+            val file = new File(dir, "ltz.parquet")
+            // 1800-01-01 00:00:00 UTC predates the last Julian-to-Gregorian switch instant of the
+            // rebase logic, so applying a timestamp rebase (or the EXCEPTION-mode guard) on this
+            // value would change the result or fail the read.
+            writeForeignNanosParquet(
+              file, isAdjustedToUTC = true, Seq(Some(-5364662400000000000L)))
+            Seq("EXCEPTION", "CORRECTED", "LEGACY").foreach { mode =>
+              withSQLConf(SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> mode) {
+                checkAnswer(
+                  spark.read.parquet(file.getCanonicalPath),
+                  spark.sql(
+                    "SELECT TIMESTAMP_LTZ '1800-01-01 00:00:00.000000000'").collect().toSeq)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: nanos timestamps round-trip inside a nested (array) column") {
+    withNanosEnabled {
+      withAllParquetReaders {
+        withTempPath { dir =>
+          val df = spark.sql(
+            "SELECT array(TIMESTAMP_NTZ '2020-01-01 00:00:00.123456789', " +
+            "TIMESTAMP_NTZ '1969-12-31 23:59:59.000000001') AS arr")
+          df.write.parquet(dir.getCanonicalPath)
+          val read = spark.read.parquet(dir.getCanonicalPath)
+          assert(read.schema("arr").dataType.asInstanceOf[ArrayType].elementType ===
+            TimestampNTZNanosType(9))
+          checkAnswer(read, df.collect().toSeq)
+        }
+      }
+    }
+  }
+
+  test("SPARK-57822: nanos timestamp filter pushdown prunes row groups with identical results") {
+    // End-to-end: write many rows across multiple row groups, filter on the nanos column, and
+    // assert that (a) the filter is pushed to Parquet and skips row groups (a stripped-Spark-filter
+    // scan reads more than the matching rows but fewer than all rows) and (b) the full query result
+    // equals reading the same predicate with pushdown disabled. Record-level filtering is disabled
+    // so ONLY row-group-level skipping is exercised; the non-vectorized reader is used so
+    // `stripSparkFilter` reflects exactly what Parquet returned. (a) holds only for precision 9.
+    withNanosEnabled {
+      Seq(7, 8, 9).foreach { p =>
+        val frac = "000000123".take(p)
+        Seq("ntz", "ltz").foreach { kind =>
+          val typ = if (kind == "ntz") "TIMESTAMP_NTZ" else "TIMESTAMP_LTZ"
+          val expectedType =
+            if (kind == "ntz") TimestampNTZNanosType(p) else TimestampLTZNanosType(p)
+          withTempPath { dir =>
+            val path = dir.getCanonicalPath
+            // 1024 rows one second apart, monotonically increasing so consecutive row groups hold
+            // disjoint value ranges (statistics-based skipping is effective). A small block size
+            // forces multiple row groups.
+            spark.sql(
+              s"""SELECT
+                 |  $typ '2020-01-01 00:00:00.$frac' + make_dt_interval(0,0,0,id) AS c
+                 |FROM range(0, 1024)""".stripMargin)
+              .coalesce(1)
+              .write.option("parquet.block.size", 512).parquet(path)
+            assert(spark.read.parquet(path).schema("c").dataType === expectedType)
+
+            // Matches the single row at id = 1000, which lives only in a late row group.
+            val predicate = s"c = $typ '2020-01-01 00:16:40.$frac'"
+
+            // Row-group-level skipping: with record filtering off, a stripped scan returns whole
+            // surviving row groups. Fewer than all rows (skipping happened) but more than the one
+            // matching row (record filtering is off). Below precision 9, the filter is not pushed
+            // down because the reader truncates the stored values to the read precision.
+            withSQLConf(
+              SQLConf.PARQUET_RECORD_FILTER_ENABLED.key -> "false",
+              SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true",
+              SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+              val df = spark.read.parquet(path).filter(predicate)
+              val actual = stripSparkFilter(df).collect().length
+              if (p == 9) {
+                assert(actual > 1 && actual < 1024,
+                  s"Expected row-group skipping (p=$p, $kind) but scanned $actual of 1024 rows.")
+              } else {
+                assert(actual === 1024, s"Expected no row-group skipping (p=$p, $kind).")
+              }
+            }
+
+            // Results must be identical whether or not the filter is pushed to Parquet.
+            val expected = withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+              spark.read.parquet(path).filter(predicate).collect().toSeq
+            }
+            assert(expected.length === 1)
+            withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> "true") {
+              checkAnswer(spark.read.parquet(path).filter(predicate), expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57102: nanos timestamps round-trip via the V2 file source") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        withAllParquetReaders {
+          withTempPath { dir =>
+            val df = spark.sql(
+              "SELECT TIMESTAMP_NTZ '2020-01-01 12:34:56.123456789' AS ntz, " +
+              "TIMESTAMP_LTZ '2020-01-01 12:34:56.123456789' AS ltz")
+            df.write.parquet(dir.getCanonicalPath)
+            val read = spark.read.parquet(dir.getCanonicalPath)
+            assert(read.schema("ntz").dataType === TimestampNTZNanosType(9))
+            assert(read.schema("ltz").dataType === TimestampLTZNanosType(9))
+            checkAnswer(read, df.collect().toSeq)
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-57828: vectorized reader produces identical results to row-based for nanos") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        // Write foreign parquet files with TIMESTAMP(NANOS) values covering edge cases:
+        // positive, negative (pre-epoch), values with precision truncation, and nulls.
+        val values = Seq(
+          Some(123456789L),       // 1970-01-01 00:00:00.123456789
+          Some(-1L),              // 1969-12-31 23:59:59.999999999 (pre-epoch, floor semantics)
+          Some(1000000000L),      // 1970-01-01 00:00:01.000000000 (exact second)
+          Some(-1000000001L),     // 1969-12-31 23:59:58.999999999
+          None                    // null
+        )
+
+        Seq(7, 8, 9).foreach { p =>
+          Seq(true, false).foreach { isAdjustedToUTC =>
+            val typeName = if (isAdjustedToUTC) "TIMESTAMP_LTZ" else "TIMESTAMP_NTZ"
+            withClue(s"$typeName($p)") {
+              withTempPath { dir =>
+                val file = new File(dir, s"ts_nanos_${typeName}_p$p.parquet")
+                writeForeignNanosParquet(file, isAdjustedToUTC, values)
+
+                val schema = s"ts $typeName($p)"
+
+                // Row-based read
+                val rowBased = withSQLConf(
+                  SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "false") {
+                  spark.read.schema(schema).parquet(file.getCanonicalPath).collect()
+                }
+
+                // Vectorized read
+                val vectorized = withSQLConf(
+                  SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+                  spark.read.schema(schema).parquet(file.getCanonicalPath).collect()
+                }
+
+                assert(vectorized.toSeq === rowBased.toSeq,
+                  s"Vectorized and row-based results differ for $typeName($p)")
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("nanosAsLong migration: BIGINT epoch nanos convert losslessly to the nanos types") {
+    // The conversions documented in the migration guide. The non-UTC session time zone shows that
+    // only the TIMESTAMP_NTZ(9) cast depends on it.
+    val values = Seq(Some(1230219000123456789L), Some(-1L), None)
+    val longs = Seq(Row(1230219000123456789L), Row(-1L), Row(null))
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+        withAllParquetReaders {
+          Seq(true, false).foreach { isAdjustedToUTC =>
+            withTempPath { dir =>
+              val file = new File(dir, "foreign.parquet")
+              writeForeignNanosParquet(file, isAdjustedToUTC, values)
+              val path = file.getCanonicalPath
+              val native = spark.read.parquet(path)
+              val expected = native.collect().toSeq
+              checkAnswer(native.selectExpr("CAST(unix_nanos(ts) AS BIGINT)"), longs)
+              checkAnswer(spark.read.schema("ts BIGINT").parquet(path), longs)
+              withSQLConf(SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "false") {
+                checkAnswer(spark.read.schema("ts BIGINT").parquet(path), longs)
+              }
+
+              withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
+                val legacy = spark.read.parquet(path)
+                assert(legacy.schema("ts").dataType === LongType)
+                checkAnswer(legacy, longs)
+                if (isAdjustedToUTC) {
+                  assert(native.schema("ts").dataType === TimestampLTZNanosType(9))
+                  checkAnswer(legacy.selectExpr("timestamp_nanos(ts)"), expected)
+                } else {
+                  assert(native.schema("ts").dataType === TimestampNTZNanosType(9))
+                  val toNtz = "CAST(timestamp_nanos(ts) AS TIMESTAMP_NTZ(9))"
+                  assert(legacy.selectExpr(toNtz).collect().toSeq !== expected)
+                  withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+                    checkAnswer(legacy.selectExpr(toNtz), expected)
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("nanosAsLong migration: tables keep BIGINT, views over the files must be recreated") {
+    withNanosEnabled {
+      withTempDir { dir =>
+        writeForeignNanosParquet(
+          new File(dir, "part.parquet"), isAdjustedToUTC = true, Seq(Some(123L)))
+        val path = dir.getCanonicalPath
+        val expected = spark.sql("SELECT TIMESTAMP_LTZ '1970-01-01 00:00:00.000000123 UTC'")
+        withAllParquetReaders {
+          withTable("t") {
+            withView("v", "ve", "vte") {
+              withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
+                spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+                spark.sql(s"CREATE VIEW v AS SELECT * FROM parquet.`$path`")
+                spark.sql(
+                  s"CREATE VIEW ve WITH SCHEMA EVOLUTION AS SELECT * FROM parquet.`$path`")
+                spark.sql(
+                  s"CREATE VIEW vte WITH SCHEMA TYPE EVOLUTION AS SELECT * FROM parquet.`$path`")
+              }
+              // The table's stored BIGINT schema is the read schema.
+              assert(spark.table("t").schema("ts").dataType === LongType)
+              checkAnswer(spark.table("t"), Row(123L))
+              checkError(
+                exception = intercept[AnalysisException](spark.table("v")),
+                condition = "DATATYPE_MISMATCH.CAST_WITHOUT_SUGGESTION",
+                parameters = Map(
+                  "sqlExpr" -> "\"ts\"",
+                  "srcType" -> "\"TIMESTAMP_LTZ(9)\"",
+                  "targetType" -> "\"BIGINT\""))
+              Seq("ve", "vte").foreach { view =>
+                assert(spark.table(view).schema("ts").dataType === TimestampLTZNanosType(9))
+                checkAnswer(spark.table(view), expected)
+              }
+
+              spark.sql("DROP TABLE t")
+              spark.sql(s"CREATE TABLE t USING parquet LOCATION '$path'")
+              assert(spark.table("t").schema("ts").dataType === TimestampLTZNanosType(9))
+              checkAnswer(spark.table("t"), expected)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("nanosAsLong does not affect Parquet files written by Spark") {
+    withNanosEnabled {
+      withTempPath { dir =>
+        val df = spark.sql(
+          "SELECT TIMESTAMP_NTZ '2020-01-01 00:00:00.1234567' AS ntz, " +
+            "TIMESTAMP_LTZ '2020-01-01 00:00:00.123456789' AS ltz")
+        df.write.parquet(dir.getCanonicalPath)
+        withSQLConf(SQLConf.LEGACY_PARQUET_NANOS_AS_LONG.key -> "true") {
+          withAllParquetReaders {
+            val read = spark.read.parquet(dir.getCanonicalPath)
+            assert(read.schema("ntz").dataType === TimestampNTZNanosType(7))
+            assert(read.schema("ltz").dataType === TimestampLTZNanosType(9))
+            checkAnswer(read, df)
+          }
+        }
+      }
+    }
+  }
+
+  test("TIMESTAMP(NANOS) inference does not depend on inferTimestampNTZ") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.PARQUET_INFER_TIMESTAMP_NTZ_ENABLED.key -> "false") {
+        Seq(true, false).foreach { isAdjustedToUTC =>
+          withTempPath { dir =>
+            val file = new File(dir, "foreign.parquet")
+            writeForeignNanosParquet(file, isAdjustedToUTC, Seq(Some(123L)))
+            val expected =
+              if (isAdjustedToUTC) TimestampLTZNanosType(9) else TimestampNTZNanosType(9)
+            assert(spark.read.parquet(file.getCanonicalPath).schema("ts").dataType === expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("filter pushdown under a lower-precision read schema matches the no-pushdown results") {
+    withNanosEnabled {
+      withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+        withAllParquetReaders {
+          Seq("TIMESTAMP_NTZ" -> "", "TIMESTAMP_LTZ" -> " UTC").foreach { case (typ, zone) =>
+            withTempPath { dir =>
+              val file = new File(dir, "foreign.parquet")
+              // .123456789 on disk reads as .1234567 under precision 7.
+              writeForeignNanosParquet(
+                file, isAdjustedToUTC = typ == "TIMESTAMP_LTZ", Seq(Some(123456789L)))
+              val lit = s"$typ '1970-01-01 00:00:00.1234567$zone'"
+              val other = s"$typ '1970-01-01 00:00:01$zone'"
+              def count(predicate: String, pushdown: Boolean): Long =
+                withSQLConf(SQLConf.PARQUET_FILTER_PUSHDOWN_ENABLED.key -> pushdown.toString) {
+                  spark.read.schema(s"ts $typ(7)").parquet(file.getCanonicalPath)
+                    .filter(predicate).count()
+                }
+              // A predicate with a value is not pushed down below precision 9, so the row group
+              // that holds the matching row is not skipped.
+              Seq(s"ts = $lit", s"ts <=> $lit", s"ts IN ($lit, $other)", s"ts <= $lit")
+                .foreach { predicate =>
+                  assert(count(predicate, pushdown = false) === 1, predicate)
+                  assert(count(predicate, pushdown = true) === 1, predicate)
+                }
+              Seq(s"ts < $lit", s"ts >= $lit", s"ts > $lit").foreach { predicate =>
+                assert(count(predicate, pushdown = true) ===
+                  count(predicate, pushdown = false), predicate)
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -27,8 +27,9 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.sql.ForeachWriter
 import org.apache.spark.sql.execution.datasources.v2.LowLatencyClock
-import org.apache.spark.sql.execution.streaming.{LowLatencyMemoryStream, RealTimeTrigger}
+import org.apache.spark.sql.execution.streaming.RealTimeTrigger
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
+import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.GlobalSingletonManualClock
 import org.apache.spark.sql.test.TestSparkSession

@@ -19,14 +19,21 @@ package org.apache.spark.sql.connect.pipelines
 
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.SparkConf
 import org.apache.spark.connect.{proto => sc}
 import org.apache.spark.connect.proto.{PipelineCommand, PipelineEvent}
 import org.apache.spark.sql.connect.{SparkConnectServerTest, SparkConnectTestUtils}
 import org.apache.spark.sql.connect.planner.SparkConnectPlanner
 import org.apache.spark.sql.connect.service.{SessionHolder, SessionKey, SparkConnectService}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.pipelines.utils.{PipelineTest, StorageRootMixin}
 
 class SparkDeclarativePipelinesServerTest extends SparkConnectServerTest with StorageRootMixin {
+
+  override def sparkConf: SparkConf = {
+    super.sparkConf
+      .set(SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key, "false")
+  }
 
   override def afterEach(): Unit = {
     SparkConnectService.sessionManager

@@ -18,9 +18,8 @@
 import pandas as pd
 
 from pyspark import pandas as ps
-from pyspark.pandas.config import set_option, reset_option
+from pyspark.pandas.config import reset_option, set_option
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class DiffFramesDotSeriesMixin:
@@ -126,7 +125,7 @@ class DiffFramesDotSeriesMixin:
             self.assert_eq(psser.dot(psser_other), 16381)
 
 
-class DiffFramesDotSeriesTests(DiffFramesDotSeriesMixin, PandasOnSparkTestCase, SQLTestUtils):
+class DiffFramesDotSeriesTests(DiffFramesDotSeriesMixin, PandasOnSparkTestCase):
     pass
 
 

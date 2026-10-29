@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, cast
 
 from pyspark.errors import PySparkValueError
 from pyspark.sql.tvf import TableValuedFunction as PySparkTableValuedFunction
@@ -99,13 +99,23 @@ class TableValuedFunction:
 
     sql_keywords.__doc__ = PySparkTableValuedFunction.sql_keywords.__doc__
 
-    def variant_explode(self, input: "Column") -> "DataFrame":
-        return self._fn("variant_explode", input)
+    def variant_explode(self, input: "Column", recursive: bool = False) -> "DataFrame":
+        if not recursive:
+            return self._fn("variant_explode", input)
+
+        from pyspark.sql.connect.functions.builtin import lit
+
+        return self._fn("variant_explode", input, cast("Column", lit(recursive)))
 
     variant_explode.__doc__ = PySparkTableValuedFunction.variant_explode.__doc__
 
-    def variant_explode_outer(self, input: "Column") -> "DataFrame":
-        return self._fn("variant_explode_outer", input)
+    def variant_explode_outer(self, input: "Column", recursive: bool = False) -> "DataFrame":
+        if not recursive:
+            return self._fn("variant_explode_outer", input)
+
+        from pyspark.sql.connect.functions.builtin import lit
+
+        return self._fn("variant_explode_outer", input, cast("Column", lit(recursive)))
 
     variant_explode_outer.__doc__ = PySparkTableValuedFunction.variant_explode_outer.__doc__
 
@@ -116,8 +126,8 @@ class TableValuedFunction:
 
     def _fn(self, name: str, *args: "Column") -> "DataFrame":
         from pyspark.sql.connect.dataframe import DataFrame
-        from pyspark.sql.connect.plan import UnresolvedTableValuedFunction
         from pyspark.sql.connect.functions.builtin import _to_col
+        from pyspark.sql.connect.plan import UnresolvedTableValuedFunction
 
         return DataFrame(
             UnresolvedTableValuedFunction(name, [_to_col(arg) for arg in args]), self._sparkSession
@@ -139,8 +149,9 @@ def _test() -> None:
         sys.exit(0)
 
     import doctest
-    from pyspark.sql import SparkSession as PySparkSession
+
     import pyspark.sql.connect.tvf
+    from pyspark.sql import SparkSession as PySparkSession
 
     globs = pyspark.sql.connect.tvf.__dict__.copy()
 

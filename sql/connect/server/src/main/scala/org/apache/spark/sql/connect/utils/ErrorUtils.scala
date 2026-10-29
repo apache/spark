@@ -161,7 +161,13 @@ private[connect] object ErrorUtils extends Logging {
             breakingChangeInfoBuilder.setNeedsAudit(breakingChangeInfo.needsAudit)
             sparkThrowableBuilder.setBreakingChangeInfo(breakingChangeInfoBuilder.build())
           }
-          sparkThrowableBuilder.putAllMessageParameters(sparkThrowable.getMessageParameters)
+          // The SparkThrowable interface's default getMessageParameters returns an empty
+          // map, but a faulty override may return null. Guard against that so the
+          // FetchErrorDetails RPC doesn't crash with a NullPointerException.
+          val messageParameters = sparkThrowable.getMessageParameters
+          if (messageParameters != null) {
+            sparkThrowableBuilder.putAllMessageParameters(messageParameters)
+          }
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
       }
@@ -270,7 +276,7 @@ private[connect] object ErrorUtils extends Logging {
       .newBuilder()
       .setCode(RPCCode.INTERNAL_VALUE)
       .addDetails(ProtoAny.pack(withStackTrace.build()))
-      .setMessage(SparkConnectService.extractErrorMessage(st))
+      .setMessage(errorDescription(st))
       .build()
   }
 
@@ -279,6 +285,21 @@ private[connect] object ErrorUtils extends Logging {
     se.getCause != null && se.getCause
       .isInstanceOf[PythonException] && se.getCause.getStackTrace
       .exists(_.toString.contains("org.apache.spark.sql.execution.python"))
+  }
+
+  /**
+   * Returns a non-empty description for the given throwable: its abbreviated message when one is
+   * present, and its fully qualified class name otherwise. Both the INTERNAL status built for a
+   * non-fatal throwable and the UNKNOWN fallback status use this, so that a client never receives
+   * an error whose description is empty.
+   */
+  private def errorDescription(e: Throwable): String = {
+    val message = e.getMessage
+    if (message != null && message.nonEmpty) {
+      Utils.abbreviate(message, 2048)
+    } else {
+      e.getClass.getName
+    }
   }
 
   /**
@@ -337,7 +358,7 @@ private[connect] object ErrorUtils extends Logging {
       case e: Throwable =>
         Status.UNKNOWN
           .withCause(e)
-          .withDescription(Utils.abbreviate(e.getMessage, 2048))
+          .withDescription(errorDescription(e))
           .asRuntimeException()
     }
 

@@ -30,6 +30,7 @@ import org.scalatest.matchers.must.Matchers.{contain, not}
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import org.apache.spark.{SecurityManager, SparkConf, SparkFunSuite}
+import org.apache.spark.deploy.yarn.config.YARN_EXECUTOR_OOM_KILL_ENABLED
 import org.apache.spark.internal.config._
 import org.apache.spark.network.util.JavaUtils
 
@@ -137,5 +138,31 @@ class ExecutorRunnableSuite extends SparkFunSuite with PrivateMethodTester {
     val commands = execRunnable invokePrivate _prepareCommand()
     commands should contain ("-XX:ActiveProcessorCount=7")
     commands should contain inOrderElementsOf List("--cores", "7")
+  }
+
+  test("test executor OnOutOfMemoryError JVM options") {
+    Seq(true, false).foreach { oomKill =>
+      val sparkConf = new SparkConf()
+        .set(YARN_EXECUTOR_OOM_KILL_ENABLED, oomKill)
+      val execRunnable = createExecutorRunnable(sparkConf)
+
+      val commands = execRunnable invokePrivate _prepareCommand()
+      if (oomKill) {
+        assert(commands.exists(_.contains("-XX:OnOutOfMemoryError")))
+      } else {
+        assert(!commands.exists(_.contains("-XX:OnOutOfMemoryError")))
+      }
+    }
+  }
+
+  test("user provided OnOutOfMemoryError option takes precedence over default") {
+    val sparkConf = new SparkConf()
+      .set(YARN_EXECUTOR_OOM_KILL_ENABLED, true)
+      .set(EXECUTOR_JAVA_OPTIONS, "-XX:OnOutOfMemoryError='kill -9 %p'")
+    val execRunnable = createExecutorRunnable(sparkConf)
+
+    val commands = execRunnable invokePrivate _prepareCommand()
+    assert(commands.count(_.contains("-XX:OnOutOfMemoryError")) === 1)
+    assert(commands.exists(_.contains("-XX:OnOutOfMemoryError=kill -9 %p")))
   }
 }

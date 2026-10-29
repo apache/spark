@@ -18,11 +18,10 @@
 package org.apache.spark.sql.pipelines.graph
 
 import scala.collection.mutable
-import scala.collection.mutable.ListBuffer
 
 import org.apache.spark.sql.catalyst.TableIdentifier
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.pipelines.AnalysisWarning
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * A context used when evaluating a `Flow`'s query into a concrete DataFrame.
@@ -32,7 +31,12 @@ import org.apache.spark.sql.pipelines.AnalysisWarning
  * @param queryContext         The context of the query being evaluated.
  * @param requestedInputs      A mutable buffer populated with names of all inputs that were
  *                             requested.
- * @param spark                the spark session to be used.
+ * @param spark                The (shared) spark session to be used.
+ * @param flowConf             A private [[SQLConf]] holding this flow's per-flow confs. It is
+ *                             installed for the analyzing thread via `SQLConf.withExistingConf`
+ *                             (see `FlowAnalysis.createFlowFunctionFromLogicalPlan`) so per-flow
+ *                             confs stay isolated from concurrently resolving flows and from the
+ *                             shared session, without cloning the session.
  * @param externalInputs The names of external inputs that were used to evaluate
  *                                 the flow's query.
  */
@@ -44,8 +48,8 @@ private[pipelines] case class FlowAnalysisContext(
     streamingInputs: mutable.HashSet[ResolvedInput] = mutable.HashSet.empty,
     requestedInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty,
     shouldLowerCaseNames: Boolean = false,
-    analysisWarnings: mutable.Buffer[AnalysisWarning] = new ListBuffer[AnalysisWarning],
     spark: SparkSession,
+    flowConf: SQLConf,
     externalInputs: mutable.HashSet[TableIdentifier] = mutable.HashSet.empty
 ) {
 
@@ -53,20 +57,12 @@ private[pipelines] case class FlowAnalysisContext(
   val availableInput: Map[TableIdentifier, Input] =
     availableInputs.map(i => i.identifier -> i).toMap
 
-  /** The confs set in this context that should be undone when exiting this context. */
-  private val confsToRestore = mutable.HashMap[String, Option[String]]()
-
-  /** Sets a Spark conf within this context that will be undone by `restoreOriginalConf`. */
+  /**
+   * Sets a Spark conf for this flow's analysis. It is set on the per-flow [[flowConf]], which is
+   * active for the analyzing thread only, so it does not leak to other flows or to the shared
+   * session.
+   */
   def setConf(key: String, value: String): Unit = {
-    if (!confsToRestore.contains(key)) {
-      confsToRestore.put(key, spark.conf.getOption(key))
-    }
-    spark.conf.set(key, value)
-  }
-
-  /** Restores the Spark conf to its state when this context was creating by undoing confs set. */
-  def restoreOriginalConf(): Unit = confsToRestore.foreach {
-    case (k, Some(v)) => spark.conf.set(k, v)
-    case (k, None) => spark.conf.unset(k)
+    flowConf.setConfString(key, value)
   }
 }

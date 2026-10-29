@@ -19,7 +19,9 @@ package org.apache.spark.sql.jdbc
 
 import java.sql.{Connection, DriverManager}
 import java.util.{HexFormat, Properties}
+import java.util.concurrent.ConcurrentLinkedQueue
 
+import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
 import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
@@ -35,7 +37,7 @@ import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, Unbound
 import org.apache.spark.sql.connector.catalog.index.SupportsIndex
 import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.execution.{FormattedMode, RowDataSourceScanExec}
-import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCRDD}
+import org.apache.spark.sql.execution.datasources.jdbc.{JDBCDatabaseMetadata, JDBCOptions, JDBCRDD}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, V1ScanWrapper}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.functions.{abs, acos, asin, atan, atan2, avg, ceil, coalesce, cos, cosh, cot, count, count_distinct, degrees, exp, floor, lit, log => logarithm, log10, not, pow, radians, round, signum, sin, sinh, sqrt, sum, tan, tanh, udf, when}
@@ -214,6 +216,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc%_def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_%def@gmail.com')")
       batchStmt.addBatch("INSERT INTO \"test\".\"address\" VALUES ('abc_''%def@gmail.com')")
+      batchStmt.addBatch(
+        "INSERT INTO \"test\".\"address\" VALUES ('abc\\def@gmail.com')")
 
       batchStmt.addBatch("CREATE TABLE \"test\".\"employee_bonus\" " +
         "(name TEXT(32), salary NUMERIC(20, 2), bonus DOUBLE, factor DOUBLE)")
@@ -233,6 +237,12 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('abc')")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES ('a a a')")
       batchStmt.addBatch("INSERT INTO \"test\".\"strings_with_nulls\" VALUES (null)")
+
+      batchStmt.addBatch(
+        "CREATE TABLE \"test\".\"null_literal\" (s TEXT(32))")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES ('keep')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES ('')")
+      batchStmt.addBatch("INSERT INTO \"test\".\"null_literal\" VALUES (null)")
 
       batchStmt.executeBatch()
 
@@ -257,6 +267,20 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     super.afterAll()
   }
 
+  test("COALESCE with Boolean cast pushes down") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      withTable("h2.test.boolean_cast_coalesce") {
+        sql("CREATE TABLE h2.test.boolean_cast_coalesce (c INT)")
+        sql("INSERT INTO h2.test.boolean_cast_coalesce VALUES (0), (1)")
+        val df = sql("SELECT c FROM h2.test.boolean_cast_coalesce " +
+          "WHERE COALESCE(NOT CAST(c AS BOOLEAN), false)")
+        checkFiltersRemoved(df)
+        checkPushedInfo(df, "PushedFilters: [COALESCE(NOT (CAST(c AS boolean)), FALSE)]")
+        checkAnswer(df, Seq(Row(0)))
+      }
+    }
+  }
+
   test("simple scan") {
     checkAnswer(sql("SELECT * FROM h2.test.empty_table"), Seq())
     checkAnswer(sql("SELECT * FROM h2.test.people"), Seq(Row("fred", 1), Row("mary", 2)))
@@ -270,6 +294,33 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
           checkKeywordsExistsInExplain(df, expectedPlanFragment: _*)
       }
     }
+  }
+
+  test("SPARK-57243: IS [NOT] NULL over a composite operand is pushed down and runs on H2") {
+    val df1 = sql("SELECT name FROM h2.test.employee WHERE (salary = 10000) IS NOT NULL")
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, "PushedFilters: [SALARY IS NOT NULL, (SALARY = 10000.00) IS NOT NULL]")
+    checkAnswer(df1, Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+    val df2 = sql("SELECT name FROM h2.test.employee WHERE (salary = 10000) IS NULL")
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, "PushedFilters: [(SALARY = 10000.00) IS NULL]")
+    checkAnswer(df2, Seq.empty)
+  }
+
+  test("SPARK-57988: IS [NOT] NULL over an IN operand is pushed down and runs on H2") {
+    // Without the parentheses around the IN operand the pushed SQL would be
+    // `SALARY IN (...) IS NOT NULL`, which databases reject as a syntax error.
+    val df1 =
+      sql("SELECT name FROM h2.test.employee WHERE (salary IN (10000, 12000)) IS NOT NULL")
+    checkFiltersRemoved(df1)
+    checkPushedInfo(df1, "PushedFilters: [(SALARY IN (10000.00, 12000.00)) IS NOT NULL]")
+    checkAnswer(df1, Seq(Row("amy"), Row("alex"), Row("cathy"), Row("david"), Row("jen")))
+
+    val df2 = sql("SELECT name FROM h2.test.employee WHERE (salary IN (10000, 12000)) IS NULL")
+    checkFiltersRemoved(df2)
+    checkPushedInfo(df2, "PushedFilters: [(SALARY IN (10000.00, 12000.00)) IS NULL]")
+    checkAnswer(df2, Seq.empty)
   }
 
   // TABLESAMPLE ({integer_expression | decimal_expression} PERCENT) and
@@ -1214,14 +1265,16 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df10, "PushedFilters: [ID IS NOT NULL, ID > 1]")
     checkAnswer(df10, Row("mary", 2))
 
+    // RAND(1) is non-deterministic, so (SPARK-58207) it is not pushed down and stays as a
+    // post-scan filter. RAND(1) < bonus is trivially true for the matching row (bonus = 1300 >= 1).
     val df11 = sql(
       """
         |SELECT * FROM h2.test.employee
         |WHERE GREATEST(bonus, 1100) > 1200 AND RAND(1) < bonus
         |""".stripMargin)
-    checkFiltersRemoved(df11)
+    checkFiltersRemoved(df11, removed = false)
     checkPushedInfo(df11, "PushedFilters: " +
-      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0, RAND(1) < BONUS]")
+      "[BONUS IS NOT NULL, (GREATEST(BONUS, 1100.0)) > 1200.0]")
     checkAnswer(df11, Row(2, "david", 10000, 1300, true))
 
     val df12 = sql(
@@ -1413,6 +1466,25 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkPushedInfo(df15,
       raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\_''\%d%' ESCAPE '\']")
     checkAnswer(df15, Seq(Row("abc_'%def@gmail.com")))
+
+    // Backslash in the value must be escaped since '\' is the LIKE escape character
+    val df16 = spark.table("h2.test.address").filter($"email".startsWith("abc\\"))
+    checkFiltersRemoved(df16)
+    checkPushedInfo(df16,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE 'abc\\%' ESCAPE '\']")
+    checkAnswer(df16, Seq(Row("abc\\def@gmail.com")))
+
+    val df17 = spark.table("h2.test.address").filter($"email".endsWith("\\def@gmail.com"))
+    checkFiltersRemoved(df17)
+    checkPushedInfo(df17,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%\\def@gmail.com' ESCAPE '\']")
+    checkAnswer(df17, Seq(Row("abc\\def@gmail.com")))
+
+    val df18 = spark.table("h2.test.address").filter($"email".contains("c\\d"))
+    checkFiltersRemoved(df18)
+    checkPushedInfo(df18,
+      raw"PushedFilters: [EMAIL IS NOT NULL, EMAIL LIKE '%c\\d%' ESCAPE '\']")
+    checkAnswer(df18, Seq(Row("abc\\def@gmail.com")))
   }
 
   test("scan with filter push-down with ansi mode") {
@@ -1769,7 +1841,8 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       Seq(Row("test", "address", false), Row("test", "people", false),
         Row("test", "empty_table", false), Row("test", "employee", false),
         Row("test", "item", false), Row("test", "dept", false),
-        Row("test", "person", false), Row("test", "view1", false), Row("test", "view2", false),
+        Row("test", "null_literal", false), Row("test", "person", false),
+        Row("test", "view1", false), Row("test", "view2", false),
         Row("test", "datetime", false), Row("test", "binary_tab", false),
         Row("test", "employee_bonus", false),
         Row("test", "strings_with_nulls", false)))
@@ -1839,6 +1912,23 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
 
       sql("SELECT 'bob' AS NAME, 4 AS ID").writeTo("h2.test.abc").overwrite(lit(true))
       checkAnswer(sql("SELECT name, id FROM h2.test.abc"), Row("bob", 4))
+    }
+  }
+
+  test("DataFrameWriterV2: truncate closes JDBC connections") {
+    JdbcDialects.unregisterDialect(h2Dialect)
+    try {
+      ConnectionTrackingH2Dialect.clearConnections()
+      JdbcDialects.registerDialect(ConnectionTrackingH2Dialect)
+      withTable("h2.test.abc") {
+        sql("CREATE TABLE h2.test.abc AS SELECT * FROM h2.test.people")
+        sql("SELECT 'bob' AS NAME, 4 AS ID").writeTo("h2.test.abc").overwrite(lit(true))
+        assert(ConnectionTrackingH2Dialect.hasTrackedConnections)
+        assert(ConnectionTrackingH2Dialect.allConnectionsClosed)
+      }
+    } finally {
+      JdbcDialects.unregisterDialect(ConnectionTrackingH2Dialect)
+      JdbcDialects.registerDialect(h2Dialect)
     }
   }
 
@@ -1925,6 +2015,141 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
       "rpad(name, 5, '*') = 'jen**'")
     checkPushedInfo(df10, "[NAME IS NOT NULL, (RPAD(NAME, 5, '*')) = 'jen**']")
     checkAnswer(df10, Seq(Row(6, "jen", 12000, 1200, true)))
+  }
+
+  test("SPARK-60479: CHAR equality is pushed down with read-side padding") {
+    val table = "h2.test.char_pad"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, flag CHAR(5))")
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, 'N'), (3, 'YES'), (4, NULL), (5, 'ä')")
+
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFiltersRemoved(eq)
+      checkPushedInfo(eq,
+        "PushedFilters: [flag IS NOT NULL, (CHAR_READ_SIDE_PADDING(flag, 5, ' ')) = 'Y    ']")
+      checkAnswer(eq, Seq(Row(1)))
+
+      val in = sql(s"SELECT id FROM $table WHERE flag IN ('Y', 'N')")
+      checkFiltersRemoved(in)
+      checkPushedInfo(in,
+        "PushedFilters: [CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN ('Y    ', 'N    ')]")
+      checkAnswer(in, Seq(Row(1), Row(2)))
+
+      withSQLConf(SQLConf.OPTIMIZER_INSET_CONVERSION_THRESHOLD.key -> "2") {
+        val inSetQ = sql(s"SELECT id FROM $table WHERE flag IN ('Y', 'N', 'X')")
+        checkFiltersRemoved(inSetQ)
+        checkPushedInfo(inSetQ,
+          "CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN",
+          "'Y    '",
+          "'N    '",
+          "'X    '")
+        checkAnswer(inSetQ, Seq(Row(1), Row(2)))
+      }
+
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFiltersRemoved(isNull)
+      checkPushedInfo(isNull, "PushedFilters: [flag IS NULL]")
+      checkAnswer(isNull, Seq(Row(4)))
+
+      val notIn = sql(s"SELECT id FROM $table WHERE flag NOT IN ('Y', 'N')")
+      checkFiltersRemoved(notIn)
+      checkPushedInfo(notIn,
+        "PushedFilters: [NOT (CHAR_READ_SIDE_PADDING(flag, 5, ' ') IN ('Y    ', 'N    '))]")
+      checkAnswer(notIn, Seq(Row(3), Row(5)))
+
+      val orPred = sql(s"SELECT id FROM $table WHERE flag = 'Y' OR flag = 'N'")
+      checkFiltersRemoved(orPred)
+      checkAnswer(orPred, Seq(Row(1), Row(2)))
+
+      val nseq = sql(s"SELECT id FROM $table WHERE flag <=> 'Y'")
+      checkFiltersRemoved(nseq)
+      checkPushedInfo(nseq,
+        "CHAR_READ_SIDE_PADDING(flag, 5, ' ')) = 'Y    '",
+        "IS NULL AND 'Y    ' IS NULL")
+      checkAnswer(nseq, Seq(Row(1)))
+
+      val notNseq = sql(s"SELECT id FROM $table WHERE NOT (flag <=> 'Y')")
+      checkFiltersRemoved(notNseq)
+      checkPushedInfo(notNseq,
+        "NOT ((((CHAR_READ_SIDE_PADDING(flag, 5, ' ')) IS NOT NULL",
+        "IS NULL AND 'Y    ' IS NULL")
+      checkAnswer(notNseq, Seq(Row(2), Row(3), Row(4), Row(5)))
+
+      val neq = sql(s"SELECT id FROM $table WHERE flag <> 'Y'")
+      checkFiltersRemoved(neq)
+      checkPushedInfo(neq,
+        "PushedFilters: [flag IS NOT NULL, " +
+          "NOT ((CHAR_READ_SIDE_PADDING(flag, 5, ' ')) = 'Y    ')]")
+      checkAnswer(neq, Seq(Row(2), Row(3), Row(5)))
+
+      val longLit = sql(s"SELECT id FROM $table WHERE flag = 'YYYYYY'")
+      checkFiltersRemoved(longLit, removed = false)
+      checkAnswer(longLit, Seq.empty)
+
+      val range = sql(s"SELECT id FROM $table WHERE flag > 'A'")
+      checkFiltersRemoved(range, removed = false)
+      checkAnswer(range, Seq(Row(1), Row(2), Row(3), Row(5)))
+
+      val likeFam = sql(s"SELECT id FROM $table WHERE flag LIKE 'Y%'")
+      checkFiltersRemoved(likeFam, removed = false)
+      checkAnswer(likeFam, Seq(Row(1), Row(3)))
+
+      val likeEq = sql(s"SELECT id FROM $table WHERE flag LIKE 'Y'")
+      checkFiltersRemoved(likeEq, removed = false)
+      checkAnswer(likeEq, Seq.empty)
+
+      val likeEnd = sql(s"SELECT id FROM $table WHERE flag LIKE '%Y'")
+      checkFiltersRemoved(likeEnd, removed = false)
+      checkAnswer(likeEnd, Seq.empty)
+
+      val vsCols = "h2.test.char_vs_vc"
+      withTable(vsCols) {
+        sql(s"CREATE TABLE $vsCols (flag CHAR(5), v VARCHAR(5))")
+        sql(s"INSERT INTO $vsCols VALUES ('Y', 'Y')")
+        val vsVarchar = sql(s"SELECT v FROM $vsCols WHERE flag = v")
+        checkFiltersRemoved(vsVarchar, removed = false)
+        checkAnswer(vsVarchar, Seq.empty)
+      }
+
+      val rpadNest = sql(s"SELECT id FROM $table WHERE rpad(flag, 10, 'x') = 'Y    xxxxx'")
+      checkFiltersRemoved(rpadNest, removed = false)
+      checkAnswer(rpadNest, Seq(Row(1)))
+
+      val cnt = sql(s"SELECT COUNT(flag) FROM $table")
+      checkAggregateRemoved(cnt, removed = false)
+      checkAnswer(cnt, Seq(Row(4)))
+
+      val caseSum = sql(
+        s"SELECT SUM(CASE WHEN flag = 'Y' THEN 1 ELSE 0 END) FROM $table")
+      checkAggregateRemoved(caseSum)
+      checkAnswer(caseSum, Seq(Row(1)))
+
+      val grp = sql(s"SELECT flag, COUNT(*) FROM $table GROUP BY flag")
+      checkAggregateRemoved(grp, removed = false)
+      checkAnswer(grp, Seq(
+        Row("Y    ", 1), Row("N    ", 1), Row("YES  ", 1), Row(null, 1), Row("ä    ", 1)))
+      // scalastyle:on nonascii
+
+      val topN = sql(s"SELECT id FROM $table WHERE flag IS NOT NULL ORDER BY flag LIMIT 1")
+      checkSortRemoved(topN, removed = false)
+      checkAnswer(topN, Seq(Row(2)))
+
+      withSQLConf(SQLConf.READ_SIDE_CHAR_PADDING.key -> "false") {
+        val padFalse = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+        checkFiltersRemoved(padFalse)
+        checkPushedInfo(padFalse,
+          "PushedFilters: [flag IS NOT NULL, (RPAD(flag, 5, ' ')) = 'Y    ']")
+        checkAnswer(padFalse, Seq(Row(1)))
+      }
+
+      withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+        val std = sql(s"SELECT id FROM $table WHERE flag = CAST('Y' AS CHAR(5))")
+        checkFiltersRemoved(std, removed = false)
+        checkPushedInfo(std, "PushedFilters: [flag IS NOT NULL]")
+        checkAnswer(std, Seq(Row(1)))
+      }
+    }
   }
 
   test("scan with aggregate push-down: MAX AVG with filter and group by") {
@@ -2465,7 +2690,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAggregateRemoved(df3)
     checkPushedInfo(df3,
       """
-        |PushedAggregates: [AVG(CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE null END)],
+        |PushedAggregates: [AVG(CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE NULL END)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -2481,7 +2706,7 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     checkAggregateRemoved(df4)
     checkPushedInfo(df4,
       """
-        |PushedAggregates: [AVG(DISTINCT CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE null END)],
+        |PushedAggregates: [AVG(DISTINCT CASE WHEN BONUS IS NOT NULL THEN BONUS ELSE NULL END)],
         |PushedFilters: [DEPT IS NOT NULL, DEPT > 0],
         |PushedGroupByExpressions: [DEPT],
         |""".stripMargin.replaceAll("\n", " "))
@@ -3123,5 +3348,39 @@ class JDBCV2Suite extends SharedSparkSession with ExplainSuiteHelper {
     )
 
     assertResult(expectedMetadata) { jdbcRdd.getDatabaseMetadata }
+  }
+
+  test("SPARK-58782: null literal in aggregate should render as NULL not 'null'") {
+    val df = sql("SELECT NULLIF(s, '') AS g, COUNT(*) FROM h2.test.null_literal GROUP BY g")
+
+    checkAggregateRemoved(df)
+    checkPushedInfo(df,
+      "PushedAggregates: [COUNT(*)]",
+      "PushedGroupByExpressions: [CASE WHEN S = '' THEN NULL ELSE S END]")
+
+    // The '' row should collapse into the NULL group, not create a separate 'null' string group
+    checkAnswer(df, Seq(Row("keep", 1), Row(null, 2)))
+  }
+
+}
+
+private object ConnectionTrackingH2Dialect extends JdbcDialect {
+  private val connections = new ConcurrentLinkedQueue[Connection]()
+
+  def clearConnections(): Unit = connections.clear()
+
+  def hasTrackedConnections: Boolean = !connections.isEmpty
+
+  def allConnectionsClosed: Boolean = connections.asScala.forall(_.isClosed)
+
+  override def canHandle(url: String): Boolean = H2Dialect().canHandle(url)
+
+  override def createConnectionFactory(options: JDBCOptions): Int => Connection = {
+    val connectionFactory = H2Dialect().createConnectionFactory(options)
+    (partitionId: Int) => {
+      val connection = connectionFactory(partitionId)
+      connections.add(connection)
+      connection
+    }
   }
 }

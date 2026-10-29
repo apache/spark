@@ -226,7 +226,8 @@ class MsSqlServerIntegrationSuite extends SharedJDBCIntegrationSuite {
       Seq(true, false).foreach { ntz =>
         Seq(true, false).foreach { legacy =>
           withSQLConf(
-            SQLConf.LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED.key -> legacy.toString) {
+            SQLConf.LEGACY_MSSQLSERVER_DATETIMEOFFSET_MAPPING_ENABLED.key -> legacy.toString,
+            SQLConf.TIME_TYPE_ENABLED.key -> "false") {
             val df = spark.read
               .option("preferTimestampNTZ", ntz)
               .jdbc(jdbcUrl, "dates", new Properties)

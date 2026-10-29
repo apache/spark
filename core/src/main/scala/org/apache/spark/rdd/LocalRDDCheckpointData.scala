@@ -55,6 +55,14 @@ private[spark] class LocalRDDCheckpointData[T: ClassTag](@transient private val 
       rdd.sparkContext.runJob(rdd, action, missingPartitionIndices.toImmutableArraySeq)
     }
 
+    // Finalization point: partitions are materialized (missing ones by the runJob above) and the
+    // checkpoint is not yet exposed to readers (markCheckpointed runs after doCheckpoint returns),
+    // so seal one consistent version per partition here. See `RDD.sealCheckpointChecksums` for the
+    // timing guarantees (eager vs lazy).
+    if (rdd.verifyCheckpointChecksums) {
+      rdd.sealCheckpointChecksums()
+    }
+
     new LocalCheckpointRDD[T](rdd)
   }
 
@@ -71,9 +79,18 @@ private[spark] object LocalRDDCheckpointData {
    * executors do not fail. Otherwise, if the RDD is cached in memory only, for instance,
    * the checkpoint data will be lost if the relevant block is evicted from memory.
    *
+   * When `forceSerialized` is set, the level is additionally adapted to a serialized one, so a
+   * checkpoint whose blocks would otherwise be deserialized (and thus have no bytes to
+   * content-checksum) becomes verifiable (see `LOCAL_CHECKPOINT_VERIFY_CHECKSUM_FORCE_SERIALIZED`).
+   *
    * This method is idempotent.
    */
-  def transformStorageLevel(level: StorageLevel): StorageLevel = {
-    StorageLevel(useDisk = true, level.useMemory, level.deserialized, level.replication)
+  def transformStorageLevel(
+      level: StorageLevel, forceSerialized: Boolean = false): StorageLevel = {
+    StorageLevel(
+      useDisk = true,
+      useMemory = level.useMemory,
+      deserialized = level.deserialized && !forceSerialized,
+      replication = level.replication)
   }
 }

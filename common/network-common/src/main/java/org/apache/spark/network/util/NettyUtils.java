@@ -65,60 +65,58 @@ public class NettyUtils {
     return new DefaultThreadFactory(threadPoolPrefix, true);
   }
 
+  /** Message for the unreachable AUTO arms below; resolveMode never returns AUTO. */
+  private static final String UNRESOLVED_AUTO_MODE = "AUTO should be resolved by resolveMode";
+
+  /**
+   * Resolves {@link IOMode#AUTO} to a concrete transport for the current platform: EPOLL on
+   * Linux, KQUEUE on macOS, and NIO otherwise (including when the native transport is not
+   * available). Any other mode is returned unchanged. Keeping this in one place stops the
+   * event-loop and channel factories below from drifting apart.
+   */
+  private static IOMode resolveMode(IOMode mode) {
+    if (mode != IOMode.AUTO) {
+      return mode;
+    }
+    if (JavaUtils.isLinux && Epoll.isAvailable()) {
+      return IOMode.EPOLL;
+    } else if (JavaUtils.isMac && KQueue.isAvailable()) {
+      return IOMode.KQUEUE;
+    } else {
+      return IOMode.NIO;
+    }
+  }
+
   /** Creates a Netty EventLoopGroup based on the IOMode. */
   public static EventLoopGroup createEventLoop(IOMode mode, int numThreads, String threadPrefix) {
     ThreadFactory threadFactory = createThreadFactory(threadPrefix);
 
-    IoHandlerFactory handlerFactory = switch (mode) {
+    IoHandlerFactory handlerFactory = switch (resolveMode(mode)) {
       case NIO -> NioIoHandler.newFactory();
       case EPOLL -> EpollIoHandler.newFactory();
       case KQUEUE -> KQueueIoHandler.newFactory();
-      case AUTO -> {
-        if (JavaUtils.isLinux && Epoll.isAvailable()) {
-          yield EpollIoHandler.newFactory();
-        } else if (JavaUtils.isMac && KQueue.isAvailable()) {
-          yield KQueueIoHandler.newFactory();
-        } else {
-          yield NioIoHandler.newFactory();
-        }
-      }
+      case AUTO -> throw new IllegalStateException(UNRESOLVED_AUTO_MODE);
     };
     return new MultiThreadIoEventLoopGroup(numThreads, threadFactory, handlerFactory);
   }
 
   /** Returns the correct (client) SocketChannel class based on IOMode. */
   public static Class<? extends Channel> getClientChannelClass(IOMode mode) {
-    return switch (mode) {
+    return switch (resolveMode(mode)) {
       case NIO -> NioSocketChannel.class;
       case EPOLL -> EpollSocketChannel.class;
       case KQUEUE -> KQueueSocketChannel.class;
-      case AUTO -> {
-        if (JavaUtils.isLinux && Epoll.isAvailable()) {
-          yield EpollSocketChannel.class;
-        } else if (JavaUtils.isMac && KQueue.isAvailable()) {
-          yield KQueueSocketChannel.class;
-        } else {
-          yield NioSocketChannel.class;
-        }
-      }
+      case AUTO -> throw new IllegalStateException(UNRESOLVED_AUTO_MODE);
     };
   }
 
   /** Returns the correct ServerSocketChannel class based on IOMode. */
   public static Class<? extends ServerChannel> getServerChannelClass(IOMode mode) {
-    return switch (mode) {
+    return switch (resolveMode(mode)) {
       case NIO -> NioServerSocketChannel.class;
       case EPOLL -> EpollServerSocketChannel.class;
       case KQUEUE -> KQueueServerSocketChannel.class;
-      case AUTO -> {
-        if (JavaUtils.isLinux && Epoll.isAvailable()) {
-          yield EpollServerSocketChannel.class;
-        } else if (JavaUtils.isMac && KQueue.isAvailable()) {
-          yield KQueueServerSocketChannel.class;
-        } else {
-          yield NioServerSocketChannel.class;
-        }
-      }
+      case AUTO -> throw new IllegalStateException(UNRESOLVED_AUTO_MODE);
     };
   }
 

@@ -17,20 +17,19 @@
 
 import os
 import string
-import unittest
 import sys
+import unittest
 
 import numpy as np
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import (
-    have_openpyxl,
-    openpyxl_requirement_message,
     have_jinja2,
+    have_openpyxl,
     jinja2_requirement_message,
+    openpyxl_requirement_message,
 )
 
 
@@ -262,7 +261,6 @@ class DataFrameConversionMixin:
 class DataFrameConversionTests(
     DataFrameConversionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
     TestUtils,
 ):
     pass

@@ -18,12 +18,18 @@
 package org.apache.spark.sql.jdbc.v2
 
 import java.sql.Connection
+import java.time.LocalDateTime
 import java.util.Locale
+
+import scala.util.Using
 
 import org.apache.spark.{SparkConf, SparkRuntimeException}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STRING_METADATA_KEY
+import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
+import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -98,6 +104,7 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     new MetadataBuilder()
       .putLong("scale", 0)
       .putBoolean("isTimestampNTZ", false)
+      .putBoolean("preferTimestampNanos", false)
       .putBoolean(
         "isSigned",
         dataType.isInstanceOf[NumericType] || dataType.isInstanceOf[StringType])
@@ -180,6 +187,19 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
+  test("SPARK-58876: a V2 NTZ read planned before a legacy flag flip still reads wall-clock") {
+    val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
+    withDefaultTimeZone(LA) {
+      val df = withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
+        sql(s"SELECT time1 FROM $table WHERE name = 'amy'")
+      }
+      assert(df.schema.head.dataType === TimestampNTZType)
+      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
+        assert(df.collect().head.get(0) === LocalDateTime.of(2022, 5, 19, 0, 0, 0))
+      }
+    }
+  }
+
   test("SPARK-46478: Revert SPARK-43049 to use varchar(255) for string") {
     val tableName = catalogName + ".t1"
     withTable(tableName) {
@@ -200,6 +220,65 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       sql(s"CREATE TABLE $tableName(c1 varchar(10), c2 char(3))")
       sql(s"INSERT INTO $tableName SELECT 'Eason' as c1, 'Y' as c2")
       checkAnswer(sql(s"SELECT * FROM $tableName"), Seq(Row("Eason", "Y  ")))
+    }
+  }
+
+  // An object that Oracle's table listing surfaces but that cannot be read as a table.
+  // `setup`/`teardown` are the DDL to create/drop it; `objectName` is its name in SYSTEM.
+  case class NonSelectableObjectCase(setup: Seq[String], objectName: String, teardown: Seq[String])
+
+  private val nonSelectableObjectCases = Map(
+    "synonym to a procedure (ORA-04044)" -> NonSelectableObjectCase(
+      setup = Seq(
+        "CREATE PROCEDURE test_proc AS BEGIN NULL; END;",
+        "CREATE SYNONYM proc_synonym FOR test_proc"),
+      objectName = "PROC_SYNONYM",
+      teardown = Seq("DROP SYNONYM proc_synonym", "DROP PROCEDURE test_proc")),
+    "synonym to a broken function (ORA-04044)" -> NonSelectableObjectCase(
+      // Function referencing a missing object -> created INVALID.
+      setup = Seq(
+        """CREATE FUNCTION broken_func RETURN NUMBER AS
+          |  x NUMBER;
+          |BEGIN
+          |  SELECT col INTO x FROM non_existent_table_xyz;
+          |  RETURN x;
+          |END;""".stripMargin,
+        "CREATE SYNONYM func_synonym FOR broken_func"),
+      objectName = "FUNC_SYNONYM",
+      teardown = Seq("DROP SYNONYM func_synonym", "DROP FUNCTION broken_func")),
+    "synonym -> missing target (ORA-00980)" -> NonSelectableObjectCase(
+      // Oracle does not validate the target on CREATE SYNONYM; SELECT raises ORA-00980.
+      setup = Seq("CREATE SYNONYM broken_synonym FOR non_existent_table_xyz"),
+      objectName = "BROKEN_SYNONYM",
+      teardown = Seq("DROP SYNONYM broken_synonym")),
+    "invalid view (ORA-04063)" -> NonSelectableObjectCase(
+      // FORCE-create a view over a missing table -> view is INVALID; SELECT raises ORA-04063.
+      setup = Seq("CREATE FORCE VIEW invalid_view AS SELECT * FROM non_existent_table_xyz"),
+      objectName = "INVALID_VIEW",
+      teardown = Seq("DROP VIEW invalid_view")))
+
+  namedGridTest("SPARK-57778: non-selectable object is handled gracefully")(
+      nonSelectableObjectCases) { testCase =>
+    Using.resource(getConnection()) { conn =>
+      testCase.setup.foreach(conn.prepareStatement(_).executeUpdate())
+    }
+    try {
+      val tableCatalog =
+        spark.sessionState.catalogManager.catalog(catalogName).asInstanceOf[TableCatalog]
+
+      // tableExists treats a non-selectable object as non-existent instead of throwing.
+      assert(!tableCatalog.tableExists(Identifier.of(Array("SYSTEM"), testCase.objectName)))
+
+      // Reading it surfaces a dedicated, clear error instead of a raw JDBC failure.
+      val e = intercept[AnalysisException] {
+        sql(s"SELECT * FROM $catalogName.SYSTEM.${testCase.objectName}").collect()
+      }
+      assert(e.getCondition == "JDBC_OBJECT_NOT_SELECTABLE")
+      assert(e.getMessageParameters.get("objectName").contains(testCase.objectName))
+    } finally {
+      Using.resource(getConnection()) { conn =>
+        testCase.teardown.foreach(conn.prepareStatement(_).executeUpdate())
+      }
     }
   }
 
@@ -340,5 +419,73 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
     assert(rows10.length === 2)
     assert(rows10(0).getString(0) === "amy")
     assert(rows10(1).getString(0) === "alex")
+
+    // SPARK-57364: verify MONTH truncation pushes down correctly (not as 'IW')
+    val df11 = sql(s"SELECT name FROM $tbl WHERE trunc(date1, 'MONTH') = date'2022-05-01'")
+    checkFilterPushed(df11)
+    val rows11 = df11.collect()
+    assert(rows11.length === 2)
+    assert(rows11(0).getString(0) === "amy")
+    assert(rows11(1).getString(0) === "alex")
+  }
+
+  test("SPARK-60479: CHAR equality is pushed, including CJK") {
+    val tableName = caseConvert("char_pad")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      // CHAR(n CHAR) so CJK occupies one length unit, matching Spark CHAR padding.
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 CHAR))").executeUpdate()
+      }
+      // scalastyle:off nonascii
+      sql(s"INSERT INTO $table VALUES (1, 'Y'), (2, NULL), (3, '日本')")
+      // scalastyle:on nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eq)
+      val eqRows = eq.collect()
+      assert(eqRows.length === 1)
+      assert(eqRows(0).getDecimal(0).intValueExact() === 1)
+      // scalastyle:off nonascii
+      val cjk = sql(s"SELECT id FROM $table WHERE flag = '日本'")
+      // scalastyle:on nonascii
+      checkFilterPushed(cjk)
+      val cjkRows = cjk.collect()
+      assert(cjkRows.length === 1)
+      assert(cjkRows(0).getDecimal(0).intValueExact() === 3)
+      val isNull = sql(s"SELECT id FROM $table WHERE flag IS NULL")
+      checkFilterPushed(isNull)
+      val nullRows = isNull.collect()
+      assert(nullRows.length === 1)
+      assert(nullRows(0).getDecimal(0).intValueExact() === 2)
+    }
+  }
+
+  test("SPARK-60479: CHAR(n BYTE) multibyte equality is pushed") {
+    val tableName = caseConvert("char_byte")
+    val table = s"$catalogName.$tableName"
+    withTable(table) {
+      Using.resource(getConnection()) { conn =>
+        conn.prepareStatement(
+          s"CREATE TABLE $tableName (id NUMBER, flag CHAR(4 BYTE))").executeUpdate()
+        // Insert via JDBC. A Spark INSERT would pad the 2-byte character to
+        // CHAR width in characters (5 bytes) and Oracle would raise ORA-12899.
+        // scalastyle:off nonascii
+        conn.prepareStatement(
+          s"INSERT INTO $tableName VALUES (1, 'ä'), (2, 'äb'), (3, 'Y')").executeUpdate()
+        // scalastyle:on nonascii
+      }
+      // scalastyle:off nonascii
+      val eq = sql(s"SELECT id FROM $table WHERE flag = 'ä'")
+      checkFilterPushed(eq)
+      assert(eq.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(1))
+      val eqAb = sql(s"SELECT id FROM $table WHERE flag = 'äb'")
+      checkFilterPushed(eqAb)
+      assert(eqAb.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(2))
+      // scalastyle:on nonascii
+      val eqY = sql(s"SELECT id FROM $table WHERE flag = 'Y'")
+      checkFilterPushed(eqY)
+      assert(eqY.collect().map(_.getDecimal(0).intValueExact()).toSet === Set(3))
+    }
   }
 }

@@ -29,8 +29,8 @@ import scala.util.control.NonFatal
 
 import org.apache.spark.annotation.Experimental
 import org.apache.spark.udf.worker.{ProcessCallable, UDFWorkerSpecification}
-import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher,
-  WorkerLogger, WorkerSecurityScope, WorkerSession}
+import org.apache.spark.udf.worker.core.{WorkerConnection, WorkerDispatcher, WorkerLogger,
+  WorkerSecurityScope, WorkerSession}
 import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableResult,
   DEFAULT_CALLABLE_TIMEOUT_MS, DEFAULT_GRACEFUL_TIMEOUT_MS, DEFAULT_INIT_TIMEOUT_MS,
   ENGINE_MAX_TIMEOUT_MS, EnvironmentState, MAX_OUTPUT_SCAN_BYTES,
@@ -46,18 +46,17 @@ import org.apache.spark.udf.worker.core.direct.DirectWorkerDispatcher.{CallableR
  * currently gets a fresh worker that is terminated when the session closes
  * (the single-reference case of the future pooling policy).
  *
- * Subclasses implement [[createConnection]] and [[createSessionForWorker]]
- * to provide protocol-specific behavior (e.g., gRPC, raw sockets).
+ * Subclasses pick the transport and protocol: they allocate the endpoint
+ * address, establish a verified [[WorkerConnection]], and build the
+ * per-session [[WorkerSession]]. See [[newEndpointAddress]],
+ * [[connectWorker]], and [[newSession]].
  *
  * For workers obtained through a provisioning service or daemon (indirect
  * creation), see the `indirect` package (TODO).
  *
- * @param workerSpec worker specification (proto)
- * @param logger [[WorkerLogger]] used for dispatcher-internal messages.
- *               The framework does not depend on any concrete logging
- *               backend; callers should pass an adapter that forwards
- *               to their preferred logger (Spark's `Logging` trait,
- *               SLF4J, etc.). Defaults to [[WorkerLogger.NoOp]].
+ * @param workerSpec worker specification (proto).
+ * @param logger     [[WorkerLogger]] for dispatcher-internal messages.
+ *                   Defaults to [[WorkerLogger.NoOp]].
  */
 @Experimental
 abstract class DirectWorkerDispatcher(
@@ -68,8 +67,22 @@ abstract class DirectWorkerDispatcher(
   // TODO: Connection pooling -- reuse idle workers across sessions.
   // TODO: Security scope isolation -- partition pool by WorkerSecurityScope.
 
-  validateTransportSupport()
+  // Pre-flight spec validation. Per convention in this dispatcher, all
+  // spec-shape validation throws `IllegalArgumentException` (via `require`
+  // in the validators below); runtime failures during environment
+  // preparation throw `DirectWorkerException`. Callers can rely on this
+  // split to decide between programmer-error and operational-error paths.
+  // `workerSpec` is passed explicitly to `validateTransportSupport` so
+  // subclass implementations cannot read partially-initialized subclass
+  // fields: at this point in construction, the parent constructor body is
+  // still running and subclass `val`s have not yet been assigned.
+  validateTransportSupport(workerSpec)
   validateEnvironmentCallables()
+  // Transport-specific setup runs only after validation passes, so an
+  // invalid spec allocates no resources. Subclasses override [[initialize]]
+  // rather than relying on field-initialiser ordering relative to this
+  // constructor.
+  initialize()
 
   /**
    * Maximum time to wait for a setup/verify/cleanup callable to finish.
@@ -82,7 +95,7 @@ abstract class DirectWorkerDispatcher(
   // dispatcher-internal callableTimeoutMs above is subclass-controlled and
   // not subject to the cap.
   // Package-private for test access.
-  private[core] val initTimeoutMs: Long = {
+  private[worker] val initTimeoutMs: Long = {
     val props = workerSpec.getDirect.getProperties
     val raw = if (props.hasInitializationTimeoutMs && props.getInitializationTimeoutMs > 0) {
       props.getInitializationTimeoutMs.toLong
@@ -116,7 +129,14 @@ abstract class DirectWorkerDispatcher(
 
   private[this] val workers = new ConcurrentHashMap[String, DirectWorkerProcess]()
   private[this] val closed = new AtomicBoolean(false)
+  private[this] val lifecycleLock = new Object
+  private[this] var inFlightSessionCreations = 0
+  private[this] var inFlightWorkerReleases = 0
 
+  // TODO [SPARK-55278]: extract the env state machine + JVM shutdown hook
+  //   into a standalone EnvironmentManager once the gRPC dispatcher work has
+  //   landed; the env machinery is unrelated to the gRPC protocol and
+  //   only lives here for historical reasons.
   @volatile private var environmentState: EnvironmentState = EnvironmentState.Pending
   private val environmentLock = new Object
   private[this] var cleanupHook: Option[Thread] = None
@@ -128,18 +148,21 @@ abstract class DirectWorkerDispatcher(
   protected def newEndpointAddress(workerId: String): String
 
   /**
-   * Waits for the worker process to be ready to accept connections at
-   * `address`. Throws [[DirectWorkerTimeoutException]] on timeout, or
-   * [[DirectWorkerException]] if the process exits early.
+   * Establishes and verifies the transport connection to a spawned worker.
+   * Implementations may construct the connection before or after the worker
+   * binds its endpoint, as required by the transport.
+   *
+   * @throws DirectWorkerTimeoutException if the worker does not become ready.
+   * @throws DirectWorkerException if the worker exits before becoming ready.
    */
-  protected def waitForReady(
+  protected def connectWorker(
       address: String,
       process: Process,
-      outputFile: File): Unit
+      outputFile: File): WorkerConnection
 
   /**
    * Best-effort per-endpoint cleanup, called from the spawn-failure path
-   * before any [[WorkerArtifacts]] / [[WorkerConnection]] exists.
+   * before a [[WorkerArtifacts]] bundle owns the connection.
    */
   protected def cleanupEndpointAddress(address: String): Unit
 
@@ -150,95 +173,227 @@ abstract class DirectWorkerDispatcher(
   protected def closeTransport(): Unit
 
   /**
-   * Validates the worker spec's transport choice. Subclasses declare
-   * which transports they support. Called from the base constructor;
-   * implementations must only read base-class state (`workerSpec`).
+   * Validates the worker spec from the dispatcher's point of view -- both
+   * the transport choice (which transports can this dispatcher provision?)
+   * and the protocol's spec-level requirements (e.g. capabilities flags).
+   *
+   * Invoked from the base-class constructor BEFORE subclass `val`s have
+   * been initialised. Implementations MUST validate against `spec` only;
+   * reading subclass fields will see uninitialised values.
+   *
+   * Convention: throw `IllegalArgumentException` (via `require`) for spec
+   * problems. Operational/install failures are reported separately via
+   * `DirectWorkerException` from `ensureEnvironmentReady`.
+   *
+   * @param spec the worker specification to validate. Identical to the
+   *             `workerSpec` field but passed explicitly to make the
+   *             "constructor-time validation" contract obvious at call
+   *             sites and prevent subclass-state reads.
    */
-  protected def validateTransportSupport(): Unit
+  protected def validateTransportSupport(spec: UDFWorkerSpecification): Unit
 
-  /** Creates a protocol-specific connection to a worker at the given address. */
-  protected def createConnection(address: String): WorkerConnection
+  /**
+   * Transport-specific one-time setup, invoked from the base-class
+   * constructor exactly once, AFTER spec validation has passed and BEFORE
+   * any session is created. Subclasses override this to allocate
+   * transport resources (e.g. a private socket directory) instead of
+   * relying on the ordering of subclass field initialisers relative to
+   * the base constructor. Overrides MUST call `super.initialize()`.
+   *
+   * The base implementation does nothing.
+   */
+  protected def initialize(): Unit = ()
 
-  /** Creates a protocol-specific session for the given worker. */
-  protected def createSessionForWorker(worker: DirectWorkerProcess): WorkerSession
+  /**
+   * Constructs the per-invocation [[WorkerSession]] for a worker.
+   * Subclasses build the concrete session implementation (e.g.
+   * `GrpcWorkerSession` for gRPC over UDS) from the process and its
+   * worker-owned transport connection.
+   */
+  protected def newSession(worker: DirectWorkerProcess): WorkerSession
+
+  /**
+   * Test-only hook: invoked once per [[createSession]] after the worker
+   * has been spawned and registered in the dispatcher's `workers` map,
+   * but before [[newSession]] has been called. The default is a no-op.
+   *
+   * Tests override to capture the worker reference or to inject a
+   * deliberate block to drive race conditions between `createSession`
+   * and `close`. Production code should not override this -- the
+   * production path provides no useful extension point here and the
+   * race-window control it offers is only meaningful for unit tests.
+   *
+   * Implementations MAY block. They run on the createSession caller's
+   * thread.
+   *
+   * Visible for testing only: `protected` so tests in this package can
+   * override it; production code should not. (The Guava annotation for this
+   * is banned by scalastyle per SPARK-11615, so the intent is noted here.)
+   */
+  protected def afterWorkerRegistered(worker: DirectWorkerProcess): Unit = ()
 
   override def createSession(
       securityScope: Option[WorkerSecurityScope]): WorkerSession = {
     require(securityScope.isEmpty,
       "securityScope is not supported yet; pass None until pooling lands")
-    if (closed.get()) throwClosed()
-    ensureEnvironmentReady()
-    val worker = spawnWorker()
-    // Acquire before publish: a concurrent close() iterating `workers` must
-    // not tear down this worker before we hand it to the caller.
-    worker.acquireSession()
-    workers.put(worker.id, worker)
-    // Re-check for close() that ran concurrently. Releasing fires the
-    // ref-count callback, which removes and tears down the worker.
-    if (closed.get()) {
-      worker.releaseSession()
-      throwClosed()
-    }
+    beginSessionCreation()
+    var creationInFlight = true
     try {
-      createSessionForWorker(worker)
-    } catch {
-      case e: InterruptedException =>
-        Thread.currentThread().interrupt()
+      ensureEnvironmentReady()
+      if (closed.get()) throwClosed()
+      val worker = spawnWorker()
+      // Acquire before publish: a concurrent close() iterating `workers` must
+      // not tear down this worker before we hand it to the caller.
+      worker.acquireSession()
+      workers.put(worker.id, worker)
+      // Re-check for close() that ran concurrently. Releasing fires the
+      // ref-count callback, which removes and tears down the worker.
+      if (closed.get()) {
         worker.releaseSession()
-        throw e
-      case NonFatal(e) =>
-        worker.releaseSession()
-        throw e
+        throwClosed()
+      }
+      try {
+        afterWorkerRegistered(worker)
+        // The test hook may block, so close could have started since the
+        // first post-publication check.
+        if (closed.get()) throwClosed()
+        val session = newSession(worker)
+        // Atomically publish the completed session relative to close(). If
+        // close started while newSession was constructing it, reject the
+        // session and let the catch block release its worker.
+        val dispatcherOpen = endSessionCreation()
+        creationInFlight = false
+        if (!dispatcherOpen) throwClosed()
+        session
+      } catch {
+        case e: InterruptedException =>
+          Thread.currentThread().interrupt()
+          worker.releaseSession()
+          throw e
+        case NonFatal(e) =>
+          worker.releaseSession()
+          throw e
+      }
+    } finally {
+      if (creationInFlight) endSessionCreation()
     }
   }
 
   /**
    * Invoked when a worker's last session closes. Terminates the worker
-   * today; future pooling can reuse it here instead. Safe to call after
-   * dispatcher close -- the worker's own CAS-idempotent close makes a
-   * second teardown a no-op.
+   * today; future pooling can reuse it here instead. Once dispatcher close
+   * starts, it owns every worker still in the map and performs the teardown.
    */
   private def releaseWorker(worker: DirectWorkerProcess): Unit = {
-    workers.remove(worker.id)
+    // Once close starts, it owns every worker still in the map. A release that
+    // started earlier is tracked so close waits for its teardown to finish.
+    if (!beginWorkerRelease()) return
     try {
-      worker.close()
-    } catch {
-      case NonFatal(e) =>
-        logger.warn(s"Error closing worker ${worker.id}", e)
+      workers.remove(worker.id)
+      try {
+        worker.close()
+      } catch {
+        case NonFatal(e) =>
+          logger.warn(s"Error closing worker ${worker.id}", e)
+      }
+    } finally {
+      endWorkerRelease()
     }
   }
 
   private def throwClosed(): Nothing =
     throw new IllegalStateException("Dispatcher is closed")
 
-  /**
-   * Terminates tracked workers, removes the socket directory, and runs
-   * environment cleanup. Idempotent via CAS. Does not drain in-flight
-   * createSession calls -- a worker spawned racing with close tears
-   * itself down through the ref-count callback, which may outlive this
-   * method.
-   */
-  override def close(): Unit = {
-    if (!closed.compareAndSet(false, true)) {
-      return
+  private def beginSessionCreation(): Unit = lifecycleLock.synchronized {
+    if (closed.get()) throwClosed()
+    inFlightSessionCreations += 1
+  }
+
+  /** Returns whether this creation linearized before dispatcher close. */
+  private def endSessionCreation(): Boolean = lifecycleLock.synchronized {
+    inFlightSessionCreations -= 1
+    val dispatcherOpen = !closed.get()
+    notifyIfDrained()
+    dispatcherOpen
+  }
+
+  private def beginWorkerRelease(): Boolean = lifecycleLock.synchronized {
+    if (closed.get()) {
+      false
+    } else {
+      inFlightWorkerReleases += 1
+      true
     }
-    // TODO: close workers in parallel -- today shutdown is serialised at
-    //   N * gracefulTimeoutMs worst case.
-    workers.values().iterator().asScala.foreach { w =>
-      try {
-        w.close()
-      } catch {
-        case NonFatal(e) =>
-          logger.warn(s"Error closing worker ${w.id}", e)
+  }
+
+  private def endWorkerRelease(): Unit = lifecycleLock.synchronized {
+    inFlightWorkerReleases -= 1
+    notifyIfDrained()
+  }
+
+  private def notifyIfDrained(): Unit = {
+    if (inFlightSessionCreations == 0 && inFlightWorkerReleases == 0) {
+      lifecycleLock.notifyAll()
+    }
+  }
+
+  private def beginClose(): Boolean = lifecycleLock.synchronized {
+    closed.compareAndSet(false, true)
+  }
+
+  /**
+   * Waits uninterruptibly so cleanup cannot race an in-flight lifecycle operation.
+   * Returns whether interruption must be restored after cleanup completes.
+   */
+  private def awaitInFlightOperations(): Boolean = {
+    var interrupted = Thread.interrupted()
+    lifecycleLock.synchronized {
+      while (inFlightSessionCreations != 0 || inFlightWorkerReleases != 0) {
+        try {
+          lifecycleLock.wait()
+        } catch {
+          case _: InterruptedException => interrupted = true
+        }
       }
     }
-    workers.clear()
-    try closeTransport() catch {
-      case NonFatal(e) =>
-        logger.warn("Error cleaning up transport state", e)
+    interrupted = Thread.interrupted() || interrupted
+    interrupted
+  }
+
+  /**
+   * Terminates tracked workers, removes the socket directory, and runs
+   * environment cleanup. Idempotent via CAS. In-flight [[createSession]]
+   * calls and worker releases are drained before cleanup, so they cannot
+   * publish or tear down a worker concurrently with transport or environment
+   * cleanup.
+   */
+  override def close(): Unit = {
+    if (!beginClose()) {
+      return
     }
-    deregisterEnvironmentCleanupHook()
-    runEnvironmentCleanup()
+    val interrupted = awaitInFlightOperations()
+    try {
+      // TODO [SPARK-55278]: Cleanup sessions as well?
+      // TODO [SPARK-55278]: close workers in parallel -- today shutdown is serialised at
+      //   N * gracefulTimeoutMs worst case.
+      workers.values().iterator().asScala.foreach { w =>
+        try {
+          w.close()
+        } catch {
+          case NonFatal(e) =>
+            logger.warn(s"Error closing worker ${w.id}", e)
+        }
+      }
+      workers.clear()
+      try closeTransport() catch {
+        case NonFatal(e) =>
+          logger.warn("Error cleaning up transport state", e)
+      }
+      deregisterEnvironmentCleanupHook()
+      runEnvironmentCleanup()
+    } finally {
+      if (interrupted) Thread.currentThread().interrupt()
+    }
   }
 
   // -- Environment lifecycle -------------------------------------------------
@@ -342,7 +497,7 @@ abstract class DirectWorkerDispatcher(
    * Runs a [[ProcessCallable]] synchronously and returns the result.
    * Always throws on timeout; callers check `exitCode` for non-timeout failures.
    */
-  private[core] def runCallable(callable: ProcessCallable): CallableResult = {
+  private[worker] def runCallable(callable: ProcessCallable): CallableResult = {
     val cmd = (callable.getCommandList.asScala ++ callable.getArgumentsList.asScala).toSeq
     require(cmd.nonEmpty,
       "ProcessCallable must have at least one entry in command or arguments")
@@ -373,33 +528,45 @@ abstract class DirectWorkerDispatcher(
       "DirectWorker.runner must have at least one entry in command or arguments")
     val workerId = UUID.randomUUID().toString
     val address = newEndpointAddress(workerId)
-    // Proto contract: the engine must pass --id and --connection.
+    // The engine injects --connection (the socket address it manages) and
+    // --id (an internal correlation identifier) into the worker command.
     val cmd = baseCmd ++ Seq("--id", workerId, "--connection", address)
     val env = runner.getEnvironmentVariablesMap.asScala.toMap
     val outputFile = Files.createTempFile("udf-worker-", ".log")
     val process = launchProcess(cmd, env, outputFile.toFile)
+    var connection: WorkerConnection = null
 
     try {
-      waitForReady(address, process, outputFile.toFile)
-      val connection = createConnection(address)
+      connection = connectWorker(address, process, outputFile.toFile)
       val artifacts = new WorkerArtifacts(process, connection, outputFile, logger)
+      // Remove the worker's endpoint artifact (its UDS socket file) on close;
+      // the worker creates it, the dispatcher owns its deletion.
+      artifacts.registerCleanup(() => cleanupEndpointAddress(address))
       new DirectWorkerProcess(
         workerId, artifacts, gracefulTimeoutMs, logger,
         onLastSessionReleased = releaseWorker)
     } catch {
       case e: InterruptedException =>
         Thread.currentThread().interrupt()
-        cleanupRawSpawn(process, address, outputFile)
+        cleanupRawSpawn(process, connection, address, outputFile)
         throw e
       case NonFatal(e) =>
-        cleanupRawSpawn(process, address, outputFile)
+        cleanupRawSpawn(process, connection, address, outputFile)
         throw e
     }
   }
 
-  // Pre-WorkerArtifacts cleanup: the connection has not been built yet,
-  // so we have no bundle to close(). Each step is independent.
-  private def cleanupRawSpawn(p: Process, address: String, outputFile: Path): Unit = {
+  // Pre-WorkerArtifacts cleanup. Each step is independent.
+  private def cleanupRawSpawn(
+      p: Process,
+      connection: WorkerConnection,
+      address: String,
+      outputFile: Path): Unit = {
+    if (connection != null) {
+      try connection.close() catch {
+        case NonFatal(e) => logger.debug("Failed to close worker connection", e)
+      }
+    }
     DirectWorkerDispatcher.destroyForciblyAndReap(p, logger, "failed spawn")
     try cleanupEndpointAddress(address) catch {
       case NonFatal(e) =>
@@ -469,8 +636,10 @@ abstract class DirectWorkerDispatcher(
   }
 }
 
-private[direct] object DirectWorkerDispatcher {
-  private[direct] val SOCKET_POLL_INTERVAL_MS = 100L
+// Visible to `core` (and the sibling `grpc` module) so concrete dispatchers in
+// the `grpc` module can call shared helpers like `destroyForciblyAndReap`.
+private[worker] object DirectWorkerDispatcher {
+  private[worker] val READY_POLL_INTERVAL_MS = 100L
   private[direct] val DEFAULT_INIT_TIMEOUT_MS = 10000L
   private[direct] val DEFAULT_CALLABLE_TIMEOUT_MS = 120000L
   private[direct] val DEFAULT_GRACEFUL_TIMEOUT_MS = 5000L
@@ -497,7 +666,7 @@ private[direct] object DirectWorkerDispatcher {
    * @param context short tag included in the timeout warning so operators
    *                can correlate a stuck child with its source.
    */
-  private[direct] def destroyForciblyAndReap(
+  private[worker] def destroyForciblyAndReap(
       process: Process,
       logger: WorkerLogger,
       context: String = ""): Unit = {
@@ -520,7 +689,7 @@ private[direct] object DirectWorkerDispatcher {
   }
 
   /** Result of running a [[ProcessCallable]]. */
-  private[core] case class CallableResult(exitCode: Int, outputTail: String)
+  private[worker] case class CallableResult(exitCode: Int, outputTail: String)
 
   private[direct] sealed trait EnvironmentState
   private[direct] object EnvironmentState {

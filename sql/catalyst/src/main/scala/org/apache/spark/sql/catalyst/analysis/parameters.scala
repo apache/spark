@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.expressions.{Expression, LeafExpression, SubqueryExpression, Unevaluable}
-import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, SupervisingCommand, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{COMMAND, PARAMETER, PARAMETERIZED_QUERY, TreePattern, UNRESOLVED_WITH}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
@@ -179,9 +179,23 @@ object BindParameters extends Rule[LogicalPlan] with QueryErrorsBase {
     p0.resolveOperatorsDownWithPruning(_.containsPattern(PARAMETER) && !stop) {
       case p1 =>
         stop = p1.isInstanceOf[ParameterizedQuery]
-        p1.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (f orElse {
-          case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
-        })
+        // V2WriteCommand.table is a non-child LogicalPlan slot, so recurse explicitly when it
+        // contains parameter markers.
+        val withBoundTable = p1 match {
+          case w: V2WriteCommand if w.table.containsPattern(PARAMETER) =>
+            bind(w.table)(f) match {
+              case nr: NamedRelation => w.withNewTable(nr)
+              case other =>
+                throw SparkException.internalError(
+                  "Parameter binding on V2WriteCommand.table must preserve " +
+                    s"NamedRelation, but got: ${other.getClass.getName}")
+            }
+          case other => other
+        }
+        withBoundTable.transformExpressionsWithPruning(_.containsPattern(PARAMETER)) (
+          f orElse {
+            case sub: SubqueryExpression => sub.withNewPlan(bind(sub.plan)(f))
+          })
     }
   }
 

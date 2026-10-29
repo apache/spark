@@ -22,6 +22,7 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, SplittableCompressionCodec}
 import org.apache.hadoop.mapreduce.Job
 
+import org.apache.spark.SparkContext
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
@@ -29,6 +30,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.errors.QueryExecutionErrors
+import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
 import org.apache.spark.sql.sources.Filter
 import org.apache.spark.sql.types._
@@ -166,6 +168,68 @@ trait FileFormat {
   }
 
   /**
+   * Like [[buildReaderWithPartitionValues]], but also takes storage filters. These are Catalyst
+   * expressions a reader may evaluate on the columns they reference first, to skip reading the
+   * other columns of the rows they reject, e.g. a runtime bloom filter.
+   *
+   * Applying them is optional, since the planner also leaves each in the post-scan `Filter`. A
+   * storage filter is evaluated without the conjuncts that precede it in the plan, so it can raise
+   * an error on a row a plain scan never evaluates it on. A reader must not fail the query for
+   * that. It gives the filter up there and lets the `Filter` decide.
+   *
+   * The `Filter` can skip them on the rows the reader says it has checked. The planner asks for
+   * that only where the scan returns columnar batches. `requiredSchema` then ends with a nullable
+   * boolean column named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]], which is not a column
+   * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`.
+   *  - True says every storage filter was evaluated on the row and kept it.
+   *  - False or null says the row was not checked. So a reader that does not know the column, and
+   *    reads it as missing from the file, is still right.
+   * A reader that marks rows writes the column itself rather than decoding it from the file. A file
+   * holding a column of that name is not supported, see
+   * [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]]. The column is in the `requiredSchema` of the
+   * ordinary reader too, the one the caller builds when this returns `None`, so that reader has to
+   * read it as missing or mark it as well.
+   *
+   * A format that does not apply storage filters returns `None`, the default, and the caller then
+   * builds an ordinary reader. It is an `Option` rather than a call to that builder, so the two
+   * builders cannot call each other. `storageFilters` arrive with their scalar subqueries
+   * materialized, bound to `requiredSchema`, while [[supportsStorageFilter]] is asked about the
+   * unbound expression. `storageFilterMetrics` are the ones this format's [[storageFilterMetrics]]
+   * created, which the scan shows in the SQL UI.
+   */
+  def buildReaderWithStorageFilters(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      storageFilters: Seq[Expression],
+      options: Map[String, String],
+      hadoopConf: Configuration,
+      storageFilterMetrics: Map[String, SQLMetric]
+    ): Option[PartitionedFile => Iterator[InternalRow]] = None
+
+  /**
+   * Whether this format applies storage filters in this session at all. The conf that enables them
+   * belongs here, so one format's conf does not decide for another. Asked once per scan.
+   */
+  def supportsStorageFilterPushdown(sparkSession: SparkSession): Boolean = false
+
+  /**
+   * The SQL metrics this format's reader updates while it applies storage filters, keyed the way
+   * the scan exposes them. Asked once per scan, and only for a scan that has storage filters.
+   */
+  def storageFilterMetrics(sparkContext: SparkContext): Map[String, SQLMetric] = Map.empty
+
+  /**
+   * Whether this format's reader can evaluate `expr` as a storage filter, i.e. whether the planner
+   * may offer it to [[buildReaderWithStorageFilters]]. The planner itself checks that the conjunct
+   * is deterministic and references only projected data columns. True says the reader can evaluate
+   * it, not that it will.
+   */
+  def supportsStorageFilter(expr: Expression): Boolean = false
+
+  /**
    * Create a file metadata struct column containing fields supported by the given file format.
    */
   def createFileMetadataCol(): AttributeReference = {
@@ -231,6 +295,11 @@ trait FileFormat {
    *
    * NOTE: Extractors are lazy, invoked only if the query actually selects their column at runtime.
    *
+   * Return types: extractors may return either a raw value (which is converted to the column's
+   * catalyst form via [[Literal.create]]) or an already-built [[Literal]] (whose `.value` is
+   * used directly). For complex types ([[ArrayType]] / [[MapType]] / [[StructType]]), return the
+   * value in catalyst form ([[ArrayData]] / [[MapData]] / [[InternalRow]]).
+   *
    * See also [[FileFormat.getFileConstantMetadataColumnValue]].
    */
   def fileConstantMetadataExtractors: Map[String, PartitionedFile => Any] =
@@ -262,6 +331,16 @@ object FileFormat {
   val OPTION_RETURNING_BATCH = "returning_batch"
 
   /**
+   * The column a reader that applies storage filters marks the rows it has checked in. See
+   * [[FileFormat.buildReaderWithStorageFilters]]. The file-source reader finds the column by this
+   * name, so there the name is reserved, as the row-index metadata column's is. A relation with a
+   * column of that name is offered no storage filters, and a file holding one outside the
+   * relation's schema is not supported. A data source v2 scan's checked column has the same name,
+   * but Spark finds it by position, so a v2 table may have a column of that name.
+   */
+  val STORAGE_FILTER_CHECKED_COLUMN_NAME = "_tmp_storage_filter_checked"
+
+  /**
    * Schema of metadata struct that can be produced by every file format,
    * metadata fields for every file format must be *not* nullable.
    */
@@ -272,6 +351,9 @@ object FileFormat {
     FileSourceConstantMetadataStructField(FILE_BLOCK_START, LongType, nullable = false),
     FileSourceConstantMetadataStructField(FILE_BLOCK_LENGTH, LongType, nullable = false),
     FileSourceConstantMetadataStructField(FILE_MODIFICATION_TIME, TimestampType, nullable = false))
+
+  private val BASE_METADATA_NAME_TO_TYPE: Map[String, DataType] =
+    BASE_METADATA_FIELDS.map(f => f.name -> f.dataType).toMap
 
   /**
    * All [[BASE_METADATA_FIELDS]] require custom extractors because they are derived directly from
@@ -299,16 +381,26 @@ object FileFormat {
    * If an extractor is available, apply it. Otherwise, look up the column's name in the file's
    * column value map and return the result (or null, if not found).
    *
-   * Raw values (including null) are automatically converted to literals as a courtesy.
+   * Raw values (including null) are converted via [[Literal.create]], which accepts catalyst-form
+   * values directly. This lets a complex constant metadata column return an [[ArrayData]] /
+   * [[MapData]] / [[InternalRow]] whose element types only the caller knows. If the extractor
+   * returns an already-built [[Literal]] (allowed by the extractor contract), its value is
+   * unwrapped before delegating to [[Literal.create]] so the dataType validation in the
+   * case-class constructor is checked against the raw value.
    */
   def getFileConstantMetadataColumnValue(
       name: String,
       file: PartitionedFile,
-      metadataExtractors: Map[String, PartitionedFile => Any]): Literal = {
+      metadataExtractors: Map[String, PartitionedFile => Any],
+      dataType: DataType): Literal = {
     val extractor = metadataExtractors.getOrElse(name,
       { pf: PartitionedFile => pf.otherConstantMetadataColumnValues.get(name).orNull }
     )
-    Literal(extractor.apply(file))
+    val rawValue = extractor.apply(file) match {
+      case lit: Literal => lit.value
+      case other => other
+    }
+    Literal.create(rawValue, dataType)
   }
 
   // create an internal row given required metadata fields and file information
@@ -334,7 +426,9 @@ object FileFormat {
       modificationTime = fileModificationTime,
       fileSize = fileSize,
       otherConstantMetadataColumnValues = Map.empty)
-    updateMetadataInternalRow(new GenericInternalRow(fieldNames.length), fieldNames, pf, extractors)
+    val fieldDataTypes = fieldNames.map(BASE_METADATA_NAME_TO_TYPE)
+    updateMetadataInternalRow(
+      new GenericInternalRow(fieldNames.length), fieldNames, pf, extractors, fieldDataTypes)
   }
 
   // update an internal row given required metadata fields and file information
@@ -342,9 +436,12 @@ object FileFormat {
       row: InternalRow,
       fieldNames: Seq[String],
       file: PartitionedFile,
-      metadataExtractors: Map[String, PartitionedFile => Any]): InternalRow = {
+      metadataExtractors: Map[String, PartitionedFile => Any],
+      fieldDataTypes: Seq[DataType]): InternalRow = {
+    require(fieldDataTypes.length == fieldNames.length,
+      s"fieldDataTypes length ${fieldDataTypes.length} != fieldNames length ${fieldNames.length}")
     fieldNames.zipWithIndex.foreach { case (name, i) =>
-      getFileConstantMetadataColumnValue(name, file, metadataExtractors) match {
+      getFileConstantMetadataColumnValue(name, file, metadataExtractors, fieldDataTypes(i)) match {
         case Literal(null, _) => row.setNullAt(i)
         case literal => row.update(i, literal.value)
       }

@@ -62,6 +62,15 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   // exposed for testing
   private[python] def numQueues(): Int = queues.size()
 
+  // MemoryConsumer already defines identity equality (see its class Javadoc). These overrides
+  // only make it final, so that no subclass of HybridQueue can switch to value equality.
+  final override def equals(other: Any): Boolean = other match {
+    case ref: AnyRef => this eq ref
+    case _ => false
+  }
+
+  final override def hashCode(): Int = System.identityHashCode(this)
+
   protected def createDiskQueue(): Q
   protected def createInMemoryQueue(page: MemoryBlock): Q
   protected def getRequiredSize(item: T): Long
@@ -70,7 +79,7 @@ abstract class HybridQueue[T, Q <: Queue[T]](
   protected def isReadingFromDiskQueue: Boolean = !isInMemoryQueue(reading)
 
   def spill(size: Long, trigger: MemoryConsumer): Long = {
-    if (trigger == this) {
+    if (trigger eq this) {
       // When it's triggered by itself, it should write upcoming elements into disk instead of
       // copying the elements already in the queue.
       return 0L
@@ -110,10 +119,15 @@ abstract class HybridQueue[T, Q <: Queue[T]](
       case _: SparkOutOfMemoryError =>
         null
     }
-    val buffer = if (page != null) {
-      createInMemoryQueue(page)
-    } else {
+    val exactFitPartialPage = page != null &&
+      required < memManager.pageSizeBytes() && page.size() == required
+    val buffer = if (page == null || exactFitPartialPage) {
+      if (page != null) {
+        freePage(page)
+      }
       createDiskQueue()
+    } else {
+      createInMemoryQueue(page)
     }
 
     synchronized {
@@ -166,10 +180,17 @@ abstract class HybridQueue[T, Q <: Queue[T]](
       reading.close()
       reading = null.asInstanceOf[Q]
     }
-    synchronized {
-      while (!queues.isEmpty) {
-        queues.remove().close()
-      }
+    // Detach the queues under the lock but close them (which frees their pages through the
+    // TaskMemoryManager) after releasing it. `spill` is called with the TaskMemoryManager's
+    // monitor held and then takes this queue's lock, so freeing pages while holding this lock
+    // could deadlock with a concurrent spill of this queue triggered from another thread.
+    val detached = synchronized {
+      val current = queues
+      queues = new java.util.LinkedList[Q]()
+      current
+    }
+    while (!detached.isEmpty) {
+      detached.remove().close()
     }
   }
 

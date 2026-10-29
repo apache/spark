@@ -17,52 +17,50 @@
 
 # mypy: disable-error-code="operator"
 
-from pyspark.resource import ResourceProfile
-
-from typing import (
-    Any,
-    Iterator,
-    List,
-    Optional,
-    Type,
-    Sequence,
-    Union,
-    cast,
-    TYPE_CHECKING,
-    Mapping,
-    Dict,
-    Tuple,
-)
 import functools
 import json
 import pickle
+from inspect import isclass, signature
 from threading import Lock
-from inspect import signature, isclass
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Iterator,
+    List,
+    Mapping,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 import pyarrow as pa
 
-from pyspark.serializers import CloudPickleSerializer
-from pyspark.storagelevel import StorageLevel
-from pyspark.sql.types import DataType, StructType
-
 import pyspark.sql.connect.proto as proto
-from pyspark.sql.column import Column
-from pyspark.sql.connect.logging import logger
-from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
-from pyspark.sql.connect.conversion import storage_level_to_proto
-from pyspark.sql.connect.expressions import Expression, SubqueryExpression
-from pyspark.sql.connect.types import pyspark_types_to_proto_types, UnparsedDataType
 from pyspark.errors import (
     AnalysisException,
-    PySparkValueError,
     PySparkPicklingError,
+    PySparkValueError,
 )
+from pyspark.resource import ResourceProfile
+from pyspark.serializers import CloudPickleSerializer
+from pyspark.sql.column import Column
+from pyspark.sql.connect.conversion import storage_level_to_proto
+from pyspark.sql.connect.expressions import Expression, SubqueryExpression
+from pyspark.sql.connect.logging import logger
+from pyspark.sql.connect.proto import base_pb2 as spark_dot_connect_dot_base__pb2
+from pyspark.sql.connect.types import UnparsedDataType, pyspark_types_to_proto_types
+from pyspark.sql.types import DataType, StructType
+from pyspark.storagelevel import StorageLevel
 
 if TYPE_CHECKING:
     from pyspark.sql.connect.client import SparkConnectClient
-    from pyspark.sql.connect.udf import UserDefinedFunction
     from pyspark.sql.connect.observation import Observation
     from pyspark.sql.connect.session import SparkSession
+    from pyspark.sql.connect.udf import UserDefinedFunction
 
 
 class LogicalPlan:
@@ -784,8 +782,16 @@ class CachedRemoteRelation(LogicalPlan):
                             request_serializer=request_serializer,
                             response_deserializer=response_deserializer,
                         )
-                        metadata = session.client._builder.metadata()
-                        channel(req, metadata=metadata)  # type: ignore[arg-type]
+                        metadata = session.client._execute_plan_metadata(req.operation_id)
+                        # Bound this blocking call with a client-side deadline. It is issued from a
+                        # finalizer with no other timeout at any layer; without a deadline it can
+                        # block forever if the response is never delivered, which stalls the
+                        # foreachBatch Connect handshake (the Python worker never sends its
+                        # completion signal and the driver JVM blocks on the per-batch read). A
+                        # timeout here is non-fatal: the eviction is best effort and the server
+                        # performs it independently, so on timeout we log and move on.
+                        timeout = session.client._rpc_deadlines.release_relation
+                        channel(req, metadata=metadata, timeout=timeout)  # type: ignore[arg-type]
             except Exception as e:
                 logger.warning(f"RemoveRemoteCachedRelation failed with exception: {e}.")
 
@@ -1447,6 +1453,40 @@ class NearestByJoin(LogicalPlan):
         """
 
 
+class Zip(LogicalPlan):
+    def __init__(self, left: Optional[LogicalPlan], right: LogicalPlan) -> None:
+        super().__init__(left)
+        self.left = cast(LogicalPlan, left)
+        self.right = right
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        plan = self._create_proto_relation()
+        plan.zip.left.CopyFrom(self.left.plan(session))
+        plan.zip.right.CopyFrom(self.right.plan(session))
+        return self._with_relations(plan, session)
+
+    @property
+    def observations(self) -> Dict[str, "Observation"]:
+        return {**super().observations, **self.right.observations}
+
+    def print(self, indent: int = 0) -> str:
+        i = " " * indent
+        o = " " * (indent + LogicalPlan.INDENT)
+        n = indent + LogicalPlan.INDENT * 2
+        return f"{i}<Zip>\n{o}left=\n{self.left.print(n)}\n{o}right=\n{self.right.print(n)}"
+
+    def _repr_html_(self) -> str:
+        return f"""
+        <ul>
+            <li>
+                <b>Zip</b><br />
+                Left: {self.left._repr_html_()}
+                Right: {self.right._repr_html_()}
+            </li>
+        </ul>
+        """
+
+
 class SetOperation(LogicalPlan):
     def __init__(
         self,
@@ -1700,6 +1740,54 @@ class WithColumnsRenamed(LogicalPlan):
                 rename.new_col_name = v
                 plan.with_columns_renamed.renames.append(rename)
         return plan
+
+
+class BinBy(LogicalPlan):
+    """Logical plan for splitting timestamp ranges into fixed-width bins."""
+
+    def __init__(
+        self,
+        child: Optional[LogicalPlan],
+        range_start: Column,
+        range_end: Column,
+        bin_width: Column,
+        distribute_uniform: Sequence[Column],
+        align_to: Optional[Column] = None,
+        bin_start_name: Optional[str] = None,
+        bin_end_name: Optional[str] = None,
+        bin_distribute_ratio_name: Optional[str] = None,
+    ) -> None:
+        columns = [range_start, range_end, bin_width, *distribute_uniform]
+        if align_to is not None:
+            columns.append(align_to)
+        super().__init__(child, self._collect_references(columns))
+        self.range_start = range_start
+        self.range_end = range_end
+        self.bin_width = bin_width
+        self.distribute_uniform = distribute_uniform
+        self.align_to = align_to
+        self.bin_start_name = bin_start_name
+        self.bin_end_name = bin_end_name
+        self.bin_distribute_ratio_name = bin_distribute_ratio_name
+
+    def plan(self, session: "SparkConnectClient") -> proto.Relation:
+        assert self._child is not None
+        plan = self._create_proto_relation()
+        node = plan.bin_by
+        node.input.CopyFrom(self._child.plan(session))
+        node.range_start.CopyFrom(self.range_start.to_plan(session))
+        node.range_end.CopyFrom(self.range_end.to_plan(session))
+        node.bin_width.CopyFrom(self.bin_width.to_plan(session))
+        node.distribute_uniform.extend(col.to_plan(session) for col in self.distribute_uniform)
+        if self.align_to is not None:
+            node.align_to.CopyFrom(self.align_to.to_plan(session))
+        if self.bin_start_name is not None:
+            node.bin_start_name = self.bin_start_name
+        if self.bin_end_name is not None:
+            node.bin_end_name = self.bin_end_name
+        if self.bin_distribute_ratio_name is not None:
+            node.bin_distribute_ratio_name = self.bin_distribute_ratio_name
+        return self._with_relations(plan, session)
 
 
 class Unpivot(LogicalPlan):
@@ -2296,11 +2384,13 @@ class Checkpoint(LogicalPlan):
         local: bool,
         eager: bool,
         storage_level: Optional[StorageLevel] = None,
+        relation_id: Optional[str] = None,
     ) -> None:
         super().__init__(child)
         self._local = local
         self._eager = eager
         self._storage_level = storage_level
+        self._relation_id = relation_id
 
     def command(self, session: "SparkConnectClient") -> proto.Command:
         cmd = proto.Command()
@@ -2312,6 +2402,8 @@ class Checkpoint(LogicalPlan):
         )
         if self._storage_level is not None:
             checkpoint_command.storage_level.CopyFrom(storage_level_to_proto(self._storage_level))
+        if self._relation_id is not None:
+            checkpoint_command.relation_id = self._relation_id
         cmd.checkpoint_command.CopyFrom(checkpoint_command)
         return cmd
 

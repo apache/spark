@@ -101,7 +101,8 @@ private[sql] class SharedState(
    * A relation cache backed by the cache manager.
    */
   private[sql] val relationCache: RelationCache = {
-    (nameParts, resolver) => cacheManager.lookupCachedTable(nameParts, resolver)
+    (catalog, ident, tableId, stateOptions, resolver) =>
+      cacheManager.lookupCachedTable(catalog, ident, tableId, stateOptions, resolver)
   }
 
   /** A global lock for all streaming query lifecycle tracking and management. */

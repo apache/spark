@@ -27,7 +27,7 @@ import org.apache.spark.metrics.source.Source
 import org.apache.spark.resource.ResourceInformation
 import org.apache.spark.scheduler.Task
 import org.apache.spark.shuffle.FetchFailedException
-import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
+import org.apache.spark.util.{AccumulatorV2, PostStatusUpdateListener, TaskCompletionListener, TaskFailureListener, TaskInterruptListener}
 
 
 object TaskContext {
@@ -148,6 +148,23 @@ abstract class TaskContext extends Serializable {
   }
 
   /**
+   * Adds a listener to be executed on task completion before every listener added with
+   * `addTaskCompletionListener`, from any thread and even if that listener was added later, as
+   * long as this listener is added before the task completes. The thread that marks the task
+   * completed runs these listeners first, in reverse order of registration, and only then marks
+   * the task completed (`isCompleted()` becomes true) and runs the completion listeners. While
+   * these listeners run, a completion listener added from another thread is only queued. A
+   * listener added after the task completes, including while the completion listeners run, is
+   * handled like one added with `addTaskCompletionListener` at that point: it runs after the
+   * completion listeners that have already run.
+   *
+   * This is for stopping helper threads that read task resources owned by completion
+   * listeners: the helper thread itself can add such listeners lazily (e.g. when it first
+   * pulls from an upstream iterator), and those would otherwise run first.
+   */
+  private[spark] def addTaskPreCompletionListener(listener: TaskCompletionListener): TaskContext
+
+  /**
    * Adds a listener to be executed on task failure (which includes completion listener failure, if
    * the task body did not already fail). Adding a listener to an already failed task will result in
    * that listener being called immediately.
@@ -194,6 +211,23 @@ abstract class TaskContext extends Serializable {
         f(context, reason)
     })
   }
+
+  /**
+   * Adds a listener to be invoked after the task's status update has been sent to the driver.
+   * This is useful for operations that should only begin after the driver has been notified
+   * of the task's result. For example, push-based shuffle block push can use this to
+   * ensure the driver processes the task result before any push data reaches the merger,
+   * avoiding stale data being merged without detection.
+   *
+   * The callback runs on the same executor thread that sends the status update.
+   */
+  private[spark] def addPostStatusUpdateListener(listener: PostStatusUpdateListener): TaskContext
+
+  /**
+   * Invokes all registered post-status-update listeners. Called by Executor after sending
+   * the task's status update to the driver.
+   */
+  private[spark] def invokePostStatusUpdateListeners(): Unit
 
   /** Runs a task with this context, ensuring failure and completion listeners get triggered. */
   private[spark] def runTaskWithListeners[T](task: Task[T]): T = {
@@ -267,10 +301,21 @@ abstract class TaskContext extends Serializable {
   def getLocalProperty(key: String): String
 
   /**
-   * CPUs allocated to the task.
+   * CPUs allocated to the task, rounded up to a whole number.
+   *
+   * @note when `spark.task.cpus` is fractional (e.g. `0.2`) this rounds up to the next integer and
+   *       so cannot represent the fractional amount; use [[cpuAmount]] for the exact value.
    */
+  @deprecated("use cpuAmount() instead, which supports a fractional spark.task.cpus", "4.3.0")
   @Since("3.3.0")
-  def cpus(): Int
+  def cpus(): Int = cpuAmount().setScale(0, BigDecimal.RoundingMode.CEILING).intValue
+
+  /**
+   * CPUs allocated to the task as an exact, possibly fractional amount, carried as a
+   * [[scala.math.BigDecimal]] (e.g. `BigDecimal("0.2")` when `spark.task.cpus` is `0.2`).
+   */
+  @Since("4.3.0")
+  def cpuAmount(): BigDecimal
 
   /**
    * Resources allocated to the task. The key is the resource name and the value is information

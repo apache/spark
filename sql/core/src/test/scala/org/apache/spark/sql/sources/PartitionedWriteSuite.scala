@@ -17,11 +17,12 @@
 
 package org.apache.spark.sql.sources
 
-import java.io.File
+import java.io.{File, IOException}
 import java.sql.Timestamp
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.hadoop.mapreduce.lib.output.{PathOutputCommitter, PathOutputCommitterFactory}
 
 import org.apache.spark.TestUtils
 import org.apache.spark.internal.Logging
@@ -198,6 +199,54 @@ class PartitionedWriteSuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60366: Dynamic partition overwrite with a committer that is not " +
+      "a FileOutputCommitter") {
+    // Hadoop 3.3.5+ binds `abfs` and `gs` to the manifest committer, which is not a
+    // FileOutputCommitter. Bind it to the local file system to test the same code path.
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+      SQLConf.PartitionOverwriteMode.DYNAMIC.toString,
+      "mapreduce.outputcommitter.factory.scheme.file" ->
+        "org.apache.hadoop.mapreduce.lib.output.committer.manifest.ManifestCommitterFactory") {
+      Seq("json", "orc").foreach { format =>
+        withTempDir { d =>
+          withTable("t") {
+            sql(s"CREATE TABLE t(c1 INT, p1 INT) USING $format PARTITIONED BY (p1) " +
+              s"LOCATION '${d.getAbsolutePath}'")
+            sql("INSERT INTO t VALUES (1, 1), (2, 2)")
+            // Unlike FileOutputCommitter, the manifest committer writes a JSON summary.
+            assert(new File(d, "_SUCCESS").length() > 0)
+
+            sql("INSERT OVERWRITE TABLE t PARTITION(p1) SELECT 3, 1")
+            checkAnswer(spark.table("t"), Seq(Row(3, 1), Row(2, 2)))
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60366: Dynamic partition overwrite keeps the existing partitions if the " +
+      "committer deletes the staged files") {
+    withSQLConf(SQLConf.PARTITION_OVERWRITE_MODE.key ->
+      SQLConf.PartitionOverwriteMode.DYNAMIC.toString) {
+      withTempDir { d =>
+        withTable("t") {
+          sql(s"CREATE TABLE t(c1 INT, p1 INT) USING json PARTITIONED BY (p1) " +
+            s"LOCATION '${d.getAbsolutePath}'")
+          sql("INSERT INTO t VALUES (1, 1), (2, 2)")
+
+          withSQLConf("mapreduce.outputcommitter.factory.scheme.file" ->
+              classOf[OutputDeletingCommitterFactory].getName) {
+            val e = intercept[IOException] {
+              sql("INSERT OVERWRITE TABLE t PARTITION(p1) SELECT 3, 1")
+            }
+            assert(e.getMessage.contains("No destination partition was changed"))
+          }
+          checkAnswer(spark.table("t"), Seq(Row(1, 1), Row(2, 2)))
+        }
+      }
+    }
+  }
+
   test("SPARK-37231, SPARK-37240: Dynamic writes/reads of ANSI interval partitions") {
     Seq("parquet", "json").foreach { format =>
       Seq(
@@ -232,7 +281,10 @@ class PartitionedWriteSuite extends SharedSparkSession {
       "00:01:02.999999" -> TimeType(6),
       "12:00:00" -> TimeType(1),
       "23:59:59.000001" -> TimeType(),
-      "23:59:59.999999" -> TimeType(6)
+      "23:59:59.999999" -> TimeType(6),
+      "00:00:00.0000019" -> TimeType(7),
+      "12:34:56.12345678" -> TimeType(8),
+      "23:59:59.999999999" -> TimeType(9)
     ).foreach { case (timeStr, timeType) =>
       withTempPath { f =>
         val df = sql(s"select 0 AS id, cast('$timeStr' as ${timeType.sql}) AS tt")
@@ -248,6 +300,69 @@ class PartitionedWriteSuite extends SharedSparkSession {
           .add("id", IntegerType)
           .add("tt", timeType)
         checkAnswer(spark.read.schema(schema).format("parquet").load(f.getAbsolutePath), df)
+      }
+    }
+  }
+
+  test("SPARK-57813: Dynamic writes/reads of nanosecond TIMESTAMP_NTZ partitions") {
+    Seq(
+      "2019-01-01 12:00:00.0000019" -> TimestampNTZNanosType(7),
+      "2019-01-01 12:34:56.12345678" -> TimestampNTZNanosType(8),
+      "2019-01-01 23:59:59.999999999" -> TimestampNTZNanosType(9)
+    ).foreach { case (tsStr, tsType) =>
+      withTempPath { f =>
+        val df = sql(s"select 0 AS id, cast('$tsStr' as ${tsType.sql}) AS tt")
+        assert(df.schema("tt").dataType === tsType)
+        df.write
+          .partitionBy("tt")
+          .format("parquet")
+          .save(f.getAbsolutePath)
+        val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+        assert(files.length == 1)
+        checkPartitionValues(files.head, tsStr)
+        val schema = new StructType()
+          .add("id", IntegerType)
+          .add("tt", tsType)
+        val read = spark.read.schema(schema).format("parquet").load(f.getAbsolutePath)
+        checkAnswer(read, df)
+        // pruning on the nanos partition value: the matching predicate keeps the row
+        checkAnswer(read.where(s"tt = cast('$tsStr' as ${tsType.sql})"), df)
+        // and a deliberately non-matching predicate excludes the partition entirely
+        checkAnswer(
+          read.where(s"tt = cast('2020-02-02 02:02:02' as ${tsType.sql})"), Seq.empty[Row])
+      }
+    }
+  }
+
+  test("SPARK-57813: Dynamic writes/reads of nanosecond TIMESTAMP_LTZ partitions") {
+    // The LTZ write directory string depends on the session zone, so pin it for determinism.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "UTC") {
+      Seq(
+        "2019-01-01 12:00:00.0000019" -> TimestampLTZNanosType(7),
+        "2019-01-01 12:34:56.12345678" -> TimestampLTZNanosType(8),
+        "2019-01-01 23:59:59.999999999" -> TimestampLTZNanosType(9)
+      ).foreach { case (tsStr, tsType) =>
+        withTempPath { f =>
+          val df = sql(s"select 0 AS id, cast('$tsStr' as ${tsType.sql}) AS tt")
+          assert(df.schema("tt").dataType === tsType)
+          df.write
+            .partitionBy("tt")
+            .format("parquet")
+            .save(f.getAbsolutePath)
+          val files = TestUtils.recursiveList(f).filter(_.getAbsolutePath.endsWith("parquet"))
+          assert(files.length == 1)
+          checkPartitionValues(files.head, tsStr)
+          val schema = new StructType()
+            .add("id", IntegerType)
+            .add("tt", tsType)
+          val read = spark.read.schema(schema).format("parquet").load(f.getAbsolutePath)
+          checkAnswer(read, df)
+          // pruning on the nanos partition value: the matching predicate keeps the row
+          checkAnswer(read.where(s"tt = cast('$tsStr' as ${tsType.sql})"), df)
+          // and a deliberately non-matching predicate excludes the partition entirely
+          checkAnswer(
+            read.where(s"tt = cast('2020-02-02 02:02:02' as ${tsType.sql})"), Seq.empty[Row])
+        }
       }
     }
   }
@@ -270,5 +385,28 @@ private class PartitionFileExistCommitProtocol(
     Utils.createDirectory(stagingPartDir)
     val conflictTaskFile = new File(stagingPartDir, s"part-00000-$jobId.c000.snappy.parquet")
     conflictTaskFile.createNewFile()
+  }
+}
+
+/**
+ * Creates committers that delete their output directory on job commit, like the S3A directory
+ * staging committer in the `replace` conflict mode.
+ */
+private class OutputDeletingCommitterFactory extends PathOutputCommitterFactory {
+  override def createOutputCommitter(
+      outputPath: Path,
+      context: TaskAttemptContext): PathOutputCommitter = {
+    new PathOutputCommitter(outputPath, context) {
+      override def getOutputPath: Path = outputPath
+      override def getWorkPath: Path = outputPath
+      override def setupJob(jobContext: JobContext): Unit = {}
+      override def setupTask(taskContext: TaskAttemptContext): Unit = {}
+      override def needsTaskCommit(taskContext: TaskAttemptContext): Boolean = false
+      override def commitTask(taskContext: TaskAttemptContext): Unit = {}
+      override def abortTask(taskContext: TaskAttemptContext): Unit = {}
+      override def commitJob(jobContext: JobContext): Unit = {
+        outputPath.getFileSystem(jobContext.getConfiguration).delete(outputPath, true)
+      }
+    }
   }
 }

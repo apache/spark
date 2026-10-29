@@ -73,6 +73,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTempViews" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveTranspose" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnpivot" ::
+      "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUnresolvedInsert" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveUpCast" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowFrame" ::
       "org.apache.spark.sql.catalyst.analysis.Analyzer$ResolveWindowOrder" ::
@@ -100,6 +101,8 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveRowLevelCommandAssignments" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveCursors" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveFetchCursor" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveBinBy" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveAsOfJoin" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveSetVariable" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableConstraints" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveTableSpec" ::
@@ -108,6 +111,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.analysis.ResolveUnresolvedHaving" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveUpdateEventTimeWatermarkColumn" ::
       "org.apache.spark.sql.catalyst.analysis.ResolveWindowTime" ::
+      "org.apache.spark.sql.catalyst.analysis.ResolveZip" ::
       "org.apache.spark.sql.catalyst.analysis.SessionWindowing" ::
       "org.apache.spark.sql.catalyst.analysis.SubstituteUnresolvedOrdinals" ::
       "org.apache.spark.sql.catalyst.analysis.TimeWindowing" ::
@@ -119,16 +123,19 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.expressions.ValidateAndStripPipeExpressions" ::
       // Catalyst Optimizer rules
       "org.apache.spark.sql.catalyst.optimizer.BooleanSimplification" ::
+      "org.apache.spark.sql.catalyst.optimizer.CollapseGroupedSumOfCount" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseProject" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseRepartition" ::
       "org.apache.spark.sql.catalyst.optimizer.CollapseWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.ColumnPruning" ::
+      "org.apache.spark.sql.catalyst.optimizer.CombineApproximatePercentiles" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineConcats" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineTypedFilters" ::
       "org.apache.spark.sql.catalyst.optimizer.CombineUnions" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantFolding" ::
       "org.apache.spark.sql.catalyst.optimizer.ConstantPropagation" ::
+      "org.apache.spark.sql.catalyst.optimizer.ConvertToCatalyst" ::
       "org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.CostBasedJoinReorder" ::
       "org.apache.spark.sql.catalyst.optimizer.DecimalAggregates" ::
@@ -158,6 +165,7 @@ object RuleIdCollection {
       "org.apache.spark.sql.catalyst.optimizer.Optimizer$OptimizeSubqueries" ::
       "org.apache.spark.sql.catalyst.optimizer.PropagateEmptyRelation" ::
       "org.apache.spark.sql.catalyst.optimizer.PruneFilters" ::
+      "org.apache.spark.sql.catalyst.optimizer.PullUpProjectAliasThroughWindow" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownJoinThroughUnion" ::
       "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin" ::
       "org.apache.spark.sql.catalyst.optimizer.PushExtraPredicateThroughJoin" ::

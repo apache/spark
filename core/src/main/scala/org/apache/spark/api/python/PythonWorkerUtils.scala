@@ -30,6 +30,7 @@ import org.apache.spark.{SparkEnv, SparkFiles}
 import org.apache.spark.api.python.PythonFunction.PythonAccumulator
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.resource.CpuAmount
 
 private[spark] object PythonWorkerUtils extends Logging {
 
@@ -83,7 +84,12 @@ private[spark] object PythonWorkerUtils extends Logging {
         "partitionId" -> context.partitionId(),
         "attemptNumber" -> context.attemptNumber(),
         "taskAttemptId" -> context.taskAttemptId(),
-        "cpus" -> context.cpus(),
+        // The Python worker exposes cpus as an int; round a fractional cpus up to a whole number
+        // (matching the deprecated TaskContext.cpus()).
+        "cpus" -> context.cpuAmount().setScale(0, BigDecimal.RoundingMode.CEILING).intValue,
+        // The exact (possibly fractional) cpus amount as a plain decimal string, read by the
+        // Python TaskContext.cpuAmount().
+        "cpuAmount" -> CpuAmount.toDisplayString(context.cpuAmount()),
         "resources" -> context.resources().map { case (k, v) =>
           k -> Map(
             "name" -> v.name,

@@ -19,6 +19,8 @@ package org.apache.spark.sql.execution.vectorized;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -33,6 +35,8 @@ import org.apache.spark.sql.vectorized.ColumnarArray;
 import org.apache.spark.sql.vectorized.ColumnarMap;
 import org.apache.spark.unsafe.array.ByteArrayMethods;
 import org.apache.spark.unsafe.types.CalendarInterval;
+import org.apache.spark.unsafe.types.BinaryView;
+import org.apache.spark.unsafe.types.TimestampNanosVal;
 import org.apache.spark.unsafe.types.UTF8String;
 
 /**
@@ -98,6 +102,13 @@ public abstract class WritableColumnVector extends ColumnVector {
 
   @Override
   public void close() {
+    if (reservedColumns != null) {
+      for (WritableColumnVector column : reservedColumns) {
+        column.close();
+      }
+      reservedColumns.clear();
+      reservedColumns = null;
+    }
     if (childColumns != null) {
       for (int i = 0; i < childColumns.length; i++) {
         childColumns[i].close();
@@ -117,6 +128,12 @@ public abstract class WritableColumnVector extends ColumnVector {
   public void closeIfFreeable() {
     // no-op
   }
+
+  /**
+   * Returns true if this vector's own data buffers are released; vectors it owns are not checked.
+   */
+  @VisibleForTesting
+  public abstract boolean isFree();
 
   public void reserveAdditional(int additionalCapacity) {
     reserve(elementsAppended + additionalCapacity);
@@ -209,7 +226,7 @@ public abstract class WritableColumnVector extends ColumnVector {
    */
   public WritableColumnVector reserveDictionaryIds(int capacity) {
     if (dictionaryIds == null) {
-      dictionaryIds = reserveNewColumn(capacity, DataTypes.IntegerType);
+      dictionaryIds = reserveNewInternalColumn(capacity, DataTypes.IntegerType);
     } else {
       dictionaryIds.reset();
       dictionaryIds.reserve(capacity);
@@ -493,6 +510,16 @@ public abstract class WritableColumnVector extends ColumnVector {
     getChild(2).putLong(rowId, value.microseconds);
   }
 
+  public void putTimestampNTZNanos(int rowId, TimestampNanosVal value) {
+    getChild(0).putLong(rowId, value.epochMicros);
+    getChild(1).putShort(rowId, value.nanosWithinMicro);
+  }
+
+  public void putTimestampLTZNanos(int rowId, TimestampNanosVal value) {
+    getChild(0).putLong(rowId, value.epochMicros);
+    getChild(1).putShort(rowId, value.nanosWithinMicro);
+  }
+
   @Override
   public UTF8String getUTF8String(int rowId) {
     if (isNullAt(rowId)) return null;
@@ -520,6 +547,24 @@ public abstract class WritableColumnVector extends ColumnVector {
       return dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
     }
   }
+
+  @Override
+  public BinaryView getBinaryView(int rowId) {
+    if (isNullAt(rowId)) return null;
+    if (dictionary == null) {
+      return arrayData().getBytesAsBinaryView(getArrayOffset(rowId), getArrayLength(rowId));
+    } else {
+      byte[] bytes = dictionary.decodeToBinary(dictionaryIds.getDictId(rowId));
+      return BinaryView.fromBytes(bytes);
+    }
+  }
+
+  /**
+   * Gets the values of bytes from [rowId, rowId + count), as a BinaryView.
+   * This method is similar to {@link ColumnVector#getBytes(int, int)}, but can save data copy as
+   * BinaryView is used as a pointer.
+   */
+  protected abstract BinaryView getBytesAsBinaryView(int rowId, int count);
 
   /**
    * Gets the values of bytes from [rowId, rowId + count), as a ByteBuffer.
@@ -751,7 +796,9 @@ public abstract class WritableColumnVector extends ColumnVector {
       putNull(elementsAppended);
       elementsAppended++;
       for (WritableColumnVector c: childColumns) {
-        if (c.type instanceof StructType || c.type instanceof VariantType) {
+        if (c.type instanceof StructType || c.type instanceof VariantType
+            || c.type instanceof CalendarIntervalType
+            || c.type instanceof AnyTimestampNanoType) {
           c.appendStruct(true);
         } else {
           c.appendNull();
@@ -1001,9 +1048,26 @@ public abstract class WritableColumnVector extends ColumnVector {
   protected WritableColumnVector[] childColumns;
 
   /**
-   * Reserve a new column.
+   * Publicly reserved columns.
    */
-  public abstract WritableColumnVector reserveNewColumn(int capacity, DataType type);
+  private List<WritableColumnVector> reservedColumns;
+
+  /**
+   * Reserve a new column owned by this column vector.
+   */
+  public WritableColumnVector reserveNewColumn(int capacity, DataType type) {
+    WritableColumnVector column = reserveNewInternalColumn(capacity, type);
+    if (reservedColumns == null) {
+      reservedColumns = new ArrayList<>(1);
+    }
+    reservedColumns.add(column);
+    return column;
+  }
+
+  /**
+   * Reserve a new column for internal usage.
+   */
+  protected abstract WritableColumnVector reserveNewInternalColumn(int capacity, DataType type);
 
   protected boolean isArray() {
     return type instanceof ArrayType || type instanceof BinaryType || type instanceof StringType ||
@@ -1040,26 +1104,31 @@ public abstract class WritableColumnVector extends ColumnVector {
         childCapacity *= DEFAULT_ARRAY_LENGTH;
       }
       this.childColumns = new WritableColumnVector[1];
-      this.childColumns[0] = reserveNewColumn(childCapacity, childType);
+      this.childColumns[0] = reserveNewInternalColumn(childCapacity, childType);
     } else if (type instanceof StructType st) {
       this.childColumns = new WritableColumnVector[st.fields().length];
       for (int i = 0; i < childColumns.length; ++i) {
-        this.childColumns[i] = reserveNewColumn(capacity, st.fields()[i].dataType());
+        this.childColumns[i] = reserveNewInternalColumn(capacity, st.fields()[i].dataType());
       }
     } else if (type instanceof MapType mapType) {
       this.childColumns = new WritableColumnVector[2];
-      this.childColumns[0] = reserveNewColumn(capacity, mapType.keyType());
-      this.childColumns[1] = reserveNewColumn(capacity, mapType.valueType());
+      this.childColumns[0] = reserveNewInternalColumn(capacity, mapType.keyType());
+      this.childColumns[1] = reserveNewInternalColumn(capacity, mapType.valueType());
     } else if (type instanceof CalendarIntervalType) {
       // Three columns. Months as int. Days as Int. Microseconds as Long.
       this.childColumns = new WritableColumnVector[3];
-      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.IntegerType);
-      this.childColumns[2] = reserveNewColumn(capacity, DataTypes.LongType);
+      this.childColumns[0] = reserveNewInternalColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[1] = reserveNewInternalColumn(capacity, DataTypes.IntegerType);
+      this.childColumns[2] = reserveNewInternalColumn(capacity, DataTypes.LongType);
+    } else if (type instanceof AnyTimestampNanoType) {
+      // Two columns. EpochMicros as Long. NanosWithinMicro as Short.
+      this.childColumns = new WritableColumnVector[2];
+      this.childColumns[0] = reserveNewInternalColumn(capacity, DataTypes.LongType);
+      this.childColumns[1] = reserveNewInternalColumn(capacity, DataTypes.ShortType);
     } else if (type instanceof VariantType) {
       this.childColumns = new WritableColumnVector[2];
-      this.childColumns[0] = reserveNewColumn(capacity, DataTypes.BinaryType);
-      this.childColumns[1] = reserveNewColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[0] = reserveNewInternalColumn(capacity, DataTypes.BinaryType);
+      this.childColumns[1] = reserveNewInternalColumn(capacity, DataTypes.BinaryType);
     } else {
       this.childColumns = null;
     }

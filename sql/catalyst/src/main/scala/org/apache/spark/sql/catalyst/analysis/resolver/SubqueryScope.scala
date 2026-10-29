@@ -70,12 +70,11 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  *        WHERE t3.b > t2.b AND t3.c > t1.c
  *   ) AND t2.b > t1.b
  * }}}
- *   We get the [[outerScopeLevel]] map for the outer references during attributes resolution
+ *   We record the outer scope level for the outer references during attributes resolution
  *   which indicates how many subquery levels we need to go up to find the attribute reference.
- *   We need the outerScopeLevel map when resolving the subquery expressions, where we collect
- *   the outer references and wrap the ones cannot be resolved in the current subquery scope or
- *   its parent scopes with [[OuterScopeReference]]. More details can be found in
- *   `SubqueryExpressionResolver.processOuterReferences`.
+ *   Only one level of correlation is currently supported, so the query above is not supported
+ *   and the subquery expression's `outerAttrs` are simply the outer references collected from
+ *   the resolved subquery plan.
  *
  * Notes:
  *  - Spark only supports outer aggregates in the subqueries inside `HAVING`;
@@ -93,9 +92,13 @@ import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, LogicalPl
  * @param aggregateExpressionsExtractor [[GroupingAndAggregateExpressionsExtractor]] object defined
  *   in case the outer parent operator is a partially resolved HAVING. Used to extract the
  *   aggregate expressions from the outer [[Aggregate]] operator.
+ * @param parentOperator the operator hosting this subquery expression. Used by
+ *   [[NameScopeStack.expandStarFromOuterScope]] to gate star expansion from outer scopes to
+ *   `Project`, `Aggregate`, or `CollectMetrics` operators, matching the fixed-point behavior.
  */
 class SubqueryScope(
     val aggregateExpressionsExtractor: Option[GroupingAndAggregateExpressionsExtractor] = None,
+    val parentOperator: Option[LogicalPlan] = None,
     private val outerOperatorResolutionContext: OperatorResolutionContext =
       new OperatorResolutionContext,
     private val outerReferenceScopeLevels: HashMap[ExprId, Int] = new HashMap[ExprId, Int]) {
@@ -167,6 +170,7 @@ class SubqueryRegistry {
     stack.push(
       new SubqueryScope(
         aggregateExpressionsExtractor = groupingAndAggregateExpressionsExtractor,
+        parentOperator = Some(parentOperator),
         outerOperatorResolutionContext = outerOperatorResolutionContext
       )
     )

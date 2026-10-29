@@ -129,8 +129,38 @@ package object client {
           }
         })
 
+    // Hive 4.2 ships with datanucleus-api-jdo:6.0.3 (down from 6.0.5), datanucleus-core:6.0.10
+    // (down from 6.0.11), and javax.jdo:3.2.0-release (down from 3.2.1) relative to Hive 4.1.
+    // These reflect the actual Hive 4.2 POM and must not be "upgraded" to v4_1 values.
+    // Derby was bumped to 10.17.1.0 (from 10.14.1.0 in v4_1) for Java 21 compatibility.
+    case object v4_2 extends HiveVersion("4.2.0",
+      extraDeps =
+        "org.antlr:antlr4-runtime:4.9.3" ::
+        "org.apache.derby:derby:10.17.1.0" ::
+        "org.apache.hadoop:hadoop-hdfs:3.4.1" ::
+        "org.datanucleus:datanucleus-api-jdo:6.0.3" ::
+        "org.datanucleus:datanucleus-core:6.0.10" ::
+        "org.datanucleus:datanucleus-rdbms:6.0.10" ::
+        "org.datanucleus:javax.jdo:3.2.0-release" ::
+        "org.springframework:spring-core:5.3.39" ::
+        "org.springframework:spring-jdbc:5.3.39" :: Nil,
+      exclusions =
+        "org.apache.curator:*" ::
+        "org.apache.hive:hive-service-rpc" ::
+        "org.apache.zookeeper:zookeeper" :: Nil ++
+        {
+          if (!Utils.isTesting) {
+            // HiveClientImpl#runHive which is used for testing refers
+            // `org.apache.hadoop.hive.ql.DriverContext` indirectly and `DriverContext` refers
+            // Tez APIs.
+            Seq("org.apache.tez:tez-api")
+          } else {
+            Seq.empty
+          }
+        })
+
     val allSupportedHiveVersions: Set[HiveVersion] =
-      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1, v4_0, v4_1)
+      Set(v2_0, v2_1, v2_2, v2_3, v3_0, v3_1, v4_0, v4_1, v4_2)
   }
   // scalastyle:on
 

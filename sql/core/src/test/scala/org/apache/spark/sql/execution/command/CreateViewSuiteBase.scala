@@ -40,7 +40,7 @@ trait CreateViewSuiteBase extends QueryTest with DDLCommandTestUtils {
 
   /**
    * Seed a non-view table at `qualified` (full `catalog.ns.name`) and run `body`. Same SQL
-   * for v1 and v2 -- `InMemoryTableViewCatalog.createTable` accepts the parquet TableInfo
+   * for v1 and v2 -- `InMemoryRelationCatalog.createTable` accepts the parquet TableInfo
    * the same way the session catalog does, so both legs share this implementation.
    */
   protected final def withSeededTable(qualified: String)(body: => Unit): Unit = {

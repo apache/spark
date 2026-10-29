@@ -151,6 +151,43 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
     }
   }
 
+  /**
+   * The conjuncts of the scan's filter the file format can evaluate at the storage layer, to skip
+   * reading the other columns of the rows they reject. They are taken from `normalizedFilters`, so
+   * they carry the relation's column names, as the pushed data filters do. They stay in the
+   * post-scan `Filter` as well, so a reader may give them up anywhere, see
+   * [[FileFormat.buildReaderWithStorageFilters]].
+   *
+   * Per scan, failing any offers nothing:
+   *  - [[FileFormat.supportsStorageFilterPushdown]] holds;
+   *  - no column of the relation is named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]],
+   *    compared case-insensitively;
+   *  - [[FileFormat.supportBatch]] holds for `partitionSchema ++ readerDataSchema`, since late
+   *    materialization needs a batch read. The checked column is left out of it, since every
+   *    built-in batch read takes a boolean.
+   *
+   * Per conjunct, see [[StorageFilterPlanning.offeredConjuncts]]. The key candidates are the
+   * projected data columns, and [[FileFormat.supportsStorageFilter]] must accept the conjunct.
+   */
+  private def storageFiltersFor(
+      normalizedFilters: Seq[Expression],
+      fsRelation: HadoopFsRelation,
+      readDataColumns: Seq[Attribute],
+      readerDataSchema: StructType): Seq[Expression] = {
+    val sparkSession = fsRelation.sparkSession
+    if (!fsRelation.fileFormat.supportsStorageFilterPushdown(sparkSession)) return Nil
+    if (fsRelation.schema.fieldNames.exists(
+        _.equalsIgnoreCase(FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME))) {
+      return Nil
+    }
+    val resultSchema = StructType(fsRelation.partitionSchema.fields ++ readerDataSchema.fields)
+    if (!fsRelation.fileFormat.supportBatch(sparkSession, resultSchema)) return Nil
+
+    val dataAttrs = AttributeSet(readDataColumns)
+    StorageFilterPlanning.offeredConjuncts(
+      normalizedFilters, dataAttrs, dataAttrs, fsRelation.fileFormat.supportsStorageFilter)
+  }
+
   def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case ScanOperation(projects, stayUpFilters, filters,
       l @ LogicalRelationWithTable(fsRelation: HadoopFsRelation, table)) =>
@@ -204,7 +241,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
 
       val supportNestedPredicatePushdown =
         DataSourceUtils.supportNestedPredicatePushdown(fsRelation)
-      val pushedFilters = dataFilters
+      // Expand struct equality predicates into field-level predicates for pushdown.
+      // The original struct predicates remain in afterScanFilters for correctness.
+      val expandedDataFilters = DataSourceStrategy.expandStructPredicatesForPushdown(
+        dataFilters, fsRelation.sparkSession.sessionState.conf)
+      val pushedFilters = expandedDataFilters
         .flatMap(DataSourceStrategy.translateFilter(_, supportNestedPredicatePushdown))
       logInfo(log"Pushed Filters: ${MDC(PUSHED_FILTERS, pushedFilters.mkString(","))}")
 
@@ -289,18 +330,30 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         }
       }
 
-      val outputDataSchema = (readDataColumns ++ generatedMetadataColumns).toStructType
+      // Offered conjuncts become `storageFilters` on the scan and stay in the post-scan Filter too.
+      // This runs here because eligibility depends on the data columns the reader reads.
+      val readerDataColumns = readDataColumns ++ generatedMetadataColumns
+      val storageFilters = storageFiltersFor(
+        normalizedFilters, fsRelation, readDataColumns, readerDataColumns.toStructType)
+      // The column the reader marks the rows it checked in, see
+      // `FileFormat.buildReaderWithStorageFilters`. `storageFiltersFor` offers filters only to a
+      // batch read, so `checkedColumn` adds the column only where
+      // `FileSourceScanExec.supportsColumnar` still holds with it.
+      val storageFilterCheckedColumn = StorageFilterPlanning.checkedColumn(
+        fsRelation.sparkSession.sessionState.conf, storageFilters,
+        readerDataColumns ++ partitionColumns ++ constantMetadataColumns)
 
       // The output rows will be produced during file scan operation in three steps:
-      //  (1) File format reader populates a `Row` with `readDataColumns` and
-      //      `fileFormatReaderGeneratedMetadataColumns`
+      //  (1) File format reader populates a `Row` with `readDataColumns`,
+      //      `fileFormatReaderGeneratedMetadataColumns` and `storageFilterCheckedColumn`
       //  (2) Then, a row containing `partitionColumns` is joined at the end.
       //  (3) Finally, a row containing `fileConstantMetadataColumns` is also joined at the end.
       // By placing `fileFormatReaderGeneratedMetadataColumns` before `partitionColumns` and
       // `fileConstantMetadataColumns` in the `outputAttributes` we make these row operations
       // simpler and more efficient.
-      val outputAttributes = readDataColumns ++ generatedMetadataColumns ++
-        partitionColumns ++ constantMetadataColumns
+      val outputDataColumns = readerDataColumns ++ storageFilterCheckedColumn
+      val outputDataSchema = outputDataColumns.toStructType
+      val outputAttributes = outputDataColumns ++ partitionColumns ++ constantMetadataColumns
 
       // Rebind metadata attribute references in filters after the metadata attribute struct has
       // been flattened. Only data filters can contain metadata references. After the rebinding
@@ -332,8 +385,11 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
           partitionKeyFilters.toSeq,
           bucketSet,
           None,
-          rebindFileSourceMetadataAttributesInFilters(dataFilters),
-          table.map(_.identifier))
+          rebindFileSourceMetadataAttributesInFilters(expandedDataFilters),
+          table.map(_.identifier),
+          markedForSingleTaskExecution =
+            l.getTagValue(MarkSingleTaskExecution.markTag).getOrElse(false),
+          storageFilters = storageFilters)
 
       // extra Project node: wrap flat metadata columns to a metadata struct
       val withMetadataProjections = metadataStructOpt.map { metadataStruct =>
@@ -348,12 +404,18 @@ object FileSourceStrategy extends Strategy with PredicateHelper with Logging {
         val metadataAlias =
           Alias(KnownNotNull(CreateStruct(structColumns.toImmutableArraySeq)),
             FileFormat.METADATA_NAME)(exprId = metadataStruct.exprId)
+        // Every column of the scan but the flattened metadata ones, which the struct replaces.
+        val flattenedMetadata = AttributeSet(generatedMetadataColumns ++ constantMetadataColumns)
         execution.ProjectExec(
-          readDataColumns ++ partitionColumns :+ metadataAlias, scan)
+          outputAttributes.filterNot(flattenedMetadata.contains) :+ metadataAlias, scan)
       }.getOrElse(scan)
 
+      // The offered conjuncts are skipped on the rows the reader marks as checked. They are matched
+      // by `ExpressionSet`, since `storageFilters` carry the relation's column names.
+      val postScanFilters = StorageFilterPlanning.skipCheckedRows(
+        afterScanFilters.toSeq, storageFilters, storageFilterCheckedColumn)
       // bottom-most filters are put in the left of the list.
-      val finalFilters = afterScanFilters.toSeq.reduceOption(expressions.And).toSeq ++ stayUpFilters
+      val finalFilters = postScanFilters.reduceOption(expressions.And).toSeq ++ stayUpFilters
       val withFilter = finalFilters.foldLeft(withMetadataProjections)((plan, cond) => {
         execution.FilterExec(cond, plan)
       })

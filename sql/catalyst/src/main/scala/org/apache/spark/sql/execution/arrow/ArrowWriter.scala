@@ -23,12 +23,13 @@ import org.apache.arrow.vector._
 import org.apache.arrow.vector.complex._
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.SpecializedGetters
+import org.apache.spark.sql.catalyst.expressions.{GenericInternalRow, SpecializedGetters}
 import org.apache.spark.sql.catalyst.types.ops.TypeOps
-import org.apache.spark.sql.catalyst.util.STUtils
-import org.apache.spark.sql.errors.ExecutionErrors
+import org.apache.spark.sql.catalyst.util.{DateTimeUtils, STUtils}
+import org.apache.spark.sql.errors.{ExecutionErrors, QueryExecutionErrors}
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.unsafe.types.TimestampNanosVal
 
 object ArrowWriter {
 
@@ -49,6 +50,23 @@ object ArrowWriter {
       createFieldWriter(vector)
     }
     new ArrowWriter(root, children.toArray)
+  }
+
+  /**
+   * Packs a nanosecond timestamp into Arrow `timestamp[ns]` epoch-nanoseconds, raising
+   * `DATETIME_OVERFLOW` outside the supported range. Unlike Parquet and Avro, the int64 minimum is
+   * out of range: pandas/numpy reserve it for `NaT`, so a non-null value would read back as null.
+   */
+  private[arrow] def timestampNanosToArrowEpochNanos(v: TimestampNanosVal, isNtz: Boolean): Long = {
+    def overflow = QueryExecutionErrors.timestampNanosEpochNanosOverflowError(
+      v, isNtz, sink = "Arrow INT64", minInstant = "1677-09-21T00:12:43.145224193Z")
+    val nanos = try {
+      DateTimeUtils.timestampNanosToEpochNanos(v)
+    } catch {
+      case _: ArithmeticException => throw overflow
+    }
+    if (nanos == Long.MinValue) throw overflow
+    nanos
   }
 
   private[sql] def createFieldWriter(vector: ValueVector): ArrowFieldWriter = {
@@ -77,7 +95,6 @@ object ArrowWriter {
       case (DateType, vector: DateDayVector) => new DateWriter(vector)
       case (TimestampType, vector: TimeStampMicroTZVector) => new TimestampWriter(vector)
       case (TimestampNTZType, vector: TimeStampMicroVector) => new TimestampNTZWriter(vector)
-      case (_: TimeType, vector: TimeNanoVector) => new TimeWriter(vector)
       case (ArrayType(_, _), vector: ListVector) =>
         val elementVector = createFieldWriter(vector.getDataVector())
         new ArrayWriter(vector, elementVector)
@@ -96,6 +113,26 @@ object ArrowWriter {
       case (_: DayTimeIntervalType, vector: DurationVector) => new DurationWriter(vector)
       case (CalendarIntervalType, vector: IntervalMonthDayNanoVector) =>
         new IntervalMonthDayNanoWriter(vector)
+      // Lossless struct representation of CalendarInterval (ArrowUtils.toArrowField with
+      // losslessInternalTypes = true).
+      case (CalendarIntervalType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new CalendarIntervalStructWriter(vector, children.toArray)
+      // Lossless struct representation of nanosecond timestamps (ArrowUtils.toArrowField with
+      // losslessInternalTypes = true). The native TimeStampNano(TZ)Vector writers are created by
+      // the TypeOps hook; only the struct-backed shape reaches this default matching.
+      case (_: TimestampNTZNanosType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new TimestampNTZNanosStructWriter(vector, children.toArray)
+      case (_: TimestampLTZNanosType, vector: StructVector) =>
+        val children = (0 until vector.size()).map { ordinal =>
+          createFieldWriter(vector.getChildByOrdinal(ordinal))
+        }
+        new TimestampLTZNanosStructWriter(vector, children.toArray)
       case (VariantType, vector: StructVector) =>
         val children = (0 until vector.size()).map { ordinal =>
           createFieldWriter(vector.getChildByOrdinal(ordinal))
@@ -111,6 +148,12 @@ object ArrowWriter {
           createFieldWriter(vector.getChildByOrdinal(ordinal))
         }
         new GeographyWriter(dt, vector, children.toArray)
+      // The Arrow view types are readable through ArrowColumnVector but have no field writers.
+      // Their Spark types resolve to the non-view vector cases above, so without this case they
+      // would fall through to UNSUPPORTED_DATATYPE naming a fully supported Spark type; report
+      // the offending Arrow type instead.
+      case (_, vector @ (_: ViewVarCharVector | _: ViewVarBinaryVector | _: ListViewVector)) =>
+        throw ExecutionErrors.unsupportedArrowTypeError(vector.getField.getType)
       case (dt, _) =>
         throw ExecutionErrors.unsupportedDataTypeError(dt)
     }
@@ -391,6 +434,32 @@ private[sql] class TimeWriter(
   }
 }
 
+private[sql] class TimestampNTZNanosWriter(
+    val valueVector: TimeStampNanoVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, ArrowWriter.timestampNanosToArrowEpochNanos(
+      input.getTimestampNTZNanos(ordinal), isNtz = true))
+  }
+}
+
+private[sql] class TimestampLTZNanosWriter(
+    val valueVector: TimeStampNanoTZVector) extends ArrowFieldWriter {
+
+  override def setNull(): Unit = {
+    valueVector.setNull(count)
+  }
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setSafe(count, ArrowWriter.timestampNanosToArrowEpochNanos(
+      input.getTimestampLTZNanos(ordinal), isNtz = false))
+  }
+}
+
 private[arrow] class ArrayWriter(
     val valueVector: ListVector,
     val elementWriter: ArrowFieldWriter) extends ArrowFieldWriter {
@@ -473,7 +542,7 @@ private[arrow] class GeographyWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeog(input.getGeography(ordinal), dt)
+    val geom = STUtils.deserializeGeog(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 
@@ -491,13 +560,81 @@ private[arrow] class GeometryWriter(
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     valueVector.setIndexDefined(count)
 
-    val geom = STUtils.deserializeGeom(input.getGeometry(ordinal), dt)
+    val geom = STUtils.deserializeGeom(input.getBinaryView(ordinal), dt)
     val bytes = geom.getBytes
     val srid = geom.getSrid
 
     val row = InternalRow(srid, bytes)
     children(0).write(row, 0)
     children(1).write(row, 1)
+  }
+}
+
+/**
+ * Writes a nanosecond timestamp into its lossless Arrow struct representation
+ * (epochMicros: int64, nanosWithinMicro: int16), built by `ArrowUtils.toArrowField` with
+ * `losslessInternalTypes = true`. The two components of TimestampNanosVal are stored as-is with
+ * no unit conversion, so unlike the Timestamp(NANOSECOND) writers there is no overflow: the full
+ * domain of the Spark types (years 0001-9999) round-trips.
+ */
+private[arrow] abstract class TimestampNanosStructWriter(
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+
+  protected def getTimestampNanos(input: SpecializedGetters, ordinal: Int): TimestampNanosVal
+
+  // Reused across rows; this writer is single-threaded like the vector it wraps.
+  private val row = new GenericInternalRow(2)
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setIndexDefined(count)
+    val v = getTimestampNanos(input, ordinal)
+    row.update(0, v.epochMicros)
+    row.update(1, v.nanosWithinMicro)
+    children(0).write(row, 0)
+    children(1).write(row, 1)
+  }
+}
+
+private[arrow] class TimestampNTZNanosStructWriter(
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends TimestampNanosStructWriter(valueVector, children) {
+  override protected def getTimestampNanos(
+      input: SpecializedGetters, ordinal: Int): TimestampNanosVal =
+    input.getTimestampNTZNanos(ordinal)
+}
+
+private[arrow] class TimestampLTZNanosStructWriter(
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends TimestampNanosStructWriter(valueVector, children) {
+  override protected def getTimestampNanos(
+      input: SpecializedGetters, ordinal: Int): TimestampNanosVal =
+    input.getTimestampLTZNanos(ordinal)
+}
+
+/**
+ * Writes a CalendarInterval into its lossless Arrow struct representation
+ * (months: int32, days: int32, microseconds: int64), built by `ArrowUtils.toArrowField` with
+ * `losslessInternalTypes = true`. The three components are stored as-is with no unit conversion,
+ * so unlike IntervalMonthDayNanoWriter there is no nanosecond multiplication and no overflow:
+ * the full Long microsecond domain round-trips.
+ */
+private[arrow] class CalendarIntervalStructWriter(
+    valueVector: StructVector,
+    children: Array[ArrowFieldWriter]) extends StructWriter(valueVector, children) {
+
+  // Reused across rows; this writer is single-threaded like the vector it wraps.
+  private val row = new GenericInternalRow(3)
+
+  override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
+    valueVector.setIndexDefined(count)
+    val ci = input.getInterval(ordinal)
+    row.update(0, ci.months)
+    row.update(1, ci.days)
+    row.update(2, ci.microseconds)
+    children(0).write(row, 0)
+    children(1).write(row, 1)
+    children(2).write(row, 2)
   }
 }
 
@@ -554,7 +691,7 @@ private[arrow] class IntervalYearWriter(val valueVector: IntervalYearVector)
   }
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
-    valueVector.setSafe(count, input.getInt(ordinal));
+    valueVector.setSafe(count, input.getInt(ordinal))
   }
 }
 
@@ -577,6 +714,17 @@ private[arrow] class IntervalMonthDayNanoWriter(val valueVector: IntervalMonthDa
 
   override def setValue(input: SpecializedGetters, ordinal: Int): Unit = {
     val ci = input.getInterval(ordinal)
-    valueVector.setSafe(count, ci.months, ci.days, Math.multiplyExact(ci.microseconds, 1000L))
+    // Arrow's IntervalMonthDayNano stores the sub-day component as int64 nanoseconds, so the
+    // conversion overflows for |microseconds| > Long.MaxValue / 1000. Translate that into the
+    // structured DATETIME_OVERFLOW at the conversion site (like the nanosecond timestamp writers
+    // above) so the raw ArithmeticException never escapes -- catching it any wider risks
+    // re-labeling unrelated arithmetic failures raised by lazily-evaluated upstream input.
+    val nanos = try {
+      Math.multiplyExact(ci.microseconds, 1000L)
+    } catch {
+      case _: ArithmeticException =>
+        throw QueryExecutionErrors.calendarIntervalArrowNanosOverflowError(ci)
+    }
+    valueVector.setSafe(count, ci.months, ci.days, nanos)
   }
 }

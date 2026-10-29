@@ -113,14 +113,17 @@ object DateTimeTestUtils {
     result
   }
 
-  // Returns nanoseconds since midnight
+  // Returns nanoseconds since midnight. `micros` sets the microsecond part; `nanos` adds the
+  // sub-microsecond remainder (digits 7-9), e.g. localTime(1, 2, 3, 987654, 321) is 01:02:03
+  // .987654321.
   def localTime(
       hour: Byte = 0,
       minute: Byte = 0,
       sec: Byte = 0,
-      micros: Int = 0): Long = {
-    val nanos = TimeUnit.MICROSECONDS.toNanos(micros).toInt
-    val localTime = LocalTime.of(hour, minute, sec, nanos)
+      micros: Int = 0,
+      nanos: Int = 0): Long = {
+    val nanoOfSecond = TimeUnit.MICROSECONDS.toNanos(micros).toInt + nanos
+    val localTime = LocalTime.of(hour, minute, sec, nanoOfSecond)
     localTimeToNanos(localTime)
   }
 }

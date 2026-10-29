@@ -24,7 +24,7 @@ Built-in functions are commonly used routines that Spark SQL predefines and a co
 
 ### Built-in Functions
 
-Spark SQL has some categories of frequently-used built-in functions for aggregation, arrays/maps, date/timestamp, and JSON data.
+Spark SQL has some categories of frequently-used built-in functions for aggregation, arrays/maps, date/time/timestamp, and JSON data.
 This subsection presents the usages and descriptions of these functions.
 
 #### Scalar Functions
@@ -32,7 +32,7 @@ This subsection presents the usages and descriptions of these functions.
  * [Collection Functions](sql-ref-functions-builtin.html#collection-functions)
  * [Struct Functions](sql-ref-functions-builtin.html#struct-functions)
  * [Map Functions](sql-ref-functions-builtin.html#map-functions)
- * [Date and Timestamp Functions](sql-ref-functions-builtin.html#date-and-timestamp-functions)
+ * [Date, Time and Timestamp Functions](sql-ref-functions-builtin.html#date-time-and-timestamp-functions)
  * [Mathematical Functions](sql-ref-functions-builtin.html#mathematical-functions)
  * [String Functions](sql-ref-functions-builtin.html#string-functions)
  * [Bitwise Functions](sql-ref-functions-builtin.html#bitwise-functions)
@@ -44,12 +44,14 @@ This subsection presents the usages and descriptions of these functions.
  * [JSON Functions](sql-ref-functions-builtin.html#json-functions)
  * [XML Functions](sql-ref-functions-builtin.html#xml-functions)
  * [URL Functions](sql-ref-functions-builtin.html#url-functions)
+ * [Vector Functions](sql-ref-functions-builtin.html#vector-functions)
  * [Misc Functions](sql-ref-functions-builtin.html#misc-functions)
 
 #### Aggregate-like Functions
  * [Aggregate Functions](sql-ref-functions-builtin.html#aggregate-functions)
  * [Window Functions](sql-ref-functions-builtin.html#window-functions)
  * [Sketch-Based Approximate Functions](sql-ref-sketch-aggregates.html)
+ * [Vector Functions](sql-ref-functions-builtin.html#vector-functions)
 
 #### Generator Functions
 * [Generator Functions](sql-ref-functions-builtin.html#generator-functions)

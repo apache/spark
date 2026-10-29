@@ -15,44 +15,47 @@
 # limitations under the License.
 #
 
-import os
+import datetime
 import gc
-import unittest
+import io
+import os
 import shutil
 import tempfile
-import io
+import unittest
 from contextlib import redirect_stdout
-import datetime
 
-from pyspark.util import is_remote_only
-from pyspark.errors import PySparkTypeError, PySparkValueError
+from pyspark.errors import AnalysisException, PySparkTypeError, PySparkValueError
 from pyspark.sql.types import (
-    StructType,
-    StructField,
-    LongType,
-    StringType,
-    IntegerType,
-    MapType,
     ArrayType,
+    CharType,
+    IntegerType,
+    LongType,
+    MapType,
     Row,
+    StringType,
+    StructField,
+    StructType,
+    VarcharType,
 )
 from pyspark.testing import assertDataFrameEqual
-from pyspark.testing.utils import eventually
 from pyspark.testing.connectutils import (
-    should_test_connect,
-    connect_requirement_message,
     ReusedMixedTestCase,
+    connect_requirement_message,
+    should_test_connect,
 )
 from pyspark.testing.pandasutils import PandasOnSparkTestUtils
+from pyspark.testing.utils import eventually
+from pyspark.util import is_remote_only
 
 if should_test_connect:
-    from pyspark.sql.connect.proto import ExecutePlanResponse, Expression as ProtoExpression
-    from pyspark.sql.connect.column import Column
-    from pyspark.sql.dataframe import DataFrame
-    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
     from pyspark.sql import functions as SF
     from pyspark.sql.connect import functions as CF
-    from pyspark.errors.exceptions.connect import AnalysisException, SparkConnectException
+    from pyspark.sql.connect.column import Column
+    from pyspark.sql.connect.dataframe import DataFrame as CDataFrame
+    from pyspark.sql.connect.proto import ExecutePlanResponse
+    from pyspark.sql.connect.proto import Expression as ProtoExpression
+    from pyspark.sql.dataframe import DataFrame
 
 
 @unittest.skipIf(
@@ -192,8 +195,8 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertEqual(cdf.collect(), cdf2.collect())
 
     def test_window_spec_serialization(self):
-        from pyspark.sql.connect.window import Window
         from pyspark.serializers import CPickleSerializer
+        from pyspark.sql.connect.window import Window
 
         pickle_ser = CPickleSerializer()
         w = Window.partitionBy("some_string").orderBy("value")
@@ -524,6 +527,159 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql(query).schema,
         )
         self._check_print_schema(query)
+
+    def test_char_varchar_result_schema(self):
+        # SPARK-59276: Python Connect maps first-class CHAR/VARCHAR the same as classic.
+        query = """
+            SELECT
+              CAST('ab' AS CHAR(4)) AS c,
+              CAST('cd' AS VARCHAR(6)) AS v,
+              CAST('ef' AS CHAR(4) COLLATE UTF8_LCASE) AS collated_c,
+              CAST('gh' AS VARCHAR(6) COLLATE UNICODE_CI) AS collated_v
+        """
+        conf = {"spark.sql.charVarchar.standardSemantics.enabled": "true"}
+        with self.both_conf(conf):
+            classic_df = self.spark.sql(query)
+            connect_df = self.connect.sql(query)
+            self.assertEqual(classic_df.schema, connect_df.schema)
+            self.assertEqual(classic_df.schema["c"].dataType, CharType(4))
+            self.assertEqual(classic_df.schema["v"].dataType, VarcharType(6))
+            self.assertEqual(classic_df.schema["collated_c"].dataType, CharType(4, "UTF8_LCASE"))
+            self.assertEqual(classic_df.schema["collated_v"].dataType, VarcharType(6, "UNICODE_CI"))
+            self.assertEqual(classic_df.collect(), connect_df.collect())
+            self.assertEqual(
+                connect_df.collect(),
+                [Row(c="ab  ", v="cd", collated_c="ef  ", collated_v="gh")],
+            )
+
+    def test_create_dataframe_with_char_varchar_schema(self):
+        schema = StructType(
+            [
+                StructField("c", CharType(4)),
+                StructField("explicit_c", CharType(4, "UTF8_BINARY")),
+                StructField("v", VarcharType(3, "UTF8_LCASE")),
+                StructField(
+                    "nested",
+                    StructType(
+                        [
+                            StructField("c", CharType(3, "UTF8_BINARY")),
+                            StructField(
+                                "values",
+                                ArrayType(VarcharType(4, "UNICODE_CI"), containsNull=False),
+                            ),
+                            StructField(
+                                "lookup",
+                                MapType(
+                                    CharType(3, "UTF8_LCASE"),
+                                    VarcharType(4, "UTF8_BINARY"),
+                                    valueContainsNull=False,
+                                ),
+                            ),
+                        ]
+                    ),
+                ),
+            ]
+        )
+        rows = [
+            (
+                "ab",
+                "cd",
+                "ef",
+                Row(c="x", values=["gh", "ij"], lookup={"k": "lm"}),
+            )
+        ]
+        standard_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "true",
+            "spark.sql.legacy.charVarcharAsString": "false",
+        }
+        with self.both_conf(standard_conf):
+            df = self.connect.createDataFrame(rows, schema)
+            self.assertEqual(df.schema, schema)
+            self.assertEqual(
+                df.collect(),
+                [
+                    Row(
+                        c="ab  ",
+                        explicit_c="cd  ",
+                        v="ef",
+                        nested=Row(
+                            c="x  ",
+                            values=["gh", "ij"],
+                            lookup={"k  ": "lm"},
+                        ),
+                    )
+                ],
+            )
+            empty = self.connect.createDataFrame([], schema)
+            self.assertEqual(empty.schema, schema)
+            self.assertEqual(empty.collect(), [])
+
+        legacy_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            "spark.sql.legacy.charVarcharAsString": "true",
+        }
+        with self.both_conf(legacy_conf):
+            expected = StructType(
+                [
+                    StructField("c", StringType()),
+                    StructField("explicit_c", StringType("UTF8_BINARY")),
+                    StructField("v", StringType("UTF8_LCASE")),
+                    StructField(
+                        "nested",
+                        StructType(
+                            [
+                                StructField("c", StringType("UTF8_BINARY")),
+                                StructField(
+                                    "values",
+                                    ArrayType(StringType("UNICODE_CI"), containsNull=False),
+                                ),
+                                StructField(
+                                    "lookup",
+                                    MapType(
+                                        StringType("UTF8_LCASE"),
+                                        StringType("UTF8_BINARY"),
+                                        valueContainsNull=False,
+                                    ),
+                                ),
+                            ]
+                        ),
+                    ),
+                ]
+            )
+            df = self.connect.createDataFrame(rows, schema)
+            self.assertEqual(df.schema, expected)
+            self.assertEqual(
+                df.collect(),
+                [
+                    Row(
+                        c="ab",
+                        explicit_c="cd",
+                        v="ef",
+                        nested=Row(
+                            c="x",
+                            values=["gh", "ij"],
+                            lookup={"k": "lm"},
+                        ),
+                    )
+                ],
+            )
+            empty = self.connect.createDataFrame([], schema)
+            self.assertEqual(empty.schema, expected)
+            self.assertEqual(empty.collect(), [])
+
+        default_conf = {
+            "spark.sql.charVarchar.standardSemantics.enabled": "false",
+            "spark.sql.legacy.charVarcharAsString": "false",
+        }
+        with self.both_conf(default_conf):
+            for data in (rows, []):
+                with self.assertRaises(AnalysisException) as ctx:
+                    self.connect.createDataFrame(data, schema).schema
+                self.check_error(
+                    exception=ctx.exception,
+                    errorClass="UNSUPPORTED_CHAR_OR_VARCHAR_AS_STRING",
+                    messageParameters={},
+                )
 
     def test_to(self):
         # SPARK-41464: test DataFrame.to()
@@ -1157,8 +1313,11 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             self.connect.sql("SELECT 1")._explain_string(mode="unknown")
         self.check_error(
             exception=pe.exception,
-            errorClass="UNKNOWN_EXPLAIN_MODE",
-            messageParameters={"explain_mode": "unknown"},
+            errorClass="VALUE_NOT_ALLOWED",
+            messageParameters={
+                "arg_name": "explain_mode",
+                "allowed_values": "['simple', 'extended', 'codegen', 'cost', 'formatted']",
+            },
         )
 
     def test_count(self) -> None:
@@ -1498,6 +1657,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(len(proto_string_1) > 10000, len(proto_string_1))
         proto_string_truncated_1 = self.connect._client._proto_to_string(plan1, True)
         self.assertTrue(len(proto_string_truncated_1) < 4000, len(proto_string_truncated_1))
+        self.assertIn("[truncated]", proto_string_truncated_1)
 
         cdf2 = cdf1.select("a" * 4096, "a" * 4096, "a" * 4096)
         plan2 = cdf2._plan.to_proto(self.connect._client)
@@ -1506,6 +1666,7 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(len(proto_string_2) > 20000, len(proto_string_2))
         proto_string_truncated_2 = self.connect._client._proto_to_string(plan2, True)
         self.assertTrue(len(proto_string_truncated_2) < 8000, len(proto_string_truncated_2))
+        self.assertIn("[truncated]", proto_string_truncated_2)
 
         cdf3 = cdf1.select("a" * 4096)
         for _ in range(64):
@@ -1516,13 +1677,14 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
         self.assertTrue(len(proto_string_3) > 128000, len(proto_string_3))
         proto_string_truncated_3 = self.connect._client._proto_to_string(plan3, True)
         self.assertTrue(len(proto_string_truncated_3) < 64000, len(proto_string_truncated_3))
+        self.assertIn("[truncated]", proto_string_truncated_3)
 
     def test_plan_compression(self):
         self.assertTrue(self.connect._client._zstd_module is not None)
         self.connect.range(1).count()
         default_plan_compression_threshold = self.connect._client._plan_compression_threshold
         self.assertTrue(default_plan_compression_threshold > 0)
-        self.assertTrue(self.connect._client._plan_compression_algorithm == "ZSTD")
+        self.assertEqual(self.connect._client._plan_compression_algorithm, "ZSTD")
         try:
             self.connect._client._plan_compression_threshold = 1000
 
@@ -1530,17 +1692,17 @@ class SparkConnectBasicTests(SparkConnectSQLTestCase):
             cdf1 = self.connect.range(1).select(CF.lit("Apache Spark"))
             plan1 = cdf1._plan.to_proto(self.connect._client)
             self.assertTrue(plan1.root is not None)
-            self.assertTrue(cdf1.count() == 1)
+            self.assertEqual(cdf1.count(), 1)
 
             # Large plan should be compressed
             cdf2 = self.connect.range(1).select(CF.lit("Apache Spark" * 1000))
             plan2 = cdf2._plan.to_proto(self.connect._client)
             self.assertTrue(plan2.compressed_operation is not None)
             # Test compressed relation
-            self.assertTrue(cdf2.count() == 1)
+            self.assertEqual(cdf2.count(), 1)
             # Test compressed command
             cdf2.createOrReplaceTempView("temp_view_cdf2")
-            self.assertTrue(self.connect.sql("SELECT * FROM temp_view_cdf2").count() == 1)
+            self.assertEqual(self.connect.sql("SELECT * FROM temp_view_cdf2").count(), 1)
         finally:
             self.connect._client._plan_compression_threshold = default_plan_compression_threshold
 

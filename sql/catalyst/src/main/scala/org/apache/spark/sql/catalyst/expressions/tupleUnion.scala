@@ -377,6 +377,15 @@ abstract class TupleUnionBase[S <: Summary]
     TupleSketch objects with double summary data type using a TupleSketch Union object. Users can
     set lgNomEntries to a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max',
     or 'alwaysone' (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch1 - The first TupleSketch (double summary) as a binary value.
+      * tupleSketch2 - The second TupleSketch (double summary) as a binary value.
+      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
+          number of nominal entries. Defaults to 12.
+      * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
+          Defaults to 'sum'.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), tuple_sketch_agg_double(col2, val2))) FROM VALUES (1, 1.0D, 4, 4.0D), (2, 2.0D, 5, 5.0D), (3, 3.0D, 6, 6.0D) tab(col1, val1, col2, val2);
@@ -407,6 +416,15 @@ object TupleUnionDoubleExpressionBuilder extends ExpressionBuilder {
     TupleSketch objects with integer summary data type using a TupleSketch Union object. Users can
     set lgNomEntries to a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max',
     or 'alwaysone' (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch1 - The first TupleSketch (integer summary) as a binary value.
+      * tupleSketch2 - The second TupleSketch (integer summary) as a binary value.
+      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
+          number of nominal entries. Defaults to 12.
+      * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
+          Defaults to 'sum'.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), tuple_sketch_agg_integer(col2, val2))) FROM VALUES (1, 1, 4, 4), (2, 2, 5, 5), (3, 3, 6, 6) tab(col1, val1, col2, val2);
@@ -440,6 +458,15 @@ object TupleUnionIntegerExpressionBuilder extends ExpressionBuilder {
     -Infinity for 'max' mode, or 1.0 for 'alwaysone' mode. Users can set lgNomEntries to a value
     between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max', or 'alwaysone' (defaults to
     'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch - The TupleSketch (double summary) as a binary value.
+      * thetaSketch - The ThetaSketch as a binary value.
+      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
+          number of nominal entries. Defaults to 12.
+      * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
+          Defaults to 'sum'.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_double(_FUNC_(tuple_sketch_agg_double(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1.0D, 4), (2, 2.0D, 5), (3, 3.0D, 6) tab(col1, val1, col2);
@@ -473,6 +500,15 @@ object TupleUnionThetaDoubleExpressionBuilder extends ExpressionBuilder {
     mode, Integer.MIN_VALUE for 'max' mode, or 1 for 'alwaysone' mode. Users can set lgNomEntries to
     a value between 4 and 26 (defaults to 12) and mode to 'sum', 'min', 'max', or 'alwaysone'
     (defaults to 'sum'). """,
+  arguments = """
+    Arguments:
+      * tupleSketch - The TupleSketch (integer summary) as a binary value.
+      * thetaSketch - The ThetaSketch as a binary value.
+      * lgNomEntries - Optional integer between 4 and 26 setting the log base 2 of the
+          number of nominal entries. Defaults to 12.
+      * mode - Optional summary combining mode, one of 'sum', 'min', 'max', or 'alwaysone'.
+          Defaults to 'sum'.
+  """,
   examples = """
     Examples:
       > SELECT tuple_sketch_estimate_integer(_FUNC_(tuple_sketch_agg_integer(col1, val1), theta_sketch_agg(col2))) FROM VALUES (1, 1, 4), (2, 2, 5), (3, 3, 6) tab(col1, val1, col2);

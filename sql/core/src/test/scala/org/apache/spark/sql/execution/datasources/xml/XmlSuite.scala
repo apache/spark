@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.xml
 
-import java.io.{EOFException, File, FileOutputStream, StringWriter}
+import java.io.{EOFException, File, FileOutputStream, StringReader, StringWriter}
 import java.nio.charset.{StandardCharsets, UnsupportedCharsetException}
 import java.nio.file.{Files, Path, Paths}
 import java.sql.{Date, Timestamp}
@@ -24,6 +24,7 @@ import java.time.{Instant, LocalDateTime, Year}
 import java.util.TimeZone
 import java.util.concurrent.ConcurrentHashMap
 import javax.xml.stream.{XMLOutputFactory, XMLStreamException}
+import javax.xml.transform.stream.StreamSource
 
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable
@@ -34,6 +35,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.FSDataInputStream
 import org.apache.hadoop.io.{LongWritable, Text}
 import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
+import org.xml.sax.SAXException
 
 import org.apache.spark.{DebugFilesystem, SparkConf, SparkException}
 import org.apache.spark.io.ZStdCompressionCodec
@@ -41,7 +43,7 @@ import org.apache.spark.sql.{AnalysisException, DataFrame, Dataset, Encoders, Ro
 import org.apache.spark.sql.catalyst.encoders.AgnosticEncoders.UDTEncoder
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.ordinalNumber
-import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, XmlOptions}
+import org.apache.spark.sql.catalyst.xml.{IndentingXMLStreamWriter, ValidatorUtil, XmlOptions}
 import org.apache.spark.sql.catalyst.xml.XmlOptions._
 import org.apache.spark.sql.errors.QueryCompilationErrors
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
@@ -1271,6 +1273,25 @@ class XmlSuite
         .xml(getTestResourcePath(resDir + "basket.xml"))
       // Mostly checking it doesn't fail
       assert(basketDF.selectExpr("entry[0].key").head().getLong(0) === 9027)
+    }
+  }
+
+  test("XSD validation does not resolve external references in records") {
+    val schema = ValidatorUtil.getSchema(
+      getTestResourcePath(resDir + "basket.xsd").replace("file:/", "/"))
+
+    withTempDir { dir =>
+      val dataFile = new File(dir, "data.txt")
+      Files.write(dataFile.toPath, "9027".getBytes(StandardCharsets.UTF_8))
+      // The validator sees the raw record before the record parser does, so it must
+      // reject DOCTYPE references the same way the parser does.
+      val record =
+        s"""<?xml version="1.0"?>
+           |<!DOCTYPE basket [<!ENTITY ext SYSTEM "${dataFile.toURI}">]>
+           |<basket><entry><key>&ext;</key><value>1</value></entry></basket>""".stripMargin
+      intercept[SAXException] {
+        ValidatorUtil.newValidator(schema).validate(new StreamSource(new StringReader(record)))
+      }
     }
   }
 
@@ -3694,6 +3715,74 @@ class XmlSuite
     assert(XmlOptions.isValidOption("encoding"))
     assert(XmlOptions.isValidOption("charset"))
   }
+
+  // Full-precision format pattern for nanosecond NTZ timestamp schema-inference tests.
+  private val ntzNanosFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSSSS"
+
+  test("SPARK-57458: XML infers nanosecond NTZ timestamps from sub-microsecond fractional digits") {
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      // Write a nanosecond DataFrame with a 9-digit format so the XML values carry 9 fractional
+      // digits; then read without a schema so the type is inferred from the string values.
+      val wallClock = LocalDateTime.of(2025, 6, 15, 12, 30, 45, 123456789)
+      val ntzType = TimestampNTZNanosType(9)
+      val inputDf = spark.createDataFrame(
+        spark.sparkContext.parallelize(Seq(Row(wallClock))),
+        new StructType().add("ts", ntzType))
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        inputDf.write.format("xml").option("rowTag", "ROW")
+          .option("timestampNTZFormat", ntzNanosFormat).mode("overwrite").save(path)
+        val df = spark.read.format("xml").option("rowTag", "ROW").load(path)
+        assert(df.schema("ts").dataType === TimestampNTZNanosType(9),
+          s"Expected TimestampNTZNanosType(9), got ${df.schema("ts").dataType}")
+      }
+    }
+  }
+
+  test("SPARK-57458: XML inferred type is TimestampNTZType for mixed micro/nano NTZ rows") {
+    // When some rows have >6 fractional digits (nano) and others have <=6 (micro), the inferred
+    // type must be TimestampNTZType (not TimestampType / LTZ), because all values are zone-free.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      val xmlContent =
+        """<root><row><ts>2025-06-15T12:30:45.123456789</ts></row>
+          |<row><ts>2025-06-15T12:30:45.123456</ts></row></root>""".stripMargin
+      withTempDir { dir =>
+        val path = new File(dir, "mixed.xml").getCanonicalPath
+        Files.write(Paths.get(path),
+          xmlContent.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read.format("xml").option("rowTag", "row")
+          .option("rootTag", "root").load(path)
+        assert(df.schema("ts").dataType === TimestampNTZType,
+          s"Expected TimestampNTZType, got ${df.schema("ts").dataType}")
+      }
+    }
+  }
+
+  test("SPARK-57458: nano timestamp + non-datetime field widens to StringType during inference") {
+    // When a field is a nano-precision timestamp in some rows and a non-datetime value in others,
+    // inference must fall back to StringType (matching the micro-precision path) rather than
+    // widening to TimestampType and then failing at read time.
+    withSQLConf(
+      SQLConf.TIMESTAMP_NANOS_TYPES_ENABLED.key -> "true",
+      SQLConf.TIMESTAMP_TYPE.key -> "TIMESTAMP_NTZ") {
+      val xmlContent =
+        """<root><row><ts>2025-06-15T12:30:45.123456789</ts></row>
+          |<row><ts>not-a-timestamp</ts></row></root>""".stripMargin
+      withTempDir { dir =>
+        val path = new File(dir, "nano_nondatetime.xml").getCanonicalPath
+        Files.write(Paths.get(path), xmlContent.getBytes(StandardCharsets.UTF_8))
+        val df = spark.read.format("xml").option("rowTag", "row")
+          .option("rootTag", "root").load(path)
+        assert(df.schema("ts").dataType === StringType,
+          s"Expected StringType for nano + non-datetime, got ${df.schema("ts").dataType}")
+      }
+    }
+  }
+
 }
 
 class XmlSuiteWithLegacyParser extends XmlSuite {

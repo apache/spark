@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.memory.{MemoryConsumer, MemoryMode, TaskMemoryManager}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Count, DeclarativeAggregate, Max, Min, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
+import org.apache.spark.sql.catalyst.expressions.aggregate.{Average, Count, DeclarativeAggregate, First, Last, Max, Min, StddevPop, StddevSamp, Sum, VariancePop, VarianceSamp}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.ExternalAppendOnlyUnsafeRowArray
 import org.apache.spark.sql.types.DataType
@@ -237,12 +237,15 @@ private[window] class WindowSegmentTree(
    * Exception-safe: if aggregation throws, previously built state is preserved.
    */
   def build(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    // rows.length is Int by design; check guards against future widening.
-    val n = rows.length
-    if (n < 0) {
+    // The segment tree indexes rows with 32-bit Ints. The window driver rejects partitions
+    // larger than Int.MaxValue rows first (see WindowEvaluatorFactoryBase.checkPartitionSizeLimit);
+    // this check is a defensive backstop.
+    val numRowsLong = rows.length
+    if (numRowsLong > Int.MaxValue) {
       throw SparkException.internalError(
-        s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $n")
+        s"WindowSegmentTree cannot hold more than Int.MaxValue rows, got $numRowsLong")
     }
+    val n = numRowsLong.toInt
     val nBlocks = if (n == 0) 0 else (n + blockSize - 1) / blockSize
     val newBlockAggs = computeBlockAggregates(rows, n, nBlocks)
 
@@ -434,7 +437,7 @@ private[window] class WindowSegmentTree(
       if (!evictEldest() || !acquireBlockMemory()) {
         // scalastyle:off throwerror
         throw QueryExecutionErrors.cannotAcquireMemoryForWindowAggregateError(
-          blockBytes, 0L)
+          blockBytes, 0L, taskMemoryManager.getMemoryConsumptionBreakdown())
         // scalastyle:on throwerror
       }
     }
@@ -572,20 +575,29 @@ private[window] object WindowSegmentTree {
 
   /**
    * Explicit allowlist of [[DeclarativeAggregate]] subclasses safe for
-   * segment-tree execution. Safe iff combine semantics form a commutative
-   * monoid on the partial-buffer representation (associativity +
-   * compatibility with `mergeExpressions`):
+   * segment-tree execution. Safe iff combine semantics are correct under the
+   * left-to-right combine order produced by [[WindowSegmentTree.query]]
+   * (left partial -> full blocks ascending -> right partial; within a block,
+   * `queryDescend` walks children in ascending index order).
    *
-   *   - [[Min]], [[Max]]: idempotent semilattice.
-   *   - [[Sum]], [[Count]]: additive monoid.
+   *   - [[Min]], [[Max]]: idempotent semilattice (associative + commutative).
+   *   - [[Sum]], [[Count]]: additive monoid (associative + commutative).
    *   - [[Average]]: sum + count, both additive monoids.
    *   - [[StddevPop]], [[StddevSamp]], [[VariancePop]], [[VarianceSamp]]:
    *     Welford (count, mean, M2) is associative -- see
    *     CentralMomentAgg.mergeExpressions.
+   *   - [[First]], [[Last]]: order-dependent but correct under left-to-right
+   *     combine. `First.mergeExpressions` is `if(valueSet.left, left, right)`
+   *     and `Last.mergeExpressions` is `if(valueSet.right, right, left)`;
+   *     under the left-to-right traversal both pick the row-order extreme
+   *     across any contiguous range. `IGNORE NULLS` is also handled: per-row
+   *     `updateExpressions` only sets `valueSet=true` on non-null values, so
+   *     a per-block partial of `(null, false)` for an all-NULL block is
+   *     correctly skipped when merged with a later non-null block.
    *
    * Intentionally excluded (tracked as follow-up): HyperLogLogPlusPlus /
-   * ApproxCountDistinct (sketch-buffer interaction unaudited), First / Last
-   * (order-dependent), CollectList / CollectSet (unbounded buffer growth),
+   * ApproxCountDistinct (sketch-buffer interaction unaudited),
+   * CollectList / CollectSet (unbounded buffer growth),
    * Percentile / ApproxPercentile (sorted-sketch buffer), and any
    * ImperativeAggregate (excluded by the type check).
    *
@@ -600,7 +612,9 @@ private[window] object WindowSegmentTree {
     classOf[StddevPop],
     classOf[StddevSamp],
     classOf[VariancePop],
-    classOf[VarianceSamp]
+    classOf[VarianceSamp],
+    classOf[First],
+    classOf[Last]
   )
 
   /**

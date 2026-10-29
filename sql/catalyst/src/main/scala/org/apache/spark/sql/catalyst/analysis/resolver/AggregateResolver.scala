@@ -28,6 +28,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   Alias,
   AliasHelper,
   AttributeReference,
+  BaseGroupingSets,
   Expression,
   ExprId,
   IntegerLiteral,
@@ -51,26 +52,27 @@ class AggregateResolver(
   private val operatorResolutionContextStack = operatorResolver.getOperatorResolutionContextStack
   private val lcaResolver = expressionResolver.getLcaResolver
   private val ordinalResolver = expressionResolver.getOrdinalResolver
+  private val groupingAnalyticsResolver =
+    new GroupingAnalyticsResolver(operatorResolver, expressionResolver)
 
   /**
    * Resolve [[Aggregate]] operator.
    *
-   * 1. Push [[WindowResolutionContext]] for potential window resolution.
-   * 2. Resolve the child (inline table).
-   * 3. Clear [[NameScope.availableAliases]]. Those are only relevant for the immediate aggregate
+   * 1. Resolve the child (inline table).
+   * 2. Clear [[NameScope.availableAliases]]. Those are only relevant for the immediate aggregate
    *    expressions for output prioritization to work correctly in
    *    [[NameScope.tryResolveMultipartNameByOutput]].
-   * 4. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]] and
+   * 3. Resolve aggregate expressions using [[ExpressionResolver.resolveAggregateExpressions]] and
    *    set [[OperatorResolutionContextStack.ordinalReplacementExpressions]] for grouping
    *    expressions resolution.
-   * 5. If there's just one [[UnresolvedAttribute]] with a single-part name "ALL", expand it using
+   * 4. If there's just one [[UnresolvedAttribute]] with a single-part name "ALL", expand it using
    *    aggregate expressions which don't contain aggregate functions. There should not exist a
    *    column with that name in the lower operator's output, otherwise it takes precedence.
-   * 6. Resolve grouping expressions using [[ExpressionResolver.resolveGroupingExpressions]]. This
+   * 5. Resolve grouping expressions using [[ExpressionResolver.resolveGroupingExpressions]]. This
    *    includes alias references to aggregate expressions, which is done in
    *    [[NameScope.resolveMultipartName]] and replacing [[UnresolvedOrdinals]] with corresponding
    *    expressions from aggregate list, done in [[OrdinalResolver]].
-   * 7. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
+   * 6. Remove all the unnecessary [[Alias]]es from the grouping (all the aliases) and aggregate
    *    (keep the outermost one) expressions. This is needed to stay compatible with the
    *    fixed-point implementation. For example:
    *
@@ -144,25 +146,36 @@ class AggregateResolver(
       )
 
       if (resolvedAggregateExpressions.hasLateralColumnAlias) {
+        // LCA + grouping analytics (CUBE/ROLLUP/GROUPING SETS) is not yet supported in the
+        // single-pass resolver because Expand mints new attribute IDs that get out of sync
+        // with the Project operator. Fall back to legacy analyzer for correct results.
+        if (finalAggregate.groupingExpressions.exists(_.isInstanceOf[BaseGroupingSets])) {
+          throw new ExplicitlyUnsupportedResolverFeature(
+            "lateral column alias with grouping analytics")
+        }
         val aggregateWithLcaResolutionResult =
           lcaResolver.handleLcaInAggregate(finalAggregate)
+        val lcaBaseAggregate = aggregateWithLcaResolutionResult.baseAggregate
         AggregateResolutionResult(
           operator = aggregateWithLcaResolutionResult.resolvedOperator,
           outputList = aggregateWithLcaResolutionResult.outputList,
           groupingAttributeIds =
-            getGroupingAttributeIds(aggregateWithLcaResolutionResult.baseAggregate),
+            getGroupingAttributeIds(lcaBaseAggregate),
           aggregateListAliases = aggregateWithLcaResolutionResult.aggregateListAliases,
-          baseAggregate = aggregateWithLcaResolutionResult.baseAggregate
+          baseAggregate = lcaBaseAggregate
         )
       } else {
-        AggregationValidator(finalAggregate)
+        // Grouping analytics (CUBE/ROLLUP/GROUPING SETS) are expanded unconditionally.
+        // groupingAnalyticsResolver.resolve no-ops when no BaseGroupingSets are present.
+        val expandedAggregate = groupingAnalyticsResolver.resolve(finalAggregate)
+        AggregationValidator(expandedAggregate)
 
         AggregateResolutionResult(
-          operator = finalAggregate,
-          outputList = finalAggregate.aggregateExpressions,
-          groupingAttributeIds = getGroupingAttributeIds(finalAggregate),
+          operator = expandedAggregate,
+          outputList = expandedAggregate.aggregateExpressions,
+          groupingAttributeIds = getGroupingAttributeIds(expandedAggregate),
           aggregateListAliases = scopes.current.getTopAggregateExpressionAliases,
-          baseAggregate = finalAggregate
+          baseAggregate = expandedAggregate
         )
       }
     } finally {

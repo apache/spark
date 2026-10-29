@@ -24,6 +24,7 @@ import scala.jdk.CollectionConverters._
 
 import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkEnv, TaskContext}
 import org.apache.spark.api.python.ChainedPythonFunctions
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -44,9 +45,17 @@ import org.apache.spark.util.Utils
  * 1. '''Arrow columnar path''' (UDF inputs are simple column refs AND
  *    columns are [[ArrowColumnVector]]): Arrow FieldVectors are extracted
  *    directly and serialized to IPC. Pass-through columns are kept as
- *    [[ColumnVector]] references (safe because Arrow vectors are
- *    independently allocated per batch). Output is produced by columnar
- *    combining: passThruCols ++ resultCols -> ColumnarBatch.
+ *    [[ColumnVector]] references, which is only correct if the batches stay
+ *    valid until their results come back from Python: a columnar reader may
+ *    reuse or release the vectors of a batch once it is asked for the next
+ *    one. So `spark.sql.execution.arrow.pythonUDF.columnarInput.enabled`
+ *    is disabled by default. Output is produced by columnar combining:
+ *    passThruCols ++ resultCols -> ColumnarBatch, so the consumer of the
+ *    output releases the pass-through columns with closeIfFreeable on the
+ *    task thread. With `spark.python.udf.pipelined.enabled`, the Python
+ *    writer reads the next input batches on its own thread meanwhile, so
+ *    the upstream operator must allow its vectors to be released while it
+ *    returns the next batches.
  *
  * 2. '''Non-Arrow columnar path''' (UDF inputs are simple column refs
  *    BUT columns are NOT [[ArrowColumnVector]]): Non-Arrow columnar
@@ -58,6 +67,9 @@ import org.apache.spark.util.Utils
  *    Rows are extracted via [[MutableProjection]] and sent using
  *    [[BasicPythonArrowInput]]. Uses [[HybridRowQueue]] for pass-through
  *    and converts joined rows back to [[ColumnarBatch]].
+ *
+ * Paths 2 and 3 copy what they need from an input batch, so they release
+ * it with closeIfFreeable once it has been written to Python.
  *
  * TODO: Add a physical plan rule that inserts a ProjectExec before
  *   ArrowEvalPythonExec to pre-evaluate complex UDF input expressions
@@ -174,9 +186,10 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
     }
 
     /**
-     * Path 1: Arrow columnar. ColumnVector references are safe
-     * because Arrow vectors are independently allocated per batch.
-     * Combines pass-through + UDF result columns into ColumnarBatch.
+     * Path 1: Arrow columnar. Keeps references to the pass-through
+     * ColumnVectors, which requires the input batches to stay valid until
+     * their results come back from Python, and combines them with the UDF
+     * result columns into ColumnarBatch.
      */
     private def evalArrowColumnar(
         inputIter: Iterator[ColumnarBatch],
@@ -201,7 +214,7 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         pyFuncs, evalType, argMetas, udfInputSchema,
         sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
         pythonMetrics, jobArtifactUUID, sessionUUID,
-        columnIndices)
+        columnIndices, udfs.map(_.elementwiseNestingDepth))
 
       val resultIter = pyRunner.compute(
         bufferedIter, context.partitionId(), context)
@@ -235,10 +248,14 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         inputColumnIndices: Option[Array[Int]]
     ): Iterator[ColumnarBatch] = {
 
+      // In pipelined mode the queue's add() runs in the writer thread and remove() runs in
+      // the task thread; use lock-free mode to skip per-row synchronization.
+      val pipelined = SparkEnv.get.conf.get(PYTHON_UDF_PIPELINED_EXECUTION)
       val queue = HybridRowQueue(
         context.taskMemoryManager(),
         new File(Utils.getLocalDir(SparkEnv.get.conf)),
-        childOutput.length)
+        childOutput.length,
+        lockFree = pipelined)
       context.addTaskCompletionListener[Unit] { _ => queue.close() }
 
       val unsafeProj = UnsafeProjection.create(
@@ -246,18 +263,18 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
 
       val resultIter = if (inputColumnIndices.isDefined) {
         // Path 2: simple column refs, non-Arrow vectors.
-        val bufferedIter = inputIter.map { batch =>
+        val bufferedIter = new WrittenBatchReleasingIterator(inputIter, { batch =>
           batch.rowIterator().asScala.foreach { row =>
             queue.add(unsafeProj(row).copy())
           }
-          batch
-        }
+          true
+        })
         val pyRunner =
           new ColumnarArrowPythonWithNamedArgumentRunner(
             pyFuncs, evalType, argMetas, udfInputSchema,
             sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
             pythonMetrics, jobArtifactUUID, sessionUUID,
-            inputColumnIndices.get)
+            inputColumnIndices.get, udfs.map(_.elementwiseNestingDepth))
         pyRunner.compute(
           bufferedIter, context.partitionId(), context)
       } else {
@@ -265,7 +282,9 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val projection = MutableProjection.create(
           allInputs, childOutput)
         projection.initialize(context.partitionId())
-        val batchIter = inputIter.map { batch =>
+        // The rows of a batch are written to Python before the writer asks
+        // for the next batch, which releases it.
+        val batchIter = new WrittenBatchReleasingIterator(inputIter, _ => true).map { batch =>
           batch.rowIterator().asScala.map { row =>
             queue.add(unsafeProj(row).copy())
             projection(row)
@@ -274,7 +293,8 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         val pyRunner = new ArrowPythonWithNamedArgumentRunner(
           pyFuncs, evalType, argMetas, udfInputSchema,
           sessionLocalTimeZone, largeVarTypes, pythonRunnerConf,
-          pythonMetrics, jobArtifactUUID, sessionUUID
+          pythonMetrics, jobArtifactUUID, sessionUUID,
+          udfs.map(_.elementwiseNestingDepth)
         ) with BasicPythonArrowInput
         pyRunner.compute(
           batchIter, context.partitionId(), context)
@@ -330,6 +350,41 @@ private[python] class ColumnarArrowEvalPythonEvaluatorFactory(
         }
       }
     }
+  }
+}
+
+/**
+ * Hands the input batches to the Python writer. `enqueue` is called on each
+ * batch before the writer gets it, and returns whether the batch should be
+ * released with closeIfFreeable once it has been written: the writer is done
+ * with a batch when it asks for the next one or reaches the end.
+ */
+private[python] class WrittenBatchReleasingIterator(
+    input: Iterator[ColumnarBatch],
+    enqueue: ColumnarBatch => Boolean)
+  extends Iterator[ColumnarBatch] {
+
+  private var written: ColumnarBatch = _
+
+  private def releaseWritten(): Unit = {
+    if (written != null) {
+      written.closeIfFreeable()
+      written = null
+    }
+  }
+
+  override def hasNext: Boolean = {
+    releaseWritten()
+    input.hasNext
+  }
+
+  override def next(): ColumnarBatch = {
+    releaseWritten()
+    val batch = input.next()
+    if (enqueue(batch)) {
+      written = batch
+    }
+    batch
   }
 }
 

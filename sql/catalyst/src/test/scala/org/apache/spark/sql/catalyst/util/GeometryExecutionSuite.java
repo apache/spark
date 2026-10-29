@@ -18,7 +18,8 @@
 package org.apache.spark.sql.catalyst.util;
 
 import org.apache.spark.SparkIllegalArgumentException;
-import org.apache.spark.unsafe.types.GeometryVal;
+import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.unsafe.types.BinaryView;
 import org.junit.jupiter.api.Test;
 
 import java.nio.ByteBuffer;
@@ -67,7 +68,7 @@ class GeometryExecutionSuite {
 
   @Test
   void testFromValue() {
-    GeometryVal value = GeometryVal.fromBytes(testGeometryVal);
+    BinaryView value = BinaryView.fromBytes(testGeometryVal);
     Geometry geometry = Geometry.fromValue(value);
     assertNotNull(geometry);
     assertEquals(value, geometry.getValue());
@@ -268,6 +269,35 @@ class GeometryExecutionSuite {
   @Test
   void testSrid() {
     Geometry geometry = Geometry.fromBytes(testGeometryVal);
+    assertEquals(4326, geometry.srid());
+  }
+
+  @Test
+  void testSetSridOnTightOwner() {
+    // fromBytes wraps a tight on-heap array, so setSrid writes through in place.
+    Geometry geometry = Geometry.fromBytes(testGeometryVal.clone());
+    geometry.setSrid(3857);
+    assertEquals(3857, geometry.srid());
+  }
+
+  @Test
+  void testSetSridThrowsWhenNotTightOwner() {
+    // A sub-range view does not own a tight backing array, so getBytes() returns a copy and an
+    // in-place setSrid would be silently lost. It must fail loudly instead of dropping the write.
+    byte[] padded = new byte[testGeometryVal.length + 4];
+    System.arraycopy(testGeometryVal, 0, padded, 4, testGeometryVal.length);
+    Geometry geometry = Geometry.fromValue(
+      BinaryView.fromBytes(padded, 4, testGeometryVal.length));
+    // Reads still work (they copy out), and the original SRID is intact.
+    assertEquals(4326, geometry.srid());
+    SparkRuntimeException e = assertThrows(
+      SparkRuntimeException.class, () -> geometry.setSrid(3857));
+    assertEquals("INTERNAL_ERROR", e.getCondition());
+    // After copy() the value owns a tight array, so setSrid succeeds and writes through.
+    Geometry owned = geometry.copy();
+    owned.setSrid(3857);
+    assertEquals(3857, owned.srid());
+    // The original sub-range view is untouched.
     assertEquals(4326, geometry.srid());
   }
 }

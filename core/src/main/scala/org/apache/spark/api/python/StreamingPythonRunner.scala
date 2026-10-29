@@ -34,23 +34,36 @@ private[spark] object StreamingPythonRunner {
       func: PythonFunction,
       connectUrl: String,
       sessionId: String,
-      workerModule: String
+      workerModule: String,
+      sessionEnvVars: Map[String, String] = Map.empty
   ): StreamingPythonRunner = {
-    new StreamingPythonRunner(func, connectUrl, sessionId, workerModule)
+    new StreamingPythonRunner(func, connectUrl, sessionId, workerModule, sessionEnvVars)
   }
 }
 
+/**
+ * @param sessionEnvVars environment variables the session contributes to the worker, applied over
+ *                       `func`'s own. A caller that has a session decides what belongs here; this
+ *                       class only carries the values to the worker.
+ */
 private[spark] class StreamingPythonRunner(
     func: PythonFunction,
     connectUrl: String,
     sessionId: String,
-    workerModule: String) extends Logging {
+    workerModule: String,
+    sessionEnvVars: Map[String, String] = Map.empty) extends Logging {
   private val conf = SparkEnv.get.conf
   private val isUnixDomainSock = conf.get(PYTHON_UNIX_DOMAIN_SOCKET_ENABLED)
   protected val bufferSize: Int = conf.get(BUFFER_SIZE)
   protected val authSocketTimeout = conf.get(PYTHON_AUTH_SOCKET_TIMEOUT)
 
-  protected val envVars: java.util.Map[String, String] = func.envVars
+  // A copy rather than `func.envVars` itself: this class and `init` below both write to it,
+  // and a function handed to more than one runner must not accumulate another's values.
+  protected val envVars: java.util.Map[String, String] = {
+    val merged = new java.util.HashMap[String, String](func.envVars)
+    sessionEnvVars.foreach { case (name, value) => merged.put(name, value) }
+    merged
+  }
   protected val pythonExec: String = func.pythonExec
   protected var pythonWorker: Option[PythonWorker] = None
   protected var pythonWorkerFactory: Option[PythonWorkerFactory] = None
@@ -113,9 +126,9 @@ private[spark] class StreamingPythonRunner(
       dataIn.readInt()
     } catch {
       case e: java.net.SocketTimeoutException =>
-        throw new StreamingPythonRunnerInitializationTimeoutException(e.getMessage)
+        throw new StreamingPythonRunnerInitializationTimeoutException(e.getMessage, e)
       case e: Exception =>
-        throw new StreamingPythonRunnerInitializationCommunicationException(e.getMessage)
+        throw new StreamingPythonRunnerInitializationCommunicationException(e.getMessage, e)
     }
 
     // Set timeout back to the original timeout
@@ -132,15 +145,21 @@ private[spark] class StreamingPythonRunner(
     (dataOut, dataIn)
   }
 
-  class StreamingPythonRunnerInitializationCommunicationException(errMessage: String)
+  class StreamingPythonRunnerInitializationCommunicationException(
+      errMessage: String,
+      cause: Throwable = null)
     extends SparkPythonException(
       errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_COMMUNICATION_FAILURE",
-      messageParameters = Map("msg" -> errMessage))
+      messageParameters = Map("msg" -> errMessage),
+      cause = cause)
 
-  class StreamingPythonRunnerInitializationTimeoutException(errMessage: String)
+  class StreamingPythonRunnerInitializationTimeoutException(
+      errMessage: String,
+      cause: Throwable = null)
     extends SparkPythonException(
       errorClass = "STREAMING_PYTHON_RUNNER_INITIALIZATION_TIMEOUT_FAILURE",
-      messageParameters = Map("msg" -> errMessage))
+      messageParameters = Map("msg" -> errMessage),
+      cause = cause)
 
   class StreamingPythonRunnerInitializationException(resFromPython: Int, errMessage: String)
     extends SparkPythonException(

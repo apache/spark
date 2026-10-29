@@ -110,7 +110,7 @@ public final class CollationFactory {
   public static class Collation {
     public final String collationName;
     public final String provider;
-    private final Collator collator;
+    private final ThreadLocal<Collator> threadLocalCollator;
     public final Comparator<UTF8String> comparator;
 
     /**
@@ -187,7 +187,7 @@ public final class CollationFactory {
     public Collation(
         String collationName,
         String provider,
-        Collator collator,
+        ThreadLocal<Collator> threadLocalCollator,
         Comparator<UTF8String> comparator,
         String version,
         Function<UTF8String, byte[]> sortKeyFunction,
@@ -197,7 +197,7 @@ public final class CollationFactory {
         boolean supportsSpaceTrimming) {
       this.collationName = collationName;
       this.provider = provider;
-      this.collator = collator;
+      this.threadLocalCollator = threadLocalCollator;
       this.comparator = comparator;
       this.version = version;
       this.sortKeyFunction = sortKeyFunction;
@@ -216,7 +216,7 @@ public final class CollationFactory {
     }
 
     public Collator getCollator() {
-      return collator;
+      return threadLocalCollator != null ? threadLocalCollator.get() : null;
     }
 
     /**
@@ -1016,29 +1016,40 @@ public final class CollationFactory {
           builder.setUnicodeLocaleKeyword("ks", "level1");
         }
         ULocale resultLocale = builder.build();
-        Collator collator = Collator.getInstance(resultLocale);
-        // Freeze ICU collator to ensure thread safety.
-        collator.freeze();
+
+        // Use thread-local Collator instances to avoid lock contention.
+        // A frozen RuleBasedCollator serializes all threads through a ReentrantLock on its
+        // internal collation buffer (used by getCollationKey/compare). By creating independent
+        // per-thread instances via Collator.getInstance(), each thread operates on its own
+        // buffer without locking. Each instance is frozen as a mutation guard so that any
+        // accidental call to setStrength() or similar throws immediately.
+        ThreadLocal<Collator> threadLocalCollator = ThreadLocal.withInitial(
+          () -> {
+            Collator collator = Collator.getInstance(resultLocale);
+            collator.freeze();
+            return collator;
+          });
 
         Comparator<UTF8String> comparator;
         Function<UTF8String, byte[]> sortKeyFunction;
 
         if (spaceTrimming == SpaceTrimming.NONE) {
           comparator = (s1, s2) ->
-            collator.compare(s1.toValidString(), s2.toValidString());
-          sortKeyFunction = s -> collator.getCollationKey(s.toValidString()).toByteArray();
+            threadLocalCollator.get().compare(s1.toValidString(), s2.toValidString());
+          sortKeyFunction = s ->
+            threadLocalCollator.get().getCollationKey(s.toValidString()).toByteArray();
         } else {
-          comparator = (s1, s2) -> collator.compare(
+          comparator = (s1, s2) -> threadLocalCollator.get().compare(
             applyTrimmingPolicy(s1, spaceTrimming).toValidString(),
             applyTrimmingPolicy(s2, spaceTrimming).toValidString());
-          sortKeyFunction = s -> collator.getCollationKey(
+          sortKeyFunction = s -> threadLocalCollator.get().getCollationKey(
             applyTrimmingPolicy(s, spaceTrimming).toValidString()).toByteArray();
         }
 
         return new Collation(
           normalizedCollationName(),
           PROVIDER_ICU,
-          collator,
+          threadLocalCollator,
           comparator,
           ICU_VERSION,
           sortKeyFunction,

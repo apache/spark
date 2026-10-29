@@ -17,9 +17,10 @@
 
 package org.apache.spark.sql.execution.joins
 
-import org.apache.spark.sql.catalyst.expressions.Attribute
-import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, LeftExistence, LeftOuter, LeftSingle, RightOuter}
-import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, FullOuter, InnerLike, JoinType, LeftAnti, LeftExistence, LeftOuter, LeftSingle, RightOuter}
+import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Distribution, KeyedPartitioning, Partitioning, PartitioningCollection, UnknownPartitioning, UnspecifiedDistribution}
+import org.apache.spark.sql.internal.SQLConf
 
 /**
  * Holds common logic for join operators by shuffling two child relations
@@ -27,6 +28,25 @@ import org.apache.spark.sql.catalyst.plans.physical.{ClusteredDistribution, Dist
  */
 trait ShuffledJoin extends JoinCodegenSupport {
   def isSkewJoin: Boolean
+
+  private lazy val canSpreadNullJoinKeys: Boolean = {
+    // Only NULL keys on the preserved side of an outer or left anti join can create this skew:
+    // they must be emitted, but cannot satisfy ordinary equi-join predicates. Non-preserved
+    // NULL-keyed rows are filtered out by `=` and never emitted, so their reducer placement does
+    // not matter here.
+    //
+    // Null-safe equality usually rewrites to non-null shuffle keys. The NullType corner can still
+    // produce NULL shuffle keys, but shuffled join execution already treats those rows as
+    // unmatched, so spreading them does not change the result.
+    val preservedSideHasNullableKeys = joinType match {
+      case LeftOuter | LeftAnti => leftKeys.exists(_.nullable)
+      case RightOuter => rightKeys.exists(_.nullable)
+      case FullOuter => leftKeys.exists(_.nullable) || rightKeys.exists(_.nullable)
+      case _ => false
+    }
+    conf.getConf(SQLConf.SHUFFLE_SPREAD_NULL_JOIN_KEYS_ENABLED) &&
+      preservedSideHasNullableKeys
+  }
 
   override def nodeName: String = {
     if (isSkewJoin) super.nodeName + "(skew=true)" else super.nodeName
@@ -39,6 +59,9 @@ trait ShuffledJoin extends JoinCodegenSupport {
       // We re-arrange the shuffle partitions to deal with skew join, and the new children
       // partitioning doesn't satisfy `ClusteredDistribution`.
       UnspecifiedDistribution :: UnspecifiedDistribution :: Nil
+    } else if (canSpreadNullJoinKeys) {
+      ClusteredDistribution(leftKeys, allowNullKeySpreading = true) ::
+        ClusteredDistribution(rightKeys, allowNullKeySpreading = true) :: Nil
     } else {
       ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
     }
@@ -46,7 +69,15 @@ trait ShuffledJoin extends JoinCodegenSupport {
 
   override def outputPartitioning: Partitioning = joinType match {
     case _: InnerLike =>
-      PartitioningCollection(Seq(left.outputPartitioning, right.outputPartitioning))
+      // Every `KeyedPartitioning` in the joined collection speaks the same declared key set (the
+      // `PartitioningCollection` invariant), and `keysSatisfy` admits a marked side into it only
+      // for full-key join keys, where the join equality ties every column of its claim: a row of
+      // an undeclared key matches nothing on the accurate side and is filtered, so a marked
+      // member alongside an unmarked one is spurious. Clear it here so consumers can take
+      // members' markers at face value (see
+      // `KeyedPartitioning.mayContainUnknownPartitionKeys`).
+      PartitioningCollection.fromPartitionings(
+        clearUnknownPartitionKeys(Seq(left.outputPartitioning, right.outputPartitioning)))
     case LeftOuter | LeftSingle => left.outputPartitioning
     case RightOuter => right.outputPartitioning
     case FullOuter => UnknownPartitioning(left.outputPartitioning.numPartitions)
@@ -54,6 +85,48 @@ trait ShuffledJoin extends JoinCodegenSupport {
     case x =>
       throw new IllegalArgumentException(
         s"ShuffledJoin should not take $x as the JoinType")
+  }
+
+  /**
+   * Clears the `mayContainUnknownPartitionKeys` marker of every `KeyedPartitioning` in
+   * `partitionings` when marked and unmarked keyed inputs meet in an `InnerLike` join.
+   * See the call site for why the marker can be cleared.
+   */
+  private def clearUnknownPartitionKeys(
+      partitionings: Seq[Partitioning]): Seq[Partitioning] = {
+    // One cached keyed member answers per input instead of re-flattening a left-deep join
+    // chain, and keyless inputs drop out of the `flatMap` rather than reading as unmarked. The
+    // all-unmarked path must reach no `copy`: `transform`'s `fastEquals` would compare every
+    // partition key.
+    val representatives = partitionings.map(PartitioningCollection.representativeOf)
+    val markers = representatives.flatten.map(_.mayContainUnknownPartitionKeys)
+    if (markers.isEmpty || markers.forall(_ == markers.head)) {
+      partitionings
+    } else {
+      // The whole input has to come out holding one layout object, not merely equal ones.
+      // `PartitioningCollection.fromPartitionings` returns a member untouched only where its layout
+      // is `eq` the canonical one, so a fresh copy here would make the unmarked side rebuild, and
+      // re-check the collection's invariant, on every `outputPartitioning` call.
+      //
+      // The guard above means an unmarked side exists, so its layout is the one to keep. The `eq`
+      // on the keys is what makes this free: the two sides share that reference wherever they were
+      // laid out on one another, which is the shape this arm is for, and where they do not the
+      // copy is used without walking the keys twice.
+      val unmarkedLayout = representatives.flatten
+        .find(!_.mayContainUnknownPartitionKeys).map(_.layout)
+      partitionings.zip(representatives).map {
+        case (partitioning: Partitioning with Expression, Some(representative))
+            if representative.mayContainUnknownPartitionKeys =>
+          val copied = representative.layout.copy(unknownKeysOrigin = None)
+          val cleared = unmarkedLayout
+            .filter(l => (l.partitionKeys eq copied.partitionKeys) && l == copied)
+            .getOrElse(copied)
+          partitioning.transform {
+            case k: KeyedPartitioning => k.copy(layout = cleared)
+          }.asInstanceOf[Partitioning]
+        case (p, _) => p
+      }
+    }
   }
 
   override def output: Seq[Attribute] = {
@@ -74,5 +147,29 @@ trait ShuffledJoin extends JoinCodegenSupport {
         throw new IllegalArgumentException(
           s"${getClass.getSimpleName} not take $x as the JoinType")
     }
+  }
+}
+
+object ShuffledJoin {
+  /**
+   * Whether replicating the right side over splits of the left cannot change the result. The
+   * right partition then reaches every left split, so no output row may come from a right row
+   * alone. Every join that drops unmatched right rows qualifies: its output is one row per left
+   * row or one per matching pair, and each left row still lands in exactly one split.
+   */
+  def canDuplicateRightSide(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | LeftOuter | LeftSingle | LeftExistence(_) => true
+    case _ => false
+  }
+
+  /**
+   * Whether replicating the left side over splits of the right cannot change the result. Every
+   * output row must then be tied to one right row. The left-preserving joins are out for that
+   * reason, and so is LeftSemi: it drops unmatched left rows yet emits one row per left row, so
+   * a left row matching in two right splits would come out twice.
+   */
+  def canDuplicateLeftSide(joinType: JoinType): Boolean = joinType match {
+    case _: InnerLike | RightOuter => true
+    case _ => false
   }
 }

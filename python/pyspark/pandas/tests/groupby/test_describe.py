@@ -16,11 +16,11 @@
 #
 
 from itertools import product
+
 import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class GroupbyDescribeMixin:
@@ -186,7 +186,6 @@ class GroupbyDescribeMixin:
 class GroupbyDescribeTests(
     GroupbyDescribeMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

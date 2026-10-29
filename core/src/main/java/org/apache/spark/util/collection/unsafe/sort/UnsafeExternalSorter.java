@@ -594,28 +594,8 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       logger.info("Merging {} spill files using bounded merge with factor {}",
           MDC.of(LogKeys.NUM_SPILL_WRITERS, spillWriters.size()),
           MDC.of(LogKeys.MERGE_FACTOR, spillMergeFactor));
-
-      // This assignment is not inside synchronized(this), unlike the read in
-      // cleanupResources(). That is safe because all callers of cleanupResources()
-      // (the task completion listener, iterator-end cleanup from wrappers like
-      // UnsafeExternalRowSorter / UnsafeKVExternalSorter / SortExec, etc.) run on
-      // the task thread, sequentially with getSortedIterator(). The volatile modifier
-      // on boundedMerger provides memory visibility across any intervening
-      // synchronized blocks.
-      boundedMerger = new UnsafeSorterBoundedSpillMerger(
-          spillMergeFactor,
-          recordComparatorSupplier.get(),
-          prefixComparator,
-          blockManager,
-          serializerManager,
-          fileBufferSizeBytes);
-
-      UnsafeSorterIterator inMemIter = null;
-      if (inMemSorter != null) {
-        readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
-        inMemIter = readingIterator;
-      }
-      return boundedMerger.merge(spillWriters, inMemIter);
+      BoundedMergerContext ctx = prepareBoundedMerge();
+      return ctx.merger.merge(ctx.snapshot, ctx.inMemIter);
     } else {
       // Original single-round merge: open all spill readers at once
       logger.info("Merging {} spill files in single round",
@@ -633,6 +613,60 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
+  @VisibleForTesting
+  static final class BoundedMergerContext {
+    final List<UnsafeSorterSpillWriter> snapshot;
+    @Nullable final SpillableIterator inMemIter;
+    final UnsafeSorterBoundedSpillMerger merger;
+
+    BoundedMergerContext(
+        List<UnsafeSorterSpillWriter> snapshot,
+        @Nullable SpillableIterator inMemIter,
+        UnsafeSorterBoundedSpillMerger merger) {
+      this.snapshot = snapshot;
+      this.inMemIter = inMemIter;
+      this.merger = merger;
+    }
+  }
+
+  @VisibleForTesting
+  BoundedMergerContext prepareBoundedMerge() {
+    // Snapshot MUST precede readingIterator publication. Once readingIterator is
+    // non-null, a sibling MemoryConsumer's spill request is routed via
+    // readingIterator.spill(), which appends a new writer to spillWriters AND rebinds
+    // readingIterator.upstream to that same file. A post-publication snapshot would
+    // then feed that file to BOTH the snapshot path and readingIterator -- duplicate
+    // records in the merged output. List.copyOf returns an unmodifiable list so any
+    // future code that mutates the snapshot (or aliases the live spillWriters field
+    // into the context and adds to it) fails fast.
+    final List<UnsafeSorterSpillWriter> snapshot = List.copyOf(spillWriters);
+
+    // The volatile fields published below -- boundedMerger and readingIterator -- are
+    // written without holding synchronized(this). Safe because all callers of
+    // getSortedIterator() and cleanupResources() (the task completion listener,
+    // iterator-end cleanup from wrappers like UnsafeExternalRowSorter /
+    // UnsafeKVExternalSorter / SortExec, etc.) run on the task thread, sequentially.
+    // The volatile modifier provides memory visibility to off-task-thread readers:
+    // sibling MemoryConsumer.spill() reads readingIterator, and cleanupResources()'s
+    // synchronized(this) read of boundedMerger crosses any intervening synchronized
+    // blocks.
+    final UnsafeSorterBoundedSpillMerger merger = new UnsafeSorterBoundedSpillMerger(
+        spillMergeFactor,
+        recordComparatorSupplier.get(),
+        prefixComparator,
+        blockManager,
+        serializerManager,
+        fileBufferSizeBytes);
+    boundedMerger = merger;
+
+    SpillableIterator inMemIter = null;
+    if (inMemSorter != null) {
+      readingIterator = new SpillableIterator(inMemSorter.getSortedIterator());
+      inMemIter = readingIterator;
+    }
+    return new BoundedMergerContext(snapshot, inMemIter, merger);
+  }
+
   @VisibleForTesting boolean hasSpaceForAnotherRecord() {
     return inMemSorter.hasSpaceForAnotherRecord();
   }
@@ -640,6 +674,15 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
   @VisibleForTesting
   void setSpillMergeFactor(int mergeFactor) {
     this.spillMergeFactor = mergeFactor;
+  }
+
+  /**
+   * Registers a spill writer as if this sorter had spilled to it. Lets tests simulate spill files
+   * whose total record count exceeds Integer.MAX_VALUE without writing that many records.
+   */
+  @VisibleForTesting
+  void addSpillWriterForTesting(UnsafeSorterSpillWriter spillWriter) {
+    spillWriters.add(spillWriter);
   }
 
   @VisibleForTesting
@@ -666,7 +709,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     private UnsafeSorterIterator upstream;
     private MemoryBlock lastPage = null;
     private boolean loaded = false;
-    private int numRecords;
+    // Named as in UnsafeSorterSpillReader: numRecords is the fixed total reported by
+    // getNumRecords(), while numRecordsRemaining counts down as records are returned.
+    private final int numRecords;
+    private int numRecordsRemaining;
 
     private Object currentBaseObject;
     private long currentBaseOffset;
@@ -675,11 +721,13 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     SpillableIterator(UnsafeSorterIterator inMemIterator) {
       this.upstream = inMemIterator;
-      this.numRecords = inMemIterator.getNumRecords();
+      // A single in-memory sorter holds at most Integer.MAX_VALUE records.
+      this.numRecords = Math.toIntExact(inMemIterator.getNumRecords());
+      this.numRecordsRemaining = this.numRecords;
     }
 
     @Override
-    public int getNumRecords() {
+    public long getNumRecords() {
       return numRecords;
     }
 
@@ -700,10 +748,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
           long currentPageNumber = upstream.getCurrentPageNumber();
 
           ShuffleWriteMetrics writeMetrics = new ShuffleWriteMetrics();
-          if (numRecords > 0) {
+          if (numRecordsRemaining > 0) {
             // Iterate over the records that have not been returned and spill them.
             final UnsafeSorterSpillWriter spillWriter = new UnsafeSorterSpillWriter(
-                    blockManager, fileBufferSizeBytes, writeMetrics, numRecords);
+                    blockManager, fileBufferSizeBytes, writeMetrics, numRecordsRemaining);
             spillIterator(upstream, spillWriter);
             spillWriters.add(spillWriter);
             upstream = spillWriter.getReader(serializerManager);
@@ -764,7 +812,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     @Override
     public boolean hasNext() {
-      return numRecords > 0;
+      return numRecordsRemaining > 0;
     }
 
     @Override
@@ -785,7 +833,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
             allocatedPages.clear();
             lastPage = null;
           }
-          numRecords--;
+          numRecordsRemaining--;
           upstream.loadNext();
 
           // Keep track of the current base object, base offset, record length, and key prefix,
@@ -841,7 +889,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
       return iter;
     } else {
       LinkedList<UnsafeSorterIterator> queue = new LinkedList<>();
-      int i = 0;
+      // Running count of records in the spill files visited so far. This is a `long` because the
+      // spill files together can hold more than Integer.MAX_VALUE records; an `int` would wrap
+      // negative, silently skipping later spill files or overrunning the in-memory tail below.
+      long i = 0;
       for (UnsafeSorterSpillWriter spillWriter : spillWriters) {
         if (i + spillWriter.recordsSpilled() > startIndex) {
           UnsafeSorterIterator iter = spillWriter.getReader(serializerManager);
@@ -859,10 +910,10 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
   }
 
-  private void moveOver(UnsafeSorterIterator iter, int steps)
+  private void moveOver(UnsafeSorterIterator iter, long steps)
       throws IOException {
     if (steps > 0) {
-      for (int i = 0; i < steps; i++) {
+      for (long i = 0; i < steps; i++) {
         if (iter.hasNext()) {
           iter.loadNext();
         } else {
@@ -880,7 +931,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
 
     private final Queue<UnsafeSorterIterator> iterators;
     private UnsafeSorterIterator current;
-    private int numRecords;
+    private long numRecords;
 
     ChainedIterator(Queue<UnsafeSorterIterator> iterators) {
       assert iterators.size() > 0;
@@ -893,7 +944,7 @@ public final class UnsafeExternalSorter extends MemoryConsumer {
     }
 
     @Override
-    public int getNumRecords() {
+    public long getNumRecords() {
       return numRecords;
     }
 

@@ -187,7 +187,7 @@ class SparkConnectServiceInternalServerSuite extends SparkFunSuite with LocalSpa
       assert(validated, msg)
     }
     // In the meanwhile, no any end event should be posted
-    assert(listenerInstance.serviceEndEvents.size() == 0)
+    assert(listenerInstance.serviceEndEvents.isEmpty)
 
     // Try to start an already started SparkConnectService
     SparkConnectService.start(sc)
@@ -302,6 +302,7 @@ private class SparkConnectServiceLifeCycleListener extends SparkListener {
         SparkConnectServiceLifeCycleListener.checksOnServiceEndEvent.foreach { checks =>
           checks.foreach(_(serviceEnd))
         }
+      case _ =>
     }
   }
 }

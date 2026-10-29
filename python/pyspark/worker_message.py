@@ -18,10 +18,12 @@
 import dataclasses
 import json
 import sys
-from typing import Optional, Union, IO
+from decimal import Decimal
+from typing import IO, Any, Optional, TypeAlias, Union
 
 from pyspark.errors import PySparkValueError
-from pyspark.serializers import read_bool, read_int, read_long, SpecialLengths
+from pyspark.messages import ZeroCopyByteStream
+from pyspark.serializers import SpecialLengths, read_bool, read_int, read_long
 from pyspark.taskcontext import BarrierTaskContext, ResourceInformation, TaskContext
 from pyspark.util import PythonEvalType
 from pyspark.worker_util import utf8_deserializer
@@ -42,11 +44,12 @@ class TaskContextInfo:
     attempt_number: int
     task_attempt_id: int
     cpus: int
+    cpu_amount: Decimal
     resources: dict[str, ResourceInfo]
     local_properties: dict[str, str]
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "TaskContextInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "TaskContextInfo":
         task_context_json = json.loads(utf8_deserializer.loads(stream))
         return cls(
             is_barrier=task_context_json["isBarrier"],
@@ -57,6 +60,7 @@ class TaskContextInfo:
             attempt_number=task_context_json["attemptNumber"],
             task_attempt_id=task_context_json["taskAttemptId"],
             cpus=task_context_json["cpus"],
+            cpu_amount=Decimal(task_context_json["cpuAmount"]),
             resources={
                 k: cls.ResourceInfo(name=v["name"], addresses=v["addresses"])
                 for k, v in task_context_json["resources"].items()
@@ -74,6 +78,7 @@ class TaskContextInfo:
                 attemptNumber=self.attempt_number,
                 taskAttemptId=self.task_attempt_id,
                 cpus=self.cpus,
+                cpuAmount=self.cpu_amount,
                 resources={
                     k: ResourceInformation(v.name, v.addresses) for k, v in self.resources.items()
                 },
@@ -86,6 +91,7 @@ class TaskContextInfo:
                 attemptNumber=self.attempt_number,
                 taskAttemptId=self.task_attempt_id,
                 cpus=self.cpus,
+                cpuAmount=self.cpu_amount,
                 resources={
                     k: ResourceInformation(v.name, v.addresses) for k, v in self.resources.items()
                 },
@@ -100,7 +106,7 @@ class BroadcastInfo:
     variables: list[tuple[int, Optional[str]]]
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "BroadcastInfo":
+    def from_stream(cls, stream: Union[ZeroCopyByteStream, IO[Any]]) -> "BroadcastInfo":
         needs_broadcast_decryption_server = read_bool(stream)
         num_broadcast_variables = read_int(stream)
         conn_info = None
@@ -125,13 +131,13 @@ class BroadcastInfo:
 
 @dataclasses.dataclass
 class UDFInfo:
-    udfs: list[bytes]
+    udfs: list[memoryview]
     args: list[int]
     kwargs: dict[str, int]
     result_id: int
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "UDFInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "UDFInfo":
         num_args = read_int(stream)
         udfs = []
         args = []
@@ -167,13 +173,13 @@ class UDTFInfo:
     args: list[int]
     kwargs: dict[str, int]
     partition_child_indexes: list[int]
-    pickled_analyze_result: Optional[bytes]
-    handler: bytes
+    pickled_analyze_result: Optional[memoryview]
+    handler: memoryview
     return_type: str
     name: str
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "UDTFInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "UDTFInfo":
         # See 'PythonUDTFRunner.PythonUDFWriterThread.writeCommand'
         args = []
         kwargs = {}
@@ -204,6 +210,9 @@ class UDTFInfo:
         )
 
 
+UDFInfoType: TypeAlias = Union[memoryview, UDTFInfo, list[UDFInfo]]
+
+
 @dataclasses.dataclass
 class WorkerInitInfo:
     split_index: int
@@ -215,10 +224,10 @@ class WorkerInitInfo:
     eval_type: int
     runner_conf: dict[str, str]
     eval_conf: dict[str, str]
-    udf_info: Union[bytes, UDTFInfo, list[UDFInfo]]
+    udf_info: UDFInfoType
 
     @classmethod
-    def from_stream(cls, stream: IO) -> "WorkerInitInfo":
+    def from_stream(cls, stream: ZeroCopyByteStream) -> "WorkerInitInfo":
         split_index = read_int(stream)
         if split_index == -1:
             sys.exit(-1)
@@ -243,9 +252,10 @@ class WorkerInitInfo:
             v = utf8_deserializer.loads(stream)
             eval_conf[k] = v
 
-        udf_info: Union[bytes, UDTFInfo, list[UDFInfo]]
+        udf_info: UDFInfoType
 
         if eval_type == PythonEvalType.NON_UDF:
+            # Returns memoryview; see assertion in worker.py if changing this type.
             udf_info = stream.read(read_int(stream))
         elif eval_type in (
             PythonEvalType.SQL_TABLE_UDF,

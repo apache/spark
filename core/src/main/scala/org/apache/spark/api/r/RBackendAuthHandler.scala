@@ -19,6 +19,7 @@ package org.apache.spark.api.r
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
+import java.security.MessageDigest
 
 import io.netty.channel.{Channel, ChannelHandlerContext, SimpleChannelInboundHandler}
 
@@ -34,7 +35,8 @@ private class RBackendAuthHandler(secret: String)
     // The R code adds a null terminator to serialized strings, so ignore it here.
     val clientSecret = new String(msg, 0, msg.length - 1, UTF_8)
     try {
-      require(secret == clientSecret, "Auth secret mismatch.")
+      require(MessageDigest.isEqual(secret.getBytes(UTF_8), clientSecret.getBytes(UTF_8)),
+        "Auth secret mismatch.")
       ctx.pipeline().remove(this)
       writeReply("ok", ctx.channel())
     } catch {

@@ -111,23 +111,33 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     val errorInfo = errorInfoMap.getOrElse(
       mainErrorClass,
       throw SparkException.internalError(s"Cannot find main error class '$errorClass'"))
-    assert(errorInfo.subClass.isDefined == subErrorClass.isDefined)
 
     if (subErrorClass.isEmpty) {
       errorInfo.messageTemplate
     } else {
-      val errorSubInfo = errorInfo.subClass.get.getOrElse(
-        subErrorClass.get,
-        throw SparkException.internalError(s"Cannot find sub error class '$errorClass'"))
+      val subClassName = subErrorClass.get
+      val subClasses = errorInfo.subClass.getOrElse(
+        throw SparkException.internalError(
+          s"Error class '$mainErrorClass' has no subclasses, " +
+            s"but subclass '$subClassName' was requested."))
+      val errorSubInfo = subClasses.getOrElse(
+        subClassName,
+        throw SparkException.internalError(
+          s"Error class '$mainErrorClass' has no '$subClassName' subclass."))
       errorInfo.messageTemplate + " " + errorSubInfo.messageTemplate
     }
   }
 
   def getSqlState(errorClass: String): String = {
-    Option(errorClass)
-      .flatMap(_.split('.').headOption)
-      .flatMap(errorInfoMap.get)
-      .flatMap(_.sqlState)
+    val errorClasses = Option(errorClass).map(_.split('.')).getOrElse(Array.empty[String])
+    val errorInfo = errorClasses.headOption.flatMap(errorInfoMap.get)
+    val subClassSqlState = errorClasses match {
+      case Array(_, subClass) =>
+        errorInfo.flatMap(_.subClass).flatMap(_.get(subClass)).flatMap(_.sqlState)
+      case _ => None
+    }
+    subClassSqlState
+      .orElse(errorInfo.flatMap(_.sqlState))
       .orNull
   }
 
@@ -136,7 +146,7 @@ class ErrorClassesJsonReader(jsonFileURLs: Seq[URL]) {
     errorClasses match {
       case Array(mainClass) => errorInfoMap.contains(mainClass)
       case Array(mainClass, subClass) => errorInfoMap.get(mainClass).exists { info =>
-        info.subClass.get.contains(subClass)
+        info.subClass.exists(_.contains(subClass))
       }
       case _ => false
     }
@@ -192,10 +202,13 @@ private case class ErrorInfo(
  *
  * @param message Message format with optional placeholders (e.g. &lt;parm&gt;).
  *                The error message is constructed by concatenating the lines with newlines.
+ * @param sqlState SQLSTATE associated with this subclass. If absent, the subclass inherits
+ *                 the SQLSTATE of its main error class.
  * @param breakingChangeInfo Additional metadata if the error is due to a breaking change.
  */
 private case class ErrorSubInfo(
     message: Seq[String],
+    sqlState: Option[String] = None,
     breakingChangeInfo: Option[BreakingChangeInfo] = None) {
   // For compatibility with multi-line error messages
   @JsonIgnore

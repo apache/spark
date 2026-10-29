@@ -17,6 +17,7 @@
 
 package org.apache.spark.sql.connect.planner
 
+import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.connect.proto
 import org.apache.spark.sql.catalyst.expressions.AttributeReference
 import org.apache.spark.sql.catalyst.plans.PlanTest
@@ -32,6 +33,25 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
       Seq.empty)
 
   val testCases = Seq(
+    TestCase(
+      name = "Connect rejects in-process Python evaluation before constructing a function",
+      expectedErrorCondition = "CONNECT_INVALID_PLAN.FUNCTION_EVAL_TYPE_NOT_SUPPORTED",
+      expectedParameters = Map("evalType" -> "258"),
+      invalidInput = {
+        val udf = proto.CommonInlineUserDefinedFunction
+          .newBuilder()
+          .setPythonUdf(
+            proto.PythonUDF
+              .newBuilder()
+              .setEvalType(PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF))
+        val expression =
+          proto.Expression.newBuilder().setCommonInlineUserDefinedFunction(udf)
+        proto.Relation
+          .newBuilder()
+          .setProject(
+            proto.Project.newBuilder().setInput(testLocalRelation).addExpressions(expression))
+          .build()
+      }),
     TestCase(
       name = "Invalid schema data type non struct for Parse",
       expectedErrorCondition = "INVALID_SCHEMA_TYPE_NON_STRUCT",
@@ -123,6 +143,20 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
           .build()
       }))
 
+  test("Connect rejects SQL registration of in-process Python functions") {
+    val udf = proto.CommonInlineUserDefinedFunction
+      .newBuilder()
+      .setPythonUdf(
+        proto.PythonUDF.newBuilder().setEvalType(PythonEvalType.SQL_SCALAR_ARROW_INPROCESS_UDF))
+    val error = intercept[InvalidPlanInput] {
+      transform(proto.Command.newBuilder().setRegisterFunction(udf).build())
+    }
+    checkError(
+      exception = error,
+      condition = "CONNECT_INVALID_PLAN.FUNCTION_EVAL_TYPE_NOT_SUPPORTED",
+      parameters = Map("evalType" -> "258"))
+  }
+
   // Run all test cases
   testCases.foreach { testCase =>
     test(s"${testCase.name}") {
@@ -137,6 +171,24 @@ class InvalidInputErrorsSuite extends PlanTest with SparkConnectPlanTest {
         assert(exception.getSqlState == "56K00")
       }
     }
+  }
+
+  test("SPARK-58042: UDT jvm_class must be a UserDefinedType") {
+    // A jvm_class that is not a UserDefinedType must be rejected before it is instantiated.
+    val udt = proto.DataType.UDT
+      .newBuilder()
+      .setType("udt")
+      .setJvmClass("java.lang.String")
+      .build()
+    val dataType = proto.DataType.newBuilder().setUdt(udt).build()
+    val exception = intercept[InvalidPlanInput] {
+      DataTypeProtoConverter.toCatalystType(dataType)
+    }
+    checkError(
+      exception = exception,
+      condition = "UDT_CLASS_NOT_USER_DEFINED_TYPE",
+      parameters = Map("udtClass" -> "java.lang.String"))
+    assert(exception.getSqlState == "2203G")
   }
 
   test("noHandlerFoundForExtension") {

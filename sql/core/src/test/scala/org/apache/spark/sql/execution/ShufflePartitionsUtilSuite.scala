@@ -20,6 +20,7 @@ package org.apache.spark.sql.execution
 import org.apache.spark.{LocalSparkContext, MapOutputStatistics, MapOutputTrackerMaster, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.sql.execution.adaptive.ShufflePartitionsUtil
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.ArrayImplicits._
 
@@ -30,7 +31,8 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       expectedPartitionStartIndices: Seq[Seq[CoalescedPartitionSpec]],
       targetSize: Long,
       minNumPartitions: Int = 1,
-      minPartitionSize: Long = 0): Unit = {
+      minPartitionSize: Long = 0,
+      maxReducerPartitionsPerTask: Int = Int.MaxValue): Unit = {
     val mapOutputStatistics = bytesByPartitionIdArray.zipWithIndex.map {
       case (bytesByPartitionId, index) =>
         Some(new MapOutputStatistics(index, bytesByPartitionId))
@@ -40,7 +42,9 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       Seq.fill(mapOutputStatistics.length)(None),
       targetSize,
       minNumPartitions,
-      minPartitionSize)
+      minPartitionSize,
+      shuffleStageIds = Seq.empty,
+      maxReducerPartitionsPerTask = maxReducerPartitionsPerTask)
     assert(estimatedPartitionStartIndices.length === expectedPartitionStartIndices.length)
     estimatedPartitionStartIndices.zip(expectedPartitionStartIndices).foreach {
       case (actual, expect) => assert(actual === expect)
@@ -194,6 +198,150 @@ class ShufflePartitionsUtilSuite extends SparkFunSuite with LocalSparkContext {
       val bytesByPartitionId1 = Array[Long](100, 100, 40, 30, 0)
       val bytesByPartitionId2 = Array[Long](30, 0, 60, 70, 110)
       checkEstimation(Array(bytesByPartitionId1, bytesByPartitionId2), Nil, targetSize)
+    }
+  }
+
+  test("max reducer partitions per task is unbounded by default") {
+    val bytesByPartitionId = Array.fill[Long](10)(1)
+    val expected = Seq(CoalescedPartitionSpec(0, 10, 10))
+    checkEstimation(Array(bytesByPartitionId), Seq(expected), targetSize = 100)
+  }
+
+  test("max reducer partitions per task limits many tiny partitions") {
+    val bytesByPartitionId = Array.fill[Long](10)(1)
+    val expected = Seq(
+      CoalescedPartitionSpec(0, 4, 4),
+      CoalescedPartitionSpec(4, 8, 4),
+      CoalescedPartitionSpec(8, 10, 2))
+    checkEstimation(
+      Array(bytesByPartitionId),
+      Seq(expected),
+      targetSize = 100,
+      maxReducerPartitionsPerTask = 4)
+  }
+
+  test("max reducer partitions per task of one does not coalesce") {
+    val bytesByPartitionId = Array.fill[Long](3)(1)
+    checkEstimation(
+      Array(bytesByPartitionId),
+      expectedPartitionStartIndices = Seq.empty,
+      targetSize = 100,
+      maxReducerPartitionsPerTask = 1)
+  }
+
+  test("max reducer partitions per task counts empty partitions") {
+    val bytesByPartitionId = Array[Long](1, 0, 0, 0, 0, 0, 0, 0, 1)
+    val expected = Seq(
+      CoalescedPartitionSpec(0, 4, 1),
+      CoalescedPartitionSpec(8, 9, 1))
+    checkEstimation(
+      Array(bytesByPartitionId),
+      Seq(expected),
+      targetSize = 100,
+      maxReducerPartitionsPerTask = 4)
+  }
+
+  test("max reducer partitions per task prevents an oversized backward merge") {
+    val bytesByPartitionId = Array[Long](30, 30, 1, 1, 100)
+    val expected = Seq(
+      CoalescedPartitionSpec(0, 2, 60),
+      CoalescedPartitionSpec(2, 5, 102))
+    checkEstimation(
+      Array(bytesByPartitionId),
+      Seq(expected),
+      targetSize = 60,
+      minPartitionSize = 10,
+      maxReducerPartitionsPerTask = 3)
+  }
+
+  test("max reducer partitions per task prevents an oversized final tail merge") {
+    val bytesByPartitionId = Array[Long](60, 1, 1, 1)
+    val expected = Seq(
+      CoalescedPartitionSpec(0, 1, 60),
+      CoalescedPartitionSpec(1, 4, 3))
+    checkEstimation(
+      Array(bytesByPartitionId),
+      Seq(expected),
+      targetSize = 60,
+      minPartitionSize = 10,
+      maxReducerPartitionsPerTask = 3)
+  }
+
+  test("max reducer partitions per task keeps an oversized reducer partition intact") {
+    val bytesByPartitionId = Array[Long](200, 1, 1, 1)
+    val expected = Seq(
+      CoalescedPartitionSpec(0, 1, 200),
+      CoalescedPartitionSpec(1, 3, 2),
+      CoalescedPartitionSpec(3, 4, 1))
+    checkEstimation(
+      Array(bytesByPartitionId),
+      Seq(expected),
+      targetSize = 100,
+      maxReducerPartitionsPerTask = 2)
+  }
+
+  test("max reducer partitions per task applies to multiple shuffles") {
+    val bytesByPartitionId1 = Array.fill[Long](7)(1)
+    val bytesByPartitionId2 = Array.tabulate[Long](7)(i => if (i % 2 == 0) 2 else 0)
+    val expected1 = Seq(
+      CoalescedPartitionSpec(0, 3, 3),
+      CoalescedPartitionSpec(3, 6, 3),
+      CoalescedPartitionSpec(6, 7, 1))
+    val expected2 = Seq(
+      CoalescedPartitionSpec(0, 3, 4),
+      CoalescedPartitionSpec(3, 6, 2),
+      CoalescedPartitionSpec(6, 7, 2))
+    checkEstimation(
+      Array(bytesByPartitionId1, bytesByPartitionId2),
+      Seq(expected1, expected2),
+      targetSize = 100,
+      maxReducerPartitionsPerTask = 3)
+  }
+
+  test("max reducer partitions per task preserves skew partition specs") {
+    val bytesByPartitionId1 = Array.fill[Long](8)(1)
+    val bytesByPartitionId2 = Array.fill[Long](8)(2)
+    val skewSpecs = Seq(
+      PartialReducerPartitionSpec(2, 0, 1, 1),
+      PartialReducerPartitionSpec(2, 1, 2, 1))
+    val specs1 = Seq.tabulate(2)(i => CoalescedPartitionSpec(i, i + 1, 1)) ++
+      skewSpecs ++ Seq.tabulate(5)(i => CoalescedPartitionSpec(i + 3, i + 4, 1))
+    val otherSideSkewSpecs = Seq.fill(2)(CoalescedPartitionSpec(2, 3, 2))
+    val specs2 = Seq.tabulate(2)(i => CoalescedPartitionSpec(i, i + 1, 2)) ++
+      otherSideSkewSpecs ++ Seq.tabulate(5)(i => CoalescedPartitionSpec(i + 3, i + 4, 2))
+
+    val expected1 = Seq(CoalescedPartitionSpec(0, 2, 2)) ++ skewSpecs ++ Seq(
+      CoalescedPartitionSpec(3, 5, 2),
+      CoalescedPartitionSpec(5, 7, 2),
+      CoalescedPartitionSpec(7, 8, 1))
+    val expected2 = Seq(CoalescedPartitionSpec(0, 2, 4)) ++ otherSideSkewSpecs ++ Seq(
+      CoalescedPartitionSpec(3, 5, 4),
+      CoalescedPartitionSpec(5, 7, 4),
+      CoalescedPartitionSpec(7, 8, 2))
+
+    val coalesced = ShufflePartitionsUtil.coalescePartitions(
+      Seq(
+        Some(new MapOutputStatistics(0, bytesByPartitionId1)),
+        Some(new MapOutputStatistics(1, bytesByPartitionId2))),
+      Seq(Some(specs1), Some(specs2)),
+      advisoryTargetSize = 100,
+      minNumPartitions = 1,
+      minPartitionSize = 0,
+      shuffleStageIds = Seq.empty,
+      maxReducerPartitionsPerTask = 2)
+    assert(coalesced === Seq(expected1, expected2))
+  }
+
+  test("max reducer partitions per task must be positive") {
+    val conf = new SQLConf
+    assert(conf.getConf(SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK) ===
+      Int.MaxValue)
+    Seq(0, -1).foreach { value =>
+      intercept[IllegalArgumentException] {
+        conf.setConfString(
+          SQLConf.COALESCE_PARTITIONS_MAX_REDUCER_PARTITIONS_PER_TASK.key,
+          value.toString)
+      }
     }
   }
 

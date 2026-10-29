@@ -17,10 +17,9 @@
 
 package org.apache.spark.sql.execution.command
 
-import org.apache.spark.QueryContext
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{ColumnDefinition, CreatePipelineDatasetAsSelect}
-import org.apache.spark.sql.connector.expressions.{FieldReference, IdentityTransform}
+import org.apache.spark.sql.connector.expressions.{ClusterByTransform, FieldReference, IdentityTransform}
 import org.apache.spark.sql.execution.SparkSqlParser
 import org.apache.spark.sql.execution.command.v1.CommandSuiteBase
 import org.apache.spark.sql.types.{IntegerType, MetadataBuilder, StringType, StructField, StructType}
@@ -78,6 +77,18 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     Seq(
       (s"CREATE $datasetSqlSyntax table1 PARTITIONED BY (a) AS SELECT * FROM input",
         Seq(IdentityTransform(FieldReference(Seq("a"))))),
+      (s"CREATE $datasetSqlSyntax table1 AS SELECT * FROM input", Seq.empty)
+    ).foreach { case (query, partitioning) =>
+      val plan = parser.parsePlan(query)
+      val cmd = plan.asInstanceOf[CreatePipelineDatasetAsSelect]
+      assert(cmd.partitioning == partitioning)
+    }
+  }
+
+  test("Clustering is correctly parsed") {
+    Seq(
+      (s"CREATE $datasetSqlSyntax table1 CLUSTER BY (a) AS SELECT * FROM input",
+        Seq(ClusterByTransform(Seq(FieldReference(Seq("a")))))),
       (s"CREATE $datasetSqlSyntax table1 AS SELECT * FROM input", Seq.empty)
     ).foreach { case (query, partitioning) =>
       val plan = parser.parsePlan(query)
@@ -224,6 +235,32 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
     )
   }
 
+  test("SPARK-34586: a write distribution and ordering is unsupported") {
+    Seq(
+      "PARTITIONED BY (a) DISTRIBUTED BY PARTITION",
+      "ORDERED BY (a)",
+      "LOCALLY ORDERED BY (a)",
+      "UNORDERED",
+      // rejected before the checks that CREATE TABLE applies to these, so they are covered too
+      "DISTRIBUTED BY PARTITION",
+      "ORDERED BY (a) UNORDERED"
+    ).foreach { clauses =>
+      val ex = intercept[ParseException] {
+        parser.parsePlan(
+          s"""CREATE $datasetSqlSyntax table1 $clauses
+             |AS SELECT * FROM input""".stripMargin)
+      }
+      checkError(
+        exception = ex,
+        condition = "INVALID_STATEMENT_OR_CLAUSE",
+        sqlState = Some("42601"),
+        parameters = Map(
+          "operation" -> s"CREATE $datasetSqlSyntax ... DISTRIBUTED BY/ORDERED BY/UNORDERED"),
+        queryContext = ex.getQueryContext.map(toExpectedContext)
+      )
+    }
+  }
+
   test("CTAS subquery is parsed into plan correctly") {
     Seq(
       "SELECT 1",
@@ -261,14 +298,4 @@ trait CreatePipelineDatasetAsSelectParserSuiteBase extends CommandSuiteBase {
       assert(cmd.tableSpec.collation == collationOpt)
     }
   }
-
-  /** Return an ExpectedContext that is equivalent to the passed QueryContext. Used to no-op
-   * queryContext checks on error validation */
-  def toExpectedContext(actualQueryContext: QueryContext): ExpectedContext = ExpectedContext(
-    objectType = actualQueryContext.objectType(),
-    objectName = actualQueryContext.objectName(),
-    startIndex = actualQueryContext.startIndex(),
-    stopIndex = actualQueryContext.stopIndex(),
-    fragment = actualQueryContext.fragment()
-  )
 }

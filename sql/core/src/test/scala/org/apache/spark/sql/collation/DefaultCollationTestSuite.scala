@@ -27,6 +27,7 @@ import org.apache.spark.sql.connector.catalog.CatalogManager.SESSION_CATALOG_NAM
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{BooleanType, StringType, StructType}
+import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class DefaultCollationTestSuite extends SharedSparkSession {
 
@@ -1556,14 +1557,8 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
     }
   }
 
-  testString("ALTER VIEW AS picks up the namespace's default collation when the existing " +
-      "view has none") {
+  testString("ALTER SCHEMA DEFAULT COLLATION does not retroactively change a view's collation") {
     _ =>
-    // The view is created in a schema with no default collation, so the stored
-    // `CatalogTable.collation` is `None`. After the schema gains a default, the next
-    // `ALTER VIEW AS` must fold that default into both the analyzed plan's literal types
-    // (so `assertTableColumnCollation` sees it on read) and the persisted CatalogTable so
-    // the AnalysisContext fallback fires on every subsequent read.
     withDatabase(testSchema) {
       sql(s"CREATE SCHEMA $testSchema")
       sql(s"USE $testSchema")
@@ -1573,8 +1568,8 @@ abstract class DefaultCollationTestSuiteV1 extends DefaultCollationTestSuite {
 
         sql(s"ALTER SCHEMA $testSchema DEFAULT COLLATION UTF8_LCASE")
         sql(s"ALTER VIEW $testView AS SELECT 'x' AS c1, 'y' AS c2")
-        assertTableColumnCollation(testView, "c1", "UTF8_LCASE")
-        assertTableColumnCollation(testView, "c2", "UTF8_LCASE")
+        assertTableColumnCollation(testView, "c1", "UTF8_BINARY")
+        assertTableColumnCollation(testView, "c2", "UTF8_BINARY")
       }
     }
   }
@@ -1941,6 +1936,7 @@ abstract class DefaultCollationTestSuiteV2
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationStringTestSuiteV1 extends DefaultCollationTestSuiteV1 {
   override protected def testDataType(testName: String)(testFn: String => Unit): Unit = {
     test(s"$testName [STRING]") {
@@ -1949,6 +1945,7 @@ class DefaultCollationStringTestSuiteV1 extends DefaultCollationTestSuiteV1 {
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationStringTestSuiteV2 extends DefaultCollationTestSuiteV2 {
   override protected def testDataType(testName: String)(testFn: String => Unit): Unit = {
     test(s"$testName [STRING]") {
@@ -1980,6 +1977,7 @@ class DefaultCollationStringTestSuiteV2 extends DefaultCollationTestSuiteV2 {
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationCharVarcharTestSuiteV1 extends DefaultCollationTestSuiteV1 {
   override protected def excluded: Seq[String] =
     super.excluded ++ stringTestNames ++ stringTestNamesV1
@@ -1994,6 +1992,7 @@ class DefaultCollationCharVarcharTestSuiteV1 extends DefaultCollationTestSuiteV1
   }
 }
 
+@ExtendedSQLTest
 class DefaultCollationCharVarcharTestSuiteV2 extends DefaultCollationTestSuiteV2 {
   override protected def excluded: Seq[String] =
     super.excluded ++ stringTestNames

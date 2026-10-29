@@ -392,13 +392,15 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
    * @since 3.5.0
    */
   override def createTable(tableName: String, path: String): DataFrame = {
-    sparkSession.newDataFrame { builder =>
-      builder.getCatalogBuilder.getCreateTableBuilder
-        .setTableName(tableName)
-        .setSchema(DataTypeProtoConverter.toConnectProtoType(new StructType))
-        .setDescription("")
-        .putOptions("path", path)
-    }
+    // Leave the source unset so the server resolves spark.sql.sources.default, as documented
+    // above. Routing through createTable(tableName, path, "parquet") would hardcode the provider
+    // and ignore that configuration.
+    createTable(
+      tableName = tableName,
+      source = None,
+      schema = new StructType,
+      description = "",
+      options = Map("path" -> path))
   }
 
   /**
@@ -484,16 +486,31 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
       schema: StructType,
       description: String,
       options: Map[String, String]): DataFrame = {
-    sparkSession.newDataFrame { builder =>
+    createTable(tableName, Some(source), schema, description, options)
+  }
+
+  /**
+   * Shared implementation for the public `createTable` overloads. When `source` is `None`, the
+   * proto's `source` field is left unset so the server resolves `spark.sql.sources.default`;
+   * otherwise the provided source is pinned via `setSource`.
+   */
+  private def createTable(
+      tableName: String,
+      source: Option[String],
+      schema: StructType,
+      description: String,
+      options: Map[String, String]): DataFrame = {
+    sparkSession.execute { builder =>
       val createTableBuilder = builder.getCatalogBuilder.getCreateTableBuilder
         .setTableName(tableName)
-        .setSource(source)
         .setSchema(DataTypeProtoConverter.toConnectProtoType(schema))
         .setDescription(description)
+      source.foreach(createTableBuilder.setSource)
       options.foreach { case (k, v) =>
         createTableBuilder.putOptions(k, v)
       }
     }
+    sparkSession.table(tableName)
   }
 
   /**
@@ -835,6 +852,9 @@ class Catalog(sparkSession: SparkSession) extends catalog.Catalog {
 
   /**
    * Returns all table properties as a map (same as `SHOW TBLPROPERTIES`).
+   *
+   * For V2 tables, the returned map also includes display-only properties, which may be
+   * transient. These entries are excluded from the table DDL returned by `getCreateTableString`.
    *
    * @param tableName
    *   qualified or unqualified table or view name

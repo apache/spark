@@ -47,8 +47,8 @@ object TransactionUtils {
     if (txn.catalog.name != catalog.name) {
       abort(txn)
       throw SparkException.internalError(
-        s"""Transaction catalog name (${txn.catalog.name})
-           |must match original catalog name (${catalog.name}).""".stripMargin)
+        s"Transaction catalog name (${txn.catalog.name}) " +
+          s"must match original catalog name (${catalog.name}).")
     }
     txn
   }

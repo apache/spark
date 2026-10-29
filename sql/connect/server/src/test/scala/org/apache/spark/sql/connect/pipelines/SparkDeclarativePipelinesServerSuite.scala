@@ -26,10 +26,15 @@ import org.apache.spark.connect.proto.{Expression, OutputType, PipelineCommand, 
 import org.apache.spark.connect.proto.PipelineCommand.{DefineFlow, DefineOutput}
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connect.service.{SessionKey, SparkConnectService}
+import org.apache.spark.sql.pipelines.autocdc.{ColumnSelection, UnqualifiedColumnName}
+import org.apache.spark.sql.pipelines.graph.AutoCdcFlow
 
 class SparkDeclarativePipelinesServerSuite
     extends SparkDeclarativePipelinesServerTest
     with Logging {
+
+  private def sessionCaseSensitive: Boolean = spark.sessionState.conf.caseSensitiveAnalysis
+
   test("CreateDataflowGraph request creates a new graph") {
     withRawBlockingStub { implicit stub =>
       assert(Option(createDataflowGraph(stub)).isDefined)
@@ -115,6 +120,221 @@ class SparkDeclarativePipelinesServerSuite
     assert(ex.getMessage.contains("DEFINE_FLOW_ONCE_OPTION_NOT_SUPPORTED"))
   }
 
+  // The Python client rejects these AutoCDC misconfigurations client-side, so drive the raw
+  // Connect stub directly to exercise the server-side validation a non-Python client would hit.
+  private def unresolvedColumn(name: String): Expression =
+    Expression
+      .newBuilder()
+      .setUnresolvedAttribute(
+        Expression.UnresolvedAttribute.newBuilder().setUnparsedIdentifier(name))
+      .build()
+
+  private def autoCdcDefineFlow(
+      graphId: String,
+      scdType: DefineFlow.SCDType,
+      columns: Seq[String] = Seq.empty,
+      exceptColumns: Seq[String] = Seq.empty,
+      trackHistoryColumns: Seq[String] = Seq.empty,
+      trackHistoryExceptColumns: Seq[String] = Seq.empty,
+      ignoreNullUpdates: Boolean = false,
+      ignoreNullUpdatesColumns: Seq[String] = Seq.empty,
+      ignoreNullUpdatesExceptColumns: Seq[String] = Seq.empty): DefineFlow = {
+    val autoCdcDetails = DefineFlow.AutoCdcFlowDetails
+      .newBuilder()
+      .setSource("src")
+      .addKeys(unresolvedColumn("id"))
+      .setSequenceBy(unresolvedColumn("ts"))
+      .setStoredAsScdType(scdType)
+    columns.foreach(c => autoCdcDetails.addColumnList(unresolvedColumn(c)))
+    exceptColumns.foreach(c => autoCdcDetails.addExceptColumnList(unresolvedColumn(c)))
+    trackHistoryColumns.foreach(c =>
+      autoCdcDetails.addTrackHistoryColumnList(unresolvedColumn(c)))
+    trackHistoryExceptColumns.foreach(c =>
+      autoCdcDetails.addTrackHistoryExceptColumnList(unresolvedColumn(c)))
+    if (ignoreNullUpdates) autoCdcDetails.setIgnoreNullUpdates(true)
+    ignoreNullUpdatesColumns.foreach(c =>
+      autoCdcDetails.addIgnoreNullUpdatesColumnList(unresolvedColumn(c)))
+    ignoreNullUpdatesExceptColumns.foreach(c =>
+      autoCdcDetails.addIgnoreNullUpdatesExceptColumnList(unresolvedColumn(c)))
+    DefineFlow
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+      .setFlowName("target")
+      .setTargetDatasetName("target")
+      .setAutoCdcFlowDetails(autoCdcDetails)
+      .build()
+  }
+
+  test("AutoCDC: specifying both column_list and except_column_list is rejected server-side") {
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(
+                autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_1,
+                  columns = Seq("id"),
+                  exceptColumns = Seq("ts")))
+              .build()))
+      }
+    }
+    assert(ex.getMessage.contains("AUTOCDC_BOTH_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+  }
+
+  test("AutoCDC: track-history columns without SCD2 are rejected server-side") {
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(autoCdcDefineFlow(
+                graphId,
+                DefineFlow.SCDType.SCD_TYPE_1,
+                trackHistoryColumns = Seq("val")))
+              .build()))
+      }
+    }
+    assert(ex.getMessage.contains("AUTOCDC_TRACK_HISTORY_REQUIRES_SCD2"))
+  }
+
+  test("AutoCDC: specifying both track-history column lists is rejected server-side") {
+    val ex = intercept[Exception] {
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        sendPlan(
+          buildPlanFromPipelineCommand(
+            PipelineCommand
+              .newBuilder()
+              .setDefineFlow(
+                autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_2,
+                  trackHistoryColumns = Seq("val"),
+                  trackHistoryExceptColumns = Seq("ts")))
+              .build()))
+      }
+    }
+    assert(
+      ex.getMessage.contains("AUTOCDC_BOTH_TRACK_HISTORY_COLUMN_LIST_AND_EXCEPT_COLUMN_LIST"))
+  }
+
+  // Retrieves the (unresolved) AutoCdcFlow registered for the given graph so its ChangeArgs can be
+  // inspected. The graph must be non-empty (its target table defined), so build() succeeds.
+  private def registeredAutoCdcFlow(graphId: String): AutoCdcFlow =
+    getDefaultSessionHolder.dataflowGraphRegistry
+      .getDataflowGraphOrThrow(graphId)
+      .toDataflowGraph
+      .flows
+      .collectFirst { case f: AutoCdcFlow => f }
+      .getOrElse(fail("Expected an AutoCdcFlow in the graph"))
+
+  // Defines the "target" streaming table the AutoCDC flows below write into, so the graph is not
+  // empty when inspected.
+  private def defineTargetTable(graphId: String)(implicit
+      stub: proto.SparkConnectServiceGrpc.SparkConnectServiceBlockingStub): Unit =
+    sendPlan(
+      buildPlanFromPipelineCommand(
+        PipelineCommand
+          .newBuilder()
+          .setDefineOutput(
+            DefineOutput
+              .newBuilder()
+              .setDataflowGraphId(graphId)
+              .setOutputName("target")
+              .setOutputType(OutputType.TABLE))
+          .build()))
+
+  test("AutoCDC: ignore_null_updates flag maps to an all-columns ignore-null selection") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      defineTargetTable(graphId)
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(
+              autoCdcDefineFlow(graphId, DefineFlow.SCDType.SCD_TYPE_1, ignoreNullUpdates = true))
+            .build()))
+      // "All columns" is an ExcludeColumns selection with an empty list.
+      assert(
+        registeredAutoCdcFlow(graphId).changeArgs.ignoreNullSelection
+          .contains(ColumnSelection.ExcludeColumns(Seq.empty)))
+    }
+  }
+
+  test("AutoCDC: ignore_null_updates_column_list maps to an include ignore-null selection") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      defineTargetTable(graphId)
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(autoCdcDefineFlow(
+              graphId,
+              DefineFlow.SCDType.SCD_TYPE_1,
+              ignoreNullUpdatesColumns = Seq("val")))
+            .build()))
+      assert(
+        registeredAutoCdcFlow(graphId).changeArgs.ignoreNullSelection
+          .contains(ColumnSelection.IncludeColumns(Seq(UnqualifiedColumnName("val")))))
+    }
+  }
+
+  test(
+    "AutoCDC: ignore_null_updates_except_column_list maps to an except ignore-null selection") {
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      defineTargetTable(graphId)
+      sendPlan(
+        buildPlanFromPipelineCommand(
+          PipelineCommand
+            .newBuilder()
+            .setDefineFlow(autoCdcDefineFlow(
+              graphId,
+              DefineFlow.SCDType.SCD_TYPE_1,
+              ignoreNullUpdatesExceptColumns = Seq("ts")))
+            .build()))
+      assert(
+        registeredAutoCdcFlow(graphId).changeArgs.ignoreNullSelection
+          .contains(ColumnSelection.ExcludeColumns(Seq(UnqualifiedColumnName("ts")))))
+    }
+  }
+
+  // Every combination of more than one of the three mutually-exclusive ignore-null options
+  // (all-columns flag, include list, except list) must be rejected server-side.
+  namedGridTest("AutoCDC: conflicting ignore-null options are rejected server-side")(
+    Map(
+      "(all + column_list)" -> ((true, Seq("val"), Seq.empty[String])),
+      "(all + except_column_list)" -> ((true, Seq.empty[String], Seq("ts"))),
+      "(column_list + except_column_list)" -> ((false, Seq("val"), Seq("ts"))),
+      "(all + column_list + except_column_list)" -> ((true, Seq("val"), Seq("ts"))))) {
+    case (ignoreNullUpdates, columns, exceptColumns) =>
+      val ex = intercept[Exception] {
+        withRawBlockingStub { implicit stub =>
+          val graphId = createDataflowGraph
+          sendPlan(
+            buildPlanFromPipelineCommand(
+              PipelineCommand
+                .newBuilder()
+                .setDefineFlow(autoCdcDefineFlow(
+                  graphId,
+                  DefineFlow.SCDType.SCD_TYPE_1,
+                  ignoreNullUpdates = ignoreNullUpdates,
+                  ignoreNullUpdatesColumns = columns,
+                  ignoreNullUpdatesExceptColumns = exceptColumns))
+                .build()))
+        }
+      }
+      assert(ex.getMessage.contains("AUTOCDC_CONFLICTING_IGNORE_NULL_UPDATES_OPTIONS"))
+  }
+
   test(
     "Cross dependency between SQL dataset and non-SQL dataset is valid and can be registered") {
     withRawBlockingStub { implicit stub =>
@@ -169,7 +389,7 @@ class SparkDeclarativePipelinesServerSuite
       val definition =
         getDefaultSessionHolder.dataflowGraphRegistry.getDataflowGraphOrThrow(graphId)
 
-      val graph = definition.toDataflowGraph.resolve()
+      val graph = definition.toDataflowGraph.resolve(sessionCaseSensitive)
 
       assert(graph.flows.size == 3)
       assert(graph.tables.size == 2)
@@ -216,7 +436,7 @@ class SparkDeclarativePipelinesServerSuite
 
       registerPipelineOutputs(pipeline)
       val graph = definition.toDataflowGraph
-        .resolve()
+        .resolve(sessionCaseSensitive)
 
       assert(graph.flows.size == 3)
       assert(graph.tables.size == 2)
@@ -943,5 +1163,203 @@ class SparkDeclarativePipelinesServerSuite
         sparkSqlResponse.getSqlCommandResult.getRelation ==
           relation.getCommand.getSqlCommand.getInput)
     }
+  }
+
+  // Helper to build a SqlCommand ExecutePlanRequest with PipelineAnalysisContext. A flow name
+  // marks the request as coming from inside a pipeline flow function.
+  private def buildSqlCommandRequestWithPipelineContext(
+      graphId: String,
+      input: proto.Relation,
+      flowName: Option[String] = None): proto.ExecutePlanRequest = {
+    val contextBuilder = proto.PipelineAnalysisContext
+      .newBuilder()
+      .setDataflowGraphId(graphId)
+    flowName.foreach(contextBuilder.setFlowName)
+    val context = contextBuilder.build()
+    val userContext = proto.UserContext
+      .newBuilder()
+      .addExtensions(com.google.protobuf.Any.pack(context))
+      .setUserId("test_user")
+      .build()
+    val plan = proto.Plan
+      .newBuilder()
+      .setCommand(
+        proto.Command
+          .newBuilder()
+          .setSqlCommand(proto.SqlCommand.newBuilder().setInput(input).build())
+          .build())
+      .build()
+    proto.ExecutePlanRequest
+      .newBuilder()
+      .setUserContext(userContext)
+      .setPlan(plan)
+      .setSessionId(UUID.randomUUID().toString)
+      .build()
+  }
+
+  // Helper to build a SQL Relation.
+  private def sqlRelation(query: String): proto.Relation =
+    proto.Relation
+      .newBuilder()
+      .setSql(proto.SQL.newBuilder().setQuery(query))
+      .build()
+
+  // Helper to build a WITH_RELATIONS Relation with the given root SQL and reference SQLs.
+  private def withRelationsRelation(
+      rootSql: String,
+      refs: Seq[(String, String)]): proto.Relation =
+    withRelationsRelationOf(
+      rootSql,
+      refs.map { case (alias, refSql) =>
+        alias -> sqlRelation(refSql)
+      })
+
+  // Helper to build a WITH_RELATIONS Relation with the given root SQL and reference inputs.
+  private def withRelationsRelationOf(
+      rootSql: String,
+      refs: Seq[(String, proto.Relation)]): proto.Relation = {
+    val withRelationsBuilder = proto.WithRelations.newBuilder().setRoot(sqlRelation(rootSql))
+    refs.foreach { case (alias, input) =>
+      withRelationsBuilder.addReferences(
+        proto.Relation
+          .newBuilder()
+          .setSubqueryAlias(
+            proto.SubqueryAlias
+              .newBuilder()
+              .setAlias(alias)
+              .setInput(input)
+              .build())
+          .build())
+    }
+    proto.Relation.newBuilder().setWithRelations(withRelationsBuilder.build()).build()
+  }
+
+  namedGridTest(
+    "SPARK-57189: blockUnsupportedSqlCommand catches Command at root of WITH_RELATIONS " +
+      "without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val tableName = "spark_catalog.default.test_with_relations_root_table"
+        try {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = withRelationsRelation(
+              rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
+              refs = Seq("ref0" -> "SELECT 1 AS id")))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the guard caught the Command before any side effect could materialize.
+          assert(!spark.catalog.tableExists(tableName))
+        } finally {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+        }
+      }
+  }
+
+  namedGridTest(
+    "SPARK-57189: blockUnsupportedSqlCommand catches Command inside reference of " +
+      "WITH_RELATIONS without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val tableName = "spark_catalog.default.test_with_relations_ref_table"
+        try {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = withRelationsRelation(
+              rootSql = "SELECT * FROM ref0",
+              refs = Seq("ref0" -> s"CREATE TABLE $tableName (id INT) USING parquet")))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the Command in the reference did not execute as a side effect.
+          assert(!spark.catalog.tableExists(tableName))
+        } finally {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+        }
+      }
+  }
+
+  namedGridTest(
+    "SPARK-57189: blockUnsupportedSqlCommand catches Command in a WITH_RELATIONS used as a " +
+      "reference input without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        val graphId = createDataflowGraph
+        val tableName = "spark_catalog.default.test_with_relations_nested_ref_table"
+        try {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+          // A DataFrame from spark.sql("...", df=...) carries a WITH_RELATIONS relation, and it
+          // becomes a reference input when passed to another spark.sql call.
+          val nested = withRelationsRelation(
+            rootSql = s"CREATE TABLE $tableName (id INT) USING parquet",
+            refs = Seq("inner0" -> "SELECT 1 AS id"))
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = withRelationsRelationOf(
+              rootSql = "SELECT * FROM ref0",
+              refs = Seq("ref0" -> nested)))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the Command in the nested WITH_RELATIONS did not execute as a side effect.
+          assert(!spark.catalog.tableExists(tableName))
+        } finally {
+          sql(s"DROP TABLE IF EXISTS $tableName")
+        }
+      }
+  }
+
+  test(
+    "SPARK-57189: blockUnsupportedSqlCommand does not over-block a valid SELECT " +
+      "WITH_RELATIONS in pipeline analysis context") {
+    // This passes with and without the fix. It keeps the new recursive check from blocking a
+    // valid SELECT in the future. The two tests above are the ones that verify the fix.
+    withRawBlockingStub { implicit stub =>
+      val graphId = createDataflowGraph
+      val request = buildSqlCommandRequestWithPipelineContext(
+        graphId,
+        withRelationsRelation(
+          rootSql = "SELECT * FROM ref0",
+          refs = Seq("ref0" -> "SELECT 1 AS id")))
+      val response = stub.executePlan(request).next()
+      assert(response.hasSqlCommandResult)
+    }
+  }
+
+  namedGridTest(
+    "SPARK-60481: blockUnsupportedSqlCommand catches INSERT OVERWRITE DIRECTORY " +
+      "without executing it")(
+    Map("outside a flow function" -> None, "inside a flow function" -> Some("flow1"))) {
+    flowName =>
+      withRawBlockingStub { implicit stub =>
+        withTempDir { dir =>
+          val graphId = createDataflowGraph
+          val request = buildSqlCommandRequestWithPipelineContext(
+            graphId,
+            flowName = flowName,
+            input = sqlRelation(
+              s"INSERT OVERWRITE DIRECTORY '${dir.toURI}' USING parquet SELECT 1 AS id"))
+          val ex = intercept[RuntimeException] {
+            stub.executePlan(request).next()
+          }
+          assert(ex.getMessage.contains("UNSUPPORTED_PIPELINE_SPARK_SQL_COMMAND"))
+          // Verify the directory was not overwritten as a side effect.
+          assert(dir.listFiles().isEmpty)
+        }
+      }
   }
 }

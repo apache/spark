@@ -15,14 +15,14 @@
 # limitations under the License.
 #
 
-from decimal import Decimal
 import datetime
 import os
 import unittest
+from decimal import Decimal
 
+from pyspark.loose_version import LooseVersion
 from pyspark.sql.functions import udf
 from pyspark.sql.types import (
-    Row,
     ArrayType,
     BinaryType,
     BooleanType,
@@ -34,23 +34,23 @@ from pyspark.sql.types import (
     IntegerType,
     LongType,
     MapType,
+    Row,
     ShortType,
     StringType,
     StructField,
     StructType,
     TimestampType,
 )
-from pyspark.loose_version import LooseVersion
-from pyspark.testing.utils import (
-    have_pyarrow,
-    have_pandas,
-    have_numpy,
-    pyarrow_requirement_message,
-    pandas_requirement_message,
-    numpy_requirement_message,
-)
-from pyspark.testing.sqlutils import ReusedSQLTestCase
 from pyspark.testing.goldenutils import GoldenFileTestMixin
+from pyspark.testing.sqlutils import ReusedSQLTestCase
+from pyspark.testing.utils import (
+    have_numpy,
+    have_pandas,
+    have_pyarrow,
+    numpy_requirement_message,
+    pandas_requirement_message,
+    pyarrow_requirement_message,
+)
 
 if have_numpy:
     import numpy as np
@@ -77,6 +77,18 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
     @property
     def prefix(self):
         return "golden_python_udf_input_type_coercion"
+
+    @property
+    def pandas_dir(self):
+        # Only the legacy pandas conversion path routes inputs through pandas,
+        # whose defaults changed in pandas 3 (e.g. None becomes nan in str
+        # columns). Use a dedicated golden file per major pandas version for
+        # that path, kept in a versioned subdirectory, instead of patching
+        # one golden in memory.
+        if LooseVersion(pd.__version__) >= LooseVersion("3.0.0"):
+            return "pandas_3"
+        else:
+            return "pandas_2"
 
     @property
     def test_cases(self):
@@ -253,7 +265,7 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
         self._run_udf_input_type_coercion(
             use_arrow=True,
             legacy_pandas=True,
-            golden_file=f"{self.prefix}_with_arrow_and_pandas",
+            golden_file=os.path.join(self.pandas_dir, f"{self.prefix}_with_arrow_and_pandas"),
             test_name="Arrow Optimized Python UDF with Legacy Pandas Conversion",
         )
 
@@ -319,6 +331,9 @@ class UDFInputTypeTests(GoldenFileTestMixin, ReusedSQLTestCase):
             except Exception as e:
                 print("Exception", e)
                 result.append(f"✗ {str(e)}")
+                # Pad to the full column count so the row roundtrips through
+                # the golden CSV (short rows come back with a trailing "").
+                result.append("")
 
             # Clean up exception message to remove newlines and extra whitespace
             result = [self.clean_result(r) for r in result]

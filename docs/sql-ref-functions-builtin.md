@@ -17,6 +17,10 @@ license: |
   limitations under the License.
 ---
 
+All built-in functions live in the virtual schema `system.builtin`. They can always be referenced
+unambiguously by their fully qualified name (for example `system.builtin.abs`), regardless of any
+user-defined function that may share the same name.
+
 ### Aggregate Functions
 {% include_api_gen generated-agg-funcs-table.html %}
 #### Examples
@@ -37,6 +41,11 @@ license: |
 #### Examples
 {% include_api_gen generated-collection-funcs-examples.html %}
 
+### Lambda Functions
+{% include_api_gen generated-lambda-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-lambda-funcs-examples.html %}
+
 ### STRUCT Functions
 {% include_api_gen generated-struct-funcs-table.html %}
 #### Examples
@@ -47,7 +56,7 @@ license: |
 #### Examples
 {% include_api_gen generated-map-funcs-examples.html %}
 
-### Date and Timestamp Functions
+### Date, Time and Timestamp Functions
 {% include_api_gen generated-datetime-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-datetime-funcs-examples.html %}
@@ -131,3 +140,8 @@ license: |
 {% include_api_gen generated-st-funcs-table.html %}
 #### Examples
 {% include_api_gen generated-st-funcs-examples.html %}
+
+### Vector Functions
+{% include_api_gen generated-vector-funcs-table.html %}
+#### Examples
+{% include_api_gen generated-vector-funcs-examples.html %}

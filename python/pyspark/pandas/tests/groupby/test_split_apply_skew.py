@@ -15,9 +15,8 @@
 # limitations under the License.
 #
 
-from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.pandas.tests.groupby.test_split_apply import GroupbySplitApplyTestingFuncMixin
+from pyspark.testing.pandasutils import PandasOnSparkTestCase
 
 
 class GroupbySplitApplySkewMixin(GroupbySplitApplyTestingFuncMixin):
@@ -31,7 +30,6 @@ class GroupbySplitApplySkewMixin(GroupbySplitApplyTestingFuncMixin):
 class GroupbySplitApplySkewTests(
     GroupbySplitApplySkewMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

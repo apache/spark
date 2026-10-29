@@ -18,7 +18,7 @@ package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
 import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
-import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
@@ -34,7 +34,7 @@ import org.apache.spark.deploy.k8s.KubernetesConf
 import org.apache.spark.deploy.k8s.KubernetesUtils.addOwnerReference
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config._
-import org.apache.spark.resource.ResourceProfile
+import org.apache.spark.resource.{CpuAmount, ResourceProfile}
 import org.apache.spark.scheduler.cluster.SchedulerBackendUtils.DEFAULT_NUMBER_EXECUTORS
 import org.apache.spark.util.{Clock, Utils}
 
@@ -88,6 +88,9 @@ class ExecutorPodsAllocator(
 
   protected val driverPodReadinessTimeout = conf.get(KUBERNETES_ALLOCATION_DRIVER_READINESS_TIMEOUT)
 
+  private val shouldWaitForDriverReadiness =
+    !conf.get(KUBERNETES_DRIVER_SERVICE_PUBLISH_NOT_READY_ADDRESSES)
+
   protected val executorIdleTimeout = conf.get(DYN_ALLOCATION_EXECUTOR_IDLE_TIMEOUT) * 1000
 
   protected val namespace = conf.get(KUBERNETES_NAMESPACE)
@@ -132,15 +135,19 @@ class ExecutorPodsAllocator(
 
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit = {
     appId = applicationId
-    driverPod.foreach { pod =>
-      // Wait until the driver pod is ready before starting executors, as the headless service won't
-      // be resolvable by DNS until the driver pod is ready.
-      Utils.tryLogNonFatalError {
-        kubernetesClient
-          .pods()
-          .inNamespace(namespace)
-          .withName(pod.getMetadata.getName)
-          .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+    warnIfRecoveryModeCannotIsolateSingleTask()
+    if (shouldWaitForDriverReadiness) {
+      driverPod.foreach { pod =>
+        // Wait until the driver pod is ready before starting executors, as the headless service
+        // won't be resolvable by DNS until the driver pod is ready. This is unnecessary when the
+        // driver service publishes not-ready addresses, since DNS no longer depends on readiness.
+        Utils.tryLogNonFatalError {
+          kubernetesClient
+            .pods()
+            .inNamespace(namespace)
+            .withName(pod.getMetadata.getName)
+            .waitUntilReady(driverPodReadinessTimeout, TimeUnit.SECONDS)
+        }
       }
     }
     snapshotsStore.addSubscriber(podAllocationDelay) { executorPodsSnapshot =>
@@ -462,8 +469,48 @@ class ExecutorPodsAllocator(
     }
   }
 
+  // Whether the user configured recovery mode. Only the switch an OOM makes is reverted when
+  // the application resumes: an application configured to run in recovery mode stays in it.
+  private val recoveryModeConfigured =
+    conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isDefined
+
   def setRecoveryMode(): Unit = {
     conf.setIfMissing(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED, true)
+    warnIfRecoveryModeCannotIsolateSingleTask()
+  }
+
+  /**
+   * Leave the recovery mode an OOM turned on, so that the executors created afterwards are
+   * normal executors again. Called when a held application resumes: the hold drained the
+   * executors the OOM was reacting to, and the resumed application starts over.
+   */
+  def unsetRecoveryMode(): Unit = {
+    if (!recoveryModeConfigured &&
+        conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).isDefined) {
+      conf.remove(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED)
+      logInfo("Recovery mode is turned off, so the executors created next are normal executors.")
+    }
+  }
+
+  // Recovery mode's single-task guarantee is enforced by announcing SPARK_EXECUTOR_CORES =
+  // ceil(spark.task.cpus), which must be a whole number. When the task cpus amount is 0.5 or
+  // less, the single announced core fits more than one task, so the guarantee cannot hold;
+  // log a prominent warning (at most once) instead of silently overcommitting recovery
+  // executors.
+  private val recoveryModeCpusWarned = new AtomicBoolean(false)
+
+  private def warnIfRecoveryModeCannotIsolateSingleTask(): Unit = {
+    val taskCpus = conf.get(CPUS_PER_TASK)
+    if (conf.get(KUBERNETES_ALLOCATION_RECOVERY_MODE_ENABLED).getOrElse(false) &&
+        taskCpus <= BigDecimal(0.5) && recoveryModeCpusWarned.compareAndSet(false, true)) {
+      val slots = ResourceProfile.numTasksBasedOnCores(
+        CpuAmount.normalize(BigDecimal(1)), taskCpus)
+      logWarning(log"Recovery mode is enabled while spark.task.cpus = " +
+        log"${MDC(LogKeys.NUM_TASK_CPUS, CpuAmount.toDisplayString(taskCpus))} is <= 0.5. A " +
+        log"recovery-mode executor announces a single core, so it accepts up to " +
+        log"${MDC(LogKeys.NUM_SLOTS, slots)} concurrent tasks instead of only one. Set " +
+        log"spark.task.cpus above 0.5 to restore single-task recovery executors.")
+    }
   }
 
   protected def requestNewExecutors(
@@ -488,8 +535,9 @@ class ExecutorPodsAllocator(
         newExecutorId.toString,
         applicationId,
         driverPod,
-        resourceProfileId)
-      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf, secMgr,
+        resourceProfileId,
+        Option(secMgr.getSecretKey()))
+      val resolvedExecutorSpec = executorBuilder.buildFromFeatures(executorConf,
         kubernetesClient, rpIdToResourceProfile(resourceProfileId))
       val executorPod = resolvedExecutorSpec.pod
       val podWithAttachedContainer = new PodBuilder(executorPod.pod)

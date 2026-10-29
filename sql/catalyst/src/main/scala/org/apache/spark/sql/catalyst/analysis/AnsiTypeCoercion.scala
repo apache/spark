@@ -168,6 +168,10 @@ object AnsiTypeCoercion extends TypeCoercionBase {
   private def implicitCast(
       inType: DataType,
       expectedType: AbstractDataType): Option[DataType] = {
+    // CHAR/VARCHAR promotion is checked first: the acceptsType case below would otherwise
+    // accept the constrained type unchanged, since CharType and VarcharType extend StringType.
+    charVarcharToPlainString(inType, expectedType).foreach(dt => return Some(dt))
+
     (inType, expectedType) match {
       // If the expected type equals the input type, no need to cast.
       case _ if expectedType.acceptsType(inType) => Some(inType)
@@ -200,9 +204,12 @@ object AnsiTypeCoercion extends TypeCoercionBase {
 
       // When the target type is `TypeCollection`, there is another branch to find the
       // "closet convertible data type" below.
+      // Unlike store assignment, a nanos timestamp, also nested, is never implicitly narrowed to
+      // TIME.
       case (_, target) if !target.isInstanceOf[TypeCollection] =>
         val concreteType = target.defaultConcreteType
-        if (Cast.canANSIStoreAssign(inType, concreteType)) {
+        if (Cast.canANSIStoreAssign(inType, concreteType) &&
+            !isNanosNarrowing(inType, concreteType)) {
           Some(concreteType)
         } else {
           None
@@ -211,7 +218,7 @@ object AnsiTypeCoercion extends TypeCoercionBase {
       // When we reach here, input type is not acceptable for any types in this type collection,
       // try to find the first one we can implicitly cast.
       case (_, TypeCollection(types)) =>
-        types.flatMap(implicitCast(inType, _)).headOption
+        pickTypeCollectionCast(inType, types.flatMap(implicitCast(inType, _)))
 
       case _ => None
     }

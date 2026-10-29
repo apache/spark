@@ -17,7 +17,7 @@
 
 export {
   ConvertDurationString, createRESTEndPointForExecutorsPage, createRESTEndPointForMiscellaneousProcess, createTemplateURI,
-  errorMessageCell, errorSummary,
+  errorMessageCell, errorSummary, escapeHtml,
   formatBytes, formatDate, formatDuration, formatLogsCells, formatTimeMillis,
   getBaseURI, getStandAloneAppId, getTimeZone,
   setDataTableDefaults, stringAbbreviate
@@ -88,12 +88,28 @@ function getTimeZone() {
   }
 }
 
+/* Custom log URLs are rendered as links only when they are http(s) or relative
+ * URLs; anything else is shown as plain text. Browsers strip ASCII whitespace
+ * and control characters when parsing URLs, so remove them before checking
+ * the scheme. */
+function isHttpOrRelativeUrl(url) {
+  if (typeof url !== 'string') return false;
+  /* eslint-disable-next-line no-control-regex */
+  var normalized = url.replace(/[\u0000-\u0020]/g, '').toLowerCase();
+  return /^https?:\/\//.test(normalized) || !/^[a-z][a-z0-9+.-]*:/.test(normalized);
+}
+
 function formatLogsCells(execLogs, type) {
   if (type !== 'display') return Object.keys(execLogs);
   if (!execLogs) return;
   var result = '';
   $.each(execLogs, function (logName, logUrl) {
-    result += '<div><a href=' + logUrl + '>' + logName + '</a></div>'
+    // Custom log names and URLs can contain markup characters.
+    if (isHttpOrRelativeUrl(logUrl)) {
+      result += '<div><a href="' + escapeHtml(logUrl) + '">' + escapeHtml(logName) + '</a></div>'
+    } else {
+      result += '<div>' + escapeHtml(logName) + '</div>'
+    }
   });
   return result;
 }
@@ -235,6 +251,18 @@ function getBaseURI() {
   return document.baseURI || document.URL;
 }
 
+/* Escape a value for safe inclusion in HTML text content. Non-string values are
+ * coerced to a string first; null/undefined are returned unchanged. */
+function escapeHtml(text) {
+  if (text === null || text === undefined) return text;
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 function detailsUINode(isMultiline, message) {
   if (isMultiline) {
     const span = '<span data-toggle-details=".stacktrace-details" class="expand-details">+details</span>';
@@ -269,8 +297,8 @@ function errorSummary(errorMessage) {
 
 function errorMessageCell(errorMessage) {
   const [summary, isMultiline] = errorSummary(errorMessage);
-  const details = detailsUINode(isMultiline, errorMessage);
-  return summary + details;
+  const details = detailsUINode(isMultiline, escapeHtml(errorMessage));
+  return escapeHtml(summary) + details;
 }
 
 function stringAbbreviate(content, limit) {

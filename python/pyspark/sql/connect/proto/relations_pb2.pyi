@@ -112,6 +112,8 @@ class Relation(google.protobuf.message.Message):
     CHUNKED_CACHED_LOCAL_RELATION_FIELD_NUMBER: builtins.int
     RELATION_CHANGES_FIELD_NUMBER: builtins.int
     NEAREST_BY_JOIN_FIELD_NUMBER: builtins.int
+    ZIP_FIELD_NUMBER: builtins.int
+    BIN_BY_FIELD_NUMBER: builtins.int
     FILL_NA_FIELD_NUMBER: builtins.int
     DROP_NA_FIELD_NUMBER: builtins.int
     REPLACE_FIELD_NUMBER: builtins.int
@@ -226,6 +228,10 @@ class Relation(google.protobuf.message.Message):
     @property
     def nearest_by_join(self) -> global___NearestByJoin: ...
     @property
+    def zip(self) -> global___Zip: ...
+    @property
+    def bin_by(self) -> global___BinBy: ...
+    @property
     def fill_na(self) -> global___NAFill:
         """NA functions"""
     @property
@@ -314,6 +320,8 @@ class Relation(google.protobuf.message.Message):
         chunked_cached_local_relation: global___ChunkedCachedLocalRelation | None = ...,
         relation_changes: global___RelationChanges | None = ...,
         nearest_by_join: global___NearestByJoin | None = ...,
+        zip: global___Zip | None = ...,
+        bin_by: global___BinBy | None = ...,
         fill_na: global___NAFill | None = ...,
         drop_na: global___NADrop | None = ...,
         replace: global___NAReplace | None = ...,
@@ -341,6 +349,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "as_of_join",
             b"as_of_join",
+            "bin_by",
+            b"bin_by",
             "cached_local_relation",
             b"cached_local_relation",
             "cached_remote_relation",
@@ -459,6 +469,8 @@ class Relation(google.protobuf.message.Message):
             b"with_relations",
             "with_watermark",
             b"with_watermark",
+            "zip",
+            b"zip",
         ],
     ) -> builtins.bool: ...
     def ClearField(
@@ -472,6 +484,8 @@ class Relation(google.protobuf.message.Message):
             b"approx_quantile",
             "as_of_join",
             b"as_of_join",
+            "bin_by",
+            b"bin_by",
             "cached_local_relation",
             b"cached_local_relation",
             "cached_remote_relation",
@@ -590,6 +604,8 @@ class Relation(google.protobuf.message.Message):
             b"with_relations",
             "with_watermark",
             b"with_watermark",
+            "zip",
+            b"zip",
         ],
     ) -> None: ...
     def WhichOneof(
@@ -642,6 +658,8 @@ class Relation(google.protobuf.message.Message):
             "chunked_cached_local_relation",
             "relation_changes",
             "nearest_by_join",
+            "zip",
+            "bin_by",
             "fill_na",
             "drop_na",
             "replace",
@@ -2263,7 +2281,7 @@ class CachedRemoteRelation(google.protobuf.message.Message):
 
     RELATION_ID_FIELD_NUMBER: builtins.int
     relation_id: builtins.str
-    """(Required) ID of the remote related (assigned by the service)."""
+    """(Required) ID of the remote relation in the current session."""
     def __init__(
         self,
         *,
@@ -3469,6 +3487,138 @@ class Hint(google.protobuf.message.Message):
     ) -> None: ...
 
 global___Hint = Hint
+
+class BinBy(google.protobuf.message.Message):
+    """Splits timestamp ranges across fixed bins and scales selected FLOAT or DOUBLE columns."""
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    INPUT_FIELD_NUMBER: builtins.int
+    RANGE_START_FIELD_NUMBER: builtins.int
+    RANGE_END_FIELD_NUMBER: builtins.int
+    BIN_WIDTH_FIELD_NUMBER: builtins.int
+    ALIGN_TO_FIELD_NUMBER: builtins.int
+    DISTRIBUTE_UNIFORM_FIELD_NUMBER: builtins.int
+    BIN_START_NAME_FIELD_NUMBER: builtins.int
+    BIN_END_NAME_FIELD_NUMBER: builtins.int
+    BIN_DISTRIBUTE_RATIO_NAME_FIELD_NUMBER: builtins.int
+    @property
+    def input(self) -> global___Relation:
+        """(Required) The input relation."""
+    @property
+    def range_start(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) Inclusive range start timestamp."""
+    @property
+    def range_end(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) Exclusive range end, with the same timestamp type as range_start."""
+    @property
+    def bin_width(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Required) A positive, constant day-time interval expression."""
+    @property
+    def align_to(self) -> pyspark.sql.connect.proto.expressions_pb2.Expression:
+        """(Optional) A constant origin with the same timestamp type as the range columns."""
+    @property
+    def distribute_uniform(
+        self,
+    ) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[
+        pyspark.sql.connect.proto.expressions_pb2.Expression
+    ]:
+        """(Required) At least one FLOAT or DOUBLE column to scale."""
+    bin_start_name: builtins.str
+    """(Optional) Name for the appended bin-start column. Defaults to bin_start."""
+    bin_end_name: builtins.str
+    """(Optional) Name for the appended bin-end column. Defaults to bin_end."""
+    bin_distribute_ratio_name: builtins.str
+    """(Optional) Name for the appended overlap-ratio column. Defaults to bin_distribute_ratio."""
+    def __init__(
+        self,
+        *,
+        input: global___Relation | None = ...,
+        range_start: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        range_end: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        bin_width: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        align_to: pyspark.sql.connect.proto.expressions_pb2.Expression | None = ...,
+        distribute_uniform: collections.abc.Iterable[
+            pyspark.sql.connect.proto.expressions_pb2.Expression
+        ]
+        | None = ...,
+        bin_start_name: builtins.str | None = ...,
+        bin_end_name: builtins.str | None = ...,
+        bin_distribute_ratio_name: builtins.str | None = ...,
+    ) -> None: ...
+    def HasField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_bin_distribute_ratio_name",
+            b"_bin_distribute_ratio_name",
+            "_bin_end_name",
+            b"_bin_end_name",
+            "_bin_start_name",
+            b"_bin_start_name",
+            "align_to",
+            b"align_to",
+            "bin_distribute_ratio_name",
+            b"bin_distribute_ratio_name",
+            "bin_end_name",
+            b"bin_end_name",
+            "bin_start_name",
+            b"bin_start_name",
+            "bin_width",
+            b"bin_width",
+            "input",
+            b"input",
+            "range_end",
+            b"range_end",
+            "range_start",
+            b"range_start",
+        ],
+    ) -> builtins.bool: ...
+    def ClearField(
+        self,
+        field_name: typing_extensions.Literal[
+            "_bin_distribute_ratio_name",
+            b"_bin_distribute_ratio_name",
+            "_bin_end_name",
+            b"_bin_end_name",
+            "_bin_start_name",
+            b"_bin_start_name",
+            "align_to",
+            b"align_to",
+            "bin_distribute_ratio_name",
+            b"bin_distribute_ratio_name",
+            "bin_end_name",
+            b"bin_end_name",
+            "bin_start_name",
+            b"bin_start_name",
+            "bin_width",
+            b"bin_width",
+            "distribute_uniform",
+            b"distribute_uniform",
+            "input",
+            b"input",
+            "range_end",
+            b"range_end",
+            "range_start",
+            b"range_start",
+        ],
+    ) -> None: ...
+    @typing.overload
+    def WhichOneof(
+        self,
+        oneof_group: typing_extensions.Literal[
+            "_bin_distribute_ratio_name", b"_bin_distribute_ratio_name"
+        ],
+    ) -> typing_extensions.Literal["bin_distribute_ratio_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_bin_end_name", b"_bin_end_name"]
+    ) -> typing_extensions.Literal["bin_end_name"] | None: ...
+    @typing.overload
+    def WhichOneof(
+        self, oneof_group: typing_extensions.Literal["_bin_start_name", b"_bin_start_name"]
+    ) -> typing_extensions.Literal["bin_start_name"] | None: ...
+
+global___BinBy = BinBy
 
 class Unpivot(google.protobuf.message.Message):
     """Unpivot a DataFrame from wide format to long format, optionally leaving identifier columns set."""
@@ -4742,3 +4892,35 @@ class NearestByJoin(google.protobuf.message.Message):
     ) -> None: ...
 
 global___NearestByJoin = NearestByJoin
+
+class Zip(google.protobuf.message.Message):
+    """Relation of type [[Zip]].
+
+    Combines the columns of two DataFrames side-by-side. Both DataFrames must produce the same
+    canonicalized plan after stripping outer Project chains.
+    """
+
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    LEFT_FIELD_NUMBER: builtins.int
+    RIGHT_FIELD_NUMBER: builtins.int
+    @property
+    def left(self) -> global___Relation:
+        """(Required) Left input relation."""
+    @property
+    def right(self) -> global___Relation:
+        """(Required) Right input relation."""
+    def __init__(
+        self,
+        *,
+        left: global___Relation | None = ...,
+        right: global___Relation | None = ...,
+    ) -> None: ...
+    def HasField(
+        self, field_name: typing_extensions.Literal["left", b"left", "right", b"right"]
+    ) -> builtins.bool: ...
+    def ClearField(
+        self, field_name: typing_extensions.Literal["left", b"left", "right", b"right"]
+    ) -> None: ...
+
+global___Zip = Zip

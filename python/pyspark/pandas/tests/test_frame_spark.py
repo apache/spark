@@ -21,7 +21,6 @@ import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase, TestUtils
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SparkFrameMethodsTestsMixin:
@@ -143,9 +142,7 @@ class SparkFrameMethodsTestsMixin:
         self.assert_eq(psdf, new_psdf)
 
 
-class SparkFrameMethodsTests(
-    SparkFrameMethodsTestsMixin, PandasOnSparkTestCase, SQLTestUtils, TestUtils
-):
+class SparkFrameMethodsTests(SparkFrameMethodsTestsMixin, PandasOnSparkTestCase, TestUtils):
     pass
 
 

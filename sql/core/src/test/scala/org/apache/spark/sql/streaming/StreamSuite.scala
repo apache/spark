@@ -21,6 +21,7 @@ import java.io.{File, InterruptedIOException, UncheckedIOException}
 import java.nio.channels.ClosedByInterruptException
 import java.time.ZoneId
 import java.util.concurrent.{CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 import scala.concurrent.TimeoutException
 import scala.reflect.ClassTag
@@ -50,6 +51,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources.StreamSourceProvider
+import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.streaming.util.{BlockOnStopSourceProvider, StreamManualClock}
 import org.apache.spark.sql.types.{IntegerType, LongType, StructField, StructType}
 import org.apache.spark.tags.SlowSQLTest
@@ -444,6 +446,75 @@ class StreamSuite extends StreamTest {
         ExpectFailure(isFatalError = true)(ClassTag(e.getClass))
       )
     }
+  }
+
+  /** Also returns the error, if any, rethrown to the query thread's `UncaughtExceptionHandler`. */
+  private def failWhileBuildingQueryException(
+      buildFailure: Throwable): (StreamingQueryException, Option[Throwable]) = {
+    val source = new Source {
+      @volatile private var failed = false
+
+      override def getOffset: Option[Offset] = Some(LongOffset(0))
+
+      override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
+        failed = true
+        throw new IllegalStateException("getBatch failed")
+      }
+
+      override def schema: StructType = StructType(Array(StructField("value", IntegerType)))
+
+      override def stop(): Unit = {}
+
+      // The query debug string embeds the source, so this fails building the detailed exception.
+      override def toString: String = if (failed) throw buildFailure else "FailingSource"
+    }
+    val df = Dataset[Int](
+      sqlContext.sparkSession,
+      StreamingExecutionRelation(source, sqlContext.sparkSession))
+    val uncaught = new AtomicReference[Throwable]()
+    // Installed on the stream thread before `start()` returns, so an early fatal error reaches it.
+    val listener = new StreamingQueryListener {
+      override def onQueryStarted(event: QueryStartedEvent): Unit =
+        Thread.currentThread.setUncaughtExceptionHandler(
+          (_: Thread, e: Throwable) => uncaught.set(e))
+      override def onQueryProgress(event: QueryProgressEvent): Unit = {}
+      override def onQueryTerminated(event: QueryTerminatedEvent): Unit = {}
+    }
+    spark.streams.addListener(listener)
+    try {
+      val query = df.writeStream.format("noop").start()
+      val queryThread =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.queryExecutionThread
+      try {
+        val e = intercept[StreamingQueryException] {
+          query.awaitTermination(streamingTimeout.toMillis)
+        }
+        queryThread.join(streamingTimeout.toMillis)
+        assert(!queryThread.isAlive)
+        assert(query.exception.contains(e))
+        assert(e.cause.getMessage == "getBatch failed")
+        assert(e.getSuppressed.toSeq == Seq(buildFailure))
+        assert(e.getCondition == "STREAM_FAILED")
+        (e, Option(uncaught.get()))
+      } finally {
+        query.stop()
+      }
+    } finally {
+      spark.streams.removeListener(listener)
+    }
+  }
+
+  test("SPARK-60091: query failure is reported when building the detailed exception fails") {
+    val (_, uncaught) =
+      failWhileBuildingQueryException(new IllegalStateException("source toString failed"))
+    assert(uncaught.isEmpty)
+  }
+
+  test("SPARK-60091: query failure is reported when building the detailed exception fails " +
+      "fatally") {
+    val buildFailure = new StackOverflowError("source toString failed")
+    val (_, uncaught) = failWhileBuildingQueryException(buildFailure)
+    assert(uncaught.contains(buildFailure))
   }
 
   test("output mode API in Scala") {
@@ -1234,6 +1305,36 @@ class StreamSuite extends StreamTest {
   test("SPARK-26379 Structured Streaming - Exception on adding current_timestamp " +
     " to Dataset - use v1 sink") {
     testCurrentTimestampOnStreamingQuery()
+  }
+
+  test("SPARK-57837: nanosecond current_timestamp(p)/localtimestamp(p) use the batch timestamp") {
+    // In micro-batch streaming, current_timestamp()/localtimestamp() are rewritten to the
+    // replay-stable batch timestamp (CurrentBatchTimestamp), not folded to a wall clock at
+    // planning time. The nanosecond variants must follow the same rewrite: the batch timestamp is
+    // millisecond resolution, so the collected value must be millisecond-aligned (a wall-clock
+    // fold from Instant.now() would carry sub-millisecond digits and fail this check).
+    val input = MemoryStream[Int]
+    val df = input.toDS().selectExpr("current_timestamp(9) AS ltz", "localtimestamp(9) AS ntz")
+
+    def assertBatchAligned(rows: Seq[Row]): Unit = {
+      assert(rows.size === 1)
+      val row = rows.head
+      // LTZ collects as java.time.Instant, NTZ as java.time.LocalDateTime.
+      val ltzNanos = row.getAs[java.time.Instant]("ltz").getNano
+      val ntzNanos = row.getAs[java.time.LocalDateTime]("ntz").getNano
+      assert(ltzNanos % 1000000 === 0,
+        s"current_timestamp(9) sub-second $ltzNanos is not millisecond-aligned")
+      assert(ntzNanos % 1000000 === 0,
+        s"localtimestamp(9) sub-second $ntzNanos is not millisecond-aligned")
+    }
+
+    testStream(df)(
+      AddData(input, 1),
+      CheckLastBatch { rows: Seq[Row] => assertBatchAligned(rows) },
+      Execute { _ => Thread.sleep(1000) },
+      AddData(input, 2),
+      CheckLastBatch { rows: Seq[Row] => assertBatchAligned(rows) }
+    )
   }
 
   private def testCurrentTimestampOnStreamingQuery(): Unit = {

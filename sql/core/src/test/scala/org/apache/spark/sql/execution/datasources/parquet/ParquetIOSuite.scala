@@ -17,7 +17,9 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import java.io.ByteArrayInputStream
 import java.math.{BigDecimal => JBigDecimal}
+import java.nio.file.Files
 import java.time.{LocalDateTime, LocalTime}
 import java.util.Locale
 
@@ -27,16 +29,22 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe.TypeTag
 
 import com.google.common.primitives.UnsignedLong
+import org.apache.commons.lang3.exception.ExceptionUtils
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.mapreduce.{JobContext, TaskAttemptContext}
+import org.apache.parquet.bytes.BytesUtils
 import org.apache.parquet.column.{Encoding, ParquetProperties}
 import org.apache.parquet.column.ParquetProperties.WriterVersion.PARQUET_1_0
 import org.apache.parquet.example.data.Group
 import org.apache.parquet.example.data.simple.{SimpleGroup, SimpleGroupFactory}
+import org.apache.parquet.format.{PageType, Util}
 import org.apache.parquet.hadoop._
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.io.ParquetDecodingException
 import org.apache.parquet.io.api.Binary
 import org.apache.parquet.schema.{MessageType, MessageTypeParser}
+import org.scalatest.concurrent.{Signaler, ThreadSignaler}
+import org.scalatest.time.{Seconds, Span}
 
 import org.apache.spark.{SPARK_VERSION_SHORT, SparkException, TestUtils}
 import org.apache.spark.rdd.RDD
@@ -1888,6 +1896,270 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-57416: read INT64 TIME(MICROS, isAdjustedToUTC=true) as TimeType " +
+    "on both readers") {
+    // The Parquet TIME logical type may carry isAdjustedToUTC=true. Spark's TimeType is
+    // zone-less local time, so such a column is decoded as the raw micros-of-day, exactly
+    // as isAdjustedToUTC=false. Before SPARK-57416 the Types Framework row-based read guard
+    // rejected this encoding (FAILED_READ_FILE) while the vectorized path accepted it,
+    // leaving the two readers inconsistent. This pins that both readers now accept it.
+    // The column must be supplied via an explicit read schema because schema inference
+    // maps isAdjustedToUTC=true to an unsupported type.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,true));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_micros", TimeType())
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times_utc.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456) / DateTimeConstants.NANOS_PER_MICROS)
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          val lt = LocalTime.of(23, 59, 59, 123456000)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+        withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+          withAllParquetReaders {
+            val df = spark.read.parquet(tablePath.toString)
+            assertResult(df.schema) { new StructType().add("time_micros", TimeType()) }
+            val lt = LocalTime.of(23, 59, 59, 123456000)
+            val expected = (0 until numRecords).map { _ => lt }.toDF()
+            checkAnswer(df, expected)
+          }
+        }
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME(NANOS) type") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          // Internal storage is nanoseconds since midnight; TIME(NANOS) writes it unchanged.
+          record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+          }
+          val lt = LocalTime.of(23, 59, 59, 123456789)
+          val expected = (0 until numRecords).map { _ => lt }.toDF()
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("TimeType nanosecond round-trip through Parquet") {
+    withAllParquetReaders {
+      Seq(7, 8, 9).foreach { p =>
+        withTempPath { path =>
+          val df = spark.sql(
+            s"SELECT CAST(TIME '23:59:59.123456789' AS TIME($p)) AS t")
+          df.write.parquet(path.getCanonicalPath)
+          val readBack = spark.read.parquet(path.getCanonicalPath)
+          assert(readBack.schema.head.dataType === TimeType(p))
+          checkAnswer(readBack, df)
+        }
+      }
+    }
+  }
+
+  test("Read TIME with a lower precision than the stored value truncates in both readers") {
+    // A raw TIME(NANOS) file carrying full nanosecond precision (.123456789), read back with an
+    // explicit lower precision (TIME(7)). Both the vectorized and the row-based reader must drop
+    // the sub-100ns digits (.123456789 -> .1234567); otherwise the requested type's precision is
+    // violated. Covers both the dictionary and plain decode paths.
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_nanos", TimeType(7))
+    val expected = LocalTime.of(23, 59, 59, 123456700)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+        val numRecords = 100
+
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          checkAnswer(df, (0 until numRecords).map(_ => Row(expected)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-55444: vectorized read rejects an incompatible encoding requested as TimeType") {
+    // TimeTypeParquetOps.getVectorUpdater returns None for any encoding other than INT64
+    // TIME(MICROS/NANOS), so the vectorized factory falls through to a clean
+    // SchemaColumnConvertNotSupportedException (surfaced as FAILED_READ_FILE) instead of
+    // silently mis-decoding - e.g. running readLongs over an INT32 column. This is the
+    // end-to-end counterpart of the unit-level reject assertions in TimeTypeParquetOpsSuite,
+    // pinned on the actual vectorized reader (the path the descriptor guard protects).
+    val readSchema = new StructType().add("c", TimeType())
+    // (Parquet column definition, writer of one matching-primitive value for that column)
+    val cases: Seq[(String, SimpleGroup => Unit)] = Seq(
+      ("required int32 c(TIME(MILLIS,false));", _.add(0, 0)),     // wrong primitive
+      ("required int64 c;", _.add(0, 0L)),                        // no TIME annotation
+      ("required int64 c(TIMESTAMP(MICROS,false));", _.add(0, 0L)) // wrong annotation
+    )
+    for ((column, addValue) <- cases) {
+      val schema = MessageTypeParser.parseMessageType(s"message root {\n  $column\n}")
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/incompatible.parquet")
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+        (0 until 10).foreach { _ =>
+          val record = new SimpleGroup(schema)
+          addValue(record)
+          writer.write(record)
+        }
+        writer.close
+
+        withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+          val e = intercept[SparkException] {
+            spark.read.schema(readSchema).parquet(tablePath.toString).collect()
+          }
+          assert(e.getCondition === "FAILED_READ_FILE.PARQUET_COLUMN_DATA_TYPE_MISMATCH",
+            s"[$column] expected a clean column-type-mismatch, got ${e.getCondition}")
+        }
+      }
+    }
+  }
+
+  test("SPARK-55444: vectorized read of a nullable TIME(NANOS) column (single-value path)") {
+    // A nullable (OPTIONAL) column interleaves def-levels, splitting value runs into sub-batch
+    // lengths that drive VectorizedRleValuesReader down the runLen == 1 path - i.e.
+    // TimeVectorUpdater.readValue / decodeSingleDictionaryId. The existing REQUIRED TIME tests
+    // only exercise the bulk readValues path, so this closes the single-value decode gap (and,
+    // via withAllParquetReaders, cross-checks the row-based reader on nulls).
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 time_nanos(TIME(NANOS,false));
+        |}""".stripMargin)
+    val readSchema = new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+    val lt = LocalTime.of(23, 59, 59, 123456789)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/times_nullable.parquet")
+        val numRecords = 100
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          // Every 7th row is null (the field is simply omitted): interleaves null/value runs.
+          if (i % 7 != 0) record.add(0, localTime(23, 59, 59, 123456, 789))
+          writer.write(record)
+        }
+        writer.close
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          assertResult(df.schema)(readSchema)
+          val expected = (0 until numRecords).map { i => if (i % 7 == 0) Row(null) else Row(lt) }
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  test("Read TimeType for the logical TIME type with isAdjustedToUTC=true throws by default") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_micros(TIME(MICROS,true));
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/times.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+      val record = new SimpleGroup(schema)
+      record.add(0, localTime(12, 0, 0, 0) / DateTimeConstants.NANOS_PER_MICROS)
+      writer.write(record)
+      writer.close
+
+      checkError(
+        exception = intercept[org.apache.spark.sql.AnalysisException] {
+          spark.read.parquet(tablePath.toString).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIME(MICROS,true))")
+      )
+    }
+  }
+
+  test("SPARK-53368: infer TIME(NANOS, isAdjustedToUTC=true) as TimeType only with the config on") {
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  required int64 time_nanos(TIME(NANOS,true));
+        |}""".stripMargin)
+
+    withTempDir { dir =>
+      val tablePath = new Path(s"${dir.getCanonicalPath}/times_nanos_utc.parquet")
+      val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = false)
+      val record = new SimpleGroup(schema)
+      // Internal storage is nanoseconds since midnight; TIME(NANOS) writes it unchanged.
+      record.add(0, localTime(23, 59, 59, 123456, 789))
+      writer.write(record)
+      writer.close
+
+      // By default, schema inference rejects isAdjustedToUTC=true.
+      checkError(
+        exception = intercept[org.apache.spark.sql.AnalysisException] {
+          spark.read.parquet(tablePath.toString).collect()
+        },
+        condition = "PARQUET_TYPE_ILLEGAL",
+        parameters = Map("parquetType" -> "INT64 (TIME(NANOS,true))")
+      )
+
+      // With the config on, it infers as TimeType(NANOS) and decodes the raw nanos-of-day.
+      withSQLConf(SQLConf.PARQUET_TIME_TYPE_ALLOW_IS_ADJUSTED_TO_UTC_READ.key -> "true") {
+        withAllParquetReaders {
+          val df = spark.read.parquet(tablePath.toString)
+          assertResult(df.schema) {
+            new StructType().add("time_nanos", TimeType(TimeType.NANOS_PRECISION))
+          }
+          checkAnswer(df, Row(LocalTime.of(23, 59, 59, 123456789)))
+        }
+      }
+    }
+  }
+
   // Deterministic INT32 sample shared by the INT32 widening tests below. Mixes sign,
   // zero, and MIN/MAX boundaries to catch sign-extension and precision regressions.
   private def widenSampleAt(i: Int): Int = i % 5 match {
@@ -2073,6 +2345,69 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
     }
   }
 
+  test("DATE -> TimestampNTZ widening end-to-end via vectorized read path") {
+    // Round-trips a DATE Parquet file read back as TimestampNTZType, exercising
+    // DateToTimestampNTZUpdater on the vectorized path in CORRECTED rebase mode.
+    // Sample mixes epoch, recent dates, pre-epoch, far-past and far-future days; each
+    // day-count converts to UTC midnight via `DateTimeUtils.daysToMicros`. Both
+    // REQUIRED and OPTIONAL columns are covered so that `readValue` and `readValues`
+    // are both invoked.
+    withSQLConf(
+        SQLConf.PARQUET_REBASE_MODE_IN_READ.key -> "CORRECTED",
+        SQLConf.PARQUET_REBASE_MODE_IN_WRITE.key -> "CORRECTED") {
+      withTempPath { file =>
+        val n = 5000
+        def sampleAt(i: Int): java.sql.Date = i % 6 match {
+          case 0 => java.sql.Date.valueOf("1970-01-01")
+          case 1 => java.sql.Date.valueOf("1900-01-01")
+          case 2 => java.sql.Date.valueOf("2023-01-01")
+          case 3 => java.sql.Date.valueOf("0001-01-01")
+          case 4 => java.sql.Date.valueOf("4707-11-28")
+          case _ =>
+            // Cover every month (1..12) and a few years to exercise month-boundary
+            // behavior, not just months 1..9 the previous string-formatting allowed.
+            val year = 2020 + (i % 80)
+            val month = 1 + (i % 12)
+            java.sql.Date.valueOf(f"$year%04d-$month%02d-15")
+        }
+
+        val nonNullData = (0 until n).map(i => Row(sampleAt(i)))
+        // Every 7th row is null; mixes value runs and null runs at sub-batch lengths.
+        val nullableData = (0 until n).map { i =>
+          if (i % 7 == 0) Row(null) else Row(sampleAt(i))
+        }
+
+        val nonNullWriteSchema = new StructType().add("v", DateType, nullable = false)
+        val nonNullReadSchema = new StructType().add("v", TimestampNTZType, nullable = false)
+        val nullableWriteSchema = new StructType().add("v", DateType, nullable = true)
+        val nullableReadSchema = new StructType().add("v", TimestampNTZType, nullable = true)
+
+        val nonNullPath = new java.io.File(file, "nonnull").getCanonicalPath
+        val nullablePath = new java.io.File(file, "nullable").getCanonicalPath
+        spark.createDataFrame(spark.sparkContext.parallelize(nonNullData, 4), nonNullWriteSchema)
+          .write.parquet(nonNullPath)
+        spark.createDataFrame(
+          spark.sparkContext.parallelize(nullableData, 4), nullableWriteSchema)
+          .write.parquet(nullablePath)
+
+        def dateToNtz(d: java.sql.Date): java.time.LocalDateTime = {
+          val days = d.toLocalDate.toEpochDay.toInt
+          val micros = DateTimeUtils.daysToMicros(days, java.time.ZoneOffset.UTC)
+          DateTimeUtils.microsToLocalDateTime(micros)
+        }
+        val expectedNonNull = nonNullData.map(r => Row(dateToNtz(r.getDate(0))))
+        val expectedNullable = nullableData.map { r =>
+          if (r.isNullAt(0)) Row(null) else Row(dateToNtz(r.getDate(0)))
+        }
+
+        withAllParquetReaders {
+          checkAnswer(spark.read.schema(nonNullReadSchema).parquet(nonNullPath), expectedNonNull)
+          checkAnswer(spark.read.schema(nullableReadSchema).parquet(nullablePath), expectedNullable)
+        }
+      }
+    }
+  }
+
   test("SPARK-56872: INT64 DECIMAL into 32-bit Decimal column with dictionary fallback") {
     // `DowncastLongUpdater.decodeSingleDictionaryId` only runs when the vectorized reader has
     // to eagerly drain buffered dictionary IDs, which happens when parquet-mr writes the
@@ -2110,6 +2445,160 @@ class ParquetIOSuite extends ParquetTest with SharedSparkSession {
         }
         checkAnswer(df, expected)
       }
+    }
+  }
+
+  test("SPARK-57828: vectorized read of TIMESTAMP(NANOS) with dictionary encoding") {
+    // Exercises TimestampNanosVectorUpdater.decodeSingleDictionaryId by writing a file with
+    // dictionary encoding enabled and a nullable column (OPTIONAL repetition, which forces
+    // single-value decode paths via def-level interleaving). Analogous to the TIME(NANOS)
+    // dictionary test above (SPARK-55444).
+    val schema = MessageTypeParser.parseMessageType(
+      """message root {
+        |  optional int64 ts_nanos(TIMESTAMP(NANOS,true));
+        |}""".stripMargin)
+    val readSchema = new StructType()
+      .add("ts_nanos", TimestampLTZNanosType(TimestampLTZNanosType.NANOS_PRECISION))
+
+    // 1_000_000_500 ns = epoch micros 1000000 + 500 ns within micro
+    // Instant: 1000000 micros = 1.000000 seconds, plus 500 ns -> 1.000000500 s
+    val epochNanosValue = 1000000500L
+    val expectedInstant = java.time.Instant.ofEpochSecond(1L, 500L)
+
+    for (dictEnabled <- Seq(true, false)) {
+      withTempDir { dir =>
+        val tablePath = new Path(s"${dir.getCanonicalPath}/ts_nanos_dict.parquet")
+        val numRecords = 100
+        val writer = createParquetWriter(schema, tablePath, dictionaryEnabled = dictEnabled)
+        (0 until numRecords).foreach { i =>
+          val record = new SimpleGroup(schema)
+          // Every 7th row is null: interleaves null/value runs to force single-value path.
+          if (i % 7 != 0) record.add(0, epochNanosValue)
+          writer.write(record)
+        }
+        writer.close()
+
+        withAllParquetReaders {
+          val df = spark.read.schema(readSchema).parquet(tablePath.toString)
+          val expected = (0 until numRecords).map { i =>
+            if (i % 7 == 0) Row(null) else Row(expectedInstant)
+          }
+          checkAnswer(df, expected)
+        }
+      }
+    }
+  }
+
+  /**
+   * Writes 100 rows of `column` with the writer `options`, lets `corrupt` modify the bytes of
+   * the written file, and returns the error of reading the file with the vectorized reader.
+   */
+  private def readCorruptedFile(column: String, options: Map[String, String])(
+      corrupt: Array[Byte] => Unit): Throwable = {
+    var error: Throwable = null
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      spark.range(100).selectExpr(column).coalesce(1).write.options(options).parquet(path)
+      val file = dir.listFiles().filter(_.getName.endsWith(".parquet")).head
+      val bytes = Files.readAllBytes(file.toPath)
+      corrupt(bytes)
+      Files.write(file.toPath, bytes)
+      dir.listFiles().filter(_.getName.endsWith(".crc")).foreach(_.delete())
+
+      withSQLConf(SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key -> "true") {
+        // Before SPARK-59832 a truncated read never returned, so run it with a timeout. The test
+        // thread waits interruptibly for the job, so it can be signaled directly.
+        implicit val signaler: Signaler = ThreadSignaler
+        error = intercept[SparkException] {
+          failAfter(Span(60, Seconds))(spark.read.parquet(path).collect())
+        }
+      }
+    }
+    error
+  }
+
+  /**
+   * Writes 100 rows of `column` to a single uncompressed data page, lets `corrupt` modify the
+   * RLE section that starts with `03 00 00 00 C8 01 01` (the 4-byte length 3, then one RLE run
+   * with header 100 << 1 and value 1), and returns the error of reading the file with the
+   * vectorized reader. For a nullable INT32 column that is the definition levels; for a
+   * BOOLEAN column written as a V2 page it is the RLE-encoded values.
+   */
+  private def readCorruptedRleSection(
+      column: String,
+      writerVersion: String = "PARQUET_1_0")(
+      corrupt: (Array[Byte], Int) => Unit): Throwable = {
+    val options = Map(
+      ParquetOutputFormat.ENABLE_DICTIONARY -> "false",
+      ParquetOutputFormat.WRITER_VERSION -> writerVersion,
+      "compression" -> "uncompressed")
+    readCorruptedFile(column, options) { bytes =>
+      val section = Array[Byte](3, 0, 0, 0, 0xC8.toByte, 0x01, 1)
+      val offset = bytes.indexOfSlice(section)
+      assert(offset >= 0 && bytes.indexOfSlice(section, offset + 1) < 0)
+      corrupt(bytes, offset)
+    }
+  }
+
+  private def causes(e: Throwable): Seq[Throwable] =
+    ExceptionUtils.getThrowableList(e).asScala.toSeq
+
+  /** Sets the 4-byte length at `offset` to Int.MaxValue, far more than the rest of the page. */
+  private def setMaxLength(bytes: Array[Byte], offset: Int): Unit =
+    BytesUtils.intToBytes(Int.MaxValue).copyToArray(bytes, offset)
+
+  /**
+   * Checks that the page error is reported once with the column, directly on top of the
+   * `ParquetDecodingException` about the invalid length.
+   */
+  private def assertInvalidLengthReportsColumn(e: Throwable, column: String): Unit = {
+    val pageErrors =
+      causes(e).filter(c => Option(c.getMessage).exists(_.startsWith("could not read page")))
+    assert(pageErrors.size == 1, e)
+    assert(pageErrors.head.getMessage.contains(s"in col [$column]"), e)
+    assert(pageErrors.head.getCause.isInstanceOf[ParquetDecodingException], e)
+    assert(pageErrors.head.getCause.getMessage.contains(
+      s"Corrupted RLE data: invalid length ${Int.MaxValue}"), e)
+  }
+
+  test("SPARK-59832: vectorized reader fails on truncated definition levels") {
+    // Shorten the run to 64 values (header 64 << 1 = varint 0x80 0x01).
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a") {
+      (bytes, offset) => bytes(offset + 4) = 0x80.toByte
+    }
+    assert(causes(e).exists {
+      case c: ParquetDecodingException => c.getMessage.contains("Corrupted RLE data")
+      case _ => false
+    }, e)
+  }
+
+  test("SPARK-59832: invalid definition level length reports the column") {
+    val e = readCorruptedRleSection("if(id < 0, null, cast(id as int)) as a")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "a")
+  }
+
+  test("SPARK-59832: invalid length of RLE booleans in a V2 page reports the column") {
+    val e = readCorruptedRleSection("id >= 0 as b", writerVersion = "PARQUET_2_0")(setMaxLength)
+    assertInvalidLengthReportsColumn(e, "b")
+  }
+
+  test("SPARK-59854: a ZSTD page that cannot be decompressed reports the column") {
+    Seq(PageType.DATA_PAGE -> false, PageType.DICTIONARY_PAGE -> true).foreach {
+      case (pageType, dictionary) =>
+        val options = Map(
+          ParquetOutputFormat.ENABLE_DICTIONARY -> dictionary.toString,
+          "compression" -> "zstd")
+        val e = readCorruptedFile("cast(id % 10 as int) as a", options) { bytes =>
+          // The first page of the only column chunk starts right after the magic number.
+          val start = ParquetFileWriter.MAGIC.length
+          val in = new ByteArrayInputStream(bytes, start, bytes.length - start)
+          assert(Util.readPageHeader(in).getType == pageType)
+          // Invert the first bytes of the page, the ZSTD frame magic number.
+          val pageStart = bytes.length - in.available()
+          (pageStart until pageStart + 4).foreach(i => bytes(i) = (~bytes(i)).toByte)
+        }
+        assert(causes(e).exists(c =>
+          Option(c.getMessage).exists(_.contains("[a] optional int32 a"))), e)
     }
   }
 }

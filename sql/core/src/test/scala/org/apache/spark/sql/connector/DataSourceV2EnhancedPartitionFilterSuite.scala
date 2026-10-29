@@ -21,6 +21,7 @@ import java.util.Locale
 
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.SparkException
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.expressions.{Expression, In, PredicateHelper, ScalaUDF}
 import org.apache.spark.sql.connector.catalog.BufferedRows
@@ -49,6 +50,8 @@ import org.apache.spark.sql.test.SharedSparkSession
  * 6. Untranslatable, Data Filter -> Post-Scan Filters
  * 7. Untranslatable, Partition Filter, 2nd Pass Returned -> Post-Scan Filters
  * 8. Untranslatable, Partition Filter, 2nd Pass Accepted -> Pushed Down
+ * 9. Translated, Partition Filter, 1st Pass Accepted AND Returned (partial pushdown) ->
+ *    Pushed Down in 1st pass, NOT re-derived in 2nd pass.
  */
 class DataSourceV2EnhancedPartitionFilterSuite
   extends SharedSparkSession with BeforeAndAfter with PredicateHelper {
@@ -220,6 +223,30 @@ class DataSourceV2EnhancedPartitionFilterSuite
     }
   }
 
+  test("case 9: partition filter pushed but returned in first pass is not re-pushed second pass") {
+    withTable(partFilterTableName) {
+      // The source accepts the partition predicate in the first pass (so it is reported by
+      // pushedPredicates and prunes partitions) but also returns it for post-scan evaluation,
+      // simulating a partial pushdown (e.g. a row group filter).
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col) " +
+        "TBLPROPERTIES('return-accepted-partition-predicates' = 'true')")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 'x'), ('b', 'y'), ('c', 'z')")
+
+      // Translated, Partition Filter; 1st Pass Accepted AND Returned.
+      // The second pass derives PartitionPredicates only from filters that were NOT already
+      // pushed (not in pushedPredicates). Since this filter was pushed in the first pass, it must
+      // NOT be pushed again as a PartitionPredicate in the second pass.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE part_col = 'b'")
+      checkAnswer(df, Seq(Row("b", "y")))
+      assertPushedPartitionPredicates(df, 0)
+      assertScanReturnsPartitionKeys(df, Set("b"))
+      // The returned filter is still evaluated after the scan.
+      assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]),
+        "Partition filter returned in first pass should remain as a post-scan Filter")
+    }
+  }
+
   test("nested identity partition: second-pass PartitionPredicate with UDF on nested key") {
     withTable(partFilterTableName) {
       sql(s"CREATE TABLE $partFilterTableName " +
@@ -254,6 +281,34 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
       assertPushedPartitionPredicates(df, 0)
       assertScanReturnsPartitionKeys(df, Set("LA", "NY"))
+    }
+  }
+
+  test("nested identity partition: case 9 partition filter pushed but returned in first pass " +
+    "is not re-pushed second pass") {
+    withTable(partFilterTableName) {
+      // The source accepts the partition predicate in the first pass (so it is reported by
+      // pushedPredicates and prunes partitions) but also returns it for post-scan evaluation,
+      // simulating a partial pushdown (e.g. a row group filter).
+      sql(s"CREATE TABLE $partFilterTableName " +
+        s"(s struct<tz: string, x: int>, data string) USING $v2Source " +
+        "PARTITIONED BY (s.tz) " +
+        "TBLPROPERTIES('return-accepted-partition-predicates' = 'true')")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "(named_struct('tz', 'LA', 'x', 1), 'a'), " +
+        "(named_struct('tz', 'NY', 'x', 2), 'b')")
+
+      // Translated, Partition Filter; 1st Pass Accepted AND Returned.
+      // The second pass derives PartitionPredicates only from filters that were NOT already
+      // pushed (not in pushedPredicates). Since this filter was pushed in the first pass, it must
+      // NOT be pushed again as a PartitionPredicate in the second pass.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE s.tz = 'LA'")
+      checkAnswer(df, Seq(Row(Row("LA", 1), "a")))
+      assertPushedPartitionPredicates(df, 0)
+      assertScanReturnsPartitionKeys(df, Set("LA"))
+      // The returned filter is still evaluated after the scan.
+      assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[FilterExec]),
+        "Partition filter returned in first pass should remain as a post-scan Filter")
     }
   }
 
@@ -346,6 +401,128 @@ class DataSourceV2EnhancedPartitionFilterSuite
       checkAnswer(df, Seq(Row("a", "x", "1", "d1"), Row("b", "x", "1", "d4")))
       assertPushedPartitionPredicates(df, 1)
       assertReferencedPartitionFieldOrdinals(df, Array(1, 2), Array("p0", "p1", "p2"))
+    }
+  }
+
+  test("SPARK-59572: a failed second-pass PartitionPredicate must not keep the partition") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, data string) USING $v2Source " +
+        "PARTITIONED BY (part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('hr', 'x'), ('1', 'y')")
+
+      spark.udf.register("to_int", (s: String) => s.toInt)
+
+      // `to_int('hr')` throws, so the filter is never true for that partition. The filter is
+      // untranslatable, so it is pushed as a PartitionPredicate and accepted, which removes it
+      // from the post-scan filters. The source is then its only evaluator, so reporting a failed
+      // evaluation as a match returns the 'hr' row. Optimizing is enough to raise it, which the
+      // fallback path cannot do: there the filter stays post-scan and only execution fails.
+      val e = intercept[SparkException] {
+        sql(s"SELECT * FROM $partFilterTableName WHERE to_int(part_col) = 1")
+          .queryExecution.optimizedPlan
+      }
+      assert(e.getCondition == "FAILED_EXECUTE_UDF")
+      assert(e.getCause.isInstanceOf[NumberFormatException])
+    }
+  }
+
+  test("mixed partitioning: second-pass PartitionPredicate on the identity field") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, id int, data string) " +
+        s"USING $v2Source PARTITIONED BY (part_col, bucket(4, id))")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 1, 'x'), ('A', 2, 'y'), ('b', 3, 'z')")
+
+      spark.udf.register("my_upper", (s: String) =>
+        if (s == null) null else s.toUpperCase(Locale.ROOT))
+
+      // Untranslatable, Partition Filter on the identity field; 2nd Pass Accepted.
+      // The bucket field keeps ordinal 1 but is never referenced.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE my_upper(part_col) = 'A'")
+      checkAnswer(df, Seq(Row("a", 1, "x"), Row("A", 2, "y")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("a/1", "A/2"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col", "bucket(4, id)"))
+    }
+  }
+
+  test("mixed partitioning: filter on the source column of a bucket transform stays post-scan") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, id int, data string) " +
+        s"USING $v2Source PARTITIONED BY (part_col, bucket(4, id))")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 1, 'x'), ('A', 2, 'y'), ('b', 3, 'z')")
+
+      spark.udf.register("my_upper", (s: String) =>
+        if (s == null) null else s.toUpperCase(Locale.ROOT))
+      spark.udf.register("my_plus1", (i: Int) => i + 1)
+
+      // Only the identity conjunct becomes a PartitionPredicate. Spark cannot evaluate the
+      // bucket conjunct against the partition key, so it is a data filter applied after the scan.
+      val df = sql(s"SELECT * FROM $partFilterTableName " +
+        "WHERE my_upper(part_col) = 'A' AND my_plus1(id) = 3")
+      checkAnswer(df, Seq(Row("A", 2, "y")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("a/1", "A/2"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("part_col", "bucket(4, id)"))
+      val postScanFilter = df.queryExecution.executedPlan.collectFirst {
+        case f: FilterExec => f
+      }.getOrElse(fail("Filter on the bucket source column should remain as a post-scan Filter"))
+      val referenced = postScanFilter.condition.references.map(_.name).toSet
+      assert(referenced.contains("id") && !referenced.contains("part_col"),
+        s"Post-scan Filter should reference id but not part_col, got $referenced")
+    }
+  }
+
+  test("bucket-only partitioning: no identity transform -> no PartitionPredicate") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (id int, data string) " +
+        s"USING $v2Source PARTITIONED BY (bucket(4, id))")
+      sql(s"INSERT INTO $partFilterTableName VALUES (1, 'x'), (2, 'y'), (3, 'z')")
+
+      spark.udf.register("my_plus1", (i: Int) => i + 1)
+
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE my_plus1(id) = 3")
+      checkAnswer(df, Seq(Row(2, "y")))
+      assertPushedPartitionPredicates(df, 0)
+      assertScanReturnsPartitionKeys(df, Set("1", "2", "3"))
+    }
+  }
+
+  test("mixed partitioning: identity field after a bucket transform -> ordinal 1") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (part_col string, id int, data string) " +
+        s"USING $v2Source PARTITIONED BY (bucket(4, id), part_col)")
+      sql(s"INSERT INTO $partFilterTableName VALUES ('a', 1, 'x'), ('A', 2, 'y'), ('b', 3, 'z')")
+
+      spark.udf.register("my_upper_second", (s: String) =>
+        if (s == null) null else s.toUpperCase(Locale.ROOT))
+
+      // The bucket field at ordinal 0 keeps its slot, so `part_col` binds to the second
+      // partition-key value and the reference reports ordinal 1.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE my_upper_second(part_col) = 'A'")
+      checkAnswer(df, Seq(Row("a", 1, "x"), Row("A", 2, "y")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("1/a", "2/A"))
+      assertReferencedPartitionFieldOrdinals(
+        df, Array(1), Array("bucket(4, id)", "part_col"))
+    }
+  }
+
+  test("mixed partitioning: cast from type coercion on the identity field is pruned by " +
+    "the second pass") {
+    withTable(partFilterTableName) {
+      sql(s"CREATE TABLE $partFilterTableName (dt string, id int, data string) " +
+        s"USING $v2Source PARTITIONED BY (dt, bucket(4, id))")
+      sql(s"INSERT INTO $partFilterTableName VALUES " +
+        "('2026-09-01', 1, 'x'), ('2026-09-02', 2, 'y'), ('2026-09-03', 3, 'z')")
+
+      // `dt = DATE'...'` is analyzed as `cast(dt AS DATE) = DATE'...'`. The source cannot
+      // evaluate a predicate over a cast and returns it in the first pass; the second pass
+      // evaluates it against the `dt` value of the full partition key.
+      val df = sql(s"SELECT * FROM $partFilterTableName WHERE dt = DATE'2026-09-02'")
+      checkAnswer(df, Seq(Row("2026-09-02", 2, "y")))
+      assertPushedPartitionPredicates(df, 1)
+      assertScanReturnsPartitionKeys(df, Set("2026-09-02/2"))
+      assertReferencedPartitionFieldOrdinals(df, Array(0), Array("dt", "bucket(4, id)"))
     }
   }
 

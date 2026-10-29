@@ -64,8 +64,18 @@ case class ParquetScanBuilder(
       val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
       val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
       val isCaseSensitive = sqlConf.caseSensitiveAnalysis
+      val readSchema = readDataSchema()
       val parquetSchema =
-        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readDataSchema())
+        new SparkToParquetSchemaConverter(sparkSession.sessionState.conf).convert(readSchema)
+      // Shredded-variant predicate pushdown (SPARK-55817) is not wired here: it applies to the
+      // DSv1 path only. DSv2 does rewrite variant extractions into `v.`0`` struct accesses, but
+      // only in `V2ScanRelationPushDown.buildScanWithPushedVariants`, which runs *after*
+      // `pushDownFilters`. So the filters reaching this method are still `variant_get(v, ...)`
+      // predicates, which do not translate to a source `Filter` at all -- there is no
+      // shredded-variant logical name for ParquetFilters to resolve here, and nothing would be
+      // reported convertible even with a variantExtractionSchema. DSv2 reads remain correct (the
+      // variant filter is applied post-scan); they just do not get row-group skipping on shredded
+      // columns.
       val parquetFilters = new ParquetFilters(
         parquetSchema,
         pushDownDate,
@@ -76,7 +86,8 @@ case class ParquetScanBuilder(
         isCaseSensitive,
         // The rebase mode doesn't matter here because the filters are used to determine
         // whether they is convertible.
-        RebaseSpec(LegacyBehaviorPolicy.CORRECTED))
+        RebaseSpec(LegacyBehaviorPolicy.CORRECTED),
+        readSchema = Some(readSchema))
       parquetFilters.convertibleFilters(dataFilters.toImmutableArraySeq).toArray
     } else {
       Array.empty[Filter]
@@ -103,6 +114,8 @@ case class ParquetScanBuilder(
   }
 
   // SupportsPushDownVariantExtractions API implementation
+  override def supportsDeferCastError(): Boolean = true
+
   override def pushVariantExtractions(extractions: Array[VariantExtraction]): Array[Boolean] = {
     // Parquet supports variant pushdown for all variant extractions
     pushedVariantExtractions = extractions

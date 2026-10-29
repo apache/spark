@@ -44,7 +44,7 @@ class ColumnTypeSuite extends SparkFunSuite {
       STRING(StringType) -> 8, STRING(StringType("UTF8_LCASE")) -> 8,
       STRING(StringType("UNICODE")) -> 8, STRING(StringType("UNICODE_CI")) -> 8,
       BINARY -> 16, STRUCT_TYPE -> 20, ARRAY_TYPE -> 28, MAP_TYPE -> 68,
-      CALENDAR_INTERVAL -> 16)
+      CALENDAR_INTERVAL -> 16, TIMESTAMP_NTZ_NANOS -> 16, TIMESTAMP_LTZ_NANOS -> 16)
 
     checks.foreach { case (columnType, expectedSize) =>
       assertResult(expectedSize, s"Wrong defaultSize for $columnType") {
@@ -113,6 +113,8 @@ class ColumnTypeSuite extends SparkFunSuite {
   testColumnType(ARRAY_TYPE)
   testColumnType(MAP_TYPE)
   testColumnType(CALENDAR_INTERVAL)
+  testColumnType(TIMESTAMP_NTZ_NANOS)
+  testColumnType(TIMESTAMP_LTZ_NANOS)
 
   def testNativeColumnType[T <: PhysicalDataType](columnType: NativeColumnType[T]): Unit = {
     val typeName = columnType match {

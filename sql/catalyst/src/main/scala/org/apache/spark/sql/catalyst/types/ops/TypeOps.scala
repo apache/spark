@@ -26,8 +26,7 @@ import org.apache.spark.sql.catalyst.WalkedTypePath
 import org.apache.spark.sql.catalyst.expressions.{Expression, Literal, MutableValue}
 import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.execution.arrow.ArrowFieldWriter
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{DataType, TimeType}
+import org.apache.spark.sql.types.{DataType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 
 /**
  * Server-side (catalyst) type operations for the Types Framework.
@@ -36,6 +35,12 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * the Spark SQL engine. Mandatory methods (physical type, literals, external conversion) must be
  * implemented by every type. Optional methods (serialization, Arrow writer) return Option and
  * default to None - types implement them as they expand their integration coverage.
+ *
+ * Extends [[TypeApiOps]] (the api-side trait) so that callers holding an `Option[TypeOps]` can
+ * invoke client-side methods (`format`, `toSQLValue`, `getEncoder`, ...) directly via `.map`,
+ * instead of an `isInstanceOf[TypeApiOps]` runtime narrowing. Concrete `*TypeOps` classes typically
+ * extend `*TypeApiOps` to inherit api-side method implementations -- this trait makes that
+ * relationship part of the type system rather than a runtime invariant.
  *
  * USAGE - integration points use TypeOps(dt) which returns Option[TypeOps]:
  * {{{
@@ -49,7 +54,8 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  * }}}
  *
  * IMPLEMENTATION - to add a new type to the framework:
- *   1. Create a case class extending TypeOps (and optionally TypeApiOps for client-side ops)
+ *   1. Create a case class extending the matching `*TypeApiOps` and mixing in `TypeOps`
+ *      (e.g., `case class FooTypeOps(...) extends FooTypeApiOps(...) with TypeOps`)
  *   2. Register it in TypeOps.apply() below - single registration point
  *   3. No other file modifications needed - all integration points automatically work
  *
@@ -57,10 +63,7 @@ import org.apache.spark.sql.types.{DataType, TimeType}
  *   TimeTypeOps for a reference implementation
  * @since 4.2.0
  */
-trait TypeOps extends Serializable {
-
-  /** The DataType this Ops instance handles. */
-  def dataType: DataType
+trait TypeOps extends TypeApiOps {
 
   // ==================== Physical Type Representation ====================
 
@@ -81,6 +84,18 @@ trait TypeOps extends Serializable {
    *   Java class (e.g., classOf[Long] for TimeType)
    */
   def getJavaClass: Class[_]
+
+  /**
+   * Returns the boxed Java class used in code generation where a nullable, reference-typed value
+   * is required (e.g., array/map elements, external-value validation). Defaults to
+   * [[getJavaClass]], which is correct for object-backed types; primitive-backed types must
+   * override it to return the corresponding boxed class (e.g., classOf[java.lang.Long] for a
+   * Long-backed type).
+   *
+   * @return
+   *   boxed Java class
+   */
+  def getBoxedJavaClass: Class[_] = getJavaClass
 
   /**
    * Returns a MutableValue instance for use in SpecificInternalRow.
@@ -208,8 +223,7 @@ trait TypeOps extends Serializable {
  * Factory object for creating TypeOps instances.
  *
  * Returns Option to serve as both lookup and existence check - callers use getOrElse to fall
- * through to legacy handling. The feature flag check is inside apply(), so callers don't need to
- * check it separately.
+ * through to legacy handling for types the framework does not manage.
  *
  * Uses pattern matching (not Set enumeration) to support parameterized types like
  * TimeType(precision) or DecimalType(precision, scale).
@@ -219,20 +233,19 @@ object TypeOps {
   /**
    * Returns a TypeOps instance for the given DataType, if supported by the framework.
    *
-   * Returns None if the type is not supported or the framework is disabled. This is the single
-   * registration point for all server-side type operations.
+   * Returns None if the type is not supported. This is the single registration point for all
+   * server-side type operations.
    *
    * @param dt
    *   the DataType to get operations for
    * @return
    *   Some(TypeOps) if supported, None otherwise
    */
-  def apply(dt: DataType): Option[TypeOps] = {
-    if (!SQLConf.get.typesFrameworkEnabled) return None
-    dt match {
-      case tt: TimeType => Some(TimeTypeOps(tt))
-      // Add new types here - single registration point
-      case _ => None
-    }
+  def apply(dt: DataType): Option[TypeOps] = dt match {
+    case tt: TimeType => Some(TimeTypeOps(tt))
+    case t: TimestampNTZNanosType => Some(TimestampNTZNanosTypeOps(t))
+    case t: TimestampLTZNanosType => Some(TimestampLTZNanosTypeOps(t))
+    // Add new types here - single registration point
+    case _ => None
   }
 }

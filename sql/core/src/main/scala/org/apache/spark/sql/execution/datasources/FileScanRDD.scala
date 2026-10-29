@@ -33,7 +33,6 @@ import org.apache.spark.rdd.{InputFileBlockHolder, RDD}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, JoinedRow, Literal, UnsafeProjection, UnsafeRow}
-import org.apache.spark.sql.catalyst.types.PhysicalDataType
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.execution.datasources.FileFormat._
 import org.apache.spark.sql.execution.datasources.v2.FileDataSourceV2
@@ -90,6 +89,10 @@ class FileScanRDD(
 
   private val ignoreCorruptFiles = options.ignoreCorruptFiles
   private val ignoreMissingFiles = options.ignoreMissingFiles
+
+  /** Whether this reader fails instead of silently skipping missing or corrupt input files. */
+  private[sql] val hasStrictFileReads: Boolean = options.hasStrictFileReads
+
   // Evaluated on the driver (sparkSession is @transient) and serialized to executors so the
   // `compute` iterator below can pass it through to ColumnVectorUtils.populate.
   private val memoryMode: MemoryMode =
@@ -173,7 +176,8 @@ class FileScanRDD(
       private def updateMetadataRow(): Unit =
         if (metadataColumns.nonEmpty && currentFile != null) {
           updateMetadataInternalRow(
-            metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors)
+            metadataRow, metadataColumns.map(_.name), currentFile, metadataExtractors,
+            metadataColumns.map(_.dataType))
         }
 
       /**
@@ -183,11 +187,11 @@ class FileScanRDD(
         val tmpRow = new GenericInternalRow(1)
         metadataColumns.map { attr =>
           // Populate each metadata column by passing the resulting value through `tmpRow`.
-          getFileConstantMetadataColumnValue(attr.name, currentFile, metadataExtractors) match {
+          getFileConstantMetadataColumnValue(
+              attr.name, currentFile, metadataExtractors, attr.dataType) match {
             case Literal(null, _) =>
               tmpRow.setNullAt(0)
             case literal =>
-              require(PhysicalDataType(attr.dataType) == PhysicalDataType(literal.dataType))
               tmpRow.update(0, literal.value)
           }
 

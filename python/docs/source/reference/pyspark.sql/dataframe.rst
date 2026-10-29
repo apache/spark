@@ -31,6 +31,7 @@ DataFrame
     DataFrame.alias
     DataFrame.approxQuantile
     DataFrame.asTable
+    DataFrame.binBy
     DataFrame.cache
     DataFrame.checkpoint
     DataFrame.coalesce
@@ -141,6 +142,8 @@ DataFrame
     DataFrame.writeTo
     DataFrame.mergeInto
     DataFrame.pandas_api
+    DataFrame.zip
+    DataFrame.zipWithIndex
     DataFrameNaFunctions.drop
     DataFrameNaFunctions.fill
     DataFrameNaFunctions.replace

@@ -23,5 +23,7 @@ package org.apache.spark.sql.connector
  */
 trait MergeIntoSchemaEvolutionTests
   extends MergeIntoSchemaEvolutionNoCapabilityTests
-  with MergeIntoSchemaEvolutionBasicTests
-  with MergeIntoSchemaEvolutionNestedTests
+  with MergeIntoSchemaEvolutionExtraSourceColumnTests
+  with MergeIntoSchemaEvolutionExtraTargetColumnTests
+  with MergeIntoSchemaEvolutionTypeWideningTests
+  with MergeIntoSchemaEvolutionMixedTests

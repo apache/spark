@@ -29,7 +29,7 @@ import scala.util.control.NonFatal
 
 import org.apache.commons.lang3.time.FastDateFormat
 
-import org.apache.spark.{SparkException, SparkIllegalArgumentException}
+import org.apache.spark.{SparkException, SparkIllegalArgumentException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
 import org.apache.spark.sql.catalyst.util.LegacyDateFormats.{LegacyDateFormat, LENIENT_SIMPLE_DATE_FORMAT}
 import org.apache.spark.sql.catalyst.util.RebaseDateTime._
@@ -38,7 +38,7 @@ import org.apache.spark.sql.errors.ExecutionErrors
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy._
 import org.apache.spark.sql.internal.SqlApiConf
 import org.apache.spark.sql.types.{Decimal, TimestampNTZType}
-import org.apache.spark.unsafe.types.UTF8String
+import org.apache.spark.unsafe.types.{TimestampNanosVal, UTF8String}
 
 sealed trait TimestampFormatter extends Serializable {
 
@@ -158,6 +158,107 @@ sealed trait TimestampFormatter extends Serializable {
     // did not fail if timestamp contained zone-id or zone-offset component and instead ignored it.
     parseWithoutTimeZone(s, true)
 
+  /**
+   * Parses a timestamp in a string and converts it to a [[TimestampNanosVal]] (epoch microseconds
+   * plus a sub-microsecond remainder in `[0, 999]`) for `TIMESTAMP_LTZ(precision)`. Fractional
+   * digits beyond `precision` are truncated (floored), matching the cast/parse rule used by the
+   * microsecond path and `SparkDateTimeUtils`.
+   *
+   * @param s
+   *   \- string with timestamp to parse
+   * @param precision
+   *   \- the target fractional-second precision in `[7, 9]`
+   * @return
+   *   the parsed value as a [[TimestampNanosVal]].
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  def parseNanos(s: String, precision: Int): TimestampNanosVal
+
+  /**
+   * Optional counterpart of [[parseNanos]]. The result is `None` on invalid input.
+   *
+   * Intentionally abstract (unlike the microsecond [[parseOptional]]): a swallowing `try`/`catch`
+   * default would also mask the user-facing `TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER` error that
+   * the legacy formatters raise from [[parseNanos]], silently returning `None`. Each formatter
+   * must decide explicitly.
+   */
+  def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal]
+
+  /**
+   * Parses a timestamp in a string and converts it to a [[TimestampNanosVal]] for
+   * `TIMESTAMP_NTZ(precision)`. The result is independent of time zones; a time zone component is
+   * discarded when `allowTimeZone` is `true` and rejected otherwise. Fractional digits beyond
+   * `precision` are truncated (floored).
+   *
+   * @param s
+   *   \- string with timestamp to parse
+   * @param precision
+   *   \- the target fractional-second precision in `[7, 9]`
+   * @param allowTimeZone
+   *   \- indicates strict parsing of timezone
+   * @throws IllegalStateException
+   *   The formatter for timestamp without time zone should always implement this method. The
+   *   exception should never be hit.
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  @throws(classOf[IllegalStateException])
+  def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal =
+    throw SparkException.internalError(
+      s"The method `parseWithoutTimeZoneNanos(s: String, precision: Int, allowTimeZone: " +
+        "Boolean)` should be implemented in the formatter of timestamp without time zone")
+
+  /**
+   * Optional counterpart of [[parseWithoutTimeZoneNanos]]. The result is `None` on invalid input.
+   *
+   * Intentionally abstract for the same reason as [[parseNanosOptional]]: a swallowing default
+   * would mask the legacy formatters' `TIMESTAMP_NANOS_WITH_LEGACY_TIME_PARSER` error.
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  @throws(classOf[IllegalStateException])
+  def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal]
+
+  /**
+   * Parses a timestamp in a string to a [[TimestampNanosVal]] for `TIMESTAMP_NTZ(precision)`.
+   * Zone-id and zone-offset components are ignored.
+   */
+  @throws(classOf[ParseException])
+  @throws(classOf[DateTimeParseException])
+  @throws(classOf[DateTimeException])
+  @throws(classOf[IllegalStateException])
+  final def parseWithoutTimeZoneNanos(s: String, precision: Int): TimestampNanosVal =
+    parseWithoutTimeZoneNanos(s, precision, true)
+
+  /**
+   * Formats a [[TimestampNanosVal]] to a string at the target fractional-second `precision` in
+   * `[7, 9]` for `TIMESTAMP_LTZ(precision)`. The value is rendered in the formatter's `zoneId`
+   * (it goes through the `format(instant: Instant)` path), so it must not be used for NTZ values;
+   * use [[formatWithoutTimeZoneNanos]] for those. Sub-`precision` digits are truncated (floored)
+   * before rendering; the number of fractional digits actually emitted follows the formatter
+   * pattern (e.g. the count of `S` letters), consistent with the microsecond `format` overloads.
+   */
+  def formatNanos(v: TimestampNanosVal, precision: Int): String
+
+  /**
+   * NTZ counterpart of [[formatNanos]]: formats a [[TimestampNanosVal]] for
+   * `TIMESTAMP_NTZ(precision)` independently of any time zone. The value is rendered as its
+   * UTC-grid wall-clock local date-time, mirroring the microsecond `format(localDateTime:
+   * LocalDateTime)` path; unlike [[formatNanos]] it does not apply the formatter's `zoneId`.
+   * Sub-`precision` digits are truncated (floored) before rendering.
+   */
+  def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String
+
   def format(us: Long): String
   def format(ts: Timestamp): String
   def format(instant: Instant): String
@@ -227,6 +328,42 @@ class Iso8601TimestampFormatter(
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
+  // `checkParsedDiff` only uses the legacy parse to decide whether to raise an upgrade exception
+  // and never returns its result, so the legacy formatter (microsecond-only) is fine here even on
+  // the nanos path. The returned `TimestampNanosVal.ZERO` is discarded.
+  protected def legacyNanosParse(str: String): TimestampNanosVal = {
+    legacyFormatter.parse(str)
+    TimestampNanosVal.ZERO
+  }
+
+  override def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] = {
+    try {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
+        Some(extractNanos(parsed, precision))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  private def extractNanos(parsed: TemporalAccessor, precision: Int): TimestampNanosVal = {
+    val parsedZoneId = parsed.query(TemporalQueries.zone())
+    val timeZoneId = if (parsedZoneId == null) zoneId else parsedZoneId
+    val zonedDateTime = toZonedDateTime(parsed, timeZoneId)
+    SparkDateTimeUtils.instantToTimestampNanos(zonedDateTime.toInstant, precision)
+  }
+
+  override def parseNanos(s: String, precision: Int): TimestampNanosVal = {
+    try {
+      val parsed = formatter.parse(s)
+      extractNanos(parsed, precision)
+    } catch checkParsedDiff(s, legacyNanosParse)
+  }
+
   override def parseWithoutTimeZoneOptional(s: String, allowTimeZone: Boolean): Option[Long] = {
     try {
       val parsePosition = new ParsePosition(0)
@@ -260,6 +397,48 @@ class Iso8601TimestampFormatter(
     } catch checkParsedDiff(s, legacyFormatter.parse)
   }
 
+  override def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal] = {
+    try {
+      val parsePosition = new ParsePosition(0)
+      val parsed = formatter.parseUnresolved(s, parsePosition)
+      if (parsed != null && s.length == parsePosition.getIndex) {
+        Some(extractNanosNTZ(s, parsed, precision, allowTimeZone))
+      } else {
+        None
+      }
+    } catch {
+      case NonFatal(_) => None
+    }
+  }
+
+  private def extractNanosNTZ(
+      s: String,
+      parsed: TemporalAccessor,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal = {
+    if (!allowTimeZone && parsed.query(TemporalQueries.zone()) != null) {
+      throw ExecutionErrors.cannotParseStringAsDataTypeError(pattern, s, TimestampNTZType)
+    }
+    val localDate = toLocalDate(parsed)
+    val localTime = toLocalTime(parsed)
+    SparkDateTimeUtils.localDateTimeToTimestampNanos(
+      LocalDateTime.of(localDate, localTime),
+      precision)
+  }
+
+  override def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal = {
+    try {
+      val parsed = formatter.parse(s)
+      extractNanosNTZ(s, parsed, precision, allowTimeZone)
+    } catch checkParsedDiff(s, legacyNanosParse)
+  }
+
   override def format(instant: Instant): String = {
     try {
       zonedFormatter.format(instant)
@@ -278,6 +457,27 @@ class Iso8601TimestampFormatter(
 
   override def format(localDateTime: LocalDateTime): String = {
     localDateTime.format(formatter)
+  }
+
+  override def formatNanos(v: TimestampNanosVal, precision: Int): String = {
+    // Floor sub-`precision` digits using the shared `SparkDateTimeUtils` truncation rule, then
+    // render the reconstructed instant. The number of fractional digits emitted follows the
+    // formatter pattern (count of `S` letters), consistent with the microsecond `format` paths.
+    val truncated = SparkDateTimeUtils.instantToTimestampNanos(
+      SparkDateTimeUtils.timestampNanosToInstant(v),
+      precision)
+    format(SparkDateTimeUtils.timestampNanosToInstant(truncated))
+  }
+
+  override def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String = {
+    // Floor sub-`precision` digits, then render the reconstructed local date-time via the
+    // pattern only (no `zoneId`), mirroring `format(localDateTime: LocalDateTime)` on the
+    // microsecond path. Routing an NTZ value through `formatNanos` / `format(Instant)` would
+    // apply the formatter's `zoneId` and shift the UTC-grid wall clock.
+    val truncated = SparkDateTimeUtils.localDateTimeToTimestampNanos(
+      SparkDateTimeUtils.timestampNanosToLocalDateTime(v),
+      precision)
+    format(SparkDateTimeUtils.timestampNanosToLocalDateTime(truncated))
   }
 
   override def validatePatternString(checkLegacy: Boolean): Unit = {
@@ -346,6 +546,44 @@ class DefaultTimestampFormatter(
     val utf8Value = UTF8String.fromString(s)
     SparkDateTimeUtils.stringToTimestampWithoutTimeZone(utf8Value, allowTimeZone)
   }
+
+  override def parseNanos(s: String, precision: Int): TimestampNanosVal = {
+    try {
+      SparkDateTimeUtils.stringToTimestampLTZNanosAnsi(
+        UTF8String.fromString(s),
+        precision,
+        zoneId)
+    } catch checkParsedDiff(s, legacyNanosParse)
+  }
+
+  override def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] =
+    SparkDateTimeUtils.stringToTimestampLTZNanos(UTF8String.fromString(s), precision, zoneId)
+
+  override def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal = {
+    try {
+      val utf8Value = UTF8String.fromString(s)
+      SparkDateTimeUtils
+        .stringToTimestampNTZNanos(utf8Value, precision, allowTimeZone)
+        .getOrElse {
+          throw ExecutionErrors.cannotParseStringAsDataTypeError(
+            TimestampFormatter.defaultPattern(),
+            s,
+            TimestampNTZType)
+        }
+    } catch checkParsedDiff(s, legacyNanosParse)
+  }
+
+  override def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal] =
+    SparkDateTimeUtils.stringToTimestampNTZNanos(
+      UTF8String.fromString(s),
+      precision,
+      allowTimeZone)
 }
 
 /**
@@ -491,6 +729,35 @@ class LegacyFastTimestampFormatter(pattern: String, zoneId: ZoneId, locale: Loca
     format(instantToMicros(instant))
   }
 
+  override def parseNanos(s: String, precision: Int): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  // The `*Optional` nanos methods are abstract in the trait (no swallowing default), so the legacy
+  // formatters must implement them. They throw rather than return `None` so the unsupported-feature
+  // error is surfaced instead of being silently masked under the LEGACY time parser policy.
+  override def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  // Without this override the trait default throws SparkException.internalError instead of the
+  // user-facing legacyNanosUnsupported error.
+  override def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal] =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def formatNanos(v: TimestampNanosVal, precision: Int): String =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
   override def validatePatternString(checkLegacy: Boolean): Unit = fastDateFormat
 }
 
@@ -532,6 +799,35 @@ class LegacySimpleTimestampFormatter(
     format(instantToMicros(instant))
   }
 
+  override def parseNanos(s: String, precision: Int): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  // The `*Optional` nanos methods are abstract in the trait (no swallowing default), so the legacy
+  // formatters must implement them. They throw rather than return `None` so the unsupported-feature
+  // error is surfaced instead of being silently masked under the LEGACY time parser policy.
+  override def parseNanosOptional(s: String, precision: Int): Option[TimestampNanosVal] =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  // Without this override the trait default throws SparkException.internalError instead of the
+  // user-facing legacyNanosUnsupported error.
+  override def parseWithoutTimeZoneNanos(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): TimestampNanosVal =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def parseWithoutTimeZoneNanosOptional(
+      s: String,
+      precision: Int,
+      allowTimeZone: Boolean): Option[TimestampNanosVal] =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def formatNanos(v: TimestampNanosVal, precision: Int): String =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
+  override def formatWithoutTimeZoneNanos(v: TimestampNanosVal, precision: Int): String =
+    throw TimestampFormatter.legacyNanosUnsupported()
+
   override def validatePatternString(checkLegacy: Boolean): Unit = sdf
 }
 
@@ -547,6 +843,16 @@ object TimestampFormatter {
 
   def defaultPattern(): String =
     s"${DateFormatter.defaultPattern} ${TimeFormatter.defaultPattern}"
+
+  /**
+   * The legacy formatters (`FastDateFormat` / `SimpleDateFormat`) cap at millisecond/microsecond
+   * resolution and cannot represent the sub-microsecond remainder of a [[TimestampNanosVal]].
+   * Nanosecond-capable timestamp types are therefore unsupported under the `LEGACY` time parser
+   * policy. This is a user-facing error (not an internal error) because the `LEGACY` policy is
+   * user-configurable and a caller may legitimately combine it with nanosecond timestamps.
+   */
+  def legacyNanosUnsupported(): SparkUnsupportedOperationException =
+    ExecutionErrors.nanosTimestampUnsupportedWithLegacyParserError()
 
   private def getFormatter(
       format: Option[String],

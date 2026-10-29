@@ -15,13 +15,13 @@
 # limitations under the License.
 #
 
-import pandas as pd
-import numpy as np
 import re
+
+import numpy as np
+import pandas as pd
 
 from pyspark import pandas as ps
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 
 
 class SeriesStringOpsMixin:
@@ -170,7 +170,6 @@ class SeriesStringOpsMixin:
 class SeriesStringOpsTests(
     SeriesStringOpsMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

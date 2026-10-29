@@ -22,13 +22,16 @@ import org.apache.spark.internal.LogKeys.EXPR
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.aggregate.{AggregateExpression, AggregateFunction, Complete}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
+import org.apache.spark.sql.catalyst.expressions.variant.{VariantGet, VariantPathParser}
 import org.apache.spark.sql.catalyst.optimizer.ConstantFolding
 import org.apache.spark.sql.connector.catalog.functions.ScalarFunction
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, Extract => V2Extract, FieldReference, GeneralScalarExpression, GetArrayItem => V2GetArrayItem, LiteralValue, NullOrdering, SortDirection, SortValue, UserDefinedScalarFunc, VariantGet => V2VariantGet}
 import org.apache.spark.sql.connector.expressions.aggregate.{AggregateFunc, Avg, Count, CountStar, GeneralAggregateFunc, Max, Min, Sum, UserDefinedAggregateFunc}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, And => V2And, Not => V2Not, Or => V2Or, Predicate => V2Predicate}
 import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegerType, StringType}
+import org.apache.spark.sql.types.{AnyTimestampNanoType, BooleanType, DataType, IntegerType,
+  StringType}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * The builder to generate V2 expressions from catalyst expressions.
@@ -39,17 +42,8 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
 
   def buildPredicate(): Option[V2Predicate] = {
     if (isPredicate) {
-      val translated0 = build()
+      val translated = wrapBooleanExpression(e, build())
       val conf = SQLConf.get
-      val alwaysCreateV2Predicate = conf.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE)
-      val translated = if (alwaysCreateV2Predicate && e.dataType == BooleanType) {
-        translated0.map {
-          case p: V2Predicate => p
-          case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
-        }
-      } else {
-        translated0
-      }
 
       val modifiedExprOpt = if (
         conf.getConf(SQLConf.DATA_SOURCE_DONT_ASSERT_ON_PREDICATE)
@@ -70,6 +64,26 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       }
     } else {
       None
+    }
+  }
+
+  private def wrapBooleanExpression(
+      expr: Expression,
+      translated: Option[V2Expression]): Option[V2Expression] = {
+    if (SQLConf.get.getConf(SQLConf.DATA_SOURCE_ALWAYS_CREATE_V2_PREDICATE) &&
+        expr.dataType == BooleanType) {
+      translated.map {
+        case p: V2Predicate => p
+        case other => new V2Predicate("BOOLEAN_EXPRESSION", Array(other))
+      }
+    } else {
+      translated
+    }
+  }
+
+  private def generatePredicate(expr: Expression): Option[V2Predicate] = {
+    wrapBooleanExpression(expr, generateExpression(expr, true)).collect {
+      case p: V2Predicate => p
     }
   }
 
@@ -94,11 +108,17 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       expr: Expression, isPredicate: Boolean = false): Option[V2Expression] = expr match {
     case literal: Literal => Some(translateLiteral(literal))
     case _ if expr.contextIndependentFoldable
-        && SQLConf.get.getConf(SQLConf.DATA_SOURCE_V2_EXPR_FOLDING) =>
+        && SQLConf.get.getConfByKeyStrict[Boolean]("spark.sql.optimizer.datasourceV2ExprFolding") =>
       // If the expression is context independent foldable, we can convert it to a literal.
       // This is useful for increasing the coverage of V2 expressions.
+      // Folding returns the expression unchanged when it failed to evaluate inside a conditional
+      // branch, and recursing on an unchanged expression would loop forever.
       val constantExpr = ConstantFolding.constantFolding(expr)
-      generateExpression(constantExpr, isPredicate)
+      if (constantExpr.fastEquals(expr)) {
+        None
+      } else {
+        generateExpression(constantExpr, isPredicate)
+      }
     case col @ ColumnOrField(nameParts) =>
       val ref = FieldReference(nameParts)
       if (isPredicate && col.dataType.isInstanceOf[BooleanType]) {
@@ -107,24 +127,34 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         Some(ref)
       }
     case InSet(child, hset) =>
-      generateExpression(child).map { v =>
-        val children =
-          (v +: hset.toSeq.map(elem => LiteralValue(elem, child.dataType))).toArray[V2Expression]
-        new V2Predicate("IN", children)
+      generateCharPadInSet(child, hset).orElse {
+        generateExpression(child).map { v =>
+          val children =
+            (v +: hset.toSeq.map(elem => LiteralValue(elem, child.dataType))).toArray[V2Expression]
+          new V2Predicate("IN", children)
+        }
       }
     // Because we only convert In to InSet in Optimizer when there are more than certain
     // items. So it is possible we still get an In expression here that needs to be pushed
     // down.
     case In(value, list) =>
-      val v = generateExpression(value)
-      val listExpressions = list.flatMap(generateExpression(_))
-      if (v.isDefined && list.length == listExpressions.length) {
-        val children = (v.get +: listExpressions).toArray[V2Expression]
-        // The children looks like [expr, value1, ..., valueN]
-        Some(new V2Predicate("IN", children))
-      } else {
-        None
+      generateCharPadIn(value, list).orElse {
+        val v = generateExpression(value)
+        val listExpressions = list.flatMap(generateExpression(_))
+        if (v.isDefined && list.length == listExpressions.length) {
+          val children = (v.get +: listExpressions).toArray[V2Expression]
+          // The children looks like [expr, value1, ..., valueN]
+          Some(new V2Predicate("IN", children))
+        } else {
+          None
+        }
       }
+    case IsNull(invoke: StaticInvoke) if isCharReadSidePaddingInvoke(invoke) =>
+      generateExpression(invoke.arguments.head)
+        .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
+    case IsNotNull(invoke: StaticInvoke) if isCharReadSidePaddingInvoke(invoke) =>
+      generateExpression(invoke.arguments.head)
+        .map(c => new V2Predicate("IS_NOT_NULL", Array[V2Expression](c)))
     case IsNull(col) => generateExpression(col)
       .map(c => new V2Predicate("IS_NULL", Array[V2Expression](c)))
     case IsNotNull(col) => generateExpression(col)
@@ -187,55 +217,56 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case _: Signum => generateExpressionWithName("SIGN", expr, isPredicate)
     case _: WidthBucket => generateExpressionWithName("WIDTH_BUCKET", expr, isPredicate)
     case and: And =>
-      // AND expects predicate
-      val l = generateExpression(and.left, true)
-      val r = generateExpression(and.right, true)
+      val l = generatePredicate(and.left)
+      val r = generatePredicate(and.right)
       if (l.isDefined && r.isDefined) {
-        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
-        Some(new V2And(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+        Some(new V2And(l.get, r.get))
       } else {
         None
       }
     case or: Or =>
-      // OR expects predicate
-      val l = generateExpression(or.left, true)
-      val r = generateExpression(or.right, true)
+      val l = generatePredicate(or.left)
+      val r = generatePredicate(or.right)
       if (l.isDefined && r.isDefined) {
-        assert(l.get.isInstanceOf[V2Predicate] && r.get.isInstanceOf[V2Predicate])
-        Some(new V2Or(l.get.asInstanceOf[V2Predicate], r.get.asInstanceOf[V2Predicate]))
+        Some(new V2Or(l.get, r.get))
       } else {
         None
       }
     case b: BinaryOperator if canTranslate(b) =>
-      val l = generateExpression(b.left)
-      val r = generateExpression(b.right)
-      if (l.isDefined && r.isDefined) {
-        b match {
-          case _: BinaryComparison if l.get.isInstanceOf[LiteralValue[_]] &&
-              r.get.isInstanceOf[FieldReference] =>
-            Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
-              Array[V2Expression](r.get, l.get)))
-          case _: Predicate =>
-            Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
-          case _ =>
-            Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+      val charPadCmp = b match {
+        case _: EqualTo | _: EqualNullSafe =>
+          generateCharPadLiteralCmp(b.sqlOperator, b.left, b.right)
+        case _ => None
+      }
+      charPadCmp.orElse {
+        val l = generateExpression(b.left)
+        val r = generateExpression(b.right)
+        if (l.isDefined && r.isDefined) {
+          b match {
+            case _: BinaryComparison if l.get.isInstanceOf[LiteralValue[_]] &&
+                r.get.isInstanceOf[FieldReference] =>
+              Some(new V2Predicate(flipComparisonOperatorName(b.sqlOperator),
+                Array[V2Expression](r.get, l.get)))
+            case _: Predicate =>
+              Some(new V2Predicate(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+            case _ =>
+              Some(new GeneralScalarExpression(b.sqlOperator, Array[V2Expression](l.get, r.get)))
+          }
+        } else {
+          None
         }
-      } else {
-        None
       }
     case Not(eq: EqualTo) =>
-      val left = generateExpression(eq.left)
-      val right = generateExpression(eq.right)
-      if (left.isDefined && right.isDefined) {
-        Some(new V2Predicate("<>", Array[V2Expression](left.get, right.get)))
-      } else {
-        None
+      generateCharPadLiteralCmp("<>", eq.left, eq.right).orElse {
+        val left = generateExpression(eq.left)
+        val right = generateExpression(eq.right)
+        if (left.isDefined && right.isDefined) {
+          Some(new V2Predicate("<>", Array[V2Expression](left.get, right.get)))
+        } else {
+          None
+        }
       }
-    case Not(child) => generateExpression(child, true) // NOT expects predicate
-      .map { v =>
-        assert(v.isInstanceOf[V2Predicate])
-        new V2Not(v.asInstanceOf[V2Predicate])
-      }
+    case Not(child) => generatePredicate(child).map(new V2Not(_))
     case UnaryMinus(_, true) => generateExpressionWithName("-", expr, isPredicate)
     case _: BitwiseNot => generateExpressionWithName("~", expr, isPredicate)
     case caseWhen @ CaseWhen(branches, elseValue) =>
@@ -333,6 +364,21 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
         case _ =>
           None
       }
+    case v: VariantGet if v.path.foldable =>
+      (Option(v.path.eval()).map(_.toString), generateExpression(v.child)) match {
+        case (Some(path), Some(colRef: FieldReference))
+            if !v.legacyPathBackslashAsLiteral ||
+              VariantPathParser.parse(path, legacyPathBackslashAsLiteral = true).map(_.toSeq) ==
+                VariantPathParser.parse(path, legacyPathBackslashAsLiteral = false).map(_.toSeq) =>
+          val vg = new V2VariantGet(colRef, path, v.targetType, v.failOnError,
+            v.timeZoneId.orNull)
+          if (isPredicate && v.dataType.isInstanceOf[BooleanType]) {
+            Some(new V2Predicate("BOOLEAN_EXPRESSION", Array[V2Expression](vg)))
+          } else {
+            Some(vg)
+          }
+        case _ => None
+      }
     // TODO supports other expressions
     case ApplyFunctionExpression(function, children) =>
       val childrenExpressions = children.flatMap(generateExpression(_))
@@ -406,8 +452,10 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
     case aggregate.Mode(PushableExpression(expr), _, _, Some(reverse)) =>
       Some(new GeneralAggregateFunc(
         "MODE", isDistinct, Array.empty, Array(generateSortValue(expr, !reverse))))
-    case aggregate.Percentile(
-      PushableExpression(left), PushableExpression(right), LongLiteral(1L), _, _, reverse) =>
+    // A source would interpolate a nanosecond timestamp with its own rounding, not Spark's floor.
+    case p @ aggregate.Percentile(
+      PushableExpression(left), PushableExpression(right), LongLiteral(1L), _, _, reverse)
+        if !p.child.dataType.isInstanceOf[AnyTimestampNanoType] =>
       Some(new GeneralAggregateFunc("PERCENTILE_CONT", isDistinct,
         Array(right), Array(generateSortValue(left, reverse))))
     case aggregate.PercentileDisc(
@@ -434,6 +482,82 @@ class V2ExpressionBuilder(e: Expression, isPredicate: Boolean = false) extends L
       case "<=" => ">="
       case _ => operatorName
     }
+  }
+
+  private def isCharReadSidePaddingInvoke(invoke: StaticInvoke): Boolean = {
+    invoke.scalarFunction.isEmpty &&
+      invoke.staticObject == classOf[CharVarcharCodegenUtils] &&
+      invoke.functionName == CharVarcharUtils.READ_SIDE_PADDING &&
+      invoke.arguments.length == 2
+  }
+
+  // Identity compile is only valid vs a literal Spark already padded to the CHAR length.
+  private def charPadLength(invoke: StaticInvoke): Option[Int] = invoke.arguments(1) match {
+    case Literal(n: Int, _) => Some(n)
+    case _ => None
+  }
+
+  private def isFoldableStringOfLen(expr: Expression, n: Int): Boolean = expr match {
+    case Literal(s: UTF8String, _) => s.numChars() == n
+    case _ => false
+  }
+
+  private def generateCharPadColumn(invoke: StaticInvoke): Option[V2Expression] = {
+    generateExpressionWithNameByChildren(
+      CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
+      Seq(invoke.arguments.head, invoke.arguments(1), Literal.create(" ", StringType)),
+      invoke.dataType,
+      isPredicate = false)
+  }
+
+  private def generateCharPadLiteralCmp(
+      name: String, left: Expression, right: Expression): Option[V2Expression] = {
+    def paddedVsLit(pad: Expression, lit: Expression): Option[V2Expression] = pad match {
+      case invoke: StaticInvoke if isCharReadSidePaddingInvoke(invoke) =>
+        charPadLength(invoke).filter(isFoldableStringOfLen(lit, _)).flatMap { _ =>
+          generateCharPadColumn(invoke).flatMap { col =>
+            generateExpression(lit).map { l =>
+              new V2Predicate(name, Array[V2Expression](col, l))
+            }
+          }
+        }
+      case _ => None
+    }
+    paddedVsLit(left, right).orElse(paddedVsLit(right, left))
+  }
+
+  private def generateCharPadIn(
+      value: Expression, list: Seq[Expression]): Option[V2Expression] = value match {
+    case invoke: StaticInvoke if isCharReadSidePaddingInvoke(invoke) =>
+      charPadLength(invoke).filter(n => list.nonEmpty && list.forall(isFoldableStringOfLen(_, n)))
+        .flatMap { _ =>
+          generateCharPadColumn(invoke).flatMap { col =>
+            val lits = list.flatMap(generateExpression(_))
+            if (lits.length == list.length) {
+              Some(new V2Predicate("IN", (col +: lits).toArray[V2Expression]))
+            } else {
+              None
+            }
+          }
+        }
+    case _ => None
+  }
+
+  private def generateCharPadInSet(
+      child: Expression, hset: Set[Any]): Option[V2Expression] = child match {
+    case invoke: StaticInvoke if isCharReadSidePaddingInvoke(invoke) =>
+      charPadLength(invoke).filter { n =>
+        hset.nonEmpty && hset.forall {
+          case s: UTF8String => s.numChars() == n
+          case _ => false
+        }
+      }.flatMap { _ =>
+        generateCharPadColumn(invoke).map { col =>
+          val lits = hset.toSeq.map(elem => LiteralValue(elem, child.dataType))
+          new V2Predicate("IN", (col +: lits).toArray[V2Expression])
+        }
+      }
+    case _ => None
   }
 
   private def generateExpressionWithName(

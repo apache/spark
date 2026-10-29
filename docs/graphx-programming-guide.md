@@ -189,7 +189,7 @@ val users: RDD[(VertexId, (String, String))] =
 val relationships: RDD[Edge[String]] =
   sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi")))
-// Define a default user in case there are relationship with missing user
+// Define a default user in case there is a relationship with a missing user
 val defaultUser = ("John Doe", "Missing")
 // Build the initial Graph
 val graph = Graph(users, relationships, defaultUser)
@@ -413,7 +413,7 @@ implemented efficiently without data movement or duplication.
 The [`subgraph`][Graph.subgraph] operator takes vertex and edge predicates and returns the graph
 containing only the vertices that satisfy the vertex predicate (evaluate to true) and edges that
 satisfy the edge predicate *and connect vertices that satisfy the vertex predicate*.  The `subgraph`
-operator can be used in number of situations to restrict the graph to the vertices and edges of
+operator can be used in a number of situations to restrict the graph to the vertices and edges of
 interest or eliminate broken links. For example in the following code we remove broken links:
 
 
@@ -428,7 +428,7 @@ val relationships: RDD[Edge[String]] =
   sc.parallelize(Seq(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
                        Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
                        Edge(4L, 0L, "student"),   Edge(5L, 0L, "colleague")))
-// Define a default user in case there are relationship with missing user
+// Define a default user in case there is a relationship with a missing user
 val defaultUser = ("John Doe", "Missing")
 // Build the initial Graph
 val graph = Graph(users, relationships, defaultUser)

@@ -46,31 +46,36 @@ private[spark] trait SparkTestUtils {
       sourceFile: JavaSourceFromString,
       classpathUrls: Seq[URL]): File = {
     val compiler = ToolProvider.getSystemJavaCompiler
-
-    // Calling this outputs a class file in pwd. It's easier to just rename the files than
-    // build a custom FileManager that controls the output location.
-    val options = if (classpathUrls.nonEmpty) {
+    val compileDir = SparkFileUtils.createTempDir(namePrefix = "spark-javac")
+    val classpathOptions = if (classpathUrls.nonEmpty) {
       Seq(
         "-classpath",
         classpathUrls
-          .map {
-            _.getFile
+          .map { u =>
+            new File(u.toURI).getPath
           }
           .mkString(File.pathSeparator))
     } else {
       Seq.empty
     }
-    compiler.getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile)).call()
+    val options = Seq("-d", compileDir.getAbsolutePath) ++ classpathOptions
 
-    val fileName = className + ".class"
-    val result = new File(fileName)
-    assert(result.exists(), "Compiled file not found: " + result.getAbsolutePath())
-    val out = new File(destDir, fileName)
+    try {
+      val compiled = compiler
+        .getTask(null, null, null, options.asJava, null, Arrays.asList(sourceFile))
+        .call()
+      assert(compiled, s"Failed to compile $className")
 
-    Files.move(result.toPath, out.toPath)
-
-    assert(out.exists(), "Destination file not moved: " + out.getAbsolutePath())
-    out
+      val fileName = className + ".class"
+      val result = SparkFileUtils.recursiveList(compileDir)
+        .find(file => file.isFile && file.getName == fileName)
+        .getOrElse(throw new IllegalStateException(s"Compiled file not found: $fileName"))
+      val out = new File(destDir, fileName)
+      Files.move(result.toPath, out.toPath)
+      out
+    } finally {
+      SparkFileUtils.deleteRecursively(compileDir)
+    }
   }
 
   /** Creates a compiled class with the given name. Class file will be placed in destDir. */
@@ -123,7 +128,8 @@ private[spark] trait SparkTestUtils {
 
     val options = Seq("-d", classDir.getAbsolutePath) ++ (
       if (classpathUrls.nonEmpty) {
-        Seq("-classpath", classpathUrls.map(_.getFile).mkString(File.pathSeparator))
+        Seq("-classpath",
+          classpathUrls.map(u => new File(u.toURI).getPath).mkString(File.pathSeparator))
       } else Seq.empty
     )
 
@@ -177,7 +183,7 @@ private[spark] trait SparkTestUtils {
     // on Windows to work around CMD's command-line length limit and by some build/CI
     // tools. Expand any such JARs before invoking scalac so the classpath is complete.
     val expandedClasspath = classpathUrls.flatMap(expandManifestClasspath)
-    val cpStr = expandedClasspath.map(_.getFile).mkString(File.pathSeparator)
+    val cpStr = expandedClasspath.map(u => new File(u.toURI).getPath).mkString(File.pathSeparator)
     val args = Array("-classpath", cpStr, "-d", classDir.getAbsolutePath) ++
       sourceFiles.map(_.getAbsolutePath)
 
@@ -216,7 +222,7 @@ private[spark] trait SparkTestUtils {
    * original URL unchanged.
    */
   private[spark] def expandManifestClasspath(url: URL): Seq[URL] = {
-    val file = new File(url.getFile)
+    val file = new File(url.toURI)
     if (!file.exists() || !file.getName.endsWith(".jar")) return Seq(url)
     try {
       val jarFile = new JarFile(file)

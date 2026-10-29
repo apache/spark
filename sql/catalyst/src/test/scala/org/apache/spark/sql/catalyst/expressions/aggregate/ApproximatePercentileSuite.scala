@@ -20,6 +20,7 @@ package org.apache.spark.sql.catalyst.expressions.aggregate
 import java.sql.Date
 
 import org.apache.spark.SparkFunSuite
+import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.analysis.UnresolvedAttribute
@@ -28,13 +29,15 @@ import org.apache.spark.sql.catalyst.dsl.plans._
 import org.apache.spark.sql.catalyst.expressions.{Alias, AttributeReference, BoundReference, Cast, CreateArray, DecimalLiteral, GenericInternalRow, Literal}
 import org.apache.spark.sql.catalyst.expressions.Cast._
 import org.apache.spark.sql.catalyst.expressions.aggregate.ApproximatePercentile.{PercentileDigest, PercentileDigestSerializer}
+import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.plans.logical.LocalRelation
 import org.apache.spark.sql.catalyst.util.{ArrayData, QuantileSummaries}
 import org.apache.spark.sql.catalyst.util.QuantileSummaries.Stats
-import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{ArrayType, Decimal, DecimalType, DoubleType, FloatType, IntegerType, IntegralType, LongType, TimestampLTZNanosType, TimestampNTZNanosType, TimeType}
 import org.apache.spark.util.SizeEstimator
 
-class ApproximatePercentileSuite extends SparkFunSuite {
+class ApproximatePercentileSuite extends SparkFunSuite with SQLHelper {
 
   private val random = new java.util.Random()
 
@@ -132,6 +135,48 @@ class ApproximatePercentileSuite extends SparkFunSuite {
         val percentiles = arrayData.toDoubleArray()
         assert(percentiles.zip(expectedPercentiles)
           .forall(pair => Math.abs(pair._1 - pair._2) < error))
+    }
+  }
+
+  test("SPARK-57557: ApproximatePercentile supports TIME type") {
+    // The result type mirrors the input TIME type, preserving precision.
+    assert(new ApproximatePercentile(
+      BoundReference(0, TimeType(), nullable = false), Literal(0.5)).dataType === TimeType())
+    assert(new ApproximatePercentile(
+      BoundReference(0, TimeType(3), nullable = false), Literal(0.5)).dataType === TimeType(3))
+
+    // TIME's internal value is a Long (nanos-of-day); update/merge/eval round-trips it as a Long.
+    val agg = new ApproximatePercentile(
+      BoundReference(0, TimeType(), nullable = false), Literal(0.5))
+    val buffer = agg.createAggregationBuffer()
+    (1L to 1000L).foreach(v => agg.update(buffer, InternalRow(v)))
+    val result = agg.eval(buffer)
+    assert(result.isInstanceOf[Long])
+    assert(Math.abs(result.asInstanceOf[Long] - 500L) < 5L)
+  }
+
+  test("SPARK-60337: ApproximatePercentile rejects nanosecond timestamps") {
+    // The sketch holds doubles, so a nanosecond timestamp is rejected rather than implicitly
+    // cast to DATE.
+    for {
+      ansiEnabled <- Seq("true", "false")
+      dataType <- (7 to 9).flatMap(p => Seq(TimestampNTZNanosType(p), TimestampLTZNanosType(p)))
+    } {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled) {
+        val agg = new ApproximatePercentile(UnresolvedAttribute("a"), Literal(0.5D))
+        checkError(
+          exception = intercept[AnalysisException] {
+            LocalRelation(AttributeReference("a", dataType)()).select(agg).analyze
+          },
+          condition = "DATATYPE_MISMATCH.UNEXPECTED_INPUT_TYPE",
+          parameters = Map(
+            "sqlExpr" -> "\"percentile_approx(a, 0.5, 10000)\"",
+            "paramIndex" -> "first",
+            "requiredType" -> ("(\"NUMERIC\" or \"DATE\" or \"TIMESTAMP\" or \"TIMESTAMP_NTZ\" " +
+              "or \"INTERVAL YEAR TO MONTH\" or \"INTERVAL DAY TO SECOND\" or \"TIME\")"),
+            "inputSql" -> "\"a\"",
+            "inputType" -> s"\"${dataType.sql}\""))
+      }
     }
   }
 

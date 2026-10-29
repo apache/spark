@@ -217,12 +217,14 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     // Simulate FileNotFoundException wrap inside SparkException
     when(
       blockTransferService
-        .uploadBlock(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+        .uploadBlock(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(),
+          mc.any(), mc.any()))
       .thenReturn(Future.failed(
         new java.io.IOException("boop", new FileNotFoundException("file not found"))))
     when(
       blockTransferService
-        .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+        .uploadBlockSync(mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(),
+          mc.any(), mc.any()))
       .thenCallRealMethod()
 
     when(bm.blockTransferService).thenReturn(blockTransferService)
@@ -253,12 +255,13 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     val blockTransferService = mock(classOf[BlockTransferService])
     // Simulate BlockSavedOnDecommissionedBlockManagerException
     when(blockTransferService.uploadBlock(
-      mc.any(), mc.any(), mc.eq(exe1.executorId), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      mc.any(), mc.any(), mc.eq(exe1.executorId), mc.any(), mc.any(), mc.any(), mc.isNull(),
+      mc.any(), mc.any()))
       .thenReturn(
         Future.failed(new RuntimeException("BlockSavedOnDecommissionedBlockManagerException"))
       )
     when(blockTransferService.uploadBlockSync(
-      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(), mc.any(), mc.any()))
       .thenCallRealMethod()
 
     when(bm.blockTransferService).thenReturn(blockTransferService)
@@ -268,10 +271,10 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     validateDecommissionTimestampsOnManager(bmDecomManager)
     verify(blockTransferService, times(1))
       .uploadBlock(mc.any(), mc.any(), mc.eq(exe1.executorId),
-        mc.any(), mc.any(), mc.any(), mc.isNull())
+        mc.any(), mc.any(), mc.any(), mc.isNull(), mc.any(), mc.any())
     verify(blockTransferService, times(1))
       .uploadBlock(mc.any(), mc.any(), mc.eq(exe2.executorId),
-        mc.any(), mc.any(), mc.any(), mc.isNull())
+        mc.any(), mc.any(), mc.any(), mc.isNull(), mc.any(), mc.any())
   }
 
   test("SPARK-54796: block decom manager handles ShuffleManagerNotInitializedException " +
@@ -295,7 +298,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     // Simulate ShuffleManagerNotInitializedException on first attempt,
     // then succeed on retry to the same peer (transient condition resolved)
     when(blockTransferService.uploadBlock(
-      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(), mc.any(), mc.any()))
       .thenAnswer(new Answer[Future[Unit]] {
         override def answer(invocation: InvocationOnMock): Future[Unit] = {
           val attempt = uploadAttempts.incrementAndGet()
@@ -309,7 +312,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
         }
       })
     when(blockTransferService.uploadBlockSync(
-      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull()))
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(), mc.any(), mc.any()))
       .thenCallRealMethod()
 
     when(bm.blockTransferService).thenReturn(blockTransferService)
@@ -321,7 +324,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     // all to the same peer since the thread keeps running
     verify(blockTransferService, times(3))
       .uploadBlock(mc.any(), mc.any(), mc.eq(exe1.executorId),
-        mc.any(), mc.any(), mc.any(), mc.isNull())
+        mc.any(), mc.any(), mc.any(), mc.isNull(), mc.any(), mc.any())
   }
 
   test("block decom manager handles IO failures") {
@@ -338,7 +341,8 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     val blockTransferService = mock(classOf[BlockTransferService])
     // Simulate an ambiguous IO error (e.g. block could be gone, connection failed, etc.)
     when(blockTransferService.uploadBlockSync(
-      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull())).thenThrow(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(),
+      mc.any(), mc.any())).thenThrow(
       new java.io.IOException("boop")
     )
 
@@ -372,7 +376,8 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
     val blockTransferService = mock(classOf[BlockTransferService])
     // Simulate an ambiguous IO error (e.g. block could be gone, connection failed, etc.)
     when(blockTransferService.uploadBlockSync(
-      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull())).thenThrow(
+      mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.any(), mc.isNull(),
+      mc.any(), mc.any())).thenThrow(
       new java.io.IOException("boop")
     )
 
@@ -418,7 +423,7 @@ class BlockManagerDecommissionUnitSuite extends SparkFunSuite with Matchers {
           mc.eq(storedBlockId1), mc.any(), mc.any(), mc.eq(Some(3)))
         verify(blockTransferService, times(2))
           .uploadBlockSync(mc.eq("host2"), mc.eq(bmPort), mc.eq("exec2"), mc.any(), mc.any(),
-            mc.eq(StorageLevel.DISK_ONLY), mc.isNull())
+            mc.eq(StorageLevel.DISK_ONLY), mc.isNull(), mc.any(), mc.any())
         // Since we never "finish" the RDD blocks, make sure the time is always moving forward.
         assert(bmDecomManager.rddBlocksLeft)
         previousRDDTime match {

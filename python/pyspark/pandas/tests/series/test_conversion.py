@@ -18,10 +18,9 @@ import unittest
 
 import pandas as pd
 
-from pyspark.loose_version import LooseVersion
 from pyspark import pandas as ps
+from pyspark.loose_version import LooseVersion
 from pyspark.testing.pandasutils import PandasOnSparkTestCase
-from pyspark.testing.sqlutils import SQLTestUtils
 from pyspark.testing.utils import have_tabulate, tabulate_requirement_message
 
 
@@ -78,7 +77,6 @@ class SeriesConversionMixin:
 class SeriesConversionTests(
     SeriesConversionMixin,
     PandasOnSparkTestCase,
-    SQLTestUtils,
 ):
     pass
 

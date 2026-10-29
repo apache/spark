@@ -1,0 +1,89 @@
+================================================================================================
+Benchmark for sharing repeated get_json_object parsing
+================================================================================================
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 2 of 32 fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                  1493           1522          26          0.1        7466.9       1.0X
+shared parsing on                                    904            910           6          0.2        4518.4       1.7X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 4 of 32 fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                  2914           2918           6          0.1       14569.6       1.0X
+shared parsing on                                    992            995           3          0.2        4960.0       2.9X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 8 of 32 fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                  5818           5832          14          0.0       29091.2       1.0X
+shared parsing on                                   1229           1230           1          0.2        6147.5       4.7X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 16 of 32 fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                  11608          11619          13          0.0       58039.4       1.0X
+shared parsing on                                    1641           1645           4          0.1        8206.3       7.1X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 2 of 32 nested fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                         1521           1525           3          0.1        7605.8       1.0X
+shared parsing on                                           926            928           1          0.2        4632.2       1.6X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 4 of 32 nested fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                         2936           2941           4          0.1       14680.2       1.0X
+shared parsing on                                          1087           1095           7          0.2        5435.7       2.7X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 8 of 32 nested fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                         5881           5886           7          0.0       29405.5       1.0X
+shared parsing on                                          1327           1337          15          0.2        6634.8       4.4X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object extracting 16 of 32 nested fields:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+---------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                         11902          11907           5          0.0       59508.3       1.0X
+shared parsing on                                           1800           1822          31          0.1        9000.9       6.6X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object coalescing 2 object/array field paths:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                              2087           2092           4          0.1       10432.5       1.0X
+shared parsing on                                                933            938           4          0.2        4667.4       2.2X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object coalescing 4 object/array field paths:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                              4131           4137           6          0.0       20655.0       1.0X
+shared parsing on                                               1133           1135           4          0.2        5664.0       3.6X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object coalescing 8 object/array field paths:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+-------------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                              8274           8311          33          0.0       41371.0       1.0X
+shared parsing on                                               1319           1320           2          0.2        6595.7       6.3X
+
+OpenJDK 64-Bit Server VM 17.0.20+8-LTS on Linux 6.17.0-1020-azure
+AMD EPYC 9V74 80-Core Processor
+get_json_object coalescing 16 object/array field paths:  Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+--------------------------------------------------------------------------------------------------------------------------------------
+shared parsing off                                              16640          16647           9          0.0       83198.7       1.0X
+shared parsing on                                                1806           1821          20          0.1        9030.6       9.2X
+
+

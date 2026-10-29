@@ -79,10 +79,6 @@ class ViewResolver(
   /**
    * Resolve the `unresolvedView` and its underlying plan. This method uses parent [[Resolver]] to
    * resolve the view child. [[View]] resolution consists of the following steps:
-   *   - Check if the view has any row-level security policies or column masking rules applied. If
-   *     so, throw [[ExplicitlyUnsupportedResolverFeature]].
-   *   - Check if the view is a materialized view. If so, throw
-   *     [[ExplicitlyUnsupportedResolverFeature]].
    *   - Check if the single-pass resolver fully supports the view plan using the [[ResolverGuard]].
    *     Throw [[ExplicitlyUnsupportedResolverFeature]] if the view plan is not supported.
    *   - Set the [[ViewResolutionContext]] for the view plan resolution.
@@ -90,19 +86,16 @@ class ViewResolver(
    *     view.
    *   - Resolve the view plan using parent [[Resolver]].
    *   - Sets the views child as analyzed in order to avoid recursing into it using rewrite rules.
-   *   - Create a new [[CatalogTable]] description for the resolved view based on the original
-   *     [[UnresolvedRelation.options]], original [[CatalogTable]] description and used
-   *     [[ViewResolutionContext]].
-   *   - Return the resolved [[View]] with the resolved child and a new [[CatalogTable]]
-   *     description.
+   *   - Return the resolved [[View]] with the resolved child and the original
+   *     [[UnresolvedRelation.options]].
    */
   override def resolve(unresolvedView: View): View = {
-
-    checkMaterializedView(unresolvedView)
-
     val (resolvedChild, usedViewResolutionContext) = withViewResolutionContext(unresolvedView) {
       SQLConf.withExistingConf(
-        View.effectiveSQLConf(unresolvedView.desc.viewSQLConfigs, unresolvedView.isTempView)
+        View.effectiveSQLConf(
+          configs = unresolvedView.desc.viewSQLConfigs,
+          isTempView = unresolvedView.isTempView,
+          createSparkVersion = unresolvedView.desc.createVersion)
       ) {
         checkResolverGuard(unresolvedView)
 
@@ -160,9 +153,6 @@ class ViewResolver(
       }
     }
   }
-  private def checkMaterializedView(unresolvedView: View): Unit = {
-  }
-
   private def checkResolverGuard(unresolvedView: View): Unit = {
     val resolverGuard = new ResolverGuard(catalogManager, tracker = tracker)
     resolverGuard(unresolvedView).planUnsupportedReason match {
