@@ -43,10 +43,12 @@
 //                   many times. Creating and closing a data writer create a file named after
 //                   it in _created_data_writers and _closed_data_writers.
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
-//                   more rows available each time Spark asks for the latest offset. With the
+//                   more rows available after the start of each micro-batch. With the
 //                   option "bad_offset", the latest offset is "none", "multiline" JSON or
 //                   "invalid" JSON. With the option "closed_path", closing the stream reader
-//                   creates that file.
+//                   creates that file. With the option "checkpoint_path", creating the stream
+//                   reader writes its checkpoint location to that file, and with "starts_path",
+//                   each call to latest_offset appends its start offset to that file, as a line.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -58,7 +60,12 @@
 //
 // With the option "fail", a step fails with an error. With the option "zero", a function that
 // creates a handle succeeds without setting it: "create", "create_reader",
-// "create_stream_reader", "create_writer" or "create_data_writer".
+// "create_stream_reader", "create_writer" or "create_data_writer". With the option "states", the
+// functions that return a state pass it that many times.
+//
+// read fails unless it gets the kind of read of its reader and the schema to read, the columns
+// that the reader returns, and write fails unless its batches have the columns of the schema
+// that create_data_writer got.
 //
 // The suite compiles it with these macros to get several distinct libraries:
 //
@@ -828,6 +835,7 @@ struct DataWriter {
   FILE* file;
   Options state;
   bool committed;
+  ArrowSchema schema;  // The schema of the data, moved from create_data_writer.
 };
 
 // The data writers that Spark closed, with the path of their write, so that using one of them
@@ -898,7 +906,8 @@ uint64_t capabilitiesOf(const DataSource& source) {
 #ifndef READ_ONLY
   if (source.name == name("native_counter")) return SPARK_DS_MICRO_BATCH_READ;
   if (source.name == name("native_sink")) {
-    return SPARK_DS_BATCH_WRITE | SPARK_DS_STREAMING_WRITE | SPARK_DS_TRUNCATE;
+    return SPARK_DS_BATCH_WRITE | SPARK_DS_STREAMING_WRITE | SPARK_DS_BATCH_TRUNCATE |
+           SPARK_DS_STREAMING_TRUNCATE;
   }
 #endif
   return 0;
@@ -957,40 +966,55 @@ int createReader(void* handle, struct ArrowSchema* schema, void** out) {
     for (const auto& column : columns) findColumn(column);
     if (returnsZero(source->options, "create_reader")) return;
     auto* reader = new Reader();
+    reader->state["kind"] = std::to_string(SPARK_DS_READ_BATCH);
     reader->state["columns"] = join(columns);
     reader->state["lo"] = "0";
     reader->state["hi"] = get(source->options, "end", "10");
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
-         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path"}) {
+         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path", "states"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
   });
 }
 
+// Passes the state to set_state once, or as many times as the option "states" says.
+void sendState(const Options& options, SparkDsSink set_state, void* sink,
+               const std::string& state) {
+  std::string times = get(options, "states", "");
+  for (int64_t i = 0; i < (times.empty() ? 1 : std::stoll(times)); i++) {
+    sendBytes(set_state, sink, state);
+  }
+}
+
 void closeSource(void* handle) { delete fromHandle<DataSource>(handle); }
 
 #ifndef READ_ONLY
 
-int createStreamReader(void* handle, struct ArrowSchema* schema, void** out) {
+int createStreamReader(void* handle, struct ArrowSchema* schema,
+                       const SparkDsStreamReaderInfo* info, void** out) {
   return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_counter")) {
       throw std::runtime_error(source->name + " does not support streaming reads");
     }
     auto columns = join(importColumns(schema));
+    if (info->checkpoint_location == nullptr) throw std::runtime_error("no checkpoint location");
+    std::string checkpoint_path = get(source->options, "checkpoint_path", "");
+    if (!checkpoint_path.empty()) writeFile(checkpoint_path, info->checkpoint_location);
     if (returnsZero(source->options, "create_stream_reader")) return;
     auto* reader = new Reader();
+    reader->state["kind"] = std::to_string(SPARK_DS_READ_MICRO_BATCH);
     reader->state["columns"] = columns;
     reader->state["max_offset"] = get(source->options, "max_offset", "10");
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
-    reader->state["current"] = "0";
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
-    reader->state["commit_path"] = get(source->options, "commit_path", "");
-    reader->state["bad_offset"] = get(source->options, "bad_offset", "");
-    reader->state["closed_path"] = get(source->options, "closed_path", "");
+    for (const char* option :
+         {"commit_path", "bad_offset", "closed_path", "starts_path", "states"}) {
+      reader->state[option] = get(source->options, option, "");
+    }
     *out = reader;
   });
 }
@@ -1016,7 +1040,7 @@ int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* 
 
 #endif  // READ_ONLY
 
-int planPartitions(void* handle, SparkDsSink add_partition, void* sink) {
+int planPartitions(void* handle, SparkDsSink add_partition, SparkDsSink set_state, void* sink) {
   return guarded([&] {
     auto* reader = fromHandle<Reader>(handle);
     maybeFail(reader->state, "plan");
@@ -1033,11 +1057,8 @@ int planPartitions(void* handle, SparkDsSink add_partition, void* sink) {
       int64_t stop = std::min(hi, start + step);
       sendBytes(add_partition, sink, std::to_string(start) + "," + std::to_string(stop));
     }
+    sendState(reader->state, set_state, sink, serialize(reader->state));
   });
-}
-
-int serializeReader(void* handle, SparkDsSink set_state, void* sink) {
-  return guarded([&] { sendBytes(set_state, sink, serialize(fromHandle<Reader>(handle)->state)); });
 }
 
 void closeReader(void* handle) { delete fromHandle<Reader>(handle); }
@@ -1048,13 +1069,22 @@ int initialOffset(void*, SparkDsSink set_offset, void* sink) {
   return guarded([&] { sendBytes(set_offset, sink, "{\"offset\":0}"); });
 }
 
-// Each call makes `step` more rows available, up to `max_offset`.
-int latestOffset(void* handle, SparkDsSink set_offset, void* sink) {
+// Makes `step` more rows available after the start of the micro-batch, up to `max_offset`.
+int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink set_offset,
+                 void* sink) {
   return guarded([&] {
-    Options& state = fromHandle<Reader>(handle)->state;
-    int64_t latest = std::min(getLong(state, "max_offset", 10),
-                              getLong(state, "current", 0) + getLong(state, "step", 10));
-    state["current"] = std::to_string(latest);
+    const Options& state = fromHandle<Reader>(handle)->state;
+    if (info->start == nullptr) throw std::runtime_error("no start offset");
+    std::string starts_path = get(state, "starts_path", "");
+    if (!starts_path.empty()) {
+      FILE* file = std::fopen(starts_path.c_str(), "a");
+      if (file == nullptr) throw std::runtime_error("cannot write " + starts_path);
+      std::fputs((std::string(info->start) + "\n").c_str(), file);
+      std::fclose(file);
+    }
+    auto start = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
+    int64_t latest =
+        std::min(getLong(state, "max_offset", 10), start + getLong(state, "step", 10));
     std::string bad_offset = get(state, "bad_offset", "");
     if (bad_offset == "none") return;
     if (bad_offset == "multiline") {
@@ -1068,17 +1098,15 @@ int latestOffset(void* handle, SparkDsSink set_offset, void* sink) {
   });
 }
 
-int streamPartitions(void*, const char* start, const char* end, SparkDsSink add_partition,
-                     void* sink) {
+int streamPartitions(void* handle, const char* start, const char* end, SparkDsSink add_partition,
+                     SparkDsSink set_state, void* sink) {
   return guarded([&] {
     auto lo = static_cast<int64_t>(JsonParser(start).parse()["offset"].number);
     auto hi = static_cast<int64_t>(JsonParser(end).parse()["offset"].number);
     if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
+    const Options& state = fromHandle<Reader>(handle)->state;
+    sendState(state, set_state, sink, serialize(state));
   });
-}
-
-int serializeStreamReader(void* handle, SparkDsSink set_state, void* sink) {
-  return guarded([&] { sendBytes(set_state, sink, serialize(fromHandle<Reader>(handle)->state)); });
 }
 
 int commitOffset(void* handle, const char* end) {
@@ -1098,15 +1126,28 @@ void closeStreamReader(void* handle) {
 
 #endif  // READ_ONLY
 
-int readPartition(const SparkDsTaskContext* task, const uint8_t* reader_state,
-                  int64_t reader_state_length, const uint8_t* partition,
-                  int64_t partition_length, struct ArrowArrayStream* stream) {
+int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
+                  struct ArrowArrayStream* stream) {
   return guarded([&] {
-    Options state = deserialize(toBytes(reader_state, reader_state_length));
+    if (info->size < static_cast<int64_t>(offsetof(SparkDsReadInfo, partition_length) +
+                                          sizeof(info->partition_length))) {
+      throw std::runtime_error("SparkDsReadInfo has a size of " + std::to_string(info->size));
+    }
+    // Releases the schema, so Spark does not release it after the call.
+    std::string columns = join(importColumns(info->schema));
+    Options state = deserialize(toBytes(info->reader_state, info->reader_state_length));
     maybeFail(state, "open");
     // Returns success without initializing the stream, which Spark must reject.
     if (get(state, "fail", "") == "uninitialized") return;
-    auto bounds = split(toBytes(partition, partition_length));
+    if (std::to_string(info->kind) != get(state, "kind", "")) {
+      throw std::runtime_error("read got the kind " + std::to_string(info->kind) +
+                               " for a reader of the kind " + get(state, "kind", ""));
+    }
+    if (columns != get(state, "columns", "")) {
+      throw std::runtime_error("read got the schema to read (" + columns +
+                               "), but the reader returns (" + get(state, "columns", "") + ")");
+    }
+    auto bounds = split(toBytes(info->partition, info->partition_length));
     if (bounds.size() != 2) throw std::runtime_error("invalid partition");
     recordTask(state, task);
     stream->get_schema = streamGetSchema;
@@ -1125,7 +1166,7 @@ int readPartition(const SparkDsTaskContext* task, const uint8_t* reader_state,
 #ifndef READ_ONLY
 
 int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInfo* info,
-                 void** out) {
+                 SparkDsSink set_state, void* sink, void** out) {
   return guarded([&] {
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_sink")) {
@@ -1157,12 +1198,9 @@ int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInf
     makeDirs(path);
     writeFile(path + "/_CREATED", "");
     if (info->query_id != nullptr) writeFile(path + "/_QUERY_ID", info->query_id);
+    sendState(source->options, set_state, sink, serialize(writer->state));
     *out = writer;
   });
-}
-
-int serializeWriter(void* handle, SparkDsSink set_state, void* sink) {
-  return guarded([&] { sendBytes(set_state, sink, serialize(fromHandle<Writer>(handle)->state)); });
 }
 
 int commitWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
@@ -1227,22 +1265,30 @@ bool usedAfterClose(void* handle) {
   return true;
 }
 
-int createDataWriter(const SparkDsTaskContext* task, const uint8_t* writer_state,
-                     int64_t writer_state_length, int64_t epoch_id, void** out) {
+int createDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo* info,
+                     void** out) {
   return guarded([&] {
-    Options state = deserialize(toBytes(writer_state, writer_state_length));
+    if (info->size < static_cast<int64_t>(offsetof(SparkDsDataWriterInfo, epoch_id) +
+                                          sizeof(info->epoch_id))) {
+      throw std::runtime_error("SparkDsDataWriterInfo has a size of " + std::to_string(info->size));
+    }
+    Options state = deserialize(toBytes(info->writer_state, info->writer_state_length));
     if (returnsZero(state, "create_data_writer")) return;
+    if (info->schema->n_children == 0) throw std::runtime_error("no columns to write");
     recordTask(state, task);
     std::string dir = state["path"] + "/_temporary";
     makeDirs(dir);
-    std::string temp_path = dir + "/" + std::to_string(epoch_id) + "-" +
+    std::string temp_path = dir + "/" + std::to_string(info->epoch_id) + "-" +
                             std::to_string(task->partition_id) + "-" +
                             std::to_string(task->task_attempt_id) + ".csv";
     FILE* file = std::fopen(temp_path.c_str(), "w");
     if (file == nullptr) throw std::runtime_error("cannot write " + temp_path);
     makeDirs(state["path"] + "/_created_data_writers");
     writeFile(state["path"] + "/_created_data_writers/" + temp_path.substr(dir.size() + 1), "");
-    auto* writer = new DataWriter{temp_path, file, state, false};
+    // Moves the schema to keep it, as the C data interface defines a move, so that Spark does not
+    // release it after the call.
+    auto* writer = new DataWriter{temp_path, file, state, false, *info->schema};
+    info->schema->release = nullptr;
     {
       // The allocator may reuse the address of a closed data writer.
       std::lock_guard<std::mutex> guard(closed_data_writers_lock);
@@ -1252,20 +1298,24 @@ int createDataWriter(const SparkDsTaskContext* task, const uint8_t* writer_state
   });
 }
 
-int writeBatch(void* handle, struct ArrowArray* array, struct ArrowSchema* schema) {
+int writeBatch(void* handle, struct ArrowArray* array) {
   return guarded([&] {
     auto* writer = fromHandle<DataWriter>(handle);
     // The batch is released here, so Spark does not release it after the call.
     std::unique_ptr<ArrowArray, void (*)(ArrowArray*)> array_owner(
         array, [](ArrowArray* a) { a->release(a); });
-    std::unique_ptr<ArrowSchema, void (*)(ArrowSchema*)> schema_owner(
-        schema, [](ArrowSchema* s) { s->release(s); });
     maybeFail(writer->state, "write");
+    const ArrowSchema& schema = writer->schema;
+    if (array->n_children != schema.n_children) {
+      throw std::runtime_error("write got a batch of " + std::to_string(array->n_children) +
+                               " columns, but the schema has " +
+                               std::to_string(schema.n_children));
+    }
     for (int64_t i = 0; i < array->length; i++) {
       std::string line;
       for (int64_t c = 0; c < array->n_children; c++) {
         if (c > 0) line += ",";
-        line += formatValue(schema->children[c], array->children[c], array->offset + i);
+        line += formatValue(schema.children[c], array->children[c], array->offset + i);
       }
       line += "\n";
       std::fputs(line.c_str(), writer->file);
@@ -1308,6 +1358,7 @@ int abortDataWriter(void* handle) {
 void closeDataWriter(void* handle) {
   if (usedAfterClose(handle)) return;
   std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
+  if (writer->schema.release != nullptr) writer->schema.release(&writer->schema);
   guarded([&] {
     if (writer->file != nullptr) std::fclose(writer->file);
     std::string path = writer->state["path"];
@@ -1334,7 +1385,6 @@ void closeDataWriter(void* handle) {
   table.create_reader = createReader;
   table.close = closeSource;
   table.partitions = planPartitions;
-  table.serialize_reader = serializeReader;
   table.close_reader = closeReader;
   table.read = readPartition;
 #ifndef READ_ONLY
@@ -1345,10 +1395,8 @@ void closeDataWriter(void* handle) {
   table.initial_offset = initialOffset;
   table.latest_offset = latestOffset;
   table.stream_partitions = streamPartitions;
-  table.serialize_stream_reader = serializeStreamReader;
   table.commit_offset = commitOffset;
   table.close_stream_reader = closeStreamReader;
-  table.serialize_writer = serializeWriter;
   table.commit = commitWrite;
   table.abort = abortWrite;
   table.close_writer = closeWriter;

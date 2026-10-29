@@ -216,6 +216,33 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(TestColumnarSink.epochs.get(table) == Seq(0L))
   }
 
+  test("the stream reader gets its checkpoint location and the start of each micro-batch") {
+    val table = "stream_reader_calls"
+    val checkpoint = Utils.createTempDir()
+    val query = spark.readStream.format(format).option("end", "5").option("table", table).load()
+      .writeStream
+      .format(format)
+      .option("table", s"${table}_sink")
+      .option("checkpointLocation", checkpoint.getPath)
+      .start()
+    try {
+      query.processAllAvailable()
+      // The progress of the query reports the latest offset that the reader returned.
+      assert(query.lastProgress.sources.head.latestOffset == """{"offset":5}""")
+    } finally {
+      query.stop()
+    }
+    assert(TestColumnarSink.rows(s"${table}_sink").length == 5)
+    val checkpointLocation = TestRangeStreamReader.checkpointLocations.get(table)
+    assert(checkpointLocation.endsWith(s"${checkpoint.getCanonicalPath}/sources/0"),
+      checkpointLocation)
+    // The first micro-batch starts after the initial offset, and the next ones after the end of
+    // the previous one.
+    val starts = TestRangeStreamReader.starts.get(table)
+    assert(starts.head == """{"offset":0}""")
+    assert(starts.tail.nonEmpty && starts.tail.forall(_ == """{"offset":5}"""), starts)
+  }
+
   test("create a stream writer for each micro-batch") {
     val table = "micro_batch_write"
     val input = MemoryStream[(Long, String)]
@@ -280,8 +307,11 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
     new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans)
   }
 
-  override def streamReader(schema: StructType): ColumnarStreamReader = {
-    new TestRangeStreamReader(end, schema)
+  override def streamReader(
+      schema: StructType,
+      checkpointLocation: String): ColumnarStreamReader = {
+    TestRangeStreamReader.checkpointLocations.put(table, checkpointLocation)
+    new TestRangeStreamReader(end, schema, table)
   }
 
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
@@ -336,12 +366,17 @@ class TestRangeReaderFactory(readSchema: StructType) extends ColumnarOnlyPartiti
   }
 }
 
-class TestRangeStreamReader(end: Long, schema: StructType) extends ColumnarStreamReader {
+/** @param table the option "table" of the read, under which it records its calls */
+class TestRangeStreamReader(end: Long, schema: StructType, table: String)
+  extends ColumnarStreamReader {
   private def offset(json: String): Long = json.stripPrefix("{\"offset\":").stripSuffix("}").toLong
 
   override def initialOffset(): String = "{\"offset\":0}"
 
-  override def latestOffset(): String = s"""{"offset":$end}"""
+  override def latestOffset(start: String): String = {
+    TestRangeStreamReader.starts.compute(table, (_, old) => Option(old).getOrElse(Nil) :+ start)
+    s"""{"offset":$end}"""
+  }
 
   override def partitions(start: String, end: String): Array[InputPartition] = {
     Array(TestRangePartition(offset(start), offset(end)))
@@ -351,6 +386,13 @@ class TestRangeStreamReader(end: Long, schema: StructType) extends ColumnarStrea
     val range = partition.asInstanceOf[TestRangePartition]
     new TestBatchReader(range.lo, range.hi, schema)
   }
+}
+
+object TestRangeStreamReader {
+  // By the option "table" of the read: the checkpoint location of its stream reader, and the
+  // start offsets that the stream reader got for the latest offset.
+  val checkpointLocations = new ConcurrentHashMap[String, String]()
+  val starts = new ConcurrentHashMap[String, Seq[String]]()
 }
 
 /** Returns the ids [lo, hi) and their names in a single batch. */

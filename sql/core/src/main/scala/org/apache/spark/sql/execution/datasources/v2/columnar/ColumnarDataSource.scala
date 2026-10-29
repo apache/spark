@@ -47,8 +47,14 @@ trait ColumnarDataSource {
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
-  /** Returns a reader for a micro-batch streaming scan of the given schema. */
-  def streamReader(schema: StructType): ColumnarStreamReader
+  /**
+   * Returns a reader for a micro-batch streaming scan of the given schema.
+   *
+   * @param checkpointLocation the location of a directory in the checkpoint of the streaming
+   *                           query that is reserved for this source. It stays the same when the
+   *                           query restarts from its checkpoint.
+   */
+  def streamReader(schema: StructType, checkpointLocation: String): ColumnarStreamReader
 
   /**
    * Returns a writer for a batch write.
@@ -107,7 +113,13 @@ case class ColumnarPlannedBatch(
 trait ColumnarStreamReader extends Serializable {
   def initialOffset(): String
 
-  def latestOffset(): String
+  /**
+   * Returns the latest offset available.
+   *
+   * @param start the offset that the next micro-batch starts after: the end of the last
+   *              micro-batch, or the initial offset before the first one
+   */
+  def latestOffset(start: String): String
 
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]

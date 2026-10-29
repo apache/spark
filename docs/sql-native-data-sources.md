@@ -101,32 +101,36 @@ Spark calls the functions of the table as follows:
   that the data source does not support before it computes the data to write. When the user does
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
-  down with `push_limit` and `prune_columns`, plans the partitions with `partitions`, and
-  serializes the state of the reader with `serialize_reader`. Then it calls `read` on the
-  executors, in one task for each partition, and `read` exports an `ArrowArrayStream`. Its
-  callbacks can be called from any thread, but never concurrently.
-- **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
-  For each micro-batch, it asks for the `latest_offset`, plans the partitions with
-  `stream_partitions`, and calls `read` on the executors. Offsets are defined by the library, as
-  compact JSON on a single line: Spark stores each offset as a line of the offset log of the
-  checkpoint, and rejects an offset that is not valid JSON or contains a line break, such as
-  pretty-printed JSON.
+  down with `push_limit` and `prune_columns`, and plans the partitions with `partitions`, which
+  also returns the state of the reader. Then it calls `read` on the executors, in one task for each
+  partition, with a `SparkDsReadInfo` that has the partition, the schema to read and the state of
+  the reader, and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
+  thread, but never concurrently.
+- **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
+  which gets the location of the checkpoint of the source in a `SparkDsStreamReaderInfo`. For each
+  micro-batch, it asks for the `latest_offset`, with the offset that the micro-batch starts after,
+  plans the partitions with `stream_partitions`, which also returns the state of the stream reader,
+  and calls `read` on the executors. Offsets are defined by the library, as compact JSON on a
+  single line: Spark stores each offset as a line of the offset log of the checkpoint, and rejects
+  an offset that is not valid JSON or contains a line break, such as pretty-printed JSON.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
   creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
-  write. With adaptive query execution, it first runs the shuffle stages of the data to write, and
-  creates no writer if they fail, but the last stage runs in the tasks of the write, so a writer can
-  still be aborted because computing the data failed: do irreversible work, such as removing the
-  existing data for an overwrite, in `commit`. On the executors, each task creates a data writer
-  with `create_data_writer`, writes the batches of its data with `write`, and calls
-  `commit_data_writer`, or `abort_data_writer` if the task or the commit fails. Then the driver
-  calls `commit` with the messages of the tasks, or `abort` if the write failed. A streaming write
-  commits each micro-batch with its epoch ID, and the ID of the query stays the same when the query
-  restarts from its checkpoint: together, they identify the output of a micro-batch, so that a
-  library can skip an epoch that it already committed. A micro-batch streaming query creates a new
-  stream writer for each micro-batch, and Spark closes the previous one when it creates the next
-  one. Because Spark is not told when a streaming query stops, the last stream writer of a query is
-  closed once it is no longer referenced, or when the query is restarted.
+  write, and returns the state of the writer. With adaptive query execution, it first runs the
+  shuffle stages of the data to write, and creates no writer if they fail, but the last stage runs
+  in the tasks of the write, so a writer can still be aborted because computing the data failed:
+  do irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
+  executors, each task creates a data writer with `create_data_writer`, which gets the schema of
+  the data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data
+  with `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit
+  fails. Then the driver calls `commit` with the messages of the tasks, or `abort` if the write
+  failed. A streaming write commits each micro-batch with its epoch ID, and the ID of the query
+  stays the same when the query restarts from its checkpoint: together, they identify the output of
+  a micro-batch, so that a library can skip an epoch that it already committed. A micro-batch
+  streaming query creates a new stream writer for each micro-batch, and Spark closes the previous
+  one when it creates the next one. Because Spark is not told when a streaming query stops, the
+  last stream writer of a query is closed once it is no longer referenced, or when the query is
+  restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
@@ -143,12 +147,13 @@ data source must not declare a capability whose functions are `NULL`:
 | Capability | Required functions | Optional functions |
 |-----------|--------------------|--------------------|
 | All | `create`, `close` | `last_error`, `schema` |
-| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns`, `serialize_reader` |
-| `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `serialize_stream_reader`, `commit_offset` |
-| `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | `serialize_writer` |
+| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns` |
+| `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `commit_offset` |
+| `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | |
 
-`SPARK_DS_TRUNCATE` declares that a writer supports `SPARK_DS_WRITE_TRUNCATE`: the save mode
-`overwrite` of a batch write, and the output mode `complete` of a streaming write.
+`SPARK_DS_BATCH_TRUNCATE` declares that a data source supports `SPARK_DS_WRITE_TRUNCATE` in batch
+writes, for the save mode `overwrite`, and `SPARK_DS_STREAMING_TRUNCATE` in streaming writes, for
+the output mode `complete`.
 
 The comments of [`spark_datasource.h`]({{site.SPARK_GITHUB_URL}}/blob/v{{site.SPARK_VERSION_SHORT}}/sql/core/src/main/resources/org/apache/spark/sql/datasource/spark_datasource.h)
 specify each function, including the ownership of the Arrow structs.
@@ -172,9 +177,10 @@ regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext` and `SparkDsWriteInfo`, start with their
-size, so that they can grow. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
-table and the manifest of a package declare. Within a version:
+`SparkDsHost`, `SparkDsTaskContext` and those whose names end with `Info`, such as
+`SparkDsCreateInfo`, start with their size, so that they can grow. The version of the interface,
+1, is `SPARK_DS_ABI_VERSION`, which the table and the manifest of a package declare. Within a
+version:
 
 - fields are only appended to these structs, and the existing fields and the semantics of the
   existing functions never change;
@@ -182,7 +188,8 @@ table and the manifest of a package declare. Within a version:
   against an earlier header keeps working with later releases of Spark, with the functions that it
   does not know as `NULL`. A library must only read the fields that fit in the size of a struct
   that Spark passes, so that it also runs on earlier releases of Spark that support its version;
-- Spark only uses a new capability or write mode with a data source that declares it.
+- Spark only uses a new capability, write mode or kind of read with a data source that declares
+  it.
 
 An incompatible change comes with a new version: `spark_ds_init` gets the newest version that Spark
 supports, in `SparkDsHost`, and returns a table of a version that the library implements. Spark
@@ -393,6 +400,19 @@ pub struct SparkDsCreateInfo {
     num_options: i64,
 }
 
+/// `SparkDsReadInfo` of `spark_datasource.h`: a partition to read, with the schema to read and
+/// the state of the reader.
+#[repr(C)]
+pub struct SparkDsReadInfo {
+    size: i64,
+    kind: i32,
+    schema: *mut FFI_ArrowSchema,
+    reader_state: *const u8,
+    reader_state_length: i64,
+    partition: *const u8,
+    partition_length: i64,
+}
+
 /// `SparkDsLibrary` of `spark_datasource.h`, up to `read`, the last function that this data
 /// source implements: Spark only reads the functions that fit in `size`.
 #[repr(C)]
@@ -416,21 +436,21 @@ pub struct SparkDsLibrary {
     close: unsafe extern "C" fn(source: *mut c_void),
     push_limit: Unused,
     prune_columns: Unused,
-    partitions: unsafe extern "C" fn(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int,
-    serialize_reader: Unused,
+    partitions: unsafe extern "C" fn(
+        reader: *mut c_void,
+        add_partition: Sink,
+        set_state: Sink,
+        sink: *mut c_void,
+    ) -> c_int,
     close_reader: unsafe extern "C" fn(reader: *mut c_void),
     initial_offset: Unused,
     latest_offset: Unused,
     stream_partitions: Unused,
-    serialize_stream_reader: Unused,
     commit_offset: Unused,
     close_stream_reader: Unused,
     read: unsafe extern "C" fn(
         task: *const c_void,
-        reader_state: *const u8,
-        reader_state_length: i64,
-        partition: *const u8,
-        partition_length: i64,
+        info: *const SparkDsReadInfo,
         out: *mut FFI_ArrowArrayStream,
     ) -> c_int,
 }
@@ -450,12 +470,10 @@ static LIBRARY: SparkDsLibrary = SparkDsLibrary {
     push_limit: None,
     prune_columns: None,
     partitions,
-    serialize_reader: None,
     close_reader,
     initial_offset: None,
     latest_offset: None,
     stream_partitions: None,
-    serialize_stream_reader: None,
     commit_offset: None,
     close_stream_reader: None,
     read,
@@ -544,12 +562,18 @@ unsafe extern "C" fn close(source: *mut c_void) {
     drop(Box::from_raw(source as *mut RangeSource));
 }
 
-unsafe extern "C" fn partitions(reader: *mut c_void, add: Sink, sink: *mut c_void) -> c_int {
+/// Plans two partitions. The reader has no state, so it does not call `set_state`.
+unsafe extern "C" fn partitions(
+    reader: *mut c_void,
+    add_partition: Sink,
+    _set_state: Sink,
+    sink: *mut c_void,
+) -> c_int {
     call(|| {
         let end = (*(reader as *const RangeReader)).end;
         for (start, end) in [(0, end / 2), (end / 2, end)] {
             let bytes = [start.to_le_bytes(), end.to_le_bytes()].concat();
-            add(sink, bytes.as_ptr(), bytes.len() as i64);
+            add_partition(sink, bytes.as_ptr(), bytes.len() as i64);
         }
         Ok(())
     })
@@ -561,14 +585,12 @@ unsafe extern "C" fn close_reader(reader: *mut c_void) {
 
 unsafe extern "C" fn read(
     _task: *const c_void,
-    _reader_state: *const u8,
-    _reader_state_length: i64,
-    partition: *const u8,
-    partition_length: i64,
+    info: *const SparkDsReadInfo,
     out: *mut FFI_ArrowArrayStream,
 ) -> c_int {
     call(|| {
-        let bytes = std::slice::from_raw_parts(partition, partition_length as usize);
+        let info = &*info;
+        let bytes = std::slice::from_raw_parts(info.partition, info.partition_length as usize);
         let start = i64::from_le_bytes(bytes[0..8].try_into()?);
         let end = i64::from_le_bytes(bytes[8..16].try_into()?);
         let ids = Int64Array::from_iter_values(start..end);
@@ -694,7 +716,8 @@ int CreateReader(void* source, struct ArrowSchema*, void** reader) {
 
 void Close(void* source) { delete static_cast<RangeSource*>(source); }
 
-int Partitions(void* reader, SparkDsSink add_partition, void* sink) {
+// Plans two partitions. The reader has no state, so it does not call set_state.
+int Partitions(void* reader, SparkDsSink add_partition, SparkDsSink, void* sink) {
   return Call([&] {
     int64_t end = static_cast<RangeReader*>(reader)->end;
     int64_t bounds[2][2] = {{0, end / 2}, {end / 2, end}};
@@ -706,11 +729,10 @@ int Partitions(void* reader, SparkDsSink add_partition, void* sink) {
 
 void CloseReader(void* reader) { delete static_cast<RangeReader*>(reader); }
 
-int Read(const SparkDsTaskContext*, const uint8_t*, int64_t, const uint8_t* partition, int64_t,
-         struct ArrowArrayStream* out) {
+int Read(const SparkDsTaskContext*, const SparkDsReadInfo* info, struct ArrowArrayStream* out) {
   return Call([&] {
     int64_t bounds[2];
-    std::memcpy(bounds, partition, sizeof(bounds));
+    std::memcpy(bounds, info->partition, sizeof(bounds));
     arrow::Int64Builder ids;
     for (int64_t id = bounds[0]; id < bounds[1]; id++) Check(ids.Append(id));
     std::shared_ptr<arrow::Array> array;

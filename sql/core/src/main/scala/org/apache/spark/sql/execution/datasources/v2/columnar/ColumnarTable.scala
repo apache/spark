@@ -25,7 +25,7 @@ import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
@@ -165,7 +165,7 @@ class ColumnarScan(
   override def toBatch: Batch = batch
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    new ColumnarMicroBatchStream(dataSource.streamReader(fullSchema))
+    new ColumnarMicroBatchStream(dataSource.streamReader(fullSchema, checkpointLocation))
   }
 
   override def getMetaData(): Map[String, String] = {
@@ -189,11 +189,31 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
 
 case class ColumnarStreamOffset(json: String) extends Offset
 
-class ColumnarMicroBatchStream(reader: ColumnarStreamReader) extends MicroBatchStream {
+/**
+ * The micro-batch stream of a [[ColumnarDataSource]]. It supports admission control only so that
+ * the data source gets the offset that each micro-batch starts after: its default read limit reads
+ * all the available data, which Spark then always asks for.
+ */
+class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
+  extends MicroBatchStream with SupportsAdmissionControl {
+
+  // The offset that the reader returned last, which the progress of the query reports.
+  @volatile private var lastLatestOffset: Offset = _
 
   override def initialOffset(): Offset = ColumnarStreamOffset(reader.initialOffset())
 
-  override def latestOffset(): Offset = ColumnarStreamOffset(reader.latestOffset())
+  override def latestOffset(): Offset = {
+    throw SparkException.internalError(
+      "latestOffset(Offset, ReadLimit) should be called instead of latestOffset().")
+  }
+
+  override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
+    val latest = ColumnarStreamOffset(reader.latestOffset(start.json()))
+    lastLatestOffset = latest
+    latest
+  }
+
+  override def reportLatestOffset(): Offset = lastLatestOffset
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     reader.partitions(start.json(), end.json())

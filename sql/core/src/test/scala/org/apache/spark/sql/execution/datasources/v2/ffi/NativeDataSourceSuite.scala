@@ -813,6 +813,41 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  nativeTest("pass the checkpoint location and the start of a micro-batch to the stream reader") {
+    val session = newSession(defaultPackage)
+    val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
+    // Runs the query until it processed the rows [0, maxOffset), 5 more rows in each micro-batch,
+    // and returns the checkpoint location and the start offsets that the stream reader got.
+    def run(maxOffset: Int): (String, Seq[Long]) = {
+      val checkpointPath = new File(dir, s"checkpoint_$maxOffset")
+      val startsPath = new File(dir, s"starts_$maxOffset")
+      val query = session.readStream.format("native_counter")
+        .option("max_offset", maxOffset.toString).option("step", "5")
+        .option("checkpoint_path", checkpointPath.getPath)
+        .option("starts_path", startsPath.getPath)
+        .load()
+        .writeStream
+        .format("noop")
+        .option("checkpointLocation", checkpoint.getPath)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+      val starts = Files.readAllLines(startsPath.toPath).asScala.toSeq
+        .map(_.stripPrefix("{\"offset\":").stripSuffix("}").toLong)
+      (Files.readString(checkpointPath.toPath), starts)
+    }
+    // The first micro-batch starts after the initial offset, and the next ones after the end of
+    // the previous one, until no more rows are available.
+    val (location, starts) = run(12)
+    assert(location.endsWith(s"${checkpoint.getCanonicalPath}/sources/0"), location)
+    assert(starts.take(4) == Seq(0L, 5L, 10L, 12L) && starts.drop(4).forall(_ == 12L), starts)
+    // A query that restarts from its checkpoint starts after the end of its last micro-batch, with
+    // the same checkpoint location.
+    val (restartedLocation, restartedStarts) = run(15)
+    assert(restartedLocation == location)
+    assert(restartedStarts.take(2) == Seq(12L, 15L), restartedStarts)
+  }
+
   nativeTest("reject offsets that are not JSON on a single line") {
     // Spark writes each offset as a line of the offset log of the checkpoint.
     def check(badOffset: String, msg: String): Unit = {
@@ -909,6 +944,29 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "create",
         "name" -> "ne_native_range",
         "msg" -> "create failed with the error code 1."))
+  }
+
+  nativeTest("reject a state returned more than once") {
+    def check(action: String, name: String, function: String)(f: SparkSession => Unit): Unit = {
+      val e = intercept[Exception](f(newSession(defaultPackage)))
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> action, "name" -> name,
+          "msg" -> s"$function returned 2 states instead of one."))
+    }
+    check("plan a scan of", "native_range", "partitions") { session =>
+      range(session, "states" -> "2").collect()
+    }
+    check("plan a scan of", "native_counter", "stream_partitions") { session =>
+      val query = session.readStream.format("native_counter").option("states", "2").load()
+        .writeStream.format("noop").start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    check("plan a write to", "native_sink", "create_writer") { session =>
+      session.range(2).write.format("native_sink").option("path", Utils.createTempDir().getPath)
+        .option("states", "2").mode("append").save()
+    }
   }
 
   nativeTest("a scan whose planning failed fails again with the same error") {
@@ -1032,13 +1090,17 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       session.range(1).write.format("ro_native_sink")
         .option("capabilities", NativeLibrary.BATCH_WRITE.toString).mode("append").save()
     }
-    // Replacing the existing data requires the capability SPARK_DS_TRUNCATE.
+    // Replacing the existing data requires the capability SPARK_DS_BATCH_TRUNCATE for a batch
+    // write, and SPARK_DS_STREAMING_TRUNCATE for a streaming write: either is not enough for the
+    // other.
     val dir = Utils.createTempDir()
-    val noTruncate = (NativeLibrary.BATCH_WRITE | NativeLibrary.STREAMING_WRITE).toString
+    val writes = NativeLibrary.BATCH_WRITE | NativeLibrary.STREAMING_WRITE
+    val batchTruncate = (writes | NativeLibrary.BATCH_TRUNCATE).toString
+    val streamingTruncate = (writes | NativeLibrary.STREAMING_TRUNCATE).toString
     check("UNSUPPORTED_FEATURE.TABLE_OPERATION",
         Map("tableName" -> "`native_sink`", "operation" -> "truncate in batch mode")) {
       session.range(1).write.format("native_sink").option("path", dir.getPath)
-        .option("capabilities", noTruncate).mode("overwrite").save()
+        .option("capabilities", streamingTruncate).mode("overwrite").save()
     }
     // The table has the capabilities that the data source declares with the options of the table,
     // which the options of a write to a table in a catalog can override: the write checks them
@@ -1053,25 +1115,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to",
           "name" -> "native_sink",
           "msg" -> "The data source does not support the save mode overwrite.")) {
-        session.range(1).writeTo("native_sink_table").option("capabilities", noTruncate)
+        session.range(1).writeTo("native_sink_table").option("capabilities", streamingTruncate)
           .overwrite(lit(true))
       }
     } finally {
       session.sql("DROP TABLE IF EXISTS native_sink_table")
     }
+    def completeWrite(dir: File, capabilities: String): Unit = runStream {
+      session.readStream.format("native_counter").load().groupBy().count().writeStream
+        .outputMode("complete")
+        .format("native_sink")
+        .option("path", dir.getPath)
+        .option("capabilities", capabilities)
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .start()
+    }
     check("NATIVE_DATA_SOURCE_ERROR", Map("action" -> "plan a write to", "name" -> "native_sink",
         "msg" -> "The data source does not support the output mode complete.")) {
-      runStream {
-        session.readStream.format("rate").load().groupBy().count().writeStream
-          .outputMode("complete")
-          .format("native_sink")
-          .option("path", dir.getPath)
-          .option("capabilities", noTruncate)
-          .option("checkpointLocation", Utils.createTempDir().getPath)
-          .start()
-      }
+      completeWrite(dir, batchTruncate)
     }
     assert(!new File(dir, "_CREATED").exists())
+    // Each capability replaces the existing data in its own kind of write.
+    val overwritten = Utils.createTempDir()
+    session.range(1).write.format("native_sink").option("path", overwritten.getPath)
+      .option("capabilities", batchTruncate).mode("overwrite").save()
+    assert(new File(overwritten, "_SUCCESS").isFile)
+    val completed = Utils.createTempDir()
+    completeWrite(completed, streamingTruncate)
+    assert(new File(completed, "_EPOCH_0").isFile)
   }
 
   nativeTest("read only the functions that fit in the table of a library") {
