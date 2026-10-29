@@ -18,16 +18,19 @@
 package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.sql.catalyst.expressions.{And, Attribute, ExprId, PredicateHelper}
-import org.apache.spark.sql.catalyst.optimizer.PerPartitionRuntimeFilterSubquery.perPartitionRuntimeFilter
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
+import org.apache.spark.sql.catalyst.optimizer.PerPartitionRuntimeFilterSubquery.{perPartitionRuntimeFilter, sizingOf}
 import org.apache.spark.sql.catalyst.plans.ExistenceJoin
-import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
+import org.apache.spark.sql.catalyst.plans.physical.{PartitioningCollection, SinglePartition}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SnapshotUnionPreparationConf, SparkPlan, UnionConfSnapshot}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, Exchange, ShuffleExchangeLike}
 
 /**
  * Keeps each semi join of a per-partition runtime bloom filter that
- * `InsertPerPartitionRuntimeFilterJoins` built only when it costs the application side nothing.
+ * `InsertPerPartitionRuntimeFilterJoins` built only when it costs the application side nothing,
+ * and sizes its bloom filters.
  *
  * A semi join costs the application side nothing when it adds no shuffle, and the stage that reads
  * the application side runs at least as many tasks as without it. That holds when the join above
@@ -40,6 +43,10 @@ import org.apache.spark.sql.execution.exchange.{EnsureRequirements, Exchange, Sh
  *
  * That planning asks a `UnionExec` what it reports, so this first records `unionConf` on each
  * union, as the preparation does ahead of `EnsureRequirements`.
+ *
+ * Each bloom filter of a semi join that stays expects an even share of the creation side's items
+ * over its partition keys. The semi join also goes when the creation side has too few partition
+ * keys for each share to be within the size threshold of a bloom filter's input.
  */
 case class ChoosePerPartitionRuntimeFilters(
     ensureRequirements: EnsureRequirements,
@@ -63,25 +70,31 @@ case class ChoosePerPartitionRuntimeFilters(
             if withouts.contains(bloomFilter.exprId) && !kept(bloomFilter.exprId) =>
           withouts(bloomFilter.exprId)
       }
-      var kept = Set.empty[ExprId]
-      var current = new Cost(ensureRequirements.apply(withOnly(kept)))
-      semiJoins.foreach { case (_, _, bloomFilter) =>
+      // The expected number of items of each bloom filter of each semi join that stays.
+      var numItems = Map.empty[ExprId, Long]
+      var current = new Cost(ensureRequirements.apply(withOnly(Set.empty)))
+      semiJoins.foreach { case (_, join, bloomFilter) =>
         val id = bloomFilter.exprId
         if (withouts.contains(id)) {
-          val trial = new Cost(ensureRequirements.apply(withOnly(kept + id)))
-          if (isFree(trial, current, withouts(id))) {
-            kept += id
-            current = trial
+          numItemsOf(join, bloomFilter).foreach { n =>
+            val trial = new Cost(ensureRequirements.apply(withOnly(numItems.keySet + id)))
+            if (isFree(trial, current, withouts(id))) {
+              numItems += id -> n
+              current = trial
+            }
           }
         }
       }
       plan.transformDown {
         case p @ ProjectExec(_, PerPartitionSemiJoin(_, _, bloomFilter))
-            if withouts.contains(bloomFilter.exprId) && !kept(bloomFilter.exprId) =>
+            if withouts.contains(bloomFilter.exprId) && !numItems.contains(bloomFilter.exprId) =>
           withoutRestoringProjection(p, withouts(bloomFilter.exprId))
-        case PerPartitionSemiJoin(_, _, bloomFilter)
-            if withouts.contains(bloomFilter.exprId) && !kept(bloomFilter.exprId) =>
-          withouts(bloomFilter.exprId)
+        case PerPartitionSemiJoin(filter, join, bloomFilter)
+            if withouts.contains(bloomFilter.exprId) =>
+          numItems.get(bloomFilter.exprId) match {
+            case Some(n) => filter.withNewChildren(Seq(withNumItems(join, n)))
+            case None => withouts(bloomFilter.exprId)
+          }
       }
     }
   }
@@ -138,6 +151,37 @@ case class ChoosePerPartitionRuntimeFilters(
           case _ => false
         }
       }
+
+  // The expected number of items of each bloom filter of the semi join, an even share of the
+  // creation side's over its partition keys. None when the creation side has fewer partition keys
+  // than it needs for each share to be within the size threshold, or reports none.
+  private def numItemsOf(join: ShuffledHashJoinExec, bloomFilter: Attribute): Option[Long] = {
+    val (numItems, minPartitionKeys) = sizingOf(bloomFilter)
+    partitionKeysOf(join.right).filter(_ >= minPartitionKeys).map { keys =>
+      ((numItems + keys - 1) / keys).max(1L)
+    }
+  }
+
+  // The number of partition keys of the input of the aggregate `plan`, before any exchange.
+  private def partitionKeysOf(plan: SparkPlan): Option[Long] = plan match {
+    case aggregate: BaseAggregateExec => partitionKeysOf(aggregate.child)
+    case input => PartitioningCollection.representativeOf(input.outputPartitioning).map { k =>
+      (if (k.isGrouped) k.numPartitions else k.partitionKeys.distinct.size).toLong
+    }
+  }
+
+  // The semi join with each bloom filter of its aggregate expecting `numItems` items.
+  private def withNumItems(join: ShuffledHashJoinExec, numItems: Long): SparkPlan = {
+    def sized(plan: SparkPlan): SparkPlan = plan match {
+      case aggregate: BaseAggregateExec =>
+        aggregate.transformExpressions {
+          case b: BloomFilterAggregate =>
+            b.withNewChildren(new BloomFilterAggregate(b.child, numItems).children)
+        }.withNewChildren(Seq(sized(aggregate.child)))
+      case other => other
+    }
+    join.withNewChildren(Seq(join.left, sized(join.right)))
+  }
 
   // The application side without the semi join, and without the partition key column it adds. The
   // conditions of `filter` other than the one on the join's flag, the last column of its output,

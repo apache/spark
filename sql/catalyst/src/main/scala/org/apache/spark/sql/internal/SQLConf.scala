@@ -1024,8 +1024,10 @@ object SQLConf {
         "the tasks that read the application side, or when it would sit in more than one " +
         "place, as below a union. To check the shuffles and the tasks, Spark plans the query " +
         "once more, and up to once more for each semi join. Adaptive query execution does that " +
-        "again on each re-planning before the semi join runs. The number of per-partition " +
-        "bloom filters has a limit of its own, the value of " +
+        "again on each re-planning before the semi join runs. Each bloom filter is sized for an " +
+        "even share of the creation side over its partition keys. The semi join is also dropped " +
+        "when that share is over spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold. " +
+        "The number of per-partition bloom filters has a limit of its own, the value of " +
         s"${RUNTIME_FILTER_NUMBER_THRESHOLD.key}. Once the other runtime filters reach that " +
         "limit, no per-partition one is added either.")
       .version("5.0.0")
@@ -1037,7 +1039,8 @@ object SQLConf {
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. A per-partition bloom filter needs only an " +
+        "even share of the creation side over its partition keys to be under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")

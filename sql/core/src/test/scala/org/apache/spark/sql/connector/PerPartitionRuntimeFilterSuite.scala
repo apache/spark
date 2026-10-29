@@ -21,22 +21,24 @@ import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, DynamicPruningSubquery, Expression, GetStructField, PlanExpression, ScalarSubquery, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, DynamicPruningExpression, DynamicPruningSubquery, Expression, GetStructField, Literal, PlanExpression, ScalarSubquery, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.optimizer.{InsertPerPartitionRuntimeFilterJoins, PerPartitionRuntimeFilterSubquery}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Union}
 import org.apache.spark.sql.catalyst.plans.physical.RangePartitioning
 import org.apache.spark.sql.catalyst.trees.TreePattern.PER_PARTITION_RUNTIME_FILTER_SUBQUERY
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryCatalystRuntimeFilterCatalog, InMemoryTableCatalog}
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction}
-import org.apache.spark.sql.connector.expressions.Expressions.{bucket, identity}
+import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, LongDaysFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction, UnboundIntBucketFunction, UnboundPhysicalDaysFunction}
+import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.execution.{InputAdapter, ProjectExec, SparkPlan, WholeStageCodegenExec}
+import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastNestedLoopJoinExec, CartesianProductExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf._
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType}
+import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StructType, TimestampType}
 import org.apache.spark.tags.DataSourceV2Test
 
 @DataSourceV2Test
@@ -59,7 +61,8 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
     catalog.clearFunctions()
   }
 
-  // `fact` and `dim`, both bucketed by `id` into 4 by default.
+  // `fact` and `dim`, both bucketed by `id` into 4 by default. Then the 6 rows of `dim` have 3
+  // partition keys, since the test catalog's `bucket` takes the value modulo the number of buckets.
   private def createTables(
       idType: DataType = LongType,
       factPartitioning: Array[Transform] = Array(bucket(4, "id")),
@@ -165,10 +168,11 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
       .queryExecution.optimizedPlan.stats.sizeInBytes
 
   // Runs `f` with the creation side threshold at about half the size of the creation side that a
-  // join gets from `table`. That side is then too big for one bloom filter of all its keys.
-  private def withoutGlobalBloomFilter(table: String)(f: => Unit): Unit =
+  // join gets from `table`. That side is then too big for one bloom filter of all its keys. With 2
+  // partition keys or more, each share is within the threshold.
+  private def withoutGlobalBloomFilter(table: String, column: String = "id")(f: => Unit): Unit =
     withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key ->
-      ((creationSideSize(table) + 1) / 2).toString)(f)
+      ((creationSideSize(table, column) + 1) / 2).toString)(f)
 
   // `fact` and `dim` with a second join key `x`, which the partitioning leaves out.
   private def createTwoKeyTables(): Unit = {
@@ -514,6 +518,123 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase {
             df.queryExecution.executedPlan)
         }
       }
+    }
+  }
+
+  // The expected numbers of items of the bloom filters that the semi joins of `df` build.
+  private def executedNumItems(df: DataFrame): Seq[Long] = {
+    df.collect()
+    executedSemiJoins(df.queryExecution.executedPlan)
+      .flatMap(_.right.collect { case a: BaseAggregateExec => a })
+      .flatMap(_.aggregateExpressions.flatMap(_.collect { case b: BloomFilterAggregate => b }))
+      .map(_.estimatedNumItemsExpression.eval().asInstanceOf[Number].longValue)
+      .distinct
+  }
+
+  test("each per-partition bloom filter expects an even share of the items over the creation " +
+      "side's partition keys") {
+    // Without CBO the Filter on the creation side drops its row count. So the creation side, twice
+    // the size threshold, gets the default expected number of items twice. `dim` has 3 partition
+    // keys, fewer than its 4 buckets.
+    createTables()
+    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "300") {
+      withoutGlobalBloomFilter("dim") {
+        assert(executedNumItems(join()) == Seq(200L), "twice the 300 expected items over 3 keys")
+      }
+    }
+  }
+
+  test("the semi join goes when the creation side has too few partition keys for the size " +
+      "threshold") {
+    // The creation side is 4 times the threshold, but `dim` has only 3 partition keys. So a share
+    // of one partition key would be over the threshold.
+    createTables()
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key ->
+        (creationSideSize("dim") / 4).toString) {
+      val df = join()
+      assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+      checkAnswer(df, expectedRows)
+      assert(executedSemiJoins(df.queryExecution.executedPlan).isEmpty,
+        df.queryExecution.executedPlan)
+    }
+  }
+
+  Seq(true, false).foreach { adaptive =>
+    test(s"a semi join that goes leaves a broadcast that a DPP filter can reuse (AQE $adaptive)") {
+      // `fact` can get a DPP filter on the source column of its bucket transform. The broadcast
+      // side joins `dim` and `dim2`, which gives `dim` a semi join. `dim2` has 4 partition keys,
+      // under the 8 that the threshold needs, so the semi join goes. The DPP filter of `fact` then
+      // reuses the broadcast, as without per-partition bloom filters.
+      withSQLConf(
+          ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString,
+          "spark.sql.catalog.rfcat" -> classOf[InMemoryCatalystRuntimeFilterCatalog].getName) {
+        val rfcat = spark.sessionState.catalogManager.catalog("rfcat")
+          .asInstanceOf[InMemoryCatalystRuntimeFilterCatalog]
+        try {
+          rfcat.createFunction(Identifier.of(Array.empty, UnboundBucketFunction.name()),
+            UnboundBucketFunction)
+          createIdTable("fact", "v", (0 until 64).map(i => s"($i, $i)").mkString(", "), rfcat)
+          createIdTable("dim", "flag", (0 until 32).map(i => s"($i, ${i % 2})").mkString(", "))
+          createIdTable("dim2", "flag", (0 until 64).map(i => s"($i, ${i % 2})").mkString(", "))
+          withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key ->
+              (creationSideSize("dim2") / 8).toString) {
+            val df = sql("SELECT /*+ BROADCAST(d) */ f.id, f.v FROM rfcat.ns.fact f JOIN " +
+              "(SELECT a.id FROM testcat.ns.dim a JOIN testcat.ns.dim2 b ON a.id = b.id " +
+              "WHERE a.flag = 1 AND b.flag = 1) d ON f.id = d.id")
+            assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+            checkAnswer(df, (1 until 32 by 2).map(i => Row(i, i)))
+            val plan = df.queryExecution.executedPlan
+            assert(executedSemiJoins(plan).isEmpty, plan)
+            val factFilters = collectScans(plan)
+              .filter(_.table.name().split('.').last == "fact").flatMap(_.runtimeFilters)
+            assert(factFilters.exists {
+              case DynamicPruningExpression(Literal.TrueLiteral) => false
+              case _: DynamicPruningExpression => true
+              case _ => false
+            }, s"the DPP filter of `fact` must reuse the broadcast:\n$plan")
+          }
+        } finally {
+          rfcat.clearTables()
+          rfcat.clearFunctions()
+        }
+      }
+    }
+  }
+
+  test("for a transform other than bucket, the bloom filters are sized over the partition keys " +
+      "too") {
+    // The 6 rows of `dim` are over 2 days, so its scan reports 2 partition keys.
+    catalog.createFunction(Identifier.of(Array.empty, "days"),
+      new UnboundPhysicalDaysFunction(LongDaysFunction))
+    createTable("fact", Array(Column.create("ts", TimestampType), Column.create("v", IntegerType)),
+      Array(days("ts")))
+    sql("INSERT INTO testcat.ns.fact VALUES (TIMESTAMP '2026-01-01 01:00:00', 1), " +
+      "(TIMESTAMP '2026-01-01 02:00:00', 2), (TIMESTAMP '2026-01-02 01:00:00', 3), " +
+      "(TIMESTAMP '2026-01-03 01:00:00', 4)")
+    createTable("dim", Array(Column.create("ts", TimestampType),
+      Column.create("flag", IntegerType)), Array(days("ts")))
+    sql("INSERT INTO testcat.ns.dim VALUES (TIMESTAMP '2026-01-01 01:00:00', 1), " +
+      "(TIMESTAMP '2026-01-01 02:00:00', 1), (TIMESTAMP '2026-01-01 03:00:00', 0), " +
+      "(TIMESTAMP '2026-01-02 01:00:00', 1), (TIMESTAMP '2026-01-02 02:00:00', 0), " +
+      "(TIMESTAMP '2026-01-02 03:00:00', 1)")
+    def daysJoin(): DataFrame = sql("SELECT f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
+      "ON f.ts = d.ts WHERE d.flag = 1")
+    // Twice the threshold, over 2 partition keys.
+    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "600") {
+      withoutGlobalBloomFilter("dim", "ts") {
+        assert(executedNumItems(daysJoin()) == Seq(600L),
+          "twice the 600 expected items over 2 keys")
+        checkAnswer(daysJoin(), Seq(Row(1), Row(2), Row(3)))
+      }
+    }
+    // Three times the threshold, over 2 partition keys.
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key ->
+        (creationSideSize("dim", "ts") / 3).toString) {
+      val df = daysJoin()
+      assert(perPartitionSemiJoins(df).size == 1, "test setup: the rule added it")
+      checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+      assert(executedSemiJoins(df.queryExecution.executedPlan).isEmpty,
+        df.queryExecution.executedPlan)
     }
   }
 

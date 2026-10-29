@@ -37,10 +37,16 @@ import org.apache.spark.sql.types.{BooleanType, Metadata, MetadataBuilder}
  *
  * Like `DynamicPruningSubquery`, it cannot be evaluated. Where it gets no semi join, it gives way
  * to `true`.
+ *
+ * `numItems` is the expected number of items of the whole creation side. `minPartitionKeys` is the
+ * number of partition keys it needs at least, so that an even share of it is within the size
+ * threshold of a bloom filter's input.
  */
 case class PerPartitionRuntimeFilterSubquery(
     key: Expression,
     plan: LogicalPlan,
+    numItems: Long,
+    minPartitionKeys: Long,
     exprId: ExprId = NamedExpression.newExprId)
   extends SubqueryExpression(plan, Seq(key), exprId, Nil, None)
   with Predicate
@@ -81,13 +87,23 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
   /**
    * The metadata key of the bloom filter column of a per-partition bloom filter's aggregate.
    * [[InsertPerPartitionRuntimeFilterJoins]] sets it. That is how [[InjectRuntimeFilter]] and
-   * `ChoosePerPartitionRuntimeFilters` tell the semi join from one a query wrote.
+   * `ChoosePerPartitionRuntimeFilters` tell the semi join from one a query wrote. Its value holds
+   * the `numItems` and `minPartitionKeys` of the placeholder, for sizing the bloom filters.
    */
   private val PER_PARTITION_RUNTIME_FILTER = "__per_partition_runtime_filter"
 
-  /** The metadata of the bloom filter column of a per-partition bloom filter's aggregate. */
-  private[optimizer] def bloomFilterMetadata: Metadata =
-    new MetadataBuilder().putBoolean(PER_PARTITION_RUNTIME_FILTER, true).build()
+  /**
+   * The metadata of the bloom filter column of the aggregate of `placeholder`'s per-partition bloom
+   * filter, with its sizing.
+   */
+  private[optimizer] def bloomFilterMetadata(
+      placeholder: PerPartitionRuntimeFilterSubquery): Metadata = {
+    val sizing = new MetadataBuilder()
+      .putLong("numItems", placeholder.numItems)
+      .putLong("minPartitionKeys", placeholder.minPartitionKeys)
+      .build()
+    new MetadataBuilder().putMetadata(PER_PARTITION_RUNTIME_FILTER, sizing).build()
+  }
 
   /**
    * For the condition of a semi join of a per-partition bloom filter, the bloom filter column and
@@ -98,6 +114,15 @@ object PerPartitionRuntimeFilterSubquery extends PredicateHelper {
       case BloomFilterMightContain(bloomFilter: Attribute, XxHash64(Seq(key), _))
           if bloomFilter.metadata.contains(PER_PARTITION_RUNTIME_FILTER) => (bloomFilter, key)
     }
+
+  /**
+   * The expected number of items of the whole creation side of the per-partition bloom filter with
+   * the column `bloomFilter`, and the number of partition keys it needs at least.
+   */
+  def sizingOf(bloomFilter: Attribute): (Long, Long) = {
+    val sizing = bloomFilter.metadata.getMetadata(PER_PARTITION_RUNTIME_FILTER)
+    (sizing.getLong("numItems"), sizing.getLong("minPartitionKeys"))
+  }
 
   /** The key that `plan` checks, when it is the join of a placeholder's semi join. */
   def semiJoinKey(plan: LogicalPlan): Option[Expression] = plan match {
@@ -201,7 +226,8 @@ object InsertPerPartitionRuntimeFilterJoins extends Rule[LogicalPlan] {
     } yield {
       val creationPartitionKey = Alias(creation, "partitionKey")()
       val bloomFilter = Alias(new BloomFilterAggregate(new XxHash64(Seq(creationKey)))
-        .toAggregateExpression(), "bloomFilter")(explicitMetadata = Some(bloomFilterMetadata))
+        .toAggregateExpression(), "bloomFilter")(
+        explicitMetadata = Some(bloomFilterMetadata(placeholder)))
       val aggregate = PullOutGroupingExpressions(Aggregate(
         Seq(creation), Seq(creationPartitionKey, bloomFilter), placeholder.plan))
       val partitionKey = Alias(application, "partitionKey")()

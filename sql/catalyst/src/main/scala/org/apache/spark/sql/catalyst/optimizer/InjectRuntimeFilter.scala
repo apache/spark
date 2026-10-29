@@ -90,7 +90,8 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * `injectPerPartitionBloomFilter` then adds its [[PerPartitionRuntimeFilterSubquery]]. Predicate
    * pushdown moves it along the key. [[InsertPerPartitionRuntimeFilterJoins]] then builds the semi
    * join where it landed. `ChoosePerPartitionRuntimeFilters` keeps the semi join only when it adds
-   * no shuffle and cuts no tasks that read the application side.
+   * no shuffle and cuts no tasks that read the application side, and the creation side has enough
+   * partition keys for the size threshold.
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    */
@@ -157,10 +158,27 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
         }) {
       None
     } else {
+      val (numItems, minPartitionKeys) = perPartitionSizing(filterCreationSide)
       Some(Filter(
-        PerPartitionRuntimeFilterSubquery(filterApplicationSideKey, creationSide),
+        PerPartitionRuntimeFilterSubquery(
+          filterApplicationSideKey, creationSide, numItems, minPartitionKeys),
         filterApplicationSidePlan))
     }
+  }
+
+  /**
+   * The expected number of items of the whole creation side, and the number of partition keys it
+   * needs at least, so that an even share of it is within the size threshold. Each bloom filter of
+   * a per-partition one holds the keys of one partition key and is built in its own task. Without
+   * a row count, the default expected number of items is for a creation side within the threshold.
+   * A bigger one gets it once for each threshold's worth of its size.
+   */
+  private def perPartitionSizing(filterCreationSide: FilterCreationSide): (Long, Long) = {
+    val threshold = math.max(1L, filterCreationSide.sizeThreshold)
+    val thresholds = ((filterCreationSide.sizeInBytes + threshold - 1) / threshold).max(1)
+    val numItems = filterCreationSide.rowCount.getOrElse(
+      thresholds * conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS))
+    (numItems.min(Long.MaxValue).longValue, thresholds.min(Long.MaxValue).longValue)
   }
 
   private def injectBloomFilter(
