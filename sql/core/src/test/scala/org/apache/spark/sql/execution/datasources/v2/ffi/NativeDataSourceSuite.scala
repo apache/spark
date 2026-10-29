@@ -29,17 +29,19 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.vector.BigIntVector
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.write.PhysicalWriteInfoImpl
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarBatchWrite, ColumnarScan, ColumnarScanBuilder, ColumnarStreamingWrite}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
@@ -47,7 +49,8 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
+import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -100,22 +103,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     session
   }
 
-  // The test libraries record the calls that the order of the calls of the header rules out.
-  override def afterEach(): Unit = {
-    try {
-      if (orderViolations.exists()) {
-        val violations = Files.readString(orderViolations.toPath)
-        orderViolations.delete()
-        fail(s"The test library got calls that the header rules out:\n$violations")
-      }
-    } finally {
-      super.afterEach()
-    }
-  }
-
+  // The test libraries record the calls that the order of the calls of the header rules out,
+  // which fail the test that made them.
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    try f finally SparkSession.setActiveSession(spark)
+    try checkingOrderOfCalls(f) finally SparkSession.setActiveSession(spark)
   }
 
   // Checks the answer without converting the DataFrame to an RDD: a job outside of a SQL
@@ -719,12 +711,85 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "action" -> "write to",
         "name" -> "native_sink",
         "msg" -> "commit_data_writer returned 2 values instead of one."))
-    // The task failed without aborting the committed data writer, which it closed, and the driver
-    // aborted the write.
-    assert(!new File(dir, "_ABORTED_COMMITTED_DATA_WRITER").exists())
+    // The task failed without aborting the committed data writer, which the test library would
+    // record as a violation of the order of the calls, and closed it. The driver aborted the write.
     checkDataWritersClosed(dir)
     assert(new File(dir, "_ABORTED").isFile)
     assert(!dir.listFiles().exists(_.getName.startsWith("part-")))
+  }
+
+  nativeTest("keep the order of the calls whatever the callers of the adapter do") {
+    val session = newSession(defaultPackage)
+    def dataSource(name: String, options: (String, String)*): NativeDataSource = {
+      val (resolved, location) =
+        NativeDataSourceRegistry.lookup(name, session.sessionState.conf).get
+      new NativeDataSource(location, resolved, new CaseInsensitiveStringMap(options.toMap.asJava))
+    }
+    val schema = StructType.fromDDL("id BIGINT")
+    // The test library records each call that the header rules out, which fails the test.
+
+    // A write or a micro-batch that committed is not aborted.
+    val batchDir = Utils.createTempDir()
+    val batchWrite = new ColumnarBatchWrite(
+      () => dataSource("native_sink", "path" -> batchDir.getPath).writer(schema, false), schema)
+    batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    batchWrite.commit(Array.empty)
+    batchWrite.abort(Array.empty)
+    assert(new File(batchDir, "_SUCCESS").isFile && !new File(batchDir, "_ABORTED").exists())
+    val streamDir = Utils.createTempDir()
+    val streamWrite = new ColumnarStreamingWrite("native_sink",
+      () => dataSource("native_sink", "path" -> streamDir.getPath)
+        .streamWriter(schema, false, UUID.randomUUID().toString),
+      schema)
+    streamWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
+    streamWrite.commit(0, Array.empty)
+    streamWrite.abort(0, Array.empty)
+    assert(new File(streamDir, "_EPOCH_0").isFile && !new File(streamDir, "_ABORTED_0").exists())
+
+    // After a write fails, a data writer only aborts and closes the data writer of the library.
+    val failingDir = Utils.createTempDir()
+    val writer = dataSource("native_sink", "path" -> failingDir.getPath, "fail" -> "write")
+      .writer(schema, false)
+    val dataWriter = writer.createWriter(0, 0)
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    val vector = new BigIntVector("id", allocator)
+    try {
+      vector.allocateNew(1)
+      vector.set(0, 1L)
+      vector.setValueCount(1)
+      val batch = new ColumnarBatch(Array(new ArrowColumnVector(vector)), 1)
+      val writeError = intercept[Exception](dataWriter.write(batch))
+      assert(findError(writeError, "NATIVE_DATA_SOURCE_ERROR").getMessageParameters
+        .get("msg") == "injected failure in write")
+      Seq(() => dataWriter.write(batch), () => dataWriter.commit()).foreach { call =>
+        checkError(
+          exception = intercept[SparkException](call()),
+          condition = "INTERNAL_ERROR",
+          parameters = Map("message" -> "A write or a commit of the data writer failed."))
+      }
+      dataWriter.abort()
+    } finally {
+      dataWriter.close()
+      vector.close()
+      allocator.close()
+      writer.abort(Array.empty)
+    }
+
+    // The reader of a scan prunes its columns once.
+    val rangeSource = dataSource("native_range")
+    val builder = new ColumnarScanBuilder("native_range", rangeSource.schema(), () => rangeSource)
+    builder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    builder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    checkError(
+      exception = intercept[SparkException] {
+        builder.pruneColumns(StructType.fromDDL("name STRING"))
+      },
+      condition = "INTERNAL_ERROR",
+      parameters = Map(
+        "message" ->
+          "The columns of a scan were pruned again, with columns that it does not read."))
+    // Plans the scan, which releases the reader.
+    builder.build().toBatch.planInputPartitions()
   }
 
   nativeTest("abort a micro-batch whose write failed") {
@@ -1227,21 +1292,28 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           "interface")))
 
     val logAppender = new LogAppender("native data source logs")
+    // The library records each call of log, with its level, in a file.
+    val logCalls = new File(Utils.createTempDir(), "log_calls")
     withLogAppender(logAppender, loggerNames = Seq(classOf[NativeLibrary].getName)) {
-      range(session, "log" -> "a message from native code")
+      range(session, "log" -> "a message from native code", "log_calls_path" -> logCalls.getPath)
     }
+    // Each data source that the read creates logs, at SPARK_DS_LOG_WARN.
+    assert(Files.readAllLines(logCalls.toPath).asScala.toSet == Set("2"))
     assert(logAppender.loggingEvents.exists { event =>
       val message = event.getMessage.getFormattedMessage
       event.getLevel == org.apache.logging.log4j.Level.WARN &&
         message.contains("a message from native code") &&
         message.contains(System.mapLibraryName("test_native_datasource"))
     })
-    // The library does not log a warning when Spark logs errors only.
+    // The library does not even call log for a warning when Spark logs errors only.
     val errorAppender = new LogAppender("native data source error logs")
+    val errorLogCalls = new File(Utils.createTempDir(), "log_calls")
     withLogAppender(errorAppender, loggerNames = Seq(classOf[NativeLibrary].getName),
         level = Some(org.apache.logging.log4j.Level.ERROR)) {
-      range(session, "log" -> "a message that Spark does not log")
+      range(session, "log" -> "a message that Spark does not log",
+        "log_calls_path" -> errorLogCalls.getPath)
     }
+    assert(!errorLogCalls.exists())
     assert(!errorAppender.loggingEvents.exists(
       _.getMessage.getFormattedMessage.contains("a message that Spark does not log")))
 

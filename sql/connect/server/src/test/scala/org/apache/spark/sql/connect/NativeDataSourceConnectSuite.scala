@@ -39,7 +39,7 @@ class NativeDataSourceConnectSuite extends SparkConnectServerTest {
 
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    f
+    checkingOrderOfCalls(f)
   }
 
   private def withNewSession(f: SparkSession => Unit): Unit = {

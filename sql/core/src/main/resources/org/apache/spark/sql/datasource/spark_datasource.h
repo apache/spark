@@ -81,16 +81,19 @@
  *   writer with create_data_writer, with the schema of the data and the state of the writer, calls
  *   write for each batch of at most spark.sql.execution.arrow.maxRecordsPerBatch rows, which also
  *   ends once it holds spark.sql.execution.arrow.maxBytesPerBatch bytes, and calls
- *   commit_data_writer, or abort_data_writer if the task or the commit fails, before it closes the
- *   data writer. Then the driver calls commit with the messages of the tasks if they all succeeded,
- *   or abort otherwise, including when commit fails, and closes the writer. Several attempts of a
- *   task may write the same partition, after a failure or with speculative execution, each with a
- *   data writer of its own. Spark lets the attempts of a partition commit one at a time, and passes
- *   to commit the message of one committed attempt for each partition, so the write consists of the
- *   data of these attempts only. It aborts the data writers of the other attempts, except on an
- *   executor that is lost, where a data writer is neither committed nor aborted, and may even have
- *   committed before its message reached the driver. A streaming write commits or aborts each
- *   micro-batch (epoch). Spark may commit the same epoch more than once, for example when a
+ *   commit_data_writer, or abort_data_writer if the task or the commit fails before
+ *   commit_data_writer succeeded, before it closes the data writer. Then the driver calls commit
+ *   with the messages of the tasks if they all succeeded, or abort otherwise, including when commit
+ *   fails, and closes the writer. Several attempts of a task may write the same partition, after a
+ *   failure or with speculative execution, each with a data writer of its own. Spark lets the
+ *   attempts of a partition commit one at a time, and passes to commit the message of one committed
+ *   attempt for each partition, so the write consists of the data of these attempts only. It aborts
+ *   the data writers of the other attempts, except two: one whose commit_data_writer succeeded
+ *   before its task failed, which is not aborted, and one on an executor that is lost, which is
+ *   neither committed nor aborted, and may even have committed before its message reached the
+ *   driver. Neither is passed to commit, so the commit or the abort of the writer cleans up the
+ *   output of the data writers whose messages it does not get. A streaming write commits or aborts
+ *   each micro-batch (epoch). Spark may commit the same epoch more than once, for example when a
  *   streaming query restarts after a failure, so committing an epoch that is already committed must
  *   have no effect, for exactly-once output. The ID of the query, which create_writer gets for a
  *   streaming write, stays the same when the query restarts from its checkpoint, so the ID of the

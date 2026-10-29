@@ -55,9 +55,10 @@
 // "capabilities", a data source declares these capabilities instead, a number. With the option
 // "task_path", the reads and the data writers of native_range and native_sink record their task
 // in a file named after its partition, in that directory. With the option "log", creating a data
-// source logs its value as a warning, with the option "log_levels_path", it writes to that file
-// whether Spark logs each level, from error to trace, such as "1,1,1,0,0", and with the option
-// "spark_version", it fails unless Spark has that version.
+// source logs its value as a warning, and with "log_calls_path" also appends the level to that
+// file when it calls log. With the option "log_levels_path", it writes to that file whether Spark
+// logs each level, from error to trace, such as "1,1,1,0,0", and with the option "spark_version",
+// it fails unless Spark has that version.
 //
 // With the option "fail", a step fails with an error. With the option "zero", a function that
 // creates a handle succeeds without setting it: "create", "create_reader",
@@ -667,12 +668,21 @@ bool hasIsLogEnabled() {
                                             sizeof(host->is_log_enabled));
 }
 
+// Appends a line to a file, or fails.
+void appendLine(const std::string& path, const std::string& line) {
+  FILE* file = std::fopen(path.c_str(), "a");
+  if (file == nullptr) throw std::runtime_error("cannot write " + path);
+  std::fputs((line + "\n").c_str(), file);
+  std::fclose(file);
+}
+
 // Logs with the log of Spark, unless it does not write the level. A library must only use the
 // fields that fit in the size of the struct that Spark passes, which may be of another version of
-// the header.
-void hostLog(int32_t level, const std::string& message) {
+// the header. With `calls_path`, appends the level to that file right before it calls log.
+void hostLog(int32_t level, const std::string& message, const std::string& calls_path = "") {
   if (hasIsLogEnabled() && !host->is_log_enabled(level)) return;
   if (host->size >= static_cast<int64_t>(offsetof(SparkDsHost, log) + sizeof(host->log))) {
+    if (!calls_path.empty()) appendLine(calls_path, std::to_string(level));
     host->log(level, message.c_str());
   }
 }
@@ -759,15 +769,17 @@ void writeFile(const std::string& path, const std::string& content) {
   std::fclose(file);
 }
 
-// Records a call that the order of the calls of the header rules out.
+// Records a call that the order of the calls of the header rules out. Unlike the files of the
+// options, a failure to record it is ignored: it may be called outside of `guarded`, as in the
+// close functions, which cannot fail.
 std::mutex order_violations_lock;
 void orderViolation(const std::string& call) {
 #ifdef ORDER_VIOLATIONS_PATH
   std::lock_guard<std::mutex> guard(order_violations_lock);
-  FILE* file = std::fopen(ORDER_VIOLATIONS_PATH, "a");
-  if (file == nullptr) return;
-  std::fputs((call + "\n").c_str(), file);
-  std::fclose(file);
+  try {
+    appendLine(ORDER_VIOLATIONS_PATH, call);
+  } catch (...) {
+  }
 #else
   (void)call;
 #endif
@@ -807,6 +819,7 @@ struct Reader {
   // Whether a function failed, and which functions of a batch reader were called, for the order of
   // the calls.
   bool failed = false;
+  bool limited = false;
   bool pruned = false;
   bool planned = false;
 };
@@ -999,7 +1012,9 @@ int createSource(const SparkDsCreateInfo* info, uint64_t* capabilities, void** h
       throw std::runtime_error("unknown data source " + source->name);
     }
     std::string message = get(source->options, "log", "");
-    if (!message.empty()) hostLog(SPARK_DS_LOG_WARN, message);
+    if (!message.empty()) {
+      hostLog(SPARK_DS_LOG_WARN, message, get(source->options, "log_calls_path", ""));
+    }
     std::string levels_path = get(source->options, "log_levels_path", "");
     if (!levels_path.empty()) writeFile(levels_path, logLevels());
     std::string version = get(source->options, "spark_version", "");
@@ -1092,9 +1107,9 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
 int pushLimit(void* handle, int32_t limit, bool* applied) {
   auto* reader = fromHandle<Reader>(handle);
   if (reader->failed) orderViolation("push_limit after a failed call");
+  if (reader->limited) orderViolation("push_limit called twice");
+  reader->limited = true;
   return tracked(&reader->failed, [&] {
-    // Spark calls push_limit at most once.
-    if (reader->state.count("limit") > 0) throw std::runtime_error("pushLimit was called twice");
     reader->state["limit"] = std::to_string(limit);
     *applied = true;
   });
@@ -1163,16 +1178,13 @@ int initialOffset(void*, const SparkDsInitialOffsetInfo* info, SparkDsSink set_o
 // Makes `step` more rows available after the start of the micro-batch, up to `max_offset`.
 int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink set_offset,
                  void* sink) {
-  return guarded([&] {
-    const Options& state = fromHandle<Reader>(handle)->state;
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("latest_offset after a failed call");
+  return tracked(&reader->failed, [&] {
+    const Options& state = reader->state;
     if (info->start == nullptr) throw std::runtime_error("no start offset");
     std::string starts_path = get(state, "starts_path", "");
-    if (!starts_path.empty()) {
-      FILE* file = std::fopen(starts_path.c_str(), "a");
-      if (file == nullptr) throw std::runtime_error("cannot write " + starts_path);
-      std::fputs((std::string(info->start) + "\n").c_str(), file);
-      std::fclose(file);
-    }
+    if (!starts_path.empty()) appendLine(starts_path, info->start);
     auto start = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     int64_t latest =
         std::min(getLong(state, "max_offset", 10), start + getLong(state, "step", 10));
@@ -1191,20 +1203,24 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
 
 int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
                      SparkDsSink add_partition, SparkDsSink set_state, void* sink) {
-  return guarded([&] {
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("stream_partitions after a failed call");
+  return tracked(&reader->failed, [&] {
     checkSize("SparkDsStreamPartitionsInfo", info->size, sizeof(SparkDsStreamPartitionsInfo));
     auto lo = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     auto hi = static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number);
     if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
-    const Options& state = fromHandle<Reader>(handle)->state;
+    const Options& state = reader->state;
     sendState(state, set_state, sink, serialize(state));
   });
 }
 
 int commitOffset(void* handle, const SparkDsCommitOffsetInfo* info) {
-  return guarded([&] {
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("commit_offset after a failed call");
+  return tracked(&reader->failed, [&] {
     checkSize("SparkDsCommitOffsetInfo", info->size, sizeof(SparkDsCommitOffsetInfo));
-    std::string path = get(fromHandle<Reader>(handle)->state, "commit_path", "");
+    std::string path = get(reader->state, "commit_path", "");
     if (!path.empty()) writeFile(path, info->end);
   });
 }
@@ -1469,7 +1485,6 @@ int abortDataWriter(void* handle) {
     // Spark does not abort a data writer that committed: records it if it does.
     if (writer->committed) {
       orderViolation("abort_data_writer after a successful commit");
-      writeFile(writer->state["path"] + "/_ABORTED_COMMITTED_DATA_WRITER", "");
       return;
     }
     if (writer->file != nullptr) {

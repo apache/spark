@@ -402,9 +402,6 @@ class NativeDataSourceWriter(
   import NativeCalls._
 
   @transient private lazy val library = NativeLibraries.get(location)
-  // Whether the library committed the write, after which it is not aborted, as the header says,
-  // even if Spark fails afterwards.
-  @transient private var committed = false
 
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] = {
     new NativeDataWriter(
@@ -415,19 +412,17 @@ class NativeDataSourceWriter(
     call(name, "commit a write to") {
       library.commit(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
     }
-    committed = true
-    // Not closed if the commit fails: Spark then aborts the write, which closes it.
+    // Not closed if the commit fails: Spark then aborts the write, which closes it. Spark does
+    // not abort a committed write, see ColumnarBatchWrite.
     handle.close()
   }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    if (!committed) {
-      Utils.tryWithSafeFinally {
-        call(name, "abort a write to") {
-          library.abort(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
-        }
-      }(handle.close())
-    }
+    Utils.tryWithSafeFinally {
+      call(name, "abort a write to") {
+        library.abort(handle.get, -1L, NativeWriterCommitMessage.toBytes(messages))
+      }
+    }(handle.close())
   }
 }
 
@@ -455,22 +450,16 @@ class NativeDataSourceStreamWriter(
       location, name, schema, timeZoneId, writerState, partitionId, taskId, epochId)
   }
 
-  // Whether the library committed the micro-batch, after which it is not aborted, as the header
-  // says, even if Spark fails afterwards.
-  @transient private var committed = false
-
+  // Spark does not abort a committed micro-batch, see ColumnarStreamingWrite.
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     call(name, "commit a write to") {
       library.commit(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
     }
-    committed = true
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    if (!committed) {
-      call(name, "abort a write to") {
-        library.abort(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
-      }
+    call(name, "abort a write to") {
+      library.abort(handle.get, epochId, NativeWriterCommitMessage.toBytes(messages))
     }
   }
 }

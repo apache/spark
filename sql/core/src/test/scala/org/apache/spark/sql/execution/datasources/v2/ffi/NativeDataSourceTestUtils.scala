@@ -43,6 +43,23 @@ object NativeDataSourceTestUtils {
    */
   lazy val orderViolations: File = new File(buildDir, "order_violations")
 
+  /**
+   * Runs a test that uses the test libraries, and fails it if the libraries got calls that the
+   * order of the calls of the header rules out. The calls recorded before, such as by a task of an
+   * earlier test that was still being killed, are dropped.
+   */
+  def checkingOrderOfCalls[T](f: => T): T = {
+    orderViolations.delete()
+    val result = f
+    if (orderViolations.exists()) {
+      val violations = Files.readString(orderViolations.toPath)
+      orderViolations.delete()
+      org.scalatest.Assertions.fail(
+        s"The test library got calls that the header rules out:\n$violations")
+    }
+    result
+  }
+
   // The executors store the files of the sessions that are not isolated in the same directory, so
   // each package has its own name.
   private val packageCount = new AtomicInteger()

@@ -82,6 +82,9 @@ class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
   extends BatchWrite {
 
   private var writer: ColumnarWriter = _
+  // Whether the writer committed the write, after which it is not aborted, even if Spark fails
+  // afterwards: a native data source relies on it.
+  private var committed = false
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
     if (writer == null) {
@@ -90,10 +93,13 @@ class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
     new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema))
   }
 
-  override def commit(messages: Array[WriterCommitMessage]): Unit = writer.commit(messages)
+  override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    writer.commit(messages)
+    committed = true
+  }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    if (writer != null) {
+    if (writer != null && !committed) {
       writer.abort(messages)
     }
   }
@@ -115,6 +121,8 @@ class ColumnarStreamingWrite(
   extends StreamingWrite {
 
   private var writer: ColumnarStreamWriter = _
+  // The epochs that the writer committed, which are not aborted, as for a batch write.
+  private val committedEpochs = scala.collection.mutable.Set.empty[Long]
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
@@ -132,10 +140,11 @@ class ColumnarStreamingWrite(
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(epochId, messages)
+    committedEpochs += epochId
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    if (writer != null) {
+    if (writer != null && !committedEpochs.contains(epochId)) {
       writer.abort(epochId, messages)
     }
   }
