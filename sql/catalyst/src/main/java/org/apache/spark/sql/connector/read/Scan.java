@@ -33,11 +33,11 @@ import org.apache.spark.sql.connector.catalog.TableCapability;
  * A logical representation of a data source scan. This interface is used to provide logical
  * information, like what the actual read schema is.
  * <p>
- * This logical representation is shared between batch scan, micro-batch streaming scan and
- * continuous streaming scan. Data sources must implement the corresponding methods in this
- * interface, to match what the table promises to support. For example, {@link #toBatch()} must be
- * implemented, if the {@link Table} that creates this {@link Scan} returns
- * {@link TableCapability#BATCH_READ} support in its {@link Table#capabilities()}.
+ * This logical representation is shared between batch scan, micro-batch streaming scan,
+ * continuous streaming scan and external lookup. Data sources must implement the corresponding
+ * methods in this interface, to match what the table promises to support. For example,
+ * {@link #toBatch()} must be implemented, if the {@link Table} that creates this {@link Scan}
+ * returns {@link TableCapability#BATCH_READ} support in its {@link Table#capabilities()}.
  * </p>
  *
  * @since 3.0.0
@@ -79,6 +79,21 @@ public interface Scan {
   default Batch toBatch() {
     throw new SparkUnsupportedOperationException(
       "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", Map.of("description", description()));
+  }
+
+  /**
+   * Returns the physical representation of this scan for external lookup. The default throws
+   * {@code DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED}; data sources must override it if the table
+   * reports {@link TableCapability#EXTERNAL_LOOKUP}. Spark calls it at most once, on the driver.
+   * {@link #readSchema()} describes the returned value rows and must list only top-level table
+   * columns, each at most once, with the table's name and data type.
+   *
+   * @throws UnsupportedOperationException
+   * @since 4.4.0
+   */
+  default ExternalLookup toExternalLookup() {
+    throw new SparkUnsupportedOperationException(
+      "DATA_SOURCE_EXTERNAL_LOOKUP_NOT_SUPPORTED", Map.of("description", description()));
   }
 
   /**

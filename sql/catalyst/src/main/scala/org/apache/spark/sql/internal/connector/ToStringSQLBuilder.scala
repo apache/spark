@@ -21,6 +21,7 @@ import org.apache.spark.sql.connector.expressions.Expression
 import org.apache.spark.sql.connector.expressions.GeneralScalarExpression
 import org.apache.spark.sql.connector.expressions.GetArrayItem
 import org.apache.spark.sql.connector.expressions.VariantGet
+import org.apache.spark.sql.connector.read.LookupParameter
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
 
 /**
@@ -58,6 +59,7 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
   // until StackOverflowError. Render it as a function call instead.
   override protected def visitUnexpectedExpr(expr: Expression): String = expr match {
     case e: GeneralScalarExpression => visitSQLFunction(e.name(), e.children())
+    case p: LookupParameter => p.describe()
     case _ => super.visitUnexpectedExpr(expr)
   }
 }
