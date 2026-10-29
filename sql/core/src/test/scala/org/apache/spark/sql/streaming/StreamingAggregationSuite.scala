@@ -862,6 +862,13 @@ class StreamingAggregationSuite extends StateStoreMetricsTest with Assertions {
       StartStream(additionalConfs = Map(SQLConf.SHUFFLE_PARTITIONS.key -> "3")),
       AddData(inputData, 3, 2, 1, 3),
       CheckLastBatch((3, 2), (2, 1), (1, 1)),
+      Execute { query =>
+        val stores = query.lastExecution.executedPlan.collect {
+          case store: StateStoreSaveExec => store
+        }
+        assert(stores.nonEmpty)
+        assert(stores.forall(_.metrics("pythonNumTimingReports").value == 0))
+      },
       assertNumStateRows(
         total = Seq(3), updated = Seq(3), droppedByWatermark = Seq(0), removed = Some(Seq(0))),
 

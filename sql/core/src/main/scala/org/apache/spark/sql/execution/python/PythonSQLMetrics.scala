@@ -21,12 +21,8 @@ import org.apache.spark.sql.execution.SparkPlan
 import org.apache.spark.sql.execution.metric.{SQLMetric, SQLMetrics}
 
 trait PythonSQLMetrics { self: SparkPlan =>
-  protected def pythonTimingEvalType: Option[Int] = None
-
-  // Share the plan's timing decision with metric registration and the Python runner.
-  protected val pythonTimingGate: Option[PythonUDFTimingGate] =
-    pythonTimingEvalType.map(PythonUDFTimingGate(_, conf))
-
+  // Register all phase metrics; Python decides whether to collect them.
+  // A zero pythonNumTimingReports means detailed timing data is unavailable.
   protected val pythonMetrics: Map[String, SQLMetric] = {
     sizeMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createSizeMetric(sparkContext, v)
@@ -34,9 +30,7 @@ trait PythonSQLMetrics { self: SparkPlan =>
       k -> SQLMetrics.createTimingMetric(sparkContext, v)
     } ++ otherMetricsDesc.map { case (k, v) =>
       k -> SQLMetrics.createMetric(sparkContext, v)
-    } ++ additionalMetrics ++ {
-      if (pythonTimingGate.exists(_.enabled)) createPythonPhaseMetrics() else Map.empty
-    }
+    } ++ additionalMetrics ++ createPythonPhaseMetrics()
   }
 
   // The metrics and their descriptions, by kind. An operator may override them, e.g. to leave

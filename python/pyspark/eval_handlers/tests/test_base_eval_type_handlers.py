@@ -49,6 +49,7 @@ from pyspark.testing.utils import (
     pyarrow_requirement_message,
 )
 from pyspark.util import PythonEvalType
+from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker_util import RunnerConf
@@ -81,6 +82,9 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             self.assertNotIn(base, registered)
 
     def test_default_serializer_per_category(self):
+        metrics = WorkerMetrics()
+        self.addCleanup(metrics.reset)
+
         class _Batch(BatchEvalTypeHandler["pa.RecordBatch"]):
             _multi_udf = True
 
@@ -104,8 +108,12 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
             (_Grouped, ArrowStreamGroupSerializer),
             (_CoGrouped, ArrowStreamCoGroupSerializer),
         ):
-            for enabled in (False, True):
-                with self.subTest(handler=handler_class.__name__, enabled=enabled):
+            for supported, enabled in ((False, True), (True, False), (True, True)):
+                with self.subTest(
+                    handler=handler_class.__name__, supported=supported, enabled=enabled
+                ):
+                    metrics.reset()
+                    handler_class._supports_detailed_timing = supported
                     conf = RunnerConf(
                         {
                             "spark.sql.execution.pythonUDF.detailedTiming.enabled": str(
@@ -113,9 +121,16 @@ class EvalTypeHandlerTests(PySparkBaseTestCase):
                             ).lower()
                         }
                     )
-                    serializer = handler_class([], conf, None).serializer
+                    handler = handler_class([], conf, None)
+                    serializer = handler.serializer
                     self.assertIsInstance(serializer, serializer_class)
-                    self.assertEqual(serializer._collect_timing, enabled)
+                    self.assertEqual(serializer._collect_timing, supported and enabled)
+                    self.assertEqual(
+                        handler._create_phase_timers() is not None, supported and enabled
+                    )
+                    self.assertEqual(conf.detailed_timing_enabled, enabled)
+                    if not (supported and enabled):
+                        self.assertEqual(metrics.to_dict(), {})
 
     def test_run_produces_output(self):
         class _Doubler(BatchEvalTypeHandler["pa.RecordBatch"]):

@@ -676,7 +676,7 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                     self.assertGreaterEqual(phases[2], 10)
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
-    def test_phase_metrics_follow_materialized_plan(self):
+    def test_phase_metrics_follow_execution_config(self):
         timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
         with self.sql_conf({"spark.sql.adaptive.enabled": "false"}):
             for enabled in (True, False):
@@ -686,11 +686,12 @@ class MapInPandasTests(MapInPandasTestsMixin, ReusedSQLTestCase):
                             lambda dfs: dfs, "id long"
                         )
                         metrics = result._jdf.queryExecution().executedPlan().metrics()
-                        self.assertEqual(metrics.contains("pythonNumTimingReports"), enabled)
+                        self.assertTrue(metrics.contains("pythonNumTimingReports"))
                     with self.sql_conf({timing_conf: str(not enabled).lower()}):
                         self.assertEqual(result.collect(), [Row(0), Row(1)])
-                    if enabled:
-                        self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimingReports").value(), int(not enabled)
+                    )
 
 
 if __name__ == "__main__":

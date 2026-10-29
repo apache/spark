@@ -154,6 +154,8 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     variant_value: ClassVar[Any] = None
     # Whether the handler's UDFs return an iterator.
     _iter_based: ClassVar[bool] = False
+    # Whether this handler implements the detailed phase measurements.
+    _supports_detailed_timing: ClassVar[bool] = False
     # Whether __init__ wraps the UDF in fail_on_stopiteration, so a StopIteration raised by
     # the UDF call fails with STOP_ITERATION_OCCURRED instead of PEP 479's generic RuntimeError.
     _fail_on_stopiteration: ClassVar[bool] = True
@@ -172,6 +174,9 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udf_descs: list[Any] = udf_descs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
+        self._timing_enabled = (
+            self._supports_detailed_timing and runner_conf.detailed_timing_enabled
+        )
         # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
         # single function is the pickled object itself (an incremental Aggregator) with its
         # signature. Empty for a UDTF.
@@ -324,7 +329,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def _create_phase_timers(
         self,
     ) -> Optional[tuple["_WorkerTimer", "_WorkerTimer", "_WorkerTimer"]]:
-        if not self._runner_conf.detailed_timing_enabled:
+        if not self._timing_enabled:
             return None
         metrics = WorkerMetrics()
         timers = (
@@ -349,7 +354,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamSerializer(
             write_start_stream=True,
-            collect_timing=self._runner_conf.detailed_timing_enabled,
+            collect_timing=self._timing_enabled,
         )
 
 
@@ -360,7 +365,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamGroupSerializer(
             write_start_stream=True,
-            collect_timing=self._runner_conf.detailed_timing_enabled,
+            collect_timing=self._timing_enabled,
         )
 
 
@@ -371,5 +376,5 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamCoGroupSerializer(
             write_start_stream=True,
-            collect_timing=self._runner_conf.detailed_timing_enabled,
+            collect_timing=self._timing_enabled,
         )

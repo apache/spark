@@ -177,10 +177,8 @@ object ArrowPythonRunner {
     }
   }
 
-  /** Return runner settings with the plan's timing decision, disabled by default. */
-  def getPythonRunnerConfMap(
-      conf: SQLConf,
-      timingGate: Option[PythonUDFTimingGate] = None): Map[String, String] = {
+  /** Return Map with conf settings to be used in ArrowPythonRunner */
+  def getPythonRunnerConfMap(conf: SQLConf): Map[String, String] = {
     val confMap = collection.mutable.Map.empty[String, String]
     Seq(
       SQLConf.SESSION_LOCAL_TIMEZONE,
@@ -189,6 +187,7 @@ object ArrowPythonRunner {
       SQLConf.ARROW_EXECUTION_USE_LARGE_VAR_TYPES,
       SQLConf.PYTHON_TABLE_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
       SQLConf.PYTHON_UDF_LEGACY_PANDAS_CONVERSION_ENABLED,
+      SQLConf.PYTHON_UDF_DETAILED_TIMING_ENABLED,
       SQLConf.PYTHON_UDF_MAP_IN_BATCH_LEGACY_ACCEPT_ANY_ITERABLE_ENABLED,
       SQLConf.PYTHON_UDF_PANDAS_INT_TO_DECIMAL_COERCION_ENABLED,
       SQLConf.PYTHON_UDF_PANDAS_PREFER_INT_EXTENSION_DTYPE,
@@ -204,8 +203,6 @@ object ArrowPythonRunner {
       case c: ConfigEntry[_] =>
         confMap.update(c.key, conf.getConf(c).toString)
     }
-    confMap.update(SQLConf.PYTHON_UDF_DETAILED_TIMING_ENABLED.key,
-      timingGate.exists(_.workerEnabled(conf)).toString)
     confMap.toMap
   }
 }

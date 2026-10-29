@@ -228,6 +228,7 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
 
     eval_type = PythonEvalType.SQL_MAP_PANDAS_ITER_UDF
     _iter_based = True
+    _supports_detailed_timing = True
 
     def __init__(
         self, udf_descs: list[UDF], runner_conf: "RunnerConf", eval_conf: "EvalConf"

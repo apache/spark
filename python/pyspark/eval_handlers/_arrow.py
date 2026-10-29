@@ -826,6 +826,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     variant_conf = "use_legacy_pandas_udf_conversion"
     variant_value = False
     _multi_udf = True
+    _supports_detailed_timing = True
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 
