@@ -253,10 +253,10 @@ class PandasMapUDFHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             # may never start, leaving the read timer unregistered. Register a zero for that case.
             metrics.measure("pythonDataReadTime")
 
-            # Sequential input intervals include reads. Subtract them at report time because
+            # Sequential input intervals include reads. Record their nesting because
             # the serializer may publish its read total after the handler finishes.
-            metrics.subtract_duration_at_report(
-                total_metric="pythonInputPreparationTime", nested_metric="pythonDataReadTime"
+            metrics.record_sub_duration(
+                parent_metric="pythonInputPreparationTime", sub_metric="pythonDataReadTime"
             )
 
         clock = time.perf_counter_ns

@@ -97,16 +97,18 @@ class WorkerMetricsTests(unittest.TestCase):
                     pass
         self.assertEqual(metrics.to_dict(), {"outer": 5, "inner": 2})
 
-    def test_subtract_duration_at_report(self):
+    def test_record_sub_duration(self):
         metrics = WorkerMetrics()
         for order in (("outer", "inner"), ("inner", "outer")):
             with self.subTest(order=order):
                 metrics.reset()
-                metrics.subtract_duration_at_report(total_metric="outer", nested_metric="inner")
+                metrics.record_sub_duration(parent_metric="outer", sub_metric="inner")
                 self.assertEqual(metrics.to_dict(), {})
                 durations = {"outer": 3_100_000, "inner": 1_900_000}
                 for name in order:
                     metrics.measure(name).add_duration_ns(durations[name])
+                    if name == "outer" and order[0] == "outer":
+                        self.assertEqual(metrics.to_dict(), {"outer": 3})
                     if name == "inner" and order[0] == "inner":
                         self.assertEqual(metrics.to_dict(), {"inner": 1})
                 self.assertEqual(metrics.to_dict(), {"outer": 1, "inner": 1})
