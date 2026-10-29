@@ -663,11 +663,17 @@ abstract class InMemoryBaseTable(
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
+      val dataColumns = new mutable.ArrayBuffer[StructField]()
       readSchema.foreach {
         case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
-        case _ =>
+        case field => dataColumns += field
       }
-      new InMemoryMicroBatchReaderFactory(metadataColNames.toArray)
+      // The data columns that the scan reads, which Spark may prune, by their position in the
+      // rows of the table.
+      val dataOrdinals = dataColumns.map(field => tableSchema.fieldIndex(field.name)).toArray
+      new InMemoryMicroBatchReaderFactory(
+        metadataColNames.toArray, dataOrdinals, dataColumns.map(_.dataType).toArray,
+        dataOrdinals.toSeq == tableSchema.indices)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
@@ -1216,15 +1222,29 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   def clear(): Unit = rows.clear()
 }
 
+/**
+ * @param dataOrdinals the positions in the rows of the table of the data columns to read
+ * @param readsAllColumns whether these are all the columns of the table, in their order
+ */
 private class InMemoryMicroBatchReaderFactory(
-    metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
+    metaNames: Array[String],
+    dataOrdinals: Array[Int],
+    dataTypes: Array[DataType],
+    readsAllColumns: Boolean) extends PartitionReaderFactory with Serializable {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
     new PartitionReader[InternalRow] {
       private var idx = -1
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
-        val rawRow = rows(idx)
+        val tableRow = rows(idx)
+        val rawRow = if (readsAllColumns) {
+          tableRow
+        } else {
+          new GenericInternalRow(dataOrdinals.indices.map { i =>
+            tableRow.get(dataOrdinals(i), dataTypes(i))
+          }.toArray[Any])
+        }
         if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {

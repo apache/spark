@@ -6193,6 +6193,16 @@ object SQLConf {
       .stringConf
       .createWithDefault("")
 
+  val STREAMING_V2_COLUMN_PRUNING_ENABLED =
+    buildConf("spark.sql.streaming.v2ColumnPruning.enabled")
+      .internal()
+      .doc("When true, the scan of a Data Source V2 streaming source that supports column " +
+        "pruning only reads the top-level columns that the streaming query needs, as for batch " +
+        "scans. When false, it reads all the columns of the source.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val DISABLE_MAP_KEY_NORMALIZATION =
     buildConf("spark.sql.legacy.disableMapKeyNormalization")
       .internal()
@@ -10180,6 +10190,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def disabledV2StreamingMicroBatchReaders: String =
     getConf(DISABLED_V2_STREAMING_MICROBATCH_READERS)
+
+  def streamingV2ColumnPruningEnabled: Boolean = getConf(STREAMING_V2_COLUMN_PRUNING_ENABLED)
 
   def fastFailFileFormatOutput: Boolean = getConf(FASTFAIL_ON_FILEFORMAT_OUTPUT)
 

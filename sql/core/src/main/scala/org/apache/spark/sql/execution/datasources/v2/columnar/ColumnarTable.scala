@@ -95,7 +95,8 @@ class ColumnarScanBuilder(
   private var pushedLimit: Option[Int] = None
   // The limit passed to the reader, and whether the reader applies it.
   private var limitResult: Option[(Int, Boolean)] = None
-  private var readSchema: StructType = schema
+  // The top-level columns that the query needs, if fewer than those of the schema.
+  private var requiredSchema: Option[StructType] = None
 
   private def batchPlanner: ColumnarBatchPlanner = {
     if (planner == null) {
@@ -123,39 +124,56 @@ class ColumnarScanBuilder(
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // Only top-level columns are pruned by the data source. Spark prunes the nested fields of the
-    // columns it reads.
+    // columns it reads. The scan asks the reader to prune them, since a streaming scan, which
+    // Spark also prunes, has no batch planner.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
-    if (required.length < schema.length && batchPlanner.pruneColumns(required)) {
-      readSchema = required
+    if (required.length < schema.length) {
+      this.requiredSchema = Some(required)
     }
   }
 
   // The scan takes over the planner, so it is built once.
   private lazy val scan = new ColumnarScan(
-    shortName, schema, readSchema, dataSource, Option(planner), pushedLimit)
+    shortName, schema, requiredSchema, dataSource, Option(planner), pushedLimit)
 
   override def build(): Scan = scan
 }
 
 /**
+ * @param requiredSchema the top-level columns that the query needs, if fewer than those of the
+ *                       full schema. A batch scan asks its planner to prune the other columns,
+ *                       while a streaming scan reads all the columns of the full schema, which is
+ *                       the schema that a stream reader gets.
  * @param pushedDownPlanner the planner that the operations were pushed down to, if any. Otherwise,
- *                          the scan creates one when its batch is planned.
+ *                          the scan creates one when its batch is planned or pruned.
  */
 class ColumnarScan(
     shortName: String,
     fullSchema: StructType,
-    prunedSchema: StructType,
+    requiredSchema: Option[StructType],
     dataSource: ColumnarDataSource,
     pushedDownPlanner: Option[ColumnarBatchPlanner],
     pushedLimit: Option[Int])
   extends Scan with SupportsMetadata {
 
-  // Spark may call `toBatch` more than once for the same scan; the partitions are planned once.
-  private lazy val batch = new ColumnarBatchScan(
-    pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema)))
+  private lazy val planner = pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema))
 
-  override def readSchema(): StructType = prunedSchema
+  // The columns that the batch reads: the required ones if the planner prunes the others.
+  private lazy val batchSchema = requiredSchema.filter(planner.pruneColumns).getOrElse(fullSchema)
+
+  // Spark may call `toBatch` more than once for the same scan; the partitions are planned once,
+  // after the columns are pruned.
+  private lazy val batch = {
+    batchSchema
+    new ColumnarBatchScan(planner)
+  }
+
+  // Whether the scan is the one of a micro-batch stream, which Spark asks for its read schema
+  // after it creates the stream.
+  @volatile private var streaming = false
+
+  override def readSchema(): StructType = if (streaming) fullSchema else batchSchema
 
   override def description(): String = shortName
 
@@ -165,11 +183,12 @@ class ColumnarScan(
   override def toBatch: Batch = batch
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
+    streaming = true
     new ColumnarMicroBatchStream(dataSource.streamReader(fullSchema))
   }
 
   override def getMetaData(): Map[String, String] = {
-    Map("ReadSchema" -> prunedSchema.simpleString) ++
+    Map("ReadSchema" -> readSchema().simpleString) ++
       pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit")
   }
 }
