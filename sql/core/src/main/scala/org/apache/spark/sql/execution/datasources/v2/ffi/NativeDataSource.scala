@@ -20,6 +20,7 @@ import java.lang.ref.{Cleaner, WeakReference}
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import java.util.function.BooleanSupplier
 
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
@@ -36,10 +37,10 @@ import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperati
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, SupportsArrowStreamRead}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, SupportsArrowStreamRead}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarArrowStreamReader, ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamPartitionReaderFactory, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -306,7 +307,7 @@ class NativePartitionReaderFactory(
   extends ColumnarOnlyPartitionReaderFactory with SupportsArrowStreamRead {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(location, name, NativeLibrary.READ_BATCH, readerState,
-      partition.asInstanceOf[NativeInputPartition].bytes, readSchema, timeZoneId)
+      partition.asInstanceOf[NativeInputPartition], readSchema, timeZoneId)
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
@@ -326,7 +327,7 @@ class NativeDataSourceStreamReader(
     schema: StructType,
     timeZoneId: String,
     @transient private val handle: NativeHandle)
-  extends ColumnarArrowStreamReader {
+  extends ColumnarStreamReader {
   import NativeCalls._
 
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
@@ -376,12 +377,17 @@ class NativeDataSourceStreamReader(
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH, readerState,
-      partition.asInstanceOf[NativeInputPartition].bytes, schema, timeZoneId)
+      partition.asInstanceOf[NativeInputPartition], schema, timeZoneId)
   }
 
-  override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
-    NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
-      readerState, partition, schema, timeZoneId, streamAddress)
+  // An engine can also get the Arrow C stream of a partition, see [[SupportsArrowStreamRead]].
+  override def readerFactory(): PartitionReaderFactory = {
+    new ColumnarStreamPartitionReaderFactory(this) with SupportsArrowStreamRead {
+      override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+        NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
+          readerState, partition, schema, timeZoneId, streamAddress)
+      }
+    }
   }
 
   override def commit(end: String): Unit = {
@@ -502,6 +508,7 @@ object NativeWriterCommitMessage {
  * library is checked, and imported into the Arrow vectors that back the returned batch.
  *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
+ * @param partition the partition, whose index in the scan the library gets as `partition_id`
  * @param schema the schema to read
  * @param timeZoneId the time zone of the timestamps of the schema to read, as the reader of the
  *                   library got it on the driver
@@ -511,7 +518,7 @@ class NativePartitionReader(
     name: String,
     kind: Int,
     readerState: Array[Byte],
-    partition: Array[Byte],
+    partition: NativeInputPartition,
     schema: StructType,
     timeZoneId: String)
   extends PartitionReader[ColumnarBatch] {
@@ -890,12 +897,11 @@ object NativePartitionReader {
       throw new IllegalArgumentException(
         "openArrowStream needs the address of a stream whose release callback is NULL.")
     }
-    val nativePartition = partition.asInstanceOf[NativeInputPartition]
-    // The partition of the scan: the task of an engine may read others than its own.
-    val task = openStream(location, name, kind, readerState, nativePartition.bytes, schema,
-      timeZoneId, streamAddress, Some(nativePartition.index), mayOutliveTask = true)
+    val task = openStream(location, name, kind, readerState,
+      partition.asInstanceOf[NativeInputPartition], schema, timeZoneId, streamAddress,
+      mayOutliveTask = true)
     try {
-      NativeLibrary.wrapEngineStream(streamAddress, task)
+      NativeLibrary.wrapEngineStream(streamAddress, task, name)
     } catch {
       case e: Throwable =>
         releaseOnFailure(e, streamAddress, task)
@@ -909,8 +915,9 @@ object NativePartitionReader {
    * of the task, which the library may use until the stream is released: it is closed then. If
    * this fails, the stream is released.
    *
-   * @param partitionId the index of the partition in the scan, by default the partition of the
-   *                    task
+   * @param partition the partition, whose index in the scan the library gets as `partition_id`,
+   *                  rather than the partition of the task: a task may read several partitions of
+   *                  a scan, or of several scans, as after a coalesce or a union
    * @param mayOutliveTask whether an engine may read the stream after the task ended, see
    *                       `NativeTask.create`
    */
@@ -919,19 +926,18 @@ object NativePartitionReader {
       name: String,
       kind: Int,
       readerState: Array[Byte],
-      partition: Array[Byte],
+      partition: NativeInputPartition,
       schema: StructType,
       timeZoneId: String,
       streamAddress: Long,
-      partitionId: Option[Int] = None,
       mayOutliveTask: Boolean = false): NativeLibrary.Task = {
     val library = NativeLibraries.get(location)
     val stream = ArrowArrayStream.wrap(streamAddress)
-    val task = NativeTask.create(partitionId, mayOutliveTask = mayOutliveTask)
+    val task = NativeTask.create(Some(partition.index), mayOutliveTask = mayOutliveTask)
     try {
       NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
         call(name, "read") {
-          library.read(task, kind, schemaAddress, readerState, partition, streamAddress)
+          library.read(task, kind, schemaAddress, readerState, partition.bytes, streamAddress)
         }
       }
       // Arrow calls the callbacks of the stream without checking them, and calling NULL would
@@ -1060,8 +1066,8 @@ class NativeDataWriter(
 /** Creates the `SparkDsTaskContext` of the running task. */
 private[ffi] object NativeTask {
   /**
-   * @param partitionId the partition that the task reads or writes, by default the partition of
-   *                    the task
+   * @param partitionId the `partition_id` of the context: the index of the partition in the scan
+   *                    for a read, and by default the partition of the task
    * @param taskAttemptId the ID of the task attempt, by default the one of the task
    * @param mayOutliveTask whether the library may use the context after the task ended, as for
    *                       the stream of an engine: `is_interrupted` then also reports the end of
@@ -1072,7 +1078,7 @@ private[ffi] object NativeTask {
       taskAttemptId: Option[Long] = None,
       mayOutliveTask: Boolean = false): NativeLibrary.Task = {
     val context = Option(TaskContext.get())
-    val interrupted: () => Boolean = if (mayOutliveTask) {
+    val interrupted: BooleanSupplier = if (mayOutliveTask) {
       val task = new WeakReference(context.orNull)
       () => Option(task.get()).forall(t => t.isInterrupted() || t.isFailed() || t.isCompleted())
     } else {
@@ -1084,7 +1090,7 @@ private[ffi] object NativeTask {
       partitionId.orElse(context.map(_.partitionId())).getOrElse(-1),
       context.map(_.attemptNumber()).getOrElse(0),
       taskAttemptId.orElse(context.map(_.taskAttemptId())).getOrElse(-1L),
-      () => interrupted())
+      interrupted)
   }
 }
 

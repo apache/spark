@@ -1332,6 +1332,29 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .mode("append")
       .save()
     check(writeTasks)
+
+    // A read gets the index of its partition in the scan, also when a task reads several
+    // partitions, or the partitions of several scans: the task attempt that read each partition.
+    def readers(dir: File): Map[Int, Long] = dir.listFiles().map { file =>
+      file.getName.toInt -> Files.readString(file.toPath).split(",")(5).toLong
+    }.toMap
+    val (first, second) = (Utils.createTempDir(), Utils.createTempDir())
+    checkRows(
+      range(session, "end" -> "6", "task_path" -> first.getPath).select("id")
+        .union(range(session, "end" -> "6", "task_path" -> second.getPath).select("id")),
+      (0L until 6L).flatMap(i => Seq(Row(i), Row(i))))
+    assert(readers(first).keySet == Set(0, 1) && readers(second).keySet == Set(0, 1))
+    val coalesced = Utils.createTempDir()
+    checkRows(range(session, "end" -> "6", "task_path" -> coalesced.getPath).select("id")
+      .coalesce(1), (0L until 6L).map(Row(_)))
+    assert(readers(coalesced).keySet == Set(0, 1) && readers(coalesced).values.toSet.size == 1)
+    // So does a read of a micro-batch.
+    val (firstStream, secondStream) = (Utils.createTempDir(), Utils.createTempDir())
+    def counter(dir: File): DataFrame = session.readStream.format("native_counter")
+      .option("max_offset", "4").option("task_path", dir.getPath).load()
+    val query = counter(firstStream).union(counter(secondStream)).writeStream.format("noop").start()
+    try query.processAllAvailable() finally query.stop()
+    assert(readers(firstStream).keySet == Set(0) && readers(secondStream).keySet == Set(0))
   }
 
   nativeTest("open the partitions of a batch scan as Arrow C streams") {
@@ -1347,29 +1370,33 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       session.sparkContext.parallelize(Seq(0), 1).map(_ => f).collect().head
     }
     import TestArrowEngine.readIds
+    // Reads the given partitions in a single task, as an engine does.
+    def readAll(factory: SupportsArrowStreamRead, partitions: Seq[InputPartition]): Seq[Long] = {
+      inTask {
+        partitions.flatMap { partition =>
+          val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+          try {
+            val stream = ArrowArrayStream.allocateNew(allocator)
+            try factory.openArrowStream(partition, stream.memoryAddress()) catch {
+              case e: Throwable =>
+                stream.close()
+                throw e
+            }
+            readIds(stream, allocator)
+          } finally {
+            allocator.close()
+          }
+        }
+      }
+    }
+    val openContexts = NativeLibrary.openTaskContexts()
 
     // An engine reads both partitions of the scan in a single task.
     val taskDir = Utils.createTempDir()
     val (factory, partitions) =
       plannedScan(range(session, "end" -> "6", "task_path" -> taskDir.getPath).select("id"))
     assert(partitions.length == 2)
-    val ids = inTask {
-      partitions.flatMap { partition =>
-        val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
-        try {
-          val stream = ArrowArrayStream.allocateNew(allocator)
-          try factory.openArrowStream(partition, stream.memoryAddress()) catch {
-            case e: Throwable =>
-              stream.close()
-              throw e
-          }
-          readIds(stream, allocator)
-        } finally {
-          allocator.close()
-        }
-      }
-    }
-    assert(ids.sorted == (0L until 6L))
+    assert(readAll(factory, partitions).sorted == (0L until 6L))
     // The library got the partition of the scan that it reads, not the one of the task.
     val tasks = taskDir.listFiles().map { file =>
       file.getName.toInt -> Files.readString(file.toPath).split(",").map(_.toLong).toSeq
@@ -1389,7 +1416,6 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       factory.openArrowStream(partition, stream)
       stream
     }
-    val openContexts = NativeLibrary.openTaskContexts()
     val address = openInTask(laterFactory, laterPartitions.head)
     assert(NativeLibrary.openEngineStreams() == 1 && !released.exists())
     assert(NativeLibrary.openTaskContexts() == openContexts + 1)
@@ -1410,6 +1436,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(Utils.exceptionString(error).contains("the task was killed"))
     assert(Files.readString(marker.toPath) == "interrupted")
     assert(NativeLibrary.openEngineStreams() == 0)
+    assert(NativeLibrary.openTaskContexts() == openContexts)
     Platform.freeMemory(waiting)
 
     // So does the reader factory of a micro-batch scan, with the state of its stream reader.
@@ -1423,24 +1450,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       query.stop()
     }
     val streamFactory = microBatchScan.readerFactory.asInstanceOf[SupportsArrowStreamRead]
-    val streamPartitions = microBatchScan.inputPartitions
-    val streamIds = inTask {
-      streamPartitions.flatMap { partition =>
-        val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
-        try {
-          val stream = ArrowArrayStream.allocateNew(allocator)
-          try streamFactory.openArrowStream(partition, stream.memoryAddress()) catch {
-            case e: Throwable =>
-              stream.close()
-              throw e
-          }
-          readIds(stream, allocator)
-        } finally {
-          allocator.close()
-        }
-      }
-    }
-    assert(streamIds.sorted == (0L until 4L))
+    assert(readAll(streamFactory, microBatchScan.inputPartitions).sorted == (0L until 4L))
     assert(NativeLibrary.openEngineStreams() == 0)
 
     // It runs in a task, with a stream whose release callback is NULL.
@@ -1480,6 +1490,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         parameters = Map("action" -> "read", "name" -> "native_range", "msg" -> msg))
       assert(failReleased.exists() == (fail == "null_get_next"), fail)
       assert(NativeLibrary.openEngineStreams() == 0)
+      assert(NativeLibrary.openTaskContexts() == openContexts, fail)
     }
   }
 

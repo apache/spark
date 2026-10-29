@@ -134,18 +134,18 @@ trait ColumnarStreamReader extends Serializable {
 
   def read(partition: InputPartition): PartitionReader[ColumnarBatch]
 
+  /**
+   * Returns the reader factory of a micro-batch, which Spark serializes to the executors with this
+   * reader. By default, it reads each partition with `read`. A reader may return a factory that
+   * also implements other interfaces of reader factories, such as
+   * `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`.
+   */
+  def readerFactory(): PartitionReaderFactory = new ColumnarStreamPartitionReaderFactory(this)
+
   /** Tells the data source that Spark has processed all the data up to and including `end`. */
   def commit(end: String): Unit = {}
 
   def stop(): Unit = {}
-}
-
-/**
- * A [[ColumnarStreamReader]] that can also read a partition as an Arrow C stream, for the reader
- * factory of its micro-batches: see `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`.
- */
-trait ColumnarArrowStreamReader extends ColumnarStreamReader {
-  def openArrowStream(partition: InputPartition, streamAddress: Long): Unit
 }
 
 /**

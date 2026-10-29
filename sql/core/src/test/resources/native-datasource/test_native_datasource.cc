@@ -1039,7 +1039,7 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "closed_path", "starts_path", "initial_offsets_path",
-          "states"}) {
+          "states", "task_path"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;

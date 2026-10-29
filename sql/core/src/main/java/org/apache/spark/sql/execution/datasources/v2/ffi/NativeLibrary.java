@@ -517,15 +517,7 @@ final class NativeLibrary {
       MethodHandle handle = (MethodHandle) DOWNCALL.invoke(
         LINKER, address, descriptor(result, parameters), NO_OPTIONS);
       // Passes and returns the pointers, which are MemorySegments in the FFM API, as addresses.
-      for (int i = 0; i < parameters.length; i++) {
-        if (parameters[i] == C.PTR) {
-          handle = MethodHandles.filterArguments(handle, i, OF_ADDRESS);
-        }
-      }
-      if (result == C.PTR) {
-        handle = MethodHandles.filterReturnValue(handle, ADDRESS_OF);
-      }
-      return handle;
+      return convertPointers(handle, 0, OF_ADDRESS, ADDRESS_OF, result, parameters);
     }
 
     /**
@@ -536,15 +528,7 @@ final class NativeLibrary {
       MethodHandle handle = (MethodHandle) UNBOUND_DOWNCALL.invoke(
         LINKER, descriptor(result, parameters), NO_OPTIONS);
       handle = MethodHandles.filterArguments(handle, 0, OF_ADDRESS);
-      for (int i = 0; i < parameters.length; i++) {
-        if (parameters[i] == C.PTR) {
-          handle = MethodHandles.filterArguments(handle, i + 1, OF_ADDRESS);
-        }
-      }
-      if (result == C.PTR) {
-        handle = MethodHandles.filterReturnValue(handle, ADDRESS_OF);
-      }
-      return handle;
+      return convertPointers(handle, 1, OF_ADDRESS, ADDRESS_OF, result, parameters);
     }
 
     /**
@@ -553,17 +537,33 @@ final class NativeLibrary {
      * function lives as long as the JVM.
      */
     static long upcall(MethodHandle target, C result, C... parameters) throws Throwable {
-      for (int i = 0; i < parameters.length; i++) {
-        if (parameters[i] == C.PTR) {
-          target = MethodHandles.filterArguments(target, i, ADDRESS_OF);
-        }
-      }
-      if (result == C.PTR) {
-        target = MethodHandles.filterReturnValue(target, OF_ADDRESS);
-      }
+      target = convertPointers(target, 0, ADDRESS_OF, OF_ADDRESS, result, parameters);
       Object stub = UPCALL.invoke(
         LINKER, target, descriptor(result, parameters), GLOBAL_ARENA, NO_OPTIONS);
       return (long) ADDRESS_OF.invoke(stub);
+    }
+
+    /**
+     * Applies `parameterFilter` to the parameters of `handle` that are pointers, the C parameters
+     * starting at the parameter `first`, and `resultFilter` to a result that is a pointer: a
+     * downcall converts the addresses to MemorySegments and back, and an upcall the other way.
+     */
+    static MethodHandle convertPointers(
+        MethodHandle handle,
+        int first,
+        MethodHandle parameterFilter,
+        MethodHandle resultFilter,
+        C result,
+        C... parameters) {
+      for (int i = 0; i < parameters.length; i++) {
+        if (parameters[i] == C.PTR) {
+          handle = MethodHandles.filterArguments(handle, first + i, parameterFilter);
+        }
+      }
+      if (result == C.PTR) {
+        handle = MethodHandles.filterReturnValue(handle, resultFilter);
+      }
+      return handle;
     }
 
     /**
@@ -572,11 +572,7 @@ final class NativeLibrary {
      */
     static long host(String path, String sparkVersion) throws Throwable {
       long log = upcall(MethodHandles.insertArguments(LOG, 0, path), C.VOID, C.I32, C.PTR);
-      byte[] version = sparkVersion.getBytes(StandardCharsets.UTF_8);
-      long versionAddress = Platform.allocateMemory(version.length + 1L);
-      Platform.copyMemory(
-        version, Platform.BYTE_ARRAY_OFFSET, null, versionAddress, version.length);
-      Platform.putByte(null, versionAddress + version.length, (byte) 0);
+      long versionAddress = toCString(sparkVersion);
       long host = Platform.allocateMemory(HOST_SIZE);
       Platform.setMemory(host, (byte) 0, HOST_SIZE);
       Platform.putLong(null, host, HOST_SIZE);
@@ -1075,9 +1071,8 @@ final class NativeLibrary {
 
     /** Copies the string as a NUL-terminated UTF-8 string. */
     long string(String value) {
-      byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-      long address = zeroed(bytes.length + 1L);
-      Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
+      long address = toCString(value);
+      allocations.add(address);
       return address;
     }
 
@@ -1094,6 +1089,15 @@ final class NativeLibrary {
     public void close() {
       allocations.forEach(Platform::freeMemory);
     }
+  }
+
+  /** Copies a string to native memory, as a NUL-terminated UTF-8 string, which the caller frees. */
+  private static long toCString(String value) {
+    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
+    long address = Platform.allocateMemory(bytes.length + 1L);
+    Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
+    Platform.putByte(null, address + bytes.length, (byte) 0);
+    return address;
   }
 
   private static byte[] readCString(long address) {
@@ -1166,6 +1170,11 @@ final class NativeLibrary {
     }
   }
 
+  /** The number of task contexts that are not closed yet, for tests. */
+  static int openTaskContexts() {
+    return tasks.size();
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Streams of engines
   // ---------------------------------------------------------------------------------------------
@@ -1201,13 +1210,16 @@ final class NativeLibrary {
   private static final class EngineStream {
     final long inner;
     final Task task;
+    // The name of the data source, for the errors.
+    final String name;
     // The message of the last error of Spark, rather than of the library, or 0 if the last call
     // returned an error of the library, or none. The callbacks never run concurrently.
     long sparkError;
 
-    EngineStream(long inner, Task task) {
+    EngineStream(long inner, Task task, String name) {
       this.inner = inner;
       this.task = task;
+      this.name = name;
     }
 
     long callback(long offset) {
@@ -1234,24 +1246,24 @@ final class NativeLibrary {
     }
   }
 
-  /** Copies a string to native memory, as a NUL-terminated UTF-8 string, which the caller frees. */
-  private static long toCString(String value) {
-    byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-    long address = Platform.allocateMemory(bytes.length + 1);
-    Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
-    Platform.putByte(null, address + bytes.length, (byte) 0);
-    return address;
-  }
-
   /**
    * Wraps the stream at the given address, which read initialized with non-NULL callbacks, so that
-   * releasing it closes the given task context (see {@link EngineStream}).
+   * releasing it closes the given task context (see {@link EngineStream}). If it fails, the stream
+   * is left as it is.
+   *
+   * @param name the name of the data source, for the errors of the stream
    */
-  static void wrapEngineStream(long stream, Task task) {
+  static void wrapEngineStream(long stream, Task task, String name) {
     long inner = Platform.allocateMemory(STREAM_SIZE);
-    Platform.copyMemory(null, stream, null, inner, STREAM_SIZE);
     long id = nextEngineStreamId.getAndIncrement();
-    engineStreams.put(id, new EngineStream(inner, task));
+    try {
+      Platform.copyMemory(null, stream, null, inner, STREAM_SIZE);
+      engineStreams.put(id, new EngineStream(inner, task, name));
+    } catch (Throwable e) {
+      engineStreams.remove(id);
+      Platform.freeMemory(inner);
+      throw e;
+    }
     Platform.putLong(null, stream + STREAM_GET_SCHEMA, Ffm.ENGINE_STREAM_GET_SCHEMA);
     Platform.putLong(null, stream + STREAM_GET_NEXT, Ffm.ENGINE_STREAM_GET_NEXT);
     Platform.putLong(null, stream + STREAM_GET_LAST_ERROR, Ffm.ENGINE_STREAM_GET_LAST_ERROR);
@@ -1262,11 +1274,6 @@ final class NativeLibrary {
   /** The number of streams wrapped for engines that are not released yet, for tests. */
   static int openEngineStreams() {
     return engineStreams.size();
-  }
-
-  /** The number of task contexts that are not closed yet, for tests. */
-  static int openTaskContexts() {
-    return tasks.size();
   }
 
   private static EngineStream engineStream(long stream) {
@@ -1296,7 +1303,8 @@ final class NativeLibrary {
         wrapped.callback(offset), wrapped.inner, out);
     } catch (Throwable e) {
       return wrapped == null ? EIO : wrapped.fail(
-        "The " + callback + " of the stream of a native data source failed", e);
+        "The " + callback + " of the stream of the native data source " + wrapped.name +
+          " failed", e);
     }
   }
 
@@ -1317,9 +1325,9 @@ final class NativeLibrary {
   }
 
   private static void engineStreamRelease(long stream) {
+    EngineStream wrapped = null;
     try {
-      EngineStream wrapped =
-        engineStreams.remove(Platform.getLong(null, stream + STREAM_PRIVATE_DATA));
+      wrapped = engineStreams.remove(Platform.getLong(null, stream + STREAM_PRIVATE_DATA));
       if (wrapped != null) {
         try {
           Ffm.STREAM_VOID_CALLBACK.invokeExact(wrapped.callback(STREAM_RELEASE), wrapped.inner);
@@ -1332,7 +1340,8 @@ final class NativeLibrary {
       }
     } catch (Throwable e) {
       try {
-        LOGGER.error("The release of the stream of a native data source failed.", e);
+        LOGGER.error("The release of the stream of the native data source " +
+          (wrapped == null ? "" : wrapped.name + " ") + "failed.", e);
       } catch (Throwable ignored) {
         // An upcall must not throw.
       }

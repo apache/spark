@@ -379,9 +379,10 @@ typedef struct SparkDsCommitOffsetInfo {
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
  * that read returns is released, or until the data writer is closed. An engine that runs a query
- * in native code may get the stream of read from Spark, and release it once the task ended, from
- * another thread: the task stays valid until then too, and is_interrupted then also returns true
- * once the task failed or completed. Such an engine may also keep the arrays of the stream after
+ * in native code may get the stream of read from Spark. It reads the stream in the task that
+ * opened it, but may release it once the task ended, from another thread: the task stays valid
+ * until then too, and is_interrupted then also returns true once the task failed or completed, so
+ * the library may stop reading then. Such an engine may also keep the arrays of the stream after
  * it released the stream, so the release of an array must not use the stream or the task.
  */
 typedef struct SparkDsTaskContext {
@@ -390,15 +391,22 @@ typedef struct SparkDsTaskContext {
   /* The ID of the stage of the task, and the attempt number of the stage. */
   int32_t stage_id;
   int32_t stage_attempt_number;
-  /* The partition that the task reads or writes, and the attempt number of the task. */
+  /*
+   * The partition: for read, the index of the partition in the list that partitions or
+   * stream_partitions returned, which is not the partition of the task when Spark reads several
+   * scans or partitions in one task, for example after a union or a coalesce. For
+   * create_data_writer, the partition of the task that writes. Then the attempt number of the
+   * task.
+   */
   int32_t partition_id;
   int32_t attempt_number;
   /* The ID of the task attempt, unique in the Spark application. */
   int64_t task_attempt_id;
   /*
-   * Returns whether the task was killed, for example because its query was canceled. Spark cannot
-   * interrupt native code, so a read or a write that runs for long, or blocks, should check it
-   * regularly, and fail once it is true.
+   * Returns whether the task was killed, for example because its query was canceled, and for the
+   * stream of an engine, also whether the task failed or completed. Spark cannot interrupt native
+   * code, so a read or a write that runs for long, or blocks, should check it regularly, and fail
+   * once it is true.
    */
   bool (*is_interrupted)(const struct SparkDsTaskContext* task);
 } SparkDsTaskContext;

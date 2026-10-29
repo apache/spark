@@ -174,8 +174,10 @@ to, but it cannot check that the buffers of the arrays hold those values, becaus
 interface does not carry the sizes of buffers: a library that exports a buffer that is too short
 makes Spark read past its end.
 
-`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, and its
-partition and attempt, and an `is_interrupted` function that returns whether the task was killed,
+`read` and `create_data_writer` get a `SparkDsTaskContext`, with the IDs of the task, its
+attempt, and the partition: for `read`, the index of the partition in the list that the planning
+returned, and for `create_data_writer`, the partition of the task. It also has an `is_interrupted`
+function that returns whether the task was killed,
 for example because its query was canceled. Spark cannot interrupt native code: when a task is
 killed, Spark stops reading only once the `get_next` function of the stream returns. So a read or
 a write that runs for long, or blocks, for example on network I/O, should check `is_interrupted`
@@ -248,8 +250,10 @@ DataFusion Comet, can read a native data source without Spark importing its data
 reader factory of a batch or micro-batch scan of a native data source implements
 `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
 `openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
-`read` returns. The engine owns the stream, and releases it, also after the task ended: Spark
-frees the `SparkDsTaskContext` of the read once the library released its stream. The callbacks
+`read` returns. The engine reads the stream in the task that opened it, and owns and releases the
+stream, which it may do after the task ended: Spark frees the `SparkDsTaskContext` of the read
+once the library released its stream. Once the task ended, `is_interrupted` returns true, so the
+library may stop reading then. The callbacks
 of the stream can be called from any thread, but never concurrently.
 Spark does not check the arrays of such a stream, unlike the streams that it reads itself, so the
 engine checks what its import of the arrays requires.
