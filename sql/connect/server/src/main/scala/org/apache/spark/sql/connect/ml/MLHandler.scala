@@ -123,7 +123,14 @@ private[connect] object MLHandler extends Logging {
     val transformerClasses = MLUtils.loadOperators(classOf[Transformer])
     val estimatorClasses = MLUtils.loadOperators(classOf[Estimator[_]])
     val evaluatorClasses = MLUtils.loadOperators(classOf[Evaluator])
-    transformerClasses ++ estimatorClasses ++ evaluatorClasses ++ Map(
+    // RFormulaModel saves these internal stages, which lack the no-argument constructors
+    // required by ServiceLoader.
+    val internalTransformerClasses = Seq(
+      "org.apache.spark.ml.feature.ColumnPruner",
+      "org.apache.spark.ml.feature.VectorAttributeRewriter")
+      .map(name => name -> Utils.classForName(name))
+      .toMap
+    transformerClasses ++ estimatorClasses ++ evaluatorClasses ++ internalTransformerClasses ++ Map(
       "org.apache.spark.ml.clustering.PowerIterationClustering" ->
         classOf[org.apache.spark.ml.clustering.PowerIterationClustering])
   }
