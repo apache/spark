@@ -293,7 +293,9 @@ trait GraphValidations extends Logging {
         val schemasMatch = if (flows.exists(GraphElementTypeUtils.isAutoCdcFlow)) {
           // Reject a malformed declared reserved column (unknown/typo'd, case-duplicate, or an
           // unknown nested field) with a user-facing error before the strip-and-compare below hides
-          // it, so the materialization and read-path reconcilers can assume a well-formed shape.
+          // it, so the materialization reconciler can assume a well-formed shape. The same-graph
+          // read path runs earlier, during flow analysis, so VirtualTableInput.load makes this same
+          // check itself rather than relying on this pass.
           // Validate against the flow-only inferred schema (userSpecifiedSchema = None): the merged
           // `inferredSchema` above already folds the declaration's reserved column in, so a junk
           // nested field would appear on both sides and escape detection.

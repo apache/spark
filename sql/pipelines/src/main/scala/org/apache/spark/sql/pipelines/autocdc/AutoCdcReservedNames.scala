@@ -78,6 +78,9 @@ private[pipelines] object AutoCdcReservedNames {
    * The engine-owned reserved fields are made nullable so a target created from a declared schema
    * matches one created from an omitted schema (that path materializes the inferred schema
    * `asNullable`), avoiding a spurious nullability diff when a declaration is added or removed.
+   * This deliberately overrides a `NOT NULL` a declaration might place on the engine-owned reserved
+   * column: parity between the declared and omitted paths is what the omit-the-column capability
+   * rests on, and the column is engine-written bookkeeping the user does not populate.
    */
   private[pipelines] def appendEngineOwnedReservedFields(
       declaredSchema: StructType,
@@ -125,14 +128,16 @@ private[pipelines] object AutoCdcReservedNames {
 
   /**
    * Reject a declared AUTO CDC target schema whose reserved metadata column(s) are shaped in a way
-   * reconciliation cannot honor, so `appendEngineOwnedReservedFields`, the read path, and the
-   * casing-drift check can assume a well-formed declaration instead of a guard elsewhere.
-   * Run this from schema validation (`GraphValidations.validateUserSpecifiedSchemas`) before
-   * materialization. Recursively through structs and array-of-struct elements it throws a
-   * user-facing `AnalysisException` when a declared reserved-prefixed field has no engine-owned
-   * counterpart (a typo or an extra reserved-namespace column), when two declared fields resolve to
-   * one engine field, or when a declared nested field under a reserved column is not one the engine
-   * produces.
+   * reconciliation cannot honor, so `appendEngineOwnedReservedFields` and the casing-drift check
+   * can assume a well-formed declaration instead of a guard elsewhere. Both callers that
+   * reconcile run this first: `GraphValidations.validateUserSpecifiedSchemas` before
+   * materialization, and
+   * `VirtualTableInput.load` on the same-graph read path, which runs during flow analysis -- before
+   * graph validation -- and so must validate the declaration itself rather than rely on that later
+   * pass. Recursively through structs and array-of-struct elements it throws a user-facing
+   * `AnalysisException` when a declared reserved-prefixed field has no engine-owned counterpart (a
+   * typo or an extra reserved-namespace column), when two declared fields resolve to one engine
+   * field, or when a declared nested field under a reserved column is not one the engine produces.
    */
   private[pipelines] def validateDeclaredReservedFields(
       tableName: String,

@@ -90,8 +90,9 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
       flowName: String,
       declaredSchema: Option[StructType],
       scdType: ScdType = ScdType.Type1,
-      sequencing: Column = functions.col("version")): DataflowGraph = {
-    val ctx = new TestGraphRegistrationContext(spark)
+      sequencing: Column = functions.col("version"),
+      confs: Map[String, String] = Map.empty): DataflowGraph = {
+    val ctx = new TestGraphRegistrationContext(spark, confs)
     ctx.registerTable("target", specifiedSchema = declaredSchema)
     ctx.registerFlow(AutoCdcFlow(
       identifier = fullyQualifiedIdentifier(flowName),
@@ -253,8 +254,9 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
 
   test("a user-specified schema that declares the reserved metadata column with the wrong " +
     "type is rejected for an AUTO CDC flow") {
-    // Declaring the engine-owned metadata column is allowed, but only with the shape the engine
-    // produces. A conflicting type is caught when the declared schema is merged with the inferred
+    // Declaring the engine-owned metadata column is allowed, and a partial or reordered nested
+    // shape is normalized to the engine's -- but a bare conflicting type (here STRING where the
+    // engine produces a struct) is caught when the declared schema is merged with the inferred
     // one, before the AUTO CDC MERGE ever runs, so the target can never be created with a
     // malformed metadata column.
     val wrongTypeMetadata = StructType(
@@ -301,6 +303,24 @@ class UserSpecifiedSchemaValidationSuite extends PipelineTest with SharedSparkSe
     val ex = intercept[AnalysisException](
       validateGraph(autoCdcGraph("auto_cdc_flow", Some(schema))))
     assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.DUPLICATE_COLUMN")
+  }
+
+  test("a reserved-prefixed column is matched with the flow's case sensitivity, not the " +
+    "session's") {
+    // Discriminates the flow-effective resolver from the session one. The session is case-sensitive
+    // while the flow sets spark.sql.caseSensitive=false, and the declaration carries an upper-cased
+    // reserved-prefixed column the engine never produces. Only the flow's case-insensitive resolver
+    // recognizes `__SPARK_AUTOCDC_BOGUS` as reserved and rejects it as UNKNOWN_COLUMN; the
+    // session's case-sensitive resolver would miss the lower-case prefix and the column would fall
+    // through to a plain schema-mismatch error, so this pins that reserved-field validation uses
+    // the flow's resolver (as the rest of AUTO CDC does), not the session default.
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "true") {
+      val bogus = s"${AutoCdcReservedNames.prefix}bogus".toUpperCase(java.util.Locale.ROOT)
+      val schema = StructType(dataSchema.fields :+ StructField(bogus, IntegerType))
+      val ex = intercept[AnalysisException](validateGraph(autoCdcGraph(
+        "auto_cdc_flow", Some(schema), confs = Map(SQLConf.CASE_SENSITIVE.key -> "false"))))
+      assert(ex.getCondition == "AUTOCDC_INVALID_RESERVED_SCHEMA.UNKNOWN_COLUMN")
+    }
   }
 
   test("a declared reserved metadata column with an unknown nested field is rejected for an " +

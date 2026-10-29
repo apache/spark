@@ -140,7 +140,7 @@ class AutoCdcReservedColumnMaterializationSuite
     // spark.sql.caseSensitive=true. Under the flow's case-sensitive analysis a user-declared
     // __SPARK_AUTOCDC_METADATA is a genuinely distinct column from the engine's lower-case
     // __spark_autocdc_metadata, so both survive. The engine still owns and writes only the
-    // lower-case column (nullable=false); the user's upper-case column is left unpopulated.
+    // lower-case column (appended nullable); the user's upper-case column is left unpopulated.
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val userColName = AutoCdcReservedNames.cdcMetadataColName.toUpperCase(Locale.ROOT)
       val declaredSchema = new StructType()
@@ -762,15 +762,20 @@ class AutoCdcReservedColumnMaterializationSuite
   test("a partial struct-sequencing declaration supports an incremental re-run and keeps the " +
     "newer row") {
     // SPARK-58118 end-to-end across two runs. SEQUENCE BY yields STRUCT<major, minor>; the reserved
-    // upsertSequence is declared partially (only `minor`). Run 1 creates the target and writes the
-    // newer row; run 2 re-runs with an older event. On the old declared-first order the
-    // target records the sequencing type as STRUCT<minor, major>, which mismatches the flow's
-    // STRUCT<major, minor>, so run 2 fails with AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT. With
-    // engine-order normalization the types agree, the re-run succeeds, and the older event does not
-    // overwrite the newer row. (The intra-run positional mis-pair the ordering guards against --
-    // an older event winning the >= comparison -- needs multiple microbatches in one run against a
-    // this-run-created target, which this one-run-per-microbatch harness cannot express; the
-    // schema-order tests above pin that root cause directly.)
+    // upsertSequence is declared partially (only `minor`). A single MemoryStream is shared across
+    // both runs so the streaming checkpoint resumes cleanly and run 2's event is processed as a
+    // genuine second microbatch against the row run 1 persisted. (A fresh stream per run would make
+    // run 2 re-consume offset 0, which the checkpoint already recorded, so no event would merge and
+    // the final assertion would hold vacuously.)
+    //
+    // Run 1 writes the newer row (major 10). Run 2 delivers an older event (major 9 < 10) that is
+    // actually merged against the persisted row and must lose the sequencing comparison, leaving
+    // the newer row in place. The assertion exercises both halves of the fix: the target records
+    // the sequencing struct in engine order STRUCT<major, minor>, so run 2 does not trip
+    // AUTOCDC_INVALID_STATE.SEQUENCING_TYPE_DRIFT, and that order makes the positional compare pair
+    // major with major, so (9, 100) correctly loses to the persisted (10, 1). On the old
+    // declared-first order the target would record STRUCT<minor, major> and run 2 would fail with
+    // SEQUENCING_TYPE_DRIFT -- the negative control that keeps this test honest.
     val ups = Scd1BatchProcessor.cdcUpsertSequenceFieldName
     val partialUpsert = new StructType().add("minor", LongType)
     val metadataType = new StructType().add(ups, partialUpsert)
@@ -781,10 +786,8 @@ class AutoCdcReservedColumnMaterializationSuite
       .add("minor", LongType)
       .add(AutoCdcReservedNames.cdcMetadataColName, metadataType)
 
-    def buildCtx(
-        rows: Seq[(Int, String, Option[Long], Option[Long])]): TestGraphRegistrationContext = {
-      val stream = MemoryStream[(Int, String, Option[Long], Option[Long])]
-      stream.addData(rows: _*)
+    val stream = MemoryStream[(Int, String, Option[Long], Option[Long])]
+    def buildCtx(): TestGraphRegistrationContext = {
       new TestGraphRegistrationContext(spark) {
         registerTable("target", catalog = Some(catalog), database = Some(namespace),
           specifiedSchema = Some(declaredSchema))
@@ -796,12 +799,12 @@ class AutoCdcReservedColumnMaterializationSuite
     }
 
     // Run 1 writes the newer row: a higher major is newer.
-    runPipeline(buildCtx(Seq((1, "newer", Some(10L), Some(1L)))))
-    // Run 2 delivers an older event (major 9 < 10); it must not overwrite the newer row. On the old
-    // declared-first order the target recorded the sequencing type as STRUCT<minor, major>, so this
-    // re-run is rejected with SEQUENCING_TYPE_DRIFT before any merge runs. With engine-order
-    // normalization the types agree, the merge runs, and the newer row survives.
-    runPipeline(buildCtx(Seq((1, "older", Some(9L), Some(100L)))))
+    stream.addData((1, "newer", Some(10L), Some(1L)))
+    runPipeline(buildCtx())
+    // Run 2 delivers the older event (major 9 < 10) as a second microbatch on the shared stream; it
+    // is merged against the persisted newer row and must not overwrite it.
+    stream.addData((1, "older", Some(9L), Some(100L)))
+    runPipeline(buildCtx())
 
     checkAnswer(
       spark.table(s"$catalog.$namespace.target").select("id", "payload"),
