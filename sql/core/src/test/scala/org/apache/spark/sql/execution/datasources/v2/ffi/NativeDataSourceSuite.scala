@@ -891,31 +891,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("limit the rows of each micro-batch with admission control") {
     val session = newSession(defaultPackage)
-    // Runs the query until it read the rows [0, 12), all available from the start, and returns
-    // the number of rows of each micro-batch and the latest offset that the last one reported.
-    def run(availableNow: Boolean, options: (String, String)*): (Seq[Long], String) = {
+    // Runs the query with a trigger until it read the rows [0, 12), and returns the number of rows
+    // of each micro-batch and the latest offset that the first one reported.
+    def run(trigger: Option[Trigger], options: (String, String)*): (Seq[Long], String) = {
       val writer = session.readStream.format("native_counter").option("max_offset", "12")
         .options(options.toMap).load()
         .writeStream
         .format("noop")
         .option("checkpointLocation", Utils.createTempDir().getPath)
-      val query = (if (availableNow) writer.trigger(Trigger.AvailableNow()) else writer).start()
+      val query = trigger.map(writer.trigger).getOrElse(writer).start()
       try {
-        if (availableNow) query.awaitTermination() else query.processAllAvailable()
+        if (trigger.isDefined) query.awaitTermination() else query.processAllAvailable()
         val batches = query.recentProgress.filter(_.numInputRows > 0).toSeq
-        (batches.map(_.numInputRows), batches.last.sources.head.latestOffset)
+        (batches.map(_.numInputRows), batches.head.sources.head.latestOffset)
       } finally {
         query.stop()
       }
     }
-    // Each micro-batch reads at most 5 rows, while the progress reports the latest offset
-    // without the limit.
-    assert(run(availableNow = false, "max_rows_per_trigger" -> "5") ==
-      ((Seq(5L, 5L, 2L), """{"offset":12}""")))
+    // Each micro-batch reads at most 5 rows, all available from the start, while the progress
+    // reports the latest offset without the limit.
+    assert(run(None, "max_rows_per_trigger" -> "5") == ((Seq(5L, 5L, 2L), """{"offset":12}""")))
     // A run of Trigger.AvailableNow reads the rows available when it starts, within the limit.
-    assert(run(availableNow = true, "max_rows_per_trigger" -> "5")._1 == Seq(5L, 5L, 2L))
+    assert(run(Some(Trigger.AvailableNow()), "max_rows_per_trigger" -> "5")._1 ==
+      Seq(5L, 5L, 2L))
+    // Only the rows [0, 6) are available when the run starts, and native_counter makes 6 more
+    // rows available after each start: the run stops at the end that it got when it started.
+    assert(run(Some(Trigger.AvailableNow()), "max_rows_per_trigger" -> "5", "step" -> "6")._1 ==
+      Seq(5L, 1L))
+    // Trigger.Once ignores the limit, and reads all the available rows in one micro-batch.
+    assert(run(Some(Trigger.Once()), "max_rows_per_trigger" -> "5")._1 == Seq(12L))
     // Without the capability, Spark asks for all the available rows.
-    assert(run(availableNow = false, "max_rows_per_trigger" -> "5",
+    assert(run(None, "max_rows_per_trigger" -> "5",
       "capabilities" -> NativeLibrary.MICRO_BATCH_READ.toString)._1 == Seq(12L))
   }
 

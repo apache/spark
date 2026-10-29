@@ -1127,14 +1127,16 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
     int64_t latest =
         std::min(getLong(state, "max_offset", 10), start + getLong(state, "step", 10));
     // Within the limit, and up to the end of a run of Trigger.AvailableNow.
-    if (info->limit_kind == SPARK_DS_READ_MAX_ROWS) {
-      latest = std::min(latest, start + info->max_rows);
-    } else if (info->limit_kind != SPARK_DS_READ_ALL_AVAILABLE) {
-      throw std::runtime_error("unknown kind of read limit " + std::to_string(info->limit_kind));
+    if (info->limit == nullptr) throw std::runtime_error("no read limit");
+    checkSize("SparkDsReadLimit", info->limit->size, sizeof(SparkDsReadLimit));
+    if (info->limit->kind == SPARK_DS_READ_MAX_ROWS) {
+      latest = std::min(latest, start + info->limit->max_rows);
+    } else if (info->limit->kind != SPARK_DS_READ_ALL_AVAILABLE) {
+      throw std::runtime_error("unknown kind of read limit " + std::to_string(info->limit->kind));
     }
-    if (info->end != nullptr) {
+    if (info->run_end != nullptr) {
       latest = std::min(
-          latest, static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number));
+          latest, static_cast<int64_t>(JsonParser(info->run_end).parse()["offset"].number));
     }
     std::string bad_offset = get(state, "bad_offset", "");
     if (bad_offset == "none") return;

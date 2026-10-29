@@ -266,23 +266,18 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
   override def getDefaultReadLimit: ReadLimit = readLimit
 
   override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
-    def ask(limit: ReadLimit, end: Option[Offset]): Offset =
-      ColumnarStreamOffset(reader.latestOffset(start.json(), limit, end.map(_.json())))
-    val allAvailable = ReadLimit.allAvailable()
-    if (availableNow && availableNowEnd == null) {
-      availableNowEnd = ask(allAvailable, None)
-    }
-    if (limit == allAvailable) {
-      val latest = if (availableNow) availableNowEnd else ask(allAvailable, None)
-      lastLatestOffset = latest
-      latest
-    } else if (availableNow) {
-      lastLatestOffset = availableNowEnd
-      ask(limit, Some(availableNowEnd))
+    def ask(limit: ReadLimit, runEnd: Option[Offset]): Offset =
+      ColumnarStreamOffset(reader.latestOffset(start.json(), limit, runEnd.map(_.json())))
+    // The latest offset without a limit, which the progress reports: with Trigger.AvailableNow,
+    // the end of the run, asked once, and otherwise asked for each micro-batch.
+    val latest = if (!availableNow) {
+      ask(ReadLimit.allAvailable(), None)
     } else {
-      lastLatestOffset = ask(allAvailable, None)
-      ask(limit, None)
+      if (availableNowEnd == null) availableNowEnd = ask(ReadLimit.allAvailable(), None)
+      availableNowEnd
     }
+    lastLatestOffset = latest
+    if (limit == ReadLimit.allAvailable()) latest else ask(limit, Option(availableNowEnd))
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {

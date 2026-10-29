@@ -135,10 +135,10 @@ trait ColumnarStreamReader extends Serializable {
    *              micro-batch, or the initial offset before the first one
    * @param limit `ReadLimit.allAvailable()`, or the default read limit: the latest offset is then
    *              the end of the data of the next micro-batch
-   * @param end with `Trigger.AvailableNow` and a limit, the offset that the run reads up to, which
-   *            the latest offset does not go beyond
+   * @param runEnd with `Trigger.AvailableNow` and a limit, the offset that the run reads up to,
+   *               which the latest offset does not go beyond
    */
-  def latestOffset(start: String, limit: ReadLimit, end: Option[String]): String
+  def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String
 
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]

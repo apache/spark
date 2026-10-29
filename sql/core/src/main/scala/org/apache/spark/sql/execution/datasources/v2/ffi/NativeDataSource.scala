@@ -343,9 +343,9 @@ class NativeDataSourceStreamReader(
     if (!admissionControl) {
       ReadLimit.allAvailable()
     } else {
-      val Array(kind, maxRows) =
-        call(name, "plan a scan of")(library.defaultReadLimit(handle.get))
-      kind.toInt match {
+      val limit = call(name, "plan a scan of")(library.defaultReadLimit(handle.get))
+      val (kind, maxRows) = (limit.kind, limit.maxRows)
+      kind match {
         case NativeLibrary.READ_ALL_AVAILABLE => ReadLimit.allAvailable()
         case NativeLibrary.READ_MAX_ROWS if maxRows >= 1 => ReadLimit.maxRows(maxRows)
         case NativeLibrary.READ_MAX_ROWS =>
@@ -358,15 +358,20 @@ class NativeDataSourceStreamReader(
     }
   }
 
-  override def latestOffset(start: String, limit: ReadLimit, end: Option[String]): String = {
-    val (kind, maxRows) = limit match {
-      case _: ReadAllAvailable => (NativeLibrary.READ_ALL_AVAILABLE, 0L)
-      case maxRows: ReadMaxRows => (NativeLibrary.READ_MAX_ROWS, maxRows.maxRows())
+  override def latestOffset(
+      start: String,
+      limit: ReadLimit,
+      runEnd: Option[String]): String = {
+    val info = limit match {
+      case _: ReadAllAvailable =>
+        new NativeLibrary.ReadLimitInfo(NativeLibrary.READ_ALL_AVAILABLE, 0L)
+      case maxRows: ReadMaxRows =>
+        new NativeLibrary.ReadLimitInfo(NativeLibrary.READ_MAX_ROWS, maxRows.maxRows())
       case other => throw SparkException.internalError(
         s"A native data source does not support the read limit $other.")
     }
     checkOffset("latest_offset", call(name, "plan a scan of") {
-      library.latestOffset(handle.get, start, kind, maxRows, end.orNull)
+      library.latestOffset(handle.get, start, info, runEnd.orNull)
     })
   }
 

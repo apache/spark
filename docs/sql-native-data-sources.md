@@ -111,21 +111,30 @@ Spark calls the functions of the table as follows:
   the checkpoint of the source in a `SparkDsStreamReaderInfo`. When the checkpoint does not have the
   initial offset of the source yet, Spark asks for it with `initial_offset`, and keeps it in the
   checkpoint, so a query that restarts before its first micro-batch is committed starts from the
-  same offset. For each micro-batch, or only once, before the first micro-batch that it plans, with
-  `Trigger.AvailableNow`, it asks for the `latest_offset`, with the offset that the micro-batch
-  starts after, plans the partitions with `stream_partitions`, which also returns the state of the
-  stream reader, and calls `read` on the executors. Offsets are defined by the library, as compact
+  same offset. For each micro-batch, it asks for the `latest_offset`, with the offset that the
+  micro-batch starts after, plans the partitions with `stream_partitions`, which also returns the
+  state of the stream reader, and calls `read` on the executors. With `Trigger.AvailableNow`, it
+  asks for the `latest_offset` once, before the first micro-batch that it plans, and reads up to
+  it. Offsets are defined by the library, as compact
   JSON on a single line: Spark stores each offset as a line of the offset log of the checkpoint,
   and rejects an offset that is not valid JSON or contains a line break, such as pretty-printed
   JSON. Spark keeps what it needs in the checkpoint of the source under the names that start with
   `_spark`, which the library must not use. A data source with the capability
   `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for example with an option for
   a maximum number of rows: Spark asks for the limit once with `default_read_limit`, and passes it
-  to each `latest_offset` in its `SparkDsLatestOffsetInfo`, which then returns the end of the data
-  of the next micro-batch within the limit. With `Trigger.AvailableNow`, Spark first asks for the
-  latest offset without a limit, and passes it as the end that the limited latest offsets must not
-  go beyond, so that the run reads the data that was available when it started in micro-batches
-  within the limit. `Trigger.Once` ignores the limit.
+  to the `latest_offset` that ends each micro-batch, in the `limit` of its
+  `SparkDsLatestOffsetInfo`, which then returns the end of the data of the next micro-batch within
+  the limit. When there is data after the start, the latest offset must be after the start, even
+  if the next unit of data, such as a file, is larger than the limit: Spark sees no new data
+  otherwise. With `Trigger.AvailableNow`, Spark first asks for the latest offset without a limit,
+  and passes it as the `run_end` that the limited latest offsets must not go beyond, so that the
+  run reads the data that was available when it started in micro-batches within the limit. With a
+  limit, Spark may call `latest_offset` more than once for a micro-batch: a call with
+  `SPARK_DS_READ_ALL_AVAILABLE` may only be for the progress of the query, so a library must not
+  count the calls as micro-batches. `Trigger.Once` ignores the limit, and so does
+  `Trigger.AvailableNow` when another source of the query does not support it and
+  `spark.sql.streaming.triggerAvailableNowWrapper.enabled` is false, as by default, where Spark
+  reads all the available data in a single micro-batch.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
   creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
