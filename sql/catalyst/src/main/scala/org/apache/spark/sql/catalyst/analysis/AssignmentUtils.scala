@@ -22,7 +22,7 @@ import scala.collection.mutable
 import org.apache.spark.SparkException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.analysis.TableOutputResolver.DefaultValueFillMode.{NONE, RECURSE}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal, MetadataAttribute}
+import org.apache.spark.sql.catalyst.expressions.{And, Attribute, CreateNamedStruct, Expression, GetStructField, If, IsNull, Literal}
 import org.apache.spark.sql.catalyst.plans.logical.Assignment
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -72,8 +72,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
     val errors = new mutable.ArrayBuffer[String]()
 
-    checkNoMetadataColumnAssignments(assignments, err => errors += err)
-
     val output = attrs.map { attr =>
       applyAssignments(
         col = restoreActualType(attr),
@@ -119,8 +117,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
     val errors = new mutable.ArrayBuffer[String]()
 
-    checkNoMetadataColumnAssignments(assignments, err => errors += err)
-
     val (topLevelAssignments, nestedAssignments) = assignments.partition { assignment =>
       assignment.key.isInstanceOf[Attribute]
     }
@@ -162,21 +158,6 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
     }
 
     alignedAssignments
-  }
-
-  // The values of metadata columns are produced by the data source and cannot be written.
-  // Assignments are aligned only with the table attributes, so reject assignments to metadata
-  // columns instead of ignoring them, unless the legacy behavior is enabled.
-  private def checkNoMetadataColumnAssignments(
-      assignments: Seq[Assignment],
-      addError: String => Unit): Unit = {
-    if (!conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS)) {
-      assignments.flatMap(_.key.references)
-        .filter(attr => MetadataAttribute.isValid(attr.metadata))
-        .map(_.name)
-        .distinct
-        .foreach(name => addError(s"Cannot assign to metadata column '$name'"))
-    }
   }
 
   private def restoreActualType(attr: Attribute): Attribute = {

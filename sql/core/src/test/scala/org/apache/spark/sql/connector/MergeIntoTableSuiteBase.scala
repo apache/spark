@@ -947,7 +947,11 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         "WHEN NOT MATCHED THEN INSERT (pk, salary, dep, index) VALUES (s.pk, 0, s.dep, 7)" ->
           "index",
         // the implicit cast in the condition resolves the command in a later analyzer iteration
-        "WHEN MATCHED AND t.salary < 150.5 THEN UPDATE SET index = 5" -> "index"
+        "WHEN MATCHED AND t.salary < 150.5 THEN UPDATE SET index = 5" -> "index",
+        // the assignments match the target output after the metadata columns are added to it
+        """WHEN MATCHED AND t.salary < 150.5 THEN
+          | UPDATE SET pk = t.pk, salary = -1, dep = t.dep, index = 5, _partition = 'x'
+          |""".stripMargin -> "index"
       ).foreach { case (clauses, metadataCol) =>
         val e = intercept[AnalysisException] {
           sql(
@@ -996,6 +1000,47 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
           Row(1, -1, "hr"), // updated
           Row(2, 200, "software"), // unchanged
           Row(3, 0, "hr"))) // new
+    }
+  }
+
+  test("SPARK-60721: merge with schema evolution rejects assignments to metadata columns" +
+      " before evolving the schema") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |""".stripMargin)
+
+      // `bonus` is missing from the target, so schema evolution would add it
+      Seq((1, 150, "hr", 10, 1000), (3, 350, "hr", 30, 3000))
+        .toDF("pk", "salary", "dep", "index", "bonus")
+        .createOrReplaceTempView("source")
+
+      Seq(
+        "WHEN MATCHED THEN UPDATE SET * WHEN NOT MATCHED THEN INSERT *" -> "index",
+        "WHEN MATCHED THEN UPDATE SET bonus = s.bonus, _partition = s.dep" -> "_partition"
+      ).foreach { case (clauses, metadataCol) =>
+        val e = intercept[AnalysisException] {
+          sql(
+            s"""MERGE WITH SCHEMA EVOLUTION INTO $tableNameAsString t
+               |USING source s
+               |ON t.pk = s.pk
+               |$clauses
+               |""".stripMargin)
+        }
+        assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+        assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+        // the schema is not evolved, not even in the aborted transaction
+        assert(catalog.lastTransaction.currentState == Aborted)
+        val txnTable = catalog.lastTransaction.catalog.txnTables(ident)
+        assert(txnTable.columns().map(_.name).toSeq == Seq("pk", "salary", "dep"))
+      }
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged
+          Row(2, 200, "software"))) // unchanged
     }
   }
 

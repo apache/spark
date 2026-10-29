@@ -557,7 +557,10 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       s"UPDATE $tableNameAsString t SET t.id = -1, t._partition = 'x' WHERE t.pk = 1" ->
         "_partition",
       // the implicit cast in the condition resolves the command in a later analyzer iteration
-      s"UPDATE $tableNameAsString SET index = 5 WHERE id < 1.5" -> "index"
+      s"UPDATE $tableNameAsString SET index = 5 WHERE id < 1.5" -> "index",
+      // the assignments match the target output after the metadata columns are added to it
+      s"UPDATE $tableNameAsString SET pk = pk, id = -1, dep = dep, index = 5, _partition = 'x' " +
+        "WHERE id < 1.5" -> "index"
     ).foreach { case (updateStmt, metadataCol) =>
       val e = intercept[AnalysisException](sql(updateStmt))
       assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
