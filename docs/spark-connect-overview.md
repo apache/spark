@@ -24,7 +24,7 @@ plans as the protocol, so Spark and its open ecosystem can be used from anywhere
 embedded in modern data applications, in IDEs, in notebooks and in programming languages.
 Spark Connect has been part of Apache Spark since the 3.4 release.
 
-To get started, see [Quickstart: Spark Connect](api/python/getting_started/quickstart_connect.html).
+To get started, see [Setting up Spark Connect](spark-connect-setup.html).
 
 * This will become a table of contents (this text will be scraped).
 {:toc}
@@ -33,7 +33,7 @@ To get started, see [Quickstart: Spark Connect](api/python/getting_started/quick
   <img src="img/spark-connect-api.png" title="Spark Connect API" alt="Spark Connect API Diagram" />
 </p>
 
-# How Spark Connect works
+## How Spark Connect works
 
 The Spark Connect client library is designed to simplify Spark application
 development. It is a thin API that can be embedded everywhere: in application
@@ -57,7 +57,7 @@ client through gRPC as Apache Arrow-encoded row batches.
   <img src="img/spark-connect-communication.png" title="Spark Connect communication" alt="Spark Connect communication" />
 </p>
 
-## How Spark Connect client applications differ from classic Spark applications
+### How Spark Connect client applications differ from classic Spark applications
 
 One of the main design goals of Spark Connect is to enable a full separation and
 isolation of the client from the server. As a consequence, there are some changes
@@ -86,7 +86,7 @@ launching, configuration, dependencies and migration; the
 [Eager vs Lazy](spark-connect-gotchas.html) page covers the behavioral differences, starting with
 the deferred analysis of query plans.
 
-# Operational benefits of Spark Connect
+## Operational benefits of Spark Connect
 
 With this new architecture, Spark Connect mitigates several multi-tenant
 operational issues:
@@ -104,14 +104,15 @@ definitions are designed to be backwards compatible.
 **Remote connectivity**: The decoupled architecture allows remote connectivity to Spark beyond SQL
 and JDBC: any application can now interactively use Spark "as a service".
 
-**Simplicity**: The number of APIs exposed to the user is reduced from 3 to 2. The Spark Connect
-API is fully declarative and consequently easy to learn for new users familiar with SQL.
+**Simplicity**: The Spark Connect API is the DataFrame API and SQL, without the lower-level RDD
+API (see [How Spark Connect client applications differ from classic Spark applications](#how-spark-connect-client-applications-differ-from-classic-spark-applications)).
+It is fully declarative and consequently easy to learn for new users familiar with SQL.
 
 **Debuggability and observability**: Spark Connect enables interactive debugging
 during development directly from your favorite IDE. Similarly, applications can
 be monitored using the application's framework native metrics and logging libraries.
 
-# What is supported
+## What is supported
 
 **PySpark**: Spark Connect supports most PySpark APIs, including
 [DataFrame](api/python/reference/pyspark.sql/dataframe.html),
@@ -149,7 +150,7 @@ outside the Apache Spark repository as well. The Apache Software Foundation host
 [Rust](https://github.com/apache/spark-connect-rust) and
 [Swift](https://github.com/apache/spark-connect-swift), each released on its own schedule.
 
-# Where to go from here
+## Where to go from here
 
 * [Spark Connect Programming Guide](spark-connect-programming-guide.html): connect from Python,
   Scala and Rust, run and configure jobs, ship code to the server, and migrate code that uses
