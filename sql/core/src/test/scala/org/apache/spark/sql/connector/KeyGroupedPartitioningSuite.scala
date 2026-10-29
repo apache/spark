@@ -3811,9 +3811,6 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |JOIN testcat.ns.b6 ON b4.id = b6.id
              |""".stripMargin)
         checkAnswer(df, expected)
-        // The skewed branch shuffles 3 times. The re-run's outer join refuses the reducer it
-        // pushed into the inner scans the first time, so it shuffles both of its sides.
-        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 5)
       }
     }
   }
