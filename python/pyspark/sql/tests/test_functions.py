@@ -25,7 +25,15 @@ from enum import Enum
 from inspect import getmembers, isclass, isfunction
 from itertools import chain
 
-from pyspark.errors import PySparkTypeError, PySparkValueError, SparkRuntimeException
+from py4j.protocol import Py4JJavaError
+
+from pyspark.errors import (
+    AnalysisException,
+    PySparkException,
+    PySparkTypeError,
+    PySparkValueError,
+    SparkRuntimeException,
+)
 from pyspark.errors.exceptions.base import IllegalArgumentException
 from pyspark.sql import Row, Window, types
 from pyspark.sql import functions as F
@@ -2528,6 +2536,126 @@ class FunctionsTestsMixin:
         n = merged.select(F.kll_sketch_get_n_bigint("merged")).first()[0]
         # Should have 5 values (1,2,3,4,6 - null is ignored)
         self.assertEqual(n, 5)
+
+    def test_sketch_size_constant_expressions(self):
+        df = self.spark.range(3)
+        sizes = [
+            ("nvl", F.nvl(F.lit(None).cast("int"), F.lit(12))),
+            ("try_add", F.try_add(F.lit(6), F.lit(6))),
+            ("nullif", F.nullif(F.lit(12), F.lit(0))),
+            ("epoch", F.year(F.lit("epoch").cast("date")) - F.lit(1958)),
+        ]
+        for name, size in sizes:
+            with self.subTest(expression=name):
+                sketches = df.agg(
+                    F.hll_sketch_agg("id", size).alias("hll"),
+                    F.theta_sketch_agg("id", size).alias("theta"),
+                    F.tuple_sketch_agg_double("id", F.lit(1.0), size).alias("tuple_double"),
+                    F.tuple_sketch_agg_integer("id", F.lit(1), size).alias("tuple_integer"),
+                )
+                estimates = sketches.select(
+                    F.hll_sketch_estimate("hll"),
+                    F.theta_sketch_estimate("theta"),
+                    F.tuple_sketch_estimate_double("tuple_double"),
+                    F.tuple_sketch_estimate_integer("tuple_integer"),
+                ).collect()
+                self.assertEqual(tuple(estimates[0]), (3, 3, 3.0, 3.0))
+                merged = sketches.agg(F.theta_union_agg("theta", size).alias("theta"))
+                unions = merged.select(
+                    F.theta_sketch_estimate("theta"),
+                    F.theta_sketch_estimate(F.theta_union("theta", "theta", size)),
+                ).collect()
+                self.assertEqual(tuple(unions[0]), (3, 3))
+
+    def test_sketch_size_validation(self):
+        df = self.spark.range(3).withColumn("size", F.col("id").cast("int"))
+        sketches = df.agg(F.theta_sketch_agg("id").alias("theta"))
+        inputs = df.crossJoin(sketches)
+        functions = [
+            ("hll_sketch_agg", lambda size: F.hll_sketch_agg("id", size), "lgConfigK", 21),
+            (
+                "theta_sketch_agg",
+                lambda size: F.theta_sketch_agg("id", size),
+                "lgNomEntries",
+                26,
+            ),
+            (
+                "theta_union_agg",
+                lambda size: F.theta_union_agg("theta", size),
+                "lgNomEntries",
+                26,
+            ),
+            (
+                "theta_union",
+                lambda size: F.theta_union("theta", "theta", size),
+                "lgNomEntries",
+                26,
+            ),
+            (
+                "tuple_sketch_agg_double",
+                lambda size: F.tuple_sketch_agg_double("id", F.lit(1.0), size),
+                "lgNomEntries",
+                26,
+            ),
+            (
+                "tuple_sketch_agg_integer",
+                lambda size: F.tuple_sketch_agg_integer("id", F.lit(1), size),
+                "lgNomEntries",
+                26,
+            ),
+        ]
+        for name, function, parameter, maximum in functions:
+            cases = [
+                (F.col("size"), "NON_FOLDABLE_INPUT"),
+                (F.lit(None).cast("int"), "UNEXPECTED_NULL"),
+                (F.nullif(F.lit(12), F.lit(12)), "UNEXPECTED_NULL"),
+                (F.lit(3), "VALUE_OUT_OF_RANGE"),
+                (F.lit(maximum + 1), "VALUE_OUT_OF_RANGE"),
+            ]
+            for size, condition in cases:
+                with self.subTest(function=name, size=str(size)):
+                    with self.assertRaises(AnalysisException) as error:
+                        inputs.select(function(size)).collect()
+                    self.assertEqual(
+                        error.exception.getCondition(), "DATATYPE_MISMATCH." + condition
+                    )
+                    key = "inputName" if condition == "NON_FOLDABLE_INPUT" else "exprName"
+                    expected = f"`{parameter}`" if key == "inputName" else parameter
+                    self.assertEqual(error.exception.getMessageParameters()[key], expected)
+
+    def test_hll_union_agg_flag_validation(self):
+        df = self.spark.range(3)
+        sketch12 = df.agg(F.hll_sketch_agg("id", 12).alias("sketch"))
+        sketch15 = df.agg(F.hll_sketch_agg("id", 15).alias("sketch"))
+        inputs = sketch12.crossJoin(self.spark.createDataFrame([(False,)], "flag BOOLEAN"))
+        with self.assertRaises(AnalysisException) as error:
+            inputs.select(F.hll_union_agg("sketch", F.col("flag"))).collect()
+        self.assertEqual(error.exception.getCondition(), "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT")
+        self.assertEqual(
+            error.exception.getMessageParameters()["inputName"], "`allowDifferentLgConfigK`"
+        )
+
+        flags = [
+            ("null", F.lit(None).cast("boolean")),
+            ("nullif_null", F.nullif(F.lit(True), F.lit(True))),
+            ("nullif_false", F.nullif(F.lit(False), F.lit(True))),
+        ]
+        for name, flag in flags:
+            with self.subTest(flag=name):
+                merged = sketch12.union(sketch12).agg(
+                    F.hll_union_agg("sketch", flag).alias("sketch")
+                )
+                self.assertEqual(merged.select(F.hll_sketch_estimate("sketch")).first()[0], 3)
+                # Executor failures can be wrapped differently by classic Spark and Connect.
+                with self.assertRaisesRegex(
+                    (Py4JJavaError, PySparkException), r"\[HLL_UNION_DIFFERENT_LG_K\]"
+                ):
+                    sketch12.union(sketch15).agg(F.hll_union_agg("sketch", flag)).collect()
+
+        merged = sketch12.union(sketch15).agg(
+            F.hll_union_agg("sketch", F.nullif(F.lit(True), F.lit(False))).alias("sketch")
+        )
+        self.assertEqual(merged.select(F.hll_sketch_estimate("sketch")).first()[0], 3)
 
     def test_tuple_sketch_agg_double_basic(self):
         """Test tuple_sketch_agg_double basic functionality"""

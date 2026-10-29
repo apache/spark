@@ -18,11 +18,11 @@
 package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, TypeCheckResult, TypeCoercion}
+import org.apache.spark.sql.catalyst.analysis.{AnalysisErrorAt, ResolveTimeZone, TypeCheckResult, TypeCoercion}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.{Expression, RowOrdering}
 import org.apache.spark.sql.catalyst.expressions.st.STExpressionUtils.isGeoSpatialType
-import org.apache.spark.sql.catalyst.optimizer.ReplaceExpressions
+import org.apache.spark.sql.catalyst.optimizer.{ReplaceExpressions, RewriteWithExpression, SpecialDatetimeValues}
 import org.apache.spark.sql.catalyst.types.{PhysicalDataType, PhysicalNumericType}
 import org.apache.spark.sql.errors.{DataTypeErrors, QueryCompilationErrors, QueryErrorsBase}
 import org.apache.spark.sql.internal.SQLConf
@@ -72,8 +72,16 @@ object TypeUtils extends QueryErrorsBase {
   }
 
   /**
-   * Replaces RuntimeReplaceable expressions, then checks that an integer input is foldable,
-   * non-null, and within the inclusive range.
+   * Replaces RuntimeReplaceable expressions and inlines safe common expressions so that constant
+   * inputs can be checked for foldability during analysis.
+   */
+  private[sql] def prepareForFoldabilityCheck(input: Expression): Expression = {
+    RewriteWithExpression.inlineSafeWithExpressions(ReplaceExpressions.replace(input))
+  }
+
+  /**
+   * Checks that an integer input is foldable after preparation, non-null, and within the inclusive
+   * range. Special datetime casts are normalized before evaluating a foldable input.
    * The caller must check the input data type before calling this method.
    */
   def checkFoldableIntInRange(
@@ -81,7 +89,7 @@ object TypeUtils extends QueryErrorsBase {
       inputName: String,
       min: Int,
       max: Int): TypeCheckResult = {
-    val preparedInput = ReplaceExpressions.replace(input)
+    val preparedInput = prepareForFoldabilityCheck(input)
     if (!preparedInput.foldable) {
       DataTypeMismatch(
         errorSubClass = "NON_FOLDABLE_INPUT",
@@ -90,7 +98,9 @@ object TypeUtils extends QueryErrorsBase {
           "inputType" -> toSQLType(IntegerType),
           "inputExpr" -> toSQLExpr(input)))
     } else {
-      preparedInput.eval() match {
+      // Type checking can run before ResolveTimeZone assigns the session time zone to casts.
+      val timeZoneResolvedInput = ResolveTimeZone.resolveTimeZones(preparedInput)
+      SpecialDatetimeValues.applyForExpression(timeZoneResolvedInput).eval() match {
         case null =>
           DataTypeMismatch(
             errorSubClass = "UNEXPECTED_NULL",

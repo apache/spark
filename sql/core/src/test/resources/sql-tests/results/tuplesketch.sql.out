@@ -220,6 +220,27 @@ struct<result:double>
 
 
 -- !query
+SELECT tuple_sketch_estimate_double(
+         tuple_sketch_agg_double(key1, val1, nvl(CAST(NULL AS INT), 12))),
+       tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, nullif(12, 0)))
+FROM t_int_double_1_5_through_7_11
+-- !query schema
+struct<tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, nvl(CAST(NULL AS INT), 12), sum)):double,tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1, nullif(12, 0), sum)):double>
+-- !query output
+7.0	7.0
+
+
+-- !query
+SELECT tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, try_add(10, 2))),
+       tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, nullif(12, 0)))
+FROM t_int_int_1_5_through_7_11
+-- !query schema
+struct<tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, try_add(10, 2), sum)):double,tuple_sketch_estimate_integer(tuple_sketch_agg_integer(key1, val1, nullif(12, 0), sum)):double>
+-- !query output
+7.0	7.0
+
+
+-- !query
 SELECT tuple_sketch_estimate_double(tuple_sketch_agg_double(key1, val1))
 FROM t_array_int_double_1_3_through_4_6
 -- !query schema
@@ -2806,9 +2827,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputExpr" : "CAST(tab.col AS INT)",
-    "inputName" : "lgNomEntries",
-    "inputType" : "int",
+    "inputExpr" : "\"CAST(col AS INT)\"",
+    "inputName" : "`lgNomEntries`",
+    "inputType" : "\"INT\"",
     "sqlExpr" : "\"tuple_sketch_agg_double(col, val, CAST(col AS INT), sum)\""
   },
   "queryContext" : [ {

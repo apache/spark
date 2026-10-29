@@ -433,13 +433,25 @@ FROM individual_sketches;
 
 -- Constant RuntimeReplaceable configuration expressions are accepted.
 SELECT theta_sketch_estimate(theta_sketch_agg(col, nvl(CAST(NULL AS INT), 12))),
-       theta_sketch_estimate(theta_sketch_agg(col, try_add(10, 2)))
+       theta_sketch_estimate(theta_sketch_agg(col, try_add(10, 2))),
+       theta_sketch_estimate(theta_sketch_agg(col, nullif(12, 0)))
 FROM VALUES (1), (2), (2) tab(col);
 
-SELECT theta_sketch_estimate(theta_union_agg(sketch, nvl(CAST(NULL AS INT), 12)))
+SELECT theta_sketch_estimate(theta_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958))
+FROM VALUES (1), (2), (2) tab(col);
+
+SELECT theta_sketch_estimate(theta_union_agg(sketch, nvl(CAST(NULL AS INT), 12))),
+       theta_sketch_estimate(theta_union_agg(sketch, nullif(12, 0)))
 FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2), (2) tab(col));
 
-SELECT theta_sketch_estimate(theta_union(sketch, sketch, try_add(10, 2)))
+SELECT theta_sketch_estimate(theta_union_agg(sketch, year(CAST('epoch' AS DATE)) - 1958))
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2), (2) tab(col));
+
+SELECT theta_sketch_estimate(theta_union(sketch, sketch, try_add(10, 2))),
+       theta_sketch_estimate(theta_union(sketch, sketch, nullif(12, 0)))
+FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2), (2) tab(col));
+
+SELECT theta_sketch_estimate(theta_union(sketch, sketch, year(CAST('epoch' AS DATE)) - 1958))
 FROM (SELECT theta_sketch_agg(col) AS sketch FROM VALUES (1), (2), (2) tab(col));
 
 -- Negative test cases

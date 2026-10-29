@@ -86,6 +86,31 @@ class RewriteWithExpressionSuite extends PlanTest {
     comparePlans(Optimizer.execute(plan), testRelation.select((a + a).as("col")))
   }
 
+  test("inlineSafeWithExpressions exposes nested constant definitions") {
+    val expr = With(Literal(6)) { case Seq(outerRef) =>
+      With(outerRef + Literal(0)) { case Seq(innerRef) =>
+        innerRef + innerRef
+      }
+    }
+    val rewritten = RewriteWithExpression.inlineSafeWithExpressions(expr)
+    assert(rewritten.foldable)
+    assert(rewritten.eval() == 12)
+  }
+
+  test("inlineSafeWithExpressions preserves definitions that are unsafe to duplicate") {
+    val aes = ReplaceExpressions.replace(
+      new AesEncrypt(Literal("abc".getBytes), Literal("1234567890123456".getBytes)))
+    assert(aes.foldable)
+    val definitions = Seq(testRelation.output.head, Rand(Literal(0L)), CurrentTimestamp(), aes)
+    definitions.foreach { definition =>
+      val expr = With(definition) { case Seq(ref) => EqualTo(ref, ref) }
+      assert(RewriteWithExpression.inlineSafeWithExpressions(expr) == expr)
+    }
+
+    val canonicalized = With(Literal(6)) { case Seq(ref) => ref + ref }.canonicalized
+    assert(RewriteWithExpression.inlineSafeWithExpressions(canonicalized) == canonicalized)
+  }
+
   test("applyForExpression inlines a literal referenced more than once") {
     val expr = With(Literal(1)) { case Seq(ref) =>
       ref + ref

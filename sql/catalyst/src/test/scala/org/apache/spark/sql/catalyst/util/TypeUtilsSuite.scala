@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.util
 
 import org.apache.spark.{SparkException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.{DataTypeMismatch, TypeCheckSuccess}
-import org.apache.spark.sql.catalyst.expressions.{Add, BoundReference, Literal, Nvl, TryAdd}
+import org.apache.spark.sql.catalyst.expressions.{Add, BoundReference, Cast, Expression, Literal, NullIf, Nvl, Subtract, TryAdd, Year}
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -89,6 +89,86 @@ class TypeUtilsSuite extends SparkFunSuite with SQLHelper {
         "inputName" -> "`size`",
         "inputType" -> "\"INT\"",
         "inputExpr" -> TypeUtils.toSQLExpr(nonFoldable))))
+  }
+
+  test("checkFoldableIntInRange accepts constant NULLIF inputs") {
+    withSQLConf(SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+      val inputs = Seq(
+        new NullIf(Literal(12), Literal(0)),
+        new NullIf(Add(Literal(10), Literal(2)), Literal(0)),
+        new NullIf(new NullIf(Literal(12), Literal(0)), Literal(0)))
+      inputs.foreach { input =>
+        assert(!input.foldable)
+        assert(TypeUtils.checkFoldableIntInRange(input, "size", 4, 21) == TypeCheckSuccess)
+      }
+
+      assert(TypeUtils.checkFoldableIntInRange(
+        new NullIf(Literal(12), Literal(12)), "size", 4, 21) == DataTypeMismatch(
+        errorSubClass = "UNEXPECTED_NULL",
+        messageParameters = Map("exprName" -> "size")))
+
+      assert(TypeUtils.checkFoldableIntInRange(
+        new NullIf(Literal(3), Literal(0)), "size", 4, 21) == DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "size",
+          "valueRange" -> "[4, 21]",
+          "currentValue" -> "3")))
+
+      val nonFoldable = new NullIf(BoundReference(0, IntegerType, nullable = true), Literal(0))
+      assert(TypeUtils.checkFoldableIntInRange(nonFoldable, "size", 4, 21) == DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "`size`",
+          "inputType" -> "\"INT\"",
+          "inputExpr" -> TypeUtils.toSQLExpr(nonFoldable))))
+    }
+  }
+
+  test("checkFoldableIntInRange normalizes special datetime constants") {
+    Seq("true", "false").foreach { ansiEnabled =>
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> ansiEnabled,
+        SQLConf.ALWAYS_INLINE_COMMON_EXPR.key -> "false") {
+        def sizeFromEpoch(input: Expression): Expression = {
+          Subtract(Year(Cast(input, DateType)), Literal(1958))
+        }
+
+        val size = sizeFromEpoch(Literal("epoch"))
+        val inputs = Seq(
+          size,
+          new NullIf(size, Literal(0)),
+          sizeFromEpoch(new NullIf(Literal("epoch"), Literal("x"))))
+        inputs.foreach { input =>
+          Seq(21, 26).foreach { max =>
+            assert(TypeUtils.checkFoldableIntInRange(input, "size", 4, max) == TypeCheckSuccess)
+          }
+        }
+
+        assert(TypeUtils.checkFoldableIntInRange(
+          new NullIf(size, size), "size", 4, 21) == DataTypeMismatch(
+          errorSubClass = "UNEXPECTED_NULL",
+          messageParameters = Map("exprName" -> "size")))
+
+        assert(TypeUtils.checkFoldableIntInRange(
+          Subtract(size, Literal(9)), "size", 4, 21) == DataTypeMismatch(
+          errorSubClass = "VALUE_OUT_OF_RANGE",
+          messageParameters = Map(
+            "exprName" -> "size",
+            "valueRange" -> "[4, 21]",
+            "currentValue" -> "3")))
+
+        val invalidString = Cast(Cast(Literal("invalid"), IntegerType), StringType)
+        val nonFoldable = Add(
+          BoundReference(0, IntegerType, nullable = true), sizeFromEpoch(invalidString))
+        assert(TypeUtils.checkFoldableIntInRange(nonFoldable, "size", 4, 21) == DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> "`size`",
+            "inputType" -> "\"INT\"",
+            "inputExpr" -> TypeUtils.toSQLExpr(nonFoldable))))
+      }
+    }
   }
 
   test("typeWithProperEquals") {

@@ -153,6 +153,72 @@ struct<hll_sketch_estimate(hll_sketch_agg(col, 12)):bigint>
 
 
 -- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, 10 + 2))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query schema
+struct<hll_sketch_estimate(hll_sketch_agg(col, (10 + 2))):bigint>
+-- !query output
+2
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, nvl(CAST(NULL AS INT), 12))),
+       hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2))),
+       hll_sketch_estimate(hll_sketch_agg(col, nullif(12, 0)))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query schema
+struct<hll_sketch_estimate(hll_sketch_agg(col, nvl(CAST(NULL AS INT), 12))):bigint,hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2))):bigint,hll_sketch_estimate(hll_sketch_agg(col, nullif(12, 0))):bigint>
+-- !query output
+2	2	2
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958)),
+       hll_sketch_estimate(hll_sketch_agg(
+         col, nullif(year(CAST('epoch' AS DATE)) - 1958, 0)))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query schema
+struct<hll_sketch_estimate(hll_sketch_agg(col, (year(CAST(epoch AS DATE)) - 1958))):bigint,hll_sketch_estimate(hll_sketch_agg(col, nullif((year(CAST(epoch AS DATE)) - 1958), 0))):bigint>
+-- !query output
+2	2
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958)),
+       hll_sketch_estimate(hll_sketch_agg(
+         col, nullif(year(CAST('epoch' AS DATE)) - 1958, 0)))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query schema
+struct<hll_sketch_estimate(hll_sketch_agg(col, (year(CAST(epoch AS DATE)) - 1958))):bigint,hll_sketch_estimate(hll_sketch_agg(col, nullif((year(CAST(epoch AS DATE)) - 1958), 0))):bigint>
+-- !query output
+2	2
+
+
+-- !query
+RESET spark.sql.ansi.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col))
 FROM VALUES ('abc'), ('def'), ('abc'), ('ghi'), ('abc') tab(col)
 -- !query schema
@@ -189,6 +255,49 @@ SELECT hll_sketch_estimate(hll_union_agg(sketch, true))
 struct<hll_sketch_estimate(hll_union_agg(sketch, true)):bigint>
 -- !query output
 1
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nvl(CAST(NULL AS BOOLEAN), true)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col))
+-- !query schema
+struct<hll_sketch_estimate(hll_union_agg(sketch, nvl(CAST(NULL AS BOOLEAN), true))):bigint>
+-- !query output
+2
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nullif(true, false)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col))
+-- !query schema
+struct<hll_sketch_estimate(hll_union_agg(sketch, nullif(true, false))):bigint>
+-- !query output
+2
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nullif(false, true))),
+       hll_sketch_estimate(hll_union_agg(sketch, nullif(true, true)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col))
+-- !query schema
+struct<hll_sketch_estimate(hll_union_agg(sketch, nullif(false, true))):bigint,hll_sketch_estimate(hll_union_agg(sketch, nullif(true, true))):bigint>
+-- !query output
+2	2
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, CAST(NULL AS BOOLEAN)))
+FROM (SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (2) tab(col))
+-- !query schema
+struct<hll_sketch_estimate(hll_union_agg(sketch, CAST(NULL AS BOOLEAN))):bigint>
+-- !query output
+2
 
 
 -- !query
@@ -317,6 +426,48 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true
+
+
+-- !query
+SELECT hll_sketch_agg(col, CAST('x' AS INT))
+FROM VALUES (1), (2) tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'x'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 43,
+    "fragment" : "CAST('x' AS INT)"
+  } ]
+}
+
+
+-- !query
+RESET spark.sql.ansi.enabled
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
 FROM VALUES (15), (16), (17) tab(col)
 -- !query schema
@@ -327,9 +478,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputExpr" : "CAST(tab.col AS INT)",
-    "inputName" : "lgConfigK",
-    "inputType" : "int",
+    "inputExpr" : "\"CAST(col AS INT)\"",
+    "inputName" : "`lgConfigK`",
+    "inputType" : "\"INT\"",
     "sqlExpr" : "\"hll_sketch_agg(col, CAST(col AS INT))\""
   },
   "queryContext" : [ {
@@ -338,6 +489,32 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 44,
     "fragment" : "hll_sketch_agg(col, CAST(col AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT hll_sketch_agg(col, nullif(col, 0))
+FROM VALUES (12), (13) tab(col)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"nullif(col, 0)\"",
+    "inputName" : "`lgConfigK`",
+    "inputType" : "\"INT\"",
+    "sqlExpr" : "\"hll_sketch_agg(col, nullif(col, 0))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "hll_sketch_agg(col, nullif(col, 0))"
   } ]
 }
 
@@ -355,9 +532,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputExpr" : "tab.allow_different_lg_config_k",
-    "inputName" : "allowDifferentLgConfigK",
-    "inputType" : "boolean",
+    "inputExpr" : "\"allow_different_lg_config_k\"",
+    "inputName" : "`allowDifferentLgConfigK`",
+    "inputType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"hll_union_agg(CAST( AS BINARY), allow_different_lg_config_k)\""
   },
   "queryContext" : [ {
@@ -429,6 +606,26 @@ FROM (SELECT hll_sketch_agg(col, 12) as sketch
       UNION ALL
       SELECT hll_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.SparkRuntimeException
+{
+  "errorClass" : "HLL_UNION_DIFFERENT_LG_K",
+  "sqlState" : "22000",
+  "messageParameters" : {
+    "function" : "`hll_union_agg`",
+    "left" : "12",
+    "right" : "20"
+  }
+}
+
+
+-- !query
+SELECT hll_union_agg(sketch, CAST(NULL AS BOOLEAN))
+FROM (SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col))
 -- !query schema
 struct<>
 -- !query output

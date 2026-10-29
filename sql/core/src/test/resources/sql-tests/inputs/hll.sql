@@ -44,8 +44,22 @@ FROM VALUES (50), (60), (60) tab(col);
 
 -- Constant RuntimeReplaceable configuration expressions are accepted.
 SELECT hll_sketch_estimate(hll_sketch_agg(col, nvl(CAST(NULL AS INT), 12))),
-       hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2)))
+       hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2))),
+       hll_sketch_estimate(hll_sketch_agg(col, nullif(12, 0)))
 FROM VALUES (50), (60), (60) tab(col);
+
+-- Special datetime casts are normalized before validating the size in either ANSI mode.
+SET spark.sql.ansi.enabled=true;
+SELECT hll_sketch_estimate(hll_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958)),
+       hll_sketch_estimate(hll_sketch_agg(
+         col, nullif(year(CAST('epoch' AS DATE)) - 1958, 0)))
+FROM VALUES (50), (60), (60) tab(col);
+SET spark.sql.ansi.enabled=false;
+SELECT hll_sketch_estimate(hll_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958)),
+       hll_sketch_estimate(hll_sketch_agg(
+         col, nullif(year(CAST('epoch' AS DATE)) - 1958, 0)))
+FROM VALUES (50), (60), (60) tab(col);
+RESET spark.sql.ansi.enabled;
 
 SELECT hll_sketch_estimate(hll_sketch_agg(col))
 FROM VALUES ('abc'), ('def'), ('abc'), ('ghi'), ('abc') tab(col);
@@ -72,6 +86,15 @@ SELECT hll_sketch_estimate(hll_union_agg(sketch, nvl(CAST(NULL AS BOOLEAN), true
 FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
       UNION ALL
       SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col));
+
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nullif(true, false)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col));
+
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nullif(false, true))),
+       hll_sketch_estimate(hll_union_agg(sketch, nullif(true, true)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col));
 
 -- A NULL flag behaves as false: sketches with the same lgConfigK can still be merged.
 SELECT hll_sketch_estimate(hll_union_agg(sketch, CAST(NULL AS BOOLEAN)))
@@ -112,6 +135,9 @@ RESET spark.sql.ansi.enabled;
 
 SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
 FROM VALUES (15), (16), (17) tab(col);
+
+SELECT hll_sketch_agg(col, nullif(col, 0))
+FROM VALUES (12), (13) tab(col);
 
 -- allowDifferentLgConfigK parameter is not foldable (non-constant)
 SELECT allow_different_lg_config_k,

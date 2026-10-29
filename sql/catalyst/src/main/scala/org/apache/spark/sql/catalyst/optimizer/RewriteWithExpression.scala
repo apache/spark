@@ -164,6 +164,18 @@ object RewriteWithExpression extends Rule[LogicalPlan] {
   }
 
   /**
+   * Inlines common expressions that are safe to duplicate, leaving other definitions intact.
+   * This exposes constant definitions to foldability checks.
+   */
+  private[sql] def inlineSafeWithExpressions(expression: Expression): Expression = {
+    val safeIds = safeToDuplicateIds(expression)
+    expression.transformUpWithPruning(_.containsPattern(WITH_EXPRESSION)) {
+      case w: With =>
+        inlineDefs(w)(d => !d.id.canonicalized && safeIds.contains(d.id))
+    }
+  }
+
+  /**
    * Ids of the definitions that are safe to duplicate. Walks outer-first, so a definition that
    * references an enclosing one is decided after it, and visits a definition's own nested `With`
    * before the definition itself. Ids are globally unique, so one flat set is enough.

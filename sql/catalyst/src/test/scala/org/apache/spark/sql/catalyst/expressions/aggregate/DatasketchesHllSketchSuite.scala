@@ -28,7 +28,7 @@ import org.apache.datasketches.memory.Memory
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Add, And, BoundReference, HllSketchEstimate, HllUnion, Literal, Nvl}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, BoundReference, HllSketchEstimate, HllUnion, Literal, NullIf, Nvl}
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLExpr
 import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, IntegerType, LongType, StringType, TimeType, TypeCollection}
 import org.apache.spark.unsafe.types.UTF8String
@@ -271,18 +271,21 @@ class DatasketchesHllSketchSuite extends SparkFunSuite {
     val sketchInput = BoundReference(0, BinaryType, nullable = true)
     val nullBoolean = Literal.create(null, BooleanType)
     Seq(Literal(true), Literal(false), nullBoolean).foreach { flag =>
-      val input = new Nvl(nullBoolean, flag)
-      assert(!input.foldable)
-      assert(new HllUnionAgg(sketchInput, input).checkInputDataTypes().isSuccess)
+      Seq(new Nvl(nullBoolean, flag), new NullIf(flag, Literal(false))).foreach { input =>
+        assert(!input.foldable)
+        assert(new HllUnionAgg(sketchInput, input).checkInputDataTypes().isSuccess)
+      }
     }
 
-    val input = new Nvl(BoundReference(1, BooleanType, nullable = true), Literal(true))
-    assert(new HllUnionAgg(sketchInput, input).checkInputDataTypes() == DataTypeMismatch(
-      errorSubClass = "NON_FOLDABLE_INPUT",
-      messageParameters = Map(
-        "inputName" -> "`allowDifferentLgConfigK`",
-        "inputType" -> "\"BOOLEAN\"",
-        "inputExpr" -> toSQLExpr(input))))
+    val flag = BoundReference(1, BooleanType, nullable = true)
+    Seq(new Nvl(flag, Literal(true)), new NullIf(flag, Literal(false))).foreach { input =>
+      assert(new HllUnionAgg(sketchInput, input).checkInputDataTypes() == DataTypeMismatch(
+        errorSubClass = "NON_FOLDABLE_INPUT",
+        messageParameters = Map(
+          "inputName" -> "`allowDifferentLgConfigK`",
+          "inputType" -> "\"BOOLEAN\"",
+          "inputExpr" -> toSQLExpr(input))))
+    }
   }
 
   /** Runs HllUnionAgg over `inputs` (a NULL entry stands for a NULL sketch) for a single group. */

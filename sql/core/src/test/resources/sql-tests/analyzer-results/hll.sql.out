@@ -146,6 +146,66 @@ Aggregate [hll_sketch_estimate(hll_sketch_agg(col#x, 12, 0, 0)) AS hll_sketch_es
 
 
 -- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, 10 + 2))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(col#x, (10 + 2), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, (10 + 2)))#xL]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, nvl(CAST(NULL AS INT), 12))),
+       hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2))),
+       hll_sketch_estimate(hll_sketch_agg(col, nullif(12, 0)))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(col#x, nvl(cast(null as int), 12), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, nvl(CAST(NULL AS INT), 12)))#xL, hll_sketch_estimate(hll_sketch_agg(col#x, try_add(10, 2), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, try_add(10, 2)))#xL, hll_sketch_estimate(hll_sketch_agg(col#x, nullif(12, 0), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, nullif(12, 0)))#xL]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958)),
+       hll_sketch_estimate(hll_sketch_agg(
+         col, nullif(year(CAST('epoch' AS DATE)) - 1958, 0)))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(col#x, (year(cast(epoch as date)) - 1958), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, (year(CAST(epoch AS DATE)) - 1958)))#xL, hll_sketch_estimate(hll_sketch_agg(col#x, nullif((year(cast(epoch as date)) - 1958), 0), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, nullif((year(CAST(epoch AS DATE)) - 1958), 0)))#xL]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(false))
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_sketch_agg(col, year(CAST('epoch' AS DATE)) - 1958)),
+       hll_sketch_estimate(hll_sketch_agg(
+         col, nullif(year(CAST('epoch' AS DATE)) - 1958, 0)))
+FROM VALUES (50), (60), (60) tab(col)
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_sketch_agg(col#x, (year(cast(epoch as date)) - 1958), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, (year(CAST(epoch AS DATE)) - 1958)))#xL, hll_sketch_estimate(hll_sketch_agg(col#x, nullif((year(cast(epoch as date)) - 1958), 0), 0, 0)) AS hll_sketch_estimate(hll_sketch_agg(col, nullif((year(CAST(epoch AS DATE)) - 1958), 0)))#xL]
++- SubqueryAlias tab
+   +- LocalRelation [col#x]
+
+
+-- !query
+RESET spark.sql.ansi.enabled
+-- !query analysis
+ResetCommand spark.sql.ansi.enabled
+
+
+-- !query
 SELECT hll_sketch_estimate(hll_sketch_agg(col))
 FROM VALUES ('abc'), ('def'), ('abc'), ('ghi'), ('abc') tab(col)
 -- !query analysis
@@ -186,6 +246,69 @@ Aggregate [hll_sketch_estimate(hll_union_agg(sketch#x, true, 0, 0)) AS hll_sketc
       :  +- SubqueryAlias tab
       :     +- LocalRelation [col#x]
       +- Aggregate [hll_sketch_agg(col#x, 20, 0, 0) AS sketch#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nvl(CAST(NULL AS BOOLEAN), true)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col))
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_union_agg(sketch#x, nvl(cast(null as boolean), true), 0, 0)) AS hll_sketch_estimate(hll_union_agg(sketch, nvl(CAST(NULL AS BOOLEAN), true)))#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
+      :  +- SubqueryAlias tab
+      :     +- LocalRelation [col#x]
+      +- Aggregate [hll_sketch_agg(col#x, 20, 0, 0) AS sketch#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nullif(true, false)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col))
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_union_agg(sketch#x, nullif(true, false), 0, 0)) AS hll_sketch_estimate(hll_union_agg(sketch, nullif(true, false)))#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
+      :  +- SubqueryAlias tab
+      :     +- LocalRelation [col#x]
+      +- Aggregate [hll_sketch_agg(col#x, 20, 0, 0) AS sketch#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, nullif(false, true))),
+       hll_sketch_estimate(hll_union_agg(sketch, nullif(true, true)))
+FROM (SELECT hll_sketch_agg(col) AS sketch FROM VALUES (1), (2) tab(col))
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_union_agg(sketch#x, nullif(false, true), 0, 0)) AS hll_sketch_estimate(hll_union_agg(sketch, nullif(false, true)))#xL, hll_sketch_estimate(hll_union_agg(sketch#x, nullif(true, true), 0, 0)) AS hll_sketch_estimate(hll_union_agg(sketch, nullif(true, true)))#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
+      +- SubqueryAlias tab
+         +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_sketch_estimate(hll_union_agg(sketch, CAST(NULL AS BOOLEAN)))
+FROM (SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (2) tab(col))
+-- !query analysis
+Aggregate [hll_sketch_estimate(hll_union_agg(sketch#x, cast(null as boolean), 0, 0)) AS hll_sketch_estimate(hll_union_agg(sketch, CAST(NULL AS BOOLEAN)))#xL]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
+      :  +- SubqueryAlias tab
+      :     +- LocalRelation [col#x]
+      +- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
          +- SubqueryAlias tab
             +- LocalRelation [col#x]
 
@@ -314,6 +437,42 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SET spark.sql.ansi.enabled=true
+-- !query analysis
+SetCommand (spark.sql.ansi.enabled,Some(true))
+
+
+-- !query
+SELECT hll_sketch_agg(col, CAST('x' AS INT))
+FROM VALUES (1), (2) tab(col)
+-- !query analysis
+org.apache.spark.SparkNumberFormatException
+{
+  "errorClass" : "CAST_INVALID_INPUT",
+  "sqlState" : "22018",
+  "messageParameters" : {
+    "ansiConfig" : "\"spark.sql.ansi.enabled\"",
+    "expression" : "'x'",
+    "sourceType" : "\"STRING\"",
+    "targetType" : "\"INT\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 28,
+    "stopIndex" : 43,
+    "fragment" : "CAST('x' AS INT)"
+  } ]
+}
+
+
+-- !query
+RESET spark.sql.ansi.enabled
+-- !query analysis
+ResetCommand spark.sql.ansi.enabled
+
+
+-- !query
 SELECT hll_sketch_agg(col, CAST(col AS INT)) AS k_non_constant
 FROM VALUES (15), (16), (17) tab(col)
 -- !query analysis
@@ -322,9 +481,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputExpr" : "CAST(tab.col AS INT)",
-    "inputName" : "lgConfigK",
-    "inputType" : "int",
+    "inputExpr" : "\"CAST(col AS INT)\"",
+    "inputName" : "`lgConfigK`",
+    "inputType" : "\"INT\"",
     "sqlExpr" : "\"hll_sketch_agg(col, CAST(col AS INT))\""
   },
   "queryContext" : [ {
@@ -333,6 +492,30 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "startIndex" : 8,
     "stopIndex" : 44,
     "fragment" : "hll_sketch_agg(col, CAST(col AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT hll_sketch_agg(col, nullif(col, 0))
+FROM VALUES (12), (13) tab(col)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"nullif(col, 0)\"",
+    "inputName" : "`lgConfigK`",
+    "inputType" : "\"INT\"",
+    "sqlExpr" : "\"hll_sketch_agg(col, nullif(col, 0))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 42,
+    "fragment" : "hll_sketch_agg(col, nullif(col, 0))"
   } ]
 }
 
@@ -348,9 +531,9 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
   "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
   "sqlState" : "42K09",
   "messageParameters" : {
-    "inputExpr" : "tab.allow_different_lg_config_k",
-    "inputName" : "allowDifferentLgConfigK",
-    "inputType" : "boolean",
+    "inputExpr" : "\"allow_different_lg_config_k\"",
+    "inputName" : "`allowDifferentLgConfigK`",
+    "inputType" : "\"BOOLEAN\"",
     "sqlExpr" : "\"hll_union_agg(CAST( AS BINARY), allow_different_lg_config_k)\""
   },
   "queryContext" : [ {
@@ -413,6 +596,23 @@ FROM (SELECT hll_sketch_agg(col, 12) as sketch
         FROM VALUES (1) AS tab(col))
 -- !query analysis
 Aggregate [hll_union_agg(sketch#x, false, 0, 0) AS hll_union_agg(sketch, false)#x]
++- SubqueryAlias __auto_generated_subquery_name
+   +- Union false, false
+      :- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
+      :  +- SubqueryAlias tab
+      :     +- LocalRelation [col#x]
+      +- Aggregate [hll_sketch_agg(col#x, 20, 0, 0) AS sketch#x]
+         +- SubqueryAlias tab
+            +- LocalRelation [col#x]
+
+
+-- !query
+SELECT hll_union_agg(sketch, CAST(NULL AS BOOLEAN))
+FROM (SELECT hll_sketch_agg(col, 12) AS sketch FROM VALUES (1) tab(col)
+      UNION ALL
+      SELECT hll_sketch_agg(col, 20) AS sketch FROM VALUES (2) tab(col))
+-- !query analysis
+Aggregate [hll_union_agg(sketch#x, cast(null as boolean), 0, 0) AS hll_union_agg(sketch, CAST(NULL AS BOOLEAN))#x]
 +- SubqueryAlias __auto_generated_subquery_name
    +- Union false, false
       :- Aggregate [hll_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
