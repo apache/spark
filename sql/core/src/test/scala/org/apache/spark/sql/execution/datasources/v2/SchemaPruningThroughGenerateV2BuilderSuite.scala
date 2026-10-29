@@ -1,0 +1,126 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.sql.execution.datasources.v2
+
+import java.util
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.sql.QueryTest
+import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
+import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{ArrayType, DataType, StructType}
+import org.apache.spark.sql.util.CaseInsensitiveStringMap
+
+/**
+ * Pruning nested fields through generators on a DataSource V2 scan whose builder only narrows:
+ * a later `pruneColumns` call cannot widen what an earlier one kept, as in Iceberg.
+ */
+class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSparkSession {
+
+  test("SPARK-47230: a rejected rewrite does not prune a narrow-only builder again") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql(
+        """select id, array(
+          |  named_struct('a', id, 'b', id * 2, 'c', id * 3, 's', cast(id * 4 as int)),
+          |  named_struct('a', id * 10, 'b', id * 20, 'c', id * 30, 's', cast(id * 40 as int))
+          |) as items from range(1, 3)""".stripMargin).write.parquet(path)
+      val query = "select item.a, item.c from t lateral view explode(items) e as item"
+      val expected = withTempView("t") {
+        spark.read.parquet(path).createOrReplaceTempView("t")
+        sql(query).collect().toSeq
+      }
+
+      Seq(false, true).foreach { reject =>
+        withSQLConf(
+            SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING.key ->
+              reject.toString) {
+          NarrowOnlyParquetSource.pruneCalls.clear()
+          withTempView("t") {
+            spark.read.format(classOf[NarrowOnlyParquetSource].getName).load(path)
+              .createOrReplaceTempView("t")
+            checkAnswer(sql(query), expected)
+          }
+          val calls = NarrowOnlyParquetSource.pruneCalls.map(_.get).toSeq
+          assert(calls.nonEmpty)
+          assert(calls.forall(_ <= 1), s"pruneColumns calls per builder: $calls")
+        }
+      }
+    }
+  }
+}
+
+/** Parquet through DataSource V2, with a scan builder whose `pruneColumns` only narrows. */
+class NarrowOnlyParquetSource extends ParquetDataSourceV2 {
+  override def shortName(): String = "narrow-only-parquet"
+
+  override def getTable(options: CaseInsensitiveStringMap): Table =
+    new NarrowOnlyTable(super.getTable(options))
+
+  override def getTable(options: CaseInsensitiveStringMap, schema: StructType): Table =
+    new NarrowOnlyTable(super.getTable(options, schema))
+}
+
+object NarrowOnlyParquetSource {
+  /** The number of `pruneColumns` calls on each builder created, in creation order. */
+  val pruneCalls: ArrayBuffer[AtomicInteger] = ArrayBuffer.empty
+
+  /** The fields of `kept` that `required` also has, recursively. */
+  def narrow(kept: DataType, required: DataType): DataType = (kept, required) match {
+    case (k: StructType, r: StructType) =>
+      StructType(k.fields.flatMap { field =>
+        r.find(_.name == field.name).map(f => field.copy(dataType = narrow(field.dataType,
+          f.dataType)))
+      })
+    case (ArrayType(k, containsNull), ArrayType(r, _)) => ArrayType(narrow(k, r), containsNull)
+    case (k, _) => k
+  }
+}
+
+class NarrowOnlyTable(table: Table) extends Table with SupportsRead {
+  override def name(): String = table.name()
+  override def schema(): StructType = table.schema()
+  override def capabilities(): util.Set[TableCapability] =
+    util.EnumSet.of(TableCapability.BATCH_READ)
+
+  override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder = {
+    val delegate = table.asInstanceOf[SupportsRead].newScanBuilder(options)
+    val calls = new AtomicInteger()
+    NarrowOnlyParquetSource.pruneCalls.synchronized {
+      NarrowOnlyParquetSource.pruneCalls += calls
+    }
+    new ScanBuilder with SupportsPushDownRequiredColumns {
+      private var kept: Option[StructType] = None
+
+      override def pruneColumns(requiredSchema: StructType): Unit = {
+        calls.incrementAndGet()
+        val narrowed = kept.map(NarrowOnlyParquetSource.narrow(_, requiredSchema)
+          .asInstanceOf[StructType]).getOrElse(requiredSchema)
+        kept = Some(narrowed)
+        delegate.asInstanceOf[SupportsPushDownRequiredColumns].pruneColumns(narrowed)
+      }
+
+      override def build(): Scan = delegate.build()
+    }
+  }
+}

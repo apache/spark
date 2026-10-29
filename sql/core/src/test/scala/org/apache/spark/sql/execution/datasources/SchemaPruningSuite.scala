@@ -108,9 +108,14 @@ abstract class SchemaPruningSuite
     Order(1, null) :: Nil
   // a column named like the position output of a posexplode over another column
   case class Point(a: Int, b: Int)
-  case class Pair(x: Int, y: Int)
+  case class Pair(x: Int, y: Int, z: String)
   case class Positioned(pos: Point, items: Array[Pair])
-  val positioned = Positioned(Point(1, 2), Array(Pair(10, 20), Pair(30, 40))) :: Nil
+  val positioned =
+    Positioned(Point(1, 2), Array(Pair(10, 20, "z1"), Pair(30, 40, "z2"))) :: Nil
+  // two array columns, each exploded by its own generator
+  case class TwoArrays(a1: Array[Point], a2: Array[Pair])
+  val twoArrays =
+    TwoArrays(Array(Point(1, 2)), Array(Pair(10, 20, "z1"), Pair(30, 40, "z2"))) :: Nil
 
   // sorting the elements by `a` and by `b` gives different orders
   case class Ranked(a: Int, b: Int, c: Int)
@@ -810,6 +815,28 @@ abstract class SchemaPruningSuite
         "lateral view explode(array(t1.pos + item.x)) t2 as y")
       checkScan(query, "struct<pos:struct<a:int>,items:array<struct<x:int>>>")
       checkAnswer(query, Row(1, 10) :: Row(1, 31) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: a posexplode position and a scan column of the same name") {
+    withDataSourceTable(positioned, "positioned") {
+      // the position `t1.pos` and the column `positioned.pos` are both read, with other types
+      val query = sql("select t1.pos, item.x, item.y, positioned.pos is not null as f, " +
+        "positioned.pos.a as pa from positioned lateral view posexplode(items) t1 as pos, item")
+      checkScan(query, "struct<pos:struct<a:int>,items:array<struct<x:int,y:int>>>")
+      checkAnswer(query, Row(0, 10, 20, true, 1) :: Row(1, 30, 40, true, 1) :: Nil)
+    }
+  }
+
+  testSchemaPruning("SPARK-47230: an explode of a second scan column is not pruned through yet") {
+    withDataSourceTable(twoArrays, "two_arrays") {
+      // Not pruned through yet (follow-up): `a2` also passes through the lower explode as a
+      // column, which reads it whole although only `x` and `y` of its elements are used
+      val query = sql("select b.x, b.y from two_arrays " +
+        "lateral view explode(a1) t1 as a lateral view explode(a2) t2 as b")
+      checkScan(query,
+        "struct<a1:array<struct<a:int>>,a2:array<struct<x:int,y:int,z:string>>>")
+      checkAnswer(query, Row(10, 20) :: Row(30, 40) :: Nil)
     }
   }
 

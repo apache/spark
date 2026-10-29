@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.trees.TreePattern.GENERATE
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField,
   StructType}
 import org.apache.spark.sql.util.SchemaUtils._
@@ -222,7 +223,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
     }
     pruneScan(segments.last, inputs.last._2, scanRootFields.toSeq)
       .map(rebuildAbove(op, generators.last.child, _))
-      .filter(newOp => newOp.resolved && newOp.schema == op.schema)
+      .filter(newOp => newOp.resolved && newOp.schema == op.schema &&
+        !conf.getConf(SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING))
       .map(readSizesDirectly)
   }
 

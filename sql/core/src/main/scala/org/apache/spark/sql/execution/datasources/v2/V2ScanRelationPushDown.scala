@@ -67,7 +67,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       buildScanWithPushedAggregate,
       buildScanWithPushedJoin,
       buildScanWithPushedVariants,
-      pruneColumns)
+      pruneColumns(_, isSubquery))
 
     pushdownRules.foldLeft(plan) { (newPlan, pushDownRule) =>
       pushDownRule(newPlan)
@@ -1016,18 +1016,47 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       Project(rewrittenProjectList, withFilter)
   }
 
-  def pruneColumns(plan: LogicalPlan): LogicalPlan = plan.transform {
-    case op @ SchemaPruning.GeneratorsOverScan(_, _, sHolder: ScanBuilderHolder) =>
-      // Fields read from the generators' elements above them narrow the scan below them. If the
-      // plan above cannot be re-resolved, the scan is pruned again on its own below, which calls
-      // `pruneColumns` on the scan builder a second time.
+  def pruneColumns(plan: LogicalPlan, isSubquery: Boolean): LogicalPlan = plan.transform {
+    case op @ SchemaPruning.GeneratorsOverScan(_, generators, sHolder: ScanBuilderHolder)
+        if !hasBlockingPushdown(sHolder) =>
+      // Fields read from the generators' elements above them narrow the scan below them. This
+      // prunes and builds the holder's builder before the plan above is re-resolved. If that is
+      // then rejected, the builder must not be pruned again with a wider schema (a builder may
+      // only narrow, e.g. Iceberg's), so the plain scan is built from a fresh builder instead, as
+      // scan merging does, and the lower generators of the chain do not try again.
+      var builderUsed = false
       SchemaPruning.pruneThroughGenerators(op, sHolder) { (scan, otherProjects, inputRootFields) =>
+        builderUsed = true
         Some(pruneScan(scan.projects, scan.filtersStayUp, scan.filtersPushDown, sHolder,
           Some(otherProjects), inputRootFields))
-      }.getOrElse(op)
+      }.getOrElse {
+        if (builderUsed) {
+          val bottom = generators.last.child
+          val rebuilt = rebuildWithoutGenerators(bottom, sHolder, isSubquery)
+          op.transformDown { case p if p eq bottom => rebuilt }
+        } else {
+          op
+        }
+      }
 
     case ScanOperation(project, filtersStayUp, filtersPushDown, sHolder: ScanBuilderHolder) =>
       pruneScan(project, filtersStayUp, filtersPushDown, sHolder, None, Nil)
+  }
+
+  /**
+   * Plans `bottom`, the projects and filters over `sHolder` below a chain of generators, from a
+   * fresh `ScanBuilder` of the same relation, re-applying the filters pushed to `sHolder`, like
+   * [[rebuildScan]]. Only valid when `sHolder` has no pushdown such a rebuild cannot reproduce.
+   */
+  private def rebuildWithoutGenerators(
+      bottom: LogicalPlan,
+      sHolder: ScanBuilderHolder,
+      isSubquery: Boolean): LogicalPlan = {
+    val relation = sHolder.relation
+    val withPushedFilters = sHolder.pushedFilterExpressions.reduceOption(And)
+      .map(Filter(_, relation)).getOrElse(relation)
+    applyWithContext(
+      bottom.transformDown { case p if p eq sHolder => withPushedFilters }, isSubquery)
   }
 
   private def pruneScan(

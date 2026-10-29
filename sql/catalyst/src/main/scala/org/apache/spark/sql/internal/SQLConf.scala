@@ -6505,6 +6505,16 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING =
+    buildConf("spark.sql.optimizer.nestedSchemaPruning.throughGenerate.rejectForTesting")
+      .internal()
+      .doc("Only for testing: reject every rewrite of pruning through generators after the " +
+        "scan is pruned, to exercise the fallback to the unpruned plan.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val DISABLE_HINTS =
     buildConf("spark.sql.optimizer.disableHints")
       .internal()
