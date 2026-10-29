@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn, MetadataColumnHelper}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -1154,26 +1154,32 @@ class Analyzer(
     }
 
     private def getMetadataAttributes(plan: LogicalPlan): Seq[Attribute] = {
+      val childrenMetadataOutput = childrenMetadataOutputById(plan)
       plan.expressions.flatMap(_.collect {
         case a: Attribute if a.isMetadataCol => a
-        case a: Attribute
-          if plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId)) =>
-          plan.children.collectFirst {
-            case c if c.metadataOutput.exists(_.exprId == a.exprId) =>
-              c.metadataOutput.find(_.exprId == a.exprId).get
-          }.get
+        case a: Attribute if childrenMetadataOutput.contains(a.exprId) =>
+          childrenMetadataOutput(a.exprId)
       })
     }
 
     private def hasMetadataCol(plan: LogicalPlan): Boolean = {
+      lazy val childrenMetadataOutput = childrenMetadataOutputById(plan)
       plan.expressions.exists(_.exists {
         case a: Attribute =>
           // If an attribute is resolved before being labeled as metadata
           // (i.e. from the originating Dataset), we check with expression ID
-          a.isMetadataCol ||
-            plan.children.exists(c => c.metadataOutput.exists(_.exprId == a.exprId))
+          a.isMetadataCol || childrenMetadataOutput.contains(a.exprId)
         case _ => false
       })
+    }
+
+    // The metadata output of the children, keeping the first attribute for each expression ID.
+    // Looking attributes up by ID keeps this rule linear when a child's metadata output is as wide
+    // as its output, as the hidden source row of the SQL pipe SET operator is.
+    private def childrenMetadataOutputById(plan: LogicalPlan): collection.Map[ExprId, Attribute] = {
+      val byId = mutable.HashMap.empty[ExprId, Attribute]
+      plan.children.foreach(_.metadataOutput.foreach(a => byId.getOrElseUpdate(a.exprId, a)))
+      byId
     }
 
     private def addMetadataCol(
@@ -1774,6 +1780,7 @@ class Analyzer(
         if (expanded.projectList.size < p.projectList.size) {
           checkTrailingCommaInSelect(expanded, starRemoved = true)
         }
+        retainExceptedColumnsAsHiddenOutput(p, expanded)
         expanded
       // If the filter list contains Stars, expand it.
       case p: Filter if containsStar(Seq(p.condition)) =>
@@ -2171,6 +2178,50 @@ class Analyzer(
         case o if containsStar(o :: Nil) => expandStarExpression(o, child) :: Nil
         case o => o :: Nil
       }.map(_.asInstanceOf[NamedExpression])
+    }
+
+    /**
+     * The SQL pipe SET operator is implemented as a star expansion that excludes the assigned
+     * column and appends a replacement of the same name. That drops the original attribute from
+     * the project list, which would also make it unreachable through its table alias, contradicting
+     * the documented behavior that table aliases keep referring to the original row values after an
+     * assignment. Retain the excluded attributes as hidden output instead, the same way USING joins
+     * hide their duplicated join keys (SPARK-59146).
+     *
+     * The hidden output holds the whole qualified source row, with every position in its original
+     * order, not just the excluded attributes, because a qualified star expands hidden output
+     * ahead of the visible output. Retaining only the excluded attributes would move them to the
+     * front, so that `VALUES (1, 2, 3) AS t(a, b, c) |> SET b = 20 |> SELECT t.*` would return
+     * `(b, a, c)`. Attributes that are also visible are emitted once by the star expansion, in
+     * their hidden position. The Project does not hide them, so they are also recorded in
+     * [[Project.visibleHiddenOutputTag]], which keeps them regular in DataFrame column resolution.
+     */
+    private def retainExceptedColumnsAsHiddenOutput(original: Project, expanded: Project): Unit = {
+      val retain = original.projectList.exists {
+        case s: UnresolvedStarExceptOrReplace => s.retainExceptedColumnsAsHidden
+        case _ => false
+      }
+      if (retain) {
+        val child = expanded.child
+        if (child.output.exists(!expanded.outputSet.contains(_))) {
+          // The row a qualified star sees on the child, keeping every one of its positions. Only
+          // qualified attributes are reachable through a qualified star.
+          val sourceRow = UnresolvedStarBase
+            .mergeHiddenAndVisibleOutput(
+              child.metadataOutput.filter(_.qualifiedAccessOnly), child.output)
+            .filter(_.qualifier.nonEmpty)
+          val sourceRowIds = sourceRow.map(_.exprId).toSet
+          // The rule forwards the original tags, such as the Spark Connect plan id, only onto a
+          // node without tags, so copy them here before adding the hidden output tag.
+          expanded.copyTagsFrom(original)
+          expanded.setTagValue(
+            Project.hiddenOutputTag,
+            sourceRow.map(_.markAsQualifiedAccessOnly()) ++
+              child.metadataOutput.filterNot(a => sourceRowIds.contains(a.exprId)))
+          expanded.setTagValue(
+            Project.visibleHiddenOutputTag, sourceRow.filter(expanded.outputSet.contains))
+        }
+      }
     }
 
     /**
