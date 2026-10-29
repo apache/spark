@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql
 
+import java.util.concurrent.{CountDownLatch, TimeUnit}
+
+import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+
 import org.scalatest.concurrent.TimeLimits
 import org.scalatest.time.SpanSugar._
 
@@ -28,6 +33,7 @@ import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.Metadata
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.ThreadUtils
 
 @SlowSQLTest
 class DatasetCacheSuite extends QueryTest
@@ -327,5 +333,44 @@ class DatasetCacheSuite extends QueryTest
     // Same with df1 except for the Alias metadata
     val df3 = spark.range(5).select(struct($"id".as("name", metadata2)))
     assert(!df3.queryExecution.executedPlan.exists(_.isInstanceOf[InMemoryTableScanExec]))
+  }
+
+  test("uncaching an unrelated Dataset does not wait for an in-progress cache materialization") {
+    // A shuffle-backed cache materialization under AQE holds the CachedRDDBuilder monitor while
+    // its map stage runs; a non-cascade uncache must not take that monitor for cache entries it
+    // does not affect.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      val unrelated = spark.range(10).toDF("u").cache()
+      unrelated.count()
+      DatasetCacheSuite.resetFillLatches()
+      val blockFill = udf { (x: Long) => DatasetCacheSuite.blockFill(); x }
+      val slow = spark.range(0, 1, 1, 1).select(blockFill($"id").as("v")).repartition(2).cache()
+      val fill = Future { slow.count() }(ExecutionContext.global)
+      try {
+        assert(DatasetCacheSuite.fillStarted.await(60, TimeUnit.SECONDS),
+          "cache materialization did not start")
+        val uncache = Future { unrelated.unpersist() }(ExecutionContext.global)
+        ThreadUtils.awaitResult(uncache, Duration(10, TimeUnit.SECONDS))
+      } finally {
+        DatasetCacheSuite.releaseFill.countDown()
+        ThreadUtils.awaitResult(fill, Duration(60, TimeUnit.SECONDS))
+        slow.unpersist()
+      }
+    }
+  }
+}
+
+object DatasetCacheSuite {
+  @volatile var fillStarted: CountDownLatch = new CountDownLatch(1)
+  @volatile var releaseFill: CountDownLatch = new CountDownLatch(1)
+
+  def resetFillLatches(): Unit = {
+    fillStarted = new CountDownLatch(1)
+    releaseFill = new CountDownLatch(1)
+  }
+
+  def blockFill(): Unit = {
+    fillStarted.countDown()
+    releaseFill.await(60, TimeUnit.SECONDS)
   }
 }
