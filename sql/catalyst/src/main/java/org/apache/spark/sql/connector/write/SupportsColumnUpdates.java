@@ -65,7 +65,8 @@ public interface SupportsColumnUpdates extends RowLevelOperation {
    * If the returned array is empty, Spark does not narrow the write and the operation receives
    * full-width rows. An UPDATE whose assignments are all identity assignments reports no
    * {@link RowLevelOperationInfo#updatedColumns()}, so an operation that declares exactly those
-   * columns takes this path for such an UPDATE.
+   * columns takes this path for such an UPDATE. An empty array is not an opt-out: an UPDATE that
+   * sets a column is still rejected, because the array misses that column.
    * <p>
    * An operation that does not mix in {@link SupportsDelta} should locate original rows through
    * metadata columns returned by {@link #requiredMetadataAttributes()} that are preserved on

@@ -44,13 +44,14 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       EliminateSubqueryAliases(aliasedTable) match {
         case r @ ExtractV2Table(tbl: SupportsRowLevelOperations) =>
           checkNoGeneratedColumns(r, UPDATE)
-          val updatedAttrs = collectUpdatedAttrs(assignments)
+          val assignedAttrs = collectAssignedAttrs(assignments)
+          val updatedAttrs = assignedAttrs.filterNot(a => MetadataAttribute.isValid(a.metadata))
           val table = buildOperationTable(tbl, UPDATE, r.options, updatedAttrs)
           val updateCond = cond.getOrElse(TrueLiteral)
           val writeAttrs = resolveWriteAttrs(r, table.operation, updatedAttrs)
           table.operation match {
             case _: SupportsDelta =>
-              buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs, updatedAttrs)
+              buildWriteDeltaPlan(r, table, assignments, updateCond, writeAttrs, assignedAttrs)
             case _ if SubqueryExpression.hasSubquery(updateCond) =>
               buildReplaceDataWithUnionPlan(r, table, assignments, updateCond, writeAttrs)
             case _ =>
@@ -166,7 +167,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       assignments: Seq[Assignment],
       cond: Expression,
       writeAttrs: Seq[AttributeReference],
-      updatedAttrs: Seq[AttributeReference]): WriteDelta = {
+      assignedAttrs: Seq[AttributeReference]): WriteDelta = {
 
     val operation = operationTable.operation.asInstanceOf[SupportsDelta]
 
@@ -178,7 +179,7 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     operation match {
       case op: SupportsColumnUpdates if splitUpdates && RewriteRowLevelCommand.narrowsWrite(op) =>
         val declared = AttributeSet(writeAttrs)
-        validateNoRowIdReassignment(op, relation, declared, updatedAttrs, rowIdAttrs)
+        validateNoRowIdReassignment(op, relation, declared, assignedAttrs, rowIdAttrs)
         validateRowIdDeclared(op, declared, rowIdAttrs, metadataAttrs)
       case _ =>
     }
@@ -255,21 +256,20 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
   }
 
   /**
-   * Returns the data columns that these assignments set to a new value, skipping identity
-   * assignments and metadata columns.
+   * Returns the table attributes that these assignments set to a new value, skipping identity
+   * assignments. Metadata columns are included.
    */
-  private def collectUpdatedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
+  private def collectAssignedAttrs(assignments: Seq[Assignment]): Seq[AttributeReference] = {
     assignments.collect {
-      case Assignment(key: AttributeReference, value)
-          if !MetadataAttribute.isValid(key.metadata) && !isIdentityAssignment(key, value) => key
+      case Assignment(key: AttributeReference, value) if !isIdentityAssignment(key, value) => key
     }
   }
 
   /**
    * Returns the output of the write relation, which is the layout of the data rows the connector
    * receives. If the operation opts into column updates, this is the connector's
-   * `requiredDataAttributes()`, validated against the updated columns, unless it is empty. Then,
-   * and for any other operation, it is the full relation output.
+   * `requiredDataAttributes()`. An empty declaration yields the full relation output, as does any
+   * other operation. Either way, the declaration must cover every updated column.
    */
   private def resolveWriteAttrs(
       relation: DataSourceV2Relation,
@@ -314,12 +314,12 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
       operation: RowLevelOperation,
       relation: DataSourceV2Relation,
       declared: AttributeSet,
-      updatedAttrs: Seq[AttributeReference],
+      assignedAttrs: Seq[AttributeReference],
       rowIdAttrs: Seq[Attribute]): Unit = {
     val dataAttrs = relation.output.filterNot(a => MetadataAttribute.isValid(a.metadata))
     if (!dataAttrs.forall(declared.contains)) {
       val rowIdAttrSet = AttributeSet(rowIdAttrs)
-      val reassigned = updatedAttrs.filter(rowIdAttrSet.contains).map(a => Seq(a.name))
+      val reassigned = assignedAttrs.filter(rowIdAttrSet.contains).map(a => Seq(a.name))
       if (reassigned.nonEmpty) {
         throw QueryCompilationErrors.splitUpdateRowIdReassignmentError(
           operation.getClass.getName, reassigned)

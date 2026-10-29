@@ -378,8 +378,9 @@ object RewriteRowLevelCommand extends SQLConfHelper {
 
   /**
    * Resolves the connector-declared required data attributes for column-update writes against
-   * the given relation, in declared order and with the relation's spelling. Nested fields, duplicate columns, columns that do not exist in the relation (including a
-   * reference with no name parts) and metadata columns are rejected with an `AnalysisException`.
+   * the given relation, in declared order and with the relation's spelling. Nested fields,
+   * duplicate columns, columns that do not exist in the relation (including a reference with no
+   * name parts) and metadata columns are rejected with an `AnalysisException`.
    */
   private[sql] def resolveRequiredDataAttrs(
       relation: LogicalPlan,

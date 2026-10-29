@@ -72,8 +72,8 @@ public interface LogicalWriteInfo {
 
   /**
    * the schema of updated, copied, and reinserted rows from Spark to data source in a
-   * column-level update. Present when the operation mixes in {@link SupportsColumnUpdates} and
-   * Spark delivers these rows with the columns of
+   * column-level update. Present when the operation mixes in {@link SupportsColumnUpdates},
+   * declares at least one column, and Spark delivers these rows with the columns of
    * {@link SupportsColumnUpdates#requiredDataAttributes()}, which currently happens only for
    * UPDATE. It covers every data column if every data column is declared. When present,
    * {@link #schema()} covers only newly inserted rows. Empty when Spark delivers every row with
