@@ -3811,6 +3811,9 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |JOIN testcat.ns.b6 ON b4.id = b6.id
              |""".stripMargin)
         checkAnswer(df, expected)
+        // The skewed branch shuffles 3 times. The re-run's outer join refuses the reducer it
+        // pushed into the inner scans the first time, so it shuffles both of its sides.
+        assert(collectAllShuffles(df.queryExecution.executedPlan).size == 5)
       }
     }
   }
@@ -3859,6 +3862,66 @@ class KeyGroupedPartitioningSuite extends DistributionAndOrderingSuiteBase {
              |JOIN testcat.ns.qy ON qd.ts = qy.ts
              |""".stripMargin)
         checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("SPARK-60232: re-running EnsureRequirements keeps a single SPJ's pairing") {
+    Seq(ReducibleHoursFunction, ReducibleDaysFunction, ReducibleYearsFunction).foreach { f =>
+      catalog.createFunction(Identifier.of(Array.empty, f.name()), new UnboundReducibleFunction(f))
+    }
+    val idCols = Array(Column.create("id", LongType))
+    Seq("b4" -> 4, "b12" -> 12).foreach { case (t, n) =>
+      createTable(t, idCols, Array(bucket(n, "id")))
+      sql(s"INSERT INTO testcat.ns.$t SELECT id FROM range(24)")
+    }
+    val tsCols = Array(Column.create("id", LongType), Column.create("ts", TimestampType))
+    Seq("qh" -> hours("ts"), "qd" -> days("ts")).foreach { case (t, p) =>
+      createTable(t, tsCols, Array(p))
+      sql(s"INSERT INTO testcat.ns.$t " +
+        "SELECT id, TIMESTAMP '2026-01-01 00:00:00' + id * INTERVAL '1' HOUR FROM range(72)")
+    }
+
+    withTempView("skewData1", "skewData2") {
+      spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 3 as key1", "id as value1")
+        .createOrReplaceTempView("skewData1")
+      spark.range(0, 1000, 1, 10)
+        .selectExpr("id % 1 as key2", "id as value2")
+        .createOrReplaceTempView("skewData2")
+      val skewQuery = "SELECT key1 AS k, count(*) AS c " +
+        "FROM skewData1 JOIN skewData2 ON key1 = key2 GROUP BY key1"
+      val skewRows = sql(skewQuery).collect().toSeq
+
+      // The re-run finds this join's own scans directly below it, still carrying the reducer the
+      // first run pushed. With v2 bucketing shuffle off, as by default, refusing that pairing
+      // would leave no spec to shuffle onto, so both sides would get a hash shuffle.
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_OPTIMIZE_SKEWS_IN_REBALANCE_PARTITIONS_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "100",
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "100",
+        SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
+        SQLConf.SHUFFLE_PARTITIONS.key -> "10",
+        SQLConf.ADAPTIVE_FORCE_OPTIMIZE_SKEWED_JOIN.key -> "true",
+        SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+        Seq(
+          ("b4", "b12", "id", 24),
+          ("qh", "qd", "ts", 72)).foreach { case (t1, t2, key, numRows) =>
+          val df = sql(
+            s"""
+               |$skewQuery
+               |UNION ALL
+               |SELECT /*+ MERGE($t1, $t2) */ $t1.id AS k, 1L AS c
+               |FROM testcat.ns.$t1 JOIN testcat.ns.$t2 ON $t1.$key = $t2.$key
+               |""".stripMargin)
+          checkAnswer(df, skewRows ++ (0L until numRows.toLong).map(i => Row(i, 1L)))
+          // Only the skewed branch shuffles: both sides of its join, and its aggregate.
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 3,
+            s"$t1 JOIN $t2 should keep SPJ when EnsureRequirements re-runs")
+        }
       }
     }
   }
