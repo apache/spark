@@ -73,6 +73,9 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
 
   protected var writer: ArrowStreamWriter = _
 
+  // Whether `root` and `allocator` have been closed.
+  private var rootAndAllocatorClosed = false
+
   protected def close(): Unit = {
     Utils.tryWithSafeFinally {
       // end writes footer to the output stream and doesn't clean any resources.
@@ -80,6 +83,19 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       // in the try block.
       writer.end()
     } {
+      closeRootAndAllocator()
+    }
+  }
+
+  /**
+   * Closes `root` and `allocator` if `writer` has been created, which creates them, and they are
+   * not closed yet. Besides `close()` at the end of the input, a task completion listener calls
+   * this, since the task can complete before the input is exhausted, e.g. when it fails, is
+   * killed, or stops reading the output early.
+   */
+  private def closeRootAndAllocator(): Unit = {
+    if (writer != null && !rootAndAllocatorClosed) {
+      rootAndAllocatorClosed = true
       root.close()
       allocator.close()
     }
@@ -91,6 +107,11 @@ private[python] trait PythonArrowInput[IN] { self: BasePythonRunner[IN, _] =>
       inputIterator: Iterator[IN],
       partitionIndex: Int,
       context: TaskContext): Writer = {
+    // Task completion listeners run after the writer is done: it runs on the task thread unless
+    // it is pipelined, and the pipelined writer is stopped and awaited before them (see
+    // `BasePythonRunner.startPipelinedWriter`). The listener does not end `writer`, since the
+    // stream that it writes to may be closed already, and nothing sends it to the worker anymore.
+    context.addTaskCompletionListener[Unit](_ => closeRootAndAllocator())
     new Writer(env, worker, inputIterator, partitionIndex, context) {
 
       protected override def writeCommand(dataOut: DataOutputStream): Unit = {
