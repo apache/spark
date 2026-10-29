@@ -52,6 +52,10 @@
 //                   With the option "max_rows_per_trigger", it declares the capability
 //                   SPARK_DS_ADMISSION_CONTROL, and its default read limit is that many rows, or
 //                   with "bad_read_limit", an unknown "kind" of limit or a maximum of 0 "rows".
+//                   With "initial_offsets_path", each call to initial_offset appends a line to
+//                   that file, and returns the number of calls before it as the offset, as an
+//                   initial offset that depends on when it is asked does. With "columns_path",
+//                   creating the stream reader writes the columns to read to that file.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -1022,6 +1026,8 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     if (info->checkpoint_location == nullptr) throw std::runtime_error("no checkpoint location");
     std::string checkpoint_path = get(source->options, "checkpoint_path", "");
     if (!checkpoint_path.empty()) writeFile(checkpoint_path, info->checkpoint_location);
+    std::string columns_path = get(source->options, "columns_path", "");
+    if (!columns_path.empty()) writeFile(columns_path, columns);
     if (returnsZero(source->options, "create_stream_reader")) return;
     auto* reader = new Reader();
     reader->state["kind"] = std::to_string(SPARK_DS_READ_MICRO_BATCH);
@@ -1030,8 +1036,8 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
-         {"commit_path", "bad_offset", "closed_path", "starts_path", "states",
-          "max_rows_per_trigger", "bad_read_limit"}) {
+         {"commit_path", "bad_offset", "closed_path", "starts_path", "initial_offsets_path",
+          "states", "max_rows_per_trigger", "bad_read_limit"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1086,11 +1092,20 @@ void closeReader(void* handle) { delete fromHandle<Reader>(handle); }
 
 #ifndef READ_ONLY
 
-int initialOffset(void*, const SparkDsInitialOffsetInfo* info, SparkDsSink set_offset,
+int initialOffset(void* handle, const SparkDsInitialOffsetInfo* info, SparkDsSink set_offset,
                   void* sink) {
   return guarded([&] {
     checkSize("SparkDsInitialOffsetInfo", info->size, sizeof(SparkDsInitialOffsetInfo));
-    sendBytes(set_offset, sink, "{\"offset\":0}");
+    int64_t offset = 0;
+    std::string path = get(fromHandle<Reader>(handle)->state, "initial_offsets_path", "");
+    if (!path.empty()) {
+      FILE* file = std::fopen(path.c_str(), "a+");
+      if (file == nullptr) throw std::runtime_error("cannot write " + path);
+      for (int c = std::fgetc(file); c != EOF; c = std::fgetc(file)) offset += c == '\n';
+      std::fputs("initial_offset\n", file);
+      std::fclose(file);
+    }
+    sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(offset) + "}");
   });
 }
 

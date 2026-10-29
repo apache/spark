@@ -107,20 +107,25 @@ Spark calls the functions of the table as follows:
   the reader, and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any
   thread, but never concurrently.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`,
-  which gets the location of the checkpoint of the source in a `SparkDsStreamReaderInfo`. For each
-  micro-batch, it asks for the `latest_offset`, with the offset that the micro-batch starts after,
-  plans the partitions with `stream_partitions`, which also returns the state of the stream reader,
-  and calls `read` on the executors. Offsets are defined by the library, as compact JSON on a
-  single line: Spark stores each offset as a line of the offset log of the checkpoint, and rejects
-  an offset that is not valid JSON or contains a line break, such as pretty-printed JSON. A data
-  source with the capability `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for
-  example with an option for a maximum number of rows: Spark asks for the limit once with
-  `default_read_limit`, and passes it to each `latest_offset` in its `SparkDsLatestOffsetInfo`,
-  which then returns the end of the data of the next micro-batch within the limit. With
-  `Trigger.AvailableNow`, Spark first asks for the latest offset without a limit, and passes it as
-  the end that the limited latest offsets must not go beyond, so that the run reads the data that
-  was available when it started in micro-batches within the limit. `Trigger.Once` ignores the
-  limit.
+  which gets the columns to read, which may be only those that the query needs, and the location of
+  the checkpoint of the source in a `SparkDsStreamReaderInfo`. When the checkpoint does not have the
+  initial offset of the source yet, Spark asks for it with `initial_offset`, and keeps it in the
+  checkpoint, so a query that restarts before its first micro-batch is committed starts from the
+  same offset. For each micro-batch, or only once, before the first micro-batch that it plans, with
+  `Trigger.AvailableNow`, it asks for the `latest_offset`, with the offset that the micro-batch
+  starts after, plans the partitions with `stream_partitions`, which also returns the state of the
+  stream reader, and calls `read` on the executors. Offsets are defined by the library, as compact
+  JSON on a single line: Spark stores each offset as a line of the offset log of the checkpoint,
+  and rejects an offset that is not valid JSON or contains a line break, such as pretty-printed
+  JSON. Spark keeps what it needs in the checkpoint of the source under the names that start with
+  `_spark`, which the library must not use. A data source with the capability
+  `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for example with an option for
+  a maximum number of rows: Spark asks for the limit once with `default_read_limit`, and passes it
+  to each `latest_offset` in its `SparkDsLatestOffsetInfo`, which then returns the end of the data
+  of the next micro-batch within the limit. With `Trigger.AvailableNow`, Spark first asks for the
+  latest offset without a limit, and passes it as the end that the limited latest offsets must not
+  go beyond, so that the run reads the data that was available when it started in micro-batches
+  within the limit. `Trigger.Once` ignores the limit.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
   creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
@@ -133,8 +138,8 @@ Spark calls the functions of the table as follows:
   `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails.
   Then the driver calls `commit` with the messages of the tasks, or `abort` if the write failed.
   When Spark rejects what `create_writer` returned, such as a state set more than once, it calls
-  `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set, and an epoch ID of -1 also for
-  a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
+  `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set to 1, and an epoch ID of -1 also
+  for a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
   epoch ID, and the ID of the query stays the same when the query restarts from its checkpoint:
   together, they identify the output of a micro-batch, so that a library can skip an epoch that it
   already committed. A micro-batch streaming query creates a new stream writer for each micro-batch,
@@ -788,7 +793,7 @@ package it as above:
 
 ```bash
 c++ -std=c++20 -O2 -shared -fPIC -I"$SPARK_HOME/include" -I"$ARROW_HOME/include" \
-  -L"$ARROW_HOME/lib" -larrow -o libspark_datasource_cpp_range.dylib cpp_range.cc
+  -o libspark_datasource_cpp_range.dylib cpp_range.cc -L"$ARROW_HOME/lib" -larrow
 cp libspark_datasource_cpp_range.dylib /usr/local/lib/
 ```
 
