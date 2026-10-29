@@ -37,7 +37,9 @@ package, and loads it when a query uses the data source. Spark adapts it to
 
 Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
-the data that a library returns without copying it.
+the data that a library returns without copying it. When the data to write is columnar too, such
+as the batches of a native scan, Spark writes them without converting them to rows: it copies
+their Arrow buffers, since a library may keep the data that it writes.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java

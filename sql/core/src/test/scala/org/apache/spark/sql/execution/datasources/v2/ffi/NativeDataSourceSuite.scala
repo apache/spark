@@ -38,9 +38,10 @@ import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTes
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -583,9 +584,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     write("overwrite", 10 until 12)
     assert(written() == (10 until 12).map(i => s"$i,v$i").toSet)
 
-    // Nulls and the other types of the test library.
-    range(session, "end" -> "6").write.format("native_sink").option("path", dir.getPath)
-      .mode("overwrite").save()
+    // Nulls and the other types of the test library, from the Arrow batches of a native scan,
+    // which the write gets without a transition to rows.
+    val plans = QueryTest.withQueryExecutionsCaptured(session) {
+      range(session, "end" -> "6").write.format("native_sink").option("path", dir.getPath)
+        .mode("overwrite").save()
+    }.flatMap(_.executedPlan.collectFirst { case write: V2TableWriteExec => write.query })
+    assert(plans.length == 1 && plans.head.isInstanceOf[BatchScanExec], plans)
     assert(written() == (0 until 6).map { id =>
       val name = if (id % 5 == 0) "null" else s"n$id"
       s"$id,${id % 3},$name,${format(id * 0.5)},${id % 2 == 0},$id,${id * 1000000L}"
@@ -786,6 +791,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .start()
     try {
       query.processAllAvailable()
+      // A micro-batch writes the Arrow batches of the scan, without a transition to rows.
+      val plan =
+        query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+      assert(plan.collectFirst { case write: V2TableWriteExec => write.query }
+        .exists(_.isInstanceOf[MicroBatchScanExec]), plan)
     } finally {
       query.stop()
     }
