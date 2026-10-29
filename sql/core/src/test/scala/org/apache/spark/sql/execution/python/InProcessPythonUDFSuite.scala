@@ -91,8 +91,12 @@ class InProcessPythonUDFSuite extends QueryTest with SharedSparkSession {
     assert(physical.head.missingInput.isEmpty)
     // There are no Python workers, so no boot time and descriptions of in-process execution.
     val metrics = physical.head.metrics
+    val phaseMetrics = Set("pythonDataReadTime", "pythonInputPreparationTime",
+      "pythonUDFExecutionTime", "pythonOutputPreparationTime", "pythonDataWriteTime",
+      "pythonNumTimingReports", "pythonNumTimedBatches")
     assert(metrics.keySet == Set("pythonDataSent", "pythonDataReceived", "pythonInitTime",
-      "pythonTotalTime", "pythonProcessingTime", "pythonNumRowsReceived"))
+      "pythonTotalTime", "pythonProcessingTime", "pythonNumRowsReceived") ++ phaseMetrics)
+    assert(phaseMetrics.forall(metrics(_).value == 0))
     assert(!metrics.values.exists(_.name.exists(_.contains("worker"))))
     // Times are summed in nanoseconds, so sub-millisecond registrations and batches count.
     assert(Seq("pythonInitTime", "pythonTotalTime", "pythonProcessingTime")
