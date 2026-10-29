@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.jdbc.v2
 
-import java.sql.Connection
+import java.sql.{Connection, Timestamp}
 import java.time.LocalDateTime
 import java.util.Locale
 
@@ -29,7 +29,6 @@ import org.apache.spark.sql.catalyst.util.CharVarcharUtils.CHAR_VARCHAR_TYPE_STR
 import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
@@ -189,66 +188,39 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
 
   override def caseConvert(tableName: String): String = tableName.toUpperCase(Locale.ROOT)
 
-  test("SPARK-58876: V2 NTZ reads keep frozen options and honor per-read and per-write options") {
+  test("SPARK-60420: V2 NTZ reads and writes honor per-query timestampNTZAsWallClock") {
     val table = s"$catalogName.${namespaceOpt.get}.${caseConvert("datetime")}"
-    // The lower-cased key must still override the wall-clock value pinned at loadTable.
-    val ntzOptions = "'zonelessTimestampAsNTZ' = 'true', 'timestampntzaswallclock' = 'true'"
+    val ldt = LocalDateTime.of(2022, 5, 19, 0, 0, 0)
+    val noWallClock = "'timestampNTZAsWallClock' = 'false'"
     withDefaultTimeZone(LA) {
-      val (df, frozenMax) =
-        withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
-          (sql(s"SELECT time1 FROM $table WHERE name = 'amy'"),
-            sql(s"SELECT MAX(time1) FROM $table"))
-        }
-      assert(df.schema.head.dataType === TimestampNTZType)
-      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-        checkAnswer(df, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
-        // Aggregate pushdown re-derives the scan schema; a mismatch would be cast back silently.
-        checkAggregateRemoved(frozenMax)
-        val pushedScan = frozenMax.queryExecution.optimizedPlan.collectFirst {
-          case s: DataSourceV2ScanRelation => s
-        }.get
-        assert(pushedScan.output.head.dataType === TimestampNTZType)
-        checkAnswer(frozenMax, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
-        // Per-read options override the flag: the mapping at loadTable, the getter at the scan.
-        val perRead = sql(s"SELECT time1 FROM $table WITH ($ntzOptions) WHERE name = 'amy'")
-        assert(perRead.schema.head.dataType === TimestampNTZType)
-        checkAnswer(perRead, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
+      // With the conversion off, values go through a JVM-default-zone java.sql.Timestamp.
+      val readShifted = DateTimeUtils.microsToLocalDateTime(
+        DateTimeUtils.fromJavaTimestampNoRebase(Timestamp.valueOf(ldt)))
+      val perRead = sql(s"SELECT time1 FROM $table WITH ($noWallClock) WHERE name = 'amy'")
+      assert(perRead.schema.head.dataType === TimestampNTZType)
+      checkAnswer(perRead, Row(readShifted))
 
-        // Aggregate and join pushdown rebuild the scan's options and must keep the per-read ones.
-        val maxDf = sql(s"SELECT MAX(time1) FROM $table WITH ($ntzOptions)")
-        checkAggregateRemoved(maxDf)
-        assert(maxDf.schema.head.dataType === TimestampNTZType)
-        checkAnswer(maxDf, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
-        withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-          val joinDf = sql(s"SELECT a.time1, b.time1 FROM $table WITH ($ntzOptions) a " +
-            s"JOIN $table WITH ($ntzOptions) b ON a.name = b.name WHERE a.name = 'amy'")
-          checkJoinPushed(joinDf)
-          checkAnswer(joinDf, Row(LocalDateTime.of(2022, 5, 19, 0, 0, 0),
-            LocalDateTime.of(2022, 5, 19, 0, 0, 0)))
-        }
+      // Aggregate and join pushdown rebuild the scan's options and must keep the per-read ones.
+      val maxDf = sql(s"SELECT MAX(time1) FROM $table WITH ($noWallClock)")
+      checkAggregateRemoved(maxDf)
+      checkAnswer(maxDf, Row(readShifted))
+      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
+        val joinDf = sql(s"SELECT a.time1, b.time1 FROM $table WITH ($noWallClock) a " +
+          s"JOIN $table WITH ($noWallClock) b ON a.name = b.name WHERE a.name = 'amy'")
+        checkJoinPushed(joinDf)
+        checkAnswer(joinDf, Row(readShifted, readShifted))
       }
-      val legacyRead = sql(s"SELECT time1 FROM $table WITH ('zonelessTimestampAsNTZ' = 'false') " +
-        "WHERE name = 'amy'")
-      assert(legacyRead.schema.head.dataType === TimestampType)
 
-      // Per-write options reach the write target: the mapping types its column and the setter
-      // binds the value. Reading back with the defaults shows the stored wall-clock exactly.
+      // Reading back with the defaults shows the stored wall-clock exactly.
       val target = s"$catalogName.${namespaceOpt.get}.${caseConvert("ntz_write")}"
       withTable(target) {
         sql(s"CREATE TABLE $target (t TIMESTAMP_NTZ)")
-        def insert(day: Int, options: String): Unit =
-          sql(s"INSERT INTO $target WITH ($options) SELECT TIMESTAMP_NTZ'2022-05-$day 00:00:00'")
-        withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-          insert(19, ntzOptions)
-        }
-        insert(20, "'timestampNTZAsWallClock' = 'false'")
-        insert(21, "'zonelessTimestampAsNTZ' = 'false', 'timestampNTZAsWallClock' = 'false'")
-        val shifted = DateTimeUtils.toJavaTimestampNoRebase(
+        sql(s"INSERT INTO $target SELECT TIMESTAMP_NTZ'2022-05-19 00:00:00'")
+        sql(s"INSERT INTO $target WITH ($noWallClock) SELECT TIMESTAMP_NTZ'2022-05-20 00:00:00'")
+        val writeShifted = DateTimeUtils.toJavaTimestampNoRebase(
           DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2022, 5, 20, 0, 0, 0)))
           .toLocalDateTime
-        checkAnswer(sql(s"SELECT t FROM $target"), Seq(
-          LocalDateTime.of(2022, 5, 19, 0, 0, 0), shifted, LocalDateTime.of(2022, 5, 21, 0, 0, 0)
-        ).map(Row(_)))
+        checkAnswer(sql(s"SELECT t FROM $target"), Seq(ldt, writeShifted).map(Row(_)))
       }
     }
   }

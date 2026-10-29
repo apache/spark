@@ -60,13 +60,13 @@ case class JDBCTable(
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): JDBCScanBuilder = {
     val mergedOptions = new JDBCOptions(
-      jdbcOptions.parameters ++ options.asCaseSensitiveMap().asScala)
+      jdbcOptions.parameters.originalMap ++ options.asCaseSensitiveMap().asScala)
     JDBCScanBuilder(SparkSession.active, schema, mergedOptions, additionalMetrics)
   }
 
   override def newWriteBuilder(info: LogicalWriteInfo): WriteBuilder = {
     val mergedOptions = new JdbcOptionsInWrite(
-      jdbcOptions.parameters ++ info.options.asCaseSensitiveMap().asScala)
+      jdbcOptions.parameters.originalMap ++ info.options.asCaseSensitiveMap().asScala)
     JDBCWriteBuilder(schema, mergedOptions)
   }
 

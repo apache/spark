@@ -628,6 +628,14 @@ class OracleIntegrationSuite extends SharedJDBCIntegrationSuite
     assert(optOutDf.schema("D").dataType === TimestampType)
     assert(optOutDf.schema("T").dataType === TimestampType)
 
+    // Conversion off keeps the NTZ mapping but reads through a JVM-zone java.sql.Timestamp;
+    // LA is UTC-08:00 on this date, so 01:23:45 reads back as 09:23:45.
+    withDefaultTimeZone(LA) {
+      val noWallClockDf = readDatetime(Map("timestampNTZAsWallClock" -> "false"))
+      assert(noWallClockDf.schema("T").dataType === TimestampNTZType)
+      checkAnswer(noWallClockDf.select("T"), Row(LocalDateTime.of(1996, 1, 1, 9, 23, 45)))
+    }
+
     // Legacy flag on: both fall back to TimestampType.
     withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
       val legacyDf = readDatetime()

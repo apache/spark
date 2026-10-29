@@ -21,13 +21,11 @@ import java.util
 
 import scala.collection.mutable
 import scala.jdk.CollectionConverters._
-import scala.util.DynamicVariable
 
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.catalyst.analysis.NoSuchFunctionException
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.classic.SparkSession
-import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, TableContext, TableSummary}
+import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Column, FunctionCatalog, Identifier, NamespaceChange, SupportsNamespaces, Table, TableCatalog, TableChange, TableSummary}
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors, QueryExecutionErrors}
@@ -153,28 +151,10 @@ class JDBCTableCatalog extends TableCatalog
     }
   }
 
-  // The per-read value decides the resolved schema, so it must reach loadTable.
-  override def tableStateOptionKeys(): util.Set[String] =
-    util.Set.of(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
-
-  // Carries the state options down the default dispatch to loadTable(ident), so subclass
-  // overrides of loadTable(ident) and loadTable(ident, writePrivileges) stay in the path.
-  private val currentStateOptions =
-    new DynamicVariable[collection.Map[String, String]](Map.empty)
-
-  override def loadTable(
-      ident: Identifier,
-      context: TableContext,
-      stateOptions: CaseInsensitiveStringMap): Table = {
-    currentStateOptions.withValue(stateOptions.asCaseSensitiveMap().asScala) {
-      super.loadTable(ident, context, stateOptions)
-    }
-  }
-
   override def loadTable(ident: Identifier): Table = {
     JdbcUtils.withConnection(options) { conn =>
-      val tableOptions = new JDBCOptions(withPlanTimeOptions(options.parameters ++
-        currentStateOptions.value + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident))))
+      val tableOptions = new JDBCOptions(
+        options.parameters + (JDBCOptions.JDBC_TABLE_NAME -> getTableName(ident)))
       JdbcUtils.classifyException(
         condition = "FAILED_JDBC.LOAD_TABLE",
         messageParameters = Map(
@@ -193,16 +173,6 @@ class JDBCTableCatalog extends TableCatalog
           Map(JDBCRelation.schemaFetchKey -> remoteSchemaFetchMetric))
       }
     }
-  }
-
-  // Pins the plan-time values of unset options, since V2 scans and writes rebuild JDBCOptions
-  // later in the query and would otherwise recompute them.
-  private def withPlanTimeOptions(
-      parameters: CaseInsensitiveMap[String]): CaseInsensitiveMap[String] = {
-    val planTimeOptions = Map(
-      JDBCOptions.JDBC_TIMESTAMP_NTZ_WALL_CLOCK -> dialect.timestampNTZAsWallClock.toString,
-      JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ -> dialect.timestampNTZAsWallClock.toString)
-    parameters ++ planTimeOptions.filterNot { case (key, _) => parameters.contains(key) }
   }
 
   override def createTable(
