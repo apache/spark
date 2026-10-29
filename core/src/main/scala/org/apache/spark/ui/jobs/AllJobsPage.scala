@@ -316,9 +316,17 @@ private[ui] class AllJobsPage(parent: JobsTab, store: AppStatusStore) extends We
     }
 
     // SPARK-33991 Avoid enumeration conversion error.
-    val schedulingMode = store.environmentInfo().sparkProperties.toMap
-      .get(SCHEDULER_MODE.key)
-      .map { mode => SchedulingMode.withName(mode.toUpperCase(Locale.ROOT)).toString }
+    // The value is read back from the event log in the History Server, where
+    // spark.redaction.regex may have replaced it (e.g. "*********(redacted)"), and the
+    // environment may be missing altogether. Neither may fail the page: an unknown value is
+    // shown as it is, and a missing one as "Unknown".
+    val schedulingMode = store.asOption(store.environmentInfo())
+      .flatMap(_.sparkProperties.toMap.get(SCHEDULER_MODE.key))
+      .map { mode =>
+        SchedulingMode.values.find(_.toString == mode.toUpperCase(Locale.ROOT))
+          .map(_.toString)
+          .getOrElse(mode)
+      }
       .getOrElse("Unknown")
 
     val summary: NodeSeq =
