@@ -168,6 +168,7 @@ class AbstractTranspiler(object):
 
     def _transpile_from_ast(
         self,
+        func: Callable[..., Any],
         src: Optional[str],
         ast_info: ast.AST,
         function_ast: ast.FunctionDef,
@@ -178,6 +179,8 @@ class AbstractTranspiler(object):
         """Lower ``function_ast`` to a :class:`Column`, or return ``None`` to decline.
 
         The override point for ``spark.sql.experimental.optimizer.pyTranspilers``.
+
+        ``func`` is the original callable being transpiled.
 
         ``params`` is the CALLER-FACING parameter list: a receiver already bound, as
         on a method or callable instance, has been removed, so ``params[i]`` is the
@@ -922,6 +925,7 @@ class CatalystTranspiler(AbstractTranspiler):
 
     def _transpile_from_ast(
         self,
+        func: Callable[..., Any],
         src: Optional[str],
         ast_info: ast.AST,
         function_ast: ast.FunctionDef,
@@ -1463,7 +1467,7 @@ def _transpile_func(
             for combo in combos:
                 try:
                     transpiled_column = transpiler._transpile_from_ast(
-                        src, ast_info, function_ast, public_params, returnType, combo
+                        func, src, ast_info, function_ast, public_params, returnType, combo
                     )
                     if transpiled_column is not None:
                         transpiled.append(transpiled_column)

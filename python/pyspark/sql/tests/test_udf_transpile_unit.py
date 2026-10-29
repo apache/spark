@@ -58,6 +58,36 @@ _TRANSPILE_OFF_ANSI_ON = {
     "UDF transpilation is only supported in regular (non-Connect) Spark.",
 )
 class UDFTranspileUnitTests(ReusedSQLTestCase):
+    def test_udf_transpiler_receives_original_callable(self):
+        from unittest.mock import patch
+
+        from pyspark.sql.transpile import AbstractTranspiler, _transpile_func
+
+        class RecordingTranspiler(AbstractTranspiler):
+            received_func = None
+
+            def _transpile_from_ast(
+                self,
+                func,
+                src,
+                ast_info,
+                function_ast,
+                params,
+                returnType,
+                param_categories=None,
+            ):
+                RecordingTranspiler.received_func = func
+                return None
+
+        def add_one(value):
+            return value + 1
+
+        with patch.dict(AbstractTranspiler.varieties, {"recording": RecordingTranspiler}):
+            with self.sql_conf({"spark.sql.experimental.optimizer.pyTranspilers": "recording"}):
+                _transpile_func(self.spark, add_one, LongType())
+
+        self.assertIs(RecordingTranspiler.received_func, add_one)
+
     def test_udf_transpile_basic(self):
         # Test callable object
         class PlusFour:
@@ -1528,6 +1558,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         transpiler = CountingCatalystTranspiler()
         converted = transpiler._transpile_from_ast(
+            lambda a: a,
             source,
             function_ast,
             function_ast,
