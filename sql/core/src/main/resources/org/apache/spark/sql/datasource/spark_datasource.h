@@ -729,7 +729,11 @@ typedef struct SparkDsLibrary {
    * Writes a batch of data.
    *
    * array: a struct array whose fields are the columns, with the schema that create_data_writer
-   *        got
+   *        got. The library may move it to keep its data, until close_data_writer: its buffers
+   *        belong to the data writer, so the library must release it before close_data_writer
+   *        returns. When Spark writes the batches of a native scan without converting them to
+   *        rows, it copies the values of their columns as the scan returned them, without the
+   *        checks of a conversion, such as the precision of a decimal.
    */
   int (*write)(void* data_writer, struct ArrowArray* array);
 

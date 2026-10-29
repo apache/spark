@@ -19,11 +19,12 @@ package org.apache.spark.sql.execution.datasources.v2.columnar
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.memory.ArrowBuf
 import org.apache.arrow.vector.{BaseFixedWidthVector, BaseVariableWidthVector, BitVector, BitVectorHelper, FieldVector, NullVector, ValueVector, VectorLoader, VectorSchemaRoot, VectorUnloader}
 import org.apache.arrow.vector.complex.{BaseRepeatedValueVector, ListVector, NonNullableStructVector, StructVector}
 import org.apache.arrow.vector.ipc.message.ArrowRecordBatch
 
-import org.apache.spark.{SparkContext, SparkException, SparkUnsupportedOperationException}
+import org.apache.spark.{SparkContext, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.write._
@@ -197,13 +198,14 @@ object ArrowBatchingOptions {
  * Converts the data of a write task to Arrow-backed [[ColumnarBatch]]es for the [[DataWriter]]
  * of a [[ColumnarDataSource]]: its rows, or the columnar batches of a columnar query. Each batch
  * gets new Arrow vectors, so a native writer that took ownership of the data of a batch can keep
- * it after the call, while the producer of a columnar batch may reuse its vectors once the call
- * returns.
+ * it after the call, until the data writer is closed, which closes the allocator of the vectors,
+ * while the producer of a columnar batch may reuse its vectors once the call returns.
  *
  * Each column of a columnar batch that is an Arrow vector in the layout of the Arrow schema of the
- * write is copied buffer by buffer, and the other columns are converted value by value. The
- * batches end as those of rows do, though a batch with copied columns also ends with the columnar
- * batch. A columnar batch without columns to copy is converted as rows are.
+ * write is copied buffer by buffer, with its values as they are, which are not checked as the
+ * converted ones are, and the other columns are converted value by value. The batches end as those
+ * of rows do, though a batch with copied columns also ends with the columnar batch. A columnar
+ * batch without columns to copy is converted as rows are.
  */
 class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: ArrowBatchingOptions)
   extends ColumnarInputDataWriter {
@@ -242,32 +244,45 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
         write(batch.getRow(i))
         i += 1
       }
-    } else {
+    } else if (numBatchRows > 0) {
+      // A batch without rows leaves the pending batch of rows as it is.
       flush()
-      // A window of the rows of the batch, whose columns that are not copied are converted at once.
+      // A window of up to `maxRecordsPerBatch` rows of the batch, whose columns that are not copied
+      // are converted at once. The next window starts where the last batch written ended, so that
+      // the batches end as those of rows do.
       var windowStart = 0
       while (windowStart < numBatchRows) {
-        val windowEnd = math.min(numBatchRows, windowStart + options.maxRecordsPerBatch)
-        val converted = copied.indices.map { i =>
-          if (copied(i).isEmpty) Some(convertColumn(batch, i, windowStart, windowEnd)) else None
-        }
-        Utils.tryWithSafeFinally {
-          val columns = copied.zip(converted).map {
-            case (Some(vector), _) => WindowColumn(vector, 0, copied = true)
-            case (_, Some(vector)) => WindowColumn(vector, windowStart, copied = false)
-            case _ =>
-              throw SparkException.internalError("A column is neither copied nor converted.")
+        val first = windowStart
+        val windowEnd = math.min(numBatchRows, first + options.maxRecordsPerBatch)
+        val converted = ArrayBuffer.empty[FieldVector]
+        windowStart = Utils.tryWithSafeFinally {
+          val columns = copied.indices.map { i =>
+            copied(i) match {
+              case Some(vector) => WindowColumn(vector, 0, copied = true)
+              case None =>
+                val vector = convertColumn(batch, i, first, windowEnd)
+                converted += vector
+                WindowColumn(vector, first, copied = false)
+            }
           }
-          var start = windowStart
-          while (start < windowEnd) {
+          var start = first
+          var next = -1
+          while (next < 0) {
             val length = batchLength(columns, start, windowEnd)
-            writeWindow(columns, start, length)
-            start += length
+            if (start > first && start + length == windowEnd && windowEnd < numBatchRows) {
+              // The batch may hold rows after the window, so it starts the next window, whose
+              // conversion converts its rows again.
+              next = start
+            } else {
+              writeRows(columns, start, length)
+              start += length
+              if (start == windowEnd) next = start
+            }
           }
+          next
         } {
-          converted.flatten.foreach(_.close())
+          converted.foreach(_.close())
         }
-        windowStart = windowEnd
       }
     }
   }
@@ -327,7 +342,6 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
    * Returns the number of rows of the batch that starts at the row `start` of the columns: up to
    * `end`, or as a batch of rows ends, up to the first row with which it holds `maxBytesPerBatch`
    * bytes, by the measure of `getBufferSizeFor`, which `rangeSize` computes without slicing.
-   *
    */
   private def batchLength(columns: Seq[WindowColumn], start: Int, end: Int): Int = {
     // The size is not computed when the limit is the largest possible one, as for rows.
@@ -338,38 +352,40 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
         ArrowBatchingDataWriter.rangeSize(
           column.vector, start - column.first, start - column.first + rows)
       }.sum
-      // The size grows with the number of rows.
-      var lo = 1
-      var hi = end - start
-      while (lo < hi) {
-        val mid = (lo + hi) >>> 1
-        if (sizeInBytes(mid) >= options.maxBytesPerBatch) hi = mid else lo = mid + 1
+      if (sizeInBytes(end - start) < options.maxBytesPerBatch) {
+        end - start
+      } else {
+        // The size grows with the number of rows.
+        var lo = 1
+        var hi = end - start
+        while (lo < hi) {
+          val mid = (lo + hi) >>> 1
+          if (sizeInBytes(mid) >= options.maxBytesPerBatch) hi = mid else lo = mid + 1
+        }
+        lo
       }
-      lo
     }
   }
 
   /**
-   * Writes the rows [start, start + length) of the columns. A copied column is sliced, which shares
-   * the buffers of the batch, and its buffers copied once each at their size. Arrow Java reads the
+   * Writes the rows [start, start + length) of the columns. The copied columns are sliced, which
+   * shares most buffers of the batch, though it allocates new offsets for lists, and for strings
+   * and binaries whose offsets do not start at 0, and new validity buffers unless `start` is a
+   * multiple of 8. Then each buffer of the slice is copied at its size. Arrow Java reads the
    * offsets of a vector of variable width, or of a list, as if they started at 0, which those of a
    * slice do. A converted column, whose vector nothing else writes to, is only sliced.
    */
-  private def writeWindow(columns: Seq[WindowColumn], start: Int, length: Int): Unit = {
+  private def writeRows(columns: Seq[WindowColumn], start: Int, length: Int): Unit = {
     val copiedColumns = columns.filter(_.copied).map(_.vector)
     // The vectors of the batch, which this root does not own: their producer releases them.
     val batchRoot = new VectorSchemaRoot(copiedColumns.map(_.getField).asJava,
-      copiedColumns.asJava, copiedColumns.headOption.map(_.getValueCount).getOrElse(0))
+      copiedColumns.asJava, copiedColumns.head.getValueCount)
     val written = ArrayBuffer.empty[AutoCloseable]
     Utils.tryWithSafeFinally {
-      val copies = if (copiedColumns.isEmpty) {
-        Iterator.empty
-      } else {
-        val slice = batchRoot.slice(start, length)
-        val copy = Utils.tryWithSafeFinally(copyRoot(slice))(slice.close())
-        written += copy
-        copy.getFieldVectors.asScala.iterator
-      }
+      val slice = batchRoot.slice(start, length)
+      val copy = Utils.tryWithSafeFinally(copyRoot(slice))(slice.close())
+      written += copy
+      val copies = copy.getFieldVectors.asScala.iterator
       val vectors = columns.map { column =>
         if (column.copied) {
           copies.next()
@@ -394,14 +410,15 @@ class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: Arro
     try {
       val unloaded = new VectorUnloader(source).getRecordBatch
       try {
-        val buffers = unloaded.getBuffers.asScala.map { buffer =>
-          val size = buffer.readableBytes()
-          val copied = allocator.buffer(size)
-          copied.setBytes(0, buffer, buffer.readerIndex(), size)
-          copied.writerIndex(size)
-          copied
-        }
+        val buffers = ArrayBuffer.empty[ArrowBuf]
         try {
+          unloaded.getBuffers.asScala.foreach { buffer =>
+            val size = buffer.readableBytes()
+            val copied = allocator.buffer(size)
+            buffers += copied
+            copied.setBytes(0, buffer, buffer.readerIndex(), size)
+            copied.writerIndex(size)
+          }
           val batch = new ArrowRecordBatch(source.getRowCount, unloaded.getNodes, buffers.asJava)
           try new VectorLoader(copy).load(batch) finally batch.close()
         } finally {

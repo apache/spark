@@ -26,8 +26,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
-import org.apache.arrow.vector.{FieldVector, VectorSchemaRoot}
-import org.apache.arrow.vector.types.pojo.ArrowType
+import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, VectorSchemaRoot}
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -375,6 +375,94 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
       writer.close()
       onHeap.close()
       arrow.close()
+    }
+  }
+
+  test("a copied batch ends at the byte limit as a batch of rows does") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    def batchSizes(batch: ColumnarBatch, maxBytesPerBatch: Long): Seq[Int] = {
+      val writer = new ArrowBatchingDataWriter(new TestDataWriter(fail = false),
+        ArrowBatchingOptions(schema, "UTC", 5, maxBytesPerBatch))
+      try {
+        writer.writeBatch(batch)
+        writer.commit().asInstanceOf[TestCommitMessage].batchSizes
+      } finally {
+        writer.close()
+      }
+    }
+    val onHeap = new TestBatchReader(0, 20, schema)
+    val arrow = new TestArrowBatchReader(0, 20, schema, 20)
+    try {
+      assert(onHeap.next() && arrow.next())
+      val vectors = (0 until 2).map {
+        arrow.get().column(_).asInstanceOf[ArrowColumnVector].getValueVector
+      }
+      // The size of the first 2 rows. The names of the ids from 10 are 1 byte longer.
+      val twoRows = vectors.map(ArrowBatchingDataWriter.rangeSize(_, 0, 2)).sum
+      Seq(twoRows - 1, twoRows, twoRows + 1, 3 * twoRows).foreach { limit =>
+        val rowSizes = batchSizes(onHeap.get(), limit)
+        assert(rowSizes.sum == 20)
+        assert(batchSizes(arrow.get(), limit) == rowSizes, s"limit $limit")
+      }
+      // The limit ends the batches every 2 rows, also across the windows of 5 rows.
+      assert(batchSizes(arrow.get(), twoRows) == Seq.fill(10)(2))
+    } finally {
+      onHeap.close()
+      arrow.close()
+    }
+  }
+
+  test("an empty columnar batch does not end the pending batch of rows") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    val writer = new ArrowBatchingDataWriter(
+      new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
+    val first = new TestBatchReader(0, 2, schema)
+    val empty = new TestArrowBatchReader(0, 0, schema, 1)
+    val second = new TestBatchReader(2, 4, schema)
+    try {
+      assert(first.next() && second.next())
+      writer.writeBatch(first.get())
+      writer.writeBatch(empty.get())
+      writer.writeBatch(second.get())
+      assert(writer.commit().asInstanceOf[TestCommitMessage].batchSizes == Seq(4))
+    } finally {
+      writer.close()
+      first.close()
+      empty.close()
+      second.close()
+    }
+  }
+
+  test("release the converted columns when a later column fails to convert") {
+    val schema = StructType.fromDDL("id BIGINT, a DECIMAL(10, 2), b DECIMAL(10, 2)")
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    val root = VectorSchemaRoot.create(new Schema(Seq(
+      Field.notNullable("id", new ArrowType.Int(64, true)),
+      Field.nullable("a", new ArrowType.Decimal(38, 2, 128)),
+      Field.nullable("b", new ArrowType.Decimal(38, 2, 128))).asJava), allocator)
+    try {
+      root.allocateNew()
+      root.getVector("id").asInstanceOf[BigIntVector].setSafe(0, 0)
+      // A decimal of another precision than that of the schema is converted, and the value of b
+      // does not fit the precision of the schema.
+      root.getVector("a").asInstanceOf[DecimalVector].setSafe(0, new java.math.BigDecimal("1.00"))
+      root.getVector("b").asInstanceOf[DecimalVector]
+        .setSafe(0, new java.math.BigDecimal("1000000000000.00"))
+      root.setRowCount(1)
+      val batch = new ColumnarBatch(
+        root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray, 1)
+      val allocated = ArrowUtils.rootAllocator.getAllocatedMemory
+      val writer = new ArrowBatchingDataWriter(
+        new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
+      try {
+        intercept[Exception](writer.writeBatch(batch))
+      } finally {
+        writer.close()
+      }
+      assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
+    } finally {
+      root.close()
+      allocator.close()
     }
   }
 
@@ -809,14 +897,22 @@ class TestDataWriter(fail: Boolean, keep: Boolean = false) extends DataWriter[Co
 
 /** A batch exported to the Arrow C data interface, which keeps its data until it is read. */
 class TestArrowExport(array: ArrowArray, schema: ArrowSchema) {
-  private var closed = false
+  private var arrayClosed = false
+  private var schemaClosed = false
 
-  /** Imports the batch, and passes it to `f`. */
+  /**
+   * Imports the batch, and passes it to `f`. Each import closes the struct that it gets, also when
+   * it fails, so `close` then only releases the struct that is still open.
+   */
   def read[T](f: ColumnarBatch => T): T = {
-    val root = Data.importVectorSchemaRoot(ArrowUtils.rootAllocator, array, schema, null)
-    // The import moved the data to the root, and closed the structs.
-    closed = true
+    val arrowSchema = try Data.importSchema(ArrowUtils.rootAllocator, schema, null) finally {
+      schemaClosed = true
+    }
+    val root = VectorSchemaRoot.create(arrowSchema, ArrowUtils.rootAllocator)
     try {
+      try Data.importIntoVectorSchemaRoot(ArrowUtils.rootAllocator, array, root, null) finally {
+        arrayClosed = true
+      }
       f(new ColumnarBatch(
         root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray,
         root.getRowCount))
@@ -826,10 +922,13 @@ class TestArrowExport(array: ArrowArray, schema: ArrowSchema) {
   }
 
   def close(): Unit = {
-    if (!closed) {
-      closed = true
+    if (!arrayClosed) {
+      arrayClosed = true
       array.release()
       array.close()
+    }
+    if (!schemaClosed) {
+      schemaClosed = true
       schema.release()
       schema.close()
     }

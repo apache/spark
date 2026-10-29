@@ -40,9 +40,11 @@ Data is exchanged only as columnar batches, through the
 the data that a library returns without copying it. When a write gets the batches of a scan as
 they are, as in a plain copy from one native data source to another, Spark writes them without
 converting them to rows: it copies the buffers of their columns, since a library may keep the data
-that it writes, and converts value by value the columns of other Arrow types than those of the
-schema, such as `utf8_view` strings. With adaptive query execution, the data of a query with a
-shuffle or a subquery is still converted to rows.
+that it writes until it closes its data writer, and converts value by value the columns of other
+Arrow types than those of the schema, such as `utf8_view` strings. The copied values are written as
+the scan returned them, without the checks of a conversion, such as the precision of a decimal.
+With adaptive query execution, the data of a query with a shuffle or a subquery is still converted
+to rows.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java

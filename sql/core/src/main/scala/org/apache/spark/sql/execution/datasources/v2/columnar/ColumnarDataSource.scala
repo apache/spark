@@ -141,7 +141,10 @@ trait ColumnarStreamReader extends Serializable {
  * maps, though not necessarily with its names, nullability and metadata, nor the Spark types that
  * `ArrowColumnVector` infers from them. A batch is only valid during the call, but nothing else
  * writes to the buffers of its vectors, so a data writer may take ownership of them to keep its
- * data.
+ * data, until it is closed: the buffers belong to the data writer, which must release them by
+ * the time its `close` returns. The columns that Spark copies from the Arrow batches of a scan
+ * have the values that the scan returned: they are not checked as converted values are, for
+ * example against the precision of a decimal.
  */
 trait ColumnarWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch]
