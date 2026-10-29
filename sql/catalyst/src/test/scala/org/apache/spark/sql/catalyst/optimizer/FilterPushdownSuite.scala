@@ -640,7 +640,7 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-60602: a throwable condition is not split off ahead of the conditions before it") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where($"f" =!= $"g" && ($"g" || raiseError))
       .analyze
 
@@ -654,7 +654,7 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-60602: a throwable condition does not keep later conditions from being split off") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where(($"g" || raiseError) && $"f")
       .analyze
 
@@ -662,9 +662,9 @@ class FilterPushdownSuite extends PlanTest {
 
     // Filtering on f first only leaves the throwable condition fewer rows to raise on.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f")
       .where($"f")
-      .select($"a", $"f", $"e".rlike("other") as "g", $"b")
+      .select($"a", $"f", expensiveRLike("other") as "g", $"b")
       .where($"g" || raiseError)
       .analyze
 
@@ -676,7 +676,7 @@ class FilterPushdownSuite extends PlanTest {
     Seq(true, false).foreach { split =>
       withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
         val originalQuery = testStringRelation
-          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .select($"a", expensiveRLike("magic") as "f", $"b")
           .where($"f" && ($"a" > 5 || raiseError) && $"b" > 1)
           .analyze
 
@@ -685,7 +685,7 @@ class FilterPushdownSuite extends PlanTest {
         // Only the non-throwable cheap condition moves below the expensive one.
         val correctAnswer = testStringRelation
           .where($"b" > 1)
-          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .select($"a", expensiveRLike("magic") as "f", $"b")
           .where($"f" && ($"a" > 5 || raiseError))
           .analyze
 
@@ -693,13 +693,13 @@ class FilterPushdownSuite extends PlanTest {
 
         // Written ahead of every expensive condition, it is pushed as usual.
         val throwableFirst = testStringRelation
-          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .select($"a", expensiveRLike("magic") as "f", $"b")
           .where(($"a" > 5 || raiseError) && $"f")
           .analyze
 
         val throwableFirstAnswer = testStringRelation
           .where($"a" > 5 || raiseError)
-          .select($"a", $"e".rlike("magic") as "f", $"b")
+          .select($"a", expensiveRLike("magic") as "f", $"b")
           .where($"f")
           .analyze
 
@@ -712,7 +712,7 @@ class FilterPushdownSuite extends PlanTest {
     "expensive one") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+      .select($"a", expensiveRLike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
         $"b")
       .where($"f" && $"t" && $"b" > 1)
       .analyze
@@ -722,7 +722,7 @@ class FilterPushdownSuite extends PlanTest {
     // `t` is cheap, but reading it evaluates the throwable expression behind it.
     val correctAnswer = testStringRelation
       .where($"b" > 1)
-      .select($"a", $"e".rlike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
+      .select($"a", expensiveRLike("magic") as "f", If($"a" > 5, Literal(true), raiseError) as "t",
         $"b")
       .where($"f" && $"t")
       .analyze
@@ -733,9 +733,9 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-60602: a condition over a throwable alias is not split off ahead of the " +
     "conditions before it") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
-    val throwableAlias = If($"e".rlike("other"), Literal(true), raiseError)
+    val throwableAlias = If(expensiveRLike("other"), Literal(true), raiseError)
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("third") as "h",
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("third") as "h",
         throwableAlias as "g", $"b")
       .where($"f" =!= $"h" && $"g")
       .analyze
@@ -745,7 +745,7 @@ class FilterPushdownSuite extends PlanTest {
     // On cost alone the condition on g would go lowest, computing g on every row. Splitting
     // f and h off instead only leaves g fewer rows to raise on.
     val correctAnswer = testStringRelation
-      .select($"a", $"b", $"e", $"e".rlike("magic") as "f", $"e".rlike("third") as "h")
+      .select($"a", $"b", $"e", expensiveRLike("magic") as "f", expensiveRLike("third") as "h")
       .where($"f" =!= $"h")
       .select($"a", $"f", $"h", throwableAlias as "g", $"b")
       .where($"g")
@@ -765,7 +765,7 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-60602: the conditions left above the projection keep their written order") {
     val raiseError = IsNull(RaiseError(Literal("boom")))
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where($"f" =!= $"g" && ($"g" || raiseError) && $"a" > 1)
       .analyze
     val Seq(unplaced, throwable, _) = splitConjunctivePredicates(
@@ -779,7 +779,7 @@ class FilterPushdownSuite extends PlanTest {
   test("SPARK-60602: a non-deterministic condition left above the projection keeps its " +
     "written order") {
     val originalQuery = testStringRelation
-      .select($"a", $"e".rlike("magic") as "f", $"e".rlike("other") as "g", $"b")
+      .select($"a", expensiveRLike("magic") as "f", expensiveRLike("other") as "g", $"b")
       .where((Rand(10) > 0.5 || $"g") && $"f" =!= $"g" && $"a" > 1)
       .analyze
     val Seq(nonDeterministic, unplaced, _) = splitConjunctivePredicates(
