@@ -2224,6 +2224,18 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
         "existingPartCols" -> existingPartCols))
   }
 
+  def fileStreamSinkPartitioningMismatchError(
+      tableName: String,
+      expectedPartCols: Seq[String],
+      recordedPartCols: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "STREAMING_FILE_SINK_PARTITIONING_MISMATCH",
+      messageParameters = Map(
+        "tableName" -> tableName,
+        "expectedPartCols" -> expectedPartCols.mkString(", "),
+        "recordedPartCols" -> recordedPartCols.mkString(", ")))
+  }
+
   def mismatchedTableBucketingError(
       tableName: String,
       specifiedBucketString: String,
