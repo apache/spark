@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
@@ -161,7 +161,12 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    // as well as metadata columns referenced in the condition or actions
+    // carried over rows contain all read metadata columns, so every instruction must produce them
+    val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: actions)
+    val readMetadataAttrs = dedupAttrs(metadataAttrs ++ referencedMetadataAttrs)
+    val readRelation = buildRelationWithAttrs(relation, operationTable, readMetadataAttrs)
 
     val checkCardinality = shouldCheckCardinality(matchedActions)
 
@@ -172,7 +177,7 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
 
     val mergeRowsPlan = buildReplaceDataMergeRowsPlan(
       readRelation, joinPlan, matchedActions, notMatchedActions,
-      notMatchedBySourceActions, metadataAttrs, checkCardinality)
+      notMatchedBySourceActions, readMetadataAttrs, checkCardinality)
 
     // predicates of the ON condition can be used to filter the target table (planning & runtime)
     // only if there is no NOT MATCHED BY SOURCE clause
@@ -248,8 +253,10 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       source: LogicalPlan,
       cond: Expression): Expression = {
 
+    // the condition may also refer to metadata columns of the target table
+    val relationAttrs = AttributeSet(relation.output ++ relation.metadataOutput)
     val condWithOuterRefs = cond transformUp {
-      case attr: Attribute if relation.outputSet.contains(attr) => OuterReference(attr)
+      case attr: Attribute if relationAttrs.contains(attr) => OuterReference(attr)
       case other => other
     }
     val outerRefs = condWithOuterRefs.collect {
@@ -276,7 +283,11 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+    // as well as metadata columns referenced in the condition or actions
+    val actions = matchedActions ++ notMatchedActions ++ notMatchedBySourceActions
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: actions)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs, rowIdAttrs)
 
     // if there is no NOT MATCHED BY SOURCE clause, predicates of the ON condition that
     // reference only the target table can be pushed down

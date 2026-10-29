@@ -51,7 +51,12 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy"),
     // [SPARK-58111] Scan and write schema narrowing for column-level UPDATE in DSv2
     ProblemFilters.exclude[ReversedMissingMethodProblem](
-      "org.apache.spark.sql.connector.write.RowLevelOperationInfo.updatedColumns")
+      "org.apache.spark.sql.connector.write.RowLevelOperationInfo.updatedColumns"),
+    // [SPARK-58645][SQL] Add recursive mode to variant explode table-valued functions
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode"),
+    ProblemFilters.exclude[ReversedMissingMethodProblem](
+      "org.apache.spark.sql.TableValuedFunction.variant_explode_outer")
   )
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).

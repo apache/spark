@@ -22,7 +22,8 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{JOIN_CONDITION, JOIN_TYPE, SCHEMA}
 import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.expressions.V2ExpressionUtils
-import org.apache.spark.sql.connector.expressions.{FieldReference, SortOrder}
+import org.apache.spark.sql.catalyst.util.CharVarcharUtils
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, GeneralScalarExpression, SortOrder}
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.join.JoinType
@@ -66,11 +67,25 @@ case class JDBCScanBuilder(
 
   private var sortOrders: Array[String] = Array.empty[String]
 
+  private def containsUnsupportedCharPad(expr: Expression): Boolean = {
+    if (dialect.isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
+      false
+    } else {
+      def walk(e: Expression): Boolean = e match {
+        case g: GeneralScalarExpression
+            if g.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING => true
+        case _ => Option(e.children()).exists(_.exists(walk))
+      }
+      walk(expr)
+    }
+  }
+
   override def pushPredicates(predicates: Array[Predicate]): Array[Predicate] = {
     if (jdbcOptions.pushDownPredicate) {
-      val (pushed, unSupported) = predicates.partition(dialect.compileExpression(_).isDefined)
+      val (unsupportedCharPad, rest) = predicates.partition(containsUnsupportedCharPad)
+      val (pushed, unSupported) = rest.partition(dialect.compileExpression(_).isDefined)
       this.pushedPredicate = pushed
-      unSupported
+      unSupported ++ unsupportedCharPad
     } else {
       predicates
     }
@@ -94,6 +109,10 @@ case class JDBCScanBuilder(
 
   override def pushAggregation(aggregation: Aggregation): Boolean = {
     if (!jdbcOptions.pushDownAggregate) return false
+    if (aggregation.aggregateExpressions.exists(containsUnsupportedCharPad) ||
+        aggregation.groupByExpressions.exists(containsUnsupportedCharPad)) {
+      return false
+    }
 
     val compiledAggs = aggregation.aggregateExpressions.flatMap(dialect.compileExpression)
     if (compiledAggs.length != aggregation.aggregateExpressions.length) return false
@@ -201,6 +220,10 @@ case class JDBCScanBuilder(
     if (!joinTypeStringOption.isDefined) {
       logError(log"Failed to push down join to JDBC due to unsupported join type " +
         log"${MDC(JOIN_TYPE, joinType)}")
+      return false
+    }
+
+    if (containsUnsupportedCharPad(condition)) {
       return false
     }
 
@@ -316,6 +339,7 @@ case class JDBCScanBuilder(
 
   override def pushTopN(orders: Array[SortOrder], limit: Int): Boolean = {
     if (jdbcOptions.pushDownLimit) {
+      if (orders.exists(containsUnsupportedCharPad)) return false
       val compiledOrders = orders.flatMap(dialect.compileExpression(_))
       if (orders.length != compiledOrders.length) return false
       pushedLimit = limit

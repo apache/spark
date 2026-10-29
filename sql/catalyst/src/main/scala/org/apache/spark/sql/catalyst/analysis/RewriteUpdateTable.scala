@@ -75,7 +75,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    // as well as metadata columns referenced in the condition or assignments
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: assignments)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs)
 
     // build a plan with updated and copied over records
     val query = buildReplaceDataUpdateProjection(readRelation, assignments, cond)
@@ -100,9 +103,12 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     val metadataAttrs = resolveRequiredMetadataAttrs(relation, operationTable.operation)
 
     // construct a read relation and include all required metadata columns
+    // as well as metadata columns referenced in the condition or assignments
     // the same read relation will be used to read records that must be updated and copied over
     // the analyzer will take care of duplicated attr IDs
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs)
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: assignments)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs)
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)
@@ -178,7 +184,10 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
     }
 
     // construct a read relation and include all required metadata columns
-    val readRelation = buildRelationWithAttrs(relation, operationTable, metadataAttrs, rowIdAttrs)
+    // as well as metadata columns referenced in the condition or assignments
+    val referencedMetadataAttrs = resolveReferencedMetadataAttrs(relation, cond +: assignments)
+    val readRelation = buildRelationWithAttrs(
+      relation, operationTable, metadataAttrs ++ referencedMetadataAttrs, rowIdAttrs)
 
     // build a plan for updated records that match the condition
     val matchedRowsPlan = Filter(cond, readRelation)

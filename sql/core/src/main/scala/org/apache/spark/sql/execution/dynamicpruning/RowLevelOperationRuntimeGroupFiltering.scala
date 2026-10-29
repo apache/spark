@@ -111,9 +111,11 @@ class RowLevelOperationRuntimeGroupFiltering(optimizeSubqueries: Rule[LogicalPla
         // this rule assigns runtime filters to both scan relations (will be shared at runtime)
         // and must transform the runtime filter condition to use correct expr IDs for each relation
         // note this only applies to group-based row-level operations (i.e. ReplaceData)
-        // the map covers the table's data columns, which the write table may leave out
         // see RewriteUpdateTable for more details
-        val attrMap = buildTableToScanAttrMap(write.originalTable.output, relation.output)
+        // the write table may leave out data columns, so map those of the original table
+        val tableAttrs = write.originalTable.output
+        val metadataAttrs = (cond.references -- tableAttrs).toSeq
+        val attrMap = buildTableToScanAttrMap(tableAttrs ++ metadataAttrs, relation.output)
         val transformedCond = cond transform {
           case attr: AttributeReference if attrMap.contains(attr) => attrMap(attr)
         }
