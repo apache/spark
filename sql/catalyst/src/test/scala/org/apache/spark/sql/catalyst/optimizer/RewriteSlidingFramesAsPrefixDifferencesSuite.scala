@@ -302,6 +302,62 @@ class RewriteSlidingFramesAsPrefixDifferencesSuite extends PlanTest {
     comparePlans(execute(input), input)
   }
 
+  test("do not rewrite a frame with a FOLLOWING upper bound") {
+    // `2 PRECEDING AND 1 FOLLOWING` is not a frame anchored at the current row, so it is
+    // not a prefix difference of the running sum. Its lower bound and width (3) qualify, so
+    // only the CURRENT ROW check in the pattern rejects it; without that check the frame
+    // would silently turn into a lag difference of the wrong rows. Width 3 is alone under
+    // the cost gate, so the plan must stay untouched.
+    val frame = SpecifiedWindowFrame(RowFrame, UnaryMinus(Literal(2, IntegerType)),
+      Literal(1, IntegerType))
+    val s = windowExpr(sum(b), spec(frame)).as("s")
+    val input = query(s)
+
+    comparePlans(execute(input), input)
+  }
+
+  test("do not rewrite a frame whose upper bound precedes CURRENT ROW") {
+    // `2 PRECEDING AND 2 PRECEDING` is an empty frame whose upper bound sits before the
+    // current row. It is not a candidate either, and alone under the cost gate.
+    val frame = SpecifiedWindowFrame(RowFrame, UnaryMinus(Literal(2, IntegerType)),
+      UnaryMinus(Literal(2, IntegerType)))
+    val s = windowExpr(sum(b), spec(frame)).as("s")
+    val input = query(s)
+
+    comparePlans(execute(input), input)
+  }
+
+  test("do not rewrite a frame with an UNBOUNDED FOLLOWING upper bound") {
+    // `2 PRECEDING AND UNBOUNDED FOLLOWING` is a growing frame: its width is not even
+    // constant, so there is no lag offset that reproduces it.
+    val frame = SpecifiedWindowFrame(RowFrame, UnaryMinus(Literal(2, IntegerType)),
+      UnboundedFollowing)
+    val s = windowExpr(sum(b), spec(frame)).as("s")
+    val input = query(s)
+
+    comparePlans(execute(input), input)
+  }
+
+  test("keep a FOLLOWING upper bound frame when its CURRENT ROW sibling is rewritten") {
+    // Partial-rewrite guard for the upper bound: the qualifying width-32 sibling rewrites,
+    // while the `2 PRECEDING AND 1 FOLLOWING` member is not a prefix frame and must keep
+    // its original expression. If the pattern ever accepts a non-CURRENT ROW upper bound,
+    // this member turns into a lag difference and the expected plan diverges.
+    val frame = SpecifiedWindowFrame(RowFrame, UnaryMinus(Literal(2, IntegerType)),
+      Literal(1, IntegerType))
+    val following = windowExpr(sum(b), spec(frame)).as("sf")
+    val sibling = windowExpr(sum(b), spec(sliding(31))).as("s31")
+    val input = query(following, sibling)
+
+    val prefix = Alias(windowExpr(sum(b), spec(running)), "window_prefix_sum_0")(ExprId(0))
+    val prefixSum = prefixAttr("window_prefix_sum_0", nullable = true)
+    val expected = Window(
+      Seq(following, sumDiff("s31", 32, prefixSum)), part, order,
+      Window(Seq(prefix), part, order, testRelation))
+
+    comparePlans(execute(input), expected)
+  }
+
   test("do not rewrite a 0 PRECEDING bound") {
     // `0 PRECEDING` reaches the rule as `UnaryMinus(Literal(0))`: a width-1 frame, rejected by
     // the branch's `v >= 1` guard. The width-15 sibling stays under the cost gate on its own, so
@@ -384,6 +440,45 @@ class RewriteSlidingFramesAsPrefixDifferencesSuite extends PlanTest {
     val prefixSum = prefixAttr("window_prefix_sum_0", nullable = true)
     val expected = Window(
       Seq(sumDiff("s", 32, prefixSum), sd), part, order,
+      Window(Seq(prefix), part, order, testRelation))
+
+    comparePlans(execute(input), expected)
+  }
+
+  test("rewrite width-2 frames: two 1 PRECEDING members and a wide sibling") {
+    // The acceptance edge `UnaryMinus(IntegerLiteral(v)) if v >= 1` at v = 1, i.e. a 1
+    // PRECEDING frame of width 2, whose lag offset is exactly 2. The group total 2 + 2 + 16
+    // clears the cost gate; the expected plan pins the width-2 members as lag differences,
+    // so a guard tightened past v = 1 diverges even though the width-16 sibling still rewrites.
+    val w2a = windowExpr(sum(b), spec(slidingUnfolded(1))).as("s2a")
+    val w2b = windowExpr(sum(b), spec(slidingUnfolded(1))).as("s2b")
+    val wide = windowExpr(sum(b), spec(sliding(15))).as("s16")
+    val input = query(w2a, w2b, wide)
+
+    val prefix = Alias(windowExpr(sum(b), spec(running)), "window_prefix_sum_0")(ExprId(0))
+    val prefixSum = prefixAttr("window_prefix_sum_0", nullable = true)
+    val expected = Window(
+      Seq(sumDiff("s2a", 2, prefixSum), sumDiff("s2b", 2, prefixSum),
+        sumDiff("s16", 16, prefixSum)),
+      part, order,
+      Window(Seq(prefix), part, order, testRelation))
+
+    comparePlans(execute(input), expected)
+  }
+
+  test("rewrite a folded width-2 bound from 1 PRECEDING") {
+    // The folded shape `Literal(-1, IntegerType)` exercises the `v <= -1` branch at its
+    // edge v = -1: the same 1 PRECEDING frame, width 2, as it appears after constant
+    // folding. The expected plan pins the width-2 member as a lag difference, so a guard
+    // tightened past v = -1 diverges even though the width-16 sibling still rewrites.
+    val folded = windowExpr(sum(b), spec(sliding(1))).as("s2")
+    val wide = windowExpr(sum(b), spec(sliding(15))).as("s16")
+    val input = query(folded, wide)
+
+    val prefix = Alias(windowExpr(sum(b), spec(running)), "window_prefix_sum_0")(ExprId(0))
+    val prefixSum = prefixAttr("window_prefix_sum_0", nullable = true)
+    val expected = Window(
+      Seq(sumDiff("s2", 2, prefixSum), sumDiff("s16", 16, prefixSum)), part, order,
       Window(Seq(prefix), part, order, testRelation))
 
     comparePlans(execute(input), expected)

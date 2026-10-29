@@ -22,6 +22,7 @@ import org.scalatest.Tag
 import org.apache.spark.sql.catalyst.expressions.{Alias, CurrentRow, Lag, NamedExpression,
   RowFrame, SpecifiedWindowFrame, UnboundedPreceding, WindowExpression, WindowSpecDefinition}
 import org.apache.spark.sql.execution.{SortExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, QueryStageExec}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeLike
 import org.apache.spark.sql.execution.window.WindowExec
 import org.apache.spark.sql.internal.SQLConf
@@ -91,6 +92,18 @@ class WindowPrefixRewriteQuerySuite extends QueryTest with SharedSparkSession {
 
   private def collectWindows(plan: SparkPlan): Seq[WindowExec] = plan.collect {
     case w: WindowExec => w
+  }
+
+  /**
+   * Descends through adaptive-plan wrappers to the operators under test: an
+   * [[AdaptiveSparkPlanExec]] is a leaf whose current plan is a query stage, and a
+   * [[QueryStageExec]] in turn hides its inner plan from tree traversal, so plan
+   * inspection must unwrap both instead of collecting over them.
+   */
+  private def unwrap(plan: SparkPlan): SparkPlan = plan match {
+    case a: AdaptiveSparkPlanExec => unwrap(a.executedPlan)
+    case s: QueryStageExec => unwrap(s.plan)
+    case p => p
   }
 
   /**
@@ -466,6 +479,26 @@ class WindowPrefixRewriteQuerySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("the rewrite is disabled by default") {
+    withTempView("t") {
+      setupView("SELECT id % 3 AS k, id AS o, id AS v FROM range(0, 90)")
+      // The performance-tuning docs list the flag's default as false; a flag-unset run
+      // must leave the width-32 group as a single plain window operator. A flipped
+      // default would rewrite it into a (difference window, prefix window) pair and
+      // fail the count. Unwrap a possible adaptive wrapper: this test pins the flag,
+      // not the AQE setting.
+      val df = spark.sql(
+        """
+          |SELECT k, o, v,
+          |  sum(v) OVER (PARTITION BY k ORDER BY o ROWS BETWEEN 31 PRECEDING AND CURRENT ROW)
+          |    AS s
+          |FROM t
+        """.stripMargin)
+      df.collect()
+      assert(collectWindows(unwrap(df.queryExecution.executedPlan)).size === 1)
+    }
+  }
+
   test("the rewrite adds no exchange or sort") {
     withTempView("t") {
       setupView(
@@ -569,6 +602,72 @@ class WindowPrefixRewriteQuerySuite extends QueryTest with SharedSparkSession {
           |FROM t
         """.stripMargin
       assertIdentical(sql, expectedExtraWindows = 1, expectedPlainWindows = 1)
+    }
+  }
+
+  test("rewrite produces identical results under AQE") {
+    withTempView("t") {
+      setupView("SELECT id % 3 AS k, id AS o, id AS v FROM range(0, 300)")
+      // The differential helper pins AQE off so the executed plan shows the window
+      // operators directly; production sessions run with AQE on, so replay the
+      // differential under AQE and unwrap AdaptiveSparkPlanExec for the assertions.
+      val sql =
+        """
+          |SELECT k, o, v,
+          |  sum(v) OVER (PARTITION BY k ORDER BY o ROWS BETWEEN 31 PRECEDING AND CURRENT ROW)
+          |    AS s
+          |FROM t
+        """.stripMargin
+
+      def runAqe(enabled: Boolean): (Array[Row], SparkPlan) =
+        withSQLConf(
+          SQLConf.WINDOW_PREFIX_REWRITE_ENABLED.key -> enabled.toString,
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+          val df = spark.sql(sql)
+          val rows = df.collect()
+          val executed = df.queryExecution.executedPlan
+          assert(executed.isInstanceOf[AdaptiveSparkPlanExec],
+            s"expected AQE to plan the query, got: $executed")
+          (rows, unwrap(executed))
+        }
+
+      val (originalRows, originalPlan) = runAqe(enabled = false)
+      val (rewrittenRows, rewrittenPlan) = runAqe(enabled = true)
+      QueryTest.sameRows(originalRows.toSeq, rewrittenRows.toSeq).foreach(fail(_))
+      val originalWindows = collectWindows(originalPlan).size
+      val rewrittenWindows = collectWindows(rewrittenPlan).size
+      assert(rewrittenWindows === originalWindows + 1,
+        s"expected the window operator count to change from $originalWindows to " +
+          s"${originalWindows + 1} under AQE, but it was $rewrittenWindows: $sql")
+      assertPrefixRewriteShape(rewrittenPlan, expectedPlainWindows = 0)
+    }
+  }
+
+  test("rewrite produces identical results with whole-stage codegen disabled") {
+    withTempView("t") {
+      setupView(
+        """
+          |SELECT id % 10 AS k, id AS o,
+          |  CASE WHEN id % 5 = 0 THEN CAST(NULL AS BIGINT) ELSE id END AS vn,
+          |  id AS v
+          |FROM range(0, 300)
+        """.stripMargin)
+      // WindowExec's interpreted path (codegen off) is a separate implementation of both
+      // the sliding frame fold and the emitted lag windows, so the differential must
+      // hold there too, not only on the whole-stage path. The nullable measure keeps
+      // the count guard's CASE expression on the interpreted path as well.
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false") {
+        assertIdentical(
+          """
+            |SELECT k, o, vn, v,
+            |  sum(vn) OVER (PARTITION BY k ORDER BY o
+            |    ROWS BETWEEN 6 PRECEDING AND CURRENT ROW) AS s6,
+            |  sum(v) OVER (PARTITION BY k ORDER BY o
+            |    ROWS BETWEEN 29 PRECEDING AND CURRENT ROW) AS s29
+            |FROM t
+          """.stripMargin,
+          expectedExtraWindows = 1)
+      }
     }
   }
 

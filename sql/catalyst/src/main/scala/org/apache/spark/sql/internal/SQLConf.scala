@@ -5089,8 +5089,9 @@ object SQLConf {
         "width of the group is large enough (an internal cost threshold). Only plain `sum` " +
         "qualifies: `sum(DISTINCT ...)`, `sum(...) FILTER (WHERE ...)`, and `try_sum` keep " +
         "their original frames, as do floating-point and decimal sums. The rewrite " +
-        "requires sums that wrap on overflow (Spark's default integer-overflow behavior); " +
-        "the rewritten results are bit-identical to the original frames.")
+        "requires sums that wrap on overflow, so it only applies when " +
+        "`spark.sql.ansi.enabled` is false; the rewritten results are bit-identical " +
+        "to the original frames.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
