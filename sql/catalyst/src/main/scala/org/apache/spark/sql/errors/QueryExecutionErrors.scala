@@ -3791,12 +3791,22 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map.empty)
   }
 
-  def invalidParseSqlContext(parameter: String, value: String): SparkRuntimeException = {
+  def parseSqlAnalyzeUnsupportedScript(): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT",
+      messageParameters = Map.empty)
+  }
+
+  def invalidParseSqlContext(
+      parameter: String,
+      value: String,
+      cause: Throwable = null): SparkRuntimeException = {
     new SparkRuntimeException(
       errorClass = "INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT",
       messageParameters = Map(
         "functionName" -> toSQLId("parse_sql"),
         "parameter" -> toSQLId(parameter),
-        "invalidValue" -> toSQLValue(value, StringType)))
+        "invalidValue" -> toSQLValue(value, StringType)),
+      cause = cause)
   }
 }

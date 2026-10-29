@@ -6938,6 +6938,12 @@
     ],
     "sqlState" : "0A000"
   },
+  "PARSE_SQL_ANALYZE_UNSUPPORTED_SCRIPT" : {
+    "message" : [
+      "parse_sql ANALYZE does not analyze SQL scripts."
+    ],
+    "sqlState" : "0A000"
+  },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [
       "Syntax error at or near <error><hint>."
