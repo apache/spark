@@ -71,11 +71,18 @@ trait ColumnarDataSource {
 
 /**
  * Plans a batch scan of a [[ColumnarDataSource]], on the driver. Spark pushes operations down by
- * calling, each at most once and in this order, `pushLimit` and `pruneColumns`, then plans the
- * scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the planned scan is
- * serialized to the executors.
+ * calling, each at most once and in this order, `pushDomains`, `pushLimit` and `pruneColumns`,
+ * then plans the scan with `plan`, at most once. Only the [[PartitionReaderFactory]] of the
+ * planned scan is serialized to the executors.
  */
 trait ColumnarBatchPlanner {
+
+  /**
+   * Returns whether the reader uses each domain to skip data: the domains of the columns that the
+   * filters of the query constrain, at least one. Spark evaluates the filters after reading
+   * anyway, and shows the filters of the used domains as pushed in the plan.
+   */
+  def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = domains.map(_ => false)
 
   /** Returns whether the reader returns at most `limit` rows. Spark applies it again anyway. */
   def pushLimit(limit: Int): Boolean = false

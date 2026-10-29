@@ -113,7 +113,10 @@ final class NativeLibrary {
     WRITE("write", C.I32, C.PTR, C.PTR, C.PTR),
     COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
     ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR),
-    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR);
+    CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR),
+    // Appended after the other functions, so that the table of a library built against a header
+    // without it keeps its layout.
+    PUSH_DOMAINS("push_domains", C.I32, C.PTR, C.PTR, C.I64, C.PTR);
 
     /** The name of the field of the function in the table. */
     final String fieldName;
@@ -155,6 +158,13 @@ final class NativeLibrary {
   private static final long WRITE_INFO_SIZE = 24;
   private static final long WRITE_INFO_MODE = 8;
   private static final long WRITE_INFO_QUERY_ID = 16;
+  private static final long DOMAIN_SIZE = 48;
+  private static final long DOMAIN_PATH = 8;
+  private static final long DOMAIN_PATH_LENGTH = 16;
+  private static final long DOMAIN_NULL_ALLOWED = 24;
+  private static final long DOMAIN_NAN_ALLOWED = 25;
+  private static final long DOMAIN_RANGES = 32;
+  private static final long DOMAIN_RANGES_SCHEMA = 40;
 
   /**
    * The offsets of the fields of the structs that Spark reads or writes, by {@code struct.field},
@@ -191,6 +201,14 @@ final class NativeLibrary {
     layout.put("SparkDsWriteInfo.size", 0L);
     layout.put("SparkDsWriteInfo.mode", WRITE_INFO_MODE);
     layout.put("SparkDsWriteInfo.query_id", WRITE_INFO_QUERY_ID);
+    layout.put("SparkDsDomain", DOMAIN_SIZE);
+    layout.put("SparkDsDomain.size", 0L);
+    layout.put("SparkDsDomain.path", DOMAIN_PATH);
+    layout.put("SparkDsDomain.path_length", DOMAIN_PATH_LENGTH);
+    layout.put("SparkDsDomain.null_allowed", DOMAIN_NULL_ALLOWED);
+    layout.put("SparkDsDomain.nan_allowed", DOMAIN_NAN_ALLOWED);
+    layout.put("SparkDsDomain.ranges", DOMAIN_RANGES);
+    layout.put("SparkDsDomain.ranges_schema", DOMAIN_RANGES_SCHEMA);
     return layout;
   }
 
@@ -611,6 +629,52 @@ final class NativeLibrary {
     function(Function.CLOSE).invokeExact(dataSource);
   }
 
+  /** The domain of a column, as push_domains gets it in a {@code SparkDsDomain}. */
+  static final class Domain {
+    final int[] path;
+    final boolean nullAllowed;
+    final boolean nanAllowed;
+    // The addresses of the ArrowArray and the ArrowSchema of the ranges, or 0 for any value.
+    final long ranges;
+    final long rangesSchema;
+
+    Domain(int[] path, boolean nullAllowed, boolean nanAllowed, long ranges, long rangesSchema) {
+      this.path = path;
+      this.nullAllowed = nullAllowed;
+      this.nanAllowed = nanAllowed;
+      this.ranges = ranges;
+      this.rangesSchema = rangesSchema;
+    }
+  }
+
+  /** Pushes the domains down to the reader, and returns whether it uses each of them. */
+  boolean[] pushDomains(long reader, Domain[] domains) throws Throwable {
+    MethodHandle f = function(Function.PUSH_DOMAINS);
+    try (Memory memory = new Memory()) {
+      long pointers = memory.zeroed(8L * Math.max(1, domains.length));
+      for (int i = 0; i < domains.length; i++) {
+        Domain domain = domains[i];
+        long struct = memory.zeroed(DOMAIN_SIZE);
+        Platform.putLong(null, struct, DOMAIN_SIZE);
+        Platform.putLong(null, struct + DOMAIN_PATH, memory.ints(domain.path));
+        Platform.putLong(null, struct + DOMAIN_PATH_LENGTH, domain.path.length);
+        Platform.putByte(null, struct + DOMAIN_NULL_ALLOWED, (byte) (domain.nullAllowed ? 1 : 0));
+        Platform.putByte(null, struct + DOMAIN_NAN_ALLOWED, (byte) (domain.nanAllowed ? 1 : 0));
+        Platform.putLong(null, struct + DOMAIN_RANGES, domain.ranges);
+        Platform.putLong(null, struct + DOMAIN_RANGES_SCHEMA, domain.rangesSchema);
+        Platform.putLong(null, pointers + 8L * i, struct);
+      }
+      long used = memory.zeroed(Math.max(1, domains.length));
+      check((int) f.invokeExact(reader, pointers, (long) domains.length, used),
+        Function.PUSH_DOMAINS);
+      boolean[] result = new boolean[domains.length];
+      for (int i = 0; i < domains.length; i++) {
+        result[i] = Platform.getByte(null, used + i) != 0;
+      }
+      return result;
+    }
+  }
+
   boolean pushLimit(long reader, int limit) throws Throwable {
     MethodHandle f = function(Function.PUSH_LIMIT);
     try (Memory memory = new Memory()) {
@@ -816,6 +880,15 @@ final class NativeLibrary {
       byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
       long address = zeroed(bytes.length + 1L);
       Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, address, bytes.length);
+      return address;
+    }
+
+    /** Copies the ints. Empty ints are passed as a valid pointer too. */
+    long ints(int[] values) {
+      long address = zeroed(4L * Math.max(1, values.length));
+      for (int i = 0; i < values.length; i++) {
+        Platform.putInt(null, address + 4L * i, values[i]);
+      }
       return address;
     }
 

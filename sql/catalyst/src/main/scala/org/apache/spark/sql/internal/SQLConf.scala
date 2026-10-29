@@ -7441,6 +7441,18 @@ object SQLConf {
     .toSequence
     .createWithDefault(Nil)
 
+  val NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED =
+    buildConf("spark.sql.dataSource.native.filterPushdown.enabled")
+      .doc("When true, Spark passes to native data sources the domains of the columns that the " +
+        "filters of a batch scan constrain, the values that these columns can have in the rows " +
+        "that match, so that a data source can skip data. Spark evaluates the filters after " +
+        "reading anyway, so turning it off only makes a data source read more data, for example " +
+        "to check whether a data source skips data that it must read.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(true)
+
   val CSV_FILTER_PUSHDOWN_ENABLED = buildConf("spark.sql.csv.filterPushdown.enabled")
     .doc("When true, enable filter pushdown to CSV datasource.")
     .version("3.0.0")
@@ -10299,6 +10311,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pythonFilterPushDown: Boolean = getConf(PYTHON_FILTER_PUSHDOWN_ENABLED)
 
   def pythonLimitPushDown: Boolean = getConf(PYTHON_LIMIT_PUSHDOWN_ENABLED)
+
+  def nativeDataSourceFilterPushdownEnabled: Boolean =
+    getConf(NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED)
 
   def csvFilterPushDown: Boolean = getConf(CSV_FILTER_PUSHDOWN_ENABLED)
 

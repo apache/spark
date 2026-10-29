@@ -77,6 +77,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_ne", "-DNO_LAST_ERROR", "-DNAME_PREFIX=\"ne_\"")
   private lazy val smallTableLibrary = compile("test_native_datasource_small",
     "-DTABLE_SIZE=offsetof(SparkDsLibrary,read)", "-DNAME_PREFIX=\"small_\"")
+  // Built as against a header without push_domains, the last function of the table.
+  private lazy val noDomainsLibrary = compile("test_native_datasource_nd",
+    "-DTABLE_SIZE=offsetof(SparkDsLibrary,push_domains)", "-DNAME_PREFIX=\"nd_\"")
   private lazy val failingInitLibrary =
     compile("test_native_datasource_if", "-DINIT_FAILURE=1", "-DNAME_PREFIX=\"if_\"")
   private lazy val noTableLibrary =
@@ -345,9 +348,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       (0L until 6L).map(id => Row(id, if (id % 5 == 0) null else s"n$id")))
 
     // The Arrow schema does not have the collation, which applies to the data that Spark reads.
+    // A data source compares strings by their bytes, so the column has no domain.
     val collated = session.read.schema("id BIGINT, name STRING COLLATE UTF8_LCASE")
       .format("native_range").option("end", "6").load()
     checkRows(collated.filter("name = 'N1'"), Seq(Row(1L, "n1")))
+    assert(scan(collated.filter("name = 'N1'")).getMetaData()("PushedFilters") == "[]")
 
     val e = intercept[Exception] {
       session.read.schema("id INT").format("native_range").load().collect()
@@ -392,6 +397,88 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val filtered = range(newSession(defaultPackage), "end" -> "100").filter("id > 5").limit(3)
     assert(filtered.collect().length == 3)
     assert(!scan(filtered).getMetaData().contains("PushedLimit"))
+  }
+
+  nativeTest("push down the domains of filtered columns") {
+    val file = new File(Utils.createTempDir(), "domains")
+    def readIn(session: SparkSession, options: (String, String)*): DataFrame = {
+      file.delete()
+      range(session, Seq("end" -> "45", "domains_path" -> file.getPath) ++ options: _*)
+    }
+    def read(options: (String, String)*): DataFrame = {
+      readIn(newSession(defaultPackage), options: _*)
+    }
+    // The domains that the library got: for each, the path of the column, whether null and NaN are
+    // in the domain, and the ranges.
+    def received(): Seq[String] = Files.readAllLines(file.toPath, UTF_8).asScala.toSeq
+
+    // The library reads the blocks of 10 rows whose ids may match, [10, 20) and [20, 30), with all
+    // their rows, and Spark filters the rows after reading.
+    val df = read().filter("id > 13 AND id < 27")
+    checkRows(df, (14L until 27L).map(expectedRow))
+    assert(received() == Seq("0 - - (13,27)"))
+    assert(scan(df).toBatch.planInputPartitions().length == 2)
+    val pushed = scan(df).getMetaData()("PushedFilters")
+    assert(pushed.contains("id > 13") && pushed.contains("id < 27"), pushed)
+    assert(scan(df).getMetaData()("PushedDomains") == "[id: (13L, 27L)]")
+
+    // The library gets the domains of the other columns too, and only uses the one of id, so the
+    // filters on the others are not shown as pushed.
+    val other = read().filter("id < 5 AND name = 'n3'")
+    checkRows(other, Seq(expectedRow(3L)))
+    assert(received() == Seq("0 - - (-inf,5)", "2 - - [n3,n3]"))
+    assert(scan(other).getMetaData()("PushedDomains") == "[id: (-inf, 5L)]")
+    assert(!scan(other).getMetaData()("PushedFilters").contains("name"))
+    val all = read("use_domains" -> "all").filter("id < 5 AND name = 'n3'")
+    checkRows(all, Seq(expectedRow(3L)))
+    assert(scan(all).getMetaData()("PushedFilters").contains("name = 'n3'"))
+    // A library that uses no domain reads all the data.
+    val none = read("use_domains" -> "none").filter("id > 40")
+    checkRows(none, (41L until 45L).map(expectedRow))
+    assert(scan(none).getMetaData()("PushedFilters") == "[]")
+    assert(!scan(none).getMetaData().contains("PushedDomains"))
+    assert(scan(none).toBatch.planInputPartitions().length == 2)
+
+    // NaN is greater than any other value, so it is in the domain of value > 10.
+    val doubles = read().filter("value > 10.0")
+    checkRows(doubles, (21L until 45L).map(expectedRow))
+    assert(received() == Seq("3 - nan (10,+inf)"))
+    // LIKE 'n1%' is STARTS_WITH(name, 'n1'): the strings from 'n1', up to 'n2' excluded.
+    val prefixed = read().filter("name LIKE 'n1%'")
+    checkRows(prefixed, Seq(1L, 11L, 12L, 13L, 14L, 16L, 17L, 18L, 19L).map(expectedRow))
+    assert(received() == Seq("2 - - [n1,n2)"))
+    // A field of a struct, and timestamps, in microseconds.
+    val nested = read("extra" -> "struct").filter("st.a >= 40 AND ts < timestamp_seconds(42)")
+    checkRows(nested.select("id"), Seq(Row(40L), Row(41L)))
+    assert(received() == Seq("6 - - (-inf,42000000)", "7.0 - - [40,+inf)"))
+    // A domain without values: the library reads nothing.
+    val empty = read().filter("id < 5 AND id > 10")
+    checkRows(empty, Nil)
+    assert(received() == Seq("0 - - "))
+    assert(scan(empty).toBatch.planInputPartitions().isEmpty)
+    // Filters on other expressions are not pushed: Spark evaluates them.
+    val functions = read().filter("id % 7 = 0 AND upper(name) = 'N14'")
+    checkRows(functions, Seq(expectedRow(14L)))
+    val notPushed = scan(functions).getMetaData()("PushedFilters")
+    assert(!notPushed.contains("%") && !notPushed.contains("UPPER"), notPushed)
+
+    val session = newSession(defaultPackage)
+    session.conf.set(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key, "false")
+    val disabled = readIn(session).filter("id > 40")
+    checkRows(disabled, (41L until 45L).map(expectedRow))
+    assert(!file.exists())
+    assert(scan(disabled).getMetaData()("PushedFilters") == "[]")
+  }
+
+  nativeTest("push no domain to a library built against a header without push_domains") {
+    val file = new File(Utils.createTempDir(), "domains")
+    val session = newSession(createPackage(noDomainsLibrary, dataSources("nd_")))
+    val df = session.read.format("nd_native_range")
+      .options(Map("end" -> "20", "domains_path" -> file.getPath)).load().filter("id > 15")
+    checkRows(df, (16L until 20L).map(expectedRow))
+    // push_domains is set in the table of the library, but after its end.
+    assert(!file.exists())
+    assert(scan(df).getMetaData()("PushedFilters") == "[]")
   }
 
   nativeTest("read maps whose entry fields have other names") {
@@ -990,6 +1077,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(limited.collect().length == 3)
     assert(scan(limited).readSchema() == df.schema)
     assert(!scan(limited).getMetaData().contains("PushedLimit"))
+    // Nor any filter, which Spark evaluates after reading.
+    val filtered = df.filter("id > 6")
+    checkRows(filtered, (7L until 10L).map(expectedRow))
+    assert(scan(filtered).getMetaData()("PushedFilters") == "[]")
 
     def check(condition: String, parameters: Map[String, String])(f: => Unit): Unit = {
       val e = intercept[Exception](f)

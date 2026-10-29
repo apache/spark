@@ -21,6 +21,7 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 
+import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.util.control.NonFatal
 
@@ -34,12 +35,14 @@ import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter, ColumnDomain}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -261,6 +264,19 @@ class NativeBatchPlanner(
   import NativeCalls._
 
   private var readSchema: StructType = schema
+
+  override def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = {
+    // The table of a library built against a header without push_domains ends before it.
+    if (!library.hasFunction(NativeLibrary.Function.PUSH_DOMAINS)) {
+      domains.map(_ => false)
+    } else {
+      call(name, "plan a scan of") {
+        NativeArrow.exportDomains(domains) { exported =>
+          library.pushDomains(handle.get, exported.toArray).toSeq
+        }
+      }
+    }
+  }
 
   override def pushLimit(limit: Int): Boolean = {
     call(name, "plan a scan of")(optional(library.pushLimit(handle.get, limit))).getOrElse(false)
@@ -1097,6 +1113,55 @@ object NativeArrow {
       // Releases the schema unless the library moved it to take ownership.
       struct.release()
       struct.close()
+    }
+  }
+
+  /**
+   * Exports the domains, with their ranges as struct arrays whose fields are low and high, of the
+   * Arrow type of the column in the exported schema to read, and low_inclusive and high_inclusive,
+   * and calls `f` with them.
+   */
+  def exportDomains[T](domains: Seq[ColumnDomain])(f: Seq[NativeLibrary.Domain] => T): T = {
+    val exported = ArrayBuffer.empty[(VectorSchemaRoot, ArrowArray, ArrowSchema)]
+    try {
+      val structs = domains.map { domain =>
+        val (ranges, rangesSchema) = domain.ranges match {
+          case None => (0L, 0L)
+          case Some(values) =>
+            val schema = StructType(Seq(
+              StructField("low", domain.dataType),
+              StructField("high", domain.dataType),
+              StructField("low_inclusive", BooleanType, nullable = false),
+              StructField("high_inclusive", BooleanType, nullable = false)))
+            val root = VectorSchemaRoot.create(
+              ArrowUtils.toArrowSchema(schema, SQLConf.get.sessionLocalTimeZone,
+                errorOnDuplicatedFieldNames = true, largeVarTypes = false),
+              ArrowUtils.rootAllocator)
+            val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
+            val arrowSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
+            exported += ((root, array, arrowSchema))
+            val writer = ArrowWriter.create(root)
+            values.foreach { range =>
+              writer.write(InternalRow(range.low.orNull, range.high.orNull, range.lowInclusive,
+                range.highInclusive))
+            }
+            writer.finish()
+            Data.exportVectorSchemaRoot(ArrowUtils.rootAllocator, root, null, array, arrowSchema)
+            (array.memoryAddress(), arrowSchema.memoryAddress())
+        }
+        new NativeLibrary.Domain(
+          domain.path.toArray, domain.nullAllowed, domain.nanAllowed, ranges, rangesSchema)
+      }
+      f(structs)
+    } finally {
+      exported.foreach { case (root, array, arrowSchema) =>
+        // Releases the ranges unless the library moved them to take ownership.
+        array.release()
+        array.close()
+        arrowSchema.release()
+        arrowSchema.close()
+        root.close()
+      }
     }
   }
 

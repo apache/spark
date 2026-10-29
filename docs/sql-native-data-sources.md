@@ -33,7 +33,7 @@ package, and loads it when a query uses the data source. Spark adapts it to
 
 - batch and micro-batch streaming reads,
 - batch and streaming writes, appending to or overwriting the existing data,
-- column and limit pushdown.
+- filter, limit and column pushdown.
 
 Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
@@ -101,8 +101,9 @@ Spark calls the functions of the table as follows:
   that the data source does not support before it computes the data to write. When the user does
   not specify a schema, Spark asks for it with `schema`.
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
-  down with `push_limit` and `prune_columns`, plans the partitions with `partitions`, and
-  serializes the state of the reader with `serialize_reader`. Then it calls `read` on the
+  down with `push_domains` (see [Filter Pushdown](#filter-pushdown)), `push_limit` and
+  `prune_columns`, plans the partitions with `partitions`, and serializes the state of the reader
+  with `serialize_reader`. Then it calls `read` on the
   executors, in one task for each partition, and `read` exports an `ArrowArrayStream`. Its
   callbacks can be called from any thread, but never concurrently.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
@@ -143,7 +144,7 @@ data source must not declare a capability whose functions are `NULL`:
 | Capability | Required functions | Optional functions |
 |-----------|--------------------|--------------------|
 | All | `create`, `close` | `last_error`, `schema` |
-| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns`, `serialize_reader` |
+| `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_domains`, `push_limit`, `prune_columns`, `serialize_reader` |
 | `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `serialize_stream_reader`, `commit_offset` |
 | `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | `serialize_writer` |
 
@@ -169,11 +170,62 @@ a write that runs for long, or blocks, for example on network I/O, should check 
 regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
 `spark.task.reaper.killTimeout`, kills an executor whose killed task does not end.
 
+### Filter Pushdown
+
+Spark does not pass the filters of a query to a library as expressions, which a library would have
+to evaluate with the exact semantics of Spark SQL. It passes the *domains* of the columns that the
+filters constrain instead: for each column, the values that it can have in the rows that match,
+which a library compares with the statistics of its data to skip what cannot match, such as files,
+row groups or blocks. With `push_domains`, a reader gets a `SparkDsDomain` for each column, with:
+
+- `path`: the index of the column in the schema to read, and then the index of the field in each
+  struct, for a field of a struct;
+- `null_allowed` and `nan_allowed`: whether null and NaN are in the domain;
+- `ranges`: the ranges of the other values in the domain, as a struct array whose fields are
+  `low` and `high`, of the Arrow type of the column, with a null bound for no bound, and
+  `low_inclusive` and `high_inclusive`. The ranges are sorted and do not overlap. A single value
+  is a range whose bounds are equal and inclusive, and `ranges` is `NULL` when all the other
+  values are in the domain.
+
+For example:
+
+| Filter | Domain |
+|--------|--------|
+| `id > 5 AND id <= 10` | `id`: `(5, 10]` |
+| `id IN (1, 3) OR id IS NULL` | `id`: null, `[1, 1]`, `[3, 3]` |
+| `NOT (id = 5)` | `id`: `(-inf, 5)`, `(5, +inf)` |
+| `value > 1.5`, for a `double` column | `value`: NaN, `(1.5, +inf)` |
+| `name LIKE 'ab%'`, which is `STARTS_WITH(name, 'ab')` | `name`: `['ab', 'ac')` |
+| `s.x = 1 AND name IS NOT NULL` | `s.x`: `[1, 1]`; `name`: all the values but null |
+| `id > 5 OR name = 'a'` | none: each side only constrains one of the columns |
+
+Spark derives the domains from the comparisons of a column with literals (`=`, `<>`, `<=>`, `<`,
+`<=`, `>`, `>=`), `IN`, `IS NULL`, `IS NOT NULL` and `STARTS_WITH`, combined with `AND`, `OR` and
+`NOT`, with the semantics of Spark SQL: comparisons with null are null, so that
+`NOT (id IN (1, NULL))` matches no row, NaN is equal to NaN and greater than any other value, and
+-0.0 is equal to 0.0. A domain has all the values of its column in the rows for which the filters
+are true, and may have others: a column that only one side of an `OR` constrains gets no domain
+from it, and the other filters, such as `id + 1 > 5`, `a = b` or `ENDS_WITH(name, 'x')`, constrain
+no column. Columns of strings with a non-binary collation, such as `UTF8_LCASE`, and arrays, maps
+and structs, get no domain.
+
+A library compares values with the order of Spark SQL: numbers, dates and timestamps by their
+values, with -0.0 equal to 0.0 (use IEEE 754 comparisons, not a total order such as
+`f64::total_cmp`), strings by their UTF-8 bytes, binary values as unsigned bytes, and false before
+true. It must never skip a row whose values are all in their domains, which Spark cannot detect,
+but it can return rows that are not: Spark evaluates all the filters again after reading. So a
+library only uses the domains to read less data, and Spark does not push a `LIMIT` down with a
+filter. The library sets `used` to whether it uses each domain,
+and the plan of the query shows the filters of the used domains as `PushedFilters`, and the
+domains as `PushedDomains`. Set `spark.sql.dataSource.native.filterPushdown.enabled` to false to
+read without passing the domains, for example to check whether a library skips data that matches.
+
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext` and `SparkDsWriteInfo`, start with their
-size, so that they can grow. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
+`SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext`, `SparkDsWriteInfo` and `SparkDsDomain`,
+start with their size, so that they can grow. `push_domains` was added this way, at the end of the
+table: Spark does not call it for a library built against a header without it. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
 table and the manifest of a package declare. Within a version:
 
 - fields are only appended to these structs, and the existing fields and the semantics of the
@@ -193,8 +245,11 @@ supports version 1 at least in all the releases of Spark 4 from 4.4.0.
 Version 1 of the interface does not cover these features of Data Source V2 yet. They can be added
 later as functions or fields appended to the structs of the interface:
 
-- predicate pushdown: Spark filters the rows of a native scan after reading them, so a library
-  cannot use the filters of a query to skip data;
+- filters that a library applies itself: Spark evaluates the filters of a native scan after
+  reading, and only passes the domains of the columns that they constrain, which a library can use
+  to skip data (see [Filter Pushdown](#filter-pushdown)). So it does not push a limit down with a
+  filter, and a library cannot evaluate filters that are not domains, such as functions of
+  columns;
 - statistics: Spark estimates the size of a native scan with `spark.sql.defaultSizeInBytes`, so it
   does not plan a native scan as the broadcast side of a join, unless the query has a broadcast
   hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
@@ -762,6 +817,7 @@ statically, or install them on the nodes.
 |---------------|---------|---------|
 | `spark.sql.dataSource.native.enabled` | true | Whether Spark loads native data sources. It is a static configuration, so it can only be set when the Spark application starts. |
 | `spark.sql.dataSource.native.paths` | (none) | Comma-separated list of native data source packages, and of directories that contain them, on the local file system of the driver. They take precedence over the installed libraries. |
+| `spark.sql.dataSource.native.filterPushdown.enabled` | true | Whether Spark passes the domains of the filtered columns of a batch scan to native data sources, so that they can skip data: see [Filter Pushdown](#filter-pushdown). Spark evaluates the filters after reading anyway. |
 
 ## Security
 
