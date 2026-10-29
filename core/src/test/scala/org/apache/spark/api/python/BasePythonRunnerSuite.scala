@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
 
+import com.fasterxml.jackson.core.StreamReadConstraints
 import com.google.common.util.concurrent.Uninterruptibles
 import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
@@ -853,6 +854,14 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
       traceback = "Traceback ...\nValueError: bad",
       errorClass = "ValueError",
       isPayloadError = true)))
+    checkEndMarkers(stream)
+  }
+
+  test("SPARK-60613: decode an init error longer than Jackson's default string limit") {
+    val traceback = "x" * (StreamReadConstraints.DEFAULT_MAX_STRING_LEN + 1)
+    val json = initErrorJson.replace("Traceback ...\\nValueError: bad", traceback)
+    val stream = framedMetricsStream(json)
+    assert(BasePythonRunner.readInitResponse(stream).map(_.traceback) === Some(traceback))
     checkEndMarkers(stream)
   }
 

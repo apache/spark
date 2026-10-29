@@ -29,7 +29,7 @@ import scala.jdk.CollectionConverters._
 import scala.util.{Success, Try}
 import scala.util.control.NonFatal
 
-import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException}
+import com.fasterxml.jackson.core.{JsonParser, JsonProcessingException, StreamReadConstraints}
 import com.fasterxml.jackson.databind.{DeserializationFeature, JsonNode, ObjectMapper}
 
 import org.apache.spark._
@@ -477,9 +477,15 @@ private[spark] object BasePythonRunner extends Logging {
     }
   }
 
-  private lazy val workerJsonMapper = new ObjectMapper()
-    .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
-    .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+  private lazy val workerJsonMapper = {
+    val mapper = new ObjectMapper()
+      .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION)
+      .enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+    // An init error carries the full worker traceback, which may exceed Jackson's default limit.
+    mapper.getFactory.setStreamReadConstraints(
+      StreamReadConstraints.builder().maxStringLength(Int.MaxValue).build())
+    mapper
+  }
 
   /** Decode every METRICS_DATA field as a named int64; reject other values. */
   private[python] def readWorkerMetrics(stream: DataInputStream): Map[String, Long] = {

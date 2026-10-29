@@ -46,7 +46,7 @@ from pyspark.serializers import (
     write_long,
     write_with_length,
 )
-from pyspark.sql.types import LongType
+from pyspark.sql.types import LongType, StructField, StructType
 from pyspark.taskcontext import TaskContext
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, eventually
 from pyspark.util import PythonEvalType
@@ -205,17 +205,39 @@ def _command(func: Any) -> bytes:
     return _framed(CloudPickleSerializer().dumps((func, None, ser, ser)))
 
 
-def _udf_info(func: Any) -> bytes:
-    """The udf_info of a task running one single-argument UDF ``func``."""
+def _udf_info(func: Any, command: Optional[bytes] = None) -> bytes:
+    """The udf_info of a task running one single-argument UDF ``func``, or the pickled
+    ``command`` in its place."""
+    if command is None:
+        command = CloudPickleSerializer().dumps((func, LongType()))
     buf = io.BytesIO()
     write_int(1, buf)  # num_udfs
     write_int(1, buf)  # num_args
     write_int(0, buf)  # arg offset
     buf.write(b"\x00")  # is_kwarg
     write_int(1, buf)  # num_chained
-    write_with_length(CloudPickleSerializer().dumps((func, LongType())), buf)
+    write_with_length(command, buf)
     write_long(0, buf)  # result_id
     return buf.getvalue()
+
+
+def _udtf_info(udtf_cls: type, return_type: str) -> bytes:
+    """The udf_info of a task running ``udtf_cls`` on one argument with ``return_type``."""
+    buf = io.BytesIO()
+    write_int(1, buf)  # num_args
+    write_int(0, buf)  # arg offset
+    buf.write(b"\x00")  # is_kwarg
+    write_int(0, buf)  # num_partition_child_indexes
+    buf.write(b"\x00")  # has_pickled_analyze_result
+    write_with_length(CloudPickleSerializer().dumps(udtf_cls), buf)
+    _write_utf8(return_type, buf)
+    _write_utf8("test_udtf", buf)  # name
+    return buf.getvalue()
+
+
+class _TwoArgUDTF:
+    def eval(self, a, b):
+        yield (a,)
 
 
 class _UnprintableError(Exception):
@@ -322,6 +344,41 @@ class WorkerInitResponseTests(unittest.TestCase):
         self.assertEqual(error["errorClass"], "ImportError")
         self.assertEqual(error["message"], "pyarrow is not installed")
         self.assertEqual(outfile.read(), b"")
+
+    def test_payload_window_of_each_payload_kind(self):
+        struct_type = StructType([StructField("x", LongType())]).json()
+        cases = [
+            # A UDF whose function does not unpickle.
+            (
+                PythonEvalType.SQL_BATCHED_UDF,
+                _udf_info(None, command=b"not a pickle"),
+                "UnpicklingError",
+                True,
+            ),
+            # A UDTF that declares a non-struct return type.
+            (
+                PythonEvalType.SQL_TABLE_UDF,
+                _udtf_info(_TwoArgUDTF, '"long"'),
+                "must be a struct type",
+                True,
+            ),
+            # A UDTF whose 'eval' signature does not match the call, checked by its handler.
+            (
+                PythonEvalType.SQL_TABLE_UDF,
+                _udtf_info(_TwoArgUDTF, struct_type),
+                "UDTF_EVAL_METHOD_ARGUMENTS_DO_NOT_MATCH_SIGNATURE",
+                False,
+            ),
+        ]
+        for eval_type, udf_info, expected_error, is_payload_error in cases:
+            with self.subTest(expected_error=expected_error):
+                outfile = self._run(
+                    _worker_input(udf_info, [1], eval_type=eval_type), expect_exit=True
+                )
+                error = self._read_init_response(outfile)["error"]
+                self.assertIn(expected_error, error["traceback"])
+                self.assertEqual(error["isPayloadError"], is_payload_error)
+                self.assertEqual(outfile.read(), b"")
 
     def test_data_error_is_reported_after_init_response(self):
         def fail(_, it):

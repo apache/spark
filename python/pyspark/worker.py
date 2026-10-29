@@ -123,7 +123,8 @@ def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):
     Initialization -> Processing -> Finish/Cleanup
 
     Initialization ends with the init response (see ``report_init_response``); a failure before
-    it is reported there, and a failure after it as PYTHON_EXCEPTION_THROWN.
+    it is reported there, and a failure while processing data after it as
+    PYTHON_EXCEPTION_THROWN.
     """
     initialized = False
     loading_payload = False
