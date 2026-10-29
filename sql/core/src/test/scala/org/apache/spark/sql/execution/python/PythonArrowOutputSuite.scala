@@ -22,7 +22,10 @@ import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.vector.{BigIntVector, FieldVector, FixedSizeBinaryVector, VectorSchemaRoot}
+import org.apache.arrow.vector.complex.{ListVector, StructVector}
 import org.apache.arrow.vector.ipc.{ArrowStreamReader, ArrowStreamWriter}
+import org.apache.arrow.vector.types.pojo.{ArrowType, FieldType}
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
@@ -129,6 +132,74 @@ class PythonArrowOutputSuite extends SparkFunSuite {
         if (sizes.isEmpty) Seq(0) else sizes
       }
       assert(output.map(_._1.size) === expectedSizes)
+    }
+  }
+
+  test("SPARK-60627: slice by records: a batch that Arrow cannot slice is output whole") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("unsliceable", 0, Long.MaxValue)
+    // An array column that reports 2^29 + 2^20 rows without allocating them, as if its offsets
+    // took over 2 GiB, so that Arrow cannot slice it. Since a real overflow needs buffers over
+    // 2 GiB, this checks only that the batch is output whole instead of sliced. The fixed-width
+    // vectors that Spark reads, e.g. of an int64 column over 2 GiB, are final classes, so a list
+    // stands in.
+    val rows = (1 << 29) + (1 << 20)
+    val list = new ListVector("l", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
+      override def getValueCount: Int = rows
+    }
+    list.addOrGetVector[BigIntVector](FieldType.nullable(new ArrowType.Int(64, true)))
+    // Like the output of mapInArrow, the column is in a struct column.
+    val struct = new StructVector(
+        "st", allocator, FieldType.nullable(ArrowType.Struct.INSTANCE), null) {
+      putChild("l", list)
+    }
+    val root = new VectorSchemaRoot(
+      Seq(struct.getField).asJava, Seq[FieldVector](struct).asJava, rows)
+    val reader = new ArrowStreamReader(
+        new ByteArrayInputStream(Array.emptyByteArray), allocator) {
+      private var loaded = false
+      override def getVectorSchemaRoot: VectorSchemaRoot = root
+      override def loadNextBatch(): Boolean = {
+        val hasNext = !loaded
+        loaded = true
+        hasNext
+      }
+      override def bytesRead(): Long = 0L
+    }
+    val metrics = Map(
+      "pythonNumRowsReceived" -> new SQLMetric("sum"),
+      "pythonDataReceived" -> new SQLMetric("size"))
+    val processor = new SliceRecordsArrowOutputProcessorImpl(reader, metrics, 1 << 20)
+    try {
+      assert(processor.loadBatch())
+      assert(processor.produceBatch().numRows() === rows)
+      assert(!processor.loadBatch())
+    } finally {
+      processor.close()
+      allocator.close()
+    }
+  }
+
+  test("SPARK-60627: canSlice rejects vectors whose slice positions overflow int") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("canSlice", 0, Long.MaxValue)
+    // Vectors that report many values without allocating them.
+    def fixed(rows: Int): FixedSizeBinaryVector =
+      new FixedSizeBinaryVector("f", allocator, 8) {
+        override def getValueCount: Int = rows
+      }
+    def list(rows: Int): ListVector = new ListVector(
+        "l", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
+      override def getValueCount: Int = rows
+    }
+    val vectors =
+      Seq(fixed((1 << 28) - 1), fixed(1 << 28), list((1 << 29) - 2), list((1 << 29) - 1))
+    try {
+      // `splitAndTransfer` computes `startIndex * 8` and `length * 8` of an 8-byte wide column,
+      // and the offset positions and `(length + 1) * 4` offset bytes of a list column, in int.
+      assert(vectors.map(BaseSliceArrowOutputProcessor.canSlice) ===
+        Seq(true, false, true, false))
+    } finally {
+      vectors.foreach(_.close())
+      allocator.close()
     }
   }
 
