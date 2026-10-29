@@ -57,8 +57,9 @@ import org.apache.spark.unsafe.types.UTF8String
     Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
     returns a JSON array describing them so callers can inspect SQL text (lineage, statement
     kind, select-list types) without running the statements. Each object has 1-based
-    character `start` and character `length` (Unicode code points; an emoji is one
-    character), parse success, Table 39 statement identifier/code, target and source
+    character `start` and character `length` (Unicode code points; a single-code-point
+    character, including a BMP glyph or one supplementary emoji, counts as one),
+    parse success, Table 39 statement identifier/code, target and source
     table references, select-list column names, and parameter markers. Every parameter
     may be passed by name (`sqlStmt => ...`, `mode => ...`).
     `mode` is `PARSE` (default) or `ANALYZE` (case-insensitive). `PARSE` is unresolved and
@@ -69,17 +70,20 @@ import org.apache.spark.unsafe.types.UTF8String
     statements. `CALL` is analyzed but the procedure is not run. A SQL script calling
     `parse_sql` does not lend it its locals or cursors. `ANALYZE` inherits the invoker's
     current catalog, schema, and SQL path. Named `current_catalog`, `current_schema`, and
-    `current_path` override that context for analysis only; omitted or NULL keeps the
-    invoker value, which is restored after the call. An override changes the session
-    for the duration of the call, so other queries running concurrently on the same
-    session can observe it; `current_path` also enables the SQL path for the call.
+    `current_path` override that context for analysis only. Omitted or NULL keeps the
+    invoker value except that `current_catalog` alone uses the new catalog's default
+    namespace. The invoker catalog, namespace, path, and PATH flag are restored after
+    the call. An override changes the session for the duration of the call, so other
+    queries running concurrently on the same session can observe it; `current_path`
+    also enables the SQL path for the call.
     `PARSE` ignores the catalog arguments. Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.
     The JSON contract may still change while spark.sql.function.parseSql.enabled remains
     off by default. On syntax / parse error returns JSON for that statement with
     `parse_success` false, source location, and a nested STANDARD error object instead of
-    throwing or stopping later statements. Nested error locations are statement-relative
-    Unicode code points. Unexpected internal failures still fail the outer query. An
+    throwing or stopping later statements. Nested `queryContext` is the STANDARD
+    renderer output (view and EXECUTE IMMEDIATE bodies keep their own text).
+    Unexpected internal failures still fail the outer query. An
     empty or closed-comment-only batch returns `[]`. NULL `sqlStmt` or `mode` returns
     NULL.""",
   arguments = """
@@ -122,14 +126,14 @@ import org.apache.spark.unsafe.types.UTF8String
     `statement_identifier` / `statement_code` (ISO/IEC 9075-2:2023 Table 39). ANALYZE
     adds `analyze_success`. Optional fields are omitted when empty:
     `target_table_references`, `source_table_references`, `function_references` (arrays
-    of name parts; ANALYZE qualifies persistent names, local temp views and temp
-    functions as `system.session`, builtins as `system.builtin`; CTE aliases in
-    scope are not listed as tables), `select_list` (`{name}` parts; ANALYZE lists the
-    output columns, with `*` expanded, and adds `type` as a DESCRIBE TABLE EXTENDED AS
-    JSON type object), `parameter_markers` (`named` and/or `unnamed_count`), and `error`
-    (STANDARD format; nested `queryContext` `startIndex`/`stopIndex` are 1-based Unicode
-    code points, statement-relative). Later statements are still processed after a
-    per-statement parse or analysis failure.
+    of name parts; ANALYZE qualifies persistent names to catalog.schema.object, local
+    temp views and temp functions as `system.session`, builtins as `system.builtin`;
+    CTE aliases in scope are not listed as tables), `select_list` (`{name}` parts;
+    ANALYZE lists the output columns, with `*` expanded, and adds `type` as a
+    DESCRIBE TABLE EXTENDED AS JSON type object), `parameter_markers` (`named` and/or
+    `unnamed_count`), and `error` (STANDARD format). Later statements are still
+    processed after a per-statement parse or analysis failure. ANALYZE of a SQL
+    script reports `analyze_success` false without executing the script.
   """,
   group = "misc_funcs",
   since = "4.4.0")
@@ -194,34 +198,39 @@ case class ParseSql(
     if (!typeCheck.isSuccess) {
       typeCheck
     } else {
-      val parsedMode = if (mode.foldable) {
-        Option(mode.eval()).map { value =>
+      if (!mode.foldable) {
+        DataTypeMismatch(
+          errorSubClass = "NON_FOLDABLE_INPUT",
+          messageParameters = Map(
+            "inputName" -> toSQLId("mode"),
+            "inputType" -> toSQLType(mode.dataType),
+            "inputExpr" -> toSQLExpr(mode)))
+      } else {
+        val parsedMode = Option(mode.eval()).map { value =>
           val modeStr = value.asInstanceOf[UTF8String].toString
           ParseSqlMode.parse(modeStr).getOrElse {
             throw QueryCompilationErrors.invalidParseSqlMode(mode)
           }
         }
-      } else {
-        None
-      }
-      // ANALYZE needs the session, which only the driver has: every argument
-      // must be constant so the call folds there. current_catalog() and the
-      // like are constant too; the optimizer replaces them with literals.
-      def constant(e: Expression): Boolean = e.foldable || (e match {
-        case _: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser => true
-        case _: LeafExpression => false
-        case other => other.deterministic && other.children.forall(constant)
-      })
-      val nonFoldable = ParseSql.parameterNames.zip(children).find(c => !constant(c._2))
-      (parsedMode, nonFoldable) match {
-        case (Some(ParseSqlMode.Analyze), Some((name, child))) =>
-          DataTypeMismatch(
-            errorSubClass = "NON_FOLDABLE_INPUT",
-            messageParameters = Map(
-              "inputName" -> toSQLId(name),
-              "inputType" -> toSQLType(child.dataType),
-              "inputExpr" -> toSQLExpr(child)))
-        case _ => TypeCheckResult.TypeCheckSuccess
+        // ANALYZE needs the session, which only the driver has: every argument
+        // must fold, or be current_catalog() / current_schema() / current_path()
+        // / current_user(), so the optimizer can replace them with literals.
+        def constant(e: Expression): Boolean = e.foldable || (e match {
+          case _: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser =>
+            true
+          case _ => false
+        })
+        val nonFoldable = ParseSql.parameterNames.zip(children).find(c => !constant(c._2))
+        (parsedMode, nonFoldable) match {
+          case (Some(ParseSqlMode.Analyze), Some((name, child))) =>
+            DataTypeMismatch(
+              errorSubClass = "NON_FOLDABLE_INPUT",
+              messageParameters = Map(
+                "inputName" -> toSQLId(name),
+                "inputType" -> toSQLType(child.dataType),
+                "inputExpr" -> toSQLExpr(child)))
+          case _ => TypeCheckResult.TypeCheckSuccess
+        }
       }
     }
   }
