@@ -112,6 +112,11 @@ abstract class SchemaPruningSuite
   case class Positioned(pos: Point, items: Array[Pair])
   val positioned =
     Positioned(Point(1, 2), Array(Pair(10, 20, "z1"), Pair(30, 40, "z2"))) :: Nil
+  // struct map keys that are equal without their `id`
+  case class Keyed(id: Int, key: Int, z: Int)
+  case class KeyedMap(m: Map[Keyed, String])
+  val keyedMaps =
+    KeyedMap(Map(Keyed(1, 23, 17) -> "x", Keyed(2, 23, 17) -> "y")) :: Nil
   // two array columns, each exploded by its own generator
   case class TwoArrays(a1: Array[Point], a2: Array[Pair])
   val twoArrays =
@@ -495,7 +500,7 @@ abstract class SchemaPruningSuite
   private val explodeOrderParts = "from orders lateral view outer explode(items) t1 as item " +
     "lateral view outer explode(item.parts) t2 as part"
 
-  testSchemaPruning("SPARK-47230: a field of the inner element of two chained explodes") {
+  test("SPARK-47230: a field of the inner element of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query1 = sql(s"select id, part.pid $explodeOrderParts")
       checkScan(query1, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
@@ -509,7 +514,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: multiple fields of the inner element of two chained explodes") {
+  test("SPARK-47230: multiple fields of the inner element of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select part.pid, part.label $explodeOrderParts")
       checkScan(query, "struct<items:array<struct<parts:array<struct<pid:int,label:string>>>>>")
@@ -518,7 +523,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: fields of both elements of two chained explodes") {
+  test("SPARK-47230: fields of both elements of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select item.sku, part.label, part.weight $explodeOrderParts")
       checkScan(query,
@@ -529,7 +534,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: two chained posexplodes") {
+  test("SPARK-47230: two chained posexplodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql("select i, j, part.label from orders " +
         "lateral view outer posexplode(items) t1 as i, item " +
@@ -540,7 +545,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: aggregate over fields of two chained explodes") {
+  test("SPARK-47230: aggregate over fields of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select id, count(part.pid), max(item.sku) $explodeOrderParts group by id")
       checkScan(query,
@@ -549,7 +554,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: an inner element used whole is not pruned") {
+  test("SPARK-47230: an inner element used whole is not pruned") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select item.sku, part $explodeOrderParts")
       checkScan(query, "struct<items:array<struct<sku:string," +
@@ -560,7 +565,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: a filter on the exploded array column itself") {
+  test("SPARK-47230: a filter on the exploded array column itself") {
     withDataSourceTable(orders, "orders") {
       // `size(items)` reads the smallest field of `items`, the explode reads `sku`
       val query = sql("select item.sku from orders lateral view explode(items) t1 as item " +
@@ -570,7 +575,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: non-adjacent fields of the inner element") {
+  test("SPARK-47230: non-adjacent fields of the inner element") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select part.pid, part.weight $explodeOrderParts")
       checkScan(query, "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
@@ -579,7 +584,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: an outer element used whole above an inner explode") {
+  test("SPARK-47230: an outer element used whole above an inner explode") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select item, part.pid $explodeOrderParts")
       checkScan(query, "struct<items:array<struct<qty:int,sku:string," +
@@ -591,7 +596,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: chains mixing explode and posexplode") {
+  test("SPARK-47230: chains mixing explode and posexplode") {
     withDataSourceTable(orders, "orders") {
       // the position of the outer level and a field of the inner one
       val query1 = sql("select i, part.label from orders " +
@@ -610,7 +615,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: an array of arrays of structs exploded twice") {
+  test("SPARK-47230: an array of arrays of structs exploded twice") {
     withDataSourceTable(matrices, "matrices") {
       val explodeCells = "from matrices lateral view outer explode(rows) t1 as r " +
         "lateral view outer explode(r) t2 as cell"
@@ -624,7 +629,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: an exploded array inside a struct") {
+  test("SPARK-47230: an exploded array inside a struct") {
     withDataSourceTable(organizations, "organizations") {
       val query = sql("select m.id, m.company.name from organizations " +
         "lateral view outer explode(team.members) t as m")
@@ -634,7 +639,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: a generator whose input is not a field of the one below") {
+  test("SPARK-47230: a generator whose input is not a field of the one below") {
     withDataSourceTable(orders, "orders") {
       val query = sql("select tag from orders lateral view outer explode(items) t1 as item " +
         "lateral view outer explode(array(item.sku, 'x')) t2 as tag")
@@ -672,7 +677,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: functions over fields of an exploded element") {
+  test("SPARK-47230: functions over fields of an exploded element") {
     withDataSourceTable(orders, "orders") {
       val explodeItems = "from orders lateral view outer explode(items) t1 as item"
       val query1 = sql(s"select item.sku, transform(item.parts, p -> p.pid) $explodeItems")
@@ -690,7 +695,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: chained elements with the same name") {
+  test("SPARK-47230: chained elements with the same name") {
     withDataSourceTable(orders, "orders") {
       // the second `x` replaces the first one, but both are in the plan
       val query1 = spark.table("orders")
@@ -713,7 +718,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: nulls at each level of two chained explodes") {
+  test("SPARK-47230: nulls at each level of two chained explodes") {
     withDataSourceTable(ordersWithNulls, "orders") {
       val query1 = sql(s"select id, part.pid, part.weight $explodeOrderParts")
       checkScan(query1,
@@ -757,7 +762,7 @@ abstract class SchemaPruningSuite
     checkAnswer(query2, Row("Susan", "Smith", "Doe") :: Nil)
   }
 
-  testSchemaPruning("SPARK-47230: an explode above an aggregate is not pruned through") {
+  test("SPARK-47230: an explode above an aggregate is not pruned through") {
     withDataSourceTable(orders, "orders") {
       val query = sql("select item.sku from (select id, first(items) as items from orders " +
         "group by id) lateral view explode(items) t1 as item")
@@ -767,7 +772,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: an explode over a CTE selecting all columns") {
+  test("SPARK-47230: an explode over a CTE selecting all columns") {
     withDataSourceTable(orders, "orders") {
       val query = sql("with c as (select * from orders) " +
         "select item.sku, item.qty from c lateral view outer explode(items) t1 as item")
@@ -806,7 +811,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: a posexplode position named like a scan column") {
+  test("SPARK-47230: a posexplode position named like a scan column") {
     withDataSourceTable(positioned, "positioned") {
       // `pos` below is both a struct column and the position of the posexplode; the generator
       // input that is not a field path reads the position, not the column
@@ -818,7 +823,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: a posexplode position and a scan column of the same name") {
+  test("SPARK-47230: a posexplode position and a scan column of the same name") {
     withDataSourceTable(positioned, "positioned") {
       // the position `t1.pos` and the column `positioned.pos` are both read, with other types;
       // `items` is still narrowed (the column passes through the posexplode and is read whole)
@@ -829,7 +834,18 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: an explode of a second scan column is not pruned through yet") {
+  test("SPARK-47230: an explode of map keys keeps the keys whole") {
+    withDataSourceTable(keyedMaps, "keyed_maps") {
+      // narrowed to `<key, z>`, both keys would be equal and a reader building the map (e.g. the
+      // ORC row reader) would keep one of them
+      val query = sql("select pos, e.key, e.z from keyed_maps " +
+        "lateral view outer posexplode(map_keys(m)) v as pos, e")
+      checkScan(query, "struct<m:map<struct<id:int,key:int,z:int>,string>>")
+      checkAnswer(query, Row(0, 23, 17) :: Row(1, 23, 17) :: Nil)
+    }
+  }
+
+  test("SPARK-47230: an explode of a second scan column is not pruned through yet") {
     withDataSourceTable(twoArrays, "two_arrays") {
       // Not pruned through yet (follow-up): `a2` also passes through the lower explode as a
       // column, which reads it whole although only `x` and `y` of its elements are used
@@ -841,7 +857,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: size() rewritten in a generator chain with ANSI mode on") {
+  test("SPARK-47230: size() rewritten in a generator chain with ANSI mode on") {
     withDataSourceTable(orders, "orders") {
       withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
         // not outer: the inferred `size(...) > 0` filters read only the smallest fields
@@ -864,7 +880,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: a sorted generator input keeps the comparator's fields") {
+  test("SPARK-47230: a sorted generator input keeps the comparator's fields") {
     withDataSourceTable(rankings, "rankings") {
       // the default comparator orders the whole struct, `a` first
       val query1 = sql("select pos, item.b, item.c from rankings " +
@@ -881,7 +897,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: a filtered generator input keeps the predicate's fields") {
+  test("SPARK-47230: a filtered generator input keeps the predicate's fields") {
     withDataSourceTable(rankings, "rankings") {
       // the predicate compares the whole element
       val query1 = sql("select item.c from rankings lateral view outer explode(" +
@@ -897,7 +913,7 @@ abstract class SchemaPruningSuite
     }
   }
 
-  testSchemaPruning("SPARK-47230: size() reads the array directly once the scan is narrowed") {
+  test("SPARK-47230: size() reads the array directly once the scan is narrowed") {
     withDataSourceTable(orders, "orders") {
       def sizeInputs(df: DataFrame): Seq[Expression] =
         df.queryExecution.optimizedPlan.flatMap(_.expressions.flatMap(_.collect {

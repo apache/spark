@@ -472,14 +472,14 @@ abstract class SchemaPruningThroughGenerateSuite
 
   testPruning("SPARK-47230: collect_list and collect_set of exploded fields") {
     checkPrunedQuery(
-      """select country, collect_list(item.sku) as skus
+      """select country, sort_array(collect_list(item.sku)) as skus
         |from orders
         |lateral view explode(items) t1 as item
         |group by country""".stripMargin,
       "struct<country:string,items:array<struct<sku:string>>>")
 
     checkPrunedQuery(
-      "select country, collect_set(part.pid) as pids from base group by country",
+      "select country, sort_array(collect_set(part.pid)) as pids from base group by country",
       "struct<country:string,items:array<struct<active:boolean," +
         "parts:array<struct<pid:int>>>>>")
   }
@@ -619,7 +619,7 @@ abstract class SchemaPruningThroughGenerateSuite
       s"struct<items:$fullItemsType>")
 
     checkPrunedQuery(
-      """select item.qty, first(item) as it
+      """select item.qty, min(item) as it
         |from orders
         |lateral view explode(items) t1 as item
         |group by item.qty""".stripMargin,

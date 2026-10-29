@@ -1017,7 +1017,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   def pruneColumns(plan: LogicalPlan, isSubquery: Boolean): LogicalPlan = plan.transform {
-    case op @ SchemaPruning.GeneratorsOverScan(_, generators, sHolder: ScanBuilderHolder)
+    case op @ SchemaPruning.GeneratorsOverScan(segments, generators, sHolder: ScanBuilderHolder)
         if !hasBlockingPushdown(sHolder) =>
       // Fields read from the generators' elements above them narrow the scan below them. This
       // prunes and builds the holder's builder before the plan above is re-resolved. If that is
@@ -1032,7 +1032,7 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
       }.getOrElse {
         if (builderUsed) {
           val bottom = generators.last.child
-          val rebuilt = rebuildWithoutGenerators(bottom, sHolder, isSubquery)
+          val rebuilt = rebuildWithoutGenerators(segments.last, sHolder, isSubquery)
           op.transformDown { case p if p eq bottom => rebuilt }
         } else {
           op
@@ -1044,19 +1044,21 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Plans `bottom`, the projects and filters over `sHolder` below a chain of generators, from a
-   * fresh `ScanBuilder` of the same relation, re-applying the filters pushed to `sHolder`, like
-   * [[rebuildScan]]. Only valid when `sHolder` has no pushdown such a rebuild cannot reproduce.
+   * Plans `scan`, the projects and filters over `sHolder` below a chain of generators, from a
+   * fresh `ScanBuilder` of the same relation, like [[rebuildScan]]: the filters pushed to
+   * `sHolder` and the pushable ones of `scan` are offered to the new builder together, directly
+   * over the relation. Only valid when `sHolder` has no pushdown such a rebuild cannot reproduce.
    */
   private def rebuildWithoutGenerators(
-      bottom: LogicalPlan,
+      scan: SchemaPruning.Segment,
       sHolder: ScanBuilderHolder,
       isSubquery: Boolean): LogicalPlan = {
     val relation = sHolder.relation
-    val withPushedFilters = sHolder.pushedFilterExpressions.reduceOption(And)
+    val pushable = (sHolder.pushedFilterExpressions ++ scan.filtersPushDown).reduceOption(And)
       .map(Filter(_, relation)).getOrElse(relation)
-    applyWithContext(
-      bottom.transformDown { case p if p eq sHolder => withPushedFilters }, isSubquery)
+    val filtered = scan.filtersStayUp.reduceOption(And)
+      .map(Filter(_, pushable)).getOrElse(pushable)
+    applyWithContext(Project(scan.projects, filtered), isSubquery)
   }
 
   private def pruneScan(

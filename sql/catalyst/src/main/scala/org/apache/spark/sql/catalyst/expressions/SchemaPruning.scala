@@ -150,13 +150,16 @@ object SchemaPruning extends SQLConfHelper {
    * `explode(items.parts)`, which still narrows `items` to `parts`.
    *
    * `input` must be expressed over the scan's output, or over the element of a generator below
-   * it. Returns None if `input` is not an access path [[SelectedField]] can narrow.
+   * it. Returns None if `input` is not an access path [[SelectedField]] can narrow, or if it goes
+   * through map keys: narrowing keys can make distinct keys equal, and a reader that builds the
+   * map then keeps only one of them.
    */
   def getGeneratorInputRootField(
       input: Expression,
       element: Attribute,
       exprs: Seq[Expression],
       elementFields: Seq[StructField] = Nil): Option[RootField] = input.dataType match {
+    case _ if input.exists(_.isInstanceOf[MapKeys]) => None
     case ArrayType(elementType, containsNull) =>
       // Rename the element, and every other attribute too, so that the element's fields can be
       // told apart by name from other columns and generator outputs.

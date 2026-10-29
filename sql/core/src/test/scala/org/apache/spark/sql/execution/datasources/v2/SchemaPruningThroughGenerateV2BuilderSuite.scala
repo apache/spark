@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.sql.{QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetDataSourceV2
+import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetDataSourceV2, ParquetScan}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{ArrayType, DataType, StructType}
@@ -67,6 +67,34 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
           val calls = NarrowOnlyParquetSource.pruneCalls.map(_.get).toSeq
           assert(calls.nonEmpty)
           assert(calls.forall(_ <= 1), s"pruneColumns calls per builder: $calls")
+          // a rejected rewrite plans the scan from a second, fresh builder
+          if (reject) assert(calls.count(_ == 1) >= 2, s"pruneColumns calls per builder: $calls")
+        }
+      }
+    }
+  }
+
+  test("SPARK-47230: a rejected rewrite offers the data filters to the fresh builder") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("select id as n, array(named_struct('a', id, 'b', id * 2, 'c', id * 3)) as items " +
+        "from range(10)").write.parquet(path)
+      withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
+        Seq(false, true).foreach { reject =>
+          withSQLConf(
+              SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING.key ->
+                reject.toString) {
+            withTempView("t") {
+              spark.read.parquet(path).createOrReplaceTempView("t")
+              val query = sql("select item.a, item.c from t " +
+                "lateral view outer explode(items) e as item where n = 7")
+              val pushed = query.queryExecution.optimizedPlan.collect {
+                case r: DataSourceV2ScanRelation => r.scan
+              }.collect { case s: ParquetScan => s.pushedFilters.toSeq }.flatten
+              assert(pushed.exists(_.references.contains("n")), s"reject=$reject: $pushed")
+              checkAnswer(query, Row(7, 21) :: Nil)
+            }
+          }
         }
       }
     }

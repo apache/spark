@@ -196,7 +196,8 @@ abstract class NestedSchemaPruningBenchmark extends SqlBasedBenchmark {
         .write.format(dataSourceName).save(path + "/5")
       spark.read.format(dataSourceName).load(path + "/5").createOrReplaceTempView("t5")
 
-      val benchmark = new Benchmark(s"Explode", numRows, numIters, output = output)
+      // both cases emit `5 * numRows` rows: five elements of `t4`, five times five of `t5`
+      val benchmark = new Benchmark(s"Explode", 5L * numRows, numIters, output = output)
       val cases = Seq(
         "Two nested fields of an exploded array" ->
           "SELECT e._1, e._2 FROM t4 LATERAL VIEW explode(col4) AS e",
