@@ -1183,8 +1183,10 @@ class Analyzer(
     // plans that read the metadata columns they need (see RewriteRowLevelCommand). The rewrite
     // takes the output of the target table as the data columns to write, so metadata columns must
     // not be added to it, even if the command is resolved only in a later iteration. This does not
-    // apply to UPDATE and MERGE on a table that accepts any schema, which Spark leaves to the rules
-    // injected for that table (see ResolveRowLevelCommandAssignments).
+    // apply to UPDATE and MERGE on a table that accepts any schema, whose assignments Spark leaves
+    // to the rules injected for that table (see ResolveRowLevelCommandAssignments). Spark still
+    // rewrites such a command once its assignments are aligned, for example a MERGE with only
+    // DELETE actions, which has nothing to align.
     private def isRowLevelCommandTarget(node: LogicalPlan, child: LogicalPlan): Boolean = {
       node match {
         case d: DeleteFromTable =>
