@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, RowToColumnConverter, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
@@ -526,6 +527,34 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     assert(failing.plans.get() == 1)
   }
 
+  test("a streaming scan reads only the columns that the query needs") {
+    val dataSource = new TestRangeDataSource(options("end" -> "3"))
+    val builder = new ColumnarScanBuilder(format, dataSource.schema(), () => dataSource)
+    builder.pruneColumns(StructType.fromDDL("name STRING"))
+    val scan = builder.build()
+    val stream = scan.toMicroBatchStream(Utils.createTempDir().getPath)
+    assert(scan.readSchema() == StructType.fromDDL("name STRING"))
+    // The stream reader gets the pruned schema, and its batches only have these columns.
+    val start = stream.initialOffset()
+    val end = stream.asInstanceOf[SupportsAdmissionControl]
+      .latestOffset(start, ReadLimit.allAvailable())
+    val factory = stream.createReaderFactory()
+    val names = stream.planInputPartitions(start, end).toSeq.flatMap { partition =>
+      val reader = factory.createColumnarReader(partition)
+      try {
+        assert(reader.next())
+        val batch = reader.get()
+        assert(batch.numCols() == 1)
+        (0 until batch.numRows()).map(batch.column(0).getUTF8String(_).toString)
+      } finally {
+        reader.close()
+      }
+    }
+    assert(names == Seq("name0", "name1", "name2"))
+    // A streaming scan has no batch planner, which a data source may not support.
+    assert(dataSource.batchPlanners.get() == 0)
+  }
+
   test("abort a failed write") {
     val table = "failed_write"
     val e = intercept[SparkException] {
@@ -636,7 +665,9 @@ class TestRangeProvider extends TableProvider with DataSourceRegister {
 class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDataSource {
   private val end = options.getLong("end", 10)
   private val table = options.getOrDefault("table", "default")
-  // The number of batch scans that the planners of this data source planned.
+  // The number of batch planners that this data source created, and of the batch scans that they
+  // planned.
+  val batchPlanners = new AtomicInteger()
   val plans = new AtomicInteger()
 
   override def schema(): StructType = StructType.fromDDL("id BIGINT, name STRING")
@@ -652,6 +683,7 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 
   // With the option "arrowBatchSize", the batch scans return Arrow batches of that size.
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
+    batchPlanners.incrementAndGet()
     new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans,
       options.getInt("arrowBatchSize", 0))
   }

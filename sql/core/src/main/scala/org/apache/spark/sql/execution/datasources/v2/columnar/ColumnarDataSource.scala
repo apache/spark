@@ -49,11 +49,14 @@ trait ColumnarDataSource {
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
   /**
-   * Returns a reader for a micro-batch streaming scan of the given schema.
+   * Returns a reader for a micro-batch streaming scan of the given schema: the columns to read,
+   * which may be only the top-level columns of the schema of the data that the query needs. The
+   * partitions return exactly these columns.
    *
    * @param checkpointLocation the location of a directory in the checkpoint of the streaming
    *                           query that is reserved for this source. It stays the same when the
-   *                           query restarts from its checkpoint.
+   *                           query restarts from its checkpoint. The names that start with
+   *                           `_spark` are reserved for Spark there.
    */
   def streamReader(schema: StructType, checkpointLocation: String): ColumnarStreamReader
 
@@ -112,6 +115,10 @@ case class ColumnarPlannedBatch(
  * to the executors, where `read` is called for each partition.
  */
 trait ColumnarStreamReader extends Serializable {
+  /**
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it in
+   * the checkpoint of the source, and only asks for it when the checkpoint does not have it yet.
+   */
   def initialOffset(): String
 
   /**
