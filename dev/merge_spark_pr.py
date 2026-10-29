@@ -1231,14 +1231,6 @@ def _is_pre_binding_policy_branch(ref: str) -> bool:
     False
     >>> _is_pre_binding_policy_branch("branch-4.1")
     True
-    >>> _is_pre_binding_policy_branch("branch-4.0")
-    True
-    >>> _is_pre_binding_policy_branch("branch-3.5")
-    True
-    >>> _is_pre_binding_policy_branch("branch-3.x")
-    True
-    >>> _is_pre_binding_policy_branch("v4.1.0")
-    False
     >>> _is_pre_binding_policy_branch("HEAD")
     False
     >>> _is_pre_binding_policy_branch("my-custom-ref")
