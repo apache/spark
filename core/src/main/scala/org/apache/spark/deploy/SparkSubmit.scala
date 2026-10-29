@@ -315,7 +315,10 @@ private[spark] class SparkSubmit extends Logging {
           "Use `yarn application -kill` command or YARN client API to stop the server.")
       case (KUBERNETES, CLUSTER) if isConnectServer(args.mainClass) =>
         logInfo("SparkConnectServer is starting in cluster deploy mode. " +
-          "Use `kubectl delete` command to delete the driver pod to stop the server.")
+          "Use `spark-submit --kill <namespace>:<driver-pod-name>` or delete the driver pod " +
+          "to stop the server. Consider setting " +
+          "spark.kubernetes.submission.waitAppCompletion=false so that this launcher " +
+          "does not keep running and logging the driver pod status.")
       case (_, CLUSTER) if isConnectServer(args.mainClass) =>
         error("Launching Spark Connect server in cluster deploy mode is supported only for " +
           "YARN and Kubernetes")
