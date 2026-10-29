@@ -163,11 +163,10 @@ object ParseSqlResult {
   }
 
   /**
-   * Recompute the fragment of each statement `queryContext` by code points.
-   * The indexes are parser (code-point) offsets, but [[SQLQueryContext]]
-   * slices its fragment by UTF-16 units, which is off after a supplementary
-   * character. A context that falls outside the statement covers all of it.
-   * Contexts of another object (a view body) are left as is.
+   * Keep statement-level `queryContext` indexes inside the statement.
+   * [[SQLQueryContext]] already reports fragments in code points; a context
+   * that falls outside the statement is widened to cover all of it. Contexts
+   * of another object (a view body) are left as is.
    */
   private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
     JObject(errorObj.obj.map {

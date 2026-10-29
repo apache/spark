@@ -45,5 +45,31 @@ class SQLQueryContextSuite extends SparkFunSuite with SQLHelper {
     ).foreach { case ((sqlText, start, stop), expectedFragment) =>
       assert(getFragment(sqlText, start, stop) === expectedFragment)
     }
+
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji' AS a, DATE 'bad'"
+    val start = sql.codePointCount(0, sql.indexOf("DATE"))
+    val stop = sql.codePointCount(0, sql.length) - 1
+    assert(getFragment(sql, start, stop) === "DATE 'bad'")
+    // A UTF-16 slice of the same indexes would include the comma and drop the last quote.
+    assert(sql.substring(start, stop + 1) !== "DATE 'bad'")
+  }
+
+  test("summary caret follows code-point indexes after a supplementary character") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"SELECT '$emoji' AS a, DATE 'bad'"
+    val start = sql.codePointCount(0, sql.indexOf("DATE"))
+    val stop = sql.codePointCount(0, sql.length) - 1
+    val context = SQLQueryContext(
+      line = Some(1),
+      startPosition = Some(start),
+      originStartIndex = Some(start),
+      originStopIndex = Some(stop),
+      sqlText = Some(sql),
+      originObjectType = None,
+      originObjectName = None)
+    val lines = context.summary.split('\n')
+    assert(lines(1) === sql)
+    assert(lines(2) === " " * start + "^" * (stop - start + 1))
   }
 }

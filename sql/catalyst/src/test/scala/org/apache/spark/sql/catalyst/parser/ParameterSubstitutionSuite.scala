@@ -158,6 +158,15 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     assert(result === s"SELECT '${flexed}', '${tada}', '${flexed}${flexed}', 99")
   }
 
+  test("PositionMapper maps past a supplementary replacement in code points") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val original = "SELECT :p AS a, DATE 'bad'"
+    val (substituted, mapper) = ParameterHandler.substituteParameters(
+      original, NamedParameterContext(Map("p" -> Literal(emoji))))
+    val dateInSubstituted = substituted.codePointCount(0, substituted.indexOf("DATE"))
+    assert(mapper.mapToOriginal(dateInSubstituted) === original.indexOf("DATE"))
+  }
+
   test("Large parameter set") {
 
     val largeParamMap = (1 to 100).map(i => s"param$i" -> Literal(i)).toMap
