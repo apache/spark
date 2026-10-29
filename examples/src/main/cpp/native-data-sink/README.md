@@ -1,0 +1,161 @@
+<!--
+Licensed to the Apache Software Foundation (ASF) under one or more
+contributor license agreements. See the NOTICE file distributed with
+this work for additional information regarding copyright ownership.
+The ASF licenses this file to You under the Apache License, Version 2.0
+(the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+   http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+
+# C++ native sink
+
+This write-only example implements `DataSource`, `BatchWrite`, `StreamingWrite`,
+`DataWriterFactory`, and `DataWriter` from the [C++ native data source SDK][sdk]. Its
+`JsonSink` names only `BatchWrite = JsonWrite` and `StreamingWrite = JsonStreamingWrite`, which
+declare truncation support with `static constexpr bool kSupportsTruncate = true;`; it exports
+`SPARK_EXPORT_DATA_SOURCE(cpp_sdk_sink::JsonSink)` and implements no read classes. The SDK
+supplies the C ABI entry point, factory and commit message serialization, Arrow batch import,
+capability checks, and error handling.
+
+The example targets C ABI version 1 from [Spark PR #59424][native-source-pr], pinned to
+`74aa0dffc53463034fa6549796c4dd599e9705de`. Running it in Spark requires that framework and
+Java 22 or later on the driver and executors. The standalone tests do not need Spark or a JVM.
+
+## Supported data and options
+
+The sink accepts exactly two columns, in this order: `id BIGINT` and `label STRING`. Both
+nullable and non-nullable input fields are accepted. Null values are preserved. Task writers
+encode batches incrementally as JSON lines, avoiding an additional file-format dependency in this
+small example.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `path` | Required | Absolute directory shared by the driver and every executor |
+| `readonly` | `false` | Remove all the write and truncate capabilities when `true` |
+
+Unknown options are rejected, except `checkpointLocation`, which Spark passes to the sink of a
+streaming query. Source creation and capability discovery do not create files. The default
+instance advertises only native `BATCH_WRITE`, `STREAMING_WRITE`, and `TRUNCATE`; it does not
+advertise reads. Spark performs its native capability check again with the operation's effective
+options.
+
+## Commit and abort protocol
+
+Each write operation holds a `.write-lock` directory under `path`, rejecting another concurrent
+writer. It assigns an operation ID and stages tasks in `.staging/<operation>`. Each task attempt
+exclusively creates its own file, writes Arrow batches, flushes and syncs the file, then returns
+a message containing its operation, file, partition, and row count. Task commit alone does not
+publish data.
+
+The driver receives the winning attempt messages, the message of partition `i` at position `i`.
+It validates those messages and renames the entire staging directory to `objects/<operation>`,
+preventing new tasks from opening files for that operation. It removes every file not named by a
+winning message, including speculative attempts and attempts whose messages never arrived. It
+then writes and syncs a new manifest and atomically renames it to `manifest.json`. That one
+manifest replacement is the commit point:
+
+- Append includes the previous manifest's files plus the winning new files.
+- Truncate includes only the winning new files, including an empty result.
+- Previously published data files are retained, so an existing manifest snapshot stays readable
+  and a failed overwrite cannot delete the old data.
+- Abort removes the entire operation, including files with no commit message and a sealed
+  directory whose manifest publication failed. It leaves the current manifest and its data
+  unchanged. Destroying an unfinished coordinator also performs best-effort cleanup. Destroying a
+  committed task writer leaves its file for the driver.
+
+To inspect output, read only the files listed in `manifest.json`. Recursively reading the
+destination directory would also pick up data from previous truncate operations.
+
+## Streaming writes
+
+A streaming query writes each micro-batch, or epoch, with the protocol above: Spark creates a
+`JsonStreamingWrite` for each micro-batch, which stages, seals, and publishes its files as a batch
+write does. The output mode "append" appends to the manifest, and "complete" replaces its files,
+as a truncate does.
+
+The manifest also records the last epoch that each streaming query committed, by the ID of the
+query, which stays the same when the query restarts from its checkpoint. Spark may commit an
+epoch again after a restart, so a micro-batch whose epoch the manifest already records for its
+query publishes nothing: it removes what it staged and leaves the manifest unchanged. Each epoch
+of a query is therefore published once, and the queries that write to the same destination keep
+their epochs apart. For example, after a successful write:
+
+```python
+import json
+from pathlib import Path
+
+root = Path("/absolute/shared/path/native-sink")
+manifest = json.loads((root / "manifest.json").read_text())
+files = [str(root / entry["path"]) for entry in manifest["files"]]
+if files:
+    spark.read.schema("id LONG, label STRING").json(files).show()
+```
+
+## Build, package, and run
+
+From the repository root, with the dependencies of the [SDK][sdk]:
+
+```sh
+cmake -S sql/native/cpp -B sql/native/cpp/build
+cmake --build sql/native/cpp/build
+(cd sql/native/cpp/build && ctest --output-on-failure -R json_sink)
+
+python3 examples/src/main/cpp/native-data-source/package.py \
+  --source cpp_sdk_sink \
+  --library sql/native/cpp/build/examples/native-data-sink/libspark_datasource_cpp_sdk_sink.so \
+  --output sql/native/cpp/build/cpp_sdk_sink.sparkpkg
+
+"$SPARK_HOME/bin/spark-submit" --master 'local[2]' \
+  examples/src/main/cpp/native-data-sink/smoke.py \
+  --package sql/native/cpp/build/cpp_sdk_sink.sparkpkg
+```
+
+Use `libspark_datasource_cpp_sdk_sink.dylib` for macOS. The smoke script uses a temporary local
+directory and requires a local Spark master. It checks append, overwrite, a failed overwrite that
+preserves published data and cleans staging, write rejection with `readonly=true`, and a
+streaming write whose restart without new input commits nothing. The tests additionally exercise
+losing attempts, missing commit messages, a driver publication failure, lock cleanup, and epochs
+that a restarted query commits again.
+
+An application can write with:
+
+```python
+spark.addArtifact("sql/native/cpp/build/cpp_sdk_sink.sparkpkg")
+data = spark.range(10).selectExpr("id", "concat('row-', id) AS label")
+data.write.format("cpp_sdk_sink").mode("append").save("/absolute/shared/path/native-sink")
+data.write.format("cpp_sdk_sink").mode("overwrite").save("/absolute/shared/path/native-sink")
+
+stream = spark.readStream.schema("id BIGINT, label STRING").json("/absolute/shared/path/input")
+query = (
+    stream.writeStream.format("cpp_sdk_sink")
+    .option("checkpointLocation", "/absolute/shared/path/checkpoint")
+    .start("/absolute/shared/path/native-sink")
+)
+```
+
+## Limits of this example
+
+Use a local POSIX filesystem, or a shared filesystem with atomic directory renames, atomic file
+replacement, and coherent exclusive creation. The same absolute path must refer to the same
+storage on all hosts. Executor-local paths in a distributed cluster, object-store URLs, and
+Windows are unsupported. Only one write operation can own a destination at a time; the lock is
+not a distributed lease or fencing protocol.
+
+This example demonstrates atomic visibility during normal execution and abort, and publishes each
+epoch of a streaming query once, not crash recovery or exactly-once publication of a retried batch
+write. It syncs files but does not implement a crash-durable metadata journal. Process or machine
+failure can leave a stale `.write-lock`, staged files, or unreferenced objects. Recover the lock
+only after confirming no operation still owns it. Retained files from old manifests also need
+garbage collection with an appropriate reader-retention policy; this demo does not implement that
+policy.
+
+[sdk]: ../../../../../sql/native/cpp/README.md
+[native-source-pr]: https://github.com/apache/spark/pull/59424
