@@ -39,16 +39,16 @@ import org.apache.spark.annotation.Evolving;
 public interface SupportsArrowStreamRead extends PartitionReaderFactory {
 
   /**
-   * Initializes an Arrow C stream with the data of a partition. It is called in the task that
-   * reads the partition, whose context the stream may use until it is released.
+   * Initializes an Arrow C stream with the data of a partition. It is called on the thread of the
+   * running task that reads the partition, and fails otherwise. The caller owns the stream, which
+   * it may move, and releases it, also after the task ended: Spark frees what the stream uses,
+   * such as the context of the task, once the stream is released. A stream that is never released
+   * leaks.
    *
    * @param partition a partition of the scan, as the scan planned it
    * @param streamAddress the address of a {@code struct ArrowArrayStream} that the caller
    *                      allocated, and whose release callback is NULL, as it is in a
    *                      zero-initialized struct. If this method fails, the stream is released.
-   * @return a handle that the caller closes once the stream is released, which frees what the
-   *         stream uses until then. Spark also closes it when the task completes, so the stream
-   *         must be released before then.
    */
-  AutoCloseable openArrowStream(InputPartition partition, long streamAddress);
+  void openArrowStream(InputPartition partition, long streamAddress);
 }

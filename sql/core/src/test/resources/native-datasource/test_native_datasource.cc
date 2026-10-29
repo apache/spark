@@ -37,7 +37,8 @@
 //                   which has no validity buffer, a null_count of -1 instead. With the option
 //                   "wait_for_interrupt", the stream of a partition creates the file
 //                   <wait_for_interrupt>.waiting, waits until its task is killed, and then creates
-//                   the file <wait_for_interrupt> and fails.
+//                   the file <wait_for_interrupt> and fails. With the option "released_path",
+//                   releasing the stream of a partition creates that file.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -772,6 +773,7 @@ struct Stream {
   const SparkDsTaskContext* task;
   std::string wait_for_interrupt;
   std::string last_error;
+  std::string released_path;
 };
 
 int streamGetSchema(ArrowArrayStream* stream, ArrowSchema* out) {
@@ -813,7 +815,13 @@ const char* streamGetLastError(ArrowArrayStream* stream) {
 }
 
 void streamRelease(ArrowArrayStream* stream) {
-  delete static_cast<Stream*>(stream->private_data);
+  auto* state = static_cast<Stream*>(stream->private_data);
+  try {
+    if (!state->released_path.empty()) writeFile(state->released_path, "");
+  } catch (...) {
+    // No exception may cross the interface, and release cannot fail.
+  }
+  delete state;
   stream->release = nullptr;
 }
 
@@ -973,7 +981,8 @@ int createReader(void* handle, struct ArrowSchema* schema, void** out) {
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
-         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path", "states"}) {
+         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path", "states",
+          "released_path"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1159,7 +1168,10 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
                                       get(state, "fail", "") == "read",
                                       get(state, "slice", "") == "true", get(state, "short", ""),
                                       get(state, "null_rows", ""), task,
-                                      get(state, "wait_for_interrupt", ""), ""};
+                                      get(state, "wait_for_interrupt", ""), "",
+                                      get(state, "released_path", "")};
+    // Initializes the stream without get_next, which Spark must reject, and release.
+    if (get(state, "fail", "") == "null_get_next") stream->get_next = nullptr;
   });
 }
 

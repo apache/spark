@@ -335,7 +335,9 @@ typedef struct SparkDsLatestOffsetInfo {
 
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
- * that read returns is released, or until the data writer is closed.
+ * that read returns is released, or until the data writer is closed. An engine that runs a query
+ * in native code may get the stream of read from Spark, and release it once the task ended, from
+ * another thread: the task stays valid until then too.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */

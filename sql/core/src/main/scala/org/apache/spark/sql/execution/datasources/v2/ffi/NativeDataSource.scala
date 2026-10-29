@@ -312,13 +312,28 @@ class NativePartitionReaderFactory(
       partition.asInstanceOf[NativeInputPartition].bytes, readSchema, timeZoneId)
   }
 
-  override def openArrowStream(partition: InputPartition, streamAddress: Long): AutoCloseable = {
+  override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    val context = TaskContext.get()
+    if (context == null || context.isCompleted()) {
+      throw new IllegalStateException(
+        "openArrowStream must be called in the running task that reads the partition.")
+    }
+    if (streamAddress == 0 || ArrowArrayStream.wrap(streamAddress).snapshot().release != 0) {
+      throw new IllegalArgumentException(
+        "openArrowStream needs the address of a stream whose release callback is NULL.")
+    }
+    val nativePartition = partition.asInstanceOf[NativeInputPartition]
+    // The partition of the scan: the task of an engine may read others than its own.
     val task = NativePartitionReader.openStream(location, name, NativeLibrary.READ_BATCH,
-      readerState, partition.asInstanceOf[NativeInputPartition].bytes, readSchema, timeZoneId,
-      streamAddress)
-    // In case the caller does not close it, which must release the stream before then.
-    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => task.close()))
-    task
+      readerState, nativePartition.bytes, readSchema, timeZoneId, streamAddress,
+      Some(nativePartition.index))
+    try {
+      NativeLibrary.wrapEngineStream(streamAddress, task)
+    } catch {
+      case e: Throwable =>
+        NativePartitionReader.releaseOnFailure(e, streamAddress, task)
+        throw e
+    }
   }
 }
 
@@ -875,6 +890,9 @@ object NativePartitionReader {
    * data of a partition, by calling read of the library in the running task. Returns the context
    * of the task, which the library may use until the stream is released: it is closed then. If
    * this fails, the stream is released.
+   *
+   * @param partitionId the index of the partition in the scan, by default the partition of the
+   *                    task
    */
   def openStream(
       location: NativeLibraryLocation,
@@ -884,10 +902,11 @@ object NativePartitionReader {
       partition: Array[Byte],
       schema: StructType,
       timeZoneId: String,
-      streamAddress: Long): NativeLibrary.Task = {
+      streamAddress: Long,
+      partitionId: Option[Int] = None): NativeLibrary.Task = {
     val library = NativeLibraries.get(location)
     val stream = ArrowArrayStream.wrap(streamAddress)
-    val task = NativeTask.create()
+    val task = NativeTask.create(partitionId)
     try {
       NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
         call(name, "read") {
@@ -905,13 +924,25 @@ object NativePartitionReader {
       task
     } catch {
       case e: Throwable =>
-        // Releases the stream, if the library initialized it, before the task that it may use,
-        // and marks it released in case its release callback did not.
-        Utils.tryWithSafeFinally {
-          stream.release()
-          stream.markReleased()
-        }(task.close())
+        releaseOnFailure(e, streamAddress, task)
         throw e
+    }
+  }
+
+  /**
+   * After `failure`, releases the stream at `streamAddress`, if the library initialized it, before
+   * the task that it may use, and marks it released in case its release callback did not. A
+   * failure to clean up is added to `failure`.
+   */
+  def releaseOnFailure(failure: Throwable, streamAddress: Long, task: NativeLibrary.Task): Unit = {
+    try {
+      Utils.tryWithSafeFinally {
+        val stream = ArrowArrayStream.wrap(streamAddress)
+        stream.release()
+        stream.markReleased()
+      }(task.close())
+    } catch {
+      case e: Throwable => failure.addSuppressed(e)
     }
   }
 }

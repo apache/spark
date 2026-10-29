@@ -240,9 +240,9 @@ DataFusion Comet, can read a native data source without Spark importing its data
 reader factory of a batch scan of a native data source implements
 `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
 `openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
-`read` returns. The engine releases the stream, and then closes the handle that `openArrowStream`
-returns, which frees the `SparkDsTaskContext` of the read; Spark also closes it when the task
-completes. The callbacks of the stream can be called from any thread, but never concurrently.
+`read` returns. The engine owns the stream, and releases it, also after the task ended: Spark
+frees the `SparkDsTaskContext` of the read once the library released its stream. The callbacks
+of the stream can be called from any thread, but never concurrently.
 Spark does not check the arrays of such a stream, unlike the streams that it reads itself, so the
 engine checks what its import of the arrays requires.
 
