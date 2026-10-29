@@ -174,7 +174,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
         self._udf_descs: list[Any] = udf_descs
         self._runner_conf = runner_conf
         self._eval_conf = eval_conf
-        self._timing_enabled = (
+        self._detailed_timing_enabled = (
             self._supports_detailed_timing and runner_conf.detailed_timing_enabled
         )
         # Each UDF's functions chained into one before any wrapping, at the indexes of _udf_descs: a
@@ -329,7 +329,7 @@ class EvalTypeHandler(Generic[InputBatch, OutputBatch], metaclass=_EvalTypeHandl
     def _create_phase_timers(
         self,
     ) -> Optional[tuple["_WorkerTimer", "_WorkerTimer", "_WorkerTimer"]]:
-        if not self._timing_enabled:
+        if not self._detailed_timing_enabled:
             return None
         metrics = WorkerMetrics()
         timers = (
@@ -354,7 +354,7 @@ class BatchEvalTypeHandler(EvalTypeHandler["pa.RecordBatch", OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamSerializer(
             write_start_stream=True,
-            collect_timing=self._timing_enabled,
+            detailed_timing_enabled=self._detailed_timing_enabled,
         )
 
 
@@ -365,7 +365,7 @@ class GroupedEvalTypeHandler(EvalTypeHandler[GroupedBatch, OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamGroupSerializer(
             write_start_stream=True,
-            collect_timing=self._timing_enabled,
+            detailed_timing_enabled=self._detailed_timing_enabled,
         )
 
 
@@ -376,5 +376,5 @@ class CoGroupedEvalTypeHandler(EvalTypeHandler[CoGroupedBatch, OutputBatch]):
     def serializer(self) -> Serializer:
         return ArrowStreamCoGroupSerializer(
             write_start_stream=True,
-            collect_timing=self._timing_enabled,
+            detailed_timing_enabled=self._detailed_timing_enabled,
         )
