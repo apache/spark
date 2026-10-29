@@ -569,6 +569,21 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
       Row(1, 1, "hr") :: Row(2, 2, "software") :: Nil)
   }
 
+  test("SPARK-60721: update ignores assignments to metadata columns in legacy mode") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(s"UPDATE $tableNameAsString SET id = -1, index = 5 WHERE pk = 1")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
   test("update with IN subqueries") {
     withTempView("updated_id", "updated_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",

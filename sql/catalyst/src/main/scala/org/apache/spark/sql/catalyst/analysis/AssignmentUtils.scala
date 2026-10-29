@@ -166,15 +166,17 @@ object AssignmentUtils extends SQLConfHelper with CastSupport {
 
   // The values of metadata columns are produced by the data source and cannot be written.
   // Assignments are aligned only with the table attributes, so reject assignments to metadata
-  // columns instead of ignoring them.
+  // columns instead of ignoring them, unless the legacy behavior is enabled.
   private def checkNoMetadataColumnAssignments(
       assignments: Seq[Assignment],
       addError: String => Unit): Unit = {
-    assignments.flatMap(_.key.references)
-      .filter(attr => MetadataAttribute.isValid(attr.metadata))
-      .map(_.name)
-      .distinct
-      .foreach(name => addError(s"Cannot assign to metadata column '$name'"))
+    if (!conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS)) {
+      assignments.flatMap(_.key.references)
+        .filter(attr => MetadataAttribute.isValid(attr.metadata))
+        .map(_.name)
+        .distinct
+        .foreach(name => addError(s"Cannot assign to metadata column '$name'"))
+    }
   }
 
   private def restoreActualType(attr: Attribute): Attribute = {
