@@ -47,6 +47,7 @@ import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanExec._
 import org.apache.spark.sql.execution.bucketing.{CoalesceBucketsInJoin, DisableUnnecessaryBucketedScan}
 import org.apache.spark.sql.execution.columnar.InMemoryTableScanLike
 import org.apache.spark.sql.execution.exchange._
+import org.apache.spark.sql.execution.joins.ChoosePerPartitionBloomFilters
 import org.apache.spark.sql.execution.ui.{SparkListenerSQLAdaptiveExecutionUpdate, SparkListenerSQLAdaptiveSQLMetricUpdates, SQLPlanMetric}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.vectorized.ColumnarBatch
@@ -144,6 +145,8 @@ case class AdaptiveSparkPlanExec(
     Seq(
       CoalesceBucketsInJoin,
       RemoveRedundantProjects,
+      // Must run before `ensureRequirements`, whose planning of a join it asks for.
+      ChoosePerPartitionBloomFilters(ensureRequirements, unionConf),
       // Must run before `ensureRequirements`, which asks a `UnionExec` what it reports: it
       // records the conf that answer depends on, so the following `StampUnionDecisions` freezes the
       // decision under the same value the exchanges were planned against.

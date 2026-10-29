@@ -971,8 +971,10 @@ object SQLConf {
     buildConf("spark.sql.optimizer.runtime.bloomFilter.perPartition.enabled")
       .doc("When true, and both sides of a join with a runtime bloom filter are V2 scans that " +
         "report a keyed partitioning by the same partition transform of the join key (other " +
-        "than identity), also check each partition of the application side against a bloom " +
-        "filter of the matching partition of the creation side, in a left semi join.")
+        "than identity), a runtime bloom filter can be built per partition. Each partition of " +
+        "the application side is then checked against the bloom filter of the matching " +
+        "partition of the creation side, in a left semi join. That semi join replaces the bloom " +
+        "filter of the whole creation side when it needs no shuffle, and is dropped otherwise.")
       .version("5.0.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

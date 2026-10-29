@@ -378,6 +378,20 @@ class BloomFilterAggregateQuerySuite extends SharedSparkSession {
     }
   }
 
+  test("SPARK-60541: a semi join a query wrote is not taken for a per-partition bloom filter") {
+    // It has the shape of the one `InjectRuntimeFilter` adds, and would need a shuffle, which is
+    // when the planner drops that one.
+    val query = bloomsCte +
+      """
+        |SELECT /*+ SHUFFLE_HASH(blooms) */ x
+        |FROM (SELECT CAST(id % 3 AS INT) AS pk, id AS x FROM range(30)) p
+        |LEFT SEMI JOIN blooms ON pk = k AND might_contain(bf, x)
+        |""".stripMargin
+    withSQLConf(SQLConf.RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED.key -> "true") {
+      checkAnswer(spark.sql(query), Seq(Row(10L), Row(20L)))
+    }
+  }
+
   test("Test that bloom_filter_agg produces a NULL with empty input") {
     checkAnswer(
       spark.sql("""SELECT bloom_filter_agg(cast(id as long)) from range(1, 1)"""),
