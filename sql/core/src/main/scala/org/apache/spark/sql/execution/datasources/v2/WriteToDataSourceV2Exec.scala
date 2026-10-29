@@ -623,7 +623,7 @@ trait V2TableWriteExec
    * Whether the data writers take the columnar batches of the query, see
    * [[SupportsColumnarInput]]. A columnar query then gets no transition to rows (see
    * `ApplyColumnarRulesAndInsertTransitions`), and its batches are written with
-   * `DataWritingSparkTask.runColumnar`.
+   * `WritingSparkTask.runColumnar` of `writingTask`.
    */
   def supportsColumnarInput: Boolean = false
 
@@ -670,7 +670,7 @@ trait V2TableWriteExec
       sparkContext.runJob(
         rdd,
         (context: TaskContext, iter: Iterator[Any]) => if (columnar) {
-          DataWritingSparkTask.runColumnar(writerFactory, context,
+          task.runColumnar(writerFactory, context,
             iter.asInstanceOf[Iterator[ColumnarBatch]], useCommitCoordinator, writeMetrics)
         } else {
           task.run(writerFactory, context, iter.asInstanceOf[Iterator[InternalRow]],
@@ -738,6 +738,19 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
       write(dataWriter, iterWithMetrics)
       iterWithMetrics.count
     }
+  }
+
+  /**
+   * Writes the columnar batches of a query, for a write whose data writers take them (see
+   * [[SupportsColumnarInput]]). Only the task that writes the rows as they are does.
+   */
+  def runColumnar(
+      writerFactory: DataWriterFactory,
+      context: TaskContext,
+      iter: Iterator[ColumnarBatch],
+      useCommitCoordinator: Boolean,
+      customMetrics: Map[String, SQLMetric]): DataWritingSparkTaskResult = {
+    throw SparkException.internalError(s"${getClass.getName} does not write columnar batches.")
   }
 
   /**
@@ -920,11 +933,7 @@ object DataWritingSparkTask extends WritingSparkTask[DataWriter[InternalRow]] {
     writer.writeAll(iter)
   }
 
-  /**
-   * Writes the columnar batches of a query, for a write whose data writers take them (see
-   * [[SupportsColumnarInput]]).
-   */
-  def runColumnar(
+  override def runColumnar(
       writerFactory: DataWriterFactory,
       context: TaskContext,
       iter: Iterator[ColumnarBatch],

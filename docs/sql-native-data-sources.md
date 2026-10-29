@@ -37,9 +37,12 @@ package, and loads it when a query uses the data source. Spark adapts it to
 
 Data is exchanged only as columnar batches, through the
 [Arrow C data interface](https://arrow.apache.org/docs/format/CDataInterface.html), so Spark reads
-the data that a library returns without copying it. When the data to write is columnar too, such
-as the batches of a native scan, Spark writes them without converting them to rows: it copies
-their Arrow buffers, since a library may keep the data that it writes.
+the data that a library returns without copying it. When a write gets the batches of a scan as
+they are, as in a plain copy from one native data source to another, Spark writes them without
+converting them to rows: it copies the buffers of their columns, since a library may keep the data
+that it writes, and converts value by value the columns of other Arrow types than those of the
+schema, such as `utf8_view` strings. With adaptive query execution, the data of a query with a
+shuffle or a subquery is still converted to rows.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java

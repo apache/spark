@@ -136,9 +136,11 @@ trait ColumnarStreamReader extends Serializable {
  * Writes data to a [[ColumnarDataSource]] for a batch write. Spark serializes the writer to the
  * executors, where `createWriter` is called for each task, and then commits or aborts the write
  * on the driver. The batches passed to the data writers are backed by new Arrow vectors, with the
- * Arrow types of the schema, except for the time zones of timestamps, though not necessarily with
- * its names and metadata. A batch is only valid during the call, but nothing else writes to the
- * buffers of its vectors, so a data writer may take ownership of them to keep its data.
+ * Arrow types of the schema, except for the time zones of timestamps and the `keysSorted` flag of
+ * maps, though not necessarily with its names, nullability and metadata, nor the Spark types that
+ * `ArrowColumnVector` infers from them. A batch is only valid during the call, but nothing else
+ * writes to the buffers of its vectors, so a data writer may take ownership of them to keep its
+ * data.
  */
 trait ColumnarWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch]

@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, RowToColumnConverter, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -55,7 +56,8 @@ import org.apache.spark.util.Utils
  * Tests the Data Source V2 adapter of [[ColumnarDataSource]] with a data source implemented on the
  * JVM. `NativeDataSourceSuite` tests the native data sources, which implement it.
  */
-class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
+class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
+  with AdaptiveSparkPlanHelper {
   import testImplicits._
 
   private val format = "test_columnar_range"
@@ -183,6 +185,17 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
           .write.format(format).option("table", "row_write").mode("append").save()
       }
       assert(plan.exists(_.isInstanceOf[ColumnarToRowExec]), plan)
+
+      // With adaptive query execution, a query with a shuffle is an adaptive plan, which is not
+      // columnar, so its batches are converted to rows.
+      val shuffled = writtenPlan {
+        spark.read.format(format).option("end", "10").option("arrowBatchSize", 2).load()
+          .repartition(2)
+          .write.format(format).option("table", "shuffled_write").mode("append").save()
+      }
+      assert(shuffled.isInstanceOf[AdaptiveSparkPlanExec], shuffled)
+      assert(find(shuffled)(_.isInstanceOf[ColumnarToRowExec]).isDefined, shuffled)
+      assert(TestColumnarSink.rows("shuffled_write").sorted == expected)
       assert(TestColumnarSink.rows("row_write") == expected.map { case (id, name) =>
         (id, name.toUpperCase(Locale.ROOT))
       })
@@ -208,109 +221,161 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     val schema = df.schema
     val rows = df.queryExecution.toRdd.map(_.copy()).collect().toSeq
     val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
-
-    // Writes a batch with the session time zone America/Los_Angeles, and returns the sizes of the
-    // batches that the data writer got, the time zone of their timestamp column c14, which a copy
-    // keeps, and their rows. The data writer keeps the data of the batches, and reads it once
-    // `overwrite` overwrote the vectors of the batch.
-    def writeAndRead(
-        batch: ColumnarBatch,
-        overwrite: () => Unit,
-        schema: StructType = schema,
-        maxRecordsPerBatch: Int = 10,
-        maxBytesPerBatch: Long = Int.MaxValue): (Seq[Int], Seq[String], Seq[InternalRow]) = {
-      val sizes = ArrayBuffer.empty[Int]
-      val timeZones = ArrayBuffer.empty[String]
-      val kept = ArrayBuffer.empty[TestArrowExport]
-      val dataWriter = new DataWriter[ColumnarBatch] {
-        override def write(batch: ColumnarBatch): Unit = {
-          sizes += batch.numRows()
-          timeZones += batch.column(schema.fieldIndex("c14")).asInstanceOf[ArrowColumnVector]
-            .getValueVector.getField.getType.asInstanceOf[ArrowType.Timestamp].getTimezone
-          kept += TestArrowExport(batch)
-        }
-        override def commit(): WriterCommitMessage = null
-        override def abort(): Unit = {}
-        override def close(): Unit = kept.foreach(_.close())
-      }
-      val writer = new ArrowBatchingDataWriter(dataWriter, ArrowBatchingOptions(
-        schema, "America/Los_Angeles", maxRecordsPerBatch, maxBytesPerBatch))
-      try {
-        writer.writeBatch(batch)
-        writer.commit()
-        overwrite()
-        val toUnsafe = UnsafeProjection.create(schema)
-        val written = kept.toSeq.flatMap { exported =>
-          exported.read(_.rowIterator().asScala.map(toUnsafe(_).copy()).toSeq)
-        }
-        kept.clear()
-        (sizes.toSeq, timeZones.toSeq, written)
-      } finally {
-        writer.close()
-      }
-    }
-
-    // Runs `f` with a batch of Arrow vectors with the time zone UTC, and a function that
-    // overwrites the vectors with the rows in reverse order.
-    def withArrowBatch(largeVarTypes: Boolean)(f: (ColumnarBatch, () => Unit) => Unit): Unit = {
-      val root = VectorSchemaRoot.create(
-        ArrowUtils.toArrowSchema(
-          schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes),
-        allocator)
-      try {
-        val arrowWriter = ArrowWriter.create(root)
-        rows.foreach(arrowWriter.write)
-        arrowWriter.finish()
-        val batch = new ColumnarBatch(
-          root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray,
-          rows.length)
-        f(batch, () => {
-          arrowWriter.reset()
-          rows.reverse.foreach(arrowWriter.write)
-          arrowWriter.finish()
-        })
-      } finally {
-        root.close()
-      }
-    }
-
-    val expected = rows.map(UnsafeProjection.create(schema)(_).copy())
-    withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
-      // The columns are Arrow vectors with the types of the schema, so they are copied.
-      assert(writeAndRead(batch, overwrite) == ((Seq(7), Seq("UTC"), expected)))
-    }
-    withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
-      // In slices of at most 3 rows, which start in the middle of the bytes of validity.
-      assert(writeAndRead(batch, overwrite, maxRecordsPerBatch = 3) ==
-        ((Seq(3, 3, 1), Seq.fill(3)("UTC"), expected)))
-    }
-    withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
-      // A copied batch also ends after the first row with which it holds the maximum size.
-      assert(writeAndRead(batch, overwrite, maxBytesPerBatch = 1) ==
-        ((Seq.fill(7)(1), Seq.fill(7)("UTC"), expected)))
-    }
-    withArrowBatch(largeVarTypes = true) { (batch, overwrite) =>
-      // Strings and binaries of other Arrow types than those of the schema are converted.
-      assert(writeAndRead(batch, overwrite, maxRecordsPerBatch = 3) ==
-        ((Seq(3, 3, 1), Seq.fill(3)("America/Los_Angeles"), expected)))
-    }
-
-    // On-heap vectors are converted too. They do not support the null type.
-    val onHeapSchema = StructType(schema.filterNot(_.name == "c1"))
-    val onHeapRows = rows.map(row => InternalRow.fromSeq(row.toSeq(schema).patch(1, Nil, 1)))
-    val vectors: Seq[WritableColumnVector] =
-      OnHeapColumnVector.allocateColumns(onHeapRows.length, onHeapSchema).toSeq
     try {
-      val converter = new RowToColumnConverter(onHeapSchema)
-      onHeapRows.foreach(converter.convert(_, vectors.toArray))
-      val batch = new ColumnarBatch(vectors.map(v => v: ColumnVector).toArray, onHeapRows.length)
-      assert(writeAndRead(batch, () => (), onHeapSchema, maxRecordsPerBatch = 3) ==
-        ((Seq(3, 3, 1), Seq.fill(3)("America/Los_Angeles"),
-          onHeapRows.map(UnsafeProjection.create(onHeapSchema)(_).copy()))))
+      // Writes a batch with the session time zone America/Los_Angeles, and returns the sizes of
+      // the batches that the data writer got, the time zone of their timestamp column c14, which
+      // a copy keeps, the Arrow types of their string column c11, and their rows. The data writer
+      // keeps the data of the batches, and reads it once `overwrite` overwrote the batch.
+      def writeAndRead(
+          batch: ColumnarBatch,
+          overwrite: () => Unit,
+          schema: StructType = schema,
+          maxRecordsPerBatch: Int = 10,
+          maxBytesPerBatch: Long = Int.MaxValue)
+          : (Seq[Int], Seq[String], Seq[ArrowType], Seq[InternalRow]) = {
+        val sizes = ArrayBuffer.empty[Int]
+        val timeZones = ArrayBuffer.empty[String]
+        val stringTypes = ArrayBuffer.empty[ArrowType]
+        val kept = ArrayBuffer.empty[TestArrowExport]
+        def field(batch: ColumnarBatch, name: String) = batch.column(schema.fieldIndex(name))
+          .asInstanceOf[ArrowColumnVector].getValueVector.getField
+        val dataWriter = new DataWriter[ColumnarBatch] {
+          override def write(batch: ColumnarBatch): Unit = {
+            sizes += batch.numRows()
+            timeZones += field(batch, "c14").getType.asInstanceOf[ArrowType.Timestamp].getTimezone
+            stringTypes += field(batch, "c11").getType
+            kept += TestArrowExport(batch)
+          }
+          override def commit(): WriterCommitMessage = null
+          override def abort(): Unit = {}
+          override def close(): Unit = kept.foreach(_.close())
+        }
+        val writer = new ArrowBatchingDataWriter(dataWriter, ArrowBatchingOptions(
+          schema, "America/Los_Angeles", maxRecordsPerBatch, maxBytesPerBatch))
+        try {
+          writer.writeBatch(batch)
+          writer.commit()
+          overwrite()
+          val toUnsafe = UnsafeProjection.create(schema)
+          val written = kept.toSeq.flatMap { exported =>
+            exported.read(_.rowIterator().asScala.map(toUnsafe(_).copy()).toSeq)
+          }
+          kept.clear()
+          (sizes.toSeq, timeZones.toSeq, stringTypes.toSeq, written)
+        } finally {
+          writer.close()
+        }
+      }
+
+      // Runs `f` with a batch of Arrow vectors with the time zone UTC, and a function that
+      // overwrites the vectors with the rows in reverse order.
+      def withArrowBatch(largeVarTypes: Boolean)(f: (ColumnarBatch, () => Unit) => Unit): Unit = {
+        val root = VectorSchemaRoot.create(
+          ArrowUtils.toArrowSchema(
+            schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes),
+          allocator)
+        try {
+          val arrowWriter = ArrowWriter.create(root)
+          rows.foreach(arrowWriter.write)
+          arrowWriter.finish()
+          val batch = new ColumnarBatch(
+            root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray,
+            rows.length)
+          f(batch, () => {
+            arrowWriter.reset()
+            rows.reverse.foreach(arrowWriter.write)
+            arrowWriter.finish()
+          })
+        } finally {
+          root.close()
+        }
+      }
+
+      val expected = rows.map(UnsafeProjection.create(schema)(_).copy())
+      val utf8 = ArrowType.Utf8.INSTANCE
+      Seq(false, true).foreach { largeVarTypes =>
+        withArrowBatch(largeVarTypes) { (batch, _) =>
+          // The size of a range of rows, which the batches of a copy end at, is the size of a slice
+          // of these rows.
+          (0 until batch.numCols()).foreach { i =>
+            val vector = batch.column(i).asInstanceOf[ArrowColumnVector].getValueVector
+            Seq((0, 7), (1, 4), (3, 7), (6, 7), (2, 2)).foreach { case (start, end) =>
+              val pair = vector.getTransferPair(vector.getAllocator)
+              pair.splitAndTransfer(start, end - start)
+              val sliceSize =
+                try pair.getTo.getBufferSizeFor(end - start) finally pair.getTo.close()
+              assert(ArrowBatchingDataWriter.rangeSize(vector, start, end) == sliceSize,
+                s"${vector.getField} [$start, $end)")
+            }
+          }
+        }
+      }
+      withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
+        // The columns are Arrow vectors with the types of the schema, so they are copied.
+        assert(writeAndRead(batch, overwrite) == ((Seq(7), Seq("UTC"), Seq(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
+        // In slices of at most 3 rows, which start in the middle of the bytes of validity.
+        assert(writeAndRead(batch, overwrite, maxRecordsPerBatch = 3) ==
+          ((Seq(3, 3, 1), Seq.fill(3)("UTC"), Seq.fill(3)(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = false) { (batch, overwrite) =>
+        // A copied batch also ends after the first row with which it holds the maximum size.
+        assert(writeAndRead(batch, overwrite, maxBytesPerBatch = 1) ==
+          ((Seq.fill(7)(1), Seq.fill(7)("UTC"), Seq.fill(7)(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = true) { (batch, overwrite) =>
+        // Each column of another Arrow type than that of the schema, here a string or a binary, is
+        // converted on its own, and the other columns are copied.
+        assert(writeAndRead(batch, overwrite, maxRecordsPerBatch = 3) ==
+          ((Seq(3, 3, 1), Seq.fill(3)("UTC"), Seq.fill(3)(utf8), expected)))
+      }
+      withArrowBatch(largeVarTypes = true) { (batch, overwrite) =>
+        // The size of the converted columns counts too.
+        assert(writeAndRead(batch, overwrite, maxBytesPerBatch = 1) ==
+          ((Seq.fill(7)(1), Seq.fill(7)("UTC"), Seq.fill(7)(utf8), expected)))
+      }
+
+      // On-heap vectors are converted too. They do not support the null type.
+      val onHeapSchema = StructType(schema.filterNot(_.name == "c1"))
+      val onHeapRows = rows.map(row => InternalRow.fromSeq(row.toSeq(schema).patch(1, Nil, 1)))
+      val vectors: Seq[WritableColumnVector] =
+        OnHeapColumnVector.allocateColumns(onHeapRows.length, onHeapSchema).toSeq
+      try {
+        val converter = new RowToColumnConverter(onHeapSchema)
+        onHeapRows.foreach(converter.convert(_, vectors.toArray))
+        val batch = new ColumnarBatch(vectors.map(v => v: ColumnVector).toArray, onHeapRows.length)
+        assert(writeAndRead(batch, () => (), onHeapSchema, maxRecordsPerBatch = 3) ==
+          ((Seq(3, 3, 1), Seq.fill(3)("America/Los_Angeles"), Seq.fill(3)(utf8),
+            onHeapRows.map(UnsafeProjection.create(onHeapSchema)(_).copy()))))
+      } finally {
+        vectors.foreach(_.close())
+      }
     } finally {
-      vectors.foreach(_.close())
+      allocator.close()
     }
-    allocator.close()
+  }
+
+  test("write the pending rows of converted batches before a copied batch") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    val writer = new ArrowBatchingDataWriter(
+      new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
+    val onHeap = new TestBatchReader(0, 3, schema)
+    val arrow = new TestArrowBatchReader(3, 7, schema, 4)
+    try {
+      // The rows of the on-heap batch stay in the batch of rows until the Arrow batch is copied.
+      assert(onHeap.next())
+      writer.writeBatch(onHeap.get())
+      assert(arrow.next())
+      writer.writeBatch(arrow.get())
+      val message = writer.commit().asInstanceOf[TestCommitMessage]
+      assert(message.rows == (0L until 7L).map(id => (id, s"name$id")))
+      assert(message.batchSizes == Seq(3, 4))
+    } finally {
+      writer.close()
+      onHeap.close()
+      arrow.close()
+    }
   }
 
   test("create the writer once the data to write is computed") {
@@ -744,9 +809,9 @@ class TestArrowExport(array: ArrowArray, schema: ArrowSchema) {
 
   /** Imports the batch, and passes it to `f`. */
   def read[T](f: ColumnarBatch => T): T = {
-    // The import moves the data to the root, and closes the structs.
-    closed = true
     val root = Data.importVectorSchemaRoot(ArrowUtils.rootAllocator, array, schema, null)
+    // The import moved the data to the root, and closed the structs.
+    closed = true
     try {
       f(new ColumnarBatch(
         root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray,
