@@ -21,7 +21,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.{BaseFixedWidthVector, BaseVariableWidthViewVector, FieldVector, VectorSchemaRoot}
+import org.apache.arrow.vector.complex.{BaseRepeatedValueVector, ListVector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
@@ -257,6 +258,33 @@ abstract class BaseSliceArrowOutputProcessor(
     closePrevSlice()
     super.close()
   }
+
+  private[python] def canSlice(root: VectorSchemaRoot): Boolean =
+    root.getFieldVectors.asScala.forall(BaseSliceArrowOutputProcessor.canSlice)
+}
+
+object BaseSliceArrowOutputProcessor {
+  /**
+   * Returns whether `VectorSchemaRoot.slice` can slice `vector` and its children. Arrow computes
+   * some byte positions of a slice in int, so it throws, and leaks the vectors sliced so far, for
+   * a fixed-width vector of 2 GiB or more, a view vector with 2^27 rows or more, or a list vector
+   * with 2^29 - 1 rows or more. A batch that holds one is output whole instead.
+   *
+   * The offset positions of a list vector overflow only from 2^29 rows, but a slice of `length`
+   * rows also allocates `(length + 1) * 4` bytes of offsets in int, and a list vector nested in
+   * another one is sliced over all its rows when the slice of its parent covers them.
+   */
+  private[python] def canSlice(vector: FieldVector): Boolean = {
+    val fits = vector match {
+      case v: BaseFixedWidthVector => v.getValueCount.toLong * v.getTypeWidth <= Int.MaxValue
+      case v: BaseVariableWidthViewVector =>
+        v.getValueCount.toLong * BaseVariableWidthViewVector.ELEMENT_SIZE <= Int.MaxValue
+      case v: ListVector =>
+        (v.getValueCount + 1L) * BaseRepeatedValueVector.OFFSET_WIDTH <= Int.MaxValue
+      case _ => true
+    }
+    fits && vector.getChildrenFromFields.asScala.forall(canSlice)
+  }
 }
 
 class SliceBytesArrowOutputProcessorImpl(
@@ -317,11 +345,15 @@ class SliceRecordsArrowOutputProcessorImpl(
 
   protected override def getRoot: VectorSchemaRoot = {
     val numRows = math.min(rowCount - currentRowIdx, arrowMaxRecordsPerOutputBatch)
-    // Output the whole root only if this chunk is the whole batch.
-    val rootSlice = if (numRows == rowCount) root else root.slice(currentRowIdx, numRows)
-
-    currentRowIdx = currentRowIdx + numRows
-
-    rootSlice
+    // Output the whole root only if this chunk is the whole batch, or if Arrow cannot slice the
+    // batch, which is checked before any row of it has been output.
+    if (numRows == rowCount || (currentRowIdx == 0 && !canSlice(root))) {
+      currentRowIdx = rowCount
+      root
+    } else {
+      val rootSlice = root.slice(currentRowIdx, numRows)
+      currentRowIdx = currentRowIdx + numRows
+      rootSlice
+    }
   }
 }
