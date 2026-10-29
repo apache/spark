@@ -753,6 +753,13 @@ struct DataSource {
   Options options;
 };
 
+// Fails unless Spark passes a struct of at least `size` bytes.
+void checkSize(const char* struct_name, int64_t actual, size_t size) {
+  if (actual < static_cast<int64_t>(size)) {
+    throw std::runtime_error(std::string(struct_name) + " has a size of " + std::to_string(actual));
+  }
+}
+
 void maybeFail(const Options& options, const std::string& step) {
   if (get(options, "fail", "") == step) throw std::runtime_error("injected failure in " + step);
 }
@@ -1041,8 +1048,10 @@ int sourceSchema(void* handle, struct ArrowSchema* out) {
   });
 }
 
-int createReader(void* handle, struct ArrowSchema* schema, void** out) {
+int createReader(void* handle, struct ArrowSchema* schema, const SparkDsReaderInfo* info,
+                 void** out) {
   return guarded([&] {
+    checkSize("SparkDsReaderInfo", info->size, sizeof(SparkDsReaderInfo));
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_range")) {
       throw std::runtime_error(source->name + " does not support batch reads");
@@ -1081,6 +1090,7 @@ void closeSource(void* handle) { delete fromHandle<DataSource>(handle); }
 int createStreamReader(void* handle, struct ArrowSchema* schema,
                        const SparkDsStreamReaderInfo* info, void** out) {
   return guarded([&] {
+    checkSize("SparkDsStreamReaderInfo", info->size, sizeof(SparkDsStreamReaderInfo));
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_counter")) {
       throw std::runtime_error(source->name + " does not support streaming reads");
@@ -1130,13 +1140,6 @@ int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* 
 
 #endif  // READ_ONLY
 
-// Fails unless Spark passes a struct of at least `size` bytes.
-void checkSize(const char* struct_name, int64_t actual, size_t size) {
-  if (actual < static_cast<int64_t>(size)) {
-    throw std::runtime_error(std::string(struct_name) + " has a size of " + std::to_string(actual));
-  }
-}
-
 int planPartitions(void* handle, const SparkDsPartitionsInfo* info, SparkDsSink add_partition,
                    SparkDsSink set_state, void* sink) {
   auto* reader = fromHandle<Reader>(handle);
@@ -1182,6 +1185,7 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
   if (reader->failed) orderViolation("latest_offset after a failed call");
   return tracked(&reader->failed, [&] {
     const Options& state = reader->state;
+    checkSize("SparkDsLatestOffsetInfo", info->size, sizeof(SparkDsLatestOffsetInfo));
     if (info->start == nullptr) throw std::runtime_error("no start offset");
     std::string starts_path = get(state, "starts_path", "");
     if (!starts_path.empty()) appendLine(starts_path, info->start);
@@ -1238,10 +1242,7 @@ void closeStreamReader(void* handle) {
 int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
                   struct ArrowArrayStream* stream) {
   return guarded([&] {
-    if (info->size < static_cast<int64_t>(offsetof(SparkDsReadInfo, partition_length) +
-                                          sizeof(info->partition_length))) {
-      throw std::runtime_error("SparkDsReadInfo has a size of " + std::to_string(info->size));
-    }
+    checkSize("SparkDsReadInfo", info->size, sizeof(SparkDsReadInfo));
     // Releases the schema, so Spark does not release it after the call.
     std::string columns = join(importColumns(info->schema));
     Options state = deserialize(toBytes(info->reader_state, info->reader_state_length));
@@ -1289,6 +1290,7 @@ std::string describeFields(const ArrowSchema* schema) {
 int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInfo* info,
                  SparkDsSink set_state, void* sink, void** out) {
   return guarded([&] {
+    checkSize("SparkDsWriteInfo", info->size, sizeof(SparkDsWriteInfo));
     auto* source = fromHandle<DataSource>(handle);
     if (source->name != name("native_sink")) {
       throw std::runtime_error(source->name + " does not support writes");
@@ -1326,17 +1328,20 @@ int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInf
   });
 }
 
-int commitWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
-                const int64_t* message_lengths, int64_t num_messages) {
+int commitWrite(void* handle, const SparkDsFinishWriteInfo* info) {
   auto* writer = fromHandle<Writer>(handle);
   if (writer->commit_called) orderViolation("commit called twice");
   if (writer->abort_called) orderViolation("commit after abort");
   writer->commit_called = true;
   return guarded([&] {
+    checkSize("SparkDsFinishWriteInfo", info->size, sizeof(SparkDsFinishWriteInfo));
+    int64_t epoch_id = info->epoch_id;
+    if (info->rejected) throw std::runtime_error("commit of a rejected writer");
     std::string path = writer->state["path"];
     maybeFail(writer->state, "commit");
     bool has_null = false;
-    auto temp_files = toByteStrings(messages, message_lengths, num_messages, &has_null);
+    auto temp_files =
+        toByteStrings(info->messages, info->message_lengths, info->num_messages, &has_null);
     if (has_null) throw std::runtime_error("commit got a null message");
     if (writer->state["overwrite"] == "true") {
       for (const auto& file : listFiles(path, "part-")) unlink((path + "/" + file).c_str());
@@ -1352,28 +1357,32 @@ int commitWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
   });
 }
 
-// Records the aborted write in _ABORTED for a batch write, or _ABORTED_<epoch> for a streaming
-// one, with the number of tasks that did not commit, whose messages are NULL.
-int abortWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
-               const int64_t* message_lengths, int64_t num_messages) {
+// Records the aborted write in _ABORTED for a batch write or a rejected writer, or
+// _ABORTED_<epoch> for a streaming one, as "<NULL messages>,<messages>,<rejected>": the number of
+// tasks that did not commit, the number of messages, and 1 for a writer whose create_writer
+// Spark rejected.
+int abortWrite(void* handle, const SparkDsFinishWriteInfo* info) {
   auto* writer = fromHandle<Writer>(handle);
   if (writer->abort_called) orderViolation("abort called twice");
   if (writer->committed) orderViolation("abort after a successful commit");
   writer->abort_called = true;
   return guarded([&] {
+    checkSize("SparkDsFinishWriteInfo", info->size, sizeof(SparkDsFinishWriteInfo));
+    int64_t epoch_id = info->epoch_id;
     writer->closed_marker = closedMarker(epoch_id);
     bool has_null = false;
     for (const auto& temp_file :
-         toByteStrings(messages, message_lengths, num_messages, &has_null)) {
+         toByteStrings(info->messages, info->message_lengths, info->num_messages, &has_null)) {
       unlink(temp_file.c_str());
     }
     int64_t null_messages = 0;
-    for (int64_t i = 0; i < num_messages; i++) {
-      if (messages[i] == nullptr) null_messages++;
+    for (int64_t i = 0; i < info->num_messages; i++) {
+      if (info->messages[i] == nullptr) null_messages++;
     }
     writeFile(writer->state["path"] +
                   (epoch_id < 0 ? "/_ABORTED" : "/_ABORTED_" + std::to_string(epoch_id)),
-              std::to_string(null_messages));
+              std::to_string(null_messages) + "," + std::to_string(info->num_messages) + "," +
+                  (info->rejected ? "1" : "0"));
   });
 }
 
@@ -1398,10 +1407,7 @@ bool usedAfterClose(void* handle) {
 int createDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo* info,
                      void** out) {
   return guarded([&] {
-    if (info->size < static_cast<int64_t>(offsetof(SparkDsDataWriterInfo, epoch_id) +
-                                          sizeof(info->epoch_id))) {
-      throw std::runtime_error("SparkDsDataWriterInfo has a size of " + std::to_string(info->size));
-    }
+    checkSize("SparkDsDataWriterInfo", info->size, sizeof(SparkDsDataWriterInfo));
     Options state = deserialize(toBytes(info->writer_state, info->writer_state_length));
     if (returnsZero(state, "create_data_writer")) return;
     if (info->schema->n_children == 0) throw std::runtime_error("no columns to write");
@@ -1459,12 +1465,14 @@ int writeBatch(void* handle, struct ArrowArray* array) {
   });
 }
 
-int commitDataWriter(void* handle, SparkDsSink set_message, void* sink) {
+int commitDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info,
+                     SparkDsSink set_message, void* sink) {
   if (usedAfterClose(handle)) return 0;
   auto* writer = fromHandle<DataWriter>(handle);
   checkWriteOrCommit(writer, "commit_data_writer");
   writer->commit_called = true;
   return tracked(&writer->failed, [&] {
+    checkSize("SparkDsFinishDataWriterInfo", info->size, sizeof(SparkDsFinishDataWriterInfo));
     // If the commit fails, Spark aborts the data writer.
     maybeFail(writer->state, "commitDataWriter");
     // With the option "commit_messages", the message is passed that many times.
@@ -1476,12 +1484,13 @@ int commitDataWriter(void* handle, SparkDsSink set_message, void* sink) {
   });
 }
 
-int abortDataWriter(void* handle) {
+int abortDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info) {
   if (usedAfterClose(handle)) return 0;
   auto* writer = fromHandle<DataWriter>(handle);
   if (writer->abort_called) orderViolation("abort_data_writer called twice");
   writer->abort_called = true;
   return guarded([&] {
+    checkSize("SparkDsFinishDataWriterInfo", info->size, sizeof(SparkDsFinishDataWriterInfo));
     // Spark does not abort a data writer that committed: records it if it does.
     if (writer->committed) {
       orderViolation("abort_data_writer after a successful commit");
