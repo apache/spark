@@ -935,7 +935,14 @@ case class EnsureRequirements(
           Some(mergedPartitionKeys), reducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
             if (replicates) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN))
-        if (gpe.outputPartitioning == child.outputPartitioning) child else gpe
+        // A spread or replicate pairing keeps its nodes even when the grouping is the identity:
+        // a re-run peels a local sort only through a `GroupPartitionsExec`, and that peel is how
+        // the statistics-based replicate-side choice is reproduced.
+        // A spread or replicate pairing keeps its nodes even when the grouping is the identity:
+        // a re-run peels a local sort only through a `GroupPartitionsExec`, and that peel is how
+        // the statistics-based replicate-side choice is reproduced.
+        if (!applyPartialClustering &&
+            gpe.outputPartitioning == child.outputPartitioning) child else gpe
       }
       (regroupOrIdentity(rawLeft, leftSpec, leftReducers, replicateLeftSide),
         regroupOrIdentity(rawRight, rightSpec, rightReducers, replicateRightSide))

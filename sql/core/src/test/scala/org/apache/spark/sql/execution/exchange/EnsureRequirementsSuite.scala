@@ -1067,7 +1067,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       var smjExec = SortMergeJoinExec(
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
       // A side whose alignment is the pass-through keeps its own layout, so the regrouping node
-      // is optional: peel the sort and the node to reach the plan that was planned over.
+      // is optional: peel the sort, then read the node's own report, or the dummy plan's if none.
       def plannedPartitioning(plan: SparkPlan): Partitioning = plan match {
         case SortExec(_, _, child, _) => plannedPartitioning(child)
         // The node's own report is what these assertions are about. Only a side whose alignment

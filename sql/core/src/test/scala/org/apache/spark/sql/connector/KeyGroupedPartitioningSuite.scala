@@ -2257,10 +2257,10 @@ class KeyGroupedPartitioningSuite
         val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
         if (pushDownValues) {
           assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
-          // Only the side that is missing keys pads; the other already holds the merged keys, so
-          // its node would be a pass-through and is not built.
+          // The inner join intersects the keys onto the side that is missing them, so that side
+          // is the pass-through and the kept node prunes the other side's extra key.
           assert(groupPartitions.size === 1,
-            "the side that is missing keys is regrouped onto the merged partition keys")
+            "only the side with extra keys is regrouped, pruning them")
         } else {
           assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
               "pushing down partition values is not enabled")
@@ -2298,10 +2298,10 @@ class KeyGroupedPartitioningSuite
         val groupPartitions = collectGroupPartitions(df.queryExecution.executedPlan)
         if (pushDownValues) {
           assert(shuffles.isEmpty, "should not add shuffle when partition values mismatch")
-          // Only the side that is missing keys pads; the other already holds the merged keys, so
-          // its node would be a pass-through and is not built.
+          // The inner join intersects the keys onto the side that is missing them, so that side
+          // is the pass-through and the kept node prunes the other side's extra key.
           assert(groupPartitions.size === 1,
-            "the side that is missing keys is regrouped onto the merged partition keys")
+            "only the side with extra keys is regrouped, pruning them")
         } else {
           assert(shuffles.nonEmpty, "should add shuffle when partition values mismatch, and " +
               "pushing down partition values is not enabled")
@@ -5474,6 +5474,67 @@ class KeyGroupedPartitioningSuite
         "the storage-partitioned join must stay shuffle-free")
       assert(collectGroupPartitions(df.queryExecution.executedPlan).nonEmpty,
         "the storage-partitioned join must keep its groupings")
+    }
+  }
+
+  test("SPARK-58996: partially clustered join keeps its replicate-side choice when the " +
+      "alignment is the identity") {
+    // The smaller side by statistics is replicated: `pc_small` holds five splits in 200 bytes,
+    // `pc_large` four splits in 224. Both are bucketed, whose transform derives no ordering, so
+    // the join's sort has to be added. The larger side ends up with one split per bucket, so the
+    // alignment on it is the identity and the pass-through node has to stay: a re-run peels a
+    // local sort only through a `GroupPartitionsExec`, and reading the statistics from the scans
+    // again is what keeps the choice. Without the node the counts (five against four) pick the
+    // other side.
+    val smallColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
+    createTable("pc_small", smallColumns, Array(bucket(4, "id")))
+    // 1, 5 and 9 share bucket 1; 2 and 3 have buckets of their own.
+    sql("INSERT INTO testcat.ns.pc_small VALUES " +
+        "(1, 'a1'), (5, 'a2'), (9, 'a3'), (2, 'a4'), (3, 'a5')")
+    // Wider than `pc_small` per row, so three rows already outweigh its five.
+    val largeColumns = smallColumns ++ Array(
+      Column.create("p1", LongType), Column.create("p2", LongType),
+      Column.create("p3", LongType), Column.create("p4", LongType))
+    createTable("pc_large", largeColumns, Array(bucket(4, "id")))
+    // One bucket per row, all of them also held by `pc_small`, so nothing is pruned and this
+    // side's alignment is the identity.
+    sql("INSERT INTO testcat.ns.pc_large VALUES " +
+        "(1, 'b1', 0, 0, 0, 0), (2, 'b2', 0, 0, 0, 0), (3, 'b3', 0, 0, 0, 0)")
+
+    // Unpartitioned, so this branch materializes shuffle stages and is converted to a shuffled
+    // hash join, which hands the whole plan back to `EnsureRequirements`.
+    createTable("pc_np1", smallColumns, Array.empty)
+    sql("INSERT INTO testcat.ns.pc_np1 VALUES (7, 'x')")
+    createTable("pc_np2", smallColumns, Array.empty)
+    sql("INSERT INTO testcat.ns.pc_np2 VALUES (7, 'y')")
+
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m") {
+      val df = sql(
+        """
+          |SELECT /*+ MERGE(a, b) */ a.id AS k
+          |FROM testcat.ns.pc_small a JOIN testcat.ns.pc_large b ON a.id = b.id
+          |UNION ALL
+          |SELECT c.id AS k
+          |FROM testcat.ns.pc_np1 c JOIN testcat.ns.pc_np2 d ON c.id = d.id
+          |""".stripMargin)
+      checkAnswer(df, Seq(Row(1L), Row(2L), Row(3L), Row(7L)))
+
+      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+        "the storage-partitioned join must stay shuffle-free")
+      val join = collect(df.queryExecution.executedPlan) {
+        case j: SortMergeJoinExec => j
+      }.head
+      // The choice is read off `distributePartitions`: the replicated side answers false, the
+      // spread side true.
+      def flags(side: SparkPlan): Seq[Boolean] =
+        collectAllGroupPartitions(side).map(_.distributePartitions)
+      assert(flags(join.left) === Seq(false),
+        "the side that is smaller by statistics is replicated, so it does not distribute")
+      assert(flags(join.right) === Seq(true),
+        "the larger side spreads, so it keeps its node")
     }
   }
 
@@ -10591,15 +10652,18 @@ class KeyGroupedPartitioningSuite
           // The shape the test exists for. Without these the assertions above would pass on a
           // plan that had lost the storage-partitioned join entirely.
           val groupings = collectAllGroupPartitions(plan)
-          // A side whose alignment is the pass-through keeps its shuffle and gets no node, so the
-          // second join groups only the side that is missing keys.
+          // The inner join intersects the keys onto aqekb's, so aqekb is the pass-through and
+          // the kept node prunes the first join's extra key. It has to stay on the first join's
+          // side, the one holding the keyed shuffle.
           assert(groupings.size === 1,
             s"aqe=$aqeEnabled: the second join groups one side:\n$plan")
           assert(groupings.head.expectedKeyCount.isDefined,
             s"aqe=$aqeEnabled: the kept node is the pushed alignment:\n$plan")
           val outerJoin = collect(plan) { case j: SortMergeJoinExec => j }.head
-          assert(collect(outerJoin) { case _: GroupPartitionsExec => true }.size === 1,
-            s"aqe=$aqeEnabled: the grouping sits under the second join:\n$plan")
+          assert(collect(outerJoin.left) { case _: GroupPartitionsExec => true }.size === 1,
+            s"aqe=$aqeEnabled: the grouping sits over the first join:\n$plan")
+          assert(collect(outerJoin.right) { case _: GroupPartitionsExec => true }.isEmpty,
+            s"aqe=$aqeEnabled: the side missing keys keeps its own layout:\n$plan")
           groupings.foreach { grouping =>
             assert(grouping.outputPartitioning.isInstanceOf[physical.KeyedPartitioning],
               s"aqe=$aqeEnabled: each still claims the layout it was planned for:\n$plan")
@@ -10785,7 +10849,7 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-59050: SPJ: a reducer-free identity regrouping keeps the unknown-keyed claim") {
+  test("SPARK-59050: SPJ: a marked side keeps its unknown-keyed claim without a regrouping node") {
     // Positive counterpart to the regrouping test above. The first join one-side-shuffles pt
     // onto pa's sorted keys [1, 2, 3] and marks the layout (pt's id=4 is out-of-set). The second
     // join aligns that marked [1, 2, 3] superset with pb's [1, 2] by pushing the merged keys
@@ -10827,14 +10891,19 @@ class KeyGroupedPartitioningSuite
           val plan = df.queryExecution.executedPlan
           assert(ValidateRequirements.validate(plan),
             s"the executed plan must satisfy every operator's required distribution:\n$plan")
-          // The marked side's alignment is the pass-through, so no node is built for it. The
-          // claim it would have re-stated has to reach the plan on the side itself, still over
-          // its three declared keys.
-          val markedKeyed = collect(plan) { case p: SparkPlan => p.outputPartitioning }
+          // The marked side's alignment is the pass-through, so no node is built for it: the
+          // claim has to reach the second join on the side itself. Assert on that join, since the
+          // first join's keyed shuffle already carries a marked three-key member of its own.
+          val secondJoin = collect(plan) { case j: SortMergeJoinExec => j }.head
+          assert(collectAllShuffles(plan).size == 1,
+            s"only the first join shuffles:\n$plan")
+          val marked = collect(secondJoin.left) { case p: SparkPlan => p.outputPartitioning }
             .flatMap(PartitioningCollection.representativeOf)
             .filter(_.mayContainUnknownPartitionKeys)
-          assert(markedKeyed.exists(_.numPartitions == 3),
-            s"the marked side keeps its unknown-keyed claim over its three keys:\n$plan")
+          assert(marked.exists(_.numPartitions == 3),
+            s"the second join's marked side keeps its claim over its three keys:\n$plan")
+          assert(secondJoin.right.outputPartitioning.numPartitions == 3,
+            s"the other side is padded to the marked side's three keys:\n$plan")
         }
       }
     }
