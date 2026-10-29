@@ -53,4 +53,28 @@ class DeltaBasedNoMetadataDeleteFromTableSuite extends DeleteFromTableSuiteBase 
     checkLastWriteInfo(expectedRowIdSchema = Some(StructType(Array(PK_FIELD))))
     checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = null))
   }
+
+  test("SPARK-60667: delete with type coercion reads non-required metadata columns " +
+    "without writing them") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "hr" }
+        |{ "pk": 3, "id": 1, "dep": "software" }
+        |""".stripMargin)
+
+    // the condition references a metadata column and needs type coercion (`id < 1.5`),
+    // so the DELETE is resolved only in a later iteration of the analyzer
+    executeAndCheckScan(
+      s"DELETE FROM $tableNameAsString WHERE _partition = 'hr' AND id < 1.5",
+      // `pk` is used to encode deletes
+      // `id` and `_partition` are used in the condition
+      expectedScanSchema = "pk INT, id INT, _partition STRING")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(2, 2, "hr") :: Row(3, 1, "software") :: Nil)
+
+    checkLastWriteInfo(expectedRowIdSchema = Some(StructType(Array(PK_FIELD))))
+    checkLastWriteLog(deleteWriteLogEntry(id = 1, metadata = null))
+  }
 }

@@ -2094,6 +2094,47 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
     }
   }
 
+  test("SPARK-60667: insert-only merge with type coercion handles metadata columns correctly") {
+    withTempView("source") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 100, "dep": "hr" }
+          |{ "pk": 2, "salary": 200, "dep": "software" }
+          |{ "pk": 3, "salary": 700, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(1, 2, 3, 4).toDF("pk").createOrReplaceTempView("source")
+
+      // the ON condition references a metadata column and needs type coercion
+      // (`t.salary < 600.5`), so the MERGE is resolved only in a later iteration of the analyzer
+      val executedPlan = executeAndKeepPlan {
+        sql(
+          s"""MERGE INTO $tableNameAsString t
+             |USING source s
+             |ON t.pk = s.pk AND t._partition = 'hr' AND t.salary < 600.5
+             |WHEN NOT MATCHED THEN
+             | INSERT (pk, salary, dep) VALUES (s.pk, 0, 'new')
+             |""".stripMargin)
+      }
+
+      // the MERGE is rewritten into InsertOnlyMerge (an append) that writes only data columns
+      val write = executedPlan.collectFirst {
+        case e: InsertOnlyMergeExec => e.write
+      }.getOrElse(fail("expected an InsertOnlyMergeExec in the executed plan"))
+      val append = write.toBatch.asInstanceOf[InMemoryBaseTable#Append]
+      assert(append.info.schema.fieldNames === table.schema.fieldNames)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Seq(
+          Row(1, 100, "hr"), // unchanged (matched)
+          Row(2, 200, "software"), // unchanged
+          Row(3, 700, "hr"), // unchanged
+          Row(2, 0, "new"), // insert (not matched in hr)
+          Row(3, 0, "new"), // insert (not matched by salary)
+          Row(4, 0, "new"))) // insert
+    }
+  }
+
   test("merge with NOT NULL checks") {
     withTempView("source") {
       createAndInitTable("pk INT NOT NULL, s STRUCT<n_i: INT NOT NULL, n_l: LONG>, dep STRING",
