@@ -1471,7 +1471,7 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
 
   def partitionNotSpecifyLocationUriError(specString: String): Throwable = {
     new AnalysisException(
-      errorClass = "_LEGACY_ERROR_TEMP_1082",
+      errorClass = "PARTITION_LOCATION_URI_NOT_SPECIFIED",
       messageParameters = Map("specString" -> specString))
   }
 
