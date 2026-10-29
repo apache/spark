@@ -132,23 +132,25 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
    * cannot serve. The unsupported operators (see class doc for why each is fatal) are
    * `CoalesceExec`, `CartesianProductExec`, and the limit operators `CollectLimitExec` /
    * `CollectTailExec` / `TakeOrderedAndProjectExec`, plus cached `AttachDistributedSequenceExec`.
-   * For each such operator anywhere in the plan, check whether a shuffle is reachable below it.
-   *
-   * The reachability walk descends through EVERY child of a non-exchange node -- not only unary
-   * children -- so a shuffle behind a `UnionExec`/join (a `BinaryExecNode`) beneath the operator
-   * is still found. It stops at the FIRST [[ShuffleExchangeExec]] on each path: a shuffle deeper
-   * than that first one is not read by this operator (the intervening exchange's own reader reads
-   * one reduce partition per task), so it is not this operator's concern.
+   * A shuffle above an unsupported operator with shuffle-free input does not disqualify the plan.
    */
-  private def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
-    def reachesShuffle(p: SparkPlan): Boolean = p match {
-      case _: ShuffleExchangeExec => true
-      case other => other.children.exists(reachesShuffle)
+  private[exchange] def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
+    var foundUnsupported = false
+    // Carry shuffle reachability up once to avoid rescanning nested consumers' subtrees.
+    def containsShuffle(p: SparkPlan): Boolean = {
+      var childHasShuffle = false
+      val children = p.children.iterator
+      while (children.hasNext && !foundUnsupported) {
+        if (containsShuffle(children.next())) {
+          childHasShuffle = true
+        }
+      }
+      if (childHasShuffle && PipelinedShuffleEligibility.isUnsupportedConsumer(p)) {
+        foundUnsupported = true
+      }
+      childHasShuffle || p.isInstanceOf[ShuffleExchangeExec]
     }
-    plan.exists {
-      case p if PipelinedShuffleEligibility.isUnsupportedConsumer(p) =>
-        p.children.exists(reachesShuffle)
-      case _ => false
-    }
+    containsShuffle(plan)
+    foundUnsupported
   }
 }
