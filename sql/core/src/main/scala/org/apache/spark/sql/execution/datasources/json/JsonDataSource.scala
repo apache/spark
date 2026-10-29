@@ -433,7 +433,8 @@ object MultiLineJsonDataSource extends JsonDataSource {
       parser: JacksonParser,
       schema: StructType): Iterator[InternalRow] = {
     // The entry is a single JSON document. Buffer its bytes so the corrupt-record column can echo
-    // the whole document on a parse failure, mirroring `readFile`'s `partitionedFileString`.
+    // the document, or a streamed array's malformed element, on a parse failure, mirroring
+    // `readFile`'s `partitionedFileString`.
     val bytes = in.readAllBytes()
     lazy val documentLiteral: UTF8String = UTF8String.fromBytes(bytes)
     val streamParser = parser.options.encoding
@@ -451,7 +452,9 @@ object MultiLineJsonDataSource extends JsonDataSource {
       safeParser.parseIterator(
         input,
         input => parser.parseIterator[InputStream](
-          input, streamParser, _ => documentLiteral))
+          input, streamParser, _ => documentLiteral,
+          // An abandoned parser over `bytes` holds nothing that needs closing.
+          closeOnTaskCompletion = false))
     } else {
       safeParser.parse(input)
     }
