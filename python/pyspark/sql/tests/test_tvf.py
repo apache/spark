@@ -589,6 +589,20 @@ class TVFTestsMixin:
         expected = self.spark.sql("""SELECT * FROM variant_explode_outer(parse_json('1'))""")
         assertDataFrameEqual(actual=actual, expected=expected)
 
+    def test_variant_explode_with_recursive(self):
+        nested = sf.parse_json(sf.lit('{"a": [1, {"b": 2}]}'))
+        actual = self.spark.tvf.variant_explode(nested, recursive=True)
+        expected = self.spark.sql(
+            """SELECT * FROM variant_explode(
+                parse_json('{"a": [1, {"b": 2}]}'), true)"""
+        )
+        assertDataFrameEqual(actual=actual, expected=expected)
+
+    def test_variant_explode_outer_with_recursive(self):
+        actual = self.spark.tvf.variant_explode_outer(sf.parse_json(sf.lit("[]")), recursive=True)
+        expected = self.spark.sql("""SELECT * FROM variant_explode_outer(parse_json('[]'), true)""")
+        assertDataFrameEqual(actual=actual, expected=expected)
+
     def test_variant_explode_outer_with_lateral_join(self):
         with self.temp_view("variant_table"):
             variant_table = self.spark.sql("""
