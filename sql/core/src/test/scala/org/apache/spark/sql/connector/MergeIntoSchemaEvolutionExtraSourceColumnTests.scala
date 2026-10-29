@@ -189,6 +189,83 @@ trait MergeIntoSchemaEvolutionExtraSourceColumnTests extends MergeIntoSchemaEvol
       (6, 350, "finance")).toDF("pk", "salary", "dep")
   )
 
+  testEvolution("SPARK-60709: source has extra column with set all columns" +
+    " and target metadata column in update condition")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", true),
+      (2, 250, "software", true),
+      (4, 450, "hr", false)
+    ).toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(
+      updateAll(condition = "t._partition = 'hr'")
+    ),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 150, "hr", true),
+      (2, 200, "software", null),
+      (3, 300, "hr", null)).toDF("pk", "salary", "dep", "active"),
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60709: source has extra column with set all columns, insert all" +
+    " and target metadata column in update condition")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", true),
+      (2, 250, "software", true),
+      (4, 450, "hr", false)
+    ).toDF("pk", "salary", "dep", "active"),
+    clauses = Seq(
+      updateAll(condition = "t._partition = 'hr'"),
+      insertAll()
+    ),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 150, "hr", true),
+      (2, 200, "software", null),
+      (3, 300, "hr", null),
+      (4, 450, "hr", false)).toDF("pk", "salary", "dep", "active"),
+    expectedWithoutEvolution = Seq(
+      (1, 150, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr"),
+      (4, 450, "hr")).toDF("pk", "salary", "dep")
+  )
+
+  testEvolution("SPARK-60709: source has extra column with set explicit column" +
+    " and target metadata column in merge and not matched by source conditions")(
+    targetData = Seq(
+      (1, 100, "hr"),
+      (2, 200, "software"),
+      (3, 300, "hr")
+    ).toDF("pk", "salary", "dep"),
+    sourceData = Seq(
+      (1, 150, "hr", true),
+      (2, 250, "software", true),
+      (4, 450, "hr", false)
+    ).toDF("pk", "salary", "dep", "active"),
+    cond = "t.pk = s.pk AND t._partition = 'hr'",
+    clauses = Seq(
+      update(set = "active = s.active"),
+      deleteNotMatched(condition = "t._partition = 'software'")
+    ),
+    expected = Seq[(Int, Int, String, java.lang.Boolean)](
+      (1, 100, "hr", true),
+      (3, 300, "hr", null)).toDF("pk", "salary", "dep", "active"),
+    expectErrorWithoutEvolutionContains = "A column, variable, or function parameter with name " +
+      "`active` cannot be resolved"
+  )
+
   testEvolution("source has extra column - empty table and insert")(
     targetData = Seq.empty[(Int, Int, String)].toDF("pk", "salary", "dep"),
     sourceData = Seq(
