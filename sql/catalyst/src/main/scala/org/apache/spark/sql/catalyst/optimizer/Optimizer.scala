@@ -1775,10 +1775,13 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     // A map from producer attributes to tuples of:
     // - how many times the producer is referenced from consumers and
     // - the set of consumers that reference the producer.
+    // References are grouped by expression ID, since references to one attribute can differ in
+    // qualifier, and each such group would otherwise replace the others in the map.
     lazy val producerReferences = AttributeMap(consumers
       .flatMap(e => collectReferences(e).filter(producerAttributes.contains).map(_ -> e))
-      .groupMap(_._1)(_._2)
-      .view.mapValues(v => v.size -> ExpressionSet(v)))
+      .groupBy(_._1.exprId)
+      .values
+      .map(refs => refs.head._1 -> (refs.size -> ExpressionSet(refs.map(_._2)))))
 
     // Split the producers from the lower node to 4 categories:
     // - `neverInlines` contains producer expressions that shouldn't be inlined.
@@ -1871,11 +1874,14 @@ object CollapseProject extends Rule[LogicalPlan] with AliasHelper {
     // We can only collapse expressions if all input expressions meet the following criteria:
     // - The input is deterministic.
     // - The input is only consumed once OR the underlying input expression is cheap.
+    // References are counted by expression ID, since references to one attribute can differ in
+    // qualifier.
     consumers
       .filter(_.references.exists(producerMap.contains))
       .flatMap(collectReferences)
-      .groupBy(identity)
-      .view.mapValues(v => v.size)
+      .groupBy(_.exprId)
+      .values
+      .map(references => references.head -> references.size)
       .forall {
         case (reference, count) =>
           val producer = producerMap.getOrElse(reference, reference)
