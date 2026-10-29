@@ -811,6 +811,66 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       cause = error)
   }
 
+  def nativeDataSourceError(
+      action: String, name: String, msg: String, cause: Throwable): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_ERROR",
+      messageParameters = Map("action" -> action, "name" -> name, "msg" -> msg),
+      cause = cause)
+  }
+
+  def invalidNativeDataSourcePackageError(
+      path: String,
+      subClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = s"INVALID_NATIVE_DATA_SOURCE_PACKAGE.$subClass",
+      messageParameters = Map("path" -> path) ++ messageParameters,
+      cause = cause)
+  }
+
+  def nativeDataSourcePackageNotFoundError(
+      fileName: String, checksum: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_NOT_FOUND",
+      messageParameters = Map("fileName" -> fileName, "checksum" -> checksum))
+  }
+
+  def invalidNativeDataSourceLibraryError(
+      path: String,
+      subClass: String,
+      messageParameters: Map[String, String],
+      cause: Throwable = null): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = s"INVALID_NATIVE_DATA_SOURCE_LIBRARY.$subClass",
+      messageParameters = Map("path" -> path) ++ messageParameters,
+      cause = cause)
+  }
+
+  def nativeDataSourceLibraryNotFoundError(
+      fileName: String, checksum: String, path: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "NATIVE_DATA_SOURCE_LIBRARY_NOT_FOUND",
+      messageParameters = Map("fileName" -> fileName, "checksum" -> checksum, "path" -> path))
+  }
+
+  def nativeDataSourceUnsupportedJavaVersionError(
+      required: Int, current: Int): SparkUnsupportedOperationException = {
+    new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION",
+      messageParameters = Map("required" -> required.toString, "current" -> current.toString))
+  }
+
+  def nativeDataSourceUnsupportedPlatformError(
+      platform: String, cause: Throwable): SparkUnsupportedOperationException = {
+    val e = new SparkUnsupportedOperationException(
+      errorClass = "NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM",
+      messageParameters = Map("platform" -> platform, "reason" -> cause.toString))
+    e.initCause(cause)
+    e
+  }
+
   def removedClassInSpark2Error(className: String, e: Throwable): SparkClassNotFoundException = {
     new SparkClassNotFoundException(
       errorClass = "_LEGACY_ERROR_TEMP_2052",

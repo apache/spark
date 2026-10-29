@@ -36,6 +36,7 @@ import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.{CONNECT_SCALA_UDF_STUB_PREFIXES, EXECUTOR_USER_CLASS_PATH_FIRST, JAR_IVY_CONNECT_TIMEOUT, JAR_IVY_READ_TIMEOUT, JAR_IVY_REPO_PATH, JAR_IVY_SETTING_PATH}
 import org.apache.spark.sql.Artifact
 import org.apache.spark.sql.classic.SparkSession
+import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourcePackage
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
@@ -152,6 +153,28 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * @return
    */
   def getPythonIncludes: Seq[String] = pythonIncludeList.asScala.toSeq
+
+  /**
+   * Returns the native data source packages added to this session, as the local files of the
+   * driver, and the UUID under which the executors store them, if the session is isolated.
+   */
+  private[sql] def getNativeDataSourcePackages: (Seq[File], Option[String]) = {
+    val packages = sparkContextRelativePaths.asScala.collect {
+      case (SparkContextResourceType.FILE, path, _)
+          if path.toString.endsWith(Artifact.NATIVE_DATA_SOURCE_PACKAGE_EXTENSION) =>
+        artifactPath.resolve(path).toFile
+    }.toSeq
+    (packages, Option(state).map(_.uuid))
+  }
+
+  /** Returns whether a file with the given name was added to this session as a file artifact. */
+  private[sql] def hasFileArtifact(fileName: String): Boolean = {
+    val path = Paths.get("files", fileName)
+    sparkContextRelativePaths.asScala.exists {
+      case (SparkContextResourceType.FILE, relativePath, _) => relativePath == path
+      case _ => false
+    }
+  }
 
   protected[sql] def getCachedBlockId(hash: String): Option[CacheId] = {
     Option(hashToCachedIdMap.get(hash)).map(_.id)
@@ -617,6 +640,9 @@ object ArtifactManager extends Logging {
         sparkContext.postEnvironmentUpdate()
       }
     }
+
+    // Forget the native data source packages read from the artifacts folder
+    Utils.tryLogNonFatalError(NativeDataSourcePackage.forgetPackagesIn(artifactPath.toFile))
 
     // Clean up artifacts folder
     try {
