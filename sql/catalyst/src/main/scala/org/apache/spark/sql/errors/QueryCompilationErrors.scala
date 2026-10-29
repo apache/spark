@@ -1038,6 +1038,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
+  def duplicateAssignmentsError(nameList: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DUPLICATE_ASSIGNMENTS",
+      messageParameters = Map("nameList" -> nameList))
+  }
+
   def unresolvedVariableError(
       name: Seq[String],
       pathEntries: Seq[Seq[String]],
