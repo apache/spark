@@ -17,7 +17,7 @@
 
 package org.apache.spark.sql.connector.read;
 
-import org.apache.spark.annotation.DeveloperApi;
+import org.apache.spark.annotation.Evolving;
 
 /**
  * A mix-in interface for a {@link PartitionReaderFactory} that also reads a partition as an
@@ -35,7 +35,7 @@ import org.apache.spark.annotation.DeveloperApi;
  *
  * @since 4.4.0
  */
-@DeveloperApi
+@Evolving
 public interface SupportsArrowStreamRead extends PartitionReaderFactory {
 
   /**
