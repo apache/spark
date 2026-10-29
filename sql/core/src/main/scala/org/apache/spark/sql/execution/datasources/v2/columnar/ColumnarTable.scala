@@ -191,25 +191,26 @@ case class ColumnarStreamOffset(json: String) extends Offset
 
 /**
  * The micro-batch stream of a [[ColumnarDataSource]]. It supports admission control only so that
- * the data source gets the offset that each micro-batch starts after: its default read limit reads
- * all the available data, which Spark then always asks for.
- */
-/**
- * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the start of each
- * micro-batch, the end of the last one, for every trigger: with `Trigger.AvailableNow`, Spark runs
- * micro-batches up to the latest offset that the first micro-batch got, rather than wrapping the
- * stream in one that asks for the latest offset from the initial offset.
+ * the reader gets the offset that each micro-batch starts after, the end of the last one, for
+ * every trigger: its default read limit reads all the available data. With
+ * `Trigger.AvailableNow`, Spark runs micro-batches up to the latest offset that the first
+ * micro-batch got, rather than wrapping the stream in one that asks for the latest offset from
+ * the initial offset.
  */
 class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
   extends MicroBatchStream with SupportsTriggerAvailableNow {
 
   // The offset that the reader returned last, which the progress of the query reports.
   @volatile private var lastLatestOffset: Offset = _
-  // With Trigger.AvailableNow, whether the latest offset of the run is the first one asked.
+  // Whether the trigger is Trigger.AvailableNow.
   @volatile private var availableNow = false
+  // The end of the run with Trigger.AvailableNow: the first latest offset asked.
   @volatile private var availableNowEnd: Offset = _
+  // Spark asks for the initial offset for the start of the first latest offset, and again to plan
+  // the first micro-batch, which both get the same offset.
+  private lazy val initial = ColumnarStreamOffset(reader.initialOffset())
 
-  override def initialOffset(): Offset = ColumnarStreamOffset(reader.initialOffset())
+  override def initialOffset(): Offset = initial
 
   override def latestOffset(): Offset = {
     throw SparkException.internalError(

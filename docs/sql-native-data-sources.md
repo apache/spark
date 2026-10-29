@@ -123,19 +123,21 @@ Spark calls the functions of the table as follows:
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
   write, and returns the state of the writer. With adaptive query execution, it first runs the
   shuffle stages of the data to write, and creates no writer if they fail, but the last stage runs
-  in the tasks of the write, so a writer can still be aborted because computing the data failed:
-  do irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
-  executors, each task creates a data writer with `create_data_writer`, which gets the schema of
-  the data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data
-  with `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit
-  fails. Then the driver calls `commit` with the messages of the tasks, or `abort` if the write
-  failed. A streaming write commits each micro-batch with its epoch ID, and the ID of the query
-  stays the same when the query restarts from its checkpoint: together, they identify the output of
-  a micro-batch, so that a library can skip an epoch that it already committed. A micro-batch
-  streaming query creates a new stream writer for each micro-batch, and Spark closes the previous
-  one when it creates the next one. Because Spark is not told when a streaming query stops, the
-  last stream writer of a query is closed once it is no longer referenced, or when the query is
-  restarted.
+  in the tasks of the write, so a writer can still be aborted because computing the data failed: do
+  irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
+  executors, each task creates a data writer with `create_data_writer`, which gets the schema of the
+  data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data with
+  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails.
+  Then the driver calls `commit` with the messages of the tasks, or `abort` if the write failed.
+  When Spark rejects what `create_writer` returned, such as a state set more than once, it calls
+  `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set, and an epoch ID of -1 also for
+  a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
+  epoch ID, and the ID of the query stays the same when the query restarts from its checkpoint:
+  together, they identify the output of a micro-batch, so that a library can skip an epoch that it
+  already committed. A micro-batch streaming query creates a new stream writer for each micro-batch,
+  and Spark closes the previous one when it creates the next one. Because Spark is not told when a
+  streaming query stops, the last stream writer of a query is closed once it is no longer
+  referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
@@ -434,6 +436,7 @@ pub struct SparkDsLibrary {
     create_reader: unsafe extern "C" fn(
         source: *mut c_void,
         schema: *mut FFI_ArrowSchema,
+        info: *const c_void,
         reader: *mut *mut c_void,
     ) -> c_int,
     create_stream_reader: Unused,
@@ -555,6 +558,7 @@ unsafe extern "C" fn schema(_source: *mut c_void, out: *mut FFI_ArrowSchema) -> 
 unsafe extern "C" fn create_reader(
     source: *mut c_void,
     _schema: *mut FFI_ArrowSchema,
+    _info: *const c_void,
     reader: *mut *mut c_void,
 ) -> c_int {
     call(|| {
@@ -718,7 +722,7 @@ int GetSchema(void*, struct ArrowSchema* out) {
   return Call([&] { Check(arrow::ExportSchema(*Schema(), out)); });
 }
 
-int CreateReader(void* source, struct ArrowSchema*, void** reader) {
+int CreateReader(void* source, struct ArrowSchema*, const SparkDsReaderInfo*, void** reader) {
   return Call([&] { *reader = new RangeReader{static_cast<RangeSource*>(source)->end}; });
 }
 

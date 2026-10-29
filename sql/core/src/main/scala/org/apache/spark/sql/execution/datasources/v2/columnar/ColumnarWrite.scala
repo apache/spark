@@ -95,7 +95,7 @@ class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
     if (writer == null) {
       writer = createWriter()
     }
-    new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema))
+    new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema, writer.timeZoneId))
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = writer.commit(messages)
@@ -135,7 +135,7 @@ class ColumnarStreamingWrite(
     if (writer == null) {
       writer = createWriter()
     }
-    new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema))
+    new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema, writer.timeZoneId))
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
@@ -181,12 +181,13 @@ case class ArrowBatchingOptions(
     maxBytesPerBatch: Long)
 
 object ArrowBatchingOptions {
-  def apply(schema: StructType): ArrowBatchingOptions = {
+  /** @param timeZoneId the time zone of the writer of the data source */
+  def apply(schema: StructType, timeZoneId: String): ArrowBatchingOptions = {
     val conf = SQLConf.get
     val maxRecords = conf.arrowMaxRecordsPerBatch
     ArrowBatchingOptions(
       schema,
-      conf.sessionLocalTimeZone,
+      timeZoneId,
       if (maxRecords > 0) maxRecords else Int.MaxValue,
       conf.arrowMaxBytesPerBatch)
   }

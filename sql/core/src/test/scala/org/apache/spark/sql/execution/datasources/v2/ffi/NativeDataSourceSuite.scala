@@ -740,7 +740,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "name" -> "native_sink",
         "msg" -> "injected failure in write"))
     // Spark aborted the first epoch, with a null message for its task, which did not commit.
-    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1")
+    assert(Files.readString(new File(dir, "_ABORTED_0").toPath) == "1,1,0")
     assert(!new File(dir, "_EPOCH_0").exists())
   }
 
@@ -1011,10 +1011,25 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       session.range(2).write.format("native_sink").option("path", dir.getPath)
         .option("states", "2").mode("append").save()
     }
-    // The rejected writer is aborted, with no messages, so that the library can undo what
-    // create_writer prepared, and released.
-    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "0")
+    // The rejected writer is aborted, as rejected and with no messages, so that the library can
+    // undo what create_writer prepared, and released.
+    assert(Files.readString(new File(dir, "_ABORTED").toPath) == "0,0,1")
     assert(new File(dir, "_CLOSED").isFile)
+    // So is the rejected writer of a micro-batch, with an epoch ID of -1, before its epoch.
+    val streamDir = Utils.createTempDir()
+    check("plan a write to", "native_sink", "create_writer") { session =>
+      val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+        .writeStream
+        .format("native_sink")
+        .option("path", streamDir.getPath)
+        .option("states", "2")
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+        .start()
+      try query.processAllAvailable() finally query.stop()
+    }
+    assert(Files.readString(new File(streamDir, "_ABORTED").toPath) == "0,0,1")
+    assert(!new File(streamDir, "_ABORTED_0").exists())
+    assert(new File(streamDir, "_CLOSED").isFile)
   }
 
   nativeTest("a scan whose planning failed fails again with the same error") {
