@@ -82,9 +82,24 @@ import org.apache.spark.sql.types._
  *
  * The schema of the datasource relation will be pruned in the [[SchemaPruning]] optimizer rule.
  */
-object NestedColumnAliasing {
+object NestedColumnAliasing extends AliasHelper {
 
   def unapply(plan: LogicalPlan): Option[LogicalPlan] = plan match {
+    case p @ Project(projectList, child: Project) if SQLConf.get.nestedSchemaPruningEnabled =>
+      lazy val childAliases = getAliasMap(child)
+      val attrToExtractValues = getAttributeToExtractValues(projectList, Nil).filter {
+        case (attr, fields) =>
+          // Keep array/map lookups and other computations at their original evaluation sites.
+          fields.forall(isNestedFieldAccess) && childAliases.get(attr).forall { alias =>
+            CollapseProject.canCollapseExpressions(fields, Seq(alias), alwaysInline = false)
+          }
+      }
+      if (attrToExtractValues.isEmpty) {
+        None
+      } else {
+        Some(rewritePlanWithAliases(p, attrToExtractValues))
+      }
+
     /**
      * This pattern is needed to support [[Filter]] plan cases like
      * [[Project]]->[[Filter]]->listed plan in [[canProjectPushThrough]] (e.g., [[Window]]).
@@ -178,19 +193,32 @@ object NestedColumnAliasing {
   }
 
   /**
-   * Replace the grandchildren of a plan with [[Project]]s of the nested fields as aliases,
+   * For a [[Project]], replace its selected outputs with nested field aliases.
+   * Otherwise, add grandchild [[Project]]s of the nested fields as aliases,
    * and replace the [[ExtractValue]] expressions with aliased attributes.
    */
   def replaceWithAliases(
       plan: LogicalPlan,
       nestedFieldToAlias: Map[Expression, Alias],
-      attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = {
-    plan.withNewChildren(plan.children.map { plan =>
-      Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
-    }).transformExpressions {
-      case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
-        nestedFieldToAlias(f.canonicalized).toAttribute
-    }
+      attrToAliases: AttributeMap[Seq[Alias]]): LogicalPlan = plan match {
+    case p: Project =>
+      // Replace selected struct outputs with extracted fields in the same project.
+      val newProjectList = p.projectList.flatMap { expression =>
+        attrToAliases.get(expression.toAttribute) match {
+          case Some(aliases) =>
+            CollapseProject.buildCleanedProjectList(aliases, Seq(expression))
+          case None => Seq(expression)
+        }
+      }
+      p.copy(projectList = newProjectList)
+
+    case _ =>
+      plan.withNewChildren(plan.children.map { plan =>
+        Project(plan.output.flatMap(a => attrToAliases.getOrElse(a, Seq(a))), plan)
+      }).transformExpressions {
+        case f: ExtractValue if nestedFieldToAlias.contains(f.canonicalized) =>
+          nestedFieldToAlias(f.canonicalized).toAttribute
+      }
   }
 
   /**
@@ -215,6 +243,13 @@ object NestedColumnAliasing {
     case _: Join => true
     case _: Window => true
     case _: Sort => true
+    case _ => false
+  }
+
+  private def isNestedFieldAccess(e: Expression): Boolean = e match {
+    case _: AttributeReference => true
+    case field: GetStructField => isNestedFieldAccess(field.child)
+    case field: GetArrayStructFields => isNestedFieldAccess(field.child)
     case _ => false
   }
 
