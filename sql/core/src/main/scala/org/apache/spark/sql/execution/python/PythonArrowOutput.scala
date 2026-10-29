@@ -369,9 +369,6 @@ class SliceBytesArrowOutputProcessorImpl(
 
   private[python] def batchBytes(root: VectorSchemaRoot): Long =
     SliceBytesArrowOutputProcessorImpl.batchBytes(root)
-
-  private[python] def canSlice(root: VectorSchemaRoot): Boolean =
-    root.getFieldVectors.asScala.forall(SliceBytesArrowOutputProcessorImpl.canSlice)
 }
 
 object SliceBytesArrowOutputProcessorImpl {
@@ -415,24 +412,6 @@ object SliceBytesArrowOutputProcessorImpl {
       val ownBytes = v.getBufferSize - children.map(_.getBufferSize).sum
       ownBytes + children.map(bufferSize).sum
     case v => v.getBufferSize
-  }
-
-  /**
-   * Returns whether `VectorSchemaRoot.slice` can slice `vector` and its children. Arrow computes
-   * some byte positions of a slice in int, so it throws, and leaks the vectors sliced so far, for
-   * a fixed-width vector of 2 GiB or more, a view vector with 2^27 rows or more, or a list vector
-   * with 2^29 - 1 rows or more. A batch that holds one is output whole instead.
-   */
-  private[python] def canSlice(vector: FieldVector): Boolean = {
-    val fits = vector match {
-      case v: BaseFixedWidthVector => v.getValueCount.toLong * v.getTypeWidth <= Int.MaxValue
-      case v: BaseVariableWidthViewVector =>
-        v.getValueCount.toLong * BaseVariableWidthViewVector.ELEMENT_SIZE <= Int.MaxValue
-      case v: ListVector =>
-        (v.getValueCount + 1L) * BaseRepeatedValueVector.OFFSET_WIDTH <= Int.MaxValue
-      case _ => true
-    }
-    fits && vector.getChildrenFromFields.asScala.forall(canSlice)
   }
 }
 

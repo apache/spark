@@ -314,27 +314,6 @@ class PythonArrowOutputSuite extends SparkFunSuite {
       })
     checkAllRowsOnceInOrder(batchSizes, output)
     assert(output.map(_._1.size) === batchSizes)
-
-    val allocator = ArrowUtils.rootAllocator.newChildAllocator("canSlice", 0, Long.MaxValue)
-    // Vectors that report many values without allocating them.
-    def fixed(rows: Int): FixedSizeBinaryVector =
-      new FixedSizeBinaryVector("f", allocator, 8) {
-        override def getValueCount: Int = rows
-      }
-    def list(rows: Int): ListVector = new ListVector(
-        "l", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
-      override def getValueCount: Int = rows
-    }
-    val vectors = Seq(fixed((1 << 28) - 1), fixed(1 << 28), list(1000), list(1 << 29))
-    try {
-      // `splitAndTransfer` computes `startIndex * 8` and `length * 8` of an int64 column, and
-      // the offset positions of a list column, in int.
-      assert(vectors.map(SliceBytesArrowOutputProcessorImpl.canSlice) ===
-        Seq(true, false, true, false))
-    } finally {
-      vectors.foreach(_.close())
-      allocator.close()
-    }
   }
 
   test("SPARK-60395: bufferSize matches getBufferSize of vectors below 2 GiB") {
@@ -402,7 +381,7 @@ class PythonArrowOutputSuite extends SparkFunSuite {
       val root = new VectorSchemaRoot(Seq[FieldVector](struct).asJava)
       assert(SliceBytesArrowOutputProcessorImpl.batchBytes(root) === expected)
       // Arrow cannot slice the int64 child of 2 GiB, which only the check of the children sees.
-      assert(!SliceBytesArrowOutputProcessorImpl.canSlice(struct))
+      assert(!BaseSliceArrowOutputProcessor.canSlice(struct))
     } finally {
       struct.close()
       allocator.close()

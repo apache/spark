@@ -5582,8 +5582,9 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record. A batch that Arrow cannot slice is sent " +
-        "as a whole. applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
+        "Spark will create a batch with one record. A batch that Arrow cannot slice, e.g. one " +
+        "with a fixed-width column of 2 GiB or more, is sent as a whole. " +
+        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
         "take columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
