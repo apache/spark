@@ -35,14 +35,11 @@ import org.apache.spark.sql.execution.UnaryExecNode
  */
 trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   protected val func: Expression
-  // The timing decision reads this during trait initialization.
-  protected def pythonEvalType: Int
+  protected val pythonEvalType: Int
 
   protected val isBarrier: Boolean
 
   protected val profile: Option[ResourceProfile]
-
-  override protected def pythonTimingEvalType: Option[Int] = Some(pythonEvalType)
 
   override def producedAttributes: AttributeSet = AttributeSet(output)
 
@@ -57,7 +54,7 @@ trait MapInBatchExec extends UnaryExecNode with PythonSQLMetrics {
   override def outputPartitioning: Partitioning = child.outputPartitioning
 
   override protected def doExecute(): RDD[InternalRow] = {
-    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf, pythonTimingGate)
+    val pythonRunnerConf = ArrowPythonRunner.getPythonRunnerConfMap(conf)
     val pythonUDF = func.asInstanceOf[PythonUDF]
     val pythonFunction = pythonUDF.func
     val chainedFunc = Seq((ChainedPythonFunctions(Seq(pythonFunction)), pythonUDF.resultId.id))

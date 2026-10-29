@@ -622,7 +622,7 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                         self.assertEqual(phases[1:4], [0, 0, 0])
                     self.assertLessEqual(sum(phases), metrics.apply("pythonProcessingTime").value())
 
-    def test_phase_metrics_disabled_by_default(self):
+    def test_phase_metrics_not_collected_by_default(self):
         add_one = udf(lambda value: value + 1, "long", useArrow=True)
 
         def run():
@@ -651,11 +651,11 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
             "pythonNumTimedBatches",
         )
         for name in detailed_metrics:
-            self.assertFalse(metrics.contains(name), name)
+            self.assertEqual(metrics.apply(name).value(), 0, name)
         self.assertTrue(metrics.contains("pythonProcessingTime"))
         self.assertTrue(metrics.contains("pythonNumPipelinedTasks"))
 
-    def test_phase_metrics_on_materialized_plan_after_config_change(self):
+    def test_phase_metrics_follow_execution_config(self):
         add_one = udf(lambda value: value + 1, "long", useArrow=True)
         timing_conf = "spark.sql.execution.pythonUDF.detailedTiming.enabled"
 
@@ -669,12 +669,12 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                             self.assertEqual(plan.children().size(), 1)
                             plan = plan.children().apply(0)
                         metrics = plan.metrics()
-                        self.assertEqual(metrics.contains("pythonNumTimingReports"), enabled)
+                        self.assertTrue(metrics.contains("pythonNumTimingReports"))
                     with self.sql_conf({timing_conf: str(not enabled).lower()}):
                         self.assertEqual([row[0] for row in result.collect()], [1, 2])
-                    if enabled:
-                        self.assertEqual(metrics.apply("pythonNumTimingReports").value(), 1)
-                        self.assertEqual(metrics.apply("pythonNumTimedBatches").value(), 1)
+                    self.assertEqual(
+                        metrics.apply("pythonNumTimingReports").value(), int(not enabled)
+                    )
 
     def test_phase_metrics_disabled_for_unsupported_handlers(self):
         phase_names = (
@@ -713,6 +713,13 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                 "spark.sql.adaptive.enabled": "false",
             }
         ):
+            arrow_runner = self.spark._jvm.org.apache.spark.sql.execution.python.ArrowPythonRunner
+            runner_conf = arrow_runner.getPythonRunnerConfMap(
+                self.spark._jsparkSession.sessionState().conf()
+            )
+            self.assertEqual(
+                runner_conf.apply("spark.sql.execution.pythonUDF.detailedTiming.enabled"), "true"
+            )
             for name, build in (
                 ("legacy", lambda: data.select(udf(scalar, "long", useArrow=True)("id"))),
                 ("scalar pandas", lambda: data.select(pandas_udf(scalar, "long")("id"))),
@@ -734,8 +741,11 @@ class ArrowPythonUDFNonLegacyTests(ArrowPythonUDFNonLegacyTestsMixin, ReusedSQLT
                     plan = result._jdf.queryExecution().executedPlan()
 
                     def check_plan(node):
-                        for metric in phase_names:
-                            self.assertFalse(node.metrics().contains(metric), (name, metric))
+                        if node.metrics().contains("pythonProcessingTime"):
+                            for metric in phase_names:
+                                self.assertEqual(
+                                    node.metrics().apply(metric).value(), 0, (name, metric)
+                                )
                         for i in range(node.children().size()):
                             check_plan(node.children().apply(i))
 
