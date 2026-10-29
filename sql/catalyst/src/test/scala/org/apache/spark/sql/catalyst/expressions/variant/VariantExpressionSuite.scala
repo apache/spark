@@ -1455,6 +1455,19 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("canonicalize_variant duplicate keys") {
+    // Both fields reference the dictionary key "a".
+    val input = new VariantVal(
+      Array[Byte](objectHeader(false, 1, 1), 2, 0, 0, 0, 2, 4,
+        primitiveHeader(INT1), 1, primitiveHeader(INT1), 2),
+      Array[Byte](VERSION, 1, 0, 1, 'a'.toByte))
+    checkErrorInExpression[SparkRuntimeException](
+      CanonicalizeVariant(BoundReference(0, VariantType, nullable = true)),
+      InternalRow(input),
+      "VARIANT_DUPLICATE_KEY",
+      Map("key" -> "a"))
+  }
+
   test("canonicalize_variant size limit") {
     // Three elements share a 6 MiB string; writing each payload exceeds the 16 MiB limit.
     val payload = Array[Byte](primitiveHeader(LONG_STR), 0, 0, 0x60, 0) ++

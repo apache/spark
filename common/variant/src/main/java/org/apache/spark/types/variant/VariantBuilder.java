@@ -718,6 +718,7 @@ public class VariantBuilder {
   private void buildCanonicalized(byte[] value, byte[] metadata, int pos) {
     int offsetSize = getMetadataOffsetSize(metadata);
     int numKeys = getMetadataNumKeys(metadata, offsetSize);
+    // Validate metadata table bounds before allocating the key-ID mapping.
     getMetadataStringStart(metadata, numKeys, offsetSize);
     int[] canonicalIds = new int[numKeys];
     Arrays.fill(canonicalIds, -1);
@@ -1652,7 +1653,8 @@ public class VariantBuilder {
   private int writePos = 0;
   // Map keys to a monotonically increasing id.
   private final HashMap<String, Integer> dictionary = new HashMap<>();
-  // Store all keys in `dictionary` in the order of id.
+  // Store key bytes in ID order. Canonicalization populates this directly,
+  // without populating `dictionary`, to preserve the original key bytes.
   private final ArrayList<byte[]> dictionaryKeys = new ArrayList<>();
   private final boolean allowDuplicateKeys;
   // When true, JSON string contents are validated to be well-formed Unicode (RFC 8259 sec 7).

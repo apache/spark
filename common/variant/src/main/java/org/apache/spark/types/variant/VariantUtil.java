@@ -730,18 +730,18 @@ public class VariantUtil {
   public static String getMetadataKey(byte[] metadata, int id) {
     // Dictionary keys are UTF-8 encoded (see `VariantBuilder.addKey`). Decode with UTF-8
     // explicitly rather than relying on the platform-dependent JVM default charset.
-    return handleMetadataKey(metadata, id, (start, length) ->
-        new String(metadata, start, length, StandardCharsets.UTF_8));
+    return handleMetadataKey(metadata, id, (bytes, start, length) ->
+        new String(bytes, start, length, StandardCharsets.UTF_8));
   }
 
   // Read the original dictionary key bytes without UTF-8 decoding or replacement.
   static byte[] getMetadataKeyBytes(byte[] metadata, int id) {
-    return handleMetadataKey(metadata, id, (start, length) ->
-        Arrays.copyOfRange(metadata, start, start + length));
+    return handleMetadataKey(metadata, id, (bytes, start, length) ->
+        Arrays.copyOfRange(bytes, start, start + length));
   }
 
   private interface MetadataKeyHandler<T> {
-    T apply(int start, int length);
+    T apply(byte[] metadata, int start, int length);
   }
 
   // Read and validate a dictionary key range before passing it to `handler`.
@@ -755,6 +755,6 @@ public class VariantUtil {
     int nextOffset = readUnsigned(metadata, 1 + (id + 2) * offsetSize, offsetSize);
     if (offset > nextOffset) throw malformedVariant();
     checkIndex(stringStart + nextOffset - 1, metadata.length);
-    return handler.apply(stringStart + offset, nextOffset - offset);
+    return handler.apply(metadata, stringStart + offset, nextOffset - offset);
   }
 }
