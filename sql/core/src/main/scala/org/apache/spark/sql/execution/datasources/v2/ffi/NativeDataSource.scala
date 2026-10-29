@@ -36,7 +36,7 @@ import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperati
 import org.apache.spark.internal.Logging
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
-import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, SupportsArrowStreamRead}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
@@ -296,17 +296,29 @@ class NativeBatchPlanner(
   }
 }
 
-/** Reads the partitions of a planned batch scan of a native data source, on the executors. */
+/**
+ * Reads the partitions of a planned batch scan of a native data source, on the executors. An
+ * engine can also get the Arrow C stream of a partition from it, see [[SupportsArrowStreamRead]].
+ */
 class NativePartitionReaderFactory(
     location: NativeLibraryLocation,
     name: String,
     readerState: Array[Byte],
     readSchema: StructType,
     timeZoneId: String)
-  extends ColumnarOnlyPartitionReaderFactory {
+  extends ColumnarOnlyPartitionReaderFactory with SupportsArrowStreamRead {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(location, name, NativeLibrary.READ_BATCH, readerState,
       partition.asInstanceOf[NativeInputPartition].bytes, readSchema, timeZoneId)
+  }
+
+  override def openArrowStream(partition: InputPartition, streamAddress: Long): AutoCloseable = {
+    val task = NativePartitionReader.openStream(location, name, NativeLibrary.READ_BATCH,
+      readerState, partition.asInstanceOf[NativeInputPartition].bytes, readSchema, timeZoneId,
+      streamAddress)
+    // In case the caller does not close it, which must release the stream before then.
+    Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => task.close()))
+    task
   }
 }
 
@@ -518,7 +530,8 @@ class NativePartitionReader(
   private var batch: ColumnarBatch = _
 
   try {
-    openStream()
+    task = NativePartitionReader.openStream(location, name, kind, readerState, partition, schema,
+      timeZoneId, stream.memoryAddress())
     root = VectorSchemaRoot.create(importSchema(), allocator)
     checkSchema()
     batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
@@ -528,25 +541,7 @@ class NativePartitionReader(
       throw e
   }
 
-  private def openStream(): Unit = {
-    val library = NativeLibraries.get(location)
-    task = NativeTask.create()
-    NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
-      call(name, "read") {
-        library.read(task, kind, schemaAddress, readerState, partition, stream.memoryAddress())
-      }
-    }
-  }
-
   private def importSchema(): Schema = {
-    // Arrow calls the callbacks of the stream without checking them, and calling NULL would crash
-    // the JVM.
-    val snapshot = stream.snapshot()
-    if (snapshot.release == 0 || snapshot.get_schema == 0 || snapshot.get_next == 0 ||
-        snapshot.get_last_error == 0) {
-      throw error(name, "read", "The library did not initialize the stream, or a callback of " +
-        "the stream is NULL.")
-    }
     val arrowSchema = ArrowSchema.allocateNew(allocator)
     try {
       call(name, "read")(stream.getSchema(arrowSchema))
@@ -868,6 +863,55 @@ class NativePartitionReader(
         task.close()
       }
       Utils.tryLogNonFatalError(allocator.close())
+    }
+  }
+}
+
+object NativePartitionReader {
+  import NativeCalls._
+
+  /**
+   * Initializes the Arrow C stream at `streamAddress`, whose release callback is NULL, with the
+   * data of a partition, by calling read of the library in the running task. Returns the context
+   * of the task, which the library may use until the stream is released: it is closed then. If
+   * this fails, the stream is released.
+   */
+  def openStream(
+      location: NativeLibraryLocation,
+      name: String,
+      kind: Int,
+      readerState: Array[Byte],
+      partition: Array[Byte],
+      schema: StructType,
+      timeZoneId: String,
+      streamAddress: Long): NativeLibrary.Task = {
+    val library = NativeLibraries.get(location)
+    val stream = ArrowArrayStream.wrap(streamAddress)
+    val task = NativeTask.create()
+    try {
+      NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
+        call(name, "read") {
+          library.read(task, kind, schemaAddress, readerState, partition, streamAddress)
+        }
+      }
+      // Arrow calls the callbacks of the stream without checking them, and calling NULL would
+      // crash the JVM.
+      val snapshot = stream.snapshot()
+      if (snapshot.release == 0 || snapshot.get_schema == 0 || snapshot.get_next == 0 ||
+          snapshot.get_last_error == 0) {
+        throw error(name, "read", "The library did not initialize the stream, or a callback of " +
+          "the stream is NULL.")
+      }
+      task
+    } catch {
+      case e: Throwable =>
+        // Releases the stream, if the library initialized it, before the task that it may use,
+        // and marks it released in case its release callback did not.
+        Utils.tryWithSafeFinally {
+          stream.release()
+          stream.markReleased()
+        }(task.close())
+        throw e
     }
   }
 }

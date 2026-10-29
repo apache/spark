@@ -29,6 +29,8 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.arrow.c.{ArrowArrayStream, Data}
+import org.apache.arrow.vector.BigIntVector
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
@@ -36,9 +38,10 @@ import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
+import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
@@ -47,7 +50,7 @@ import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.streaming.{StreamingQuery, Trigger}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
-import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
@@ -1214,6 +1217,76 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       .mode("append")
       .save()
     check(writeTasks)
+  }
+
+  nativeTest("open the partitions of a batch scan as Arrow C streams") {
+    val session = newSession(defaultPackage)
+    // The reader factory and the partitions of the batch scan of a query, which an engine gets
+    // from its plan.
+    def plannedScan(df: DataFrame): (SupportsArrowStreamRead, Seq[InputPartition]) = {
+      val scan = df.queryExecution.executedPlan.collectFirst { case s: BatchScanExec => s }.get
+      (scan.readerFactory.asInstanceOf[SupportsArrowStreamRead], scan.inputPartitions)
+    }
+    val taskDir = Utils.createTempDir()
+    val (factory, partitions) =
+      plannedScan(range(session, "end" -> "6", "task_path" -> taskDir.getPath).select("id"))
+    assert(partitions.length == 2)
+    // An engine opens the stream of each partition in its task, and reads it from another thread.
+    val ids = session.sparkContext.parallelize(partitions, partitions.length).mapPartitions {
+      partition =>
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+        val stream = ArrowArrayStream.allocateNew(allocator)
+        try {
+          val handle = factory.openArrowStream(partition.next(), stream.memoryAddress())
+          try {
+            ThreadUtils.runInNewThread("engine") {
+              // Moves the stream, which closing the reader releases.
+              val reader = Data.importArrayStream(allocator, stream)
+              try {
+                val ids = ArrayBuffer.empty[Long]
+                while (reader.loadNextBatch()) {
+                  val root = reader.getVectorSchemaRoot
+                  val vector = root.getVector("id").asInstanceOf[BigIntVector]
+                  (0 until root.getRowCount).foreach(i => ids += vector.get(i))
+                }
+                ids.toSeq
+              } finally {
+                reader.close()
+              }
+            }.iterator
+          } finally {
+            handle.close()
+          }
+        } finally {
+          stream.close()
+          allocator.close()
+        }
+    }.collect()
+    assert(ids.sorted.toSeq == (0L until 6L))
+    // The library got the context of each task.
+    assert(taskDir.list().toSet == Set("0", "1"))
+
+    // If it fails, the stream is released.
+    Seq(
+      "open" -> "injected failure in open",
+      "uninitialized" ->
+        "The library did not initialize the stream, or a callback of the stream is NULL."
+    ).foreach { case (fail, msg) =>
+      val (failing, failingPartitions) = plannedScan(range(session, "fail" -> fail))
+      val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
+      try {
+        val e = intercept[Exception] {
+          failing.openArrowStream(failingPartitions.head, stream.memoryAddress())
+        }
+        checkError(
+          exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+          condition = "NATIVE_DATA_SOURCE_ERROR",
+          parameters = Map("action" -> "read", "name" -> "native_range", "msg" -> msg))
+        assert(stream.snapshot().release == 0)
+      } finally {
+        stream.close()
+      }
+    }
   }
 
   nativeTest("tell a read that its task was killed") {

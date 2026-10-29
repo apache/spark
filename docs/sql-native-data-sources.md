@@ -233,6 +233,19 @@ their memory, and at least 384 MiB, by default. Increase it for libraries that u
 bound the memory that a library uses, for example with the size of its batches: on YARN or
 Kubernetes, an executor that uses more memory than it requested is killed.
 
+### Native Execution Engines
+
+An engine that runs queries in native code within Spark, such as Apache Gluten or Apache
+DataFusion Comet, can read a native data source without Spark importing its data on the JVM. The
+reader factory of a batch scan of a native data source implements the developer API
+`org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
+`openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
+`read` returns. The engine releases the stream, and then closes the handle that `openArrowStream`
+returns, which frees the `SparkDsTaskContext` of the read; Spark also closes it when the task
+completes. The callbacks of the stream can be called from any thread, but never concurrently.
+Spark does not check the arrays of such a stream, unlike the streams that it reads itself, so the
+engine checks what its import of the arrays requires.
+
 ## Finding Native Data Sources
 
 When no Java or Python data source has the name that a query uses, Spark looks for a native data

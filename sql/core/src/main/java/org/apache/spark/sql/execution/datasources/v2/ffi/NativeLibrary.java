@@ -978,7 +978,9 @@ final class NativeLibrary {
 
   /**
    * The {@code SparkDsTaskContext} of a task that reads a partition or writes data. The reader or
-   * the data writer closes it once the library no longer uses it, which frees it.
+   * the data writer closes it once the library no longer uses it, which frees it. It can be closed
+   * from any thread: the engine that got the stream of a read with
+   * {@code SupportsArrowStreamRead} closes it, and so does the end of the task.
    */
   static final class Task implements AutoCloseable {
     final long address;
@@ -1004,7 +1006,7 @@ final class NativeLibrary {
     }
 
     @Override
-    public void close() {
+    public synchronized void close() {
       if (!closed) {
         closed = true;
         // A call to is_interrupted that is still running only looks the address up.
