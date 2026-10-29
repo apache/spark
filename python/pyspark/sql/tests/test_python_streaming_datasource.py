@@ -307,6 +307,51 @@ class BasePythonStreamingDataSourceTestsMixin:
         self.assertEqual(end, start)
         self.assertEqual(len(wrapper.cache), 0)
 
+    def test_simple_stream_reader_returns_list(self):
+        """read() returning a list instead of an iterator is handled like an iterator."""
+        from pyspark.sql.datasource_internal import _SimpleStreamReaderWrapper
+
+        class ListReader(SimpleDataSourceStreamReader):
+            def __init__(self, rows, advance):
+                self.rows = rows
+                self.advance = advance
+
+            def initialOffset(self):
+                return {"offset": 0}
+
+            def read(self, start: dict):
+                end = {"offset": start["offset"] + len(self.rows)} if self.advance else start
+                return (list(self.rows), end)
+
+            def readBetweenOffsets(self, start: dict, end: dict):
+                return iter([])
+
+            def commit(self, end: dict):
+                pass
+
+        start = {"offset": 0}
+
+        # Non-empty list with an advanced end offset is cached and readable.
+        wrapper = _SimpleStreamReaderWrapper(ListReader([(0,), (1,)], advance=True))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, {"offset": 2})
+        self.assertEqual(list(wrapper.getCache(start, end)), [(0,), (1,)])
+
+        # Empty list with end == start is allowed and not cached.
+        wrapper = _SimpleStreamReaderWrapper(ListReader([], advance=False))
+        end = wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(end, start)
+        self.assertEqual(len(wrapper.cache), 0)
+
+        # Non-empty list with end == start raises the offset validation error.
+        wrapper = _SimpleStreamReaderWrapper(ListReader([(0,)], advance=False))
+        with self.assertRaises(PySparkException) as cm:
+            wrapper.latestOffset(start, ReadAllAvailable())
+        self.assertEqual(
+            cm.exception.getCondition(),
+            "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
+        )
+
     def test_stream_writer(self):
         input_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_input")
         output_dir = tempfile.TemporaryDirectory(prefix="test_data_stream_write_output")
