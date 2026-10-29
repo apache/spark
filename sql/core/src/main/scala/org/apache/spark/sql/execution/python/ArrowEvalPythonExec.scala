@@ -89,10 +89,8 @@ case class ArrowEvalPythonExec(
     throw SparkException.internalError(s"Unexpected eval type $evalType")
   }
 
-  override protected def pythonTimingEvalType: Option[Int] = Some(evalType)
-
   private def pythonRunnerConfMap: Map[String, String] =
-    ArrowPythonRunner.getPythonRunnerConfMap(conf, pythonTimingGate)
+    ArrowPythonRunner.getPythonRunnerConfMap(conf)
 
   private[this] val jobArtifactUUID = JobArtifactSet.getCurrentJobArtifactState.map(_.uuid)
   private[this] val sessionUUID = {
