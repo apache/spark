@@ -40,7 +40,9 @@
 //                   the file <wait_for_interrupt> and fails. With the option "slow_read", the
 //                   get_next that creates the file <slow_read>.reading, the first one, then waits
 //                   until the file <slow_read>.continue exists, for at most a minute; with the
-//                   option "fail" set to "slow_read", each get_next then fails. Releasing
+//                   option "fail" set to "slow_read", each get_next then fails. After the wait,
+//                   it creates the file <slow_read>.interrupted with what is_interrupted returns
+//                   for the task context, "true" for one that Spark freed meanwhile. Releasing
 //                   the stream creates the file <slow_read>, which says whether Spark released it
 //                   "during get_next", which it must not, or "after get_next" otherwise.
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
@@ -773,6 +775,9 @@ struct Stream {
   std::string last_error;
   std::string slow_read;
   bool fail_slow_read;
+  // task->is_interrupted, kept to call it without reading the task context, which a regression
+  // of Spark could free during get_next.
+  bool (*is_interrupted)(const SparkDsTaskContext*);
   std::atomic<bool> in_get_next{false};
 };
 
@@ -825,6 +830,11 @@ int streamGetNext(ArrowArrayStream* stream, ArrowArray* out) {
         for (int i = 0; i < 6000 && stat(go.c_str(), &info) != 0; i++) {
           std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
+        // The task context must still be valid, as a library that checks it here expects. Spark
+        // only looks its address up, and answers true for a context that it freed, unless a new
+        // one got the same address, which no other read in these tests creates meanwhile.
+        bool interrupted = state->is_interrupted(state->task);
+        writeFile(state->slow_read + ".interrupted", interrupted ? "true" : "false");
       }
       if (state->fail_slow_read) {
         state->last_error = "injected failure after a slow get_next";
@@ -1171,7 +1181,7 @@ int readPartition(const SparkDsTaskContext* task, const uint8_t* reader_state,
                                       get(state, "null_rows", ""), task,
                                       get(state, "wait_for_interrupt", ""), "",
                                       get(state, "slow_read", ""),
-                                      get(state, "fail", "") == "slow_read"};
+                                      get(state, "fail", "") == "slow_read", task->is_interrupted};
   });
 }
 

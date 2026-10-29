@@ -1204,6 +1204,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
     }
+    // The task context was still valid once get_next continued: Spark answers that a context
+    // that it freed is interrupted, and this task was not.
+    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
   }
 
   nativeTest("close a reader while another thread reads it") {
@@ -1232,6 +1235,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
           case e: ExecutionException => Left(e.getCause)
         }
         assert(Files.readString(marker.toPath) == "after get_next")
+        // The task context was still valid once get_next continued, as in the test above.
+        assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
         // A reader that was closed reads nothing more, and closing it again does not fail.
         assert(!reader.next())
         reader.close()

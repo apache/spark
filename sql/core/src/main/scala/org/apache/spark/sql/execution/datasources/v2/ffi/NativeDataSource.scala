@@ -473,9 +473,11 @@ object NativeWriterCommitMessage {
  * A reader can be closed while another thread is in [[next]]: some operators read their input on
  * a thread of their own that the task does not wait for, such as the stdin writer thread of
  * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
- * not get the release of the stream during get_next, and the task must stay valid until then, so
- * [[close]] then leaves the release to [[next]], once get_next returns, rather than wait for it
- * and keep the task from completing. [[next]] returns false once the reader is closed.
+ * not get the release of the stream during get_next, and the task context must stay valid until
+ * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
+ * for it and keep the task from completing. That [[next]] then returns false, or throws the error
+ * of its read. A [[next]] called once the reader is closed returns false without calling the
+ * library.
  */
 class NativePartitionReader(
     location: NativeLibraryLocation,
