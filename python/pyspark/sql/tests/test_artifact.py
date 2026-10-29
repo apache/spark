@@ -16,6 +16,7 @@
 #
 import os
 import tempfile
+from pathlib import Path
 
 from pyspark.errors import PySparkRuntimeError
 from pyspark.sql.functions import assert_true, lit, udf
@@ -103,6 +104,47 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                 exception=pe.exception,
                 errorClass="DUPLICATED_ARTIFACT",
                 messageParameters={"normalized_path": pyfile_path},
+            )
+
+    def test_add_native_data_source_package(self):
+        # A new session, so that the packages do not affect the other tests.
+        spark = self.spark.newSession()
+        with tempfile.TemporaryDirectory(prefix="test_add_native_data_source_package") as d:
+
+            def new_file(name):
+                file_path = os.path.join(d, name)
+                with open(file_path, "wb") as f:
+                    f.write(name.encode("utf-8"))
+                return file_path
+
+            spark.addArtifact(new_file("my_source.sparkpkg"))
+            # Packages are added to the session whatever the flags, as with Spark Connect, also
+            # together with other files.
+            spark.addArtifact(new_file("my_file_source.sparkpkg"), file=True)
+            spark.addArtifacts(new_file("my_other_source.sparkpkg"), new_file("other.txt"))
+            # A URI, and paths relative to the working directory of Python, which is not the
+            # one of the JVM, also with a colon, which is not the scheme of a URI.
+            spark.addArtifact(Path(new_file("my_uri_source.sparkpkg")).as_uri())
+            new_file("my_relative_source.sparkpkg")
+            new_file("my_source:1.sparkpkg")
+            cwd = os.getcwd()
+            os.chdir(d)
+            try:
+                spark.addArtifact("my_relative_source.sparkpkg")
+                spark.addArtifact("my_source:1.sparkpkg")
+            finally:
+                os.chdir(cwd)
+            packages = spark._jsparkSession.artifactManager().getNativeDataSourcePackages()._1()
+            self.assertEqual(
+                sorted(packages.apply(i).getName() for i in range(packages.size())),
+                [
+                    "my_file_source.sparkpkg",
+                    "my_other_source.sparkpkg",
+                    "my_relative_source.sparkpkg",
+                    "my_source.sparkpkg",
+                    "my_source:1.sparkpkg",
+                    "my_uri_source.sparkpkg",
+                ],
             )
 
     def test_add_zipped_package(self):

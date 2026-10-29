@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.analysis
 
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, AttributeReference, AttributeSet, Exists, Expression, IsNotNull, Literal, MetadataAttribute, MonotonicallyIncreasingID, OuterReference, PredicateHelper, SubqueryExpression}
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
@@ -248,8 +248,10 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
       source: LogicalPlan,
       cond: Expression): Expression = {
 
+    // the condition may also refer to metadata columns of the target table
+    val relationAttrs = AttributeSet(relation.output ++ relation.metadataOutput)
     val condWithOuterRefs = cond transformUp {
-      case attr: Attribute if relation.outputSet.contains(attr) => OuterReference(attr)
+      case attr: Attribute if relationAttrs.contains(attr) => OuterReference(attr)
       case other => other
     }
     val outerRefs = condWithOuterRefs.collect {

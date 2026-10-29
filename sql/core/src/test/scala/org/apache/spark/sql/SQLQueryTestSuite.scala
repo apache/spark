@@ -64,12 +64,6 @@ import org.apache.spark.util.Utils
  *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.SQLQueryTestSuite -- -z describe.sql"
  * }}}
  *
- * The commands above exclude inputs under "streaming/". To re-generate their execution and
- * analyzer golden files, run:
- * {{{
- *   SPARK_GENERATE_GOLDEN_FILES=1 build/sbt "sql/testOnly org.apache.spark.sql.StreamingSQLQueryTestSuite"
- * }}}
- *
  * The format for input files is simple:
  *  1. A list of SQL queries separated by semicolons by default. If the semicolon cannot effectively
  *     separate the SQL queries in the test file(e.g. bracketed comments), please use
@@ -193,8 +187,7 @@ class SQLQueryTestSuite extends SharedSparkSession
     if (TestUtils.testCommandAvailable("/bin/bash")) Nil else Set("transform.sql")
   /** List of test cases to ignore, in lower cases. */
   protected def ignoreList: Set[String] = Set(
-    "ignored.sql", // Do NOT remove this one. It is here to test the ignore functionality.
-    "streaming/" // Handled by StreamingSQLQueryTestSuite.
+    "ignored.sql" // Do NOT remove this one. It is here to test the ignore functionality.
   ) ++ otherIgnoreList
   /** List of test cases that require TPCDS table schemas to be loaded. */
   private def requireTPCDSCases: Seq[String] = Seq("pipe-operators.sql")
@@ -373,27 +366,6 @@ class SQLQueryTestSuite extends SharedSparkSession
     localSparkSession
   }
 
-  protected def parsePlan(session: SparkSession, sql: String): Option[LogicalPlan] = {
-    session.withActive {
-      try {
-        Some(session.sessionState.sqlParser.parsePlan(sql))
-      } catch {
-        case _: ParseException => None
-      }
-    }
-  }
-
-  /**
-   * Returns a per-test executor for SQL statements handled by a specialized subclass. The plan
-   * supplier is lazy so ordinary statements are not parsed an extra time.
-   */
-  protected def createCustomQueryExecutor(
-      session: SparkSession,
-      testCase: TestCase,
-      sparkConfigSet: Seq[(String, String)],
-      analyzerOnly: Boolean):
-      (String, () => Option[LogicalPlan]) => Option[(String, Seq[String])] = (_, _) => None
-
   /**
    * Runs queries in debug mode. Only commands and --DEBUG-marked queries are executed.
    * Failed debug queries print the full error stacktrace. Results are compared against
@@ -410,8 +382,6 @@ class SQLQueryTestSuite extends SharedSparkSession
     val localSparkSession = setupLocalSession(testCase, sparkConfigSet)
     val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
     val segmentsPerQuery = 3
-    val executeCustomQuery =
-      createCustomQueryExecutor(localSparkSession, testCase, sparkConfigSet, analyzerOnly = false)
 
     val goldenFileExists = new File(testCase.resultFile).exists()
     val segments = if (goldenFileExists) {
@@ -421,13 +391,15 @@ class SQLQueryTestSuite extends SharedSparkSession
     }
 
     queriesWithDebug.zipWithIndex.foreach { case ((sql, isDebug), i) =>
-      lazy val parsedPlan = parsePlan(localSparkSession, sql)
-      val customQueryExecuted = executeCustomQuery(sql, () => parsedPlan).nonEmpty
-      lazy val isCommand = parsedPlan.exists(_.isInstanceOf[Command])
+      val isCommand = try {
+        localSparkSession.sessionState.sqlParser.parsePlan(sql).isInstanceOf[Command]
+      } catch {
+        case _: ParseException => false
+      }
 
-      if (!customQueryExecuted && isCommand) {
+      if (isCommand) {
         localSparkSession.sql(sql).collect()
-      } else if (!customQueryExecuted && isDebug) {
+      } else if (isDebug) {
         // Capture exception stacktrace if the query fails.
         var exceptionTrace: Option[String] = None
         val (schema, result) = handleExceptions {
@@ -511,29 +483,21 @@ class SQLQueryTestSuite extends SharedSparkSession
     // This does not isolate catalog changes.
     val localSparkSession = setupLocalSession(testCase, sparkConfigSet)
     val lowercaseTestCase = testCase.name.toLowerCase(Locale.ROOT)
-    val analyzerOnly = testCase.isInstanceOf[AnalyzerTest]
-    val executeCustomQuery =
-      createCustomQueryExecutor(localSparkSession, testCase, sparkConfigSet, analyzerOnly)
 
     // Run the SQL queries preparing them for comparison.
     val outputs: Seq[QueryTestOutput] = queries.map { sql =>
-      lazy val parsedPlan = parsePlan(localSparkSession, sql)
       testCase match {
         case _: AnalyzerTest =>
-          val (_, output) = handleExceptions {
-            executeCustomQuery(sql, () => parsedPlan)
-              .getOrElse(getNormalizedQueryAnalysisResult(localSparkSession, sql))
-          }
+          val (_, output) =
+            handleExceptions(getNormalizedQueryAnalysisResult(localSparkSession, sql))
           // We do some query canonicalization now.
           AnalyzerOutput(
             sql = sql,
             schema = None,
             output = normalizeTestResults(output.mkString("\n")))
         case _ =>
-          val (schema, output) = handleExceptions {
-            executeCustomQuery(sql, () => parsedPlan)
-              .getOrElse(getNormalizedQueryExecutionResult(localSparkSession, sql))
-          }
+          val (schema, output) =
+            handleExceptions(getNormalizedQueryExecutionResult(localSparkSession, sql))
           // We do some query canonicalization now.
           val executionOutput = ExecutionOutput(
             sql = sql,
@@ -612,9 +576,7 @@ class SQLQueryTestSuite extends SharedSparkSession
     file.getAbsolutePath.replace(inputFilePath, goldenFilePath) + ".out"
   }
 
-  protected lazy val listTestCases: Seq[TestCase] = createTestCases()
-
-  protected def createTestCases(): Seq[TestCase] = {
+  protected lazy val listTestCases: Seq[TestCase] = {
     listFilesRecursively(new File(inputFilePath)).flatMap { file =>
       var resultFile = resultFileForInputFile(file)
       var analyzerResultFile =
