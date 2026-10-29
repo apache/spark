@@ -21,6 +21,7 @@ import org.apache.spark.SparkUnsupportedOperationException
 import org.apache.spark.sql.{AnalysisException, SQLContext}
 import org.apache.spark.sql.catalyst.analysis.{AnalysisTest, NamedRelation}
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, EqualTo, Literal}
+import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
@@ -28,12 +29,13 @@ import org.apache.spark.sql.classic.DataFrame
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability._
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, TableCapabilityCheck}
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation,
+  PrepareExternalLookupJoin, TableCapabilityCheck}
 import org.apache.spark.sql.execution.streaming.{Offset, Source}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingRelation
 import org.apache.spark.sql.sources.StreamSourceProvider
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.types.{IntegerType, LongType, StringType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
@@ -60,6 +62,46 @@ class TableCapabilityCheckSuite extends AnalysisTest with SharedSparkSession {
       TableCapabilityCheck.apply(
         DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap)
       )
+    }
+    assert(e.message.contains("does not support batch scan"))
+  }
+
+  test("batch scan: external lookup capability defers the batch read check to planning") {
+    val relation = DataSourceV2Relation.create(
+      CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap)
+    TableCapabilityCheck.apply(relation)
+    val e = intercept[AnalysisException] {
+      PrepareExternalLookupJoin(relation)
+    }
+    assert(e.message.contains("does not support batch scan"))
+  }
+
+  test("external lookup relation: check external lookup capability") {
+    val lookupRelation = ExternalLookupRelation(DataSourceV2Relation.create(
+      CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap))
+    TableCapabilityCheck.apply(lookupRelation)
+
+    val invalidLookupRelation = ExternalLookupRelation(DataSourceV2Relation.create(
+      CapabilityTable(BATCH_READ), None, None, emptyMap))
+    val e = intercept[AnalysisException] {
+      TableCapabilityCheck.apply(invalidLookupRelation)
+    }
+    assert(e.message.contains("does not support batch scan"))
+  }
+
+  test("external lookup join: the lookup side still requires a read capability") {
+    val left = LocalRelation(AttributeReference("id", IntegerType)())
+    val lookupOnly = DataSourceV2Relation.create(
+      CapabilityTable(EXTERNAL_LOOKUP), None, None, emptyMap)
+    TableCapabilityCheck.apply(ExternalLookupJoin(
+      left, lookupOnly, Inner, Some(Literal(true)),
+      lookupOnly.output))
+
+    val noCapability = DataSourceV2Relation.create(CapabilityTable(), None, None, emptyMap)
+    val e = intercept[AnalysisException] {
+      TableCapabilityCheck.apply(ExternalLookupJoin(
+        left, noCapability, Inner, Some(Literal(true)),
+        noCapability.output))
     }
     assert(e.message.contains("does not support batch scan"))
   }

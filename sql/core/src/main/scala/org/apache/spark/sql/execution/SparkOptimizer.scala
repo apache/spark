@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
-import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
+import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, PrepareExternalLookupJoin, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
@@ -46,6 +46,12 @@ class SparkOptimizer(
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
+      // Must run after operator optimization, which simplifies the join condition and the lookup
+      // side before they are negotiated with the connector: a condition that folds to false, or
+      // an empty lookup side, needs no lookup. Must run before V2ScanRelationPushDown, which
+      // would turn the lookup side into a batch scan that no lookup join can read. It does not
+      // depend on the rules before it in this batch.
+      PrepareExternalLookupJoin,
       V2ScanRelationPushDown,
       // V2 applies this fallback before building its scan. For V1, apply it here and rerun
       // nested pruning because the original grouping expressions may have kept extra fields.
@@ -135,6 +141,8 @@ class SparkOptimizer(
       PlanExternalUDFs.ruleName,
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
+      // An ExternalLookupJoin has no physical plan until this rule prepares it.
+      PrepareExternalLookupJoin.ruleName,
       V2ScanRelationPushDown.ruleName,
       V2ScanPartitioningAndOrdering.ruleName,
       V2Writes.ruleName,

@@ -19,10 +19,11 @@ package org.apache.spark.sql.execution.datasources.v2
 
 import java.util.{Collections, IdentityHashMap}
 
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, EqualTo, Expression,
-  PredicateHelper}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, LogicalPlan,
-  PreparedExternalLookupJoin}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, EqualTo, Expression,
+  Literal, PredicateHelper}
+import org.apache.spark.sql.catalyst.plans.LeftOuter
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, LocalRelation, LogicalPlan,
+  PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_LOOKUP_JOIN
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
@@ -31,13 +32,14 @@ import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, F
 import org.apache.spark.sql.connector.expressions.filter.{Predicate => V2Predicate}
 import org.apache.spark.sql.connector.read.{LookupParameter, SupportsExternalLookup}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase}
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{BooleanType, DataType}
 
 /** Finalizes an optimized external lookup side immediately before ordinary V2 scan preparation. */
 object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
   with QueryErrorsBase {
   override def apply(plan: LogicalPlan): LogicalPlan = {
     val prepared = plan.transformUpWithPruning(_.containsPattern(EXTERNAL_LOOKUP_JOIN)) {
+      case join: ExternalLookupJoin if provablyEmpty(join) => emptyJoinResult(join)
       case join: ExternalLookupJoin => prepare(join)
     }
     // Prepared lookup joins no longer contain their lookup relation, so a lookup-only table that
@@ -48,6 +50,23 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       }
     }
     prepared
+  }
+
+  // The optimizer folds `WHERE false` on the lookup side into an empty relation, and a condition
+  // such as `s.id = r.id AND false` into `false`. Such a join needs no connector call.
+  private def provablyEmpty(join: ExternalLookupJoin): Boolean =
+    join.right.maxRows.contains(0L) || (join.condition match {
+      case Some(Literal(value, BooleanType)) => value == null || value == false
+      case _ => false
+    })
+
+  private def emptyJoinResult(join: ExternalLookupJoin): LogicalPlan = join.joinType match {
+    case LeftOuter =>
+      val nullLookupColumns = join.right.output.map { attr =>
+        Alias(Literal(null, attr.dataType), attr.name)(attr.exprId)
+      }
+      Project(join.left.output ++ nullLookupColumns, join.left)
+    case _ => LocalRelation(join.output, Seq.empty, join.isStreaming)
   }
 
   private def prepare(join: ExternalLookupJoin): PreparedExternalLookupJoin = {

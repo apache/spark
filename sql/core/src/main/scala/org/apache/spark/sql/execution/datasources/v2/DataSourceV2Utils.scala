@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.Literal
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, SessionConfigSupport, StagedTable, StagingTableCatalog, SupportsCatalogOptions, SupportsRead, Table, TableProvider}
-import org.apache.spark.sql.connector.catalog.TableCapability.BATCH_READ
+import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, EXTERNAL_LOOKUP}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.SQLExecution
 import org.apache.spark.sql.execution.command.DDLUtils
@@ -152,6 +152,9 @@ private[sql] object DataSourceV2Utils extends Logging {
     table match {
       case _: SupportsRead if table.supports(BATCH_READ) =>
         Option(DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec))
+      case _: SupportsRead if table.supports(EXTERNAL_LOOKUP) =>
+        Option(ExternalLookupRelation(
+          DataSourceV2Relation.create(table, catalog, ident, dsOptions, timeTravelSpec)))
       case _ => None
     }
   }
