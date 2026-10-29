@@ -670,6 +670,26 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
+  val LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT =
+    buildConf("spark.sql.legacy.pushFilterAheadOfExpensiveConjunct")
+      .internal()
+      .doc(s"When ${AVOID_DOUBLE_FILTER_EVAL.key} is true, a filter over a projection with " +
+        "expensive (UDF, etc.) elements pushes its cheap conditions below the projection and " +
+        "keeps the expensive ones above it. When this config is true, a cheap condition written " +
+        "after an expensive one is pushed, and so evaluated ahead of it, unless it is " +
+        "throwable (e.g. raise_error). When false, it is pushed only when it is a plain " +
+        "deterministic condition over columns and literals, such as a comparison, IN or IS " +
+        "NULL, where a column the projection defines with an expression counts as that " +
+        "expression; otherwise it stays above in its written order, so it is only evaluated " +
+        "where none of the conditions before it is false, and an error it would raise on other " +
+        "rows (e.g. a division by zero or an invalid cast in ANSI mode, or an exception in a " +
+        "UDF) is not raised. The projection split does not place such a condition, with the " +
+        "expensive elements read as columns, ahead of the conditions written before it either.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")
     .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -10352,6 +10372,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def splitProjectionForExpensiveFilters: Boolean =
     getConf(SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS)
+
+  def legacyPushFilterAheadOfExpensiveConjunct: Boolean =
+    getConf(LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT)
 
   def structPredicateDecomposeEnabled: Boolean = getConf(STRUCT_PREDICATE_DECOMPOSE_ENABLED)
 
