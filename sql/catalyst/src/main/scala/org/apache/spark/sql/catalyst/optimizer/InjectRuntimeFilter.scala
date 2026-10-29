@@ -169,7 +169,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    * filter of the row's partition key. `transform` of `key` gives that partition key, and
    * `creation` gives the bloom filter `bloomFilter` of each partition key `creationPartitionKey`.
    */
-  private def perPartitionSemiJoin(
+  private[optimizer] def perPartitionSemiJoin(
       plan: LogicalPlan,
       key: Expression,
       transform: TransformExpression,

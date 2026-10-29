@@ -80,6 +80,10 @@ class SparkOptimizer(
       RewriteDistinctAggregates),
     Batch("Pushdown Filters from PartitionPruning", fixedPoint,
       PushDownPredicates),
+    // After the pushdown, which moves a global runtime bloom filter but not the semi join of its
+    // per-partition counterpart.
+    Batch("Push down per-partition runtime bloom filters", Once,
+      PushDownPerPartitionBloomFilters),
     Batch("Cleanup filters that cannot be pushed down", Once,
       CleanupDynamicPruningFilters,
       // cleanup the unnecessary TrueLiteral predicates

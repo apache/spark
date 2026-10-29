@@ -23,7 +23,7 @@ import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, Expression, GetStructField, PlanExpression, PredicateHelper}
 import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
-import org.apache.spark.sql.catalyst.plans.LeftSemi
+import org.apache.spark.sql.catalyst.plans.{Inner, LeftSemi}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join}
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryTable}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
@@ -34,7 +34,7 @@ import org.apache.spark.sql.connector.expressions.Expressions.{bucket, identity}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder, StorageFilterRequest, SupportsStorageFilters}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
-import org.apache.spark.sql.execution.joins.ShuffledHashJoinExec
+import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
@@ -289,7 +289,9 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase wit
     }
 
     test(s"the semi join follows the join key through a join below it (AQE $adaptive)") {
-      // The application side is the storage-partitioned join of `fact` and `other`.
+      // The application side is the storage-partitioned join of `fact` and `other`. Pushdown puts
+      // the global bloom filter on `fact`, below that join, and the semi join follows it there. So
+      // the join gets only the rows the semi join keeps.
       createTables()
       createTable("other", Array(Column.create("id", LongType)), Array(bucket(4, "id")))
       sql("INSERT INTO testcat.ns.other VALUES " + (0 until 16).map(i => s"($i)").mkString(", "))
@@ -306,7 +308,18 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase wit
         checkAnswer(df, expectedRows)
         val plan = df.queryExecution.executedPlan
         assert(executedSemiJoins(plan).size == 1, plan)
+        assert(executedGlobalChecks(plan).isEmpty, plan)
         assert(executedShuffles(plan).isEmpty, plan)
+        // The join of `fact` and `other` is the inner join with no other one below it.
+        def isInner(p: SparkPlan): Boolean = p match {
+          case j: BaseJoinExec => j.joinType == Inner
+          case _ => false
+        }
+        val joinBelow = collect(plan) {
+          case j: BaseJoinExec if isInner(j) && !j.children.exists(_.exists(isInner)) => j
+        }
+        assert(joinBelow.size == 1, plan)
+        assert(joinBelow.head.metrics("numOutputRows").value == expectedRows.size, plan)
       }
     }
 
