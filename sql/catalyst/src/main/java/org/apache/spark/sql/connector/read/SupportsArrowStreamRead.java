@@ -48,7 +48,9 @@ public interface SupportsArrowStreamRead extends PartitionReaderFactory {
    * @param partition a partition of the scan, as the scan planned it
    * @param streamAddress the address of a {@code struct ArrowArrayStream} that the caller
    *                      allocated, and whose release callback is NULL, as it is in a
-   *                      zero-initialized struct. If this method fails, the stream is released.
+   *                      zero-initialized struct. If this method fails after it checked its
+   *                      arguments, the stream is released. A stream whose release callback
+   *                      is not NULL is left as it is.
    */
   void openArrowStream(InputPartition partition, long streamAddress);
 }

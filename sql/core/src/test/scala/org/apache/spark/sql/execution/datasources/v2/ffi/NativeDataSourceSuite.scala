@@ -1308,16 +1308,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val released = new File(Utils.createTempDir(), "released")
     val (laterFactory, laterPartitions) =
       plannedScan(range(session, "end" -> "6", "released_path" -> released.getPath).select("id"))
-    val address = inTask {
+    // Opens a stream in a task, which it returns unreleased.
+    def openInTask(factory: SupportsArrowStreamRead, partition: InputPartition): Long = inTask {
       val stream = Platform.allocateMemory(40)
       Platform.setMemory(stream, 0.toByte, 40)
-      laterFactory.openArrowStream(laterPartitions.head, stream)
+      factory.openArrowStream(partition, stream)
       stream
     }
+    val openContexts = NativeLibrary.openTaskContexts()
+    val address = openInTask(laterFactory, laterPartitions.head)
     assert(NativeLibrary.openEngineStreams() == 1 && !released.exists())
+    assert(NativeLibrary.openTaskContexts() == openContexts + 1)
     assert(readIds(ArrowArrayStream.wrap(address), ArrowUtils.rootAllocator) == (0L until 3L))
     assert(NativeLibrary.openEngineStreams() == 0 && released.exists())
+    assert(NativeLibrary.openTaskContexts() == openContexts)
     Platform.freeMemory(address)
+
+    // Once the task ended, its context tells the library that it was interrupted, so that the
+    // library stops waiting.
+    val marker = new File(Utils.createTempDir(), "interrupted")
+    val (waitingFactory, waitingPartitions) = plannedScan(
+      range(session, "end" -> "6", "wait_for_interrupt" -> marker.getPath).select("id"))
+    val waiting = openInTask(waitingFactory, waitingPartitions.head)
+    val error = intercept[Exception] {
+      readIds(ArrowArrayStream.wrap(waiting), ArrowUtils.rootAllocator)
+    }
+    assert(Utils.exceptionString(error).contains("the task was killed"))
+    assert(Files.readString(marker.toPath) == "interrupted")
+    assert(NativeLibrary.openEngineStreams() == 0)
+    Platform.freeMemory(waiting)
 
     // It runs in a task, with a stream whose release callback is NULL.
     val outside = intercept[IllegalStateException] {

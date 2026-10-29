@@ -324,7 +324,7 @@ class NativePartitionReaderFactory(
     // The partition of the scan: the task of an engine may read others than its own.
     val task = NativePartitionReader.openStream(location, name, NativeLibrary.READ_BATCH,
       readerState, nativePartition.bytes, readSchema, timeZoneId, streamAddress,
-      Some(nativePartition.index))
+      Some(nativePartition.index), mayOutliveTask = true)
     try {
       NativeLibrary.wrapEngineStream(streamAddress, task)
     } catch {
@@ -891,6 +891,8 @@ object NativePartitionReader {
    *
    * @param partitionId the index of the partition in the scan, by default the partition of the
    *                    task
+   * @param mayOutliveTask whether an engine may read the stream after the task ended, see
+   *                       `NativeTask.create`
    */
   def openStream(
       location: NativeLibraryLocation,
@@ -901,10 +903,11 @@ object NativePartitionReader {
       schema: StructType,
       timeZoneId: String,
       streamAddress: Long,
-      partitionId: Option[Int] = None): NativeLibrary.Task = {
+      partitionId: Option[Int] = None,
+      mayOutliveTask: Boolean = false): NativeLibrary.Task = {
     val library = NativeLibraries.get(location)
     val stream = ArrowArrayStream.wrap(streamAddress)
-    val task = NativeTask.create(partitionId)
+    val task = NativeTask.create(partitionId, mayOutliveTask = mayOutliveTask)
     try {
       NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
         call(name, "read") {
@@ -1040,18 +1043,28 @@ private[ffi] object NativeTask {
    * @param partitionId the partition that the task reads or writes, by default the partition of
    *                    the task
    * @param taskAttemptId the ID of the task attempt, by default the one of the task
+   * @param mayOutliveTask whether the library may use the context after the task ended, as for
+   *                       the stream of an engine: `is_interrupted` then also reports the end of
+   *                       the task, and the context does not keep the task alive
    */
   def create(
       partitionId: Option[Int] = None,
-      taskAttemptId: Option[Long] = None): NativeLibrary.Task = {
+      taskAttemptId: Option[Long] = None,
+      mayOutliveTask: Boolean = false): NativeLibrary.Task = {
     val context = Option(TaskContext.get())
+    val interrupted: () => Boolean = if (mayOutliveTask) {
+      val task = new WeakReference(context.orNull)
+      () => Option(task.get()).forall(t => t.isInterrupted() || t.isFailed() || t.isCompleted())
+    } else {
+      () => context.exists(_.isInterrupted())
+    }
     new NativeLibrary.Task(
       context.map(_.stageId()).getOrElse(-1),
       context.map(_.stageAttemptNumber()).getOrElse(-1),
       partitionId.orElse(context.map(_.partitionId())).getOrElse(-1),
       context.map(_.attemptNumber()).getOrElse(0),
       taskAttemptId.orElse(context.map(_.taskAttemptId())).getOrElse(-1L),
-      () => context.exists(_.isInterrupted()))
+      () => interrupted())
   }
 }
 

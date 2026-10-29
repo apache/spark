@@ -369,7 +369,9 @@ typedef struct SparkDsCommitOffsetInfo {
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
  * that read returns is released, or until the data writer is closed. An engine that runs a query
  * in native code may get the stream of read from Spark, and release it once the task ended, from
- * another thread: the task stays valid until then too.
+ * another thread: the task stays valid until then too, and is_interrupted then also returns true
+ * once the task failed or completed. Such an engine may also keep the arrays of the stream after
+ * it released the stream, so the release of an array must not use the stream or the task.
  */
 typedef struct SparkDsTaskContext {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
@@ -636,11 +638,13 @@ typedef struct SparkDsLibrary {
    * out: the stream to initialize. Each array of the stream is a struct array whose fields are the
    *      columns of the schema to read, info->schema. The callbacks of the stream can be called
    *      from any thread, but never concurrently. get_next may block, for example on network
-   *      I/O, but Spark cannot interrupt native code: when the task is killed, Spark only stops
-   *      reading once get_next returns, and then releases the stream. So a get_next that blocks
-   *      forever keeps the task running, unless the task reaper (spark.task.reaper.enabled and
-   *      spark.task.reaper.killTimeout) kills the executor. Use timeouts for blocking
-   *      operations, and check task->is_interrupted.
+   *      I/O, but Spark cannot interrupt native code: when Spark reads the stream itself and the
+   *      task is killed, Spark only stops reading once get_next returns, and then releases the
+   *      stream. So a get_next that blocks forever keeps the task running, unless the task reaper
+   *      (spark.task.reaper.enabled and spark.task.reaper.killTimeout) kills the executor. An
+   *      engine that gets the stream from Spark reads and releases it itself (see
+   *      SparkDsTaskContext). Use timeouts for blocking operations, and check
+   *      task->is_interrupted.
    */
   int (*read)(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
               struct ArrowArrayStream* out);
