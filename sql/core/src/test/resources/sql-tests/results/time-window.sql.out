@@ -1871,6 +1871,76 @@ g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
 
 
 -- !query
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY 1, 2
+-- !query schema
+struct<k:string,w:struct<start:timestamp,end:timestamp>,cnt:bigint>
+-- !query output
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+
+
+-- !query
+SELECT window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY w
+-- !query schema
+struct<w:struct<start:timestamp,end:timestamp>,cnt:bigint>
+-- !query output
+{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+
+
+-- !query
+SELECT grp AS k, window(ts, '10 minutes', '5 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+ORDER BY w
+-- !query schema
+struct<k:string,w:struct<start:timestamp,end:timestamp>,cnt:bigint>
+-- !query output
+g1	{"start":2023-12-31 23:55:00,"end":2024-01-01 00:05:00}	1
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+g1	{"start":2024-01-01 00:05:00,"end":2024-01-01 00:15:00}	1
+
+
+-- !query
+SELECT grp AS k, session_window(ts, '5 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+-- !query schema
+struct<k:string,w:struct<start:timestamp,end:timestamp>,cnt:bigint>
+-- !query output
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+
+
+-- !query
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+HAVING cnt > 1
+ORDER BY k, w
+-- !query schema
+struct<k:string,w:struct<start:timestamp,end:timestamp>,cnt:bigint>
+-- !query output
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+
+
+-- !query
 SELECT grp, window(ts, '10 minutes') AS w,
   row_number() OVER (PARTITION BY grp ORDER BY ts DESC) AS rn
 FROM VALUES
@@ -1895,3 +1965,42 @@ struct<grp:string,rn:int>
 -- !query output
 g1	1
 g1	2
+
+
+-- !query
+SELECT grp, row_number() OVER (PARTITION BY grp ORDER BY window(ts, '10 minutes'), ts) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+-- !query schema
+struct<grp:string,rn:int>
+-- !query output
+g1	1
+g1	2
+
+
+-- !query
+SELECT grp, row_number() OVER (PARTITION BY window(ts, '10 minutes').start ORDER BY ts) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+-- !query schema
+struct<grp:string,rn:int>
+-- !query output
+g1	1
+g1	2
+
+
+-- !query
+SELECT window(ts, '10 minutes') AS w, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY window(ts, '10 minutes')
+-- !query schema
+struct<w:struct<start:timestamp,end:timestamp>,cnt:bigint,total:bigint>
+-- !query output
+{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2	2

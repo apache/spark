@@ -1264,6 +1264,283 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT percentile(col1, -0.1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "-0.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, -0.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "percentile(col1, -0.1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(col1, 0.0), percentile(col1, 1.0) FROM aggr_double
+-- !query schema
+struct<percentile(col1, 0.0, 1):double,percentile(col1, 1.0, 1):double>
+-- !query output
+1.0	4.0
+
+
+-- !query
+SELECT percentile(col1, array(0.5, 1.1)) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "0.5D,1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, array(0.5, 1.1), 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 40,
+    "fragment" : "percentile(col1, array(0.5, 1.1))"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(col1, col1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "\"col1\"",
+    "inputName" : "`percentage`",
+    "inputType" : "\"DOUBLE\"",
+    "sqlExpr" : "\"percentile(col1, col1, 1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 29,
+    "fragment" : "percentile(col1, col1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_approx(col1, 1.1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile_approx(col1, 1.1, 10000)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 35,
+    "fragment" : "percentile_approx(col1, 1.1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_cont(1.1) WITHIN GROUP (ORDER BY col1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile_cont(col1, 1.1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "percentile_cont(1.1) WITHIN GROUP (ORDER BY col1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile_disc(1.1) WITHIN GROUP (ORDER BY col1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile_disc(col1, 1.1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 56,
+    "fragment" : "percentile_disc(1.1) WITHIN GROUP (ORDER BY col1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(col1, 1.1) OVER () FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, 1.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 36,
+    "fragment" : "percentile(col1, 1.1) OVER ()"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(col1, 1.1) FILTER (WHERE col1 > 1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, 1.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 52,
+    "fragment" : "percentile(col1, 1.1) FILTER (WHERE col1 > 1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(DISTINCT col1, 1.1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, 1.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 37,
+    "fragment" : "percentile(DISTINCT col1, 1.1)"
+  } ]
+}
+
+
+-- !query
+SELECT 1 FROM aggr_double HAVING percentile(col1, 1.1) > 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, 1.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 34,
+    "stopIndex" : 54,
+    "fragment" : "percentile(col1, 1.1)"
+  } ]
+}
+
+
+-- !query
+SELECT percentile(col1, 0.5) OVER () FROM aggr_double
+-- !query schema
+struct<percentile(col1, 0.5, 1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING):double>
+-- !query output
+2.5
+2.5
+2.5
+2.5
+
+
+-- !query
+SELECT percentile(DISTINCT col1, 0.5) FILTER (WHERE col1 > 1) FROM aggr_double
+-- !query schema
+struct<percentile(DISTINCT col1, 0.5, 1) FILTER (WHERE (col1 > 1)):double>
+-- !query output
+3.0
+
+
+-- !query
 DROP VIEW aggr_double
 -- !query schema
 struct<>

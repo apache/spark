@@ -660,5 +660,31 @@ SELECT IDENTIFIER(identifier_sql_function_name)(col1) FROM VALUES ('b'), ('a') G
 SELECT count(*) FROM VALUES ('b'), ('a') GROUP BY IDENTIFIER(identifier_sql_function_name)(col1);
 SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
 ON IDENTIFIER(identifier_sql_function_name)(a) = b;
+-- The same function in WHERE, HAVING, ORDER BY, a window specification and an aggregate
+-- argument, with GROUP BY ALL, and through a name computed from the variable.
+SELECT * FROM VALUES ('a'), ('b') t(c) WHERE IDENTIFIER(identifier_sql_function_name)(c) = 'ablah';
+SELECT col1 FROM VALUES ('b'), ('a') GROUP BY col1
+HAVING IDENTIFIER(identifier_sql_function_name)(col1) = 'ablah';
+SELECT col1 FROM VALUES ('b'), ('a') ORDER BY IDENTIFIER(identifier_sql_function_name)(col1);
+SELECT col1 FROM VALUES ('b'), ('a') ORDER BY identifier_sql_function(col1);
+SELECT col1, row_number() OVER (
+  PARTITION BY IDENTIFIER(identifier_sql_function_name)(col1) ORDER BY col1) AS rn
+FROM VALUES ('b'), ('a');
+SELECT max(IDENTIFIER(identifier_sql_function_name)(col1)) FROM VALUES ('b'), ('a');
+SELECT IDENTIFIER(identifier_sql_function_name)(col1), count(*) FROM VALUES ('b'), ('a')
+GROUP BY ALL;
+SELECT IDENTIFIER(identifier_sql_function_name || '')(col1) FROM VALUES ('b'), ('a') GROUP BY col1;
+-- Built-in nondeterministic, aggregate and generator functions named through a variable are
+-- subject to the same restrictions as direct calls.
+DECLARE identifier_builtin_function_name STRING DEFAULT 'rand';
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_builtin_function_name)(0) > 0.5;
+SET VAR identifier_builtin_function_name = 'max';
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_builtin_function_name)(a) = b;
+SET VAR identifier_builtin_function_name = 'explode';
+SELECT count(*) FROM VALUES (array(1, 2)) AS t(a)
+GROUP BY IDENTIFIER(identifier_builtin_function_name)(a);
+DROP TEMPORARY VARIABLE identifier_builtin_function_name;
 DROP TEMPORARY VARIABLE identifier_sql_function_name;
 DROP TEMPORARY FUNCTION identifier_sql_function;

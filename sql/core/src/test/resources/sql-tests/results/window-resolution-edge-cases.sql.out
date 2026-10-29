@@ -174,12 +174,111 @@ struct<id:bigint,grp:bigint>
 
 
 -- !query
+SELECT col1, SUM(RANK() OVER (ORDER BY col1)) OVER (PARTITION BY col2) AS s FROM t1
+-- !query schema
+struct<col1:int,s:bigint>
+-- !query output
+1	3
+2	3
+3	3
+
+
+-- !query
+SELECT col1, MAX(SUM(ROW_NUMBER() OVER (ORDER BY col1)) OVER ()) OVER () AS m FROM t1
+-- !query schema
+struct<col1:int,m:bigint>
+-- !query output
+1	6
+2	6
+3	6
+
+
+-- !query
+SELECT col1, ROW_NUMBER() OVER (ORDER BY COUNT(*) OVER (PARTITION BY col2), col1) AS rn FROM t1
+-- !query schema
+struct<col1:int,rn:int>
+-- !query output
+1	2
+2	3
+3	1
+
+
+-- !query
+SELECT col1, MAX(ROW_NUMBER() OVER w) OVER () AS max_rn FROM t1 WINDOW w AS (ORDER BY col1)
+-- !query schema
+struct<col1:int,max_rn:int>
+-- !query output
+1	3
+2	3
+3	3
+
+
+-- !query
+SELECT col1, MAX(RANK() OVER (ORDER BY SUM(col2))) OVER () AS m FROM t1 GROUP BY col1
+-- !query schema
+struct<col1:int,m:int>
+-- !query output
+1	3
+2	3
+3	3
+
+
+-- !query
+SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
+QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1
+-- !query schema
+struct<col1:int>
+-- !query output
+3
+
+
+-- !query
 SELECT lead(COL1) OVER (ORDER BY COL1) AS flag, * FROM t1
 -- !query schema
 struct<flag:int,col1:int,col2:int>
 -- !query output
 2	1	1
 3	2	1
+NULL	3	2
+
+
+-- !query
+SELECT *, lead(COL1) OVER (ORDER BY COL1) AS flag FROM t1
+-- !query schema
+struct<col1:int,col2:int,flag:int>
+-- !query output
+1	1	2
+2	1	3
+3	2	NULL
+
+
+-- !query
+SELECT T1.*, lag(Col2) OVER (ORDER BY cOL1) AS flag FROM t1
+-- !query schema
+struct<col1:int,col2:int,flag:int>
+-- !query output
+1	1	NULL
+2	1	1
+3	2	1
+
+
+-- !query
+SELECT * EXCEPT (col2), lead(COL1) OVER (ORDER BY COL1) AS flag FROM t1
+-- !query schema
+struct<col1:int,flag:int>
+-- !query output
+1	2
+2	3
+3	NULL
+
+
+-- !query
+SELECT lead(COL1) OVER (PARTITION BY COL2 ORDER BY COL1) AS flag, * FROM t1 ORDER BY COL1
+-- !query schema
+struct<flag:int,col1:int,col2:int>
+-- !query output
+2	1	1
+NULL	2	1
 NULL	3	2
 
 
@@ -201,6 +300,46 @@ struct<cnt:bigint>
 3
 3
 3
+
+
+-- !query
+SELECT col1, count(randn(0)) OVER (ORDER BY col1) AS cnt FROM t1
+-- !query schema
+struct<col1:int,cnt:bigint>
+-- !query output
+1	1
+2	2
+3	3
+
+
+-- !query
+SELECT col1, count(uuid()) OVER (PARTITION BY col2) AS cnt FROM t1 ORDER BY col1
+-- !query schema
+struct<col1:int,cnt:bigint>
+-- !query output
+1	2
+2	2
+3	1
+
+
+-- !query
+SELECT col1, max(rand(0) < 2) OVER () AS m FROM t1 ORDER BY col1
+-- !query schema
+struct<col1:int,m:boolean>
+-- !query output
+1	true
+2	true
+3	true
+
+
+-- !query
+SELECT col1, row_number() OVER (PARTITION BY rand(0) < 2 ORDER BY col1) AS rn FROM t1
+-- !query schema
+struct<col1:int,rn:int>
+-- !query output
+1	1
+2	2
+3	3
 
 
 -- !query

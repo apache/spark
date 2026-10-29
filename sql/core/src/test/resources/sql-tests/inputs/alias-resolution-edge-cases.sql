@@ -20,6 +20,33 @@ SELECT 1 AS a, a + 1 AS b,
   (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c;
 -- A window function inside an aggregate function is still rejected.
 SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
+-- LCA in a Project, subquery laterally referenced.
+SELECT 1 AS a,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c,
+  c + a AS d;
+-- LCA in an Aggregate, subquery not laterally referenced.
+SELECT col1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY c) AS rn FROM VALUES (1), (2) AS t(c)))
+    AS c
+FROM VALUES (1), (2) GROUP BY col1;
+-- Window function inside EXISTS and IN subqueries.
+SELECT 1 AS a, a + 1 AS b, EXISTS (SELECT ROW_NUMBER() OVER (ORDER BY col1) FROM VALUES (1)) AS c;
+SELECT 1 AS a, a + 1 AS b,
+  b IN (SELECT ROW_NUMBER() OVER (ORDER BY col1) FROM VALUES (1), (2)) AS c;
+-- A window function in the SELECT list next to the subquery makes it a window query block.
+SELECT col1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY c) AS rn FROM VALUES (1), (2) AS t(c)))
+    AS c,
+  ROW_NUMBER() OVER (ORDER BY col1) AS d
+FROM VALUES (1), (2);
+-- A window function inside an aggregate function: other functions, with GROUP BY, without LCA, and
+-- inside a scalar subquery.
+SELECT 1 AS a, a + 1 AS b, MAX(RANK() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
+SELECT col1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s
+FROM VALUES (1), (2) GROUP BY col1;
+SELECT SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
+SELECT 1 AS a, a + 1 AS b,
+  (SELECT SUM(ROW_NUMBER() OVER (ORDER BY col1)) FROM VALUES (1), (2)) AS c;
 
 DROP TABLE t1;
 DROP TABLE t2;

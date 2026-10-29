@@ -257,4 +257,46 @@ FROM wwa_data
 GROUP BY GROUPING SETS ((col1), ())
 ORDER BY grp ASC, col1 ASC;
 
+-- ORDER BY the alias in descending order, with a window function.
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+ORDER BY a DESC;
+
+-- Grouping keys aliased with each other's names, combined with a window function.
+SELECT col1 AS col2, col2 AS col1, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1, col2
+ORDER BY col1 DESC, col2;
+
+-- HAVING on an aggregate over an aliased grouping key, with a window function.
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+HAVING count(*) > 1;
+
+-- ROLLUP and CUBE with aliased GROUPING_ID() and GROUPING(), referenced by ORDER BY, HAVING,
+-- QUALIFY and a window specification.
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY ROLLUP(col1)
+ORDER BY gid, col1;
+
+SELECT col1, col2, COUNT(*) AS cnt,
+  SUM(COUNT(*)) OVER (PARTITION BY GROUPING_ID(col1, col2)) AS s,
+  GROUPING_ID(col1, col2) AS gid
+FROM wwa_data
+GROUP BY CUBE(col1, col2)
+ORDER BY gid, col1, col2;
+
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+HAVING GROUPING_ID() = 1;
+
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING(col1) AS grp
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+QUALIFY grp = 1;
+
 DROP VIEW wwa_data;

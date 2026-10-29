@@ -3208,6 +3208,72 @@ Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
 
 
 -- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:b)
+-- !query analysis
+Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
++- LateralJoin lateral-subquery#x [value#x], Inner
+   :  +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false)), true, [pos#x, key#x, value#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:missing)
+-- !query analysis
+Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
++- LateralJoin lateral-subquery#x [value#x], Inner
+   :  +- Generate variant_explode(variant_get(outer(value#x), $.missing, VariantType, true, Some(America/Los_Angeles), false)), true, [pos#x, key#x, value#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": {"c": [1, 2]}}}')) AS t,
+  LATERAL variant_explode(t.value:b.c)
+-- !query analysis
+Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
++- LateralJoin lateral-subquery#x [value#x], Inner
+   :  +- Generate variant_explode(variant_get(outer(value#x), $.b.c, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate variant_explode(parse_json({"a": {"b": {"c": [1, 2]}}}, true)), false, [pos#x, key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:['b'])
+-- !query analysis
+Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
++- LateralJoin lateral-subquery#x [value#x], Inner
+   :  +- Generate variant_explode(variant_get(outer(value#x), $['b'], VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :     +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
+SELECT u.pos, u.value FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b) AS u
+-- !query analysis
+Project [pos#x, value#x]
++- LateralJoin lateral-subquery#x [value#x], Inner
+   :  +- SubqueryAlias u
+   :     +- Generate variant_explode(variant_get(outer(value#x), $.b, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   :        +- OneRowRelation
+   +- SubqueryAlias t
+      +- Generate variant_explode(parse_json({"a": {"b": [1, 2, 3]}}, true)), false, [pos#x, key#x, value#x]
+         +- OneRowRelation
+
+
+-- !query
 DROP VIEW t1
 -- !query analysis
 DropTableCommand `spark_catalog`.`default`.`t1`, false, true, false

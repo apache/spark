@@ -2424,6 +2424,100 @@ Aggregate [payload.file_name#x, spark_grouping_id#xL], [payload.file_name#x AS f
 
 
 -- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY CUBE(payload.file_name)
+-- !query analysis
+Aggregate [payload.file_name#x, spark_grouping_id#xL], [payload.file_name#x AS file_name#x]
++- Expand [[payload#x, payload.file_name#x, 0], [payload#x, null, 1]], [payload#x, payload.file_name#x, spark_grouping_id#xL]
+   +- Project [payload#x, payload#x.file_name AS payload.file_name#x]
+      +- SubqueryAlias t
+         +- LocalRelation [payload#x]
+
+
+-- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY GROUPING SETS ((payload.file_name), ())
+-- !query analysis
+Aggregate [payload.file_name#x, spark_grouping_id#xL], [payload.file_name#x AS file_name#x]
++- Expand [[payload#x, payload.file_name#x, 0], [payload#x, null, 1]], [payload#x, payload.file_name#x, spark_grouping_id#xL]
+   +- Project [payload#x, payload#x.file_name AS payload.file_name#x]
+      +- SubqueryAlias t
+         +- LocalRelation [payload#x]
+
+
+-- !query
+SELECT payload.meta.name, count(*) AS cnt
+FROM VALUES
+  (named_struct('meta', named_struct('name', 'a'))),
+  (named_struct('meta', named_struct('name', 'b')))
+AS t(payload)
+GROUP BY ROLLUP(payload.meta.name)
+-- !query analysis
+Aggregate [payload.meta.name#x, spark_grouping_id#xL], [payload.meta.name#x AS name#x, count(1) AS cnt#xL]
++- Expand [[payload#x, payload.meta.name#x, 0], [payload#x, null, 1]], [payload#x, payload.meta.name#x, spark_grouping_id#xL]
+   +- Project [payload#x, payload#x.meta.name AS payload.meta.name#x]
+      +- SubqueryAlias t
+         +- LocalRelation [payload#x]
+
+
+-- !query
+SELECT payload.file_name, payload.size, sum(payload.size) AS total,
+  GROUPING(payload.file_name) AS g
+FROM VALUES
+  (named_struct('file_name', 'a', 'size', 1)),
+  (named_struct('file_name', 'a', 'size', 2)),
+  (named_struct('file_name', 'b', 'size', 3))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name, payload.size)
+-- !query analysis
+Aggregate [payload.file_name#x, payload.size#x, spark_grouping_id#xL], [payload.file_name#x AS file_name#x, payload.size#x AS size#x, sum(payload#x.size) AS total#xL, cast((shiftright(spark_grouping_id#xL, 1) & 1) as tinyint) AS g#x]
++- Expand [[payload#x, payload.file_name#x, payload.size#x, 0], [payload#x, payload.file_name#x, null, 1], [payload#x, null, null, 3]], [payload#x, payload.file_name#x, payload.size#x, spark_grouping_id#xL]
+   +- Project [payload#x, payload#x.file_name AS payload.file_name#x, payload#x.size AS payload.size#x]
+      +- SubqueryAlias t
+         +- LocalRelation [payload#x]
+
+
+-- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name)
+HAVING payload.file_name IS NOT NULL
+-- !query analysis
+Filter isnotnull(file_name#x)
++- Aggregate [payload.file_name#x, spark_grouping_id#xL], [payload.file_name#x AS file_name#x]
+   +- Expand [[payload#x, payload.file_name#x, 0], [payload#x, null, 1]], [payload#x, payload.file_name#x, spark_grouping_id#xL]
+      +- Project [payload#x, payload#x.file_name AS payload.file_name#x]
+         +- SubqueryAlias t
+            +- LocalRelation [payload#x]
+
+
+-- !query
+SELECT payload.file_name AS fn
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(fn)
+-- !query analysis
+Aggregate [payload.file_name#x, spark_grouping_id#xL], [payload.file_name#x AS fn#x]
++- Expand [[payload#x, payload.file_name#x, 0], [payload#x, null, 1]], [payload#x, payload.file_name#x, spark_grouping_id#xL]
+   +- Project [payload#x, payload#x.file_name AS payload.file_name#x]
+      +- SubqueryAlias t
+         +- LocalRelation [payload#x]
+
+
+-- !query
 DROP VIEW testData
 -- !query analysis
 DropTempViewCommand testData, false

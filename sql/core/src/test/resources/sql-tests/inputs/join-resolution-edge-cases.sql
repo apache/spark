@@ -25,6 +25,17 @@ SELECT 1 FROM t2 NATURAL JOIN t1 JOIN t2 ON t2.col1 = t1.col1 ORDER BY t2.col2;
 -- Non-deterministic expressions should be disallowed in multi children operators
 SELECT * FROM t1 JOIN t2 ON random(t1.col1) > 0.1;
 SELECT * FROM t1 JOIN t2 ON random(100) > 0.1;
+SELECT * FROM t1 JOIN t2 ON rand(0) > 0.1;
+SELECT * FROM t1 JOIN t2 ON randn(t1.col1) > 0.1;
+SELECT * FROM t1 JOIN t2 ON t1.col2 = uuid();
+SELECT * FROM t1 JOIN t2 ON t1.col1 = t2.col1 AND random(100) > 0.1;
+SELECT * FROM t1 LEFT JOIN t2 ON random(100) > 0.1;
+SELECT * FROM t1 RIGHT JOIN t2 ON random(100) > 0.1;
+SELECT * FROM t1 FULL OUTER JOIN t2 ON random(100) > 0.1;
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON random(100) > 0.1;
+SELECT * FROM t1 LEFT ANTI JOIN t2 ON random(100) > 0.1;
+-- Non-deterministic expressions are allowed in a filter above the join
+SELECT * FROM t1 JOIN t2 ON t1.col1 = t2.col1 WHERE random(100) > 0.1;
 
 DROP TABLE t1;
 DROP TABLE t2;

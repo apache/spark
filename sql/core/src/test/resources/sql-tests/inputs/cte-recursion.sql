@@ -853,6 +853,73 @@ WITH RECURSIVE r(level, data) AS (
 )
 SELECT * FROM r;
 
+-- Recursive CTE self-reference on the right side of INNER JOIN ... USING and NATURAL INNER JOIN
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM (VALUES (0)) AS t(data) INNER JOIN r USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r;
+
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM (VALUES (0)) AS t(data) NATURAL INNER JOIN r
+  WHERE level < 2
+)
+SELECT * FROM r;
+
+-- The other side's non-key columns stay visible after the USING join
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM r INNER JOIN (VALUES (0, 'x')) AS t(data, tag) USING (data)
+  WHERE level < 2 AND tag = 'x'
+)
+SELECT * FROM r;
+
+-- Recursive CTE self-reference under outer joins with USING and NATURAL: allowed only on the
+-- preserved side of a left outer join.
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM r LEFT OUTER JOIN (VALUES (0)) AS t(data) USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r;
+
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM r NATURAL LEFT OUTER JOIN (VALUES (0)) AS t(data)
+  WHERE level < 2
+)
+SELECT * FROM r;
+
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM (VALUES (0)) AS t(data) LEFT OUTER JOIN r USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r;
+
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM r FULL OUTER JOIN (VALUES (0)) AS t(data) USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r;
+
 -- A string-valued PIVOT cannot read the recursive table in its input.
 WITH RECURSIVE numbers(n) AS (
   SELECT CAST(1 AS STRING)
@@ -881,6 +948,34 @@ WITH RECURSIVE t(n) AS (
 )
 SELECT * FROM t;
 
+-- An integer-valued PIVOT cannot read the recursive table in its input either.
+WITH RECURSIVE numbers(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT * FROM (SELECT n, n AS value FROM numbers) source
+  PIVOT (MAX(value) FOR n IN (1))
+)
+SELECT * FROM numbers;
+
+-- A recursive reference in the second of multiple PIVOT aggregates is rejected.
+WITH RECURSIVE t(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT `1_a` FROM VALUES (1, 1) AS source(k, v)
+  PIVOT (max(v) AS a, max(v + (SELECT n FROM t)) AS b FOR k IN (1))
+)
+SELECT * FROM t;
+
+-- The single-aggregate PIVOT path with an aliased pivot value.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS STRING)
+  UNION ALL
+  SELECT one FROM VALUES (1, 1) AS source(k, v)
+  PIVOT (max(cast((SELECT cast(n AS INT) + 1 FROM t) AS STRING)) FOR k IN (1 AS one))
+  WHERE one < 3
+)
+SELECT * FROM t;
+
 -- A local helper retains its recursive dependency below an aggregate.
 WITH RECURSIVE t(n) AS (
   SELECT CAST(1 AS BIGINT)
@@ -902,6 +997,59 @@ WITH RECURSIVE t(n) AS (
 )
 SELECT * FROM t LIMIT 5;
 
+-- A chain of local helpers retains the recursive dependency below an aggregate.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH h1 AS (SELECT n FROM t), h2 AS (SELECT n FROM h1)
+    SELECT sum(n) FROM h2
+  )
+)
+SELECT * FROM t;
+
+-- A local helper below an aggregate with GROUP BY.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT max(n) + 1 FROM helper GROUP BY n
+  )
+)
+SELECT * FROM t;
+
+-- A local helper on the allowed side of a left outer join.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT helper.n + 1
+    FROM helper LEFT JOIN VALUES (1) AS v(x) ON helper.n = v.x
+    WHERE helper.n < 3
+  )
+)
+SELECT * FROM t;
+
+-- A local helper on a forbidden side of right outer and full outer joins.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT helper.n + 1
+    FROM helper RIGHT JOIN VALUES (1) AS v(x) ON helper.n < 3
+  )
+)
+SELECT * FROM t LIMIT 5;
+
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT helper.n + 1
+    FROM helper FULL OUTER JOIN VALUES (1) AS v(x) ON helper.n < 3
+  )
+)
+SELECT * FROM t LIMIT 5;
+
 -- A completed inner loop is an independent input to the outer recursive step.
 WITH RECURSIVE t(n) AS (
   SELECT CAST(1 AS BIGINT)
@@ -913,6 +1061,22 @@ WITH RECURSIVE t(n) AS (
     ), helper AS (SELECT n FROM inner_loop)
     SELECT t.n + totals.n
     FROM t CROSS JOIN (SELECT sum(n) AS n FROM helper) totals
+    WHERE t.n < 3
+  )
+)
+SELECT * FROM t;
+
+-- The completed inner loop read directly, without a helper, on the left side of the join.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH RECURSIVE inner_loop(n) AS (
+      SELECT 1
+      UNION ALL
+      SELECT n + 1 FROM inner_loop WHERE n < 2
+    )
+    SELECT t.n + totals.n
+    FROM (SELECT sum(n) AS n FROM inner_loop) totals CROSS JOIN t
     WHERE t.n < 3
   )
 )
@@ -936,6 +1100,28 @@ WITH RECURSIVE t(n) AS (
     WITH helper AS (SELECT n FROM t)
     SELECT s FROM (
       SELECT max(x) + (SELECT n FROM helper LIMIT 1) AS s FROM VALUES (1) AS v(x)
+    ) WHERE s < 4
+  )
+)
+SELECT * FROM t;
+
+-- A recursive reference in an aggregate-list subquery with GROUP BY.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    SELECT s FROM (
+      SELECT max(x) + (SELECT n FROM t LIMIT 1) AS s FROM VALUES (1), (1) AS v(x) GROUP BY x
+    ) WHERE s < 4
+  )
+)
+SELECT * FROM t;
+
+-- A recursive reference in a subquery inside the aggregate function argument.
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    SELECT s FROM (
+      SELECT max(x + (SELECT n FROM t LIMIT 1)) AS s FROM VALUES (1) AS v(x)
     ) WHERE s < 4
   )
 )

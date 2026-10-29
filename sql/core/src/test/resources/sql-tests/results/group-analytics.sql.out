@@ -2475,6 +2475,101 @@ b
 
 
 -- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY CUBE(payload.file_name)
+-- !query schema
+struct<file_name:string>
+-- !query output
+NULL
+a
+b
+
+
+-- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY GROUPING SETS ((payload.file_name), ())
+-- !query schema
+struct<file_name:string>
+-- !query output
+NULL
+a
+b
+
+
+-- !query
+SELECT payload.meta.name, count(*) AS cnt
+FROM VALUES
+  (named_struct('meta', named_struct('name', 'a'))),
+  (named_struct('meta', named_struct('name', 'b')))
+AS t(payload)
+GROUP BY ROLLUP(payload.meta.name)
+-- !query schema
+struct<name:string,cnt:bigint>
+-- !query output
+NULL	2
+a	1
+b	1
+
+
+-- !query
+SELECT payload.file_name, payload.size, sum(payload.size) AS total,
+  GROUPING(payload.file_name) AS g
+FROM VALUES
+  (named_struct('file_name', 'a', 'size', 1)),
+  (named_struct('file_name', 'a', 'size', 2)),
+  (named_struct('file_name', 'b', 'size', 3))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name, payload.size)
+-- !query schema
+struct<file_name:string,size:int,total:bigint,g:tinyint>
+-- !query output
+NULL	NULL	6	1
+a	1	1	0
+a	2	2	0
+a	NULL	3	0
+b	3	3	0
+b	NULL	3	0
+
+
+-- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name)
+HAVING payload.file_name IS NOT NULL
+-- !query schema
+struct<file_name:string>
+-- !query output
+a
+b
+
+
+-- !query
+SELECT payload.file_name AS fn
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(fn)
+-- !query schema
+struct<fn:string>
+-- !query output
+NULL
+a
+b
+
+
+-- !query
 DROP VIEW testData
 -- !query schema
 struct<>

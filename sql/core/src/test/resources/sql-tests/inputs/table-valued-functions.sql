@@ -132,3 +132,13 @@ select * from stack(2, explode(array(1, 2, 3)));
 -- Table-valued function argument that is an alias: the `:` semi-structured extraction makes the
 -- variant_explode argument a top-level Alias.
 SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a);
+-- The same with variant_explode_outer, a missing, a nested and a bracketed path, an object input,
+-- column aliases, and two such table-valued functions joined together.
+SELECT * FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):a);
+SELECT * FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):missing);
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2]}}'):a.b);
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):['a']);
+SELECT * FROM variant_explode(parse_json('{"a": {"x": 1, "y": 2}}'):a);
+SELECT p, v FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t(p, k, v);
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t1,
+  variant_explode(parse_json('{"b": [3]}'):b) AS t2;

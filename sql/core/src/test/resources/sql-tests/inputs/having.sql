@@ -118,5 +118,12 @@ SELECT col1 FROM VALUES (1) t1 GROUP BY col1 HAVING (
 -- HAVING name resolution should prioritize table columns when referencing outer ones
 CREATE TEMPORARY VIEW hav_outer AS SELECT * FROM VALUES (1, 2), (3, 4) AS hav_outer(col1, col2);
 SELECT col2 FROM hav_outer GROUP BY col1, col2 HAVING (SELECT col1);
+-- Outer reference in a comparison, in EXISTS and IN subqueries, and under an aggregate.
+SELECT col2 FROM hav_outer GROUP BY col1, col2 HAVING (SELECT col1) > 1;
+SELECT col2 FROM hav_outer GROUP BY col1, col2 HAVING EXISTS (SELECT col1);
+SELECT col2 FROM hav_outer GROUP BY col1, col2 HAVING col2 IN (SELECT col1 + 1);
+SELECT col2 FROM hav_outer GROUP BY col2 HAVING (SELECT max(col1)) > 1;
+-- The referenced table column has to be a grouping column.
+SELECT col2 FROM hav_outer GROUP BY col2 HAVING (SELECT col1);
 
 DROP VIEW hav_outer;

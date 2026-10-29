@@ -90,11 +90,31 @@ QUALIFY ROW_NUMBER() OVER (
 ) = 1
 ORDER BY id;
 
+-- Nested windows in the SELECT list: other outer and inner functions, two levels of nesting, a
+-- nested window in the outer window specification, and a named window.
+SELECT col1, SUM(RANK() OVER (ORDER BY col1)) OVER (PARTITION BY col2) AS s FROM t1;
+SELECT col1, MAX(SUM(ROW_NUMBER() OVER (ORDER BY col1)) OVER ()) OVER () AS m FROM t1;
+SELECT col1, ROW_NUMBER() OVER (ORDER BY COUNT(*) OVER (PARTITION BY col2), col1) AS rn FROM t1;
+SELECT col1, MAX(ROW_NUMBER() OVER w) OVER () AS max_rn FROM t1 WINDOW w AS (ORDER BY col1);
+
+-- Nested windows over an aggregate, and in QUALIFY together with HAVING.
+SELECT col1, MAX(RANK() OVER (ORDER BY SUM(col2))) OVER () AS m FROM t1 GROUP BY col1;
+SELECT col1 FROM t1 GROUP BY col1, col2 HAVING col2 > 0
+QUALIFY ROW_NUMBER() OVER (ORDER BY SUM(col2) OVER (PARTITION BY col1) DESC, col1) = 1;
+
 -- Window + star should preserve original column name case
 SELECT lead(COL1) OVER (ORDER BY COL1) AS flag, * FROM t1;
+SELECT *, lead(COL1) OVER (ORDER BY COL1) AS flag FROM t1;
+SELECT T1.*, lag(Col2) OVER (ORDER BY cOL1) AS flag FROM t1;
+SELECT * EXCEPT (col2), lead(COL1) OVER (ORDER BY COL1) AS flag FROM t1;
+SELECT lead(COL1) OVER (PARTITION BY COL2 ORDER BY COL1) AS flag, * FROM t1 ORDER BY COL1;
 
 -- Nondeterministic expressions are allowed in aggregate functions used as window functions.
 SELECT col1, count(rand(0)) OVER (PARTITION BY col1) AS cnt FROM t1 ORDER BY col1, col2;
 SELECT count(rand(0)) OVER () AS cnt FROM t1;
+SELECT col1, count(randn(0)) OVER (ORDER BY col1) AS cnt FROM t1;
+SELECT col1, count(uuid()) OVER (PARTITION BY col2) AS cnt FROM t1 ORDER BY col1;
+SELECT col1, max(rand(0) < 2) OVER () AS m FROM t1 ORDER BY col1;
+SELECT col1, row_number() OVER (PARTITION BY rand(0) < 2 ORDER BY col1) AS rn FROM t1;
 
 DROP TABLE t1;

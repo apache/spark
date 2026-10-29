@@ -75,6 +75,21 @@ SELECT a FROM testData ORDER BY a, max(a) OVER ();
 SELECT a FROM testData ORDER BY a, max(a);
 SELECT a FROM testData DISTRIBUTE BY max(a) OVER (), a;
 SELECT a FROM testData DISTRIBUTE BY a, max(a) OVER ();
+-- A window function in a middle key, multiple window keys, and a window function nested in an
+-- expression.
+SELECT a FROM testData ORDER BY a, max(a) OVER (), b;
+SELECT a FROM testData ORDER BY max(a) OVER (), min(a) OVER ();
+SELECT a FROM testData ORDER BY a, 1 + max(a) OVER ();
+SELECT a FROM testData ORDER BY b, sum(a);
+-- SORT BY, and DISTRIBUTE BY with aggregate functions.
+SELECT a FROM testData SORT BY max(a) OVER (), a;
+SELECT a FROM testData SORT BY a, max(a) OVER ();
+SELECT a FROM testData DISTRIBUTE BY max(a), a;
+SELECT a FROM testData DISTRIBUTE BY a, max(a);
+SELECT a FROM testData DISTRIBUTE BY a, max(a) OVER () SORT BY a;
+-- Aggregate functions are allowed in every ORDER BY key on top of an Aggregate.
+SELECT a FROM testData GROUP BY a ORDER BY max(b), a;
+SELECT a FROM testData GROUP BY a ORDER BY a, max(b);
 
 -- Clean up
 DROP VIEW IF EXISTS testData;

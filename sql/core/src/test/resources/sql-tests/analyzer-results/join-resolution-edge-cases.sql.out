@@ -252,6 +252,193 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT * FROM t1 JOIN t2 ON rand(0) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(0) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 41,
+    "fragment" : "JOIN t2 ON rand(0) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON randn(t1.col1) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "SEED_EXPRESSION_IS_UNFOLDABLE",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "exprWithSeed" : "\"randn(col1)\"",
+    "seedExpr" : "\"col1\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 42,
+    "fragment" : "randn(t1.col1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON t1.col2 = uuid()
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(col2 = uuid())\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 44,
+    "fragment" : "JOIN t2 ON t1.col2 = uuid()"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON t1.col1 = t2.col1 AND random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"((col1 = col1) AND (rand(100) > 0.1))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 67,
+    "fragment" : "JOIN t2 ON t1.col1 = t2.col1 AND random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 LEFT JOIN t2 ON random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(100) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 50,
+    "fragment" : "LEFT JOIN t2 ON random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 RIGHT JOIN t2 ON random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(100) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 51,
+    "fragment" : "RIGHT JOIN t2 ON random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 FULL OUTER JOIN t2 ON random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(100) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 56,
+    "fragment" : "FULL OUTER JOIN t2 ON random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 LEFT SEMI JOIN t2 ON random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(100) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 55,
+    "fragment" : "LEFT SEMI JOIN t2 ON random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 LEFT ANTI JOIN t2 ON random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(100) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 55,
+    "fragment" : "LEFT ANTI JOIN t2 ON random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON t1.col1 = t2.col1 WHERE random(100) > 0.1
+-- !query analysis
+[Analyzer test output redacted due to nondeterminism]
+
+
+-- !query
 DROP TABLE t1
 -- !query analysis
 DropTable false, false

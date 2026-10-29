@@ -362,3 +362,25 @@ SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
 GROUP BY ROW_NUMBER() OVER (ORDER BY c1), explode(a);
 
 SELECT SUM(a) FROM (SELECT 1 AS a) t GROUP BY 1 + ROW_NUMBER() OVER (ORDER BY a);
+
+-- Other window functions as grouping keys, and windows over grouping keys that stay valid with
+-- GROUP BY ALL.
+SELECT count(*) FROM VALUES (1), (2) AS t(c1) GROUP BY RANK() OVER (ORDER BY c1);
+SELECT count(*) FROM VALUES (1), (2) AS t(c1) GROUP BY SUM(c1) OVER ();
+SELECT c1, SUM(c1) OVER () AS s FROM VALUES (1), (2) AS t(c1) GROUP BY ALL ORDER BY c1;
+SELECT c1, SUM(SUM(c1)) OVER () AS s FROM VALUES (1), (2) AS t(c1) GROUP BY ALL ORDER BY c1;
+SELECT c1, ROW_NUMBER() OVER (ORDER BY c1) FROM VALUES (1), (2) AS t(c1) GROUP BY 1, 2;
+
+-- Other generators as grouping keys, and generators next to other columns with GROUP BY ALL and
+-- ordinals.
+SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY posexplode(a);
+SELECT count(*) FROM VALUES (1) AS t(c1) GROUP BY stack(2, c1, c1 + 1);
+SELECT c1, explode(a) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a) GROUP BY ALL;
+SELECT c1, explode(a) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a) GROUP BY 1, 2;
+SELECT posexplode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY ALL;
+
+-- Unsupported grouping keys in the reverse order, inside grouping analytics, and nested deeper.
+SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
+GROUP BY explode(a), ROW_NUMBER() OVER (ORDER BY c1);
+SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY GROUPING SETS ((explode(a)));
+SELECT SUM(a) FROM (SELECT 1 AS a) t GROUP BY abs(1 + ROW_NUMBER() OVER (ORDER BY a));

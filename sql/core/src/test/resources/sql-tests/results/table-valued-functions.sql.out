@@ -1079,3 +1079,68 @@ struct<pos:int,key:string,value:variant>
 0	NULL	1
 1	NULL	2
 2	NULL	3
+
+
+-- !query
+SELECT * FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):a)
+-- !query schema
+struct<pos:int,key:string,value:variant>
+-- !query output
+0	NULL	1
+1	NULL	2
+2	NULL	3
+
+
+-- !query
+SELECT * FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):missing)
+-- !query schema
+struct<pos:int,key:string,value:variant>
+-- !query output
+NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2]}}'):a.b)
+-- !query schema
+struct<pos:int,key:string,value:variant>
+-- !query output
+0	NULL	1
+1	NULL	2
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):['a'])
+-- !query schema
+struct<pos:int,key:string,value:variant>
+-- !query output
+0	NULL	1
+1	NULL	2
+2	NULL	3
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"x": 1, "y": 2}}'):a)
+-- !query schema
+struct<pos:int,key:string,value:variant>
+-- !query output
+0	x	1
+1	y	2
+
+
+-- !query
+SELECT p, v FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t(p, k, v)
+-- !query schema
+struct<p:int,v:variant>
+-- !query output
+0	1
+1	2
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t1,
+  variant_explode(parse_json('{"b": [3]}'):b) AS t2
+-- !query schema
+struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
+-- !query output
+0	NULL	1	0	NULL	3
+1	NULL	2	0	NULL	3

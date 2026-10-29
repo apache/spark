@@ -569,6 +569,53 @@ FROM VALUES
 AS t(payload)
 GROUP BY ROLLUP(payload.file_name);
 
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY CUBE(payload.file_name);
+
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY GROUPING SETS ((payload.file_name), ());
+
+-- A nested struct field, struct fields next to each other, and GROUPING() of a struct field.
+SELECT payload.meta.name, count(*) AS cnt
+FROM VALUES
+  (named_struct('meta', named_struct('name', 'a'))),
+  (named_struct('meta', named_struct('name', 'b')))
+AS t(payload)
+GROUP BY ROLLUP(payload.meta.name);
+
+SELECT payload.file_name, payload.size, sum(payload.size) AS total,
+  GROUPING(payload.file_name) AS g
+FROM VALUES
+  (named_struct('file_name', 'a', 'size', 1)),
+  (named_struct('file_name', 'a', 'size', 2)),
+  (named_struct('file_name', 'b', 'size', 3))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name, payload.size);
+
+-- A struct field grouping key referenced by HAVING and through a SELECT alias.
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name)
+HAVING payload.file_name IS NOT NULL;
+
+SELECT payload.file_name AS fn
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(fn);
+
 
 -- Clean up temporary views
 DROP VIEW testData;

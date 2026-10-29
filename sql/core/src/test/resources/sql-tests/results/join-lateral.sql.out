@@ -1998,6 +1998,58 @@ struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
 
 
 -- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:b)
+-- !query schema
+struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
+-- !query output
+0	a	{"b":[1,2,3]}	0	NULL	1
+0	a	{"b":[1,2,3]}	1	NULL	2
+0	a	{"b":[1,2,3]}	2	NULL	3
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:missing)
+-- !query schema
+struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
+-- !query output
+0	a	{"b":[1,2,3]}	NULL	NULL	NULL
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": {"c": [1, 2]}}}')) AS t,
+  LATERAL variant_explode(t.value:b.c)
+-- !query schema
+struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
+-- !query output
+0	a	{"b":{"c":[1,2]}}	0	NULL	1
+0	a	{"b":{"c":[1,2]}}	1	NULL	2
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:['b'])
+-- !query schema
+struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
+-- !query output
+0	a	{"b":[1,2,3]}	0	NULL	1
+0	a	{"b":[1,2,3]}	1	NULL	2
+0	a	{"b":[1,2,3]}	2	NULL	3
+
+
+-- !query
+SELECT u.pos, u.value FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b) AS u
+-- !query schema
+struct<pos:int,value:variant>
+-- !query output
+0	1
+1	2
+2	3
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

@@ -1152,6 +1152,131 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM cte_time_travel TIMESTAMP AS OF '2020-01-01 00:00:00'
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM cte_time_travel FOR SYSTEM_VERSION AS OF 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM CTE_TIME_TRAVEL VERSION AS OF 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`CTE_TIME_TRAVEL`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM VALUES (1) AS v(col1) JOIN cte_time_travel VERSION AS OF 0 USING (col1)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT (SELECT col1 FROM cte_time_travel VERSION AS OF 0)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM (WITH cte AS (SELECT * FROM cte_time_travel VERSION AS OF 0) SELECT * FROM cte)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1)
+SELECT * FROM spark_catalog.default.cte_time_travel VERSION AS OF 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`spark_catalog`.`default`.`cte_time_travel`"
+  }
+}
+
+
+-- !query
+SELECT * FROM cte_time_travel VERSION AS OF 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`spark_catalog`.`default`.`cte_time_travel`"
+  }
+}
+
+
+-- !query
 DROP TABLE cte_time_travel
 -- !query schema
 struct<>
