@@ -52,13 +52,15 @@ SELECT count(testData.*) FROM testData;
 set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false;
 SELECT count(testData.*) FROM testData;
 
--- Stars with target should be disallowed in COUNT function, also with DISTINCT
+-- Stars with target should be disallowed in COUNT function, also with DISTINCT, a table alias, a
+-- different case, in HAVING and as a window function
 SELECT count(DISTINCT testData.*) FROM testData;
 SELECT count(DISTINCT t.*) FROM testData t;
 SELECT count(DISTINCT TESTDATA.*) FROM testData;
-SELECT count(DISTINCT testData.*, a) FROM testData;
 SELECT a FROM testData GROUP BY a HAVING count(DISTINCT testData.*) > 0;
 SELECT count(testData.*) OVER () FROM testData;
+-- A star with target is allowed next to other arguments
+SELECT count(DISTINCT testData.*, a) FROM testData;
 
 -- legacy behavior: allow count(DISTINCT testData.*)
 set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=true;

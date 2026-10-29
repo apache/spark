@@ -120,4 +120,4 @@ SET spark.sql.ansi.enabled=false;
 SELECT typeof(map_zip_with(map(1, 0), map(CAST(2 AS FLOAT), 0), (k, v1, v2) -> k));
 SELECT typeof(map_zip_with(map(1, 0), map('2', 0), (k, v1, v2) -> k));
 SELECT map_zip_with(map(true, false), map(1, 0), (k, v1, v2) -> struct(k, v1, v2));
-RESET spark.sql.ansi.enabled;
+SET spark.sql.ansi.enabled=true;

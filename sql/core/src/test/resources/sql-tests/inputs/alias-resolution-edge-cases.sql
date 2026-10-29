@@ -18,8 +18,6 @@ SELECT COUNT(col1) as alias, SUM(col1) + alias, SUM(col1) + col1 FROM t1 GROUP B
 -- LCA in a Project, subquery not laterally referenced.
 SELECT 1 AS a, a + 1 AS b,
   (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c;
--- A window function inside an aggregate function is still rejected.
-SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
 -- LCA in a Project, subquery laterally referenced.
 SELECT 1 AS a,
   (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c,
@@ -39,8 +37,9 @@ SELECT col1 AS a, a + 1 AS b,
     AS c,
   ROW_NUMBER() OVER (ORDER BY col1) AS d
 FROM VALUES (1), (2);
--- A window function inside an aggregate function: other functions, with GROUP BY, without LCA, and
--- inside a scalar subquery.
+-- A window function inside an aggregate function is still rejected.
+SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
+-- The same with other functions, with GROUP BY, without LCA, and inside a scalar subquery.
 SELECT 1 AS a, a + 1 AS b, MAX(RANK() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
 SELECT col1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s
 FROM VALUES (1), (2) GROUP BY col1;

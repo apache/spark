@@ -271,18 +271,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT count(DISTINCT testData.*, a) FROM testData
--- !query analysis
-Aggregate [count(distinct a#x, b#x, a#x) AS count(DISTINCT a, b, a)#xL]
-+- SubqueryAlias testdata
-   +- View (`testData`, [a#x, b#x])
-      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
-         +- Project [a#x, b#x]
-            +- SubqueryAlias testData
-               +- LocalRelation [a#x, b#x]
-
-
--- !query
 SELECT a FROM testData GROUP BY a HAVING count(DISTINCT testData.*) > 0
 -- !query analysis
 org.apache.spark.sql.catalyst.ExtendedAnalysisException
@@ -314,6 +302,18 @@ org.apache.spark.sql.AnalysisException
     "tableName" : "`testData`"
   }
 }
+
+
+-- !query
+SELECT count(DISTINCT testData.*, a) FROM testData
+-- !query analysis
+Aggregate [count(distinct a#x, b#x, a#x) AS count(DISTINCT a, b, a)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
 
 
 -- !query

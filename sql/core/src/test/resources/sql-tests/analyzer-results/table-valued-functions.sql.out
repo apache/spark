@@ -984,57 +984,61 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a)
+SELECT pos, key, to_json(value) AS value FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a)
 -- !query analysis
-Project [pos#x, key#x, value#x]
+Project [pos#x, key#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- Generate variant_explode(variant_get(parse_json({"a": [1, 2, 3]}, true), $.a, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
 -- !query
-SELECT * FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):a)
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):a)
 -- !query analysis
-Project [pos#x, key#x, value#x]
+Project [pos#x, key#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- Generate variant_explode(variant_get(parse_json({"a": [1, 2, 3]}, true), $.a, VariantType, true, Some(America/Los_Angeles), false)), true, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
 -- !query
-SELECT * FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):missing)
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode_outer(parse_json('{"a": [1, 2, 3]}'):missing)
 -- !query analysis
-Project [pos#x, key#x, value#x]
+Project [pos#x, key#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- Generate variant_explode(variant_get(parse_json({"a": [1, 2, 3]}, true), $.missing, VariantType, true, Some(America/Los_Angeles), false)), true, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
 -- !query
-SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2]}}'):a.b)
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2]}}'):a.b)
 -- !query analysis
-Project [pos#x, key#x, value#x]
+Project [pos#x, key#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- Generate variant_explode(variant_get(parse_json({"a": {"b": [1, 2]}}, true), $.a.b, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
 -- !query
-SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):['a'])
+SELECT pos, key, to_json(value) AS value FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):['a'])
 -- !query analysis
-Project [pos#x, key#x, value#x]
+Project [pos#x, key#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- Generate variant_explode(variant_get(parse_json({"a": [1, 2, 3]}, true), $['a'], VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
 -- !query
-SELECT * FROM variant_explode(parse_json('{"a": {"x": 1, "y": 2}}'):a)
+SELECT pos, key, to_json(value) AS value
+FROM variant_explode(parse_json('{"a": {"x": 1, "y": 2}}'):a)
 -- !query analysis
-Project [pos#x, key#x, value#x]
+Project [pos#x, key#x, to_json(value#x, Some(America/Los_Angeles)) AS value#x]
 +- Generate variant_explode(variant_get(parse_json({"a": {"x": 1, "y": 2}}, true), $.a, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
    +- OneRowRelation
 
 
 -- !query
-SELECT p, v FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t(p, k, v)
+SELECT p, to_json(v) AS v FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t(p, k, v)
 -- !query analysis
-Project [p#x, v#x]
+Project [p#x, to_json(v#x, Some(America/Los_Angeles)) AS v#x]
 +- SubqueryAlias t
    +- Project [pos#x AS p#x, key#x AS k#x, value#x AS v#x]
       +- Generate variant_explode(variant_get(parse_json({"a": [1, 2]}, true), $.a, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
@@ -1042,10 +1046,11 @@ Project [p#x, v#x]
 
 
 -- !query
-SELECT * FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t1,
+SELECT t1.pos, to_json(t1.value) AS v1, t2.pos, to_json(t2.value) AS v2
+FROM variant_explode(parse_json('{"a": [1, 2]}'):a) AS t1,
   variant_explode(parse_json('{"b": [3]}'):b) AS t2
 -- !query analysis
-Project [pos#x, key#x, value#x, pos#x, key#x, value#x]
+Project [pos#x, to_json(value#x, Some(America/Los_Angeles)) AS v1#x, pos#x, to_json(value#x, Some(America/Los_Angeles)) AS v2#x]
 +- Join Inner
    :- SubqueryAlias t1
    :  +- Generate variant_explode(variant_get(parse_json({"a": [1, 2]}, true), $.a, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]

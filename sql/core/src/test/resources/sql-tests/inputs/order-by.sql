@@ -68,8 +68,8 @@ SELECT col1 AS a, SUM(col2) AS b, CASE WHEN col1 = 1 THEN 1 END AS c FROM VALUES
 -- Priority of aliases when replacing them in ORDER BY should be determined by name
 SELECT col1+1 AS ltrl2, col1+1 AS ltrl1 FROM VALUES(1) GROUP BY col1+1 ORDER BY col1+1;
 
--- Window and aggregate functions are rejected in every ORDER BY and DISTRIBUTE BY key, not only in
--- the last one.
+-- Window and aggregate functions are rejected in ORDER BY and DISTRIBUTE BY keys of a query without
+-- GROUP BY.
 SELECT a FROM testData ORDER BY max(a) OVER (), a;
 SELECT a FROM testData ORDER BY a, max(a) OVER ();
 SELECT a FROM testData ORDER BY a, max(a);

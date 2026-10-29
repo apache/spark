@@ -583,21 +583,28 @@ SELECT * FROM (SELECT k FROM cte1 GROUP BY k) g,
 LATERAL (SELECT v1 AS leaked);
 
 -- Table-valued function argument that is an alias over an outer reference: the `:` extraction on
--- the lateral join's outer `t.value` makes the variant_explode argument a top-level Alias.
-SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
-  LATERAL variant_explode(t.value:b);
--- The same with variant_explode_outer, a missing, a nested and a bracketed path, and a table
--- alias on the lateral side.
-SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
-  LATERAL variant_explode_outer(t.value:b);
-SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
-  LATERAL variant_explode_outer(t.value:missing);
-SELECT * FROM variant_explode(parse_json('{"a": {"b": {"c": [1, 2]}}}')) AS t,
-  LATERAL variant_explode(t.value:b.c);
-SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
-  LATERAL variant_explode(t.value:['b']);
-SELECT u.pos, u.value FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+-- the lateral join's outer `t.value` makes the variant_explode argument a top-level Alias. The
+-- variant values are returned as JSON strings, which the Thrift server can also return.
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
   LATERAL variant_explode(t.value:b) AS u;
+-- The same with variant_explode_outer, a missing, a nested and a bracketed path, and column
+-- aliases on the lateral side.
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:b) AS u;
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode_outer(t.value:missing) AS u;
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": {"c": [1, 2]}}}')) AS t,
+  LATERAL variant_explode(t.value:b.c) AS u;
+SELECT t.key, u.pos, to_json(u.value) AS value
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:['b']) AS u;
+SELECT t.key, u.p, to_json(u.v) AS v
+FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b) AS u(p, k, v);
 
 -- clean up
 DROP VIEW t1;

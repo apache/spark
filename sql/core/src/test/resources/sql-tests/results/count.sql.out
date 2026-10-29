@@ -245,14 +245,6 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
-SELECT count(DISTINCT testData.*, a) FROM testData
--- !query schema
-struct<count(DISTINCT a, b, a):bigint>
--- !query output
-3
-
-
--- !query
 SELECT a FROM testData GROUP BY a HAVING count(DISTINCT testData.*) > 0
 -- !query schema
 struct<>
@@ -288,6 +280,14 @@ org.apache.spark.sql.AnalysisException
     "tableName" : "`testData`"
   }
 }
+
+
+-- !query
+SELECT count(DISTINCT testData.*, a) FROM testData
+-- !query schema
+struct<count(DISTINCT a, b, a):bigint>
+-- !query output
+3
 
 
 -- !query

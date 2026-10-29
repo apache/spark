@@ -84,17 +84,6 @@ struct<a:int,b:int,c:int>
 
 
 -- !query
-SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
--- !query schema
-struct<>
--- !query output
-org.apache.spark.sql.AnalysisException
-{
-  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
-}
-
-
--- !query
 SELECT 1 AS a,
   (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c,
   c + a AS d
@@ -144,6 +133,17 @@ struct<a:int,b:int,c:int,d:int>
 -- !query output
 1	2	2	1
 2	3	2	2
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
 
 
 -- !query

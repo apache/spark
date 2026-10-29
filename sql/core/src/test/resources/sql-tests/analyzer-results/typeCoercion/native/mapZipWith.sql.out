@@ -592,6 +592,6 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-RESET spark.sql.ansi.enabled
+SET spark.sql.ansi.enabled=true
 -- !query analysis
-ResetCommand spark.sql.ansi.enabled
+SetCommand (spark.sql.ansi.enabled,Some(true))

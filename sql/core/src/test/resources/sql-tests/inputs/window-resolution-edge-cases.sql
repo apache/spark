@@ -115,6 +115,7 @@ SELECT count(rand(0)) OVER () AS cnt FROM t1;
 SELECT col1, count(randn(0)) OVER (ORDER BY col1) AS cnt FROM t1;
 SELECT col1, count(uuid()) OVER (PARTITION BY col2) AS cnt FROM t1 ORDER BY col1;
 SELECT col1, max(rand(0) < 2) OVER () AS m FROM t1 ORDER BY col1;
+-- Nondeterministic expressions are also allowed in window partitioning expressions.
 SELECT col1, row_number() OVER (PARTITION BY rand(0) < 2 ORDER BY col1) AS rn FROM t1;
 
 DROP TABLE t1;

@@ -526,8 +526,8 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
-RESET spark.sql.ansi.enabled
+SET spark.sql.ansi.enabled=true
 -- !query schema
-struct<>
+struct<key:string,value:string>
 -- !query output
-
+spark.sql.ansi.enabled	true
