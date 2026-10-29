@@ -507,8 +507,11 @@ object CollationTypeCoercion extends SQLConfHelper {
       case _: Throwable => NullType
     }
 
-    expression.children.exists(child =>
-      shouldFailWithIndeterminateCollation(expression, getDataTypeSafe(child)))
+    // Most expressions can contain indeterminate collation, so their children's types are not
+    // needed. Some of those types are an internal error to build and swallow, such as the type of
+    // a WithField or DropField operation of an UpdateFields.
+    !canContainIndeterminateCollation(expression) &&
+      expression.children.exists(child => hasIndeterminateCollation(getDataTypeSafe(child)))
   }
 
   /**
