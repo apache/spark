@@ -2,23 +2,23 @@
 WindowReorder: stack reordering of the window chain
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20.1+1-LTS on Linux 6.17.0-1022-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 window batch over two user key groups:    Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-baseline (window reorder off)                     25331          25698         439          0.7        1509.9       1.0X
-optimized (window reorder on)                     20076          20185          72          0.8        1196.6       1.3X
+baseline (window reorder off)                     31995          32295         268          0.5        1907.1       1.0X
+optimized (window reorder on)                     24104          24230         123          0.7        1436.7       1.3X
 
 
 ================================================================================================
 WindowReorder: wide collect_list output in the window chain
 ================================================================================================
 
-OpenJDK 64-Bit Server VM 17.0.20.1+1-LTS on Linux 6.17.0-1022-azure
-AMD EPYC 7763 64-Core Processor
+OpenJDK 64-Bit Server VM 17.0.21+9-LTS on Linux 6.17.0-1022-azure
+Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz
 ranking windows with a wide event list:   Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
 ------------------------------------------------------------------------------------------------------------------------
-baseline (window reorder off)                     19162          19348         182          0.9        1142.2       1.0X
-optimized (window reorder on)                     17490          17578         110          1.0        1042.5       1.1X
+baseline (window reorder off)                     18027          18113          66          0.9        1074.5       1.0X
+optimized (window reorder on)                     17034          17122          71          1.0        1015.3       1.1X
 
 
