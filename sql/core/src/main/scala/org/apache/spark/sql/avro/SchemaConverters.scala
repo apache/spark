@@ -115,12 +115,34 @@ object SchemaConverters extends Logging {
     mapSchema
   }
 
-  private def parseStampedStringType(catalystTypeAttrValue: String): StringType = {
-    CatalystSqlParser.parseDataType(catalystTypeAttrValue) match {
+  // Parses a Catalyst type carried in an Avro property (`spark.sql.catalyst.type` or, for map
+  // keys, `spark.sql.catalyst.mapKey.type`) with the recursive-descent Catalyst parser. A
+  // pathologically deep type string can exhaust the stack while parsing; the parser only converts
+  // `ParseException`, so such a `StackOverflowError` would otherwise escape as an unhandled error.
+  // Convert it into an `IncompatibleSchemaException`, naming the property it came from, so it
+  // surfaces as a normal schema error. This runs on both the driver (schema inference) and
+  // executors (`AvroDeserializer`).
+  private def parseCatalystType(
+      catalystTypeAttrValue: String,
+      propName: String = CATALYST_TYPE_PROP_NAME): DataType = {
+    try {
+      CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+    } catch {
+      case e: StackOverflowError =>
+        throw new IncompatibleSchemaException(
+          s"Cannot parse the $propName Avro schema property because it is nested " +
+            "too deeply.", e)
+    }
+  }
+
+  private def parseStampedStringType(
+      catalystTypeAttrValue: String,
+      propName: String = CATALYST_TYPE_PROP_NAME): StringType = {
+    parseCatalystType(catalystTypeAttrValue, propName) match {
       case s: StringType => s
       case other =>
         throw new IncompatibleSchemaException(
-          s"Avro $CATALYST_TYPE_PROP_NAME for STRING must be a STRING subtype, got $other")
+          s"Avro $propName for STRING must be a STRING subtype, got $other")
     }
   }
 
@@ -138,7 +160,7 @@ object SchemaConverters extends Logging {
           val catalystType = if (catalystTypeAttrValue == null) {
             IntegerType
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
           }
           SchemaType(catalystType, nullable = false)
       }
@@ -173,7 +195,7 @@ object SchemaConverters extends Logging {
           val nanosType = if (catalystTypeAttrValue == null) {
             TimestampLTZNanosType()
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
               .asInstanceOf[TimestampLTZNanosType]
           }
           SchemaType(nanosType, nullable = false)
@@ -182,7 +204,7 @@ object SchemaConverters extends Logging {
           val nanosType = if (catalystTypeAttrValue == null) {
             TimestampNTZNanosType()
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
               .asInstanceOf[TimestampNTZNanosType]
           }
           SchemaType(nanosType, nullable = false)
@@ -193,7 +215,7 @@ object SchemaConverters extends Logging {
           val timeType = if (catalystTypeAttrValue == null) {
             TimeType(TimeType.MICROS_PRECISION)
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue).asInstanceOf[TimeType]
+            parseCatalystType(catalystTypeAttrValue).asInstanceOf[TimeType]
           }
           SchemaType(timeType, nullable = false)
         case _ =>
@@ -201,7 +223,7 @@ object SchemaConverters extends Logging {
           val catalystType = if (catalystTypeAttrValue == null) {
             LongType
           } else {
-            CatalystSqlParser.parseDataType(catalystTypeAttrValue)
+            parseCatalystType(catalystTypeAttrValue)
           }
           SchemaType(catalystType, nullable = false)
       }
@@ -283,7 +305,7 @@ object SchemaConverters extends Logging {
           val keyType = if (keyAttr == null) {
             StringType
           } else {
-            parseStampedStringType(keyAttr)
+            parseStampedStringType(keyAttr, CATALYST_MAP_KEY_TYPE_PROP_NAME)
           }
           SchemaType(
             MapType(keyType, schemaType.dataType, valueContainsNull = schemaType.nullable),

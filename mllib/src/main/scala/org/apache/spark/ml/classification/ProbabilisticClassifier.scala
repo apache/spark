@@ -124,7 +124,7 @@ abstract class ProbabilisticClassifier[
  *     <td>Set</td>
  *     <td>Set</td>
  *     <td>Set</td>
- *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> =>
+ *     <td><code>predictRawColumn</code> => <code>raw2probabilityColumn</code> &amp;
  *       <code>raw2predictionColumn</code></td>
  *   </tr>
  * </table>
@@ -194,7 +194,14 @@ abstract class ProbabilisticClassificationModel[
    * @note This method honors [[thresholds]] when they are set.
    */
   protected def probability2predictionColumn(probability: Column): Column = {
-    udf(probability2prediction _).apply(probability)
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((probability: Vector) =>
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      ).apply(probability)
+    } else {
+      udf((probability: Vector) => probability.argmax.toDouble).apply(probability)
+    }
   }
 
   /** @group setParam */

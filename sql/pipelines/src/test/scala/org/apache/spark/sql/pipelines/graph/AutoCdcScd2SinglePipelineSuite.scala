@@ -48,7 +48,7 @@ class AutoCdcScd2SinglePipelineSuite
   import testImplicits._
 
   /** The SCD2 target's `_cdc_metadata` struct value for a given recordStartAt. */
-  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt)
+  private def scd2Meta(recordStartAt: Long): Row = Row(recordStartAt, null)
 
   /**
    * DDL for an SCD2 target table with user columns `(id, name, version)` plus the framework

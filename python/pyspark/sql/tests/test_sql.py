@@ -113,6 +113,58 @@ class SQLTestsMixin:
         self.assertEqual(df1.take(1), [Row(id=5)])
         self.assertEqual(df1.tail(1), [Row(id=8)])
 
+    def test_kwargs_string_literal(self):
+        # String values are converted to SQL string literals with quotes and
+        # backslashes escaped, so they round-trip unchanged.
+        for s in [
+            "abc",
+            "",
+            "it's",
+            'say "hi"',
+            "back\\slash",
+            "C:\\new",
+            "end\\",
+            "\\'",
+            "x' OR '1'='1",
+            "line1\nline2\ttab",
+            "{not_a_field}",
+        ]:
+            with self.subTest(s=s):
+                self.assertEqual(self.spark.sql("SELECT {s} AS v", s=s).first(), Row(v=s))
+
+        df = self.spark.sql(
+            "SELECT * FROM VALUES ('a'), ('b'), ('it''s') AS t(name) WHERE name = {name}",
+            name="it's",
+        )
+        self.assertEqual(df.collect(), [Row(name="it's")])
+
+    def test_kwargs_dataframe_referenced_twice(self):
+        df = self.spark.range(3)
+        expected = [Row(a=0, b=0), Row(a=1, b=1), Row(a=2, b=2)]
+
+        # The same DataFrame referenced twice by the same name.
+        df1 = self.spark.sql(
+            "SELECT l.id AS a, r.id AS b FROM {df} l JOIN {df} r ON l.id = r.id ORDER BY a",
+            df=df,
+        )
+        self.assertEqual(df1.collect(), expected)
+
+        # The same DataFrame passed under two different names.
+        df2 = self.spark.sql(
+            "SELECT l.id AS a, r.id AS b FROM {x} l JOIN {y} r ON l.id = r.id ORDER BY a",
+            x=df,
+            y=df,
+        )
+        self.assertEqual(df2.collect(), expected)
+
+        # Different DataFrames must not share a name.
+        df3 = self.spark.sql(
+            "SELECT l.id AS a, r.id AS b FROM {x} l JOIN {y} r ON l.id + 1 = r.id ORDER BY a",
+            x=df,
+            y=self.spark.range(1, 3),
+        )
+        self.assertEqual(df3.collect(), [Row(a=0, b=1), Row(a=1, b=2)])
+
     def test_nested_view(self):
         with self.temp_view("v1", "v2", "v3", "v4"):
             self.spark.range(10).createOrReplaceTempView("v1")

@@ -488,8 +488,8 @@ private[ml] class FeedForwardModel private(
       new BDV[Double](denseWeights, offset, 1, layers(i).weightSize))
     offset += layers(i).weightSize
   }
-  private var outputs: Array[BDM[Double]] = null
-  private var deltas: Array[BDM[Double]] = null
+  @transient private var outputs: Array[BDM[Double]] = null
+  @transient private var deltas: Array[BDM[Double]] = null
 
   override def forward(data: BDM[Double], includeLastLayer: Boolean): Array[BDM[Double]] = {
     // Initialize output arrays for all layers. Special treatment for InPlace

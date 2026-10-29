@@ -134,6 +134,78 @@ public final class CredentialProviderLoader {
         throw new IllegalStateException("Credential providers have already been closed");
       }
     }
+    Optional<CredentialProvider> selectedOpt = selectProvider(scheme, conf);
+    if (selectedOpt.isEmpty()) {
+      return Optional.empty();
+    }
+    CredentialProvider selected = selectedOpt.get();
+
+    // Initialize exactly once under the lock (first-conf-wins).
+    // Only pass spark.security.oidc.* keys to init() to avoid leaking secrets
+    // from other subsystems to third-party ServiceLoader providers. This follows the
+    // precedent of DataSourceV2Utils.extractSessionConfigs() which scopes configuration
+    // to a specific prefix. We keep the full key (unlike extractSessionConfigs which
+    // strips the prefix) so providers can distinguish sub-keys unambiguously.
+    synchronized (this) {
+      // Re-check under the initialization lock in case closeAll() ran during selection.
+      if (providersClosed) {
+        throw new IllegalStateException("Credential providers have already been closed");
+      }
+      if (!initializedProviders.contains(selected)) {
+        Map<String, String> filteredConf = new HashMap<>();
+        for (Map.Entry<String, String> entry : conf.entrySet()) {
+          if (entry.getKey().startsWith(OIDC_CONF_PREFIX)) {
+            filteredConf.put(entry.getKey(), entry.getValue());
+          }
+        }
+        selected.init(Collections.unmodifiableMap(filteredConf));
+        initializedProviders.add(selected);
+      }
+    }
+    return Optional.of(selected);
+  }
+
+  /**
+   * Selects the {@link CredentialProvider} for the given URI scheme <em>without</em>
+   * initializing it, applying the same Binding Policy A as {@link #providerFor(String, Map)}.
+   * <p>
+   * This is intended for the provider <em>selection</em> phase, which only needs a provider's
+   * {@link CredentialProvider#additionalSparkProperties()} -- a static declaration that does not
+   * depend on {@link CredentialProvider#init(Map)} having run. Because {@code init()} on the
+   * shipped AWS provider builds an STS client (which can trigger AWS SDK region resolution and
+   * EC2 IMDS network calls), skipping {@code init()} here keeps the selection phase free of
+   * network I/O and side effects. Actual initialization happens later, once, via
+   * {@link #providerFor(String, Map)} during credential resolution.
+   *
+   * @param scheme the URI scheme (e.g., "s3a"); normalized to lowercase
+   * @param conf Spark configuration properties as a string map
+   * @return the selected (uninitialized) provider, or empty if no provider supports the scheme
+   * @throws IllegalArgumentException if explicit selection names an unknown or non-supporting
+   *     class, or if multiple candidates exist without explicit selection
+   * @throws IllegalStateException if providers have already been closed or if a provider returns
+   *     null from {@code supportedSchemes()}
+   */
+  public Optional<CredentialProvider> selectProviderForProperties(
+      String scheme, Map<String, String> conf) {
+    Objects.requireNonNull(scheme, "scheme must not be null");
+    Objects.requireNonNull(conf, "conf must not be null");
+    if (scheme.isEmpty()) {
+      throw new IllegalArgumentException("scheme must not be empty");
+    }
+    synchronized (this) {
+      if (providersClosed) {
+        throw new IllegalStateException("Credential providers have already been closed");
+      }
+    }
+    return selectProvider(scheme, conf);
+  }
+
+  /**
+   * Applies Binding Policy A to choose the provider for a scheme, without initializing it.
+   * Shared by {@link #providerFor(String, Map)} (which additionally initializes the selected
+   * provider) and {@link #selectProviderForProperties(String, Map)} (which does not).
+   */
+  private Optional<CredentialProvider> selectProvider(String scheme, Map<String, String> conf) {
     String normalizedScheme = scheme.toLowerCase(Locale.ROOT);
     List<CredentialProvider> providers = getProviders();
 
@@ -179,29 +251,6 @@ public final class CredentialProviderLoader {
       throw new IllegalArgumentException(
           "Multiple credential providers found for scheme '" + normalizedScheme
               + "'. Set " + confKey + " to one of: " + candidateNames);
-    }
-
-    // Initialize exactly once under the lock (first-conf-wins).
-    // Only pass spark.security.oidc.* keys to init() to avoid leaking secrets
-    // from other subsystems to third-party ServiceLoader providers. This follows the
-    // precedent of DataSourceV2Utils.extractSessionConfigs() which scopes configuration
-    // to a specific prefix. We keep the full key (unlike extractSessionConfigs which
-    // strips the prefix) so providers can distinguish sub-keys unambiguously.
-    synchronized (this) {
-      // Re-check under the initialization lock in case closeAll() ran during selection.
-      if (providersClosed) {
-        throw new IllegalStateException("Credential providers have already been closed");
-      }
-      if (!initializedProviders.contains(selected)) {
-        Map<String, String> filteredConf = new HashMap<>();
-        for (Map.Entry<String, String> entry : conf.entrySet()) {
-          if (entry.getKey().startsWith(OIDC_CONF_PREFIX)) {
-            filteredConf.put(entry.getKey(), entry.getValue());
-          }
-        }
-        selected.init(Collections.unmodifiableMap(filteredConf));
-        initializedProviders.add(selected);
-      }
     }
     return Optional.of(selected);
   }

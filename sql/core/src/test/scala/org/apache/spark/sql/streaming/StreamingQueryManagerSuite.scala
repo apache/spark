@@ -20,17 +20,21 @@ package org.apache.spark.sql.streaming
 import java.io.File
 import java.util.concurrent.CountDownLatch
 
+import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.Future
 import scala.util.Random
 import scala.util.control.NonFatal
 
+import org.apache.hadoop.fs.Path
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
 import org.scalatest.time.Span
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.{Dataset, Encoders}
+import org.apache.spark.sql.{AnalysisException, Dataset, Encoders}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
+import org.apache.spark.sql.execution.streaming.checkpointing.{OffsetMap, OffsetSeq, OffsetSeqLog,
+  OffsetSeqMetadata, OffsetSeqMetadataV2}
 import org.apache.spark.sql.execution.streaming.runtime._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.util.BlockingSource
@@ -45,6 +49,29 @@ class StreamingQueryManagerSuite extends StreamTest {
 
   override val streamingTimeout = 20.seconds
 
+  private def rewriteOffsetLogConf(
+      checkpoint: File)(f: Map[String, String] => Map[String, String]): Unit = {
+    val offsetsPath = new File(checkpoint, "offsets").getCanonicalPath
+    val offsetLog = new OffsetSeqLog(spark, offsetsPath)
+    val (batchId, offsetSeq) = offsetLog.getLatest().getOrElse {
+      fail("Missing offset log entry")
+    }
+    val updatedMetadata = offsetSeq.metadataOpt.map {
+      case m: OffsetSeqMetadata => m.copy(conf = f(m.conf))
+      case m: OffsetSeqMetadataV2 => m.copy(conf = f(m.conf))
+    }
+    val updatedOffsetSeq = offsetSeq match {
+      case o: OffsetSeq =>
+        o.copy(metadataOpt = updatedMetadata.map(_.asInstanceOf[OffsetSeqMetadata]))
+      case o: OffsetMap =>
+        o.copy(metadata = updatedMetadata.map(_.asInstanceOf[OffsetSeqMetadataV2]).get)
+    }
+    val hadoopConf = spark.sessionState.newHadoopConf()
+    val batchFile = new Path(offsetsPath, batchId.toString)
+    assert(batchFile.getFileSystem(hadoopConf).delete(batchFile, false))
+    assert(offsetLog.add(batchId, updatedOffsetSeq))
+  }
+
   override def beforeEach(): Unit = {
     super.beforeEach()
     assert(spark.streams.active.isEmpty)
@@ -57,6 +84,161 @@ class StreamingQueryManagerSuite extends StreamTest {
       spark.streams.resetTerminated()
     } finally {
       super.afterEach()
+    }
+  }
+
+  test("streaming EXCEPT compatibility defaults to legacy behavior for old checkpoints") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val result = input.toDS().except(Seq(100).toDS())
+      val checkpointLocation = checkpointDir.getCanonicalPath
+      val output = ArrayBuffer.empty[Int]
+
+      def startQuery(): StreamingQuery = result.writeStream
+        .outputMode("update")
+        .foreachBatch { (batch: Dataset[Int], _: Long) =>
+          output ++= batch.collect()
+          ()
+        }
+        .option("checkpointLocation", checkpointLocation)
+        .start()
+
+      withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true") {
+        val query = startQuery()
+        try {
+          input.addData(1)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+
+      rewriteOffsetLogConf(checkpointDir)(
+        _ - SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key)
+
+      withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "false") {
+        val query = startQuery()
+        try {
+          input.addData(2)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+        assert(!spark.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME))
+      }
+
+      assert(output.sorted === Seq(1, 2))
+    }
+  }
+
+  test("streaming EXCEPT compatibility restores false from the checkpoint") {
+    withTempDir { checkpointDir =>
+      val input = MemoryStream[Int]
+      val result = input.toDS().except(Seq(100).toDS())
+      val checkpointLocation = checkpointDir.getCanonicalPath
+
+      def startQuery(): StreamingQuery = result.writeStream
+        .outputMode("update")
+        .foreachBatch { (batch: Dataset[Int], _: Long) =>
+          batch.collect()
+          ()
+        }
+        .option("checkpointLocation", checkpointLocation)
+        .start()
+
+      withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true") {
+        val query = startQuery()
+        try {
+          input.addData(1)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+
+      rewriteOffsetLogConf(checkpointDir)(_.updated(
+        SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key, "false"))
+
+      withSQLConf(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true") {
+        val error = intercept[AnalysisException](startQuery())
+        assert(error.getMessage.contains(
+          "Except on a streaming DataFrame/Dataset on the left is not supported"))
+        assert(spark.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME))
+      }
+    }
+  }
+
+  test("streaming EXCEPT compatibility uses the query session checkpoint location") {
+    withTempDir { checkpointRoot =>
+      withTempDir { otherCheckpointRoot =>
+        val querySession = spark.cloneSession()
+        val otherSession = spark.cloneSession()
+        val input = MemoryStream(Encoders.scalaInt, querySession)
+        val static = querySession.createDataset(Seq(100))(Encoders.scalaInt)
+        val result = input.toDS().except(static)
+        val output = ArrayBuffer.empty[Int]
+
+        querySession.conf.set(SQLConf.CHECKPOINT_LOCATION.key, checkpointRoot.getCanonicalPath)
+        otherSession.conf.set(
+          SQLConf.CHECKPOINT_LOCATION.key, otherCheckpointRoot.getCanonicalPath)
+
+        def startQuery(): StreamingQuery = result.writeStream
+          .queryName("streaming-except")
+          .outputMode("update")
+          .foreachBatch { (batch: Dataset[Int], _: Long) =>
+            output ++= batch.collect()
+            ()
+          }
+          .start()
+
+        querySession.conf.set(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key, true)
+        val firstQuery = startQuery()
+        try {
+          input.addData(1)
+          firstQuery.processAllAvailable()
+        } finally {
+          firstQuery.stop()
+        }
+
+        querySession.conf.set(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key, false)
+        val secondQuery = otherSession.withActive(startQuery())
+        try {
+          input.addData(2)
+          secondQuery.processAllAvailable()
+        } finally {
+          secondQuery.stop()
+        }
+
+        assert(output.sorted === Seq(1, 2))
+        assert(!querySession.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME))
+      }
+    }
+  }
+
+  test("streaming EXCEPT reuses the generated checkpoint location during analysis") {
+    withTempDir { checkpointRoot =>
+      val input = MemoryStream[Int]
+      val result = input.toDS().except(Seq(100).toDS())
+
+      withSQLConf(
+          SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true",
+          SQLConf.CHECKPOINT_LOCATION.key -> checkpointRoot.getCanonicalPath) {
+        val query = result.writeStream
+          .outputMode("update")
+          .foreachBatch { (batch: Dataset[Int], _: Long) =>
+            batch.collect()
+            ()
+          }
+          .start()
+        try {
+          input.addData(1)
+          query.processAllAvailable()
+        } finally {
+          query.stop()
+        }
+      }
+
+      assert(checkpointRoot.listFiles().count(_.isDirectory) === 1)
     }
   }
 

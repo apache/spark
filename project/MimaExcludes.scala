@@ -34,20 +34,27 @@ import com.typesafe.tools.mima.core.*
 object MimaExcludes {
 
   // Exclude rules for 5.0.x from 4.4.0 (add 5.0-specific filters below as needed).
-  lazy val v50excludes: Seq[Problem => Boolean] = v44excludes ++ Seq(
+  lazy val v50excludes: Seq[Problem => Boolean] = v44excludes
+
+  // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
+  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes ++ Seq(
     // [SPARK-58896] Decision tree leaf counts moved behind NodeStats. The old package-private
     // numLeave accessors are removed from concrete models.
     ProblemFilters.exclude[DirectMissingMethodProblem](
       "org.apache.spark.ml.classification.DecisionTreeClassificationModel.numLeave"),
     ProblemFilters.exclude[DirectMissingMethodProblem](
-      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave")
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.numLeave"),
+    // [SPARK-59154] Remove unused prediction variance helper after inlining its implementation.
+    ProblemFilters.exclude[DirectMissingMethodProblem](
+      "org.apache.spark.ml.regression.DecisionTreeRegressionModel.predictVariance"),
+    // BIN BY DataFrame API.
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.binBy")
   )
-
-  // Exclude rules for 4.4.x from 4.3.0 (add 4.4-specific filters below as needed).
-  lazy val v44excludes: Seq[Problem => Boolean] = v43excludes
 
   // Exclude rules for 4.3.x from 4.2.0 (add 4.3-specific filters below as needed).
   lazy val v43excludes: Seq[Problem => Boolean] = v42excludes ++ Seq(
+    // [SPARK-60113][CORE][SQL] Add TaskContext.addTaskPreCompletionListener
+    ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskPreCompletionListener"),
     // [SPARK-54879] Add exitCode field to ApplicationAttemptInfo
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.tupled"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.ApplicationAttemptInfo.curried"),
@@ -67,6 +74,15 @@ object MimaExcludes {
       "org.apache.spark.ml.recommendation.ALS.intermediateStorageLevel"),
     ProblemFilters.exclude[FinalMethodProblem](
       "org.apache.spark.ml.recommendation.ALS.getIntermediateStorageLevel"),
+    // [SPARK-60384] Spark 4.2 artifacts shade Jetty types in these private wrapper classes.
+    ProblemFilters.exclude[MissingTypesProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler$MutableFieldsWrapper"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.onAddField"),
+    ProblemFilters.exclude[IncompatibleMethTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#MutableFieldsWrapper.this"),
+    ProblemFilters.exclude[IncompatibleResultTypeProblem](
+      "org.apache.spark.ui.ProxyRedirectHandler#ResponseWrapper.getHeaders"),
     // [SPARK-57987] Add desc field to the SQL REST API Node case class
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.apply"),
     ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.status.api.v1.sql.Node.copy"),
@@ -100,8 +116,6 @@ object MimaExcludes {
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.TaskContext.addTaskInterruptListener"),
     // [SPARK-56700][SS] Make DataStreamReader.name public
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.streaming.DataStreamReader.name"),
-    // [SPARK-34591][ML] Add pruneTree parameter to Strategy
-    ProblemFilters.exclude[DirectMissingMethodProblem]("org.apache.spark.mllib.tree.configuration.Strategy.this"),
     // [SPARK-56395][SQL] Add NEAREST BY top-K ranking join
     ProblemFilters.exclude[ReversedMissingMethodProblem]("org.apache.spark.sql.Dataset.nearestByJoin"),
     // [SPARK-57332][SQL] MySQLDialect no longer overrides the visit methods below; the public

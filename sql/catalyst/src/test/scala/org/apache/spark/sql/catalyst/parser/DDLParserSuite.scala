@@ -46,7 +46,11 @@ class DDLParserSuite extends AnalysisTest {
     // We don't care the write privileges in this suite.
     val parsed = parsePlan(sql).transform {
       case u: UnresolvedRelation => u.clearWritePrivileges
-      case u: UnresolvedInsertTarget => UnresolvedRelation(u.multipartIdentifier, u.options)
+      case i: InsertIntoStatement =>
+        i.table match {
+          case u: UnresolvedRelation => i.copy(table = u.clearWritePrivileges)
+          case _ => i
+        }
       case o: OverwriteByExpression =>
         o.table match {
           case u: UnresolvedRelation => o.copy(table = u.clearWritePrivileges)
@@ -1625,7 +1629,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT INTO testcat.ns1.ns2.tbl SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        UnresolvedInsert(
+        InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Nil,
@@ -1640,7 +1644,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT INTO testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        UnresolvedInsert(
+        InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Seq("a", "b"),
@@ -1651,7 +1655,7 @@ class DDLParserSuite extends AnalysisTest {
 
   test("insert table: append from another catalog") {
     parseCompare("INSERT INTO TABLE testcat.ns1.ns2.tbl SELECT * FROM testcat2.db.tbl",
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map.empty,
         Nil,
@@ -1666,7 +1670,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2)
         |SELECT * FROM source
       """.stripMargin,
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Nil,
@@ -1681,7 +1685,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2) (a, b)
         |SELECT * FROM source
       """.stripMargin,
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Seq("a", "b"),
@@ -1695,7 +1699,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT OVERWRITE testcat.ns1.ns2.tbl SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        UnresolvedInsert(
+        InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Nil,
@@ -1710,7 +1714,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT OVERWRITE testcat.ns1.ns2.tbl (a, b) SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        UnresolvedInsert(
+        InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Seq("a", "b"),
@@ -1726,7 +1730,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2)
         |SELECT * FROM source
       """.stripMargin,
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Nil,
@@ -1741,7 +1745,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3, p2) (a, b)
         |SELECT * FROM source
       """.stripMargin,
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3"), "p2" -> None),
         Seq("a", "b"),
@@ -1756,7 +1760,7 @@ class DDLParserSuite extends AnalysisTest {
         |PARTITION (p1 = 3) IF NOT EXISTS
         |SELECT * FROM source
       """.stripMargin,
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         Map("p1" -> Some("3")),
         Nil,
@@ -1806,7 +1810,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT INTO testcat.ns1.ns2.tbl BY NAME SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        UnresolvedInsert(
+        InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Nil,
@@ -1819,7 +1823,7 @@ class DDLParserSuite extends AnalysisTest {
       "INSERT OVERWRITE testcat.ns1.ns2.tbl BY NAME SELECT * FROM source"
     ).foreach { sql =>
       parseCompare(sql,
-        UnresolvedInsert(
+        InsertIntoStatement(
           UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           Map.empty,
           Nil,
@@ -1842,7 +1846,7 @@ class DDLParserSuite extends AnalysisTest {
   test("insert table: REPLACE WHERE with BY NAME") {
     parseCompare(
       "INSERT INTO testcat.ns1.ns2.tbl BY NAME REPLACE WHERE a > 5 SELECT * FROM source",
-      UnresolvedInsert(
+      InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Nil,
@@ -1857,7 +1861,7 @@ class DDLParserSuite extends AnalysisTest {
   test("insert table: REPLACE WHERE without BY NAME") {
     parseCompare(
       "INSERT INTO testcat.ns1.ns2.tbl REPLACE WHERE a > 5 SELECT * FROM source",
-      UnresolvedInsert(
+      InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Nil,
@@ -1906,7 +1910,7 @@ class DDLParserSuite extends AnalysisTest {
   test("insert table: REPLACE WHERE with column list") {
     parseCompare(
       "INSERT INTO testcat.ns1.ns2.tbl (a, b) REPLACE WHERE a > 5 SELECT * FROM source",
-      UnresolvedInsert(
+      InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq("a", "b"),
@@ -1957,7 +1961,7 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare(
       "INSERT WITH SCHEMA EVOLUTION INTO testcat.ns1.ns2.tbl (a, b) " +
         "REPLACE WHERE a > 5 SELECT * FROM source",
-      UnresolvedInsert(
+      InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq("a", "b"),
@@ -1974,7 +1978,7 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare(
       "INSERT INTO testcat.ns1.ns2.tbl WITH (key = 'value') (a, b) " +
         "REPLACE WHERE a > 5 SELECT * FROM source",
-      UnresolvedInsert(
+      InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl"), opts),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq("a", "b"),
@@ -2006,7 +2010,7 @@ class DDLParserSuite extends AnalysisTest {
 
       parseCompare(
         sql = insertSQLStmt,
-        expected = UnresolvedInsert(
+        expected = InsertIntoStatement(
           table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           partitionSpec = Map.empty,
           userSpecifiedCols = userSpecifiedCols,
@@ -2027,7 +2031,7 @@ class DDLParserSuite extends AnalysisTest {
 
         parseCompare(
           sql = insertSQLStmt,
-          expected = UnresolvedInsert(
+          expected = InsertIntoStatement(
             table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
             partitionSpec = Map.empty,
             userSpecifiedCols = userSpecifiedCols,
@@ -2055,7 +2059,7 @@ class DDLParserSuite extends AnalysisTest {
 
         parseCompare(
           sql = insertSQLStmt,
-          expected = UnresolvedInsert(
+          expected = InsertIntoStatement(
             table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
             partitionSpec = Map.empty,
             userSpecifiedCols = Seq.empty,
@@ -2081,7 +2085,7 @@ class DDLParserSuite extends AnalysisTest {
 
       parseCompare(
         sql = insertSQLStmt,
-        expected = UnresolvedInsert(
+        expected = InsertIntoStatement(
           table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           partitionSpec = Map.empty,
           userSpecifiedCols = Seq.empty,
@@ -2101,7 +2105,7 @@ class DDLParserSuite extends AnalysisTest {
 
       parseCompare(
         sql = insertSQLStmt,
-        expected = UnresolvedInsert(
+        expected = InsertIntoStatement(
           table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           partitionSpec = Map.empty,
           userSpecifiedCols = Seq.empty,
@@ -2123,7 +2127,7 @@ class DDLParserSuite extends AnalysisTest {
 
       parseCompare(
         sql = insertSQLStmt,
-        expected = UnresolvedInsert(
+        expected = InsertIntoStatement(
           table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           partitionSpec = Map.empty,
           userSpecifiedCols = Seq.empty,
@@ -2143,7 +2147,7 @@ class DDLParserSuite extends AnalysisTest {
 
       parseCompare(
         sql = insertSQLStmt,
-        expected = UnresolvedInsert(
+        expected = InsertIntoStatement(
           table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
           partitionSpec = Map.empty,
           userSpecifiedCols = Seq.empty,
@@ -2163,7 +2167,7 @@ class DDLParserSuite extends AnalysisTest {
     val table = "testcat.ns1.ns2.tbl"
     parseCompare(
       sql = s"INSERT INTO $table REPLACE ON col1 = col2 SELECT * FROM source",
-      expected = UnresolvedInsert(
+      expected = InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq.empty,
@@ -2197,7 +2201,7 @@ class DDLParserSuite extends AnalysisTest {
         s"""INSERT INTO $table AS t
            |REPLACE ON (t.a = s.b)
            |(SELECT * FROM source) AS s""".stripMargin,
-      expected = UnresolvedInsert(
+      expected = InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq.empty,
@@ -2224,7 +2228,7 @@ class DDLParserSuite extends AnalysisTest {
         s"""INSERT INTO $table AS t
            |REPLACE USING (col1, col2)
            |(SELECT * FROM source) AS s""".stripMargin,
-      expected = UnresolvedInsert(
+      expected = InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq.empty,
@@ -2244,7 +2248,7 @@ class DDLParserSuite extends AnalysisTest {
         """INSERT INTO testcat.ns1.ns2.tbl
           |REPLACE WHERE a > 5
           |(SELECT * FROM source) AS s""".stripMargin,
-      expected = UnresolvedInsert(
+      expected = InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Nil,
@@ -2260,7 +2264,7 @@ class DDLParserSuite extends AnalysisTest {
     parseCompare(
       sql = s"INSERT INTO $table AS t REPLACE ON t.a = s.a AND t.b = s.b " +
         "(SELECT * FROM source) AS s",
-      expected = UnresolvedInsert(
+      expected = InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq.empty,
@@ -2285,7 +2289,7 @@ class DDLParserSuite extends AnalysisTest {
     val table = "testcat.ns1.ns2.tbl"
     parseCompare(
       sql = s"INSERT INTO $table AS t REPLACE USING (id) SELECT * FROM source",
-      expected = UnresolvedInsert(
+      expected = InsertIntoStatement(
         table = UnresolvedRelation(Seq("testcat", "ns1", "ns2", "tbl")),
         partitionSpec = Map.empty,
         userSpecifiedCols = Seq.empty,
@@ -2554,8 +2558,8 @@ class DDLParserSuite extends AnalysisTest {
         SubqueryAlias("target", UnresolvedRelation(Seq("testcat1", "ns1", "ns2", "tbl"))),
         SubqueryAlias("source", UnresolvedWith(Project(Seq(UnresolvedStar(None)),
           UnresolvedRelation(Seq("s"))),
-          Seq(("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
-            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))), None)))),
+          Seq(UnresolvedCTERelation("s", SubqueryAlias("s", Project(Seq(UnresolvedStar(None)),
+            UnresolvedRelation(Seq("testcat2", "ns1", "ns2", "tbl")))))))),
         EqualTo(UnresolvedAttribute("target.col1"), UnresolvedAttribute("source.col1")),
         Seq(DeleteAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("delete")))),
           UpdateAction(Some(EqualTo(UnresolvedAttribute("target.col2"), Literal("update"))),
@@ -3380,8 +3384,8 @@ class DDLParserSuite extends AnalysisTest {
   }
 
   test("SPARK-33474: Support typed literals as partition spec values") {
-    def insertPartitionPlan(part: String, optimizeInsertIntoCmds: Boolean): UnresolvedInsert = {
-      UnresolvedInsert(
+    def insertPartitionPlan(part: String, optimizeInsertIntoCmds: Boolean): InsertIntoStatement = {
+      InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some(part)),
         Seq.empty[String],
@@ -3532,7 +3536,7 @@ class DDLParserSuite extends AnalysisTest {
           UnresolvedAttribute("DEFAULT"))))))
     parseCompare(
       "INSERT INTO t PARTITION(part = date'2019-01-02') VALUES ('a', DEFAULT)",
-      UnresolvedInsert(
+      InsertIntoStatement(
         UnresolvedRelation(Seq("t")),
         Map("part" -> Some("2019-01-02")),
         userSpecifiedCols = Seq.empty[String],

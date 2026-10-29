@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{DeduplicateKeySpec, LeafNode, LogicalPlan, SupportsSubquery, UnaryNode}
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.util._
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
@@ -131,7 +132,17 @@ case class ExpressionWithUnresolvedIdentifier(
 case class UnresolvedInsertTarget(
     multipartIdentifier: Seq[String],
     options: CaseInsensitiveStringMap,
-    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode
+    writePrivileges: Set[TableWritePrivilege]) extends UnresolvedLeafNode {
+
+  /** Converts this target to an [[UnresolvedRelation]] that keeps its origin and tags. */
+  def toUnresolvedRelation: UnresolvedRelation = {
+    val relation = CurrentOrigin.withOrigin(origin) {
+      UnresolvedRelation(multipartIdentifier, options).requireWritePrivileges(writePrivileges)
+    }
+    relation.copyTagsFrom(this)
+    relation
+  }
+}
 
 /**
  * Holds the name of a relation that has yet to be looked up in a catalog.
@@ -197,7 +208,10 @@ object UnresolvedRelation {
 
 /**
  * An inline table that has not been resolved yet. Once resolved, it is turned by the analyzer into
- * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]].
+ * a [[org.apache.spark.sql.catalyst.plans.logical.LocalRelation]], or into an
+ * [[org.apache.spark.sql.catalyst.plans.logical.Expand]] over a
+ * [[org.apache.spark.sql.catalyst.plans.logical.OneRowRelation]] if some of its expressions are
+ * evaluated when the query runs.
  *
  * @param names list of column names
  * @param rows expressions for the data
@@ -394,6 +408,11 @@ case class UnresolvedGenerator(name: FunctionIdentifier, children: Seq[Expressio
  * Represents an unresolved function that is being invoked. The analyzer will resolve the function
  * arguments first, then look up the function by name and arguments, and return an expression that
  * can be evaluated to get the result of this function invocation.
+ *
+ * `boundOwner`, when set, is the SQL PATH candidate that direct-star preprocessing selected as this
+ * call's owner (a relative persistent-catalog candidate stays relative until later resolution
+ * qualifies it); later resolution binds to exactly it instead of re-walking the SQL PATH
+ * (see [[FunctionResolution.selectRoutedSqlJsonDirectStarOwner]]).
  */
 case class UnresolvedFunction(
     nameParts: Seq[String],
@@ -402,7 +421,8 @@ case class UnresolvedFunction(
     filter: Option[Expression] = None,
     ignoreNulls: Option[Boolean] = None,
     orderingWithinGroup: Seq[SortOrder] = Seq.empty,
-    isInternal: Boolean = false)
+    isInternal: Boolean = false,
+    boundOwner: Option[Seq[String]] = None)
   extends Expression with Unevaluable {
   import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
 
@@ -647,6 +667,8 @@ case class UnresolvedStarExceptOrReplace(
     replacements: Option[Seq[NamedExpression]])
   extends LeafExpression with UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_EXCEPT_OR_REPLACE)
+
   /**
    * We expand the * EXCEPT by the following three steps:
    * 1. use the original .expandStar() to get top-level column list or struct expansion
@@ -796,6 +818,8 @@ case class UnresolvedStarWithColumns(
      explicitMetadata: Option[Seq[Metadata]] = None)
   extends UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_WITH_COLUMNS)
+
   override def target: Option[Seq[String]] = None
   override def children: Seq[Expression] = exprs
 
@@ -857,6 +881,8 @@ case class UnresolvedStarWithColumnsRenames(
     newNames: Seq[String])
   extends LeafExpression with UnresolvedStarBase {
 
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR_WITH_COLUMNS_RENAMES)
+
   override def target: Option[Seq[String]] = None
 
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
@@ -893,7 +919,10 @@ case class UnresolvedStarWithColumnsRenames(
  *              is a list of identifiers that is the path of the expansion.
  */
 case class UnresolvedStar(target: Option[Seq[String]])
-  extends LeafExpression with UnresolvedStarBase
+  extends LeafExpression with UnresolvedStarBase {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_STAR)
+}
 
 /**
  * Represents all of the input attributes to a given relational operator, for example in
@@ -904,6 +933,9 @@ case class UnresolvedStar(target: Option[Seq[String]])
  */
 case class UnresolvedRegex(regexPattern: String, table: Option[String], caseSensitive: Boolean)
   extends LeafExpression with Star with Unevaluable {
+
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_REGEX)
+
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = {
     val pattern = if (caseSensitive) regexPattern else s"(?i)$regexPattern"
     table match {
@@ -964,6 +996,7 @@ case class MultiAlias(child: Expression, names: Seq[String])
  */
 case class ResolvedStar(expressions: Seq[NamedExpression])
   extends LeafExpression with Star with Unevaluable {
+  final override val nodePatterns: Seq[TreePattern] = Seq(RESOLVED_STAR)
   override def newInstance(): NamedExpression = throw new UnresolvedException("newInstance")
   override def expandStar(parameters: ExpandStarParameters): Seq[NamedExpression] = expressions
   override def toString: String = expressions.mkString("ResolvedStar(", ", ", ")")

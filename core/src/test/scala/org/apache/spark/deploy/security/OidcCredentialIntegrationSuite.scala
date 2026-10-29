@@ -509,7 +509,8 @@ class OidcCredentialIntegrationSuite extends SparkFunSuite {
       .set(NETWORK_AUTH_ENABLED, true)
       .set(NETWORK_CRYPTO_ENABLED, true)
 
-    val oidcManager = UserCredentialManager.create(conf, (_, _) => ())
+    val oidcManager = UserCredentialManager.create(
+      conf, (_, _) => (), Some(new CredentialProviderLoader()))
     assert(oidcManager.isEmpty, "OIDC manager should not be created when disabled")
 
     val dtManager = new HadoopDelegationTokenManager(conf, hadoopConf, mockRef)

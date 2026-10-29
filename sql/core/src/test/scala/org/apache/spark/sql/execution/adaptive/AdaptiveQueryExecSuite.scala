@@ -36,7 +36,7 @@ import org.apache.spark.sql.{DataFrame, Dataset, Row, SparkSession}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Ascending, Attribute, AttributeReference, EqualTo, IsNull, Literal, Or, SortOrder}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, EliminateLimits}
-import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftSemi}
+import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner, LeftAnti, LeftSemi, LeftSingle}
 import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, EmptyRelation, GlobalLimit, Join, JoinHint, LeafNode, LocalRelation, LogicalPlan, Statistics}
 import org.apache.spark.sql.catalyst.plans.physical.{CoalescedNullAwareHashPartitioning, SinglePartition}
 import org.apache.spark.sql.classic.Strategy
@@ -46,7 +46,7 @@ import org.apache.spark.sql.execution.columnar.{InMemoryTableScanExec, InMemoryT
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.noop.NoopDataSource
 import org.apache.spark.sql.execution.datasources.v2.V2TableWriteExec
-import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
+import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ENSURE_REQUIREMENTS, EnsureRequirements, Exchange, REPARTITION_BY_COL, REPARTITION_BY_NUM, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike, ShuffleOrigin}
 import org.apache.spark.sql.execution.joins.{BaseJoinExec, BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, HashedRelationBroadcastMode, ShuffledHashJoinExec, ShuffledJoin, SortMergeJoinExec}
 import org.apache.spark.sql.execution.metric.SQLShuffleReadMetricsReporter
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
@@ -1983,8 +1983,9 @@ class AdaptiveQueryExecSuite
         SQLConf.COALESCE_PARTITIONS_MIN_PARTITION_NUM.key -> "1",
         SQLConf.SHUFFLE_PARTITIONS.key -> "100",
         SQLConf.SKEW_JOIN_SKEWED_PARTITION_THRESHOLD.key -> "800",
-        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800") {
-        withTempView("skewData1", "skewData2") {
+        SQLConf.ADVISORY_PARTITION_SIZE_IN_BYTES.key -> "800",
+        SQLConf.SCALAR_SUBQUERY_USE_SINGLE_JOIN.key -> "true") {
+        withTempView("skewData1", "skewData2", "skewData3") {
           spark
             .range(0, 1000, 1, 10)
             .select(
@@ -2000,6 +2001,11 @@ class AdaptiveQueryExecSuite
                 .otherwise($"id").as("key2"),
               $"id" as "value2")
             .createOrReplaceTempView("skewData2")
+          // one row per key, as a left single join errors on a second match
+          spark
+            .range(0, 1000, 1, 10)
+            .select($"id" as "key3", $"id" as "value3")
+            .createOrReplaceTempView("skewData3")
 
           def checkSkewJoin(
               joins: Seq[ShuffledJoin],
@@ -2038,6 +2044,24 @@ class AdaptiveQueryExecSuite
               "RIGHT OUTER JOIN skewData2 ON key1 = key2")
           val rightJoin = getJoinNode(rightAdaptivePlan)
           checkSkewJoin(rightJoin, 0, 1)
+
+          // skewed existence join optimization, splitting the left side like a left outer join
+          val (_, existenceAdaptivePlan) = runAdaptiveAndVerifyResult(
+            s"SELECT * FROM skewData1 WHERE EXISTS (SELECT /*+ $joinHint(skewData2) */ 1 " +
+              "FROM skewData2 WHERE key1 = key2) OR value1 < 0")
+          val existenceJoin = getJoinNode(existenceAdaptivePlan)
+          assert(existenceJoin.head.joinType.isInstanceOf[ExistenceJoin])
+          checkSkewJoin(existenceJoin, 2, 0)
+
+          // skewed left single join optimization, hash join only as it cannot sort-merge
+          if (joinHint == "SHUFFLE_HASH") {
+            val (_, singleAdaptivePlan) = runAdaptiveAndVerifyResult(
+              s"SELECT key1, value1, (SELECT /*+ $joinHint(skewData3) */ value3 " +
+                "FROM skewData3 WHERE key3 = key1) FROM skewData1")
+            val singleJoin = getJoinNode(singleAdaptivePlan)
+            assert(singleJoin.head.joinType == LeftSingle)
+            checkSkewJoin(singleJoin, 2, 0)
+          }
         }
       }
     }
@@ -5297,6 +5321,45 @@ class AdaptiveQueryExecSuite
           checkAnswer(df, correctResults)
         }
       }
+    }
+  }
+
+  test("SPARK-59122: query stage preparation keeps the union barriers around EnsureRequirements") {
+    // `EnsureRequirements` asks a `UnionExec` what it reports, and `StampUnionDecisions` freezes
+    // that answer so every rule below it and the execution read what the exchanges were planned
+    // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
+    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
+    // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
+    // three have to stay contiguous: an injected rule cannot land between them, since those are
+    // appended at the tail, but an edit to the list can. AQE builds its own list, and
+    // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
+    withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
+      // The repartition exchanges are what bring AQE in, with the aggregate's distribution
+      // requirement as a second reason: `InsertAdaptiveSparkPlan` tests for either and leaves a
+      // plain union of ranges alone.
+      val df = spark.range(0, 20, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k"))
+        .union(spark.range(20, 40, 1, 2).selectExpr("id % 5 AS k").repartition(4, col("k")))
+        .groupBy("k").count()
+      val aqe = df.queryExecution.executedPlan.collectFirst {
+        case a: AdaptiveSparkPlanExec => a
+      }
+      assert(aqe.isDefined, s"expected an AdaptiveSparkPlanExec:\n${df.queryExecution}")
+      val rules = aqe.get.queryStagePreparationRules
+      val snapshot = rules.indexWhere(_.isInstanceOf[SnapshotUnionPreparationConf])
+      val ensureRequirements = rules.indexWhere(_.isInstanceOf[EnsureRequirements])
+      // Both barriers, not the first one: the list ends with a second `StampUnionDecisions` for a
+      // union an injected prep rule created, and asking only for the first index would let that one
+      // stand in for the barrier behind `EnsureRequirements`.
+      val stamps = rules.zipWithIndex.collect {
+        case (rule, i) if rule.isInstanceOf[StampUnionDecisions] => i
+      }
+      assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
+        s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
+          s"got $snapshot")
+      assert(stamps.headOption.contains(ensureRequirements + 1),
+        s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")
+      assert(stamps.last == rules.length - 1,
+        s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
     }
   }
 

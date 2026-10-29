@@ -51,6 +51,11 @@ class ArrowPythonUDTFRunner(
   with BasicPythonArrowOutput {
   ArrowUtils.failDuplicatedFieldNames(schema)
 
+  // `EvalPythonUDTFExec` joins each output batch with one input row, so the batches returned
+  // from Python must not be sliced.
+  override protected def arrowMaxRecordsPerOutputBatch: Int = -1
+  override protected def arrowMaxBytesPerOutputBatch: Int = -1
+
   override protected def runnerConf: Map[String, String] = super.runnerConf ++ pythonRunnerConf
 
   override protected def evalConf: Map[String, String] = {
@@ -73,7 +78,10 @@ class ArrowPythonUDTFRunner(
   }
 
   override val envVars: util.Map[String, String] = {
-    val envVars = new util.HashMap(funcs.head.funcs.head.envVars)
+    // Installed at worker launch, so a cached plan cannot pin an older environment.
+    val envVars =
+      PythonWorkerEnvironment.mergeValidated(funcs.head.funcs.head.envVars, SQLConf.get)
+    // Applied after the session's environment, so a session cannot override a Spark-owned name.
     sessionUUID.foreach { uuid =>
       envVars.put("PYSPARK_SPARK_SESSION_UUID", uuid)
     }

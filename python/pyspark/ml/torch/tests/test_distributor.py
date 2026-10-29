@@ -275,6 +275,111 @@ class TorchDistributorBaselineUnitTestsMixin:
             )
         self.assertIn("hello_after_socket_drop", output.getvalue().strip())
 
+    def test_log_streaming_server_start_failure_warns(self) -> None:
+        """A failure to start the log streaming server must only emit a warning."""
+
+        class StopTraining(Exception):
+            pass
+
+        dist = TorchDistributor(num_processes=2, local_mode=False, use_gpu=False)
+        with (
+            patch(
+                "pyspark.ml.torch.distributor.LogStreamingServer.start",
+                side_effect=OSError("Address already in use"),
+            ),
+            patch.object(dist, "_get_spark_task_function", side_effect=StopTraining),
+            self.assertLogs(dist.logger, level="WARNING") as logs,
+            self.assertRaises(StopTraining),
+        ):
+            dist._run_distributed_training(MagicMock(), MagicMock(), None, None)
+
+        self.assertEqual(dist.log_streaming_server_port, -1)
+        self.assertIsNone(dist.log_streaming_auth_secret)
+        self.assertEqual(len(logs.records), 1)
+        message = logs.records[0].getMessage()
+        self.assertIn("Start torch distributor log streaming server failed", message)
+        self.assertIn("Address already in use", message)
+
+    def test_reserve_free_port(self) -> None:
+        import socket
+        from datetime import timedelta
+
+        from torch.distributed import TCPStore
+
+        sock = TorchDistributor._reserve_free_port("127.0.0.1")
+        try:
+            port = sock.getsockname()[1]
+            # Plain binds on the same address cannot take the reserved port.
+            other = socket.socket()
+            try:
+                with self.assertRaises(OSError):
+                    other.bind(("127.0.0.1", port))
+            finally:
+                other.close()
+            # torchrun's TCPStore can still listen on it.
+            store = TCPStore("127.0.0.1", port, 1, True, timeout=timedelta(seconds=30))
+            store.set("key", "value")
+            self.assertEqual(store.get("key"), b"value")
+        finally:
+            sock.close()
+
+    def test_master_port_reserved_until_training_finishes(self) -> None:
+        import socket
+
+        from pyspark.taskcontext import BarrierTaskContext
+
+        def bind_master_port() -> None:
+            sock = socket.socket()
+            try:
+                sock.bind((os.environ["MASTER_ADDR"], int(os.environ["MASTER_PORT"])))
+            finally:
+                sock.close()
+
+        def train_and_check_reserved(*args: Any, **kwargs: Any) -> str:
+            with self.assertRaises(OSError):
+                bind_master_port()
+            return "done"
+
+        def train_check_reserved_and_raise(*args: Any, **kwargs: Any) -> str:
+            train_and_check_reserved()
+            raise RuntimeError("training failed")
+
+        dist = TorchDistributor(num_processes=1, local_mode=False, use_gpu=False)
+        dist.driver_address = "127.0.0.1"
+        dist.log_streaming_server_port = -1
+        dist.log_streaming_auth_secret = None
+        context = MagicMock()
+        context.partitionId.return_value = 0
+        context.getTaskInfos.return_value = [MagicMock(address="127.0.0.1:0")]
+        context.allGather.side_effect = lambda message: [message]
+
+        for train_fn in [train_and_check_reserved, train_check_reserved_and_raise]:
+            with (
+                self.subTest(train_fn=train_fn.__name__),
+                patch.dict(os.environ),
+                patch.object(BarrierTaskContext, "get", return_value=context),
+                patch("pyspark.ml.torch.distributor.LogStreamingClient"),
+                patch.object(
+                    TorchDistributor, "_get_output_from_framework_wrapper", side_effect=train_fn
+                ),
+            ):
+                task_fn = dist._get_spark_task_function(None, MagicMock(), None, None)
+                gen = task_fn(iter([]))
+                # The reservation is released explicitly, while the generator or the
+                # exception still keeps the reserving socket alive.
+                if train_fn is train_check_reserved_and_raise:
+                    with self.assertRaisesRegex(RuntimeError, "training failed"):
+                        try:
+                            next(gen)
+                        except RuntimeError:
+                            bind_master_port()
+                            raise
+                else:
+                    # Partition 0's output batch, yielded after the finally.
+                    next(gen)
+                    bind_master_port()
+                    self.assertEqual(list(gen), [])
+
     def test_create_torchrun_command(self) -> None:
         train_path = "train.py"
         args_string = ["1", "3"]
@@ -299,7 +404,21 @@ class TorchDistributorBaselineUnitTestsMixin:
         )
 
         distributed_mode_input_params = {"num_processes": 4, "local_mode": False}
-        input_env_vars = {"MASTER_ADDR": "localhost", "MASTER_PORT": "9350", "RANK": "3"}
+
+        # Without the per-run rendezvous id in the environment, command construction must
+        # fail instead of falling back to a fixed rendezvous id.
+        missing_rdzv_env_vars = {"MASTER_ADDR": "localhost", "MASTER_PORT": "9350", "RANK": "3"}
+        self.setup_env_vars(missing_rdzv_env_vars)
+        with self.assertRaisesRegex(RuntimeError, "PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID"):
+            TorchDistributor._create_torchrun_command(distributed_mode_input_params, train_path)
+        self.delete_env_vars(missing_rdzv_env_vars)
+
+        input_env_vars = {
+            "MASTER_ADDR": "localhost",
+            "MASTER_PORT": "9350",
+            "RANK": "3",
+            "PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID": "0123456789abcdef",
+        }
 
         args_number = [1, 3]  # testing conversion to strings
         self.setup_env_vars(input_env_vars)
@@ -310,7 +429,7 @@ class TorchDistributorBaselineUnitTestsMixin:
             "--nnodes=4",
             "--node_rank=3",
             "--rdzv_endpoint=localhost:9350",
-            "--rdzv_id=0",
+            "--rdzv_id=0123456789abcdef",
             "--nproc_per_node=1",
             "train.py",
             "1",
@@ -331,13 +450,19 @@ class TorchDistributorBaselineUnitTestsMixin:
             "MASTER_ADDR": "11.22.33.44",
             "MASTER_PORT": "6677",
             "RANK": "1",
+            "PYSPARK_TORCH_DISTRIBUTOR_RDZV_ID": "0123456789abcdef",
         },
     )
     def test_multi_gpu_node_get_torchrun_args(self):
         torchrun_args, processes_per_node = TorchDistributor._get_torchrun_args(False, 8)
         self.assertEqual(
             torchrun_args,
-            ["--nnodes=2", "--node_rank=1", "--rdzv_endpoint=11.22.33.44:6677", "--rdzv_id=0"],
+            [
+                "--nnodes=2",
+                "--node_rank=1",
+                "--rdzv_endpoint=11.22.33.44:6677",
+                "--rdzv_id=0123456789abcdef",
+            ],
         )
         self.assertEqual(processes_per_node, 4)
 

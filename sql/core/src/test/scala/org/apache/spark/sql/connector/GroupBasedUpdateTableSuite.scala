@@ -168,6 +168,32 @@ class GroupBasedUpdateTableSuite extends UpdateTableSuiteBase {
     }
   }
 
+  test("SPARK-60664: update runtime group filtering with metadata column and subquery") {
+    withTempView("updated_pk") {
+      createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
+        """{ "pk": 1, "salary": 300, "dep": "hr" }
+          |{ "pk": 2, "salary": 150, "dep": "software" }
+          |{ "pk": 3, "salary": 120, "dep": "hr" }
+          |""".stripMargin)
+
+      Seq(1, 2).toDF("pk").createOrReplaceTempView("updated_pk")
+
+      // the subquery makes the UPDATE read the table twice (UNION), so the group filter
+      // of each read must refer to the metadata attributes of that read
+      sql(
+        s"""UPDATE $tableNameAsString
+           |SET salary = -1
+           |WHERE _partition = 'hr' AND pk IN (SELECT pk FROM updated_pk)
+           |""".stripMargin)
+
+      checkAnswer(
+        sql(s"SELECT * FROM $tableNameAsString"),
+        Row(1, -1, "hr") :: Row(2, 150, "software") :: Row(3, 120, "hr") :: Nil)
+
+      checkReplacedPartitions(Seq("hr"))
+    }
+  }
+
   test("update with nondeterministic conditions") {
     createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
       """{ "pk": 1, "id": 1, "dep": "hr" }

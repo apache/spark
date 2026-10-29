@@ -430,3 +430,16 @@ INSERT INTO time_narrow_tbl SELECT '01:02:03.456789' :: TIME(6);
 INSERT INTO time_narrow_tbl SELECT CAST('01:02:03.456789' :: TIME(6) AS TIME(3));
 SELECT typeof(t3), t3 FROM time_narrow_tbl;
 DROP TABLE time_narrow_tbl;
+
+-- width_bucket over the TIME type: 09:00:00 .. 17:00:00 split into 8 one-hour buckets
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'09:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'17:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'08:00:00', TIME'09:00:00', TIME'17:00:00', 8);
+-- reversed range (min > max)
+select width_bucket(TIME'12:00:00', TIME'17:00:00', TIME'09:00:00', 8);
+-- mixed precisions are allowed
+select width_bucket(TIME'12:00:00', CAST(TIME'09:00:00' AS TIME(3)), CAST(TIME'17:00:00' AS TIME(9)), 8);
+-- null and degenerate inputs
+select width_bucket(CAST(null AS TIME), TIME'09:00:00', TIME'17:00:00', 8);
+select width_bucket(TIME'12:00:00', TIME'09:00:00', TIME'09:00:00', 8);

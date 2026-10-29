@@ -21,16 +21,18 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.VectorSchemaRoot
+import org.apache.arrow.vector.{BaseFixedWidthVector, BaseVariableWidthViewVector, FieldVector, VectorSchemaRoot}
+import org.apache.arrow.vector.complex.{BaseRepeatedValueVector, ListVector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
 import org.apache.spark.{SparkEnv, TaskContext}
 import org.apache.spark.api.python.{BasePythonRunner, PythonWorker, PythonWorkerHandle, SpecialLengths}
 import org.apache.spark.sql.execution.metric.SQLMetric
+import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.ArrowUtils
-import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
+import org.apache.spark.sql.vectorized.{ColumnarBatch, ColumnVector}
 
 /**
  * A trait that can be mixed-in with [[BasePythonRunner]]. It implements the logic from
@@ -44,6 +46,9 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
 
   protected def deserializeColumnarBatch(batch: ColumnarBatch, schema: StructType): OUT
 
+  // The limits for slicing the batches returned from Python. A runner whose consumer cannot take
+  // a batch split into several, e.g. one that pairs each batch with one input row, overrides both
+  // to -1, as `ArrowPythonUDTFRunner` does.
   protected def arrowMaxRecordsPerOutputBatch: Int = SQLConf.get.arrowMaxRecordsPerOutputBatch
 
   protected def arrowMaxBytesPerOutputBatch: Int = SQLConf.get.arrowMaxBytesPerOutputBatch.toInt
@@ -91,12 +96,12 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
         super.handleEndOfDataSection()
       }
 
-      protected override def handleTimingData(): Unit = {
+      protected override def handleMetricsData(): Unit = {
         // Get data size from pythonMetrics which is already being tracked
         totalDataReceived = pythonMetrics.get("pythonDataReceived")
           .map(_.value)
           .getOrElse(0L)
-        super.handleTimingData()
+        super.handleMetricsData()
       }
 
       protected override def read(): OUT = {
@@ -135,8 +140,8 @@ private[python] trait PythonArrowOutput[OUT <: AnyRef] { self: BasePythonRunner[
                 }
 
                 read()
-              case SpecialLengths.TIMING_DATA =>
-                handleTimingData()
+              case SpecialLengths.METRICS_DATA =>
+                handleMetricsData()
                 read()
               case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
                 throw handlePythonException()
@@ -167,12 +172,18 @@ trait ArrowOutputProcessor {
   def close(): Unit
 }
 
+/**
+ * Loads every batch from Python into the reader's root and returns batches over the same vectors,
+ * so the vectors of a batch are only valid until the next one is loaded. They are
+ * [[ReusedArrowColumnVector]]s: a consumer does not hold them past the next batch, and its
+ * `closeIfFreeable` leaves them to this processor, which closes them in `close`.
+ */
 class ArrowOutputProcessorImpl(reader: ArrowStreamReader, pythonMetrics: Map[String, SQLMetric])
     extends ArrowOutputProcessor {
   protected val root = reader.getVectorSchemaRoot()
   protected val schema: StructType = ArrowUtils.fromArrowSchema(root.getSchema())
   private val vectors: Array[ColumnVector] = root.getFieldVectors().asScala.map { vector =>
-    new ArrowColumnVector(vector)
+    new ReusedArrowColumnVector(vector)
   }.toArray[ColumnVector]
 
   protected var rowCount = -1
@@ -210,8 +221,7 @@ abstract class BaseSliceArrowOutputProcessor(
   extends ArrowOutputProcessorImpl(reader, pythonMetrics) {
 
   protected var currentRowIdx = -1
-  protected var prevRoot: VectorSchemaRoot = null
-  protected var prevVectors: Array[ColumnVector] = _
+  protected var prevRoot: VectorSchemaRoot = root
 
   override def loadBatch(): Boolean = {
     if (rowCount > 0 && currentRowIdx < rowCount) {
@@ -225,35 +235,65 @@ abstract class BaseSliceArrowOutputProcessor(
 
   override def produceBatch(): ColumnarBatch = {
     val batchRoot = getRoot
+    closePrevSlice()
+    prevRoot = batchRoot
 
-    if (batchRoot != prevRoot) {
-      if (prevRoot != null) {
-        prevVectors.foreach(_.close())
-        prevRoot.close()
-      }
-      prevRoot = batchRoot
-    }
-
-    val vectors = getVectors(batchRoot)
-    prevVectors = vectors
-
-    val batch = new ColumnarBatch(vectors)
+    val batch = new ColumnarBatch(getVectors(batchRoot))
     batch.setNumRows(batchRoot.getRowCount)
     batch
   }
 
+  // The vectors are either those of the reader's root, into which the next batch is loaded, or
+  // those of a slice of it, which is closed once the next one is produced, so both are reused
+  // vectors.
   protected override def getVectors(root: VectorSchemaRoot): Array[ColumnVector] = {
-    root.getFieldVectors.asScala.map { vector =>
-      new ArrowColumnVector(vector)
-    }.toArray[ColumnVector]
+    if (root eq this.root) {
+      super.getVectors(root)
+    } else {
+      root.getFieldVectors.asScala.map { vector =>
+        new ReusedArrowColumnVector(vector)
+      }.toArray[ColumnVector]
+    }
+  }
+
+  // Releases the previous output batch if it is a slice. The reader loads every batch from Python
+  // into the same root, so it must not be closed here; `ArrowOutputProcessorImpl.close` closes it.
+  private def closePrevSlice(): Unit = {
+    if (prevRoot ne root) {
+      prevRoot.close()
+    }
   }
 
   override def close(): Unit = {
-    if (prevRoot != null) {
-      prevVectors.foreach(_.close())
-      prevRoot.close()
-    }
+    closePrevSlice()
     super.close()
+  }
+
+  private[python] def canSlice(root: VectorSchemaRoot): Boolean =
+    root.getFieldVectors.asScala.forall(BaseSliceArrowOutputProcessor.canSlice)
+}
+
+object BaseSliceArrowOutputProcessor {
+  /**
+   * Returns whether `VectorSchemaRoot.slice` can slice `vector` and its children. Arrow computes
+   * some byte positions of a slice in int, so it throws, and leaks the vectors sliced so far, for
+   * a fixed-width vector of 2 GiB or more, a view vector with 2^27 rows or more, or a list vector
+   * with 2^29 - 1 rows or more. A batch that holds one is output whole instead.
+   *
+   * The offset positions of a list vector overflow only from 2^29 rows, but a slice of `length`
+   * rows also allocates `(length + 1) * 4` bytes of offsets in int, and a list vector nested in
+   * another one is sliced over all its rows when the slice of its parent covers them.
+   */
+  private[python] def canSlice(vector: FieldVector): Boolean = {
+    val fits = vector match {
+      case v: BaseFixedWidthVector => v.getValueCount.toLong * v.getTypeWidth <= Int.MaxValue
+      case v: BaseVariableWidthViewVector =>
+        v.getValueCount.toLong * BaseVariableWidthViewVector.ELEMENT_SIZE <= Int.MaxValue
+      case v: ListVector =>
+        (v.getValueCount + 1L) * BaseRepeatedValueVector.OFFSET_WIDTH <= Int.MaxValue
+      case _ => true
+    }
+    fits && vector.getChildrenFromFields.asScala.forall(canSlice)
   }
 }
 
@@ -264,8 +304,9 @@ class SliceBytesArrowOutputProcessorImpl(
   extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
   protected override def getRoot: VectorSchemaRoot = {
-    if (getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
-      currentRowIdx = currentRowIdx + root.getRowCount
+    // Output the whole root only if no row of this batch has been output yet.
+    if (currentRowIdx == 0 && getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
+      currentRowIdx = rowCount
       root
     } else {
       // We iteratively slice the batch by 90% until we reach a batch with required byte size.
@@ -313,15 +354,16 @@ class SliceRecordsArrowOutputProcessorImpl(
   extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
   protected override def getRoot: VectorSchemaRoot = {
-    val remainingRows = rowCount - currentRowIdx
-    val rootSlice = if (remainingRows > arrowMaxRecordsPerOutputBatch) {
-      root.slice(currentRowIdx, arrowMaxRecordsPerOutputBatch)
-    } else {
+    val numRows = math.min(rowCount - currentRowIdx, arrowMaxRecordsPerOutputBatch)
+    // Output the whole root only if this chunk is the whole batch, or if Arrow cannot slice the
+    // batch, which is checked before any row of it has been output.
+    if (numRows == rowCount || (currentRowIdx == 0 && !canSlice(root))) {
+      currentRowIdx = rowCount
       root
+    } else {
+      val rootSlice = root.slice(currentRowIdx, numRows)
+      currentRowIdx = currentRowIdx + numRows
+      rootSlice
     }
-
-    currentRowIdx = currentRowIdx + rootSlice.getRowCount
-
-    rootSlice
   }
 }

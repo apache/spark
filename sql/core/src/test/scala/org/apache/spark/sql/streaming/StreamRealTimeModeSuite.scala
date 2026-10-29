@@ -31,11 +31,12 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerJobStart, SparkLi
 import org.apache.spark.sql.execution.datasources.v2.RealTimeStreamScanExec
 import org.apache.spark.sql.execution.exchange.{ReusedExchangeExec, ShuffleExchangeExec}
 import org.apache.spark.sql.execution.streaming.RealTimeTrigger
+import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDeduplicateWithinWatermarkExec
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamExecution}
 import org.apache.spark.sql.execution.streaming.sources.{ContinuousMemorySink, LowLatencyMemoryStream}
 import org.apache.spark.sql.execution.streaming.state.{FailureInjectionCheckpointFileManager,
   FailureInjectionFileSystem, RocksDBStateStoreProvider}
-import org.apache.spark.sql.functions.{broadcast, concat, lit, udf}
+import org.apache.spark.sql.functions.{broadcast, concat, lit, timestamp_seconds, udf}
 import org.apache.spark.sql.internal.SQLConf
 
 class StreamRealTimeModeSuite extends StreamRealTimeModeSuiteBase {
@@ -599,6 +600,52 @@ class StreamRealTimeModeWithManualClockSuite extends StreamRealTimeModeManualClo
     } finally {
       spark.sparkContext.removeSparkListener(listener)
     }
+  }
+
+  test("pipelined shuffle: dedup within watermark runs in Real-Time Mode") {
+    val inputData = LowLatencyMemoryStream.singlePartition[(String, Int)]
+    val result = inputData.toDF()
+      .withColumn("eventTime", timestamp_seconds($"_2"))
+      .withWatermark("eventTime", "10 seconds")
+      .dropDuplicatesWithinWatermark("_1")
+      .select($"_1")
+
+    testStream(result, OutputMode.Update, Map.empty, new ContinuousMemorySink())(
+      // The second "dup" is suppressed in the live first batch. The high event time advances the
+      // watermark to 20 seconds after that batch completes.
+      AddData(inputData,
+        ("expired", 1), ("dup", 15), ("dup", 16), ("high", 30)),
+      StartStream(),
+      CheckAnswerWithTimeout(60000, "expired", "dup", "high"),
+      Execute { q =>
+        val plan = q.lastExecution.executedPlan
+        assert(plan.exists(_.isInstanceOf[StreamingDeduplicateWithinWatermarkExec]),
+          s"expected StreamingDeduplicateWithinWatermarkExec, got:\n$plan")
+        assertAllExchangesPipelined(q)
+      },
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(0),
+
+      // "dup" remains in state across the batch boundary. At the end of this batch, "expired" is
+      // evicted because its expiry (11 seconds) is behind the 20-second eviction watermark
+      // inherited from batch 0.
+      AddData(inputData, ("dup", 26), ("middle", 32)),
+      CheckAnswerWithTimeout(60000, "expired", "dup", "high", "middle"),
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(1),
+
+      // Once its old state has been evicted, a new non-late "expired" record is emitted again.
+      // Late-event filtering deliberately trails eviction by one batch, so the event at 5 seconds
+      // is tested here, when the late-events watermark has advanced to 20 seconds.
+      AddData(inputData, ("expired", 31), ("dup", 27), ("late", 5), ("new", 35)),
+      CheckAnswerWithTimeout(
+        60000, "expired", "dup", "high", "middle", "expired", "new"),
+      advanceRealTimeClock,
+      WaitUntilBatchProcessed(2),
+      CheckAnswerWithTimeout(
+        60000, "expired", "dup", "high", "middle", "expired", "new"),
+      StopStream
+    )
   }
 
   test("pipelined shuffle: multi-key dedup runs in Real-Time Mode over a pipelined shuffle") {

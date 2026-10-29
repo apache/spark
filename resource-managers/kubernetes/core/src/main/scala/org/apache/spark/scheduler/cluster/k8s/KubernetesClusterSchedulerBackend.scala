@@ -203,6 +203,17 @@ private[spark] class KubernetesClusterSchedulerBackend(
     conf.get(KUBERNETES_ALLOCATION_PODS_ALLOCATOR) == "direct"
   }
 
+  // A hold drains every executor, including the recovery-mode ones that replaced an
+  // OOM-terminated executor, so a resumed application starts over with normal executors
+  // instead of staying in the recovery mode the OOM turned on.
+  private[spark] override def setExecutorsHeld(held: Boolean): Unit = {
+    super.setExecutorsHeld(held)
+    podAllocator match {
+      case allocator: ExecutorPodsAllocator if !held => allocator.unsetRecoveryMode()
+      case _ => // no-op
+    }
+  }
+
   override def sufficientResourcesRegistered(): Boolean = {
     totalRegisteredExecutors.get() >= minRegisteredExecutors
   }

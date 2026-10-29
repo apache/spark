@@ -178,6 +178,60 @@ abstract class DataSourceV2SQLSuite
     }
   }
 
+  test("transformed nested partition source does not receive a DPP runtime filter") {
+    val fact = s"${catalogAndNamespace}fact_transformed_nested_runtime_filter"
+    val dim = s"${catalogAndNamespace}dim_transformed_nested_runtime_filter"
+    withTable(fact, dim) {
+      sql(s"CREATE TABLE $fact " +
+        "(id INT, derives STRUCT<toStr: STRING, other: STRING>) USING " +
+        s"$v2Format PARTITIONED BY (truncate(derives.toStr, 1))")
+      sql(s"INSERT INTO $fact VALUES " +
+        "(1, named_struct('toStr', 'AA', 'other', 'a')), " +
+        "(2, named_struct('toStr', 'BB', 'other', 'b')), " +
+        "(3, named_struct('toStr', 'CC', 'other', 'c'))")
+      sql(s"CREATE TABLE $dim (value STRING, selected INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES ('AA', 0), ('BB', 1)")
+
+      withSQLConf(
+        SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "true",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_REUSE_BROADCAST_ONLY.key -> "false",
+        SQLConf.DYNAMIC_PARTITION_PRUNING_FALLBACK_FILTER_RATIO.key -> "10") {
+        val df = sql(
+          s"""SELECT f.id FROM $fact f JOIN $dim d
+             |ON f.derives.toStr = d.value WHERE d.selected = 1""".stripMargin)
+        checkAnswer(df, Row(2))
+
+        val factScan = collect(df.queryExecution.executedPlan) {
+          case b: BatchScanExec if b.output.exists(_.name == "derives") => b
+        }.head
+        assert(factScan.runtimeFilters.isEmpty,
+          s"expected no runtime filters on a transform source, got ${factScan.runtimeFilters}")
+        assert(factScan.partitions.size === 3)
+        assert(factScan.filteredPartitions.flatten.size === 3)
+      }
+    }
+  }
+
+  test("filter on transformed partition source remains post-scan") {
+    val table = s"${catalogAndNamespace}transformed_source_filter"
+    withTable(table) {
+      sql(s"CREATE TABLE $table (id INT, part DATE) USING $v2Format " +
+        "PARTITIONED BY (days(part))")
+      sql(s"INSERT INTO $table VALUES " +
+        "(1, DATE '2026-08-01'), (2, DATE '2026-08-02'), (3, DATE '2026-08-03')")
+
+      val df = sql(s"SELECT * FROM $table WHERE " +
+        "part IN (DATE '2026-08-01', DATE '2026-08-03')")
+      checkAnswer(df, Seq(
+        Row(1, java.sql.Date.valueOf("2026-08-01")),
+        Row(3, java.sql.Date.valueOf("2026-08-03"))))
+
+      val scan = collect(df.queryExecution.executedPlan) { case b: BatchScanExec => b }.head
+      assert(scan.partitions.size === 3)
+      assert(scan.filteredPartitions.flatten.size === 3)
+    }
+  }
+
   private def checkExplain(query: String, relationPattern: Regex): Unit = {
     val explain = spark.sql(s"EXPLAIN EXTENDED $query").head().getString(0)
     val relations = explain.split("\n").filter(_.contains("RelationV2"))
@@ -2626,6 +2680,21 @@ class DataSourceV2SQLSuiteV1Filter
           "table" -> "testcat.ns1.ns2.tbl",
           "filters" -> "[id = 2, id = id]"))
       assert(spark.table(t).count() === 3)
+    }
+  }
+
+  test("SPARK-59962: DeleteFrom: a condition reading a value twice reaches the source inlined") {
+    // BETWEEN reads `id + p` twice. Pre-evaluating it would put a `Project` where the planner
+    // expects the table, so the condition has to reach the source inlined.
+    val t = "testcat.ns1.ns2.tbl"
+    withTable(t) {
+      sql(s"CREATE TABLE $t (id bigint, data string, p int) USING foo PARTITIONED BY (id, p)")
+      checkError(
+        exception = analysisException(s"DELETE FROM $t WHERE (id + p) BETWEEN 0 AND 4"),
+        condition = "_LEGACY_ERROR_TEMP_1110",
+        parameters = Map(
+          "table" -> "testcat.ns1.ns2.tbl",
+          "filters" -> "[(id + CAST(p AS long)) >= 0, (id + CAST(p AS long)) <= 4]"))
     }
   }
 
@@ -5553,6 +5622,37 @@ class DataSourceV2SQLSuiteV2Filter extends DataSourceV2SQLSuite {
       }
       assert(postScanConditions.exists(!_.deterministic),
         s"Expected the non-deterministic filter above the scan, got $postScanConditions")
+    }
+  }
+
+  test("SPARK-60569: scalar subquery filters merged by MergeSubplans are pushed to the scan") {
+    val tbl = s"${catalogAndNamespace}tbl"
+    val dim = s"${catalogAndNamespace}dim"
+    withTable(tbl, dim) {
+      sql(s"CREATE TABLE $tbl (id INT, part INT) USING $v2Format PARTITIONED BY (part)")
+      for (i <- 0 until 10) {
+        sql(s"INSERT INTO $tbl VALUES ($i, $i)")
+      }
+
+      sql(s"CREATE TABLE $dim (val INT) USING $v2Format")
+      sql(s"INSERT INTO $dim VALUES (1), (3)")
+
+      // `MergeSubplans` merges the two subqueries into one, and each filter reads its result out
+      // of the struct the merged one returns.
+      val df = sql(s"SELECT * FROM $tbl " +
+        s"WHERE part = (SELECT max(val) FROM $dim) AND id > (SELECT min(val) FROM $dim)")
+      checkAnswer(df, Row(3, 3))
+
+      val batchScan = collect(df.queryExecution.executedPlan) {
+        case b: BatchScanExec => b
+      }.head
+      assert(batchScan.runtimeFilters.exists(_.exists(_.isInstanceOf[GetStructField])),
+        s"Expected a runtime filter on a merged scalar subquery, got ${batchScan.runtimeFilters}")
+
+      // Verify partition pruning: only 1 of 10 partitions should remain
+      val numPartitions = batchScan.filteredPartitions.count(_.isDefined)
+      assert(numPartitions == 1,
+        s"Expected 1 partition after scalar subquery pruning, got $numPartitions")
     }
   }
 }

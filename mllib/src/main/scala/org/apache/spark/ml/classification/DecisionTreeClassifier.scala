@@ -209,6 +209,44 @@ class DecisionTreeClassificationModel private[ml] (
     rootNode.predictImpl(features).prediction
   }
 
+  override protected def predictRawColumn(features: Column): Column = {
+    val localRootNode = rootNode
+    udf((features: Vector) =>
+      DecisionTreeClassificationModel.predictRaw(features, localRootNode)
+    ).apply(features)
+  }
+
+  override protected def raw2probabilityColumn(rawPrediction: Column): Column = {
+    udf((rawPrediction: Vector) =>
+      DecisionTreeClassificationModel.raw2probability(rawPrediction)
+    ).apply(rawPrediction)
+  }
+
+  override protected def predictProbabilityColumn(features: Column): Column = {
+    val localRootNode = rootNode
+    udf((features: Vector) => {
+      val rawPrediction = DecisionTreeClassificationModel.predictRaw(features, localRootNode)
+      DecisionTreeClassificationModel.raw2probability(rawPrediction)
+    }).apply(features)
+  }
+
+  override protected def raw2predictionColumn(rawPrediction: Column): Column = {
+    if (isDefined(thresholds)) {
+      val localThresholds = getThresholds.clone()
+      udf((rawPrediction: Vector) => {
+        val probability = DecisionTreeClassificationModel.raw2probability(rawPrediction)
+        ProbabilisticClassificationModel.probability2prediction(probability, localThresholds)
+      }).apply(rawPrediction)
+    } else {
+      udf((rawPrediction: Vector) => rawPrediction.argmax.toDouble).apply(rawPrediction)
+    }
+  }
+
+  override protected def predictionColumn(features: Column): Column = {
+    val localRootNode = rootNode
+    udf((features: Vector) => localRootNode.predictImpl(features).prediction).apply(features)
+  }
+
   @Since("3.0.0")
   override def transformSchema(schema: StructType): StructType = {
     var outputSchema = super.transformSchema(schema)
@@ -223,7 +261,10 @@ class DecisionTreeClassificationModel private[ml] (
 
     val outputData = super.transform(dataset)
     if ($(leafCol).nonEmpty) {
-      val leafUDF = udf { features: Vector => predictLeaf(features) }
+      val localRootNode = rootNode
+      val leafUDF = udf { features: Vector =>
+        DecisionTreeModel.predictLeaf(features, localRootNode)
+      }
       outputData.withColumn($(leafCol), leafUDF(col($(featuresCol))),
         outputSchema($(leafCol)).metadata)
     } else {
@@ -233,7 +274,7 @@ class DecisionTreeClassificationModel private[ml] (
 
   @Since("3.0.0")
   override def predictRaw(features: Vector): Vector = {
-    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
+    DecisionTreeClassificationModel.predictRaw(features, rootNode)
   }
 
   override protected def raw2probabilityInPlace(rawPrediction: Vector): Vector = {
@@ -290,6 +331,16 @@ class DecisionTreeClassificationModel private[ml] (
 
 @Since("2.0.0")
 object DecisionTreeClassificationModel extends MLReadable[DecisionTreeClassificationModel] {
+
+  private def predictRaw(features: Vector, rootNode: Node): Vector = {
+    Vectors.dense(rootNode.predictImpl(features).impurityStats.stats.clone())
+  }
+
+  private def raw2probability(rawPrediction: Vector): Vector = {
+    val probability = rawPrediction.copy.toDense
+    ProbabilisticClassificationModel.normalizeToProbabilitiesInPlace(probability)
+    probability
+  }
 
   @Since("2.0.0")
   override def read: MLReader[DecisionTreeClassificationModel] =
