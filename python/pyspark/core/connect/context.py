@@ -16,6 +16,7 @@
 #
 
 import os
+import sys
 import time
 import warnings
 from typing import (
@@ -255,6 +256,26 @@ class SparkContext:
                     stacklevel=2,
                 )
 
+        # The Spark Connect server was started with its own Spark home and executor environment.
+        for label, value in (("sparkHome", sparkHome), ("environment", environment)):
+            if value:
+                warnings.warn(
+                    f"`{label}` is ignored by Spark Connect `SparkContext`; it is decided when "
+                    "the Spark Connect server starts.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        if isinstance(master, str) and not (
+            master.startswith("sc://") or master.startswith("grpc:")
+        ):
+            warnings.warn(
+                f"`master` {master!r} is ignored by Spark Connect `SparkContext`; it connects to "
+                "the Spark Connect server in `spark.remote`, SPARK_REMOTE, or localhost.",
+                UserWarning,
+                stacklevel=2,
+            )
+
         pairs: List[Tuple[str, str]] = []
         if conf is not None:
             pairs.extend(cast(Any, conf).getAll())
@@ -267,11 +288,6 @@ class SparkContext:
             b = b.appName(appName)
         if not any(k == "spark.app.name" for k, _ in pairs) and appName is None:
             b = b.appName("PySparkSparkConnect")
-        if sparkHome is not None:
-            b = b.config("spark.home", str(sparkHome))
-        if environment:
-            for ev_k, ev_v in environment.items():
-                b = b.config(f"spark.executorEnv.{ev_k}", str(ev_v))
         for ck, cv in pairs:
             if ck in ("spark.remote", "spark.master"):
                 continue
@@ -323,6 +339,21 @@ class SparkContext:
         .. versionadded:: 5.0.0
         """
         return self._session.version
+
+    @property
+    def appName(self) -> str:
+        """The ``spark.app.name`` of this Spark Connect session."""
+        return cast(str, self._session.conf.get("spark.app.name"))
+
+    @property
+    def master(self) -> str:
+        """The ``spark.master`` of the application serving this Spark Connect session."""
+        return cast(str, self._session.conf.get("spark.master"))
+
+    @property
+    def pythonVer(self) -> str:
+        """The major and minor version of this Python, as in Spark Classic."""
+        return "%d.%d" % sys.version_info[:2]
 
     @property
     def applicationId(self) -> str:

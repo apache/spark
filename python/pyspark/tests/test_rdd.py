@@ -17,6 +17,7 @@
 import hashlib
 import os
 import random
+import sys
 import tempfile
 import time
 import unittest
@@ -1111,6 +1112,11 @@ class RDDTestsMixin:
 
     def test_is_instance_of_rdd(self):
         self.assertIsInstance(self.sc.parallelize([1]), RDD)
+
+    def test_context_attributes(self):
+        self.assertEqual(self.sc.pythonVer, "%d.%d" % sys.version_info[:2])
+        self.assertIsInstance(self.sc.appName, str)
+        self.assertIsInstance(self.sc.master, str)
 
 
 class RDDTests(RDDTestsMixin, ReusedPySparkTestCase):

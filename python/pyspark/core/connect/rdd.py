@@ -859,10 +859,16 @@ class RDD(RDDFacade, Generic[T_co]):
         return self._barrier
 
     def withResources(self: "RDD[T]", profile: ResourceProfile) -> "RDD[T]":
-        """Run the stage computing this RDD with ``profile`` (stage-level scheduling)."""
+        """
+        Run the stage computing this RDD with ``profile`` (stage-level scheduling). On Spark
+        Connect the profile applies to the ``mapInArrow`` stage that computes the elements, so
+        they are always computed by Python, even for actions that would not need it otherwise.
+        """
         self._resource_profile = profile
         self._stage_profile = profile
         self.has_resource_profile = True
+        if self._func is None:
+            self._func = _identity_partition
         self._materialized = None
         return self
 

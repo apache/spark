@@ -336,7 +336,7 @@ class ConnectCompatibilityTestsMixin:
             "resources",
             "uiWebUrl",
         }
-        expected_missing_classic_properties = {"serializer"}
+        expected_missing_classic_properties = {"appName", "master", "pythonVer", "serializer"}
 
         self.check_compatibility(
             ClassicSparkContext,
