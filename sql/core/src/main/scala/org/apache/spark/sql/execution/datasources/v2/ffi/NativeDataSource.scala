@@ -39,7 +39,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, SupportsArrowStreamRead}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarArrowStreamReader, ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -310,27 +310,8 @@ class NativePartitionReaderFactory(
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
-    val context = TaskContext.get()
-    if (context == null || context.isCompleted()) {
-      throw new IllegalStateException(
-        "openArrowStream must be called in the running task that reads the partition.")
-    }
-    if (streamAddress == 0 || ArrowArrayStream.wrap(streamAddress).snapshot().release != 0) {
-      throw new IllegalArgumentException(
-        "openArrowStream needs the address of a stream whose release callback is NULL.")
-    }
-    val nativePartition = partition.asInstanceOf[NativeInputPartition]
-    // The partition of the scan: the task of an engine may read others than its own.
-    val task = NativePartitionReader.openStream(location, name, NativeLibrary.READ_BATCH,
-      readerState, nativePartition.bytes, readSchema, timeZoneId, streamAddress,
-      Some(nativePartition.index), mayOutliveTask = true)
-    try {
-      NativeLibrary.wrapEngineStream(streamAddress, task)
-    } catch {
-      case e: Throwable =>
-        NativePartitionReader.releaseOnFailure(e, streamAddress, task)
-        throw e
-    }
+    NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_BATCH, readerState,
+      partition, readSchema, timeZoneId, streamAddress)
   }
 }
 
@@ -345,7 +326,7 @@ class NativeDataSourceStreamReader(
     schema: StructType,
     timeZoneId: String,
     @transient private val handle: NativeHandle)
-  extends ColumnarStreamReader {
+  extends ColumnarArrowStreamReader {
   import NativeCalls._
 
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
@@ -396,6 +377,11 @@ class NativeDataSourceStreamReader(
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH, readerState,
       partition.asInstanceOf[NativeInputPartition].bytes, schema, timeZoneId)
+  }
+
+  override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
+      readerState, partition, schema, timeZoneId, streamAddress)
   }
 
   override def commit(end: String): Unit = {
@@ -881,6 +867,41 @@ class NativePartitionReader(
 
 object NativePartitionReader {
   import NativeCalls._
+
+  /**
+   * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
+   * [[SupportsArrowStreamRead]]: the context of its task is closed once the stream is released.
+   */
+  def openEngineStream(
+      location: NativeLibraryLocation,
+      name: String,
+      kind: Int,
+      readerState: Array[Byte],
+      partition: InputPartition,
+      schema: StructType,
+      timeZoneId: String,
+      streamAddress: Long): Unit = {
+    val context = TaskContext.get()
+    if (context == null || context.isCompleted()) {
+      throw new IllegalStateException(
+        "openArrowStream must be called in the running task that reads the partition.")
+    }
+    if (streamAddress == 0 || ArrowArrayStream.wrap(streamAddress).snapshot().release != 0) {
+      throw new IllegalArgumentException(
+        "openArrowStream needs the address of a stream whose release callback is NULL.")
+    }
+    val nativePartition = partition.asInstanceOf[NativeInputPartition]
+    // The partition of the scan: the task of an engine may read others than its own.
+    val task = openStream(location, name, kind, readerState, nativePartition.bytes, schema,
+      timeZoneId, streamAddress, Some(nativePartition.index), mayOutliveTask = true)
+    try {
+      NativeLibrary.wrapEngineStream(streamAddress, task)
+    } catch {
+      case e: Throwable =>
+        releaseOnFailure(e, streamAddress, task)
+        throw e
+    }
+  }
 
   /**
    * Initializes the Arrow C stream at `streamAddress`, whose release callback is NULL, with the

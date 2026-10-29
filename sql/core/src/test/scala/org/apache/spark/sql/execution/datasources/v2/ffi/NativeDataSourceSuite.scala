@@ -43,9 +43,10 @@ import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
-import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation}
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchScan, ColumnarScan}
 import org.apache.spark.sql.execution.datasources.v2.python.{PythonDataSourceV2, UserDefinedPythonDataSource}
+import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.functions.lit
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
@@ -1352,6 +1353,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(Files.readString(marker.toPath) == "interrupted")
     assert(NativeLibrary.openEngineStreams() == 0)
     Platform.freeMemory(waiting)
+
+    // So does the reader factory of a micro-batch scan, with the state of its stream reader.
+    val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+      .writeStream.format("noop").start()
+    val microBatchScan = try {
+      query.processAllAvailable()
+      query.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution.executedPlan
+        .collectFirst { case s: MicroBatchScanExec => s }.get
+    } finally {
+      query.stop()
+    }
+    val streamFactory = microBatchScan.readerFactory.asInstanceOf[SupportsArrowStreamRead]
+    val streamPartitions = microBatchScan.inputPartitions
+    val streamIds = inTask {
+      streamPartitions.flatMap { partition =>
+        val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+        try {
+          val stream = ArrowArrayStream.allocateNew(allocator)
+          try streamFactory.openArrowStream(partition, stream.memoryAddress()) catch {
+            case e: Throwable =>
+              stream.close()
+              throw e
+          }
+          readIds(stream, allocator)
+        } finally {
+          allocator.close()
+        }
+      }
+    }
+    assert(streamIds.sorted == (0L until 4L))
+    assert(NativeLibrary.openEngineStreams() == 0)
 
     // It runs in a task, with a stream whose release callback is NULL.
     val outside = intercept[IllegalStateException] {

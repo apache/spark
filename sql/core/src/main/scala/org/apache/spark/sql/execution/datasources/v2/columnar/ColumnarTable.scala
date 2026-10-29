@@ -240,8 +240,10 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
     reader.partitions(start.json(), end.json())
   }
 
-  override def createReaderFactory(): PartitionReaderFactory = {
-    new ColumnarStreamPartitionReaderFactory(reader)
+  override def createReaderFactory(): PartitionReaderFactory = reader match {
+    case arrowStreamReader: ColumnarArrowStreamReader =>
+      new ColumnarArrowStreamPartitionReaderFactory(arrowStreamReader)
+    case _ => new ColumnarStreamPartitionReaderFactory(reader)
   }
 
   override def deserializeOffset(json: String): Offset = ColumnarStreamOffset(json)
@@ -267,5 +269,13 @@ class ColumnarStreamPartitionReaderFactory(reader: ColumnarStreamReader)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
     reader.read(partition)
+  }
+}
+
+/** The reader factory of a stream reader that also opens a partition as an Arrow C stream. */
+class ColumnarArrowStreamPartitionReaderFactory(reader: ColumnarArrowStreamReader)
+  extends ColumnarStreamPartitionReaderFactory(reader) with SupportsArrowStreamRead {
+  override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    reader.openArrowStream(partition, streamAddress)
   }
 }

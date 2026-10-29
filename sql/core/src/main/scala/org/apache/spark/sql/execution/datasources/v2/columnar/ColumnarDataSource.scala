@@ -134,6 +134,14 @@ trait ColumnarStreamReader extends Serializable {
 }
 
 /**
+ * A [[ColumnarStreamReader]] that can also read a partition as an Arrow C stream, for the reader
+ * factory of its micro-batches: see `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`.
+ */
+trait ColumnarArrowStreamReader extends ColumnarStreamReader {
+  def openArrowStream(partition: InputPartition, streamAddress: Long): Unit
+}
+
+/**
  * Writes data to a [[ColumnarDataSource]] for a batch write. Spark serializes the writer to the
  * executors, where `createWriter` is called for each task, and then commits or aborts the write
  * on the driver. The batches passed to the data writers are backed by Arrow, and are only valid

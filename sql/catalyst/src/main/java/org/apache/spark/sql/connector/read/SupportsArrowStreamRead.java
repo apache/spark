@@ -24,8 +24,9 @@ import org.apache.spark.annotation.Evolving;
  * <a href="https://arrow.apache.org/docs/format/CStreamInterface.html">Arrow C stream</a>, for an
  * engine that processes Arrow data in native code: the engine imports the arrays of the stream
  * itself, instead of reading the {@link org.apache.spark.sql.vectorized.ColumnarBatch}es of
- * {@link #createColumnarReader(InputPartition)}. The reader factories of the batch scans of
- * native data sources implement it, with the stream that the library returns.
+ * {@link #createColumnarReader(InputPartition)}. The reader factories of the batch and
+ * micro-batch scans of native data sources implement it, with the stream that the library
+ * returns.
  * <p>
  * Each array of the stream is a struct array whose fields are the columns of the read schema of
  * the scan. Spark does not check the stream, while it checks the streams that it reads itself, so

@@ -239,7 +239,7 @@ Kubernetes, an executor that uses more memory than it requested is killed.
 
 An engine that runs queries in native code within Spark, such as Apache Gluten or Apache
 DataFusion Comet, can read a native data source without Spark importing its data on the JVM. The
-reader factory of a batch scan of a native data source implements
+reader factory of a batch or micro-batch scan of a native data source implements
 `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`: in the task that reads a partition,
 `openArrowStream` initializes an Arrow C stream that the engine allocated with the stream that
 `read` returns. The engine owns the stream, and releases it, also after the task ended: Spark
