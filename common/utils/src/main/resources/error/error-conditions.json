@@ -2356,6 +2356,44 @@
     ],
     "sqlState" : "0A000"
   },
+  "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP" : {
+    "message" : [
+      "Data source table <table> violates the external lookup contract:"
+    ],
+    "subClass" : {
+      "DUPLICATE_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan returned the field <field> more than once."
+        ]
+      },
+      "DUPLICATE_SELECTED_PREDICATE" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the predicate <predicate> more than once."
+        ]
+      },
+      "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
+        "message" : [
+          "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
+        ]
+      },
+      "NULL_PREDICATE_SELECTION" : {
+        "message" : [
+          "`selectLookupPredicates()` returned null or an array containing null."
+        ]
+      },
+      "UNKNOWN_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan returned the field <field>, which is not in the table output."
+        ]
+      },
+      "UNOFFERED_SELECTED_PREDICATE" : {
+        "message" : [
+          "`selectLookupPredicates()` returned the predicate <predicate>, which is not one of the candidate instances offered by Spark."
+        ]
+      }
+    },
+    "sqlState" : "KD000"
+  },
   "DATA_SOURCE_INVALID_RUNTIME_FILTER_ATTRIBUTE" : {
     "message" : [
       "The runtime filter attribute <attribute> reported by `<method>` in data source scan <scanClass> is invalid for the scan relation output <relationOutput>."
@@ -2822,6 +2860,59 @@
       "Column expression <expr> cannot be sorted because its type <exprType> is not orderable."
     ],
     "sqlState" : "42822"
+  },
+  "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED" : {
+    "message" : [
+      "The join cannot be executed as an external lookup join:"
+    ],
+    "subClass" : {
+      "CONFLICTING_JOIN_STRATEGY" : {
+        "message" : [
+          "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint, or the `EXTERNAL_LOOKUP` hint if the table also supports batch reads."
+        ]
+      },
+      "JOIN_TYPE" : {
+        "message" : [
+          "The join type <joinType> is not supported by an external lookup join over <relation>. Supported join types are <supportedJoinTypes>."
+        ]
+      },
+      "LOOKUP_PLAN" : {
+        "message" : [
+          "The lookup side must be a DSv2 table, optionally followed by projections and filters."
+        ]
+      },
+      "LOOKUP_TABLE_ON_LEFT" : {
+        "message" : [
+          "The lookup-only table <relation> must be on the right side of the join."
+        ]
+      },
+      "MISSING_JOIN_CONDITION" : {
+        "message" : [
+          "The join has no join condition."
+        ]
+      },
+      "NO_LOOKUP_PREDICATE" : {
+        "message" : [
+          "The data source of table <table> did not select any lookup predicate from the join condition."
+        ]
+      },
+      "SCAN_BUILDER" : {
+        "message" : [
+          "The scan builder of table <table> does not implement `SupportsExternalLookup`."
+        ]
+      },
+      "STATIC_LEFT_SIDE" : {
+        "message" : [
+          "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
+        ]
+      },
+      "TABLE" : {
+        "message" : [
+          "Table <table> does not support external lookup."
+        ]
+      }
+    },
+    "sqlState" : "0A000"
   },
   "FAILED_CREATE_CHECKPOINT_DIRECTORY" : {
     "message" : [
