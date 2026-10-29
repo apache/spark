@@ -561,12 +561,14 @@ abstract class SchemaPruningThroughGenerateSuite
   }
 
   testPruning("SPARK-47230: a scala UDF over an exploded field") {
-    spark.udf.register("skuLen", (s: String) => if (s == null) -1 else s.length)
-    checkPrunedQuery(
-      """select id, skuLen(item.sku) as sku_len
-        |from orders
-        |lateral view explode(items) t1 as item""".stripMargin,
-      "struct<id:int,items:array<struct<sku:string>>>")
+    withUserDefinedFunction("skuLen" -> true) {
+      spark.udf.register("skuLen", (s: String) => if (s == null) -1 else s.length)
+      checkPrunedQuery(
+        """select id, skuLen(item.sku) as sku_len
+          |from orders
+          |lateral view explode(items) t1 as item""".stripMargin,
+        "struct<id:int,items:array<struct<sku:string>>>")
+    }
   }
 
   testPruning("SPARK-47230: aliases shadowing real column names") {
@@ -770,13 +772,15 @@ abstract class SchemaPruningThroughGenerateSuite
 
   testPruning("SPARK-47230: a UDF consuming a whole sub-array keeps it whole") {
     // the UDF is opaque, so `parts` must be read whole; the element is still narrowed
-    spark.udf.register("partsCount",
-      (parts: Seq[Row]) => if (parts == null) -1 else parts.size)
-    checkPrunedQuery(
-      """select id, partsCount(item.parts) as pc
-        |from orders
-        |lateral view explode(items) t1 as item""".stripMargin,
-      s"struct<id:int,items:array<struct<active:boolean,parts:$fullPartsType>>>")
+    withUserDefinedFunction("partsCount" -> true) {
+      spark.udf.register("partsCount",
+        (parts: Seq[Row]) => if (parts == null) -1 else parts.size)
+      checkPrunedQuery(
+        """select id, partsCount(item.parts) as pc
+          |from orders
+          |lateral view explode(items) t1 as item""".stripMargin,
+        s"struct<id:int,items:array<struct<active:boolean,parts:$fullPartsType>>>")
+    }
   }
 
   testPruning("SPARK-47230: distribute by and sort by after the explode chain") {

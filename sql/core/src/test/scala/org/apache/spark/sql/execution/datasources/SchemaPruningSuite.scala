@@ -780,21 +780,23 @@ abstract class SchemaPruningSuite
         .selectExpr("explode_outer(items) AS item")
         .selectExpr("explode_outer(item.parts) AS part")
         .selectExpr("part.pid", "part.label")
-      val q = stream.writeStream.format("memory").queryName("spark_47230_stream").start()
-      try {
-        q.processAllAvailable()
-        val scanSchemas = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
-          .executedPlan.collect { case s: FileSourceScanExec => s.requiredSchema }
-        val expected = CatalystSqlParser.parseDataType(
-          "struct<items:array<struct<parts:array<struct<pid:int,label:string>>>>>")
-          .asInstanceOf[StructType]
-        implicit val equality = schemaEquality
-        assert(scanSchemas.size === 1)
-        assert(scanSchemas.head === expected)
-        checkAnswer(spark.table("spark_47230_stream"),
-          Row(1, "p1") :: Row(2, "p2") :: Row(null, null) :: Row(null, null) :: Nil)
-      } finally {
-        q.stop()
+      withTempView("spark_47230_stream") {
+        val q = stream.writeStream.format("memory").queryName("spark_47230_stream").start()
+        try {
+          q.processAllAvailable()
+          val scanSchemas = q.asInstanceOf[StreamingQueryWrapper].streamingQuery.lastExecution
+            .executedPlan.collect { case s: FileSourceScanExec => s.requiredSchema }
+          val expected = CatalystSqlParser.parseDataType(
+            "struct<items:array<struct<parts:array<struct<pid:int,label:string>>>>>")
+            .asInstanceOf[StructType]
+          implicit val equality = schemaEquality
+          assert(scanSchemas.size === 1)
+          assert(scanSchemas.head === expected)
+          checkAnswer(spark.table("spark_47230_stream"),
+            Row(1, "p1") :: Row(2, "p2") :: Row(null, null) :: Row(null, null) :: Nil)
+        } finally {
+          q.stop()
+        }
       }
     }
   }

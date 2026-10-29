@@ -149,8 +149,8 @@ object SchemaPruning extends SQLConfHelper {
    * If the element is used whole, `input` is needed whole, e.g. `items.parts` for
    * `explode(items.parts)`, which still narrows `items` to `parts`.
    *
-   * `input` must be expressed over the scan's output. Returns None if `input` is not an access
-   * path [[SelectedField]] can narrow.
+   * `input` must be expressed over the scan's output, or over the element of a generator below
+   * it. Returns None if `input` is not an access path [[SelectedField]] can narrow.
    */
   def getGeneratorInputRootField(
       input: Expression,
@@ -158,10 +158,12 @@ object SchemaPruning extends SQLConfHelper {
       exprs: Seq[Expression],
       elementFields: Seq[StructField] = Nil): Option[RootField] = input.dataType match {
     case ArrayType(elementType, containsNull) =>
-      // Rename the element so that its fields can be told apart from other columns by name.
+      // Rename the element, and every other attribute too, so that the element's fields can be
+      // told apart by name from other columns and generator outputs.
       val name = s"${element.name}#${element.exprId.id}"
       val renamed = exprs.map(_.transform {
         case a: Attribute if a.exprId == element.exprId => a.withName(name)
+        case a: Attribute => a.withName(s"${a.name}#${a.exprId.id}")
       })
       val fields = identifyRootFields(Nil, renamed,
         elementFields.map(f => RootField(f.copy(name = name), derivedFromAtt = false)))

@@ -33,6 +33,7 @@ import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
 import org.apache.spark.sql.types.{ArrayType, AtomicType, DataType, MapType, StructField,
   StructType}
 import org.apache.spark.sql.util.SchemaUtils._
+import org.apache.spark.util.Utils
 
 /**
  * Prunes unnecessary physical columns given a [[ScanOperation]] over a data source relation.
@@ -122,25 +123,26 @@ object SchemaPruning extends Rule[LogicalPlan] {
       scanRelation: LogicalPlan)(
       pruneScan: (Segment, Seq[NamedExpression], Seq[RootField]) => Option[LogicalPlan])
       : Option[LogicalPlan] = {
-    if (!conf.nestedSchemaPruningEnabled || !conf.nestedSchemaPruningThroughGenerateEnabled) {
-      None
-    } else {
-      try {
-        // e.g. the `size(arr) > 0` filters inferred for a non-outer explode
-        op.transformAllExpressions {
-          case s @ Size(child, _) => s.copy(child = lengthOnly(child))
-        } match {
-          case sized @ GeneratorsOverScan(segments, generators, _) =>
-            pruneThroughGeneratorsImpl(sized, segments, generators, scanRelation)(pruneScan)
-          case _ => None
-        }
-      } catch {
-        // A missed optimization, not a failed query: keep the plan as it is.
-        case NonFatal(e) =>
-          logWarning(log"Failed to prune nested fields through generators; " +
-            log"the scan is pruned without them", e)
-          None
+    // the flags are checked by GeneratorsOverScan, which matched `op`
+    try {
+      // e.g. the `size(arr) > 0` filters inferred for a non-outer explode
+      op.transformAllExpressions {
+        case s @ Size(child, _) => s.copy(child = lengthOnly(child))
+      } match {
+        case sized @ GeneratorsOverScan(segments, generators, _) =>
+          pruneThroughGeneratorsImpl(sized, segments, generators, scanRelation)(pruneScan)
+        case _ => None
       }
+    } catch {
+      // In tests, surface the bug (e.g. SelectedField and ProjectionOverSchema drifting apart)
+      // instead of passing on the unpruned plan.
+      case NonFatal(e) if Utils.isTesting => throw e
+      // Otherwise a missed optimization, not a failed query: keep the plan as it is. The rule
+      // runs several times per query, so this is not logged as a warning.
+      case NonFatal(e) =>
+        logDebug("Failed to prune nested fields through generators; " +
+          "the scan is pruned without them", e)
+        None
     }
   }
 
