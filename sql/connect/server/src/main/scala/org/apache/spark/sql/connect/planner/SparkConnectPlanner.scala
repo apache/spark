@@ -3274,10 +3274,15 @@ class SparkConnectPlanner(
           timeZoneId = timeZoneId,
           errorOnDuplicatedFieldNames = false,
           largeVarTypes = largeVarTypes)
-        assert(batches.hasNext)
-        val bytes = batches.next()
-        assert(!batches.hasNext, s"remaining batches: ${batches.size}")
-        bytes
+        // On the driver, nothing else closes the converter if the conversion fails.
+        Utils.tryWithSafeFinally {
+          assert(batches.hasNext)
+          val bytes = batches.next()
+          assert(!batches.hasNext, s"remaining batches: ${batches.size}")
+          bytes
+        } {
+          batches.close()
+        }
       }
 
       result.setRelation(
