@@ -540,8 +540,7 @@ object CollationTypeCoercion extends SQLConfHelper {
     case _: BinaryComparison | _: StringPredicate | _: Upper | _: Lower | _: InitCap |
          _: FindInSet | _: StringInstr | _: StringReplace | _: StringLocate | _: SubstringIndex |
          _: StringTrim | _: StringTrimLeft | _: StringTrimRight | _: StringTranslate |
-         _: StringSplitSQL | _: In | _: InSubquery | _: FindInSet |
-         _: StringInstrWithOccurrence => false
+         _: StringSplitSQL | _: In | _: InSubquery | _: StringInstrWithOccurrence => false
     case _ => true
   }
 
