@@ -117,6 +117,12 @@
  *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
  *   must not depend on the data source handle it was created from, because Spark closes the data
  *   source handle right after creating it.
+ * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
+ *   handle than its close function, except that it aborts a writer whose commit failed and a data
+ *   writer whose write or commit failed. It calls each function of a batch reader at most once. It
+ *   calls commit and abort at most once each for a writer, and commit_data_writer and
+ *   abort_data_writer at most once each for a data writer, with all the calls to write before
+ *   them.
  * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
  *   names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
@@ -288,6 +294,13 @@ typedef struct SparkDsHost {
    * of the driver or of the executor, with the path of the library.
    */
   void (*log)(int32_t level, const char* message);
+  /*
+   * Returns whether log writes the messages of one of the SPARK_DS_LOG_* levels, so that the
+   * library only formats the messages that Spark writes, and gets those that Spark writes at the
+   * levels that a library would not log by default, such as debug. It follows the configuration of
+   * the log of Spark, which can change while Spark runs.
+   */
+  bool (*is_log_enabled)(int32_t level);
 } SparkDsHost;
 
 /* A data source, as create gets it. */

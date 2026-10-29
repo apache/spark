@@ -70,7 +70,9 @@ A native data source library exports a single C function, `spark_ds_init`, which
 of function pointers, a `SparkDsLibrary`, that implements the data source: it needs no JVM headers
 or bindings. Each library has its own table, so any number of native data sources can be loaded
 side by side. When Spark loads a library, it calls `spark_ds_init` with a `SparkDsHost`, which
-gives the library the version of Spark and a function to log messages to the log of Spark.
+gives the library the version of Spark, a function to log messages to the log of Spark, and a
+function that tells whether Spark logs the messages of a level, so that a library follows the log
+level of Spark.
 
 A Spark distribution contains the header in its `include` directory, as
 `$SPARK_HOME/include/spark_datasource.h`, and the `spark-sql` JAR contains it as

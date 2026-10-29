@@ -55,8 +55,9 @@
 // "capabilities", a data source declares these capabilities instead, a number. With the option
 // "task_path", the reads and the data writers of native_range and native_sink record their task
 // in a file named after its partition, in that directory. With the option "log", creating a data
-// source logs its value as a warning, and with the option "spark_version", it fails unless Spark
-// has that version.
+// source logs its value as a warning, with the option "log_levels_path", it writes to that file
+// whether Spark logs each level, from error to trace, such as "1,1,1,0,0", and with the option
+// "spark_version", it fails unless Spark has that version.
 //
 // With the option "fail", a step fails with an error. With the option "zero", a function that
 // creates a handle succeeds without setting it: "create", "create_reader",
@@ -655,12 +656,32 @@ thread_local std::string last_error;
 // Spark, as spark_ds_init got it.
 const SparkDsHost* host = nullptr;
 
-// Logs with the log of Spark. A library must only use the fields that fit in the size of the
-// struct that Spark passes, which may be of another version of the header.
+// Whether the struct that Spark passes has is_log_enabled, which an earlier version of the header
+// does not have.
+bool hasIsLogEnabled() {
+  return host->size >= static_cast<int64_t>(offsetof(SparkDsHost, is_log_enabled) +
+                                            sizeof(host->is_log_enabled));
+}
+
+// Logs with the log of Spark, unless it does not write the level. A library must only use the
+// fields that fit in the size of the struct that Spark passes, which may be of another version of
+// the header.
 void hostLog(int32_t level, const std::string& message) {
+  if (hasIsLogEnabled() && !host->is_log_enabled(level)) return;
   if (host->size >= static_cast<int64_t>(offsetof(SparkDsHost, log) + sizeof(host->log))) {
     host->log(level, message.c_str());
   }
+}
+
+// Whether Spark logs each level, from error to trace, such as "1,1,1,0,0".
+std::string logLevels() {
+  if (!hasIsLogEnabled()) throw std::runtime_error("the host has no is_log_enabled");
+  std::string levels;
+  for (int32_t level = SPARK_DS_LOG_ERROR; level <= SPARK_DS_LOG_TRACE; level++) {
+    if (level > SPARK_DS_LOG_ERROR) levels += ",";
+    levels += host->is_log_enabled(level) ? "1" : "0";
+  }
+  return levels;
 }
 
 // Runs `f`, and turns a C++ exception into an error: none may cross the boundary.
@@ -932,6 +953,8 @@ int createSource(const SparkDsCreateInfo* info, uint64_t* capabilities, void** h
     }
     std::string message = get(source->options, "log", "");
     if (!message.empty()) hostLog(SPARK_DS_LOG_WARN, message);
+    std::string levels_path = get(source->options, "log_levels_path", "");
+    if (!levels_path.empty()) writeFile(levels_path, logLevels());
     std::string version = get(source->options, "spark_version", "");
     if (!version.empty() && version != host->spark_version) {
       throw std::runtime_error("the version of Spark is " + std::string(host->spark_version) +

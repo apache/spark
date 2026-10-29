@@ -1185,6 +1185,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         message.contains("a message from native code") &&
         message.contains(System.mapLibraryName("test_native_datasource"))
     })
+
+    // is_log_enabled follows the level of the log of Spark: the library gets whether Spark logs
+    // each level, from error to trace.
+    val levels = new File(Utils.createTempDir(), "levels")
+    Seq(
+      org.apache.logging.log4j.Level.DEBUG -> "1,1,1,1,0",
+      org.apache.logging.log4j.Level.ERROR -> "1,0,0,0,0").foreach { case (level, expected) =>
+      withLogAppender(new LogAppender("native data source log levels"),
+          loggerNames = Seq(classOf[NativeLibrary].getName), level = Some(level)) {
+        range(session, "log_levels_path" -> levels.getPath)
+      }
+      assert(Files.readString(levels.toPath) == expected, level)
+    }
   }
 
   nativeTest("pass the task to reads and data writers") {
