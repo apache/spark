@@ -650,3 +650,15 @@ DECLARE OR REPLACE VARIABLE identifier_subq_col STRING DEFAULT 'c1';
 CREATE VIEW identifier_subq_view AS
 SELECT (SELECT IDENTIFIER(identifier_subq_col) FROM VALUES(1) AS t(c1)) AS x;
 DROP TEMPORARY VARIABLE identifier_subq_col;
+
+-- A SQL function named through IDENTIFIER(<variable>) is subject to the same operator restrictions
+-- as a direct call, in an aggregate select list, a grouping expression, and a join condition.
+CREATE TEMPORARY FUNCTION identifier_sql_function(arg1 STRING) RETURNS STRING
+RETURN arg1 || 'blah';
+DECLARE identifier_sql_function_name STRING DEFAULT 'identifier_sql_function';
+SELECT IDENTIFIER(identifier_sql_function_name)(col1) FROM VALUES ('b'), ('a') GROUP BY col1;
+SELECT count(*) FROM VALUES ('b'), ('a') GROUP BY IDENTIFIER(identifier_sql_function_name)(col1);
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_sql_function_name)(a) = b;
+DROP TEMPORARY VARIABLE identifier_sql_function_name;
+DROP TEMPORARY FUNCTION identifier_sql_function;

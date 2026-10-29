@@ -1953,6 +1953,15 @@ table other
 table other
 |> aggregate sum(a) as total_a;
 
+-- A pipe projection does not expose a removed struct through star or field resolution.
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.*;
+
+from values (1, named_struct('a', 10, 'b', 20)) as tab(id, h)
+|> select id
+|> select h.a;
+
 -- Cleanup.
 -----------
 drop table t;

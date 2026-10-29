@@ -51,3 +51,6 @@ SELECT count(testData.*) FROM testData;
 -- count with a single tblName.* as parameter
 set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false;
 SELECT count(testData.*) FROM testData;
+
+-- Stars with target should be disallowed in COUNT function, also with DISTINCT
+SELECT count(DISTINCT testData.*) FROM testData;

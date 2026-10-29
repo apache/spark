@@ -507,6 +507,121 @@ struct<ltrl2:int,ltrl1:int>
 
 
 -- !query
+SELECT a FROM testData ORDER BY max(a) OVER (), a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)\", \"max(a)\"",
+    "operator" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 49,
+    "fragment" : "ORDER BY max(a) OVER (), a"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY a, max(a) OVER ()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)\", \"max(a)\"",
+    "operator" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 49,
+    "fragment" : "ORDER BY a, max(a) OVER ()"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData ORDER BY a, max(a)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a)\"",
+    "operator" : "Sort"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 41,
+    "fragment" : "ORDER BY a, max(a)"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData DISTRIBUTE BY max(a) OVER (), a
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)\", \"max(a)\"",
+    "operator" : "RepartitionByExpression"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 54,
+    "fragment" : "DISTRIBUTE BY max(a) OVER (), a"
+  } ]
+}
+
+
+-- !query
+SELECT a FROM testData DISTRIBUTE BY a, max(a) OVER ()
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "UNSUPPORTED_EXPR_FOR_OPERATOR",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "invalidExprSqls" : "\"max(a) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)\", \"max(a)\"",
+    "operator" : "RepartitionByExpression"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 24,
+    "stopIndex" : 54,
+    "fragment" : "DISTRIBUTE BY a, max(a) OVER ()"
+  } ]
+}
+
+
+-- !query
 DROP VIEW IF EXISTS testData
 -- !query schema
 struct<>

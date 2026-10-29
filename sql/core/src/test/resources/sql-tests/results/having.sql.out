@@ -451,3 +451,28 @@ SELECT col1 FROM VALUES (1) t1 GROUP BY col1 HAVING (
 struct<col1:int>
 -- !query output
 1
+
+
+-- !query
+CREATE TEMPORARY VIEW hav_outer AS SELECT * FROM VALUES (1, 2), (3, 4) AS hav_outer(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col2 FROM hav_outer GROUP BY col1, col2 HAVING (SELECT col1)
+-- !query schema
+struct<col2:int>
+-- !query output
+2
+4
+
+
+-- !query
+DROP VIEW hav_outer
+-- !query schema
+struct<>
+-- !query output
+

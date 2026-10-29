@@ -34,6 +34,27 @@ Project [a#x]
 
 
 -- !query
+CREATE TABLE t2(col1 ARRAY<INT>, col2 INT)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
+
+
+-- !query
+SELECT col1[get(filter(col1,k -> k == col2), col2)] FROM t2
+-- !query analysis
+Project [col1#x[get(filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false)), col2#x)] AS col1[get(filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), col2)]#x]
++- SubqueryAlias spark_catalog.default.t2
+   +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+DROP TABLE t2
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
+
+
+-- !query
 DROP TABLE t1
 -- !query analysis
 DropTable false, false

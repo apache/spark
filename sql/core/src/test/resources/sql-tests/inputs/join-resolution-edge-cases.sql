@@ -22,5 +22,9 @@ SELECT 1 FROM t2 NATURAL JOIN t1 JOIN t2 ON t2.col1 = t1.col1 WHERE t2.col2 = 1;
 SELECT 1 FROM t2 NATURAL JOIN t1 JOIN t2 ON t2.col1 = t1.col1 GROUP BY t2.col2 HAVING t2.col2 = 1;
 SELECT 1 FROM t2 NATURAL JOIN t1 JOIN t2 ON t2.col1 = t1.col1 ORDER BY t2.col2;
 
+-- Non-deterministic expressions should be disallowed in multi children operators
+SELECT * FROM t1 JOIN t2 ON random(t1.col1) > 0.1;
+SELECT * FROM t1 JOIN t2 ON random(100) > 0.1;
+
 DROP TABLE t1;
 DROP TABLE t2;

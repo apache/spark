@@ -1855,3 +1855,43 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "expressionAnyValue" : "\"any_value(ts)\""
   }
 }
+
+
+-- !query
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+-- !query schema
+struct<k:string,w:struct<start:timestamp,end:timestamp>,cnt:bigint>
+-- !query output
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+
+
+-- !query
+SELECT grp, window(ts, '10 minutes') AS w,
+  row_number() OVER (PARTITION BY grp ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+-- !query schema
+struct<grp:string,w:struct<start:timestamp,end:timestamp>,rn:int>
+-- !query output
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	1
+g1	{"start":2024-01-01 00:00:00,"end":2024-01-01 00:10:00}	2
+
+
+-- !query
+SELECT grp, row_number() OVER (PARTITION BY grp, window(ts, '10 minutes') ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+-- !query schema
+struct<grp:string,rn:int>
+-- !query output
+g1	1
+g1	2

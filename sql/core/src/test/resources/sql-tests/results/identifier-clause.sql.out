@@ -4092,3 +4092,63 @@ DROP TEMPORARY VARIABLE identifier_subq_col
 struct<>
 -- !query output
 
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_sql_function(arg1 STRING) RETURNS STRING
+RETURN arg1 || 'blah'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DECLARE identifier_sql_function_name STRING DEFAULT 'identifier_sql_function'
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name)(col1) FROM VALUES ('b'), ('a') GROUP BY col1
+-- !query schema
+struct<identifier_sql_function(col1):string>
+-- !query output
+ablah
+bblah
+
+
+-- !query
+SELECT count(*) FROM VALUES ('b'), ('a') GROUP BY IDENTIFIER(identifier_sql_function_name)(col1)
+-- !query schema
+struct<count(1):bigint>
+-- !query output
+1
+1
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_sql_function_name)(a) = b
+-- !query schema
+struct<a:string,b:string>
+-- !query output
+a	ablah
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_sql_function_name
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_sql_function
+-- !query schema
+struct<>
+-- !query output
+

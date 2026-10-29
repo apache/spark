@@ -32,6 +32,30 @@ b
 
 
 -- !query
+CREATE TABLE t2(col1 ARRAY<INT>, col2 INT)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col1[get(filter(col1,k -> k == col2), col2)] FROM t2
+-- !query schema
+struct<col1[get(filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), col2)]:int>
+-- !query output
+
+
+
+-- !query
+DROP TABLE t2
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP TABLE t1
 -- !query schema
 struct<>

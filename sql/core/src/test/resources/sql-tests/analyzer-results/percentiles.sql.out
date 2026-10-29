@@ -1230,3 +1230,55 @@ Aggregate [percentile_approx(t#x, cast(array(0.25, cast(0.5 as decimal(2,2)), 0.
          +- Project [t#x]
             +- SubqueryAlias aggr_time
                +- LocalRelation [t#x]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW aggr_double AS SELECT * FROM VALUES
+(1.0D), (2.0D), (3.0D), (4.0D) AS aggr_double(col1)
+-- !query analysis
+CreateViewCommand `aggr_double`, SELECT * FROM VALUES
+(1.0D), (2.0D), (3.0D), (4.0D) AS aggr_double(col1), false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x]
+      +- SubqueryAlias aggr_double
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT percentile(col1, 0.5) FROM aggr_double
+-- !query analysis
+Aggregate [percentile(col1#x, cast(0.5 as double), 1, 0, 0, false) AS percentile(col1, 0.5, 1)#x]
++- SubqueryAlias aggr_double
+   +- View (`aggr_double`, [col1#x])
+      +- Project [cast(col1#x as double) AS col1#x]
+         +- Project [col1#x]
+            +- SubqueryAlias aggr_double
+               +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT percentile(col1, 1.1) FROM aggr_double
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, 1.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "percentile(col1, 1.1)"
+  } ]
+}
+
+
+-- !query
+DROP VIEW aggr_double
+-- !query analysis
+DropTempViewCommand aggr_double, false

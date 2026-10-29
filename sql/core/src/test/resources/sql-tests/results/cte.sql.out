@@ -1112,6 +1112,54 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+CREATE TABLE cte_time_travel(col1 INT) USING parquet
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM cte_time_travel VERSION AS OF 0
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1),
+     cte AS (SELECT * FROM cte_time_travel VERSION AS OF 0)
+SELECT * FROM cte
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+DROP TABLE cte_time_travel
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query schema
 struct<>

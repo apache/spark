@@ -128,3 +128,7 @@ select * from stack();
 select * from stack(2, 1, 2, 3) t(a, b, c);
 select * from stack(2, 1, '1.1', 'a', 2, 2.2, 'b');
 select * from stack(2, explode(array(1, 2, 3)));
+
+-- Table-valued function argument that is an alias: the `:` semi-structured extraction makes the
+-- variant_explode argument a top-level Alias.
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a);

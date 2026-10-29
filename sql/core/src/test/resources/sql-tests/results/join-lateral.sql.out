@@ -1987,6 +1987,17 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b)
+-- !query schema
+struct<pos:int,key:string,value:variant,pos:int,key:string,value:variant>
+-- !query output
+0	a	{"b":[1,2,3]}	0	NULL	1
+0	a	{"b":[1,2,3]}	1	NULL	2
+0	a	{"b":[1,2,3]}	2	NULL	3
+
+
+-- !query
 DROP VIEW t1
 -- !query schema
 struct<>

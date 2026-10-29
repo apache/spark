@@ -7,6 +7,11 @@ SELECT col1.a, a FROM t1 ORDER BY col1.a;
 -- Indexing a result of a function that returns a complex type
 SELECT split(col1, '-')[1] AS a FROM VALUES('a-b') ORDER BY split(col1, '-')[1];
 
+-- Both child and extraction should be checked in ResolverGuard
+CREATE TABLE t2(col1 ARRAY<INT>, col2 INT);
+SELECT col1[get(filter(col1,k -> k == col2), col2)] FROM t2;
+DROP TABLE t2;
+
 DROP TABLE t1;
 
 -- SPARK-57186: extracting a field/element/key from a NullType base returns NULL instead of

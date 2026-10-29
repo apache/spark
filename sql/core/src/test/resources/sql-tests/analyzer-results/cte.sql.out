@@ -1623,6 +1623,47 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+CREATE TABLE cte_time_travel(col1 INT) USING parquet
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`cte_time_travel`, false
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM cte_time_travel VERSION AS OF 0
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+WITH cte_time_travel AS (SELECT 1 AS col1),
+     cte AS (SELECT * FROM cte_time_travel VERSION AS OF 0)
+SELECT * FROM cte
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "UNSUPPORTED_FEATURE.TIME_TRAVEL",
+  "sqlState" : "0A000",
+  "messageParameters" : {
+    "relationId" : "`cte_time_travel`"
+  }
+}
+
+
+-- !query
+DROP TABLE cte_time_travel
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.cte_time_travel
+
+
+-- !query
 DROP VIEW IF EXISTS t
 -- !query analysis
 DropTempViewCommand t, true

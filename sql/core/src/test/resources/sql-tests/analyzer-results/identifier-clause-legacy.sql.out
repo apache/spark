@@ -4067,3 +4067,61 @@ DROP TEMPORARY VARIABLE identifier_subq_col
 -- !query analysis
 DropVariable false
 +- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_subq_col
+
+
+-- !query
+CREATE TEMPORARY FUNCTION identifier_sql_function(arg1 STRING) RETURNS STRING
+RETURN arg1 || 'blah'
+-- !query analysis
+CreateSQLFunctionCommand identifier_sql_function, arg1 STRING, STRING, arg1 || 'blah', false, true, false, false
+
+
+-- !query
+DECLARE identifier_sql_function_name STRING DEFAULT 'identifier_sql_function'
+-- !query analysis
+CreateVariable default(cast(identifier_sql_function as string), sql=''identifier_sql_function''), false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_sql_function_name
+
+
+-- !query
+SELECT IDENTIFIER(identifier_sql_function_name)(col1) FROM VALUES ('b'), ('a') GROUP BY col1
+-- !query analysis
+Project [identifier_sql_function(arg1#x) AS identifier_sql_function(col1)#x]
++- Project [col1#x, cast(col1#x as string) AS arg1#x]
+   +- Aggregate [col1#x], [col1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT count(*) FROM VALUES ('b'), ('a') GROUP BY IDENTIFIER(identifier_sql_function_name)(col1)
+-- !query analysis
+Project [count(1)#xL]
++- Aggregate [identifier_sql_function#x], [count(1) AS count(1)#xL]
+   +- Project [col1#x, identifier_sql_function(arg1#x) AS identifier_sql_function#x]
+      +- Project [col1#x, cast(col1#x as string) AS arg1#x]
+         +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT * FROM VALUES ('a') t1(a) JOIN VALUES ('ablah') t2(b)
+ON IDENTIFIER(identifier_sql_function_name)(a) = b
+-- !query analysis
+Project [a#x, b#x]
++- Join Inner, (identifier_sql_function(arg1#x) = b#x)
+   :- SubqueryAlias t1
+   :  +- LocalRelation [a#x]
+   +- SubqueryAlias t2
+      +- LocalRelation [b#x]
+
+
+-- !query
+DROP TEMPORARY VARIABLE identifier_sql_function_name
+-- !query analysis
+DropVariable false
++- ResolvedIdentifier org.apache.spark.sql.catalyst.analysis.FakeSystemCatalog$@xxxxxxxx, session.identifier_sql_function_name
+
+
+-- !query
+DROP TEMPORARY FUNCTION identifier_sql_function
+-- !query analysis
+DropFunctionCommand identifier_sql_function, false, true

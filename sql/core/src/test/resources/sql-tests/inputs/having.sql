@@ -114,3 +114,9 @@ SELECT col1 FROM VALUES (1) t1 GROUP BY col1 HAVING (
         SELECT t3.col1 FROM VALUES (1) t3 WHERE t3.col1 == MAX(t2.col1)
     )
 );
+
+-- HAVING name resolution should prioritize table columns when referencing outer ones
+CREATE TEMPORARY VIEW hav_outer AS SELECT * FROM VALUES (1, 2), (3, 4) AS hav_outer(col1, col2);
+SELECT col2 FROM hav_outer GROUP BY col1, col2 HAVING (SELECT col1);
+
+DROP VIEW hav_outer;

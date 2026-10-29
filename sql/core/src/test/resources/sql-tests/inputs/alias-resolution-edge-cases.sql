@@ -13,5 +13,13 @@ SELECT col1.field, field FROM VALUES(map('field', 1));
 SELECT COUNT(col1) as alias, SUM(col1) + alias FROM t1 GROUP BY ALL;
 SELECT COUNT(col1) as alias, SUM(col1) + alias, SUM(col1) + col1 FROM t1 GROUP BY ALL;
 
+-- A window function inside a scalar subquery does not make a SELECT with lateral column aliases
+-- a window query block.
+-- LCA in a Project, subquery not laterally referenced.
+SELECT 1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c;
+-- A window function inside an aggregate function is still rejected.
+SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2);
+
 DROP TABLE t1;
 DROP TABLE t2;

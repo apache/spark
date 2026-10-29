@@ -395,6 +395,14 @@ SELECT * FROM t o WHERE EXISTS (
   SELECT * FROM v
 );
 
+-- Time travel on a CTE reference is rejected instead of reading the same-named table
+CREATE TABLE cte_time_travel(col1 INT) USING parquet;
+WITH cte_time_travel AS (SELECT 1 AS col1) SELECT * FROM cte_time_travel VERSION AS OF 0;
+WITH cte_time_travel AS (SELECT 1 AS col1),
+     cte AS (SELECT * FROM cte_time_travel VERSION AS OF 0)
+SELECT * FROM cte;
+DROP TABLE cte_time_travel;
+
 -- Clean up
 DROP VIEW IF EXISTS t;
 DROP VIEW IF EXISTS t2;

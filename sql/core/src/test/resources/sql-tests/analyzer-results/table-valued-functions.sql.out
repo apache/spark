@@ -981,3 +981,11 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "stack(2, explode(array(1, 2, 3)))"
   } ]
 }
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a)
+-- !query analysis
+Project [pos#x, key#x, value#x]
++- Generate variant_explode(variant_get(parse_json({"a": [1, 2, 3]}, true), $.a, VariantType, true, Some(America/Los_Angeles), false)), false, [pos#x, key#x, value#x]
+   +- OneRowRelation

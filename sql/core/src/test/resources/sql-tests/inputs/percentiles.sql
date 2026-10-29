@@ -441,3 +441,12 @@ SELECT
 FROM aggr_time;
 
 SELECT percentile_approx(t, array(0.25, 0.5, 0.75)) FROM aggr_time;
+
+-- Aggregate function inside an AggregateExpression should be validated using checkInputDataTypes
+CREATE OR REPLACE TEMPORARY VIEW aggr_double AS SELECT * FROM VALUES
+(1.0D), (2.0D), (3.0D), (4.0D) AS aggr_double(col1);
+
+SELECT percentile(col1, 0.5) FROM aggr_double;
+SELECT percentile(col1, 1.1) FROM aggr_double;
+
+DROP VIEW aggr_double;

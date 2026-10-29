@@ -2460,6 +2460,21 @@ NULL	100
 
 
 -- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name)
+-- !query schema
+struct<file_name:string>
+-- !query output
+NULL
+a
+b
+
+
+-- !query
 DROP VIEW testData
 -- !query schema
 struct<>

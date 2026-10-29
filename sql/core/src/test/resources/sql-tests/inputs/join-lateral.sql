@@ -582,6 +582,11 @@ WITH cte1(k, v1) AS (VALUES (1, 'a'), (2, 'b'), (3, 'c'))
 SELECT * FROM (SELECT k FROM cte1 GROUP BY k) g,
 LATERAL (SELECT v1 AS leaked);
 
+-- Table-valued function argument that is an alias over an outer reference: the `:` extraction on
+-- the lateral join's outer `t.value` makes the variant_explode argument a top-level Alias.
+SELECT * FROM variant_explode(parse_json('{"a": {"b": [1, 2, 3]}}')) AS t,
+  LATERAL variant_explode(t.value:b);
+
 -- clean up
 DROP VIEW t1;
 DROP VIEW t2;

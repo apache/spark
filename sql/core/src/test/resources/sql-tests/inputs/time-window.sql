@@ -776,3 +776,31 @@ QUALIFY session_window(ts, '5 minutes').start IS NOT NULL;
 
 -- session_window_select_star_error
 SELECT * FROM ts_data GROUP BY a, session_window(ts, '5 minutes');
+
+-- window_group_by_select_alias
+-- GROUP BY referencing a SELECT-list alias must resolve even when the SELECT contains a
+-- time-windowing function; the window wrapper exposing the `window` attribute must not drop the
+-- group-by-alias map before GROUP BY is resolved.
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w;
+
+-- window_with_window_function
+-- A time-windowing function next to a window function, in the SELECT list or only in the window
+-- specification: the `window` attribute must be part of the Window operator's input.
+SELECT grp, window(ts, '10 minutes') AS w,
+  row_number() OVER (PARTITION BY grp ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts);
+
+-- window_in_window_partition_by
+SELECT grp, row_number() OVER (PARTITION BY grp, window(ts, '10 minutes') ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts);

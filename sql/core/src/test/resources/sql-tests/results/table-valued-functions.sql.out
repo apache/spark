@@ -1069,3 +1069,13 @@ org.apache.spark.sql.AnalysisException
     "fragment" : "stack(2, explode(array(1, 2, 3)))"
   } ]
 }
+
+
+-- !query
+SELECT * FROM variant_explode(parse_json('{"a": [1, 2, 3]}'):a)
+-- !query schema
+struct<pos:int,key:string,value:variant>
+-- !query output
+0	NULL	1
+1	NULL	2
+2	NULL	3

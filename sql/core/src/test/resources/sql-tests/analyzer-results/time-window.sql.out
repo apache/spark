@@ -2002,3 +2002,53 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
     "expressionAnyValue" : "\"any_value(ts)\""
   }
 }
+
+
+-- !query
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+-- !query analysis
+Aggregate [grp#x, window#x], [grp#x AS k#x, window#x AS w#x, count(1) AS cnt#xL]
++- Project [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) + 600000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) + 600000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) END) - 0) + 600000000), LongType, TimestampType))) AS window#x, grp#x, ts#x]
+   +- Filter isnotnull(ts#x)
+      +- SubqueryAlias t
+         +- LocalRelation [grp#x, ts#x]
+
+
+-- !query
+SELECT grp, window(ts, '10 minutes') AS w,
+  row_number() OVER (PARTITION BY grp ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+-- !query analysis
+Project [grp#x, w#x, rn#x]
++- Project [grp#x, w#x, ts#x, rn#x, rn#x]
+   +- Window [row_number() windowspecdefinition(grp#x, ts#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [grp#x], [ts#x DESC NULLS LAST]
+      +- Project [grp#x, window#x AS w#x, ts#x]
+         +- Project [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) + 600000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) + 600000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) END) - 0) + 600000000), LongType, TimestampType))) AS window#x, grp#x, ts#x]
+            +- Filter isnotnull(ts#x)
+               +- SubqueryAlias t
+                  +- LocalRelation [grp#x, ts#x]
+
+
+-- !query
+SELECT grp, row_number() OVER (PARTITION BY grp, window(ts, '10 minutes') ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+-- !query analysis
+Project [grp#x, rn#x]
++- Project [grp#x, window#x, ts#x, rn#x, rn#x]
+   +- Window [row_number() windowspecdefinition(grp#x, window#x, ts#x DESC NULLS LAST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [grp#x, window#x], [ts#x DESC NULLS LAST]
+      +- Project [grp#x, window#x, ts#x]
+         +- Project [named_struct(start, knownnullable(precisetimestampconversion(((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) + 600000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) END) - 0), LongType, TimestampType)), end, knownnullable(precisetimestampconversion((((precisetimestampconversion(ts#x, TimestampType, LongType) - CASE WHEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) < cast(0 as bigint)) THEN (((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) + 600000000) ELSE ((precisetimestampconversion(ts#x, TimestampType, LongType) - 0) % 600000000) END) - 0) + 600000000), LongType, TimestampType))) AS window#x, grp#x, ts#x]
+            +- Filter isnotnull(ts#x)
+               +- SubqueryAlias t
+                  +- LocalRelation [grp#x, ts#x]

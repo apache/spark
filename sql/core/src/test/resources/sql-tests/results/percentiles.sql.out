@@ -1219,3 +1219,53 @@ SELECT percentile_approx(t, array(0.25, 0.5, 0.75)) FROM aggr_time
 struct<percentile_approx(t, array(0.25, 0.5, 0.75), 10000):array<time(6)>>
 -- !query output
 [00:00:00,06:00:00,12:00:00]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW aggr_double AS SELECT * FROM VALUES
+(1.0D), (2.0D), (3.0D), (4.0D) AS aggr_double(col1)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT percentile(col1, 0.5) FROM aggr_double
+-- !query schema
+struct<percentile(col1, 0.5, 1):double>
+-- !query output
+2.5
+
+
+-- !query
+SELECT percentile(col1, 1.1) FROM aggr_double
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "1.1D",
+    "exprName" : "percentage",
+    "sqlExpr" : "\"percentile(col1, 1.1, 1)\"",
+    "valueRange" : "[0.0, 1.0]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 28,
+    "fragment" : "percentile(col1, 1.1)"
+  } ]
+}
+
+
+-- !query
+DROP VIEW aggr_double
+-- !query schema
+struct<>
+-- !query output
+

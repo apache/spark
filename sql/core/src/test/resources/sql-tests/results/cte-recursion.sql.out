@@ -2253,3 +2253,187 @@ SELECT * FROM t
 struct<n:int>
 -- !query output
 1
+
+
+-- !query
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM r INNER JOIN (VALUES (0)) AS t(data) USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r
+-- !query schema
+struct<level:int,data:int>
+-- !query output
+0	0
+1	0
+2	0
+
+
+-- !query
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM r NATURAL INNER JOIN (VALUES (0)) AS t(data)
+  WHERE level < 2
+)
+SELECT * FROM r
+-- !query schema
+struct<level:int,data:int>
+-- !query output
+0	0
+1	0
+2	0
+
+
+-- !query
+WITH RECURSIVE numbers(n) AS (
+  SELECT CAST(1 AS STRING)
+  UNION ALL
+  SELECT * FROM (SELECT n, n AS value FROM numbers) source
+  PIVOT (MAX(value) FOR n IN ('1'))
+)
+SELECT * FROM numbers
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT 1
+  UNION ALL
+  SELECT `1` FROM VALUES (1, 1) AS source(k, v)
+  PIVOT (max(v + (SELECT n FROM t)) FOR k IN (1))
+)
+SELECT * FROM t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS STRING)
+  UNION ALL
+  SELECT `1` FROM VALUES (1, 1) AS source(k, v)
+  PIVOT (max(cast((SELECT cast(n AS INT) + 1 FROM t) AS STRING)) FOR k IN (1))
+  WHERE `1` < 3
+)
+SELECT * FROM t
+-- !query schema
+struct<n:string>
+-- !query output
+1
+2
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT sum(n) FROM helper
+  )
+)
+SELECT * FROM t
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT helper.n + 1
+    FROM VALUES (1) AS v(x) LEFT JOIN helper ON helper.n < 3
+  )
+)
+SELECT * FROM t LIMIT 5
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_RECURSIVE_REFERENCE.PLACE",
+  "sqlState" : "42836"
+}
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH RECURSIVE inner_loop(n) AS (
+      SELECT 1
+      UNION ALL
+      SELECT n + 1 FROM inner_loop WHERE n < 2
+    ), helper AS (SELECT n FROM inner_loop)
+    SELECT t.n + totals.n
+    FROM t CROSS JOIN (SELECT sum(n) AS n FROM helper) totals
+    WHERE t.n < 3
+  )
+)
+SELECT * FROM t
+-- !query schema
+struct<n:bigint>
+-- !query output
+1
+4
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    SELECT s FROM (
+      SELECT max(x) + (SELECT n FROM t LIMIT 1) AS s FROM VALUES (1) AS v(x)
+    ) WHERE s < 4
+  )
+)
+SELECT * FROM t
+-- !query schema
+struct<n:bigint>
+-- !query output
+1
+2
+3
+
+
+-- !query
+WITH RECURSIVE t(n) AS (
+  SELECT CAST(1 AS BIGINT)
+  UNION ALL (
+    WITH helper AS (SELECT n FROM t)
+    SELECT s FROM (
+      SELECT max(x) + (SELECT n FROM helper LIMIT 1) AS s FROM VALUES (1) AS v(x)
+    ) WHERE s < 4
+  )
+)
+SELECT * FROM t
+-- !query schema
+struct<n:bigint>
+-- !query output
+1
+2
+3

@@ -561,6 +561,14 @@ WHERE col2 > (SELECT AVG(x) FROM sub12 WHERE x <= subOuter4.col1)
 GROUP BY ROLLUP(col1)
 ORDER BY col1 NULLS LAST;
 
+-- Visible struct field as a ROLLUP grouping key
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name);
+
 
 -- Clean up temporary views
 DROP VIEW testData;

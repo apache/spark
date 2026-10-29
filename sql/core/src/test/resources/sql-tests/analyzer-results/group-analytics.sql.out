@@ -2409,6 +2409,21 @@ Sort [col1#x ASC NULLS LAST], true
 
 
 -- !query
+SELECT payload.file_name
+FROM VALUES
+  (named_struct('file_name', 'a')),
+  (named_struct('file_name', 'b'))
+AS t(payload)
+GROUP BY ROLLUP(payload.file_name)
+-- !query analysis
+Aggregate [payload.file_name#x, spark_grouping_id#xL], [payload.file_name#x AS file_name#x]
++- Expand [[payload#x, payload.file_name#x, 0], [payload#x, null, 1]], [payload#x, payload.file_name#x, spark_grouping_id#xL]
+   +- Project [payload#x, payload#x.file_name AS payload.file_name#x]
+      +- SubqueryAlias t
+         +- LocalRelation [payload#x]
+
+
+-- !query
 DROP VIEW testData
 -- !query analysis
 DropTempViewCommand testData, false

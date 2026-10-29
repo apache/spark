@@ -512,3 +512,213 @@ Project [bucket#x, parity#x, avg_col1#x, rank_in_bucket#x]
       +- Aggregate [(cast(col1#x as double) / cast(5 as double)), (col2#x % 2), col1#x, col2#x], [(cast(col1#x as double) / cast(5 as double)) AS bucket#x, (col2#x % 2) AS parity#x, avg(col1#x) AS avg_col1#x, avg(col1#x) AS _w0#x, (cast(col1#x as double) / cast(5 as double)) AS _w1#x, (col2#x % 2) AS _w2#x]
          +- SubqueryAlias t
             +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW wwa_data AS SELECT * FROM VALUES
+(1, 10), (1, 20), (2, 30), (3, 40) AS wwa_data(col1, col2)
+-- !query analysis
+CreateViewCommand `wwa_data`, SELECT * FROM VALUES
+(1, 10), (1, 20), (2, 30), (3, 40) AS wwa_data(col1, col2), false, true, LocalTempView, UNSUPPORTED, true
+   +- Project [col1#x, col2#x]
+      +- SubqueryAlias wwa_data
+         +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+ORDER BY col1
+-- !query analysis
+Project [a#x, ratio#x]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Project [a#x, ratio#x, col1#x]
+      +- Project [a#x, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 1.0) / cast(_we0#xL as decimal(20,0))) AS ratio#x, col1#x]
+         +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+            +- Aggregate [col1#x], [col1#x AS a#x, count(1) AS _w0#xL, col1#x]
+               +- SubqueryAlias wwa_data
+                  +- View (`wwa_data`, [col1#x, col2#x])
+                     +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                        +- Project [col1#x, col2#x]
+                           +- SubqueryAlias wwa_data
+                              +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) AS cnt
+FROM wwa_data
+GROUP BY col1
+ORDER BY col1
+-- !query analysis
+Sort [a#x ASC NULLS FIRST], true
++- Aggregate [col1#x], [col1#x AS a#x, count(1) AS cnt#xL]
+   +- SubqueryAlias wwa_data
+      +- View (`wwa_data`, [col1#x, col2#x])
+         +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+            +- Project [col1#x, col2#x]
+               +- SubqueryAlias wwa_data
+                  +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+HAVING col1 > 0
+-- !query analysis
+Project [a#x, ratio#x]
++- Project [a#x, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 1.0) / cast(_we0#xL as decimal(20,0))) AS ratio#x]
+   +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+      +- Filter (a#x > 0)
+         +- Aggregate [col1#x], [col1#x AS a#x, count(1) AS _w0#xL]
+            +- SubqueryAlias wwa_data
+               +- View (`wwa_data`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias wwa_data
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY col1 > 0
+-- !query analysis
+Filter (a#x > 0)
++- Project [a#x, ratio#x]
+   +- Project [a#x, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 1.0) / cast(_we0#xL as decimal(20,0))) AS ratio#x]
+      +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+         +- Aggregate [col1#x], [col1#x AS a#x, count(1) AS _w0#xL]
+            +- SubqueryAlias wwa_data
+               +- View (`wwa_data`, [col1#x, col2#x])
+                  +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                     +- Project [col1#x, col2#x]
+                        +- SubqueryAlias wwa_data
+                           +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY row_number() OVER (ORDER BY col1) = 1
+-- !query analysis
+Project [a#x, ratio#x]
++- Filter (row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x = 1)
+   +- Project [a#x, ratio#x, row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+      +- Project [a#x, ratio#x, row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+         +- Window [row_number() windowspecdefinition(a#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [a#x ASC NULLS FIRST]
+            +- Project [a#x, ratio#x]
+               +- Project [a#x, ratio#x]
+                  +- Project [a#x, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 1.0) / cast(_we0#xL as decimal(20,0))) AS ratio#x]
+                     +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+                        +- Aggregate [col1#x], [col1#x AS a#x, count(1) AS _w0#xL]
+                           +- SubqueryAlias wwa_data
+                              +- View (`wwa_data`, [col1#x, col2#x])
+                                 +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                    +- Project [col1#x, col2#x]
+                                       +- SubqueryAlias wwa_data
+                                          +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY col1 > 0
+ORDER BY col1
+-- !query analysis
+Project [a#x, ratio#x]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Filter (a#x > 0)
+      +- Project [a#x, ratio#x, col1#x]
+         +- Project [a#x, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 1.0) / cast(_we0#xL as decimal(20,0))) AS ratio#x, col1#x]
+            +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+               +- Aggregate [col1#x], [col1#x AS a#x, count(1) AS _w0#xL, col1#x]
+                  +- SubqueryAlias wwa_data
+                     +- View (`wwa_data`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- SubqueryAlias wwa_data
+                                 +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY row_number() OVER (ORDER BY col1) = 1
+ORDER BY col1
+-- !query analysis
+Project [a#x, ratio#x]
++- Sort [col1#x ASC NULLS FIRST], true
+   +- Project [a#x, ratio#x, col1#x]
+      +- Filter (row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x = 1)
+         +- Project [a#x, ratio#x, row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, col1#x]
+            +- Project [a#x, ratio#x, row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, col1#x]
+               +- Window [row_number() windowspecdefinition(a#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (ORDER BY a ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [a#x ASC NULLS FIRST]
+                  +- Project [a#x, ratio#x, col1#x]
+                     +- Project [a#x, ratio#x, col1#x]
+                        +- Project [a#x, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 1.0) / cast(_we0#xL as decimal(20,0))) AS ratio#x, col1#x]
+                           +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+                              +- Aggregate [col1#x], [col1#x AS a#x, count(1) AS _w0#xL, col1#x]
+                                 +- SubqueryAlias wwa_data
+                                    +- View (`wwa_data`, [col1#x, col2#x])
+                                       +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                                          +- Project [col1#x, col2#x]
+                                             +- SubqueryAlias wwa_data
+                                                +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt,
+  (COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS pct,
+  GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY gid ASC, col1 ASC
+-- !query analysis
+Sort [gid#xL ASC NULLS FIRST, col1#x ASC NULLS FIRST], true
++- Project [col1#x, cnt#xL, pct#x, gid#xL]
+   +- Project [col1#x, cnt#xL, gid#xL, _w0#xL, _we0#xL, ((cast(_w0#xL as decimal(20,0)) * 100.0) / cast(_we0#xL as decimal(20,0))) AS pct#x]
+      +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS _we0#xL]
+         +- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, count(1) AS cnt#xL, spark_grouping_id#xL AS gid#xL, count(1) AS _w0#xL]
+            +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+               +- Project [col1#x, col2#x, col1#x AS col1#x]
+                  +- SubqueryAlias wwa_data
+                     +- View (`wwa_data`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- SubqueryAlias wwa_data
+                                 +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt,
+  SUM(COUNT(*)) OVER () AS total,
+  GROUPING(col1) AS grp
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY grp ASC, col1 ASC
+-- !query analysis
+Sort [grp#x ASC NULLS FIRST, col1#x ASC NULLS FIRST], true
++- Project [col1#x, cnt#xL, total#xL, grp#x]
+   +- Project [col1#x, cnt#xL, grp#x, _w0#xL, total#xL, total#xL]
+      +- Window [sum(_w0#xL) windowspecdefinition(specifiedwindowframe(RowFrame, unboundedpreceding$(), unboundedfollowing$())) AS total#xL]
+         +- Aggregate [col1#x, spark_grouping_id#xL], [col1#x, count(1) AS cnt#xL, cast((shiftright(spark_grouping_id#xL, 0) & 1) as tinyint) AS grp#x, count(1) AS _w0#xL]
+            +- Expand [[col1#x, col2#x, col1#x, 0], [col1#x, col2#x, null, 1]], [col1#x, col2#x, col1#x, spark_grouping_id#xL]
+               +- Project [col1#x, col2#x, col1#x AS col1#x]
+                  +- SubqueryAlias wwa_data
+                     +- View (`wwa_data`, [col1#x, col2#x])
+                        +- Project [cast(col1#x as int) AS col1#x, cast(col2#x as int) AS col2#x]
+                           +- Project [col1#x, col2#x]
+                              +- SubqueryAlias wwa_data
+                                 +- LocalRelation [col1#x, col2#x]
+
+
+-- !query
+DROP VIEW wwa_data
+-- !query analysis
+DropTempViewCommand wwa_data, false

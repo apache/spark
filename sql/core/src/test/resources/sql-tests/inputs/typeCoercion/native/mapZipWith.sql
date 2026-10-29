@@ -94,3 +94,10 @@ FROM various_maps;
 
 SELECT map_zip_with(float_zero_map, float_neg_zero_map, (k, v1, v2) -> (v1, v2)) m
 FROM various_maps;
+
+-- map_zip_with coerces input map key types with the session-mode variant before binding the lambda
+SELECT typeof(map_zip_with(map(1, 0), map(CAST(2 AS FLOAT), 0), (k, v1, v2) -> k));
+
+-- map_zip_with with non-coercible key types reports MAP_ZIP_WITH_DIFF_TYPES, not an internal error
+SELECT map_zip_with(map(true, false), map(1, 0), (k, v1, v2) -> struct(k, v1, v2));
+SELECT map_zip_with(map(1, 0), map(DATE '2020-01-01', 0), (k, v1, v2) -> struct(k, v1, v2));

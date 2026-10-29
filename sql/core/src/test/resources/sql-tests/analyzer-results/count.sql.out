@@ -229,3 +229,16 @@ org.apache.spark.sql.AnalysisException
     "tableName" : "`testData`"
   }
 }
+
+
+-- !query
+SELECT count(DISTINCT testData.*) FROM testData
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`testData`"
+  }
+}

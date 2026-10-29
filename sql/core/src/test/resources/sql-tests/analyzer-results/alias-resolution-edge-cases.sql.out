@@ -77,6 +77,31 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT 1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c
+-- !query analysis
+Project [a#x, (a#x + 1) AS b#x, scalar-subquery#x [] AS c#x]
+:  +- Aggregate [max(rn#x) AS max(rn)#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Project [rn#x]
+:           +- Project [col1#x, rn#x, rn#x]
+:              +- Window [row_number() windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [col1#x ASC NULLS FIRST]
+:                 +- Project [col1#x]
+:                    +- LocalRelation [col1#x]
++- Project [1 AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
+
+
+-- !query
 DROP TABLE t1
 -- !query analysis
 DropTable false, false

@@ -338,3 +338,27 @@ SELECT col1 FROM t1 GROUP BY ALL HAVING any_value(col2) = 'a';
 SELECT col1 FROM t1 GROUP BY col1 HAVING EXISTS (SELECT any_value(t1.col2) == 0);
 
 DROP TABLE t1;
+
+-- Window and generator functions as grouping keys. A window function is computed after grouping,
+-- so it can never be a grouping key: it is rejected in an explicit GROUP BY, when GROUP BY ALL
+-- promotes the SELECT window to a grouping key, and when a GROUP BY ordinal points at it. A
+-- generator is rejected as an explicit grouping key, but a generator in the SELECT list is
+-- extracted to a Generate operator, so GROUP BY ALL / a GROUP BY ordinal that points at it groups
+-- by the generated output and stays valid.
+SELECT c1, ROW_NUMBER() OVER (ORDER BY c1) AS rn FROM VALUES (1), (2) AS t(c1)
+GROUP BY ALL ORDER BY c1;
+
+SELECT ROW_NUMBER() OVER (ORDER BY c1) FROM VALUES (1), (2) AS t(c1) GROUP BY 1;
+
+SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY explode(a);
+
+SELECT explode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY ALL;
+
+SELECT explode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY 1;
+
+-- Multiple unsupported grouping keys are reported together, in grouping-list order, and an
+-- unsupported expression nested inside a larger grouping key is reported on its own.
+SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
+GROUP BY ROW_NUMBER() OVER (ORDER BY c1), explode(a);
+
+SELECT SUM(a) FROM (SELECT 1 AS a) t GROUP BY 1 + ROW_NUMBER() OVER (ORDER BY a);

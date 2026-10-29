@@ -211,6 +211,47 @@ org.apache.spark.sql.AnalysisException
 
 
 -- !query
+SELECT * FROM t1 JOIN t2 ON random(t1.col1) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "SEED_EXPRESSION_IS_UNFOLDABLE",
+  "sqlState" : "42K08",
+  "messageParameters" : {
+    "exprWithSeed" : "\"rand(col1)\"",
+    "seedExpr" : "\"col1\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 29,
+    "stopIndex" : 43,
+    "fragment" : "random(t1.col1)"
+  } ]
+}
+
+
+-- !query
+SELECT * FROM t1 JOIN t2 ON random(100) > 0.1
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_NON_DETERMINISTIC_EXPRESSIONS",
+  "sqlState" : "42K0E",
+  "messageParameters" : {
+    "sqlExprs" : "\"(rand(100) > 0.1)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 18,
+    "stopIndex" : 45,
+    "fragment" : "JOIN t2 ON random(100) > 0.1"
+  } ]
+}
+
+
+-- !query
 DROP TABLE t1
 -- !query analysis
 DropTable false, false
