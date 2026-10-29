@@ -7988,8 +7988,15 @@ class KeyGroupedPartitioningSuite
       Seq(TransformExpression(IntegerTruncateFunction, Seq(b, Literal(4)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(a)))
     val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(b)))
-    assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
-      "a mismatched-type column must not be reducible via the identity-vs-transform eval path")
+    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
+    // so these confs are what make this reach the check it pins.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
+        "a mismatched-type column must not be reducible via the identity-vs-transform eval path")
+    }
   }
 
   test("SPARK-50593: identityReducer validates the substituted identity column, not the " +
@@ -8006,8 +8013,15 @@ class KeyGroupedPartitioningSuite
       Seq(TransformExpression(TruncateFunction, Seq(tCol, Literal(3)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(idCol)))
     val trSpec = physical.KeyedShuffleSpec(truncated, physical.ClusteredDistribution(Seq(tCol)))
-    assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
-      "must validate the substituted identity column (ShortType), not the transform's own column")
+    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
+    // so these confs are what make this reach the check it pins.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
+        "must validate the substituted identity column (ShortType), not the transform's own column")
+    }
   }
 
   test("SPARK-50593: an arity-flexible transform (children > declared inputTypes) is not " +
@@ -8025,8 +8039,15 @@ class KeyGroupedPartitioningSuite
       Seq(TransformExpression(ZeroOrOneParamFunction, Seq(col, Literal(2)))), Seq.empty)
     val idSpec = physical.KeyedShuffleSpec(identity, physical.ClusteredDistribution(Seq(col)))
     val afSpec = physical.KeyedShuffleSpec(arityFlexible, physical.ClusteredDistribution(Seq(col)))
-    assert(idSpec.reducersBothWays(afSpec) == ((None, None)),
-      "a child beyond the declared arity must not reach the eval path (would AIOOBE)")
+    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
+    // so these confs are what make this reach the check it pins.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(idSpec.reducersBothWays(afSpec) == ((None, None)),
+        "a child beyond the declared arity must not reach the eval path (would AIOOBE)")
+    }
   }
 
   test("SPARK-50593: zero-param vs one-param transforms reach the reducer (no arity block)") {
@@ -8090,8 +8111,15 @@ class KeyGroupedPartitioningSuite
     // coerce a value the partitions were not built on, this pair is not reducible (reducers =>
     // None); the companion gate test asserts areKeysCompatible also rejects it, so it shuffles.
     val (idSpec, trSpec) = mismatchedIdVsTransformSpecs()
-    assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
-      "a mismatched-type literal param must not be reducible via the identity-vs-transform path")
+    // reducersBothWays returns no reducers at all unless compatible transforms are allowed,
+    // so these confs are what make this reach the check it pins.
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(idSpec.reducersBothWays(trSpec) == ((None, None)),
+        "a mismatched-type literal param must not be reducible via the identity-vs-transform path")
+    }
   }
 
   test("SPARK-50593: identity-vs-transform compatibility gate agrees with reducers on a " +
