@@ -1038,6 +1038,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("dt" -> dt.toString))
   }
 
+  def duplicateAssignmentsError(nameList: String): Throwable = {
+    new AnalysisException(
+      errorClass = "DUPLICATE_ASSIGNMENTS",
+      messageParameters = Map("nameList" -> nameList))
+  }
+
   def unresolvedVariableError(
       name: Seq[String],
       pathEntries: Seq[Seq[String]],
@@ -2020,6 +2026,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Some(cause))
   }
 
+  def nativeDataSourcePackageConflictError(name: String, packages: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT",
+      messageParameters = Map("name" -> name, "packages" -> packages.mkString(", ")))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "MULTIPLE_DATA_SOURCES",
@@ -2240,6 +2252,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1165",
       messageParameters = Map.empty)
+  }
+
+  def specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      origin = origin)
   }
 
   def bucketingColumnCannotBePartOfPartitionColumnsError(

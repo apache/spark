@@ -16,15 +16,18 @@
  */
 package org.apache.spark.sql.connector.catalog;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 import org.apache.spark.sql.connector.catalog.constraints.Constraint;
+import org.apache.spark.sql.connector.expressions.SortOrder;
 import org.apache.spark.sql.connector.expressions.Transform;
 import org.apache.spark.sql.types.StructType;
 
 /**
- * Metadata describing a data-source table: its columns, properties, partitioning and constraints.
+ * Metadata describing a data-source table: its columns, stored and display-only properties,
+ * partitioning, constraints, and requested write distribution and ordering.
  * Spark realizes a {@code TableInfo} into a {@link Table} via {@link DelegatingTable}; a catalog
  * that has its own {@link Table} object returns that instead. Views are described by the sibling
  * {@link View}, which -- unlike a table -- is itself a {@link Relation} because Spark never builds
@@ -34,8 +37,11 @@ public class TableInfo {
 
   private final Column[] columns;
   private final Map<String, String> properties;
+  private final Map<String, String> displayProperties;
   private final Transform[] partitions;
   private final Constraint[] constraints;
+  private final WriteDistributionMode writeDistributionMode;
+  private final SortOrder[] writeOrdering;
 
   /**
    * Constructor for TableInfo used by the builder.
@@ -43,8 +49,15 @@ public class TableInfo {
   protected TableInfo(Builder builder) {
     this.columns = builder.columns;
     this.properties = builder.properties;
+    this.displayProperties = builder.displayProperties;
     this.partitions = builder.partitions;
     this.constraints = builder.constraints;
+    this.writeDistributionMode = builder.writeDistributionMode;
+    this.writeOrdering =
+      Objects.requireNonNull(builder.writeOrdering, "writeOrdering should not be null");
+    for (SortOrder sortOrder : writeOrdering) {
+      Objects.requireNonNull(sortOrder, "writeOrdering should not contain null");
+    }
   }
 
   public Column[] columns() {
@@ -59,18 +72,95 @@ public class TableInfo {
     return properties;
   }
 
+  /**
+   * Returns the additional display-only properties described by {@link Table#displayProperties()}.
+   *
+   * <p>These properties describe metadata returned by a catalog. Spark leaves them empty when
+   * calling {@link TableCatalog#createTable(Identifier, TableInfo)},
+   * {@link TableCatalog#createTableLike(Identifier, TableInfo, Table)},
+   * {@link StagingTableCatalog#stageCreate(Identifier, TableInfo)},
+   * {@link StagingTableCatalog#stageReplace(Identifier, TableInfo)}, and
+   * {@link StagingTableCatalog#stageCreateOrReplace(Identifier, TableInfo)}.
+   *
+   * @since 4.4.0
+   */
+  public Map<String, String> displayProperties() {
+    return displayProperties;
+  }
+
   public Transform[] partitions() {
     return partitions;
   }
 
   public Constraint[] constraints() { return constraints; }
 
+  /**
+   * The requested write distribution, or null when the statement did not ask for one, which
+   * leaves the choice to the catalog.
+   * <p>
+   * Only catalogs that report
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING} see a
+   * request; for any other catalog, including the built-in session catalog, Spark rejects the
+   * statement. A {@link WriteDistributionMode#HASH} request always comes with a partition in
+   * {@link #partitions()} that is not {@code cluster_by}.
+   * <p>
+   * Spark passes the request only to the {@code TableInfo} overloads of
+   * {@link TableCatalog#createTable(Identifier, TableInfo)} and of the {@link StagingTableCatalog}
+   * methods {@code stageCreate}, {@code stageReplace} and {@code stageCreateOrReplace}. Their
+   * default implementations reject it, so a catalog that reports the capability must override each
+   * one it can be reached through. For a {@link TransactionalCatalogPlugin}, a
+   * {@code CREATE TABLE ... AS SELECT} or {@code REPLACE TABLE ... AS SELECT} that Spark runs in a
+   * transaction reaches the catalog of its
+   * {@link org.apache.spark.sql.connector.catalog.transactions.Transaction} instead; otherwise it
+   * reaches the plugin itself. See
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   * {@link TableCatalog#createTableLike} never gets a request: Spark does not copy the source
+   * table's write distribution and ordering into its {@code TableInfo}.
+   *
+   * @since 4.4.0
+   */
+  public WriteDistributionMode writeDistributionMode() { return writeDistributionMode; }
+
+  /**
+   * The requested write ordering; never null, without null elements, and empty when none was
+   * requested. Gated on the same capability and delivered the same way as
+   * {@link #writeDistributionMode()}.
+   * <p>
+   * A plain column is a {@link org.apache.spark.sql.connector.expressions.NamedReference}; any
+   * other key is a {@link Transform}, such as {@code bucket(16, id)}. Spark checks that each column
+   * a key references exists in the table schema, and the parser checks the argument kinds of the
+   * lowercase {@code bucket}, {@code years}, {@code months}, {@code days} and {@code hours}. It
+   * does not check that a key is orderable, that a bucket count is positive or that it lists a
+   * column, or the arguments of any other transform, so a catalog must reject a key it cannot
+   * honor. A catalog that is not a {@link StagingTableCatalog} sees a {@code REPLACE TABLE} only
+   * after Spark has dropped the existing table; see
+   * {@link TableCatalogCapability#SUPPORTS_CREATE_TABLE_WITH_WRITE_DISTRIBUTION_AND_ORDERING}.
+   *
+   * @since 4.4.0
+   */
+  public SortOrder[] writeOrdering() { return writeOrdering; }
+
   public static class Builder extends RelationBuilder<Builder> {
+    protected Map<String, String> displayProperties = new HashMap<>();
     protected Transform[] partitions = new Transform[0];
     protected Constraint[] constraints = new Constraint[0];
+    protected WriteDistributionMode writeDistributionMode = null;
+    protected SortOrder[] writeOrdering = new SortOrder[0];
 
     @Override
     protected Builder self() { return this; }
+
+    /**
+     * Sets additional display-only properties.
+     *
+     * @param displayProperties a non-null map with non-null keys and values
+     * @see TableInfo#displayProperties()
+     * @since 4.4.0
+     */
+    public Builder withDisplayProperties(Map<String, String> displayProperties) {
+      this.displayProperties = new HashMap<>(displayProperties);
+      return this;
+    }
 
     public Builder withPartitions(Transform[] partitions) {
       this.partitions = partitions;
@@ -79,6 +169,27 @@ public class TableInfo {
 
     public Builder withConstraints(Constraint[] constraints) {
       this.constraints = constraints;
+      return this;
+    }
+
+    /**
+     * Sets the requested write distribution. See {@link TableInfo#writeDistributionMode()}.
+     *
+     * @since 4.4.0
+     */
+    public Builder withWriteDistributionMode(WriteDistributionMode writeDistributionMode) {
+      this.writeDistributionMode = writeDistributionMode;
+      return this;
+    }
+
+    /**
+     * Sets the requested write ordering, which must not be null. See
+     * {@link TableInfo#writeOrdering()}.
+     *
+     * @since 4.4.0
+     */
+    public Builder withWriteOrdering(SortOrder[] writeOrdering) {
+      this.writeOrdering = writeOrdering;
       return this;
     }
 

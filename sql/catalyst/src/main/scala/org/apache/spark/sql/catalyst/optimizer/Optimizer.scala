@@ -2553,7 +2553,7 @@ object PruneFilters extends Rule[LogicalPlan] with PredicateHelper {
  */
 object PushDownPredicates extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan.transformWithPruning(
-    _.containsAnyPattern(FILTER, JOIN)) {
+    _.containsAnyPattern(FILTER, JOIN, AS_OF_JOIN)) {
     CombineFilters.applyLocally
       .orElse(PushPredicateThroughNonJoin.applyLocally)
       .orElse(PushPredicateThroughJoin.applyLocally)
@@ -2594,7 +2594,11 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     //    is worth splitting.
     // Note that a given filter may contain parts (separated by logical ands) from all cases.
     // We handle each part separately according to the logic above.
-    // Additional restriction:
+    // Additional restrictions:
+    // SPARK-60602: A throwable part (including one over a throwable alias) must not be
+    // evaluated on rows the parts written before it would have filtered out. So it is pushed
+    // only when no expensive part is written before it, it never enters the projection split,
+    // and the parts left above the projection keep their written order.
     // SPARK-13473: We can't push the predicate down when the underlying projection output non-
     // deterministic field(s).  Non-deterministic expressions are essentially stateful. This
     // implies that, for a given input row, the output are determined by the expression's initial
@@ -2618,22 +2622,23 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
           val (replaced, usedAliases) = replaceAliasWhileTracking(cond, aliasMap)
           (cond, usedAliases, replaced)
         }
+        // A component is cheap if it uses nothing expensive from the projection: either it
+        // uses nothing at all, or only inexpensive items. Then we can push it because it might
+        // eliminate more data quickly and it may also be something which could be evaluated at
+        // the storage layer. We may wish to improve this heuristic in the future.
+        def isCheap(used: AttributeMap[Alias]): Boolean = !used.exists(_._2.child.expensive)
         // Split the filter's components into cheap and expensive while keeping track of
-        // what each references from the projection.
-        val (cheapWithUsed, expensiveWithUsed) = originalAndRewrittenConditionsWithUsedAlias
-          .partition { case (cond, used, replaced) =>
-            // Didn't use anything? We're good
-            if (used.isEmpty) {
-              true
-            } else if (!used.exists(_._2.child.expensive)) {
-              // If it's cheap we can push it because it might eliminate more data quickly and
-              // it may also be something which could be evaluated at the storage layer.
-              // We may wish to improve this heuristic in the future.
-              true
-            } else {
-              false
-            }
-          }
+        // what each references from the projection. The cheap components written before the
+        // first expensive one are all pushed. After it, a throwable component (e.g.
+        // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
+        // so it is not evaluated on rows the components before it would have filtered out.
+        val (leading, rest) = originalAndRewrittenConditionsWithUsedAlias.span {
+          case (_, used, _) => isCheap(used)
+        }
+        val (cheapRest, expensiveWithUsed) = rest.partition {
+          case (_, used, replaced) => isCheap(used) && !replaced.throwable
+        }
+        val cheapWithUsed = leading ++ cheapRest
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
@@ -2644,15 +2649,21 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // Case 3: split the projection around the expensive conditions. Non-deterministic
         // conditions stay in the top filter, as they do everywhere else in this rule -- the
         // split orders conditions by cost, and cost is no way to decide how many rows a
-        // non-deterministic expression sees.
+        // non-deterministic expression sees. Throwable conditions, or conditions over throwable
+        // aliases, stay there too: ordering by cost could evaluate them (or compute the aliases
+        // in a lower projection) ahead of the conditions written before them.
         val (splitChild, splitAliases, stayUp) =
           if (expensiveWithUsed.nonEmpty && SQLConf.get.splitProjectionForExpensiveFilters) {
-            val (deterministic, nonDeterministic) =
-              expensiveWithUsed.partition { case (cond, _, _) => cond.deterministic }
+            val (splittable, notSplittable) = expensiveWithUsed.partition {
+              case (cond, _, replaced) => cond.deterministic && !replaced.throwable
+            }
             val (child, aliases, unplaced) = splitProjectForExpensiveConditions(
               project, aliasMap, baseChild,
-              deterministic.map { case (cond, used, _) => (cond, used) })
-            (child, aliases, unplaced ++ nonDeterministic.map(_._1))
+              splittable.map { case (cond, used, _) => (cond, used) })
+            // Keep the top filter in the order the conditions were written, so a throwable
+            // condition still only sees the rows the conditions before it kept.
+            val stayUpSet = (unplaced ++ notSplittable.map(_._1)).toSet
+            (child, aliases, expensiveWithUsed.map(_._1).filter(stayUpSet.contains))
           } else {
             (baseChild, AttributeSet.empty, expensiveWithUsed.map(_._1))
           }
@@ -2872,8 +2883,9 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
    * The most demanding group is left un-placed for the caller to put above the projection --
    * where expensive conditions go when there is nothing worth splitting.
    *
-   * Callers must pass deterministic conditions only -- the grouping below orders conditions by
-   * cost, and cost is no way to decide how many rows a non-deterministic expression sees.
+   * Callers must pass deterministic, non-throwable conditions only -- the grouping below orders
+   * conditions by cost, and cost is no way to decide how many rows a non-deterministic
+   * expression sees, nor may it evaluate a throwable one ahead of the conditions before it.
    *
    * Returns the new plan, the alias attributes it has already computed, and the un-placed
    * conditions (in their original, alias-referencing form).
@@ -2974,6 +2986,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
  *
  * And also pushes down the join filter, where the `condition` can be evaluated using only the
  * attributes of the left or right side of sub query when applicable.
+ *
+ * Also pushes the safe predicates through an [[AsOfJoin]]
  *
  * Check https://cwiki.apache.org/confluence/display/Hive/OuterJoinBehavior for more details
  */
@@ -3090,6 +3104,40 @@ object PushPredicateThroughJoin extends Rule[LogicalPlan] with PredicateHelper {
 
         case other =>
           throw SparkException.internalError(s"Unexpected join type: $other")
+      }
+    // Left-side WHERE predicate can run before the ASOF join, but a right-side one cannot
+    case f @ Filter(filterCondition, j: AsOfJoin) =>
+      val (leftFilterConditions, rightFilterConditions, commonFilterCondition) =
+        split(splitConjunctivePredicates(filterCondition), j.left, j.right)
+      if (leftFilterConditions.isEmpty) {
+        f
+      } else {
+        val newJoin = j.copy(left = Filter(leftFilterConditions.reduceLeft(And), j.left))
+        (rightFilterConditions ++ commonFilterCondition).
+          reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      }
+
+    // Right-side ON predicates can filter the right input first.
+    // Left-side ON predicates can filter the left input only for an inner join
+    // because a left outer join keeps every left row.
+    case j: AsOfJoin =>
+      val (leftJoinConditions, rightJoinConditions, commonJoinCondition) =
+        split(j.condition.map(splitConjunctivePredicates).getOrElse(Nil), j.left, j.right)
+      val (pushedLeftConditions, keptLeftConditions) = j.joinType match {
+        case Inner => (leftJoinConditions, Nil)
+        case LeftOuter => (Nil, leftJoinConditions)
+        case other =>
+          throw SparkException.internalError(s"Unexpected as-of join type: $other")
+      }
+      if (pushedLeftConditions.isEmpty && rightJoinConditions.isEmpty) {
+        j
+      } else {
+        val newLeft = pushedLeftConditions.
+          reduceLeftOption(And).map(Filter(_, j.left)).getOrElse(j.left)
+        val newRight = rightJoinConditions.
+          reduceLeftOption(And).map(Filter(_, j.right)).getOrElse(j.right)
+        j.copy(left = newLeft, right = newRight,
+          condition = (keptLeftConditions ++ commonJoinCondition).reduceLeftOption(And))
       }
   }
 }

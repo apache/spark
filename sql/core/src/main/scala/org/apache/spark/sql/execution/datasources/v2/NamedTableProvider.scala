@@ -15,18 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.catalyst.analysis
+package org.apache.spark.sql.execution.datasources.v2
 
-import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.V1CommandUtils.supportsV1Command
-import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
-import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
+import org.apache.spark.sql.connector.catalog.TableProvider
 
-/** Extracts a V1 command identifier, rejecting namespaces that cannot be represented in V1. */
-object ResolvedV1CommandIdentifier {
-  def unapply(resolved: LogicalPlan): Option[TableIdentifier] = resolved match {
-    case ResolvedIdentifier(catalog, ident) if supportsV1Command(catalog) =>
-      Some(ident.asTableIdentifier.copy(catalog = Some(catalog.name)))
-    case _ => None
-  }
+/**
+ * A [[TableProvider]] that serves the data sources registered under their own short names, such
+ * as Python and native data sources. `DataSource.lookupDataSource` resolves those names to the
+ * provider class, so the caller has to tell each new instance which name it was created for with
+ * [[setShortName]] before using it.
+ */
+trait NamedTableProvider extends TableProvider {
+  def setShortName(name: String): Unit
 }
