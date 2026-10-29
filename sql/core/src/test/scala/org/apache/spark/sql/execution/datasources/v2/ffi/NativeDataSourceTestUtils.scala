@@ -23,6 +23,12 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.{ZipEntry, ZipOutputStream}
 
+import scala.util.control.NonFatal
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
 
 /**
@@ -45,19 +51,41 @@ object NativeDataSourceTestUtils {
 
   /**
    * Runs a test that uses the test libraries, and fails it if the libraries got calls that the
-   * order of the calls of the header rules out. The calls recorded before, such as by a task of an
-   * earlier test that was still being killed, are dropped.
+   * order of the calls of the header rules out. It waits until no task runs before it checks, so
+   * that the late calls of the tasks of the test, such as of a task of a failed job that is still
+   * being killed, fail the test that made them. If the test fails, the calls are added to its
+   * error as suppressed.
    */
   def checkingOrderOfCalls[T](f: => T): T = {
     orderViolations.delete()
-    val result = f
+    val result = try f catch {
+      case e: Throwable =>
+        try {
+          violations().foreach(v => e.addSuppressed(new AssertionError(v)))
+        } catch {
+          case NonFatal(check) => e.addSuppressed(check)
+        }
+        throw e
+    }
+    violations().foreach(org.scalatest.Assertions.fail(_))
+    result
+  }
+
+  // The calls that the test libraries recorded as violations of the order of the calls, once no
+  // task runs.
+  private def violations(): Option[String] = {
+    SparkContext.getActive.foreach { sc =>
+      eventually(timeout(1.minute), interval(10.milliseconds)) {
+        assert(sc.statusTracker.getExecutorInfos.forall(_.numRunningTasks() == 0))
+      }
+    }
     if (orderViolations.exists()) {
       val violations = Files.readString(orderViolations.toPath)
       orderViolations.delete()
-      org.scalatest.Assertions.fail(
-        s"The test library got calls that the header rules out:\n$violations")
+      Some(s"The test library got calls that the header rules out:\n$violations")
+    } else {
+      None
     }
-    result
   }
 
   // The executors store the files of the sessions that are not isolated in the same directory, so

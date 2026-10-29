@@ -129,7 +129,9 @@
  *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit
  *   succeeded. It calls each function of a batch reader at most once. It calls commit and abort at
  *   most once each for a writer, and commit_data_writer and abort_data_writer at most once each
- *   for a data writer, with all the calls to write before them.
+ *   for a data writer, with all the calls to write before them. The data writers of the task
+ *   attempts that Spark kills, such as speculative ones, may still be written to, aborted and
+ *   closed after their writer is committed or aborted, and closed.
  * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
  *   names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:

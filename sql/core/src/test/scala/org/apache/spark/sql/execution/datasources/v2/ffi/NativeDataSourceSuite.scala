@@ -1159,6 +1159,38 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(new File(streamDir, "_CLOSED").isFile)
   }
 
+  nativeTest("call no other function on a reader whose call failed than its close function") {
+    def checkFailure(step: String)(f: => Unit): Unit = {
+      val e = intercept[Exception](f)
+      assert(findError(e, "NATIVE_DATA_SOURCE_ERROR").getMessageParameters.get("msg") ==
+        s"injected failure in $step")
+    }
+    // The test library records the calls after a failed one, which fail the test.
+    Seq("push_limit" -> ((df: DataFrame) => df.limit(1)),
+        "prune_columns" -> ((df: DataFrame) => df.select("id"))).foreach { case (step, query) =>
+      checkFailure(step) {
+        query(range(newSession(defaultPackage), "fail" -> step)).collect()
+      }
+    }
+    // A stream reader is closed after one of its functions failed, when the query stops. The
+    // offsets of the first micro-batch are committed when the second one runs.
+    Seq("initial_offset", "latest_offset", "stream_partitions", "commit_offset").foreach { step =>
+      val closedPath = new File(Utils.createTempDir(), "closed")
+      checkFailure(step) {
+        val query = newSession(defaultPackage).readStream.format("native_counter")
+          .option("max_offset", "12").option("step", "5").option("fail", step)
+          .option("closed_path", closedPath.getPath)
+          .load()
+          .writeStream
+          .format("noop")
+          .option("checkpointLocation", Utils.createTempDir().getPath)
+          .start()
+        try query.processAllAvailable() finally query.stop()
+      }
+      assert(closedPath.isFile, s"the stream reader is not closed after $step failed")
+    }
+  }
+
   nativeTest("a scan whose planning failed fails again with the same error") {
     // The reader is released after planning, even if it failed. The query execution of a
     // DataFrame keeps the failure of its plan, but a scan can be planned again, for example by

@@ -64,10 +64,12 @@
 // logs each level, from error to trace, such as "1,1,1,0,0", and with the option "spark_version",
 // it fails unless Spark has that version.
 //
-// With the option "fail", a step fails with an error. With the option "zero", a function that
-// creates a handle succeeds without setting it: "create", "create_reader",
-// "create_stream_reader", "create_writer" or "create_data_writer". With the option "states", the
-// functions that return a state pass it that many times.
+// With the option "fail", a step fails with an error, such as a function of a reader:
+// "push_limit", "prune_columns", "plan", "initial_offset", "latest_offset", "stream_partitions"
+// or "commit_offset". With the option "zero", a function that creates a handle succeeds without
+// setting it: "create", "create_reader", "create_stream_reader", "create_writer" or
+// "create_data_writer". With the option "states", the functions that return a state pass it that
+// many times.
 //
 // read fails unless it gets the kind of read of its reader and the schema to read, the columns
 // that the reader returns. create_data_writer fails unless it gets the schema that create_writer
@@ -87,7 +89,8 @@
 //                   a table.
 //   ORDER_VIOLATIONS_PATH
 //                   A file to which the calls that the order of the calls of the header rules out
-//                   are appended, as lines, which the suite checks after each test.
+//                   are appended, as lines, which the suites check at the end of each test, with
+//                   checkingOrderOfCalls.
 //   NO_INIT         Leaves out spark_ds_init, which makes the library invalid.
 
 #include "spark_datasource.h"
@@ -781,8 +784,8 @@ void writeFile(const std::string& path, const std::string& content) {
 }
 
 // Records a call that the order of the calls of the header rules out. Unlike the files of the
-// options, a failure to record it is ignored: it may be called outside of `guarded`, as in the
-// close functions, which cannot fail.
+// options, a failure to record it is ignored: it is called outside of `guarded`, by the checks at
+// the start of the functions on a handle, before `tracked`.
 std::mutex order_violations_lock;
 void orderViolation(const std::string& call) {
 #ifdef ORDER_VIOLATIONS_PATH
@@ -1114,7 +1117,7 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "closed_path", "starts_path", "initial_offsets_path",
-          "states"}) {
+          "states", "fail"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1127,6 +1130,7 @@ int pushLimit(void* handle, int32_t limit, bool* applied) {
   if (reader->limited) orderViolation("push_limit called twice");
   reader->limited = true;
   return tracked(&reader->failed, [&] {
+    maybeFail(reader->state, "push_limit");
     reader->state["limit"] = std::to_string(limit);
     *applied = true;
   });
@@ -1138,6 +1142,7 @@ int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* 
   if (reader->pruned) orderViolation("prune_columns called twice");
   reader->pruned = true;
   return tracked(&reader->failed, [&] {
+    maybeFail(reader->state, "prune_columns");
     auto names = toStrings(columns, count);
     for (const auto& column : names) findColumn(column);
     reader->state["columns"] = join(names);
@@ -1179,10 +1184,13 @@ void closeReader(void* handle) { delete fromHandle<Reader>(handle); }
 
 int initialOffset(void* handle, const SparkDsInitialOffsetInfo* info, SparkDsSink set_offset,
                   void* sink) {
-  return guarded([&] {
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("initial_offset after a failed call");
+  return tracked(&reader->failed, [&] {
     checkSize("SparkDsInitialOffsetInfo", info->size, sizeof(SparkDsInitialOffsetInfo));
+    maybeFail(reader->state, "initial_offset");
     int64_t offset = 0;
-    std::string path = get(fromHandle<Reader>(handle)->state, "initial_offsets_path", "");
+    std::string path = get(reader->state, "initial_offsets_path", "");
     if (!path.empty()) {
       FILE* file = std::fopen(path.c_str(), "a+");
       if (file == nullptr) throw std::runtime_error("cannot write " + path);
@@ -1202,6 +1210,7 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
   return tracked(&reader->failed, [&] {
     const Options& state = reader->state;
     checkSize("SparkDsLatestOffsetInfo", info->size, sizeof(SparkDsLatestOffsetInfo));
+    maybeFail(state, "latest_offset");
     if (info->start == nullptr) throw std::runtime_error("no start offset");
     std::string starts_path = get(state, "starts_path", "");
     if (!starts_path.empty()) appendLine(starts_path, info->start);
@@ -1227,6 +1236,7 @@ int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
   if (reader->failed) orderViolation("stream_partitions after a failed call");
   return tracked(&reader->failed, [&] {
     checkSize("SparkDsStreamPartitionsInfo", info->size, sizeof(SparkDsStreamPartitionsInfo));
+    maybeFail(reader->state, "stream_partitions");
     auto lo = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     auto hi = static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number);
     if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
@@ -1240,6 +1250,7 @@ int commitOffset(void* handle, const SparkDsCommitOffsetInfo* info) {
   if (reader->failed) orderViolation("commit_offset after a failed call");
   return tracked(&reader->failed, [&] {
     checkSize("SparkDsCommitOffsetInfo", info->size, sizeof(SparkDsCommitOffsetInfo));
+    maybeFail(reader->state, "commit_offset");
     std::string path = get(reader->state, "commit_path", "");
     if (!path.empty()) writeFile(path, info->end);
   });

@@ -130,8 +130,11 @@ Spark calls the functions of the table as follows:
   irreversible work, such as removing the existing data for an overwrite, in `commit`. On the
   executors, each task creates a data writer with `create_data_writer`, which gets the schema of the
   data and the state of the writer in a `SparkDsDataWriterInfo`, writes the batches of its data with
-  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails.
-  Then the driver calls `commit` with the messages of the tasks, or `abort` if the write failed.
+  `write`, and calls `commit_data_writer`, or `abort_data_writer` if the task or the commit fails
+  before `commit_data_writer` succeeded. Then the driver calls `commit` with the messages of the
+  tasks, or `abort` if the write failed. A data writer whose task failed after
+  `commit_data_writer` succeeded is neither aborted nor passed to `commit`, so `commit` or `abort`
+  cleans up the output of the data writers whose messages it does not get.
   When Spark rejects what `create_writer` returned, such as a state set more than once, it calls
   `abort` with the field `rejected` of `SparkDsFinishWriteInfo` set to 1, and an epoch ID of -1 also
   for a streaming write, before `close_writer`. A streaming write commits each micro-batch with its

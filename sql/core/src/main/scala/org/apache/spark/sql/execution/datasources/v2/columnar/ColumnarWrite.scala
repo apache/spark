@@ -75,8 +75,8 @@ class ColumnarWrite(
  * A batch write. The writer of the data source is created with the writer factory, right before
  * the tasks of the write start: after the shuffle stages that adaptive query execution runs
  * before the write, so no writer is created if they fail. The rest of the data, such as its last
- * stage, is computed in the tasks of the write, and a failure there, as any later failure, aborts
- * the write. So irreversible work belongs in the commit of the writer.
+ * stage, is computed in the tasks of the write, and a failure there, as any later failure before
+ * the commit succeeds, aborts the write. So irreversible work belongs in the commit of the writer.
  */
 class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
   extends BatchWrite {
@@ -121,8 +121,9 @@ class ColumnarStreamingWrite(
   extends StreamingWrite {
 
   private var writer: ColumnarStreamWriter = _
-  // The epochs that the writer committed, which are not aborted, as for a batch write.
-  private val committedEpochs = scala.collection.mutable.Set.empty[Long]
+  // Whether the writer committed the micro-batch, which is not aborted then, as for a batch write.
+  // Spark creates a streaming write for each micro-batch, so it commits at most one epoch.
+  private var committed = false
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
@@ -140,11 +141,11 @@ class ColumnarStreamingWrite(
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(epochId, messages)
-    committedEpochs += epochId
+    committed = true
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    if (writer != null && !committedEpochs.contains(epochId)) {
+    if (writer != null && !committed) {
       writer.abort(epochId, messages)
     }
   }
