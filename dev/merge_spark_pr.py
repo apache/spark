@@ -1480,11 +1480,6 @@ def merge_pr(pr_num, target_ref, title, body, pr_repo_desc, pr_author, co_author
 
     git.run(["git", "commit", '--author="%s"' % primary_author] + merge_message_flags)
 
-    # A PR can be opened straight against a maintenance branch, so the pre-4.2 binding-policy
-    # check belongs here too, not only on the cherry-picks. The optional compile check is not
-    # offered on the initial merge -- it is the backports we are mainly trying to catch.
-    maybe_binding_policy_warning(target_ref, target_head)
-
     continue_maybe(
         "Merge complete (local ref %s). Push to %s?" % (target_branch_name, PUSH_REMOTE_NAME)
     )
