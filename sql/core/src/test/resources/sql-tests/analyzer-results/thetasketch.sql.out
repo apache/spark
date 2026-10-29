@@ -1016,18 +1016,48 @@ WithCTE
 SELECT theta_sketch_agg(col, 2)
 FROM VALUES (50), (60), (60) tab(col)
 -- !query analysis
-Aggregate [theta_sketch_agg(col#x, 2, 0, 0) AS theta_sketch_agg(col, 2)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "2",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_sketch_agg(col, 2)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 31,
+    "fragment" : "theta_sketch_agg(col, 2)"
+  } ]
+}
 
 
 -- !query
 SELECT theta_sketch_agg(col, 40)
 FROM VALUES (50), (60), (60) tab(col)
 -- !query analysis
-Aggregate [theta_sketch_agg(col#x, 40, 0, 0) AS theta_sketch_agg(col, 40)#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "40",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_sketch_agg(col, 40)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 32,
+    "fragment" : "theta_sketch_agg(col, 40)"
+  } ]
+}
 
 
 -- !query
@@ -1038,15 +1068,24 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col))
 -- !query analysis
-Aggregate [theta_union_agg(sketch#x, 3, 0, 0) AS theta_union_agg(sketch, 3)#x]
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Union false, false
-      :- Aggregate [theta_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
-      :  +- SubqueryAlias tab
-      :     +- LocalRelation [col#x]
-      +- Aggregate [theta_sketch_agg(col#x, 20, 0, 0) AS sketch#x]
-         +- SubqueryAlias tab
-            +- LocalRelation [col#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "3",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_union_agg(sketch, 3)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 33,
+    "fragment" : "theta_union_agg(sketch, 3)"
+  } ]
+}
 
 
 -- !query
@@ -1057,33 +1096,119 @@ FROM (SELECT theta_sketch_agg(col, 12) as sketch
       SELECT theta_sketch_agg(col, 20) as sketch
         FROM VALUES (1) AS tab(col))
 -- !query analysis
-Aggregate [theta_union_agg(sketch#x, 27, 0, 0) AS theta_union_agg(sketch, 27)#x]
-+- SubqueryAlias __auto_generated_subquery_name
-   +- Union false, false
-      :- Aggregate [theta_sketch_agg(col#x, 12, 0, 0) AS sketch#x]
-      :  +- SubqueryAlias tab
-      :     +- LocalRelation [col#x]
-      +- Aggregate [theta_sketch_agg(col#x, 20, 0, 0) AS sketch#x]
-         +- SubqueryAlias tab
-            +- LocalRelation [col#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "currentValue" : "27",
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_union_agg(sketch, 27)\"",
+    "valueRange" : "[4, 26]"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 34,
+    "fragment" : "theta_union_agg(sketch, 27)"
+  } ]
+}
 
 
 -- !query
 SELECT theta_sketch_agg(col, CAST(NULL AS INT)) AS lg_nom_entries_is_null
 FROM VALUES (15), (16), (17) tab(col)
 -- !query analysis
-Aggregate [theta_sketch_agg(col#x, cast(null as int), 0, 0) AS lg_nom_entries_is_null#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.UNEXPECTED_NULL",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "exprName" : "lgNomEntries",
+    "sqlExpr" : "\"theta_sketch_agg(col, CAST(NULL AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 47,
+    "fragment" : "theta_sketch_agg(col, CAST(NULL AS INT))"
+  } ]
+}
 
 
 -- !query
 SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15), (16), (17) tab(col)
 -- !query analysis
-Aggregate [theta_sketch_agg(col#x, cast(col#x as int), 0, 0) AS lg_nom_entries_non_constant#x]
-+- SubqueryAlias tab
-   +- LocalRelation [col#x]
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "CAST(tab.col AS INT)",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"theta_sketch_agg(col, CAST(col AS INT))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 46,
+    "fragment" : "theta_sketch_agg(col, CAST(col AS INT))"
+  } ]
+}
+
+
+-- !query
+SELECT lg, theta_union_agg(CAST('' AS BINARY), lg)
+FROM VALUES (12) tab(lg)
+GROUP BY lg
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "tab.lg",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"theta_union_agg(CAST( AS BINARY), lg)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 12,
+    "stopIndex" : 50,
+    "fragment" : "theta_union_agg(CAST('' AS BINARY), lg)"
+  } ]
+}
+
+
+-- !query
+SELECT theta_union(CAST('' AS BINARY), CAST('' AS BINARY), lg)
+FROM VALUES (12) tab(lg)
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "inputExpr" : "tab.lg",
+    "inputName" : "lgNomEntries",
+    "inputType" : "int",
+    "sqlExpr" : "\"theta_union(CAST( AS BINARY), CAST( AS BINARY), lg)\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 62,
+    "fragment" : "theta_union(CAST('' AS BINARY), CAST('' AS BINARY), lg)"
+  } ]
+}
 
 
 -- !query

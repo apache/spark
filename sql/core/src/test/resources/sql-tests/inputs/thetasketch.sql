@@ -465,6 +465,15 @@ FROM VALUES (15), (16), (17) tab(col);
 SELECT theta_sketch_agg(col, CAST(col AS INT)) AS lg_nom_entries_non_constant
 FROM VALUES (15), (16), (17) tab(col);
 
+-- theta_union_agg lgNomEntries parameter is not foldable (non-constant)
+SELECT lg, theta_union_agg(CAST('' AS BINARY), lg)
+FROM VALUES (12) tab(lg)
+GROUP BY lg;
+
+-- theta_union lgNomEntries parameter is not foldable (non-constant)
+SELECT theta_union(CAST('' AS BINARY), CAST('' AS BINARY), lg)
+FROM VALUES (12) tab(lg);
+
 -- lgNomEntries parameter has wrong type (STRING instead of INT)
 SELECT theta_sketch_agg(col, '15')
 FROM VALUES (50), (60), (60) tab(col);

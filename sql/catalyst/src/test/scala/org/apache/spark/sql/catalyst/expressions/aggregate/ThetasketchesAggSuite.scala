@@ -22,12 +22,22 @@ import scala.util.Random
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{BoundReference, GenericInternalRow, ThetaSketchEstimate}
+import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
+import org.apache.spark.sql.catalyst.expressions.{Add, BoundReference, Expression, GenericInternalRow, Literal, ThetaSketchEstimate, ThetaUnion}
 import org.apache.spark.sql.catalyst.util.{ArrayData, ThetaSketchUtils}
 import org.apache.spark.sql.types.{ArrayType, BinaryType, DataType, DoubleType, FloatType, IntegerType, LongType, StringType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class ThetasketchesAggSuite extends SparkFunSuite {
+
+  private def expressionsWithLgNomEntries(lgNomEntries: Expression): Seq[Expression] = {
+    val input = BoundReference(0, IntegerType, nullable = true)
+    val sketch = BoundReference(0, BinaryType, nullable = true)
+    Seq(
+      new ThetaSketchAgg(input, lgNomEntries),
+      new ThetaUnionAgg(sketch, lgNomEntries),
+      ThetaUnion(sketch, sketch, lgNomEntries))
+  }
 
   def simulateUpdateMerge(
       dataType: DataType,
@@ -292,5 +302,36 @@ class ThetasketchesAggSuite extends SparkFunSuite {
     val populated = createIntersectionBuffer(agg, Seq(buildThetaSketch(Seq(1, 2))))
     val result = agg.merge(populated, agg.deserialize(serialized))
     checkIntersectionEstimate(agg, result, 0.0)
+  }
+
+  test("lgNomEntries is validated during analysis") {
+    expressionsWithLgNomEntries(BoundReference(1, IntegerType, nullable = true)).foreach { expr =>
+      val result = expr.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+      assert(result.errorSubClass == "NON_FOLDABLE_INPUT")
+      assert(result.messageParameters("inputName") == "lgNomEntries")
+    }
+
+    expressionsWithLgNomEntries(Literal.create(null, IntegerType)).foreach { expr =>
+      val result = expr.checkInputDataTypes().asInstanceOf[DataTypeMismatch]
+      assert(result.errorSubClass == "UNEXPECTED_NULL")
+      assert(result.messageParameters("exprName") == "lgNomEntries")
+    }
+
+    expressionsWithLgNomEntries(Literal(ThetaSketchUtils.MIN_LG_NOM_LONGS - 1)).foreach { expr =>
+      assert(expr.checkInputDataTypes() == DataTypeMismatch(
+        errorSubClass = "VALUE_OUT_OF_RANGE",
+        messageParameters = Map(
+          "exprName" -> "lgNomEntries",
+          "valueRange" -> "[4, 26]",
+          "currentValue" -> "3")))
+    }
+
+    expressionsWithLgNomEntries(Literal(ThetaSketchUtils.DEFAULT_LG_NOM_LONGS)).foreach { expr =>
+      assert(expr.checkInputDataTypes().isSuccess)
+    }
+
+    expressionsWithLgNomEntries(Add(Literal(10), Literal(2))).foreach { expr =>
+      assert(expr.checkInputDataTypes().isSuccess)
+    }
   }
 }

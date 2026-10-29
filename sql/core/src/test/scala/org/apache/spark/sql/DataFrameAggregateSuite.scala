@@ -27,6 +27,7 @@ import org.scalatest.matchers.must.Matchers.the
 import org.scalatestplus.scalacheck.ScalaCheckDrivenPropertyChecks
 
 import org.apache.spark.{SparkArithmeticException, SparkRuntimeException}
+import org.apache.spark.sql.catalyst.ExtendedAnalysisException
 import org.apache.spark.sql.catalyst.plans.logical.Expand
 import org.apache.spark.sql.catalyst.util.AUTO_GENERATED_ALIAS
 import org.apache.spark.sql.errors.DataTypeErrors.toSQLId
@@ -2672,38 +2673,60 @@ class DataFrameAggregateSuite extends SharedSparkSession
     ).toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
-    // validate that the functions error out when lgConfigK < 4 or > 24
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[ExtendedAnalysisException] {
+        df1.groupBy("id")
+          .agg(hll_sketch_agg(col("value"), col("id")).as("hllsketch"))
+          .collect()
+      },
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"hll_sketch_agg(value, id)\"",
+        "inputName" -> "lgConfigK",
+        "inputType" -> "int",
+        "inputExpr" -> "id"),
+      context = ExpectedContext(
+        fragment = "hll_sketch_agg",
+        callSitePattern = getCurrentClassCallSitePattern))
+
+    // Validate that the functions error out during analysis when lgConfigK < 4 or > 21.
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
         df1.groupBy("id")
           .agg(
             hll_sketch_agg("value", 1).as("hllsketch")
           )
           .collect()
       },
-      condition = "HLL_INVALID_LG_K",
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
       parameters = Map(
-        "function" -> "`hll_sketch_agg`",
-        "min" -> "4",
-        "max" -> "21",
-        "value" -> "1"
-      ))
+        "sqlExpr" -> "\"hll_sketch_agg(value, 1)\"",
+        "exprName" -> "lgConfigK",
+        "valueRange" -> "[4, 21]",
+        "currentValue" -> "1"
+      ),
+      context = ExpectedContext(
+        fragment = "hll_sketch_agg",
+        callSitePattern = getCurrentClassCallSitePattern))
 
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[ExtendedAnalysisException] {
         df1.groupBy("id")
           .agg(
             hll_sketch_agg("value", 25).as("hllsketch")
           )
           .collect()
       },
-      condition = "HLL_INVALID_LG_K",
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
       parameters = Map(
-        "function" -> "`hll_sketch_agg`",
-        "min" -> "4",
-        "max" -> "21",
-        "value" -> "25"
-      ))
+        "sqlExpr" -> "\"hll_sketch_agg(value, 25)\"",
+        "exprName" -> "lgConfigK",
+        "valueRange" -> "[4, 21]",
+        "currentValue" -> "25"
+      ),
+      context = ExpectedContext(
+        fragment = "hll_sketch_agg",
+        callSitePattern = getCurrentClassCallSitePattern))
 
     // validate that unions error out by default for different lgConfigK sketches
     checkError(
@@ -2889,6 +2912,26 @@ class DataFrameAggregateSuite extends SharedSparkSession
       }
       assert(output.toString().contains("public class hashAgg_FastHashMap_0"))
     }
+  }
+
+  gridTest("hll_union_agg treats NULL allowDifferentLgConfigK as false")(
+    Seq("NULL", "CAST(NULL AS BOOLEAN)", "true AND CAST(NULL AS BOOLEAN)")) { flag =>
+    def unionQuery(lgConfigK: Int): DataFrame = {
+      sql(s"""
+        |SELECT hll_sketch_estimate(hll_union_agg(sketch, $flag))
+        |FROM (
+        |  SELECT hll_sketch_agg(value, 12) AS sketch FROM VALUES (1), (2) AS t(value)
+        |  UNION ALL
+        |  SELECT hll_sketch_agg(value, $lgConfigK) AS sketch FROM VALUES (2), (3) AS t(value)
+        |)
+        |""".stripMargin)
+    }
+
+    checkAnswer(unionQuery(12), Row(3L))
+    val error = intercept[SparkRuntimeException] {
+      unionQuery(15).collect()
+    }
+    assert(error.getCondition == "HLL_UNION_DIFFERENT_LG_K")
   }
 
   // Byte 3 of the serialized sketch holds lgConfigK, so SUBSTRING(hex(...), 7, 2) reads it as a
@@ -3153,37 +3196,59 @@ class DataFrameAggregateSuite extends SharedSparkSession
       .toDF("id", "value")
     df2.createOrReplaceTempView("df2")
 
-    // Validate that the functions error out when lgNomEntries < 4 or > 26.
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[ExtendedAnalysisException] {
+        df1.groupBy("id")
+          .agg(theta_sketch_agg(col("value"), col("id")).as("thetasketch"))
+          .collect()
+      },
+      condition = "DATATYPE_MISMATCH.NON_FOLDABLE_INPUT",
+      parameters = Map(
+        "sqlExpr" -> "\"theta_sketch_agg(value, id)\"",
+        "inputName" -> "lgNomEntries",
+        "inputType" -> "int",
+        "inputExpr" -> "id"),
+      context = ExpectedContext(
+        fragment = "theta_sketch_agg",
+        callSitePattern = getCurrentClassCallSitePattern))
+
+    // Validate that the functions error out during analysis when lgNomEntries < 4 or > 26.
+    checkError(
+      exception = intercept[ExtendedAnalysisException] {
         df1
           .groupBy("id")
           .agg(theta_sketch_agg("value", 1).as("thetasketch"))
           .collect()
       },
-      condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
       parameters = Map(
-        "function" -> "`theta_sketch_agg`",
-        "min" -> "4",
-        "max" -> "26",
-        "value" -> "1"
-      )
+        "sqlExpr" -> "\"theta_sketch_agg(value, 1)\"",
+        "exprName" -> "lgNomEntries",
+        "valueRange" -> "[4, 26]",
+        "currentValue" -> "1"
+      ),
+      context = ExpectedContext(
+        fragment = "theta_sketch_agg",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
 
     checkError(
-      exception = intercept[SparkRuntimeException] {
+      exception = intercept[ExtendedAnalysisException] {
         df1
           .groupBy("id")
           .agg(theta_sketch_agg("value", 28).as("thetasketch"))
           .collect()
       },
-      condition = "SKETCH_INVALID_LG_NOM_ENTRIES",
+      condition = "DATATYPE_MISMATCH.VALUE_OUT_OF_RANGE",
       parameters = Map(
-        "function" -> "`theta_sketch_agg`",
-        "min" -> "4",
-        "max" -> "26",
-        "value" -> "28"
-      )
+        "sqlExpr" -> "\"theta_sketch_agg(value, 28)\"",
+        "exprName" -> "lgNomEntries",
+        "valueRange" -> "[4, 26]",
+        "currentValue" -> "28"
+      ),
+      context = ExpectedContext(
+        fragment = "theta_sketch_agg",
+        callSitePattern = getCurrentClassCallSitePattern)
     )
 
     // Validate that the functions error out when provided unexpected types.
