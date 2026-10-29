@@ -22,6 +22,10 @@ license: |
 * Table of contents
 {:toc}
 
+## Upgrading from Core 4.4 to 5.0
+
+- Since Spark 5.0, Spark's default log layouts write timestamps in ISO-8601 format in UTC, for example `2026-01-31T13:45:30.123Z`, instead of `yy/MM/dd HH:mm:ss` in the JVM's local time zone. This applies to the built-in log4j2 configuration that Spark uses when no `log4j2.properties` is provided, to `conf/log4j2.properties.template`, and to the driver log files written under `spark.driver.log.localDir` and `spark.driver.log.dfsDir` when `spark.driver.log.layout` is not set. Tools that parse Spark's plain-text logs may need to be updated. To restore the legacy behavior, you can provide a `log4j2.properties` whose pattern layout uses `%d{yy/MM/dd HH:mm:ss}`, and set `spark.driver.log.layout` to `%d{yy/MM/dd HH:mm:ss.SSS} %t %p %c{1}: %m%n%ex`.
+
 ## Upgrading from Core 4.3 to 4.4
 
 - Since Spark 4.4, reading an RDD checkpoint ignores names beginning with `part-` unless the suffix consists of one or more ASCII digits. Previously, names such as `part-00000.bak`, `part-backup`, or `part-` caused checkpoint recovery to fail with `NumberFormatException`. Validation of numeric partition names and the contiguous partition sequence is unchanged.
