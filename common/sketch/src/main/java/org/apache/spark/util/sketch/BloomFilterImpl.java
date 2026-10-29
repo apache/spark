@@ -32,6 +32,7 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
     int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
+    long bitSizeMask = bits.bitSizeMask();
     boolean bitsChanged = false;
     for (int i = 1; i <= numHashFunctions; i++) {
       int combinedHash = h1 + (i * h2);
@@ -39,7 +40,7 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
       }
-      bitsChanged |= bits.set(combinedHash % bitSize);
+      bitsChanged |= bits.set(bitIndex(combinedHash, bitSize, bitSizeMask));
     }
     return bitsChanged;
   }
@@ -49,13 +50,14 @@ class BloomFilterImpl extends BloomFilterBase implements Serializable {
     int h2 = inputHash.lo();
 
     long bitSize = bits.bitSize();
+    long bitSizeMask = bits.bitSizeMask();
     for (int i = 1; i <= numHashFunctions; i++) {
       int combinedHash = h1 + (i * h2);
       // Flip all the bits if it's negative (guaranteed positive number)
       if (combinedHash < 0) {
         combinedHash = ~combinedHash;
       }
-      if (!bits.get(combinedHash % bitSize)) {
+      if (!bits.get(bitIndex(combinedHash, bitSize, bitSizeMask))) {
         return false;
       }
     }
