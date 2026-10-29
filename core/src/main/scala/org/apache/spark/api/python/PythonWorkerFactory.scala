@@ -139,7 +139,14 @@ private[spark] class PythonWorkerFactory(
     conf.get(PYTHON_FACTORY_IDLE_WORKER_MAX_POOL_SIZE)
   @GuardedBy("self")
   private var lastActivityNs = 0L
-  new MonitorThread().start()
+  // Simple workers have no reusable idle pool and do not need a monitor.
+  private[spark] val monitorThread: Option[Thread] = if (useDaemon) {
+    val thread = new MonitorThread()
+    thread.start()
+    Some(thread)
+  } else {
+    None
+  }
 
   @GuardedBy("self")
   private val simpleWorkers = new mutable.WeakHashMap[PythonWorker, Process]()
@@ -467,14 +474,18 @@ private[spark] class PythonWorkerFactory(
     setDaemon(true)
 
     override def run(): Unit = {
-      while (true) {
-        self.synchronized {
-          if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
-            cleanupIdleWorkers()
-            lastActivityNs = System.nanoTime()
+      try {
+        while (!isInterrupted) {
+          self.synchronized {
+            if (IDLE_WORKER_TIMEOUT_NS < System.nanoTime() - lastActivityNs) {
+              cleanupIdleWorkers()
+              lastActivityNs = System.nanoTime()
+            }
           }
+          Thread.sleep(10000)
         }
-        Thread.sleep(10000)
+      } catch {
+        case _: InterruptedException => // Factory shutdown.
       }
     }
   }
@@ -511,8 +522,12 @@ private[spark] class PythonWorkerFactory(
   }
 
   def stop(): Unit = {
-    workerLogCapture.foreach(_.closeAllWriters())
-    stopDaemon()
+    monitorThread.foreach(_.interrupt())
+    try {
+      workerLogCapture.foreach(_.closeAllWriters())
+    } finally {
+      stopDaemon()
+    }
   }
 
   def stopWorker(worker: PythonWorker): Unit = {
@@ -558,6 +573,12 @@ private[spark] class PythonWorkerFactory(
           logWarning("Failed to close worker", e)
       }
     }
+  }
+
+  /** Whether a worker created by this factory is checked out, i.e. neither idle nor stopped. */
+  private[spark] def hasActiveWorkers: Boolean = self.synchronized {
+    val workers = if (useDaemon) daemonWorkers.keys else simpleWorkers.keys
+    workers.exists(worker => worker.channel.isOpen && !idleWorkers.contains(worker))
   }
 
   def isWorkerStopped(worker: PythonWorker): Boolean = {

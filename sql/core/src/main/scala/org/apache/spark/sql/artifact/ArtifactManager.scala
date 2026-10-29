@@ -630,6 +630,11 @@ object ArtifactManager extends Logging {
       cleanupState.artifactPath)
     val fileServer = SparkEnv.get.rpcEnv.fileServer
     if (state != null) {
+      // Stop the Python planner workers of this session (UDTF analysis, Python data sources).
+      // Executor-side task workers are stopped when executors evict the session state.
+      Utils.tryLogNonFatalError {
+        SparkEnv.get.removeDriverPythonWorkerFactories(state.uuid)
+      }
       val shouldUpdateEnv = sparkContext.addedFiles.contains(state.uuid) ||
         sparkContext.addedArchives.contains(state.uuid) ||
         sparkContext.addedJars.contains(state.uuid)

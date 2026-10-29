@@ -21,7 +21,7 @@ import java.io.File
 
 import scala.collection.mutable.HashMap
 
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{doAnswer, never, times, verify, when}
 import org.scalatest.BeforeAndAfterEach
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -39,6 +39,7 @@ class ExecutorSideSessionManagementSuite
 
   private var testSessionCounter = 0
   private var tempDir: File = _
+  private var mockEnv: SparkEnv = _
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -48,7 +49,7 @@ class ExecutorSideSessionManagementSuite
 
     // Set up a mock SparkEnv so that cleanup() can access SparkFiles.getRootDirectory()
     tempDir = Utils.createTempDir()
-    val mockEnv = mock[SparkEnv]
+    mockEnv = mock[SparkEnv]
     val conf = new SparkConf(false)
     when(mockEnv.conf).thenReturn(conf)
     when(mockEnv.driverTmpDir).thenReturn(Some(tempDir.getAbsolutePath))
@@ -146,6 +147,7 @@ class ExecutorSideSessionManagementSuite
     // Evict the session - cleanup should be deferred
     session.markEvicted()
     assert(IsolatedSessionState.sessions.containsKey(uuid))
+    verify(mockEnv, never()).removeExecutorPythonWorkerFactories(uuid)
 
     // Release twice - cleanup should still be deferred
     session.release()
@@ -153,9 +155,11 @@ class ExecutorSideSessionManagementSuite
     session.release()
     assert(IsolatedSessionState.sessions.containsKey(uuid))
 
+    verify(mockEnv, never()).removeExecutorPythonWorkerFactories(uuid)
     // Release the last reference - cleanup should happen now
     session.release()
     assert(!IsolatedSessionState.sessions.containsKey(uuid))
+    verify(mockEnv, times(1)).removeExecutorPythonWorkerFactories(uuid)
   }
 
   test("tryUnEvict succeeds when session is evicted but still has references") {
@@ -226,8 +230,41 @@ class ExecutorSideSessionManagementSuite
 
     // Task 2 releases - session stays in map because it's not evicted
     session.release()
+    verify(mockEnv, never()).removeExecutorPythonWorkerFactories(uuid)
     // Session stays in map because it's not evicted anymore (was un-evicted).
     // In production, the Guava cache would eventually evict it again, triggering cleanup.
     assert(IsolatedSessionState.sessions.containsKey(uuid))
+  }
+
+  test("SPARK-54055: idle session eviction cleans up Python factories before session files") {
+    val uuid = nextUniqueUuid()
+    val session = createTestSession(uuid)
+    val sessionDir = new File(tempDir, uuid)
+    assert(sessionDir.mkdir())
+    doAnswer { _ =>
+      assert(sessionDir.isDirectory)
+      null
+    }.when(mockEnv).removeExecutorPythonWorkerFactories(uuid)
+
+    session.markEvicted()
+
+    verify(mockEnv, times(1)).removeExecutorPythonWorkerFactories(uuid)
+    assert(!sessionDir.exists())
+    assert(!IsolatedSessionState.sessions.containsKey(uuid))
+  }
+
+  test("SPARK-54055: session cleanup tolerates a cleared SparkEnv during shutdown") {
+    val uuid = nextUniqueUuid()
+    val session = createTestSession(uuid)
+    val sessionDir = new File(tempDir, uuid)
+    assert(sessionDir.mkdir())
+    SparkEnv.set(null)
+    try {
+      session.markEvicted()
+    } finally {
+      SparkEnv.set(mockEnv)
+    }
+    verify(mockEnv, never()).removeExecutorPythonWorkerFactories(uuid)
+    assert(!IsolatedSessionState.sessions.containsKey(uuid))
   }
 }

@@ -27,7 +27,8 @@ import scala.jdk.CollectionConverters._
 import net.razorvine.pickle.Pickler
 
 import org.apache.spark.{JobArtifactSet, SparkEnv, SparkException}
-import org.apache.spark.api.python.{BasePythonRunner, PythonFunction, PythonWorker, PythonWorkerException, PythonWorkerHandle, PythonWorkerUtils, SpecialLengths}
+import org.apache.spark.SparkEnv.PythonWorkersKey
+import org.apache.spark.api.python.{BasePythonRunner, PythonFunction, PythonWorker, PythonWorkerException, PythonWorkerFactory, PythonWorkerHandle, PythonWorkerUtils, SpecialLengths}
 import org.apache.spark.internal.{Logging, LogKeys}
 import org.apache.spark.internal.config.BUFFER_SIZE
 import org.apache.spark.internal.config.Python._
@@ -120,8 +121,13 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
     val pickler = new Pickler(/* useMemo = */ true,
       /* valueCompare = */ false)
 
+    // In local mode this env is shared with executor tasks, whose session eviction must not
+    // stop a planner that runs outside the executor's session reference count.
+    val workerKey = PythonWorkersKey(
+      pythonExec, workerModule, PythonWorkerFactory.defaultDaemonModule, envVars.asScala.toMap,
+      driverOwned = true)
     val (worker: PythonWorker, handle: Option[PythonWorkerHandle]) =
-      env.createPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, useDaemon)
+      env.createPythonWorker(workerKey, useDaemon)
     var releasedOrClosed = false
     val bufferStream = new DirectByteBufferOutputStream()
     try {
@@ -150,9 +156,9 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
 
       dataIn.readInt() match {
         case SpecialLengths.END_OF_STREAM if reuseWorker =>
-          env.releasePythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          env.releasePythonWorker(workerKey, worker)
         case _ =>
-          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          env.destroyPythonWorker(workerKey, worker)
       }
       releasedOrClosed = true
 
@@ -177,7 +183,7 @@ abstract class PythonPlannerRunner[T](func: PythonFunction) extends Logging {
       } finally {
         if (!releasedOrClosed) {
           // An error happened. Force to close the worker.
-          env.destroyPythonWorker(pythonExec, workerModule, envVars.asScala.toMap, worker)
+          env.destroyPythonWorker(workerKey, worker)
         }
       }
     }
