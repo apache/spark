@@ -78,7 +78,7 @@ class SubquerySuite extends SharedSparkSession
     assert(joins.size == numJoins)
   }
 
-  test("preserve sorted LIMIT and OFFSET with correlated subqueries") {
+  test("preserve sorted LIMIT and OFFSET with projected subqueries") {
     withTempView("p", "k") {
       Seq((1, "a", 30), (2, "b", 20), (3, "c", 40),
         (4, "d", 60), (5, "e", 10), (6, "f", 50))
@@ -92,12 +92,14 @@ class SubquerySuite extends SharedSparkSession
         val cases = Seq(
           ("LIMIT 3",
             Seq(Row("c", 0L), Row("d", 0L), Row("f", 0L)),
+            Seq(Row("c", false), Row("d", false), Row("f", false)),
             Seq(Row("c", false), Row("d", false), Row("f", false))),
           ("OFFSET 3",
             Seq(Row("a", 3L), Row("b", 1L), Row("e", 0L)),
+            Seq(Row("a", true), Row("b", true), Row("e", false)),
             Seq(Row("a", true), Row("b", true), Row("e", false))))
 
-        cases.foreach { case (slice, counts, exists) =>
+        cases.foreach { case (slice, counts, exists, inResults) =>
           val cte = s"WITH s AS (SELECT id, name FROM p ORDER BY age DESC $slice)"
           checkAnswer(
             sql(s"""$cte
@@ -109,6 +111,11 @@ class SubquerySuite extends SharedSparkSession
                    |SELECT name, EXISTS(SELECT 1 FROM k WHERE k.a = s.id) AS e
                    |FROM s""".stripMargin).orderBy("name"),
             exists)
+          checkAnswer(
+            sql(s"""$cte
+                   |SELECT name, s.id IN (SELECT a FROM k) AS in_k
+                   |FROM s""".stripMargin).orderBy("name"),
+            inResults)
         }
       }
     }
