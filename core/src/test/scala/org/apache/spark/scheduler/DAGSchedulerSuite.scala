@@ -6975,7 +6975,15 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     // map side (2) and reduce side (3) are deliberately asymmetric: materialization
     // completeness must be measured in MAP outputs, and a symmetric count would hide a check
     // against the wrong side.
-    val regularRoot = new MyRDD(sc, 2, Nil)
+    val prefixEdgeReads = new AtomicInteger
+    val prefixInput = new MyRDD(sc, 2, Nil).cache()
+    val countedDependency = new OneToOneDependency(prefixInput) {
+      override def rdd: RDD[(Int, Int)] = {
+        prefixEdgeReads.incrementAndGet()
+        super.rdd
+      }
+    }
+    val regularRoot = new MyRDD(sc, 2, List(countedDependency))
     val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
     val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
     submit(prefixReader, Array(0, 1, 2))
@@ -6989,7 +6997,19 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val producerRdd = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
     val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    var prefixEdgeReadsAtAdmission = -1
+    scheduler.asInstanceOf[MyDAGScheduler].outstandingTasksForOtherWorkForTest = (_, _) => {
+      if (prefixEdgeReadsAtAdmission == -1) {
+        prefixEdgeReadsAtAdmission = prefixEdgeReads.get()
+      }
+      0
+    }
+    prefixEdgeReads.set(0)
     submit(consumerRdd, Array(0, 1))
+
+    // The two classification walks and admission visit the prefix; cache collection must not.
+    assert(prefixEdgeReadsAtAdmission === 3)
+    assert(prefixInput.getStorageLevel === StorageLevel.MEMORY_ONLY)
 
     // Not rejected; the prefix stage is available (not resubmitted); producer and consumer
     // gang-run concurrently.

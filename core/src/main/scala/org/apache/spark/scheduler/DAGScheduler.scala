@@ -1523,7 +1523,12 @@ private[spark] class DAGScheduler(
           rdd.checkpointData.exists(_.isInstanceOf[LocalRDDCheckpointData[_]])) {
         persisted += rdd
       }
-      rdd.dependencies.foreach(dep => enqueue(dep.rdd))
+      rdd.dependencies.foreach {
+        case pd: PipelinedShuffleDependency[_, _, _] => enqueue(pd.rdd)
+        case _: ShuffleDependency[_, _, _] =>
+          // Shape validation excludes pipelined readers below a regular boundary.
+        case dep => enqueue(dep.rdd)
+      }
     }
     // Cache locations cannot establish a stable cut: eviction can revive an upstream producer,
     // and a partial cache hit skips a reader whose producer still needs its termination ACK.
