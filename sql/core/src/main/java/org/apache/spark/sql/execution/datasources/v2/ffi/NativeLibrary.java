@@ -94,7 +94,7 @@ final class NativeLibrary {
     LAST_ERROR("last_error", C.PTR),
     CREATE("create", C.I32, C.PTR, C.PTR, C.PTR),
     SCHEMA("schema", C.I32, C.PTR, C.PTR),
-    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE("close", C.VOID, C.PTR),
@@ -108,13 +108,13 @@ final class NativeLibrary {
     COMMIT_OFFSET("commit_offset", C.I32, C.PTR, C.PTR),
     CLOSE_STREAM_READER("close_stream_reader", C.VOID, C.PTR),
     READ("read", C.I32, C.PTR, C.PTR, C.PTR),
-    COMMIT("commit", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
-    ABORT("abort", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
+    COMMIT("commit", C.I32, C.PTR, C.PTR),
+    ABORT("abort", C.I32, C.PTR, C.PTR),
     CLOSE_WRITER("close_writer", C.VOID, C.PTR),
     CREATE_DATA_WRITER("create_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
     WRITE("write", C.I32, C.PTR, C.PTR),
-    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
-    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR),
+    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR, C.PTR),
     CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR);
 
     /** The name of the field of the function in the table. */
@@ -147,6 +147,7 @@ final class NativeLibrary {
   private static final long CREATE_INFO_OPTION_KEYS = 16;
   private static final long CREATE_INFO_OPTION_VALUES = 24;
   private static final long CREATE_INFO_NUM_OPTIONS = 32;
+  private static final long READER_INFO_SIZE = 8;
   private static final long PARTITIONS_INFO_SIZE = 8;
   private static final long INITIAL_OFFSET_INFO_SIZE = 8;
   private static final long STREAM_PARTITIONS_INFO_SIZE = 24;
@@ -180,6 +181,13 @@ final class NativeLibrary {
   private static final long DATA_WRITER_INFO_WRITER_STATE = 16;
   private static final long DATA_WRITER_INFO_WRITER_STATE_LENGTH = 24;
   private static final long DATA_WRITER_INFO_EPOCH_ID = 32;
+  private static final long FINISH_WRITE_INFO_SIZE = 48;
+  private static final long FINISH_WRITE_INFO_EPOCH_ID = 8;
+  private static final long FINISH_WRITE_INFO_MESSAGES = 16;
+  private static final long FINISH_WRITE_INFO_MESSAGE_LENGTHS = 24;
+  private static final long FINISH_WRITE_INFO_NUM_MESSAGES = 32;
+  private static final long FINISH_WRITE_INFO_REJECTED = 40;
+  private static final long FINISH_DATA_WRITER_INFO_SIZE = 8;
 
   /**
    * The offsets of the fields of the structs that Spark reads or writes, by {@code struct.field},
@@ -204,6 +212,8 @@ final class NativeLibrary {
     layout.put("SparkDsCreateInfo.option_keys", CREATE_INFO_OPTION_KEYS);
     layout.put("SparkDsCreateInfo.option_values", CREATE_INFO_OPTION_VALUES);
     layout.put("SparkDsCreateInfo.num_options", CREATE_INFO_NUM_OPTIONS);
+    layout.put("SparkDsReaderInfo", READER_INFO_SIZE);
+    layout.put("SparkDsReaderInfo.size", 0L);
     layout.put("SparkDsPartitionsInfo", PARTITIONS_INFO_SIZE);
     layout.put("SparkDsPartitionsInfo.size", 0L);
     layout.put("SparkDsInitialOffsetInfo", INITIAL_OFFSET_INFO_SIZE);
@@ -249,6 +259,15 @@ final class NativeLibrary {
     layout.put(
       "SparkDsDataWriterInfo.writer_state_length", DATA_WRITER_INFO_WRITER_STATE_LENGTH);
     layout.put("SparkDsDataWriterInfo.epoch_id", DATA_WRITER_INFO_EPOCH_ID);
+    layout.put("SparkDsFinishWriteInfo", FINISH_WRITE_INFO_SIZE);
+    layout.put("SparkDsFinishWriteInfo.size", 0L);
+    layout.put("SparkDsFinishWriteInfo.epoch_id", FINISH_WRITE_INFO_EPOCH_ID);
+    layout.put("SparkDsFinishWriteInfo.messages", FINISH_WRITE_INFO_MESSAGES);
+    layout.put("SparkDsFinishWriteInfo.message_lengths", FINISH_WRITE_INFO_MESSAGE_LENGTHS);
+    layout.put("SparkDsFinishWriteInfo.num_messages", FINISH_WRITE_INFO_NUM_MESSAGES);
+    layout.put("SparkDsFinishWriteInfo.rejected", FINISH_WRITE_INFO_REJECTED);
+    layout.put("SparkDsFinishDataWriterInfo", FINISH_DATA_WRITER_INFO_SIZE);
+    layout.put("SparkDsFinishDataWriterInfo.size", 0L);
     return layout;
   }
 
@@ -635,8 +654,10 @@ final class NativeLibrary {
   long createReader(long dataSource, long schemaAddress) throws Throwable {
     MethodHandle f = function(Function.CREATE_READER);
     try (Memory memory = new Memory()) {
+      long info = memory.zeroed(READER_INFO_SIZE);
+      Platform.putLong(null, info, READER_INFO_SIZE);
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, out), Function.CREATE_READER);
+      check((int) f.invokeExact(dataSource, schemaAddress, info, out), Function.CREATE_READER);
       return readHandle(out, Function.CREATE_READER);
     }
   }
@@ -674,8 +695,8 @@ final class NativeLibrary {
   }
 
   /**
-   * Creates a writer. If the library returns an invalid state, the writer is aborted, with no
-   * messages and an epoch ID of -1, and closed.
+   * Creates a writer. If the library returns an invalid state, the writer is aborted, as rejected,
+   * and closed.
    *
    * @param mode {@link #WRITE_APPEND} or {@link #WRITE_TRUNCATE}
    * @param queryId the ID of the streaming query of a streaming write, or null for a batch write
@@ -698,7 +719,7 @@ final class NativeLibrary {
       } catch (Throwable e) {
         // So that the library can undo what create_writer prepared.
         try {
-          abort(handle, -1, new byte[0][]);
+          finishWrite(Function.ABORT, handle, -1, new byte[0][], true);
         } catch (Throwable abortError) {
           e.addSuppressed(abortError);
         }
@@ -853,15 +874,24 @@ final class NativeLibrary {
   }
 
   void commit(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(Function.COMMIT, writer, epochId, messages);
+    finishWrite(Function.COMMIT, writer, epochId, messages, false);
   }
 
   void abort(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(Function.ABORT, writer, epochId, messages);
+    finishWrite(Function.ABORT, writer, epochId, messages, false);
   }
 
-  private void finishWrite(Function function, long writer, long epochId, byte[][] messages)
-      throws Throwable {
+  /**
+   * Commits or aborts a write.
+   *
+   * @param rejected whether Spark rejected what create_writer returned, for an abort
+   */
+  private void finishWrite(
+      Function function,
+      long writer,
+      long epochId,
+      byte[][] messages,
+      boolean rejected) throws Throwable {
     MethodHandle f = function(function);
     try (Memory memory = new Memory()) {
       long pointers = memory.zeroed(8L * Math.max(1, messages.length));
@@ -872,8 +902,14 @@ final class NativeLibrary {
           Platform.putLong(null, lengths + 8L * i, messages[i].length);
         }
       }
-      check((int) f.invokeExact(writer, epochId, pointers, lengths, (long) messages.length),
-        function);
+      long info = memory.zeroed(FINISH_WRITE_INFO_SIZE);
+      Platform.putLong(null, info, FINISH_WRITE_INFO_SIZE);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_EPOCH_ID, epochId);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGES, pointers);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGE_LENGTHS, lengths);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_NUM_MESSAGES, messages.length);
+      Platform.putByte(null, info + FINISH_WRITE_INFO_REJECTED, (byte) (rejected ? 1 : 0));
+      check((int) f.invokeExact(writer, info), function);
     }
   }
 
@@ -914,8 +950,11 @@ final class NativeLibrary {
    */
   byte[] commitDataWriter(long dataWriter, Runnable committed) throws Throwable {
     MethodHandle f = function(Function.COMMIT_DATA_WRITER);
-    try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(dataWriter, Ffm.SINK, sink.id), Function.COMMIT_DATA_WRITER);
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
+      long info = memory.zeroed(FINISH_DATA_WRITER_INFO_SIZE);
+      Platform.putLong(null, info, FINISH_DATA_WRITER_INFO_SIZE);
+      check((int) f.invokeExact(dataWriter, info, Ffm.SINK, sink.id),
+        Function.COMMIT_DATA_WRITER);
       committed.run();
       byte[] message = single(sink, Function.COMMIT_DATA_WRITER);
       return message == null ? new byte[0] : message;
@@ -923,8 +962,12 @@ final class NativeLibrary {
   }
 
   void abortDataWriter(long dataWriter) throws Throwable {
-    check((int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter),
-      Function.ABORT_DATA_WRITER);
+    try (Memory memory = new Memory()) {
+      long info = memory.zeroed(FINISH_DATA_WRITER_INFO_SIZE);
+      Platform.putLong(null, info, FINISH_DATA_WRITER_INFO_SIZE);
+      check((int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter, info),
+        Function.ABORT_DATA_WRITER);
+    }
   }
 
   void closeDataWriter(long dataWriter) throws Throwable {

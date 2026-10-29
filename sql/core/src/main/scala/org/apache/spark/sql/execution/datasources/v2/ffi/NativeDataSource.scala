@@ -135,7 +135,7 @@ class NativeDataSource(
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val created = createWriter(library, schema, timeZoneId, overwrite, queryId = null)
+    val created = createWriter(library, schema, overwrite, queryId = null)
     new NativeDataSourceWriter(executorLocation, name, schema, timeZoneId,
       new NativeHandle(created.handle, library.closeWriter), bytesOrEmpty(Option(created.state)))
   }
@@ -146,7 +146,7 @@ class NativeDataSource(
       queryId: String): ColumnarStreamWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val created = createWriter(library, schema, timeZoneId, overwrite, queryId)
+    val created = createWriter(library, schema, overwrite, queryId)
     val handle = new NativeHandle(created.handle, library.closeWriter)
     val writer = new NativeDataSourceStreamWriter(
       executorLocation, name, schema, timeZoneId, handle, bytesOrEmpty(Option(created.state)))
@@ -200,7 +200,6 @@ class NativeDataSource(
   private def createWriter(
       library: NativeLibrary,
       schema: StructType,
-      timeZoneId: String,
       overwrite: Boolean,
       queryId: String): NativeLibrary.WriterHandle = {
     val action = "plan a write to"
@@ -395,7 +394,7 @@ class NativeDataSourceWriter(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    timeZoneId: String,
+    override val timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarWriter {
@@ -433,7 +432,7 @@ class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
-    timeZoneId: String,
+    override val timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarStreamWriter {
