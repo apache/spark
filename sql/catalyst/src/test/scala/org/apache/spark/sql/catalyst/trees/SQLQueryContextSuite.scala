@@ -51,25 +51,64 @@ class SQLQueryContextSuite extends SparkFunSuite with SQLHelper {
     val start = sql.codePointCount(0, sql.indexOf("DATE"))
     val stop = sql.codePointCount(0, sql.length) - 1
     assert(getFragment(sql, start, stop) === "DATE 'bad'")
-    // A UTF-16 slice of the same indexes would include the comma and drop the last quote.
+    // A UTF-16 slice of the same indexes would include a leading space and drop the last quote.
     assert(sql.substring(start, stop + 1) !== "DATE 'bad'")
-  }
 
-  test("summary caret follows code-point indexes after a supplementary character") {
-    val emoji = new String(Character.toChars(0x1F600))
-    val sql = s"SELECT '$emoji' AS a, DATE 'bad'"
-    val start = sql.codePointCount(0, sql.indexOf("DATE"))
-    val stop = sql.codePointCount(0, sql.length) - 1
-    val context = SQLQueryContext(
-      line = Some(1),
-      startPosition = Some(start),
-      originStartIndex = Some(start),
-      originStopIndex = Some(stop),
+    val overshoot = SQLQueryContext(
+      line = None,
+      startPosition = None,
+      originStartIndex = Some(0),
+      originStopIndex = Some(sql.codePointCount(0, sql.length)),
       sqlText = Some(sql),
       originObjectType = None,
       originObjectName = None)
-    val lines = context.summary.split('\n')
-    assert(lines(1) === sql)
-    assert(lines(2) === " " * start + "^" * (stop - start + 1))
+    assert(overshoot.fragment === "")
+    assert(overshoot.summary === "")
+  }
+
+  test("summary caret follows code-point indexes after a supplementary character") {
+    def summaryLines(sql: String, line: Int, startPos: Int): Array[String] = {
+      val start = sql.codePointCount(0, sql.indexOf("DATE"))
+      val stop = sql.codePointCount(0, sql.length) - 1
+      SQLQueryContext(
+        line = Some(line),
+        startPosition = Some(startPos),
+        originStartIndex = Some(start),
+        originStopIndex = Some(stop),
+        sqlText = Some(sql),
+        originObjectType = None,
+        originObjectName = None).summary.split('\n')
+    }
+
+    val emoji = new String(Character.toChars(0x1F600))
+    val sameLine = s"SELECT '$emoji' AS a, DATE 'bad'"
+    val sameStart = sameLine.codePointCount(0, sameLine.indexOf("DATE"))
+    val sameLines = summaryLines(sameLine, 1, sameStart)
+    assert(sameLines(1) === sameLine)
+    assert(sameLines(2) === " " * sameStart + "^" * "DATE 'bad'".length)
+
+    // A later line is where UTF-16 caret placement no longer cancels with the emoji width.
+    val nextLine = s"SELECT '$emoji' AS a,\nDATE 'bad'"
+    val nextLines = summaryLines(nextLine, 2, 0)
+    assert(nextLines(1) === "DATE 'bad'")
+    assert(nextLines(2) === "^" * "DATE 'bad'".length)
+
+    val indented = s"SELECT '$emoji' AS a,\n  b, DATE 'bad'"
+    val indentedLines = summaryLines(indented, 2, indented.split('\n')(1).indexOf("DATE"))
+    assert(indentedLines(1) === "  b, DATE 'bad'")
+    val col = indentedLines(1).indexOf("DATE")
+    assert(indentedLines(2) === " " * col + "^" * "DATE 'bad'".length)
+  }
+
+  test("sqlTextSlice uses code-point indexes after a supplementary character") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val sql = s"BEGIN SELECT '$emoji'; SELECT 2; END"
+    val start = sql.codePointCount(0, sql.indexOf("SELECT 2"))
+    val stop = start + "SELECT 2".length - 1
+    val origin = Origin(
+      startIndex = Some(start),
+      stopIndex = Some(stop),
+      sqlText = Some(sql))
+    assert(origin.sqlTextSlice.contains("SELECT 2"))
   }
 }

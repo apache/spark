@@ -164,9 +164,9 @@ object ParseSqlResult {
 
   /**
    * Keep statement-level `queryContext` indexes inside the statement.
-   * [[SQLQueryContext]] already reports fragments in code points; a context
-   * that falls outside the statement is widened to cover all of it. Contexts
-   * of another object (a view body) are left as is.
+   * In-range contexts keep the shared renderer's fragment. A context that
+   * falls outside the statement is widened to cover all of it. Contexts of
+   * another object (a view body) are left as is.
    */
   private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
     JObject(errorObj.obj.map {
@@ -186,14 +186,17 @@ object ParseSqlResult {
     (objectType, start, stop) match {
       case (Some(""), Some(from), Some(to)) =>
         val length = statement.codePointCount(0, statement.length)
-        val (first, last) =
-          if (from >= 1 && to >= from && to <= length) (from, to) else (1, length)
-        JObject(ctx.obj.map {
-          case ("startIndex", _) => "startIndex" -> JInt(first)
-          case ("stopIndex", _) => "stopIndex" -> JInt(last)
-          case ("fragment", _) => "fragment" -> JString(codePointSlice(statement, first - 1, last))
-          case other => other
-        })
+        if (from >= 1 && to >= from && to <= length) {
+          ctx
+        } else {
+          JObject(ctx.obj.map {
+            case ("startIndex", _) => "startIndex" -> JInt(1)
+            case ("stopIndex", _) => "stopIndex" -> JInt(length)
+            case ("fragment", _) =>
+              "fragment" -> JString(codePointSlice(statement, 0, length))
+            case other => other
+          })
+        }
       case _ => ctx
     }
   }

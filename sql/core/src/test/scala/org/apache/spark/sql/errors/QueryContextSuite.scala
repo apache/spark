@@ -73,6 +73,14 @@ class QueryContextSuite extends SharedSparkSession {
     assert(exec.fragment() === "DATE 'bad'")
     assert(exec.objectType() === "EXECUTE IMMEDIATE")
     assert(exec.startIndex() === execSql.codePointCount(0, execSql.indexOf("DATE")))
+
+    val execSyntaxSql = s"SELECT '$emoji' FRUM t"
+    val execSyntax = contextOf(
+      spark.sql(s"EXECUTE IMMEDIATE '${execSyntaxSql.replace("'", "''")}'").collect())
+    assert(execSyntax.fragment() === execSyntaxSql)
+    assert(execSyntax.objectType() === "EXECUTE IMMEDIATE")
+    assert(execSyntax.stopIndex() ===
+      execSyntaxSql.codePointCount(0, execSyntaxSql.length) - 1)
   }
 
   test("SPARK-50290: Add a flag to disable DataFrame context") {

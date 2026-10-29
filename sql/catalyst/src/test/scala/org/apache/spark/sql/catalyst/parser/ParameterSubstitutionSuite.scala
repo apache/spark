@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.parser
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.catalyst.expressions.Literal
+import org.apache.spark.sql.catalyst.trees.{Origin, SQLQueryContext}
 
 /**
  * Test suite for the new parameter substitution architecture.
@@ -156,6 +157,23 @@ class ParameterSubstitutionSuite extends SparkFunSuite {
     val sql = s"SELECT '${flexed}', ?, '${flexed}${flexed}', ?"
     val (result, _) = ParameterHandler.substituteParameters(sql, context)
     assert(result === s"SELECT '${flexed}', '${tada}', '${flexed}${flexed}', 99")
+  }
+
+  test("whole-text origin stopIndex after substitution is a code-point offset") {
+    val emoji = new String(Character.toChars(0x1F600))
+    val original = s"SELECT '$emoji' AS a, :p AS b"
+    val (substituted, mapper) = ParameterHandler.substituteParameters(
+      original, NamedParameterContext(Map("p" -> Literal(1))))
+    val origin = Origin(
+      sqlText = Some(substituted),
+      startIndex = Some(0),
+      stopIndex = Some(substituted.codePointCount(0, substituted.length) - 1),
+      positionMapper = Some(mapper))
+    val ctx = origin.context.asInstanceOf[SQLQueryContext]
+    assert(ctx.isValid)
+    assert(ctx.fragment === original)
+    assert(ctx.startIndex === 0)
+    assert(ctx.stopIndex === original.codePointCount(0, original.length) - 1)
   }
 
   test("PositionMapper maps past a supplementary replacement in code points") {
