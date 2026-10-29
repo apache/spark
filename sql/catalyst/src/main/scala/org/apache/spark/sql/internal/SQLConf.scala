@@ -4620,8 +4620,10 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record. applyInPandasWithState, Arrow Python " +
-        "UDTFs and Arrow Python UDFs that take columnar input directly ignore this config.")
+        "Spark will create a batch with one record. A batch that Arrow cannot slice, e.g. one " +
+        "with a fixed-width column of 2 GiB or more, is sent as a whole. " +
+        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
+        "take columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -8381,7 +8383,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
 
-  def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
+  // Zero or negative means no limit; clamp it so that a value below Int.MinValue does not wrap
+  // around to a positive limit when narrowed to an int.
+  def arrowMaxBytesPerOutputBatch: Long =
+    math.max(getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH), 0L)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
