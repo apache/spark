@@ -51,11 +51,13 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     def check(
         value: Array[Byte],
         metadata: Array[Byte],
-        condition: String = "MALFORMED_VARIANT"): Unit = {
+        condition: String = "MALFORMED_VARIANT",
+        parameters: Map[String, String] = Map.empty): Unit = {
       checkErrorInExpression[SparkRuntimeException](
         ResolveTimeZone.resolveTimeZones(
           StructsToJson(Map.empty, Literal(new VariantVal(value, metadata)))),
-        condition
+        condition,
+        parameters
       )
     }
 
@@ -100,7 +102,9 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
     val a = createArray[Byte](SIZE_LIMIT, 'a'.toByte)
     val hugeMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 1) ++
       a ++ Array[Byte]('b')
-    check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+    val sizeLimitParams = Map("sizeLimit" -> "16 MiB")
+    check(Array(primitiveHeader(TRUE)), hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT",
+      sizeLimitParams)
 
     // The keys are 'aaa....' and 'b'. Values are "yyy..." and 'true'.
     val y = createArray[Byte](SIZE_LIMIT, 'y'.toByte)
@@ -116,8 +120,8 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
 
     val smallMetadata = bigVersion ++ Array[Byte](2, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0) ++
       Array[Byte]('a', 'b')
-    check(hugeObject, smallMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
-    check(hugeObject, hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT")
+    check(hugeObject, smallMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT", sizeLimitParams)
+    check(hugeObject, hugeMetadata, "VARIANT_CONSTRUCTOR_SIZE_LIMIT", sizeLimitParams)
   }
 
   // Test valid forms of Variant that our writer would never produce.

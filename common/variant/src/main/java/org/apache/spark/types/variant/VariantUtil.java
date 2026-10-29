@@ -19,6 +19,7 @@ package org.apache.spark.types.variant;
 
 import org.apache.spark.QueryContext;
 import org.apache.spark.SparkRuntimeException;
+import org.apache.spark.network.util.ByteUnit;
 import org.apache.spark.network.util.JavaUtils;
 import scala.collection.immutable.Map$;
 
@@ -196,12 +197,14 @@ public class VariantUtil {
   }
 
   // An exception indicating that an external caller tried to call the Variant constructor with
-  // value or metadata exceeding the 16MiB size limit. We will never construct a Variant this large,
-  // so it should only be possible to encounter this exception when reading a Variant produced by
-  // another tool.
+  // value or metadata exceeding `SIZE_LIMIT`. We will never construct a Variant this large, so it
+  // should only be possible to encounter this exception when reading a Variant produced by another
+  // tool.
   static SparkRuntimeException variantConstructorSizeLimit() {
     return new SparkRuntimeException("VARIANT_CONSTRUCTOR_SIZE_LIMIT",
-        Map$.MODULE$.<String, String>empty(), null, new QueryContext[]{}, "");
+        new scala.collection.immutable.Map.Map1<>("sizeLimit",
+            ByteUnit.BYTE.toMiB(SIZE_LIMIT) + " MiB"),
+        null, new QueryContext[]{}, "");
   }
 
   // Check the validity of an array index `pos`. Throw `MALFORMED_VARIANT` if it is out of bound,

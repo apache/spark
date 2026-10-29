@@ -10242,7 +10242,7 @@
   },
   "VARIANT_CONSTRUCTOR_SIZE_LIMIT" : {
     "message" : [
-      "Cannot construct a Variant larger than 16 MiB. The maximum allowed size of a Variant value is 16 MiB."
+      "Cannot construct a Variant larger than <sizeLimit>. The maximum allowed size of a Variant value is <sizeLimit>."
     ],
     "sqlState" : "22023"
   },
