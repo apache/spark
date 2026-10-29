@@ -191,6 +191,16 @@
       "Invalid as-of join."
     ],
     "subClass" : {
+      "INVALID_KEY_EXPRESSION" : {
+        "message" : [
+          "The as-of join key contains an invalid expression: <expr>. Use keys without subqueries, aggregate functions, window functions, generator functions, or non-deterministic functions."
+        ]
+      },
+      "KEY_REFERENCE" : {
+        "message" : [
+          "Each as-of join key must reference exactly one join input, and the two keys must reference different inputs. Got: <refs1> and <refs2>."
+        ]
+      },
       "TOLERANCE_IS_NON_NEGATIVE" : {
         "message" : [
           "The input argument `tolerance` must be non-negative."
@@ -206,9 +216,19 @@
           "Unsupported as-of join direction '<direction>'. Supported as-of join direction include: <supported>."
         ]
       },
+      "UNSUPPORTED_KEY_TYPE" : {
+        "message" : [
+          "The as-of join keys must be of an orderable, mutually comparable type. Got: <type1> and <type2>."
+        ]
+      },
       "UNSUPPORTED_NEAREST_KEY_TYPE" : {
         "message" : [
-          "Nearest sort-merge as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+          "Nearest as-of joins do not support <dataType> keys. Cast the keys to a numeric or datetime type."
+        ]
+      },
+      "UNSUPPORTED_TOLERANCE_KEY_TYPE" : {
+        "message" : [
+          "Sort-merge as-of joins with a tolerance do not support <dataType> keys. Cast the keys to a numeric or datetime type."
         ]
       }
     },

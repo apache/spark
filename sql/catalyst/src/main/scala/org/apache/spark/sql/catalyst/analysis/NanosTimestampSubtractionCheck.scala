@@ -33,9 +33,8 @@ object NanosTimestampSubtractionCheck extends (LogicalPlan => Unit) {
 
   def checkOperator(operator: LogicalPlan): Unit = operator match {
     case j: AsOfJoin =>
-      j.expressions.filterNot(_ eq j.orderExpression).foreach(checkExpression)
-      // The SQL path never evaluates the distance, and its operands are also in `asOfCondition`.
-      if (!j.requiresSortMergeAsOfJoin) checkAsOfDistance(j.orderExpression)
+      j.expressions.filterNot(e => j.orderExpression.exists(_ eq e)).foreach(checkExpression)
+      j.orderExpression.foreach(checkAsOfDistance)
     case o => o.expressions.foreach(checkExpression)
   }
 

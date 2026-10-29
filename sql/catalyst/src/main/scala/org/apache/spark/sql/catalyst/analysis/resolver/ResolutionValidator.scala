@@ -369,9 +369,9 @@ class ResolutionValidator {
       attributeScopeStack.overwriteCurrent(asOfJoin.left.output ++ asOfJoin.right.output)
 
       expressionResolutionValidator.validate(asOfJoin.asOfCondition)
-      expressionResolutionValidator.validate(asOfJoin.orderExpression)
       asOfJoin.condition.foreach(expressionResolutionValidator.validate)
-      asOfJoin.toleranceAssertion.foreach(expressionResolutionValidator.validate)
+      asOfJoin.tolerance.foreach(expressionResolutionValidator.validate)
+      asOfJoin.orderExpression.foreach(expressionResolutionValidator.validate)
       asOfJoin.leftSortExprs.foreach(expressionResolutionValidator.validate)
       asOfJoin.rightSortExprs.foreach(expressionResolutionValidator.validate)
     } finally {
