@@ -64,8 +64,9 @@
 // functions that return a state pass it that many times.
 //
 // read fails unless it gets the kind of read of its reader and the schema to read, the columns
-// that the reader returns, and write fails unless its batches have the columns of the schema
-// that create_data_writer got.
+// that the reader returns. create_data_writer fails unless it gets the schema that create_writer
+// got, with the same names and formats, and write fails unless its batches have the columns of
+// that schema.
 //
 // The suite compiles it with these macros to get several distinct libraries:
 //
@@ -1040,8 +1041,17 @@ int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* 
 
 #endif  // READ_ONLY
 
-int planPartitions(void* handle, SparkDsSink add_partition, SparkDsSink set_state, void* sink) {
+// Fails unless Spark passes a struct of at least `size` bytes.
+void checkSize(const char* struct_name, int64_t actual, size_t size) {
+  if (actual < static_cast<int64_t>(size)) {
+    throw std::runtime_error(std::string(struct_name) + " has a size of " + std::to_string(actual));
+  }
+}
+
+int planPartitions(void* handle, const SparkDsPartitionsInfo* info, SparkDsSink add_partition,
+                   SparkDsSink set_state, void* sink) {
   return guarded([&] {
+    checkSize("SparkDsPartitionsInfo", info->size, sizeof(SparkDsPartitionsInfo));
     auto* reader = fromHandle<Reader>(handle);
     maybeFail(reader->state, "plan");
     int64_t lo = getLong(reader->state, "lo", 0);
@@ -1065,8 +1075,12 @@ void closeReader(void* handle) { delete fromHandle<Reader>(handle); }
 
 #ifndef READ_ONLY
 
-int initialOffset(void*, SparkDsSink set_offset, void* sink) {
-  return guarded([&] { sendBytes(set_offset, sink, "{\"offset\":0}"); });
+int initialOffset(void*, const SparkDsInitialOffsetInfo* info, SparkDsSink set_offset,
+                  void* sink) {
+  return guarded([&] {
+    checkSize("SparkDsInitialOffsetInfo", info->size, sizeof(SparkDsInitialOffsetInfo));
+    sendBytes(set_offset, sink, "{\"offset\":0}");
+  });
 }
 
 // Makes `step` more rows available after the start of the micro-batch, up to `max_offset`.
@@ -1098,21 +1112,23 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
   });
 }
 
-int streamPartitions(void* handle, const char* start, const char* end, SparkDsSink add_partition,
-                     SparkDsSink set_state, void* sink) {
+int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
+                     SparkDsSink add_partition, SparkDsSink set_state, void* sink) {
   return guarded([&] {
-    auto lo = static_cast<int64_t>(JsonParser(start).parse()["offset"].number);
-    auto hi = static_cast<int64_t>(JsonParser(end).parse()["offset"].number);
+    checkSize("SparkDsStreamPartitionsInfo", info->size, sizeof(SparkDsStreamPartitionsInfo));
+    auto lo = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
+    auto hi = static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number);
     if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
     const Options& state = fromHandle<Reader>(handle)->state;
     sendState(state, set_state, sink, serialize(state));
   });
 }
 
-int commitOffset(void* handle, const char* end) {
+int commitOffset(void* handle, const SparkDsCommitOffsetInfo* info) {
   return guarded([&] {
+    checkSize("SparkDsCommitOffsetInfo", info->size, sizeof(SparkDsCommitOffsetInfo));
     std::string path = get(fromHandle<Reader>(handle)->state, "commit_path", "");
-    if (!path.empty()) writeFile(path, end);
+    if (!path.empty()) writeFile(path, info->end);
   });
 }
 
@@ -1165,6 +1181,18 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
 
 #ifndef READ_ONLY
 
+// The names and the formats of the fields of a schema, at every level, such as "id:l,ts:tsu:UTC".
+std::string describeFields(const ArrowSchema* schema) {
+  std::string description;
+  for (int64_t i = 0; i < schema->n_children; i++) {
+    const ArrowSchema* child = schema->children[i];
+    if (i > 0) description += ",";
+    description += std::string(child->name ? child->name : "") + ":" + child->format;
+    if (child->n_children > 0) description += "(" + describeFields(child) + ")";
+  }
+  return description;
+}
+
 int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInfo* info,
                  SparkDsSink set_state, void* sink, void** out) {
   return guarded([&] {
@@ -1193,6 +1221,8 @@ int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInf
     writer->state["zero"] = get(source->options, "zero", "");
     writer->state["commit_messages"] = get(source->options, "commit_messages", "1");
     writer->state["task_path"] = get(source->options, "task_path", "");
+    // The data writers check that they get the schema of the writer.
+    writer->state["fields"] = describeFields(schema);
     // Records that a writer was created, which Spark then commits or aborts, and the ID of the
     // streaming query.
     makeDirs(path);
@@ -1275,6 +1305,11 @@ int createDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo
     Options state = deserialize(toBytes(info->writer_state, info->writer_state_length));
     if (returnsZero(state, "create_data_writer")) return;
     if (info->schema->n_children == 0) throw std::runtime_error("no columns to write");
+    std::string fields = describeFields(info->schema);
+    if (fields != state["fields"]) {
+      throw std::runtime_error("create_data_writer got the schema (" + fields +
+                               "), but create_writer got (" + state["fields"] + ")");
+    }
     recordTask(state, task);
     std::string dir = state["path"] + "/_temporary";
     makeDirs(dir);

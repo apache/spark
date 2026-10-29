@@ -100,11 +100,11 @@ final class NativeLibrary {
     CLOSE("close", C.VOID, C.PTR),
     PUSH_LIMIT("push_limit", C.I32, C.PTR, C.I32, C.PTR),
     PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
-    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE_READER("close_reader", C.VOID, C.PTR),
-    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR),
+    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     LATEST_OFFSET("latest_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
-    STREAM_PARTITIONS("stream_partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
+    STREAM_PARTITIONS("stream_partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     COMMIT_OFFSET("commit_offset", C.I32, C.PTR, C.PTR),
     CLOSE_STREAM_READER("close_stream_reader", C.VOID, C.PTR),
     READ("read", C.I32, C.PTR, C.PTR, C.PTR),
@@ -147,6 +147,13 @@ final class NativeLibrary {
   private static final long CREATE_INFO_OPTION_KEYS = 16;
   private static final long CREATE_INFO_OPTION_VALUES = 24;
   private static final long CREATE_INFO_NUM_OPTIONS = 32;
+  private static final long PARTITIONS_INFO_SIZE = 8;
+  private static final long INITIAL_OFFSET_INFO_SIZE = 8;
+  private static final long STREAM_PARTITIONS_INFO_SIZE = 24;
+  private static final long STREAM_PARTITIONS_INFO_START = 8;
+  private static final long STREAM_PARTITIONS_INFO_END = 16;
+  private static final long COMMIT_OFFSET_INFO_SIZE = 16;
+  private static final long COMMIT_OFFSET_INFO_END = 8;
   private static final long STREAM_READER_INFO_SIZE = 16;
   private static final long STREAM_READER_INFO_CHECKPOINT_LOCATION = 8;
   private static final long LATEST_OFFSET_INFO_SIZE = 16;
@@ -197,6 +204,17 @@ final class NativeLibrary {
     layout.put("SparkDsCreateInfo.option_keys", CREATE_INFO_OPTION_KEYS);
     layout.put("SparkDsCreateInfo.option_values", CREATE_INFO_OPTION_VALUES);
     layout.put("SparkDsCreateInfo.num_options", CREATE_INFO_NUM_OPTIONS);
+    layout.put("SparkDsPartitionsInfo", PARTITIONS_INFO_SIZE);
+    layout.put("SparkDsPartitionsInfo.size", 0L);
+    layout.put("SparkDsInitialOffsetInfo", INITIAL_OFFSET_INFO_SIZE);
+    layout.put("SparkDsInitialOffsetInfo.size", 0L);
+    layout.put("SparkDsStreamPartitionsInfo", STREAM_PARTITIONS_INFO_SIZE);
+    layout.put("SparkDsStreamPartitionsInfo.size", 0L);
+    layout.put("SparkDsStreamPartitionsInfo.start", STREAM_PARTITIONS_INFO_START);
+    layout.put("SparkDsStreamPartitionsInfo.end", STREAM_PARTITIONS_INFO_END);
+    layout.put("SparkDsCommitOffsetInfo", COMMIT_OFFSET_INFO_SIZE);
+    layout.put("SparkDsCommitOffsetInfo.size", 0L);
+    layout.put("SparkDsCommitOffsetInfo.end", COMMIT_OFFSET_INFO_END);
     layout.put("SparkDsStreamReaderInfo", STREAM_READER_INFO_SIZE);
     layout.put("SparkDsStreamReaderInfo.size", 0L);
     layout.put(
@@ -656,7 +674,8 @@ final class NativeLibrary {
   }
 
   /**
-   * Creates a writer. If the library returns an invalid state, the writer is closed.
+   * Creates a writer. If the library returns an invalid state, the writer is aborted, with no
+   * messages and an epoch ID of -1, and closed.
    *
    * @param mode {@link #WRITE_APPEND} or {@link #WRITE_TRUNCATE}
    * @param queryId the ID of the streaming query of a streaming write, or null for a batch write
@@ -677,6 +696,12 @@ final class NativeLibrary {
       try {
         return new WriterHandle(handle, state(sink, Function.CREATE_WRITER));
       } catch (Throwable e) {
+        // So that the library can undo what create_writer prepared.
+        try {
+          abort(handle, -1, new byte[0][]);
+        } catch (Throwable abortError) {
+          e.addSuppressed(abortError);
+        }
         try {
           closeWriter(handle);
         } catch (Throwable closeError) {
@@ -724,9 +749,12 @@ final class NativeLibrary {
 
   PlannedPartitions partitions(long reader) throws Throwable {
     MethodHandle f = function(Function.PARTITIONS);
-    try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(reader, Ffm.SINK, Ffm.STATE_SINK, sink.id), Function.PARTITIONS);
-      return new PlannedPartitions(sink.all(), state(sink, Function.PARTITIONS));
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
+      long info = memory.zeroed(PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info, PARTITIONS_INFO_SIZE);
+      check((int) f.invokeExact(reader, info, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+        Function.PARTITIONS);
+      return new PlannedPartitions(sink.values(), state(sink, Function.PARTITIONS));
     }
   }
 
@@ -736,8 +764,10 @@ final class NativeLibrary {
 
   String initialOffset(long streamReader) throws Throwable {
     MethodHandle f = function(Function.INITIAL_OFFSET);
-    try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(streamReader, Ffm.SINK, sink.id), Function.INITIAL_OFFSET);
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
+      long info = memory.zeroed(INITIAL_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info, INITIAL_OFFSET_INFO_SIZE);
+      check((int) f.invokeExact(streamReader, info, Ffm.SINK, sink.id), Function.INITIAL_OFFSET);
       return offset(Function.INITIAL_OFFSET, sink);
     }
   }
@@ -771,16 +801,23 @@ final class NativeLibrary {
       throws Throwable {
     MethodHandle f = function(Function.STREAM_PARTITIONS);
     try (Memory memory = new Memory(); Sink sink = new Sink()) {
-      check((int) f.invokeExact(streamReader, memory.string(start), memory.string(end),
-        Ffm.SINK, Ffm.STATE_SINK, sink.id), Function.STREAM_PARTITIONS);
-      return new PlannedPartitions(sink.all(), state(sink, Function.STREAM_PARTITIONS));
+      long info = memory.zeroed(STREAM_PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info, STREAM_PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info + STREAM_PARTITIONS_INFO_START, memory.string(start));
+      Platform.putLong(null, info + STREAM_PARTITIONS_INFO_END, memory.string(end));
+      check((int) f.invokeExact(streamReader, info, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+        Function.STREAM_PARTITIONS);
+      return new PlannedPartitions(sink.values(), state(sink, Function.STREAM_PARTITIONS));
     }
   }
 
   void commitOffset(long streamReader, String end) throws Throwable {
     MethodHandle f = function(Function.COMMIT_OFFSET);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(streamReader, memory.string(end)), Function.COMMIT_OFFSET);
+      long info = memory.zeroed(COMMIT_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info, COMMIT_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info + COMMIT_OFFSET_INFO_END, memory.string(end));
+      check((int) f.invokeExact(streamReader, info), Function.COMMIT_OFFSET);
     }
   }
 
@@ -896,22 +933,20 @@ final class NativeLibrary {
 
   /** Returns the single byte array that a function passed to the sink, or null if none. */
   private static byte[] single(Sink sink, Function function) throws Throwable {
-    byte[][] values = sink.all();
-    if (values.length > 1) {
-      throw new IllegalStateException(
-        function.fieldName + " returned " + values.length + " values instead of one.");
-    }
-    return values.length == 0 ? null : values[0];
+    return atMostOne(sink.values(), function, "values");
   }
 
   /** Returns the state that a function passed to the set_state sink, or null if none. */
   private static byte[] state(Sink sink, Function function) throws Throwable {
-    byte[][] states = sink.states();
-    if (states.length > 1) {
+    return atMostOne(sink.states(), function, "states");
+  }
+
+  private static byte[] atMostOne(byte[][] arrays, Function function, String what) {
+    if (arrays.length > 1) {
       throw new IllegalStateException(
-        function.fieldName + " returned " + states.length + " states instead of one.");
+        function.fieldName + " returned " + arrays.length + " " + what + " instead of one.");
     }
-    return states.length == 0 ? null : states[0];
+    return arrays.length == 0 ? null : arrays[0];
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -1051,19 +1086,20 @@ final class NativeLibrary {
     }
 
     /** The byte arrays passed to {@link Ffm#SINK}. */
-    byte[][] all() throws Throwable {
-      if (error != null) {
-        throw error;
-      }
-      return values.toArray(new byte[0][]);
+    byte[][] values() throws Throwable {
+      return collected(values);
     }
 
     /** The byte arrays passed to {@link Ffm#STATE_SINK}. */
     byte[][] states() throws Throwable {
+      return collected(states);
+    }
+
+    private byte[][] collected(List<byte[]> arrays) throws Throwable {
       if (error != null) {
         throw error;
       }
-      return states.toArray(new byte[0][]);
+      return arrays.toArray(new byte[0][]);
     }
 
     @Override
