@@ -21,14 +21,6 @@ import software.amazon.kinesis.common.InitialPositionInStream;
 import java.io.Serializable;
 import java.util.Date;
 
-/**
- * A java wrapper for exposing [[InitialPositionInStream]]
- * to the corresponding Kinesis readers.
- */
-interface KinesisInitialPosition {
-    InitialPositionInStream getPosition();
-}
-
 public class KinesisInitialPositions {
     public static class Latest implements KinesisInitialPosition, Serializable {
         public Latest() {}
