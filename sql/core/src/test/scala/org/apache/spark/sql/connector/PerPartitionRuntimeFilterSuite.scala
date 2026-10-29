@@ -22,17 +22,19 @@ import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.QueryTest.withQueryExecutionsCaptured
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{BloomFilterMightContain, DynamicPruningSubquery, Expression, GetStructField, PlanExpression, PredicateHelper, ScalarSubquery, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.aggregate.BloomFilterAggregate
 import org.apache.spark.sql.catalyst.optimizer.{InjectRuntimeFilter, InsertPerPartitionRuntimeFilterJoins, PerPartitionRuntimeFilterPlaceholder}
 import org.apache.spark.sql.catalyst.plans.{ExistenceJoin, Inner}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join, LogicalPlan, Project, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Filter, Join, LogicalPlan, Project, Union}
 import org.apache.spark.sql.catalyst.plans.physical.REPLICATED_FOR_JOIN
 import org.apache.spark.sql.catalyst.trees.TreePattern.PER_PARTITION_RUNTIME_FILTER_PLACEHOLDER
+import org.apache.spark.sql.catalyst.util.DateTimeConstants.MICROS_PER_DAY
 import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, BucketFunction, ScalarFunction, UnboundBucketFunction, UnboundFunction}
 import org.apache.spark.sql.connector.distributions.Distribution
 import org.apache.spark.sql.connector.expressions.{NamedReference, SortOrder, Transform}
-import org.apache.spark.sql.connector.expressions.Expressions.{bucket, identity}
+import org.apache.spark.sql.connector.expressions.Expressions.{bucket, days, identity}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, ScanBuilder, StorageFilterRequest, SupportsStorageFilters}
 import org.apache.spark.sql.execution.{FilterExec, ProjectExec, SparkPlan}
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, GroupPartitionsExec}
@@ -41,7 +43,7 @@ import org.apache.spark.sql.execution.joins.{BaseJoinExec, ShuffledHashJoinExec}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
 import org.apache.spark.sql.internal.SQLConf._
 import org.apache.spark.sql.internal.connector.SchemaAlignmentConfig
-import org.apache.spark.sql.types.{DataType, IntegerType, LongType, StringType, StructType}
+import org.apache.spark.sql.types.{DataType, DateType, IntegerType, LongType, StringType, StructType, TimestampType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
 class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase with PredicateHelper {
@@ -139,9 +141,9 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase wit
 
   private val expectedRows = Seq(Row(1, 10), Row(3, 30), Row(5, 50), Row(9, 90))
 
-  // The size of the creation side that a join on `id` gets from `table` with `flag = 1`.
-  private def creationSideSize(table: String): BigInt =
-    spark.table(s"testcat.ns.$table").where("flag = 1").select("id")
+  // The size of the creation side that a join on `column` gets from `table` with `flag = 1`.
+  private def creationSideSize(table: String, column: String = "id"): BigInt =
+    spark.table(s"testcat.ns.$table").where("flag = 1").select(column)
       .queryExecution.optimizedPlan.stats.sizeInBytes
 
   // `fact` and `dim` with a second join key `x`, which the partitioning leaves out.
@@ -536,6 +538,107 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase wit
     }
   }
 
+  // The expected number of items of each per-partition bloom filter of `df`.
+  private def perPartitionNumItems(df: DataFrame = join()): Seq[Long] =
+    df.queryExecution.optimizedPlan.collect {
+      case Aggregate(grouping, aggregates, _, _) if grouping.nonEmpty =>
+        aggregates.flatMap(_.collect { case b: BloomFilterAggregate => b })
+    }.flatten.map(_.estimatedNumItemsExpression.eval().asInstanceOf[Long])
+
+  test("each per-partition bloom filter expects one bucket's share of the items") {
+    // Without CBO the Filter on the creation side drops its row count, so the bloom filters spread
+    // the default expected number of items.
+    createTables()
+    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "400") {
+      assert(perPartitionNumItems() == Seq(100L), "the 400 expected items spread over 4 buckets")
+    }
+  }
+
+  test("each per-partition bloom filter expects one partition's share of the items when the " +
+      "scan reports fewer partitions than buckets") {
+    // The scan of `dim` reports one partition per row, 6 in all, fewer than the 16 buckets.
+    createTables(
+      factPartitioning = Array(bucket(16, "id")), dimPartitioning = Array(bucket(16, "id")))
+    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "600") {
+      assert(perPartitionNumItems() == Seq(100L), "the 600 expected items spread over 6 partitions")
+    }
+  }
+
+  test("each per-partition bloom filter expects more items for a creation side over the size " +
+      "threshold") {
+    // Without a row count, the default expected number of items is for a creation side within the
+    // threshold. This one is twice that, with each of its 4 buckets within it.
+    createTables()
+    val size = creationSideSize("dim")
+    withSQLConf(
+        RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "400",
+        RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> ((size + 1) / 2).toString) {
+      assert(perPartitionNumItems() == Seq(200L), "twice the 400 expected items over 4 buckets")
+    }
+  }
+
+  test("for a transform other than bucket, the size threshold and the expected items are for " +
+      "the whole creation side") {
+    // Partitions may share a key, and such a transform has no buckets to bound the keys. The scan
+    // of `dim` reports one partition per row, 6 in all, over 2 days.
+    catalog.createFunction(Identifier.of(Array.empty, "days"), new UnboundFunction {
+      override def bind(inputType: StructType): BoundFunction = new ScalarFunction[Int] {
+        override def inputTypes(): Array[DataType] = Array(TimestampType)
+        override def resultType(): DataType = DateType
+        override def name(): String = "days"
+        override def canonicalName(): String = name()
+        override def produceResult(input: InternalRow): Int =
+          Math.floorDiv(input.getLong(0), MICROS_PER_DAY).toInt
+      }
+      override def description(): String = name()
+      override def name(): String = "days"
+    })
+    createTable("fact", Array(Column.create("ts", TimestampType), Column.create("v", IntegerType)),
+      Array(days("ts")))
+    sql("INSERT INTO testcat.ns.fact VALUES (TIMESTAMP '2026-01-01 01:00:00', 1), " +
+      "(TIMESTAMP '2026-01-01 02:00:00', 2), (TIMESTAMP '2026-01-02 01:00:00', 3), " +
+      "(TIMESTAMP '2026-01-03 01:00:00', 4)")
+    createTable("dim", Array(Column.create("ts", TimestampType),
+      Column.create("flag", IntegerType)), Array(days("ts")))
+    sql("INSERT INTO testcat.ns.dim VALUES (TIMESTAMP '2026-01-01 01:00:00', 1), " +
+      "(TIMESTAMP '2026-01-01 02:00:00', 1), (TIMESTAMP '2026-01-01 03:00:00', 0), " +
+      "(TIMESTAMP '2026-01-02 01:00:00', 1), (TIMESTAMP '2026-01-02 02:00:00', 0), " +
+      "(TIMESTAMP '2026-01-02 03:00:00', 1)")
+    def daysJoin(): DataFrame = sql("SELECT f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
+      "ON f.ts = d.ts WHERE d.flag = 1")
+    withSQLConf(RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS.key -> "600") {
+      assert(perPartitionNumItems(daysJoin()) == Seq(600L), "all 600 expected items")
+      checkAnswer(daysJoin(), Seq(Row(1), Row(2), Row(3)))
+    }
+    val size = creationSideSize("dim", "ts")
+    // Under the size of the creation side, but over that of one of its 6 partitions.
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> (size / 2).toString) {
+      val df = daysJoin()
+      assert(perPartitionSemiJoins(df).isEmpty, df.queryExecution.optimizedPlan)
+      checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+    }
+  }
+
+  test("the creation side's size threshold applies to one partition of it") {
+    createTables()
+    val size = creationSideSize("dim")
+    // Under the size of the creation side, but over that of one of its 4 buckets.
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> (size / 2).toString) {
+      val df = join()
+      val plan = df.queryExecution.optimizedPlan
+      assert(perPartitionSemiJoins(df).size == 1, plan)
+      assert(!hasGlobalBloomFilter(plan), plan)
+      checkAnswer(df, expectedRows)
+    }
+    // Under the size of one bucket.
+    withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> (size / 8).toString) {
+      val df = join()
+      val plan = df.queryExecution.optimizedPlan
+      assert(perPartitionSemiJoins(df).isEmpty && !hasGlobalBloomFilter(plan), plan)
+      checkAnswer(df, expectedRows)
+    }
+  }
+
   test("a later join gets its bloom filter on a key whose semi join has no global one") {
     // The creation side of `dim` is too big for one bloom filter of all its keys, so its join gets
     // only the semi join. The join with `dim2` on the same key still gets its bloom filter, but no
@@ -670,10 +773,10 @@ class PerPartitionRuntimeFilterSuite extends KeyGroupedPartitioningSuiteBase wit
     sql("INSERT INTO testcat.ns.dim2 VALUES (1, 1), (3, 1), (5, 0)")
     val creationSide = "SELECT dim.id FROM testcat.ns.dim JOIN testcat.ns.dim2 " +
       "ON dim.id = dim2.id WHERE dim.flag = 1 AND dim2.flag = 1"
-    // The bloom filter of the union is of the rows of `dim`. The threshold is under their size,
-    // and over the size of the rows of `dim2`.
+    // The bloom filter of the union is of the rows of `dim`. The threshold is under their size, but
+    // over that of one of their 4 buckets, and over the size of the rows of `dim2`.
     val size = creationSideSize("dim")
-    val threshold = creationSideSize("dim2")
+    val threshold = creationSideSize("dim2").max((size + 3) / 4)
     assert(threshold < size, "test setup: the union must get no bloom filter")
     withSQLConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD.key -> threshold.toString) {
       val df = sql("SELECT f.id, f.v FROM (SELECT id, v FROM testcat.ns.fact UNION ALL " +

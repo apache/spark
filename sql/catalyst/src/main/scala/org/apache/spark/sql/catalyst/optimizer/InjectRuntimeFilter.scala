@@ -24,6 +24,8 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.{INVOKE, JSON_TO_STRUCT, LIKE_FAMLIY, PYTHON_UDF, REGEXP_EXTRACT_FAMILY, REGEXP_REPLACE, SCALA_UDF}
 import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
+import org.apache.spark.sql.connector.read.SupportsReportPartitioning
+import org.apache.spark.sql.connector.read.partitioning.KeyGroupedPartitioning
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.MetadataBuilder
@@ -66,7 +68,20 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       plan: LogicalPlan,
       useMaterializedThreshold: Boolean,
       materializedRowCount: Option[BigInt] = None,
-      materializedSizeInBytes: Option[BigInt] = None)
+      materializedSizeInBytes: Option[BigInt] = None) {
+
+    // The creation side's row count, when known. A count of 0 is taken as unknown.
+    def rowCount: Option[BigInt] =
+      materializedRowCount.orElse(plan.stats.rowCount).filter(_ > 0)
+
+    // The creation side's size, and the threshold the input of one bloom filter must not exceed.
+    def sizeInBytes: BigInt = materializedSizeInBytes.getOrElse(plan.stats.sizeInBytes)
+    def sizeThreshold: Long = if (useMaterializedThreshold) {
+      conf.runtimeFilterMaterializedCreationSideThreshold
+    } else {
+      conf.runtimeFilterCreationSideThreshold
+    }
+  }
 
   // `filterApplicationSidePlan` with its runtime filters, whether it got a bloom filter of the
   // whole creation side, and whether it got a per-partition one. It can get a per-partition one
@@ -104,6 +119,9 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    *
    * A key gets one per-partition bloom filter at most, so a later join on the same key adds none.
    *
+   * The creation side's size threshold applies to one partition of it (see `partitionsOf`), since
+   * each bloom filter holds the keys of one partition and is built in its own task.
+   *
    * The bloom filter column carries [[PER_PARTITION_RUNTIME_FILTER]] in its metadata. That is how
    * this rule, `InsertPerPartitionRuntimeFilterJoins` and `ChoosePerPartitionRuntimeFilters` tell
    * this semi join from one a query wrote.
@@ -117,16 +135,19 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       return planWithBloomFilter
     }
     val placeholder = for {
-      application <- partitionTransform(filterApplicationSideKey, planWithBloomFilter)
-      creation <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
+      (application, _) <- partitionTransform(filterApplicationSideKey, planWithBloomFilter)
+      (creation, scan) <- partitionTransform(filterCreationSide.key, filterCreationSide.plan)
       if application.isSameFunction(creation)
-      if !hasPerPartitionRuntimeFilter(planWithBloomFilter, filterApplicationSideKey)
+      numPartitions = partitionsOf(creation, scan)
+      if filterCreationSide.sizeInBytes / numPartitions <= filterCreationSide.sizeThreshold &&
+        !hasPerPartitionRuntimeFilter(planWithBloomFilter, filterApplicationSideKey)
       creationPartitionKey = Alias(creation, "partitionKey")()
       bloomFilter = Alias(new BloomFilterAggregate(
-        new XxHash64(Seq(filterCreationSide.key))).toAggregateExpression(), "bloomFilter")(
-        explicitMetadata = Some(new MetadataBuilder()
-          .putLong(PER_PARTITION_RUNTIME_FILTER, globalBloomFilter.map(_.id).getOrElse(-1L))
-          .build()))
+        new XxHash64(Seq(filterCreationSide.key)),
+        perPartitionNumItems(filterCreationSide, numPartitions)
+      ).toAggregateExpression(), "bloomFilter")(explicitMetadata = Some(new MetadataBuilder()
+        .putLong(PER_PARTITION_RUNTIME_FILTER, globalBloomFilter.map(_.id).getOrElse(-1L))
+        .build()))
       aggregate = withNewSubqueryIds(ColumnPruning(PullOutGroupingExpressions(Aggregate(
         Seq(creation), Seq(creationPartitionKey, bloomFilter), filterCreationSide.plan))))
       if canEvaluateApart(aggregate)
@@ -145,8 +166,47 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
     }
 
   /**
-   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`.
-   * Defined when:
+   * The number of partitions that the size threshold and the sizing of each bloom filter split the
+   * creation side into. Each is taken to hold the rows of one partition key, since a bloom filter
+   * is built per key:
+   *  - for a `bucket` transform, the number of buckets, or the number of partitions the scan
+   *    reports when that is smaller;
+   *  - for any other transform, one. Partitions may share a key, so the scan can report far more
+   *    partitions than there are keys.
+   */
+  private def partitionsOf(transform: TransformExpression, scan: DataSourceV2ScanRelation): Int =
+    transform.numBucketsOpt.filter(_ > 0) match {
+      case Some(numBuckets) =>
+        val reported = scan.scan match {
+          case s: SupportsReportPartitioning => s.outputPartitioning() match {
+            case k: KeyGroupedPartitioning if k.numPartitions() > 0 => Some(k.numPartitions())
+            case _ => None
+          }
+          case _ => None
+        }
+        (numBuckets +: reported.toSeq).min
+      case None => 1
+    }
+
+  /**
+   * The expected number of items of one partition's bloom filter. Without a row count, the default
+   * is for a creation side within the size threshold. A creation side over it, with each partition
+   * within it, gets the default once for each threshold's worth of its size.
+   */
+  private def perPartitionNumItems(
+      filterCreationSide: FilterCreationSide,
+      numPartitions: Int): Long = {
+    val numItems = filterCreationSide.rowCount.getOrElse {
+      val threshold = math.max(1L, filterCreationSide.sizeThreshold)
+      val thresholds = (filterCreationSide.sizeInBytes + threshold - 1) / threshold
+      thresholds.max(1) * conf.getConf(SQLConf.RUNTIME_BLOOM_FILTER_EXPECTED_NUM_ITEMS)
+    }
+    ((numItems + numPartitions - 1) / numPartitions).max(1).longValue
+  }
+
+  /**
+   * The partition transform of the V2 scan `key` comes from under `plan`, rebuilt over `key`, and
+   * that scan. Defined when:
    *  - V2 bucketing is on;
    *  - `key` is one of the scan's columns, followed down through `plan`;
    *  - the scan reports a keyed partitioning by a single transform of that column;
@@ -160,7 +220,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
    */
   private def partitionTransform(
       key: Expression,
-      plan: LogicalPlan): Option[TransformExpression] = {
+      plan: LogicalPlan): Option[(TransformExpression, DataSourceV2ScanRelation)] = {
     if (!conf.v2BucketingEnabled) {
       None
     } else {
@@ -170,7 +230,7 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
             case Seq(t @ TransformExpression(_, Seq(child), _, _))
                 if child.semanticEquals(column) && t.function.isDeterministic &&
                   t.evaluableFunction.isDefined =>
-              t.copy(children = Seq(key))
+              (t.copy(children = Seq(key)), scan)
           }
         case _ => None
       }
@@ -185,24 +245,14 @@ object InjectRuntimeFilter extends Rule[LogicalPlan] with PredicateHelper with J
       filterCreationSide: FilterCreationSide): (LogicalPlan, Option[ExprId]) = {
     val filterCreationSideKey = filterCreationSide.key
     val filterCreationSidePlan = filterCreationSide.plan
-    val creationSideThreshold = if (filterCreationSide.useMaterializedThreshold) {
-      conf.runtimeFilterMaterializedCreationSideThreshold
-    } else {
-      conf.runtimeFilterCreationSideThreshold
-    }
     // Skip if the filter creation side is too big
-    if (filterCreationSide.materializedSizeInBytes
-        .getOrElse(filterCreationSidePlan.stats.sizeInBytes) > creationSideThreshold) {
+    if (filterCreationSide.sizeInBytes > filterCreationSide.sizeThreshold) {
       return (filterApplicationSidePlan, None)
     }
-    val rowCount = filterCreationSide.materializedRowCount
-      .orElse(filterCreationSidePlan.stats.rowCount)
-    val bloomFilterAgg =
-      if (rowCount.isDefined && rowCount.get.longValue > 0L) {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)), rowCount.get.longValue)
-      } else {
-        new BloomFilterAggregate(new XxHash64(Seq(filterCreationSideKey)))
-      }
+    val hash = new XxHash64(Seq(filterCreationSideKey))
+    val bloomFilterAgg = filterCreationSide.rowCount
+      .map(rowCount => new BloomFilterAggregate(hash, rowCount.longValue))
+      .getOrElse(new BloomFilterAggregate(hash))
 
     val alias = Alias(bloomFilterAgg.toAggregateExpression(), "bloomFilter")()
     val aggregate =

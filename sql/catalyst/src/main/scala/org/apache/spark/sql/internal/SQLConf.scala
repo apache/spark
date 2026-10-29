@@ -1024,7 +1024,9 @@ object SQLConf {
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. Under a bucket transform, a per-partition " +
+        "bloom filter needs only the estimated size of one partition of the creation side to be " +
+        "under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
