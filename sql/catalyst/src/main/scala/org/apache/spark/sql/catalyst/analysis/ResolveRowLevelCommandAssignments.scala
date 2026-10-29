@@ -17,8 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
+import scala.collection.mutable
+
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference, Cast}
 import org.apache.spark.sql.catalyst.expressions.objects.AssertNotNull
 import org.apache.spark.sql.catalyst.plans.logical.{Assignment, DeleteAction, InsertAction, LogicalPlan, MergeAction, MergeIntoTable, UpdateAction, UpdateTable}
 import org.apache.spark.sql.catalyst.rules.Rule
@@ -41,10 +43,10 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     _.containsPattern(COMMAND), ruleId) {
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && u.rewritable && !u.aligned =>
       validateStoreAssignmentPolicy()
-      val newTable = cleanAttrMetadata(u.table)
+      val (newTable, metadataAttrMap) = cleanAttrMetadata(u.table)
       val newAssignments = AssignmentUtils.alignUpdateAssignments(u.table.output, u.assignments,
         fromStar = false, coerceNestedTypes = false)
-      u.copy(table = newTable, assignments = newAssignments)
+      u.copy(table = newTable, assignments = newAssignments).rewriteAttrs(metadataAttrMap)
 
     case u: UpdateTable if !u.skipSchemaResolution && u.resolved && !u.aligned =>
       resolveAssignments(u)
@@ -52,8 +54,9 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     case m: MergeIntoTable if m.rewritable && shouldAlignAssignments(m) && containsFinalSchema(m) =>
       validateStoreAssignmentPolicy()
       val coerceNestedTypes = conf.coerceMergeNestedTypes && m.withSchemaEvolution
+      val (newTargetTable, metadataAttrMap) = cleanAttrMetadata(m.targetTable)
       m.copy(
-        targetTable = cleanAttrMetadata(m.targetTable),
+        targetTable = newTargetTable,
         matchedActions = alignActions(
           m.targetTable.output,
           m.matchedActions,
@@ -65,7 +68,7 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
         notMatchedBySourceActions = alignActions(
           m.targetTable.output,
           m.notMatchedBySourceActions,
-          coerceNestedTypes))
+          coerceNestedTypes)).rewriteAttrs(metadataAttrMap)
 
     case m: MergeIntoTable if shouldAlignAssignments(m) && containsFinalSchema(m) =>
       resolveAssignments(m)
@@ -86,11 +89,23 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
     }
   }
 
-  private def cleanAttrMetadata(table: LogicalPlan): LogicalPlan = {
-    table.transform {
+  // A cleaned relation is a new instance whose metadata output has new expression IDs, so this
+  // also returns a map from the metadata output of the original relation, which the command may
+  // reference, to the new one. A relation with nothing to clean is kept as is.
+  private def cleanAttrMetadata(table: LogicalPlan): (LogicalPlan, AttributeMap[Attribute]) = {
+    val metadataAttrMapping = mutable.ArrayBuffer.empty[(Attribute, Attribute)]
+    val newTable = table.transform {
       case r: DataSourceV2Relation =>
-        r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata))
+        val newOutput = r.output.map(CharVarcharUtils.cleanAttrMetadata)
+        if (newOutput == r.output) {
+          r
+        } else {
+          val newRelation = r.copy(output = newOutput)
+          metadataAttrMapping ++= r.metadataOutput.zip(newRelation.metadataOutput)
+          newRelation
+        }
     }
+    (newTable, AttributeMap(metadataAttrMapping.toSeq))
   }
 
   private def resolveAssignments(p: LogicalPlan): LogicalPlan = {
