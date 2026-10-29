@@ -101,6 +101,14 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
     checkFilterPredicate(df, predicate, checkLogicalOperator)
   }
 
+  protected def checkIsNullPushdown(attr: Expression)(implicit df: DataFrame): Unit = {
+    if (df.schema.exists(_.dataType.isInstanceOf[StructType])) {
+      checkNoFilterPredicate(attr.isNull, noneSupported = true)
+    } else {
+      checkFilterPredicate(attr.isNull, PredicateLeaf.Operator.IS_NULL)
+    }
+  }
+
   test("filter pushdown - integer") {
     withNestedOrcDataFrame((1 to 4).map(i => Tuple1(Option(i)))) { case (inputDF, colName, _) =>
       implicit val df: DataFrame = inputDF
@@ -108,7 +116,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val intAttr = df(colName).expr
       assert(df(colName).expr.dataType === IntegerType)
 
-      checkFilterPredicate(intAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(intAttr)
 
       checkFilterPredicate(intAttr === 1, PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(intAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
@@ -135,7 +143,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val longAttr = df(colName).expr
       assert(df(colName).expr.dataType === LongType)
 
-      checkFilterPredicate(longAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(longAttr)
 
       checkFilterPredicate(longAttr === 1, PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(longAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
@@ -162,7 +170,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val floatAttr = df(colName).expr
       assert(df(colName).expr.dataType === FloatType)
 
-      checkFilterPredicate(floatAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(floatAttr)
 
       checkFilterPredicate(floatAttr === 1, PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(floatAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
@@ -189,7 +197,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val doubleAttr = df(colName).expr
       assert(df(colName).expr.dataType === DoubleType)
 
-      checkFilterPredicate(doubleAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(doubleAttr)
 
       checkFilterPredicate(doubleAttr === 1, PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(doubleAttr <=> 1, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
@@ -216,7 +224,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val strAttr = df(colName).expr
       assert(df(colName).expr.dataType === StringType)
 
-      checkFilterPredicate(strAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(strAttr)
 
       checkFilterPredicate(strAttr === "1", PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(strAttr <=> "1", PredicateLeaf.Operator.NULL_SAFE_EQUALS)
@@ -243,7 +251,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val booleanAttr = df(colName).expr
       assert(df(colName).expr.dataType === BooleanType)
 
-      checkFilterPredicate(booleanAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(booleanAttr)
 
       checkFilterPredicate(booleanAttr === true, PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(booleanAttr <=> true, PredicateLeaf.Operator.NULL_SAFE_EQUALS)
@@ -271,7 +279,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
       val decimalAttr = df(colName).expr
       assert(df(colName).expr.dataType === DecimalType(38, 18))
 
-      checkFilterPredicate(decimalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+      checkIsNullPushdown(decimalAttr)
 
       checkFilterPredicate(decimalAttr === BigDecimal.valueOf(1), PredicateLeaf.Operator.EQUALS)
       checkFilterPredicate(decimalAttr <=> BigDecimal.valueOf(1),
@@ -689,7 +697,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           val ymIntervalAttr = df(colName).expr
           assert(df(colName).expr.dataType === ymIntervalType)
 
-         checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+          checkIsNullPushdown(ymIntervalAttr)
 
           checkFilterPredicate(ymIntervalAttr === periods(1),
             PredicateLeaf.Operator.EQUALS)
@@ -737,7 +745,7 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
           val ymIntervalAttr = df(colName).expr
           assert(df(colName).expr.dataType === dtIntervalType)
 
-          checkFilterPredicate(ymIntervalAttr.isNull, PredicateLeaf.Operator.IS_NULL)
+          checkIsNullPushdown(ymIntervalAttr)
 
           checkFilterPredicate(ymIntervalAttr === durations(1),
             PredicateLeaf.Operator.EQUALS)
@@ -1070,5 +1078,34 @@ class OrcFilterSuite extends OrcTest with SharedSparkSession {
   test("SPARK-58814: CHAR/VARCHAR filters use the ORC string predicate type") {
     assert(OrcFilters.getPredicateLeafType(CharType(5)) === PredicateLeaf.Type.STRING)
     assert(OrcFilters.getPredicateLeafType(VarcharType(7)) === PredicateLeaf.Type.STRING)
+  }
+
+  test("SPARK-60362: do not push IS NULL on a field under a nullable struct") {
+    import org.apache.spark.sql.sources._
+    val nested = StructType(Seq(
+      StructField("s", StructType(Seq(
+        StructField("b", LongType, nullable = true)
+      )), nullable = true)
+    ))
+    val required = StructType(Seq(StructField("b", LongType, nullable = false)))
+    val topLevel = StructType(Seq(StructField("b", LongType, nullable = true)))
+    val requiredNested = StructType(Seq(
+      StructField("s", StructType(Seq(
+        StructField("b", LongType, nullable = true)
+      )), nullable = false)
+    ))
+
+    assert(OrcFilters.createFilter(nested, Seq(IsNull("s.b"))).isEmpty)
+    assert(OrcFilters.createFilter(nested, Seq(IsNotNull("s.b"))).isEmpty)
+    assert(OrcFilters.createFilter(nested, Seq(Or(IsNull("s.b"), EqualTo("s.b", 1L)))).isEmpty)
+    assert(OrcFilters.createFilter(nested, Seq(And(IsNull("s.b"), EqualTo("s.b", 1L))))
+      .get.asInstanceOf[SearchArgumentImpl].toOldString ==
+      "leaf-0 = (EQUALS s.b 1), expr = leaf-0")
+    assert(OrcFilters.createFilter(nested, Seq(EqualTo("s.b", 1L))).isDefined)
+    assert(OrcFilters.createFilter(nested, Seq(EqualNullSafe("s.b", 1L))).isDefined)
+    assert(OrcFilters.createFilter(required, Seq(IsNull("b"))).isDefined)
+    assert(OrcFilters.createFilter(topLevel, Seq(IsNull("b"))).isDefined)
+    assert(OrcFilters.createFilter(requiredNested, Seq(IsNull("s.b"))).isDefined)
+    assert(OrcFilters.createFilter(requiredNested, Seq(IsNotNull("s.b"))).isDefined)
   }
 }
