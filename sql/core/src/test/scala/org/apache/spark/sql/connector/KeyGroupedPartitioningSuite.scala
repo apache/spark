@@ -1172,6 +1172,8 @@ class KeyGroupedPartitioningSuite
         // projected onto the join keys. The shuffled side is laid out on that same projection, so
         // its `GroupPartitionsExec` would only re-state the keys its shuffle already has and must
         // not be built.
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m",
         SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_ALLOW_KEYS_SUBSET_OF_PARTITION_KEYS.key -> "true") {
@@ -1205,9 +1207,13 @@ class KeyGroupedPartitioningSuite
               if g.child.isInstanceOf[ShuffleQueryStageExec] ||
                 g.child.isInstanceOf[AQEShuffleReadExec] => g
         }.isEmpty, s"no GroupPartitionsExec should sit over a shuffle stage:\n$plan")
+        // Without the node over the stage the join converts to a shuffled hash join.
+        val shj = collect(plan) { case j: ShuffledHashJoinExec => j }
+        assert(shj.size == 1 && collect(plan) { case j: SortMergeJoinExec => j }.isEmpty,
+          s"the join should convert to a shuffled hash join:\n$plan")
         // The source side keeps its node: `items` holds two splits for key (1, 'aa'), and merging
         // them is work the join needs.
-        assert(collect(plan) { case _: GroupPartitionsExec => true }.nonEmpty,
+        assert(collect(shj.head.left) { case _: GroupPartitionsExec => true }.nonEmpty,
           s"the source side should keep its grouping node:\n$plan")
       }
     }
@@ -5477,14 +5483,14 @@ class KeyGroupedPartitioningSuite
     }
   }
 
-  test("SPARK-58996: partially clustered join keeps its replicate-side choice when the " +
+  test("SPARK-60618: partially clustered join keeps its replicate-side choice when the " +
       "alignment is the identity") {
     // The smaller side by statistics is replicated: `pc_small` holds five splits in 200 bytes,
-    // `pc_large` four splits in 224. Both are bucketed, whose transform derives no ordering, so
+    // `pc_large` three splits in 216. Both are bucketed, whose transform derives no ordering, so
     // the join's sort has to be added. The larger side ends up with one split per bucket, so the
     // alignment on it is the identity and the pass-through node has to stay: a re-run peels a
     // local sort only through a `GroupPartitionsExec`, and reading the statistics from the scans
-    // again is what keeps the choice. Without the node the counts (five against four) pick the
+    // again is what keeps the choice. Without the node the counts (five against three) pick the
     // other side.
     val smallColumns = Array(Column.create("id", LongType), Column.create("data", StringType))
     createTable("pc_small", smallColumns, Array(bucket(4, "id")))
@@ -5512,29 +5518,41 @@ class KeyGroupedPartitioningSuite
         SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
         SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "true",
         SQLConf.ADAPTIVE_MAX_SHUFFLE_HASH_JOIN_LOCAL_MAP_THRESHOLD.key -> "100m") {
-      val df = sql(
-        """
-          |SELECT /*+ MERGE(a, b) */ a.id AS k
-          |FROM testcat.ns.pc_small a JOIN testcat.ns.pc_large b ON a.id = b.id
-          |UNION ALL
-          |SELECT c.id AS k
-          |FROM testcat.ns.pc_np1 c JOIN testcat.ns.pc_np2 d ON c.id = d.id
-          |""".stripMargin)
-      checkAnswer(df, Seq(Row(1L), Row(2L), Row(3L), Row(7L)))
+      def check(
+          joinType: String,
+          expectedRows: Seq[Row],
+          expectedFlags: (Seq[Boolean], Seq[Boolean])): Unit = {
+        val df = sql(
+          s"""
+             |SELECT /*+ MERGE(a, b) */ a.id AS k
+             |FROM testcat.ns.pc_small a $joinType testcat.ns.pc_large b ON a.id = b.id
+             |UNION ALL
+             |SELECT c.id AS k
+             |FROM testcat.ns.pc_np1 c JOIN testcat.ns.pc_np2 d ON c.id = d.id
+             |""".stripMargin)
+        checkAnswer(df, expectedRows)
 
-      assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
-        "the storage-partitioned join must stay shuffle-free")
-      val join = collect(df.queryExecution.executedPlan) {
-        case j: SortMergeJoinExec => j
-      }.head
-      // The choice is read off `distributePartitions`: the replicated side answers false, the
-      // spread side true.
-      def flags(side: SparkPlan): Seq[Boolean] =
-        collectAllGroupPartitions(side).map(_.distributePartitions)
-      assert(flags(join.left) === Seq(false),
-        "the side that is smaller by statistics is replicated, so it does not distribute")
-      assert(flags(join.right) === Seq(true),
-        "the larger side spreads, so it keeps its node")
+        assert(collectShuffles(df.queryExecution.executedPlan).isEmpty,
+          s"$joinType: the storage-partitioned join must stay shuffle-free")
+        val join = collect(df.queryExecution.executedPlan) {
+          case j: SortMergeJoinExec => j
+        }.head
+        // The choice is read off `distributePartitions`: the replicated side answers false, the
+        // spread side true.
+        def flags(side: SparkPlan): Seq[Boolean] =
+          collectAllGroupPartitions(side).map(_.distributePartitions)
+        assert(flags(join.left) === expectedFlags._1,
+          s"$joinType: left side distributePartitions")
+        assert(flags(join.right) === expectedFlags._2,
+          s"$joinType: right side distributePartitions")
+      }
+
+      check("JOIN", Seq(Row(1L), Row(2L), Row(3L), Row(7L)),
+        (Seq(false), Seq(true)))
+      // Here the join type declines the side the statistics pick, so the pairing is never
+      // applied. A re-run has to decline it again instead of picking the side it may replicate.
+      check("LEFT JOIN", Seq(Row(1L), Row(2L), Row(3L), Row(5L), Row(9L), Row(7L)),
+        (Seq(false), Seq(false)))
     }
   }
 
@@ -10897,8 +10915,7 @@ class KeyGroupedPartitioningSuite
           val secondJoin = collect(plan) { case j: SortMergeJoinExec => j }.head
           assert(collectAllShuffles(plan).size == 1,
             s"only the first join shuffles:\n$plan")
-          val marked = collect(secondJoin.left) { case p: SparkPlan => p.outputPartitioning }
-            .flatMap(PartitioningCollection.representativeOf)
+          val marked = PartitioningCollection.representativeOf(secondJoin.left.outputPartitioning)
             .filter(_.mayContainUnknownPartitionKeys)
           assert(marked.exists(_.numPartitions == 3),
             s"the second join's marked side keeps its claim over its three keys:\n$plan")

@@ -1079,6 +1079,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
 
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case smj: SortMergeJoinExec =>
+          assert(groupPartitionsNodes(smj).size == 1, "the pruning side is regrouped")
           val left = plannedPartitioning(smj.left).asInstanceOf[KeyedPartitioning]
           val right = plannedPartitioning(smj.right).asInstanceOf[KeyedPartitioning]
           assert(left.expressions === Seq(bucket(4, exprB), bucket(8, exprC)))
@@ -1098,6 +1099,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case smj: SortMergeJoinExec =>
+          assert(groupPartitionsNodes(smj).size == 1, "the pruning side is regrouped")
           val left = plannedPartitioning(smj.left).asInstanceOf[PartitioningCollection]
           val right = plannedPartitioning(smj.right).asInstanceOf[KeyedPartitioning]
           assert(left.partitionings.length == 2)
@@ -1128,6 +1130,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
         exprA :: exprB :: exprC :: Nil, exprA :: exprC :: exprB :: Nil, Inner, None, plan1, plan2)
       applyEnsureRequirementsWithSubsetKeys(smjExec) match {
         case smj: SortMergeJoinExec =>
+          assert(groupPartitionsNodes(smj).size == 1, "the pruning side is regrouped")
           val left = plannedPartitioning(smj.left).asInstanceOf[PartitioningCollection]
           val right = plannedPartitioning(smj.right).asInstanceOf[PartitioningCollection]
           assert(left.partitionings.length == 2)
@@ -1753,9 +1756,9 @@ class EnsureRequirementsSuite extends SharedSparkSession {
       // The fine pair's members are each their child's own layout, so no projection is reported and
       // the nodes only align to the merged keys. Taking the first agreeing pair instead groups both
       // sides on `a` alone, i.e. positions `Some(Seq(0))`.
-      // A side whose alignment is the pass-through keeps its own layout and gets no node, so the
-      // pair shows up as unprojected nodes only.
-      assert(groupPartitionsNodes(planned).forall(_.joinKeyPositions.isEmpty),
+      // The pass-through side keeps its own layout and gets no node, so the pair shows up as the
+      // one unprojected node the other side gets.
+      assert(groupPartitionsNodes(planned).map(_.joinKeyPositions) === Seq(None),
         "the join must be planned on the pair that keeps the most partitions")
     }
   }
@@ -2964,7 +2967,7 @@ class EnsureRequirementsSuite extends SharedSparkSession {
               planned.treeString)
           // The marked side already holds the three merged keys and gets no node; the subset side
           // is padded to them.
-          assert(groupPartitionsNodes(planned).map(_.expectedKeyCount).forall(_ == Some(3)),
+          assert(groupPartitionsNodes(planned).map(_.expectedKeyCount) === Seq(Some(3)),
             s"$joinType: the subset side is pushed the marked side's three keys:\n" +
               planned.treeString)
           assert(planned.children.map(_.outputPartitioning.numPartitions) === Seq(3, 3),
