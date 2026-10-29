@@ -190,21 +190,24 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
 case class ColumnarStreamOffset(json: String) extends Offset
 
 /**
- * The micro-batch stream of a [[ColumnarDataSource]]. It supports admission control only so that
- * the reader gets the offset that each micro-batch starts after, the end of the last one, for
- * every trigger: its default read limit reads all the available data. With
- * `Trigger.AvailableNow`, Spark runs micro-batches up to the latest offset that the first
- * micro-batch got, rather than wrapping the stream in one that asks for the latest offset from
- * the initial offset.
+ * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the offset that each
+ * micro-batch starts after, the end of the last one, for every trigger, and the limit on the data
+ * of a micro-batch, its default read limit, all the available data unless it limits it. With
+ * `Trigger.AvailableNow`, Spark runs micro-batches up to the latest offset without a limit that
+ * the first micro-batch got, rather than wrapping the stream in one that asks for the latest
+ * offset from the initial offset: in one micro-batch, or within the limit in several.
  */
 class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
   extends MicroBatchStream with SupportsTriggerAvailableNow {
 
-  // The offset that the reader returned last, which the progress of the query reports.
+  // The latest offset without a limit that the reader returned last, which the progress of the
+  // query reports.
   @volatile private var lastLatestOffset: Offset = _
+  // The limit on the data of each micro-batch, asked once.
+  private lazy val readLimit = reader.defaultReadLimit()
   // Whether the trigger is Trigger.AvailableNow.
   @volatile private var availableNow = false
-  // The end of the run with Trigger.AvailableNow: the first latest offset asked.
+  // The end of the run with Trigger.AvailableNow: the first latest offset without a limit asked.
   @volatile private var availableNowEnd: Offset = _
   // Spark asks for the initial offset for the start of the first latest offset, and again to plan
   // the first micro-batch, which both get the same offset.
@@ -217,17 +220,26 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader)
       "latestOffset(Offset, ReadLimit) should be called instead of latestOffset().")
   }
 
+  override def getDefaultReadLimit: ReadLimit = readLimit
+
   override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
-    val latest = if (availableNow && availableNowEnd != null) {
-      availableNowEnd
+    def ask(limit: ReadLimit, end: Option[Offset]): Offset =
+      ColumnarStreamOffset(reader.latestOffset(start.json(), limit, end.map(_.json())))
+    val allAvailable = ReadLimit.allAvailable()
+    if (availableNow && availableNowEnd == null) {
+      availableNowEnd = ask(allAvailable, None)
+    }
+    if (limit == allAvailable) {
+      val latest = if (availableNow) availableNowEnd else ask(allAvailable, None)
+      lastLatestOffset = latest
+      latest
+    } else if (availableNow) {
+      lastLatestOffset = availableNowEnd
+      ask(limit, Some(availableNowEnd))
     } else {
-      ColumnarStreamOffset(reader.latestOffset(start.json()))
+      lastLatestOffset = ask(allAvailable, None)
+      ask(limit, None)
     }
-    if (availableNow) {
-      availableNowEnd = latest
-    }
-    lastLatestOffset = latest
-    latest
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {

@@ -112,7 +112,15 @@ Spark calls the functions of the table as follows:
   plans the partitions with `stream_partitions`, which also returns the state of the stream reader,
   and calls `read` on the executors. Offsets are defined by the library, as compact JSON on a
   single line: Spark stores each offset as a line of the offset log of the checkpoint, and rejects
-  an offset that is not valid JSON or contains a line break, such as pretty-printed JSON.
+  an offset that is not valid JSON or contains a line break, such as pretty-printed JSON. A data
+  source with the capability `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for
+  example with an option for a maximum number of rows: Spark asks for the limit once with
+  `default_read_limit`, and passes it to each `latest_offset` in its `SparkDsLatestOffsetInfo`,
+  which then returns the end of the data of the next micro-batch within the limit. With
+  `Trigger.AvailableNow`, Spark first asks for the latest offset without a limit, and passes it as
+  the end that the limited latest offsets must not go beyond, so that the run reads the data that
+  was available when it started in micro-batches within the limit. `Trigger.Once` ignores the
+  limit.
 - **Writes**: on the driver, right before the tasks of the write (or of a micro-batch) start, Spark
   creates a writer with `create_writer`, which gets a `SparkDsWriteInfo` with the mode of the write,
   `SPARK_DS_WRITE_APPEND` or `SPARK_DS_WRITE_TRUNCATE`, and the ID of the query of a streaming
@@ -151,6 +159,7 @@ data source must not declare a capability whose functions are `NULL`:
 | All | `create`, `close` | `last_error`, `schema` |
 | `SPARK_DS_BATCH_READ` | `create_reader`, `partitions`, `read`, `close_reader` | `push_limit`, `prune_columns` |
 | `SPARK_DS_MICRO_BATCH_READ` | `create_stream_reader`, `initial_offset`, `latest_offset`, `stream_partitions`, `read`, `close_stream_reader` | `commit_offset` |
+| `SPARK_DS_ADMISSION_CONTROL`, with `SPARK_DS_MICRO_BATCH_READ` | `default_read_limit` | |
 | `SPARK_DS_BATCH_WRITE`, `SPARK_DS_STREAMING_WRITE` | `create_writer`, `commit`, `abort`, `close_writer`, `create_data_writer`, `write`, `commit_data_writer`, `abort_data_writer`, `close_data_writer` | |
 
 `SPARK_DS_BATCH_TRUNCATE` declares that a data source supports `SPARK_DS_WRITE_TRUNCATE` in batch
@@ -209,7 +218,6 @@ later as functions or fields appended to the structs of the interface:
   hint. Adaptive query execution can still broadcast it at run time, from the size of a shuffle of
   the scan;
 - custom metrics, shown in the Spark UI;
-- admission control for streaming reads, such as a maximum number of rows for each micro-batch;
 - continuous processing (`Trigger.Continuous`): a continuous query that reads from or writes to a
   native data source fails when it starts;
 - the pushdown of aggregates and of top-N queries (`ORDER BY` with `LIMIT`), and reporting the

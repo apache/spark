@@ -29,6 +29,7 @@ import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
+import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
@@ -377,7 +378,7 @@ class TestRangeStreamReader(end: Long, schema: StructType, table: String)
 
   override def initialOffset(): String = "{\"offset\":0}"
 
-  override def latestOffset(start: String): String = {
+  override def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String = {
     TestRangeStreamReader.starts.compute(table, (_, old) => Option(old).getOrElse(Nil) :+ start)
     s"""{"offset":$end}"""
   }

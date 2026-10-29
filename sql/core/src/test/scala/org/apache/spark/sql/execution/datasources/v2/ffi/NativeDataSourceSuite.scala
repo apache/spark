@@ -77,6 +77,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     compile("test_native_datasource_ne", "-DNO_LAST_ERROR", "-DNAME_PREFIX=\"ne_\"")
   private lazy val smallTableLibrary = compile("test_native_datasource_small",
     "-DTABLE_SIZE=offsetof(SparkDsLibrary,read)", "-DNAME_PREFIX=\"small_\"")
+  // A library built against the header before default_read_limit, whose table ends before it.
+  private lazy val noReadLimitLibrary = compile("test_native_datasource_nrl",
+    "-DTABLE_SIZE=offsetof(SparkDsLibrary,default_read_limit)", "-DNAME_PREFIX=\"nrl_\"")
   private lazy val failingInitLibrary =
     compile("test_native_datasource_if", "-DINIT_FAILURE=1", "-DNAME_PREFIX=\"if_\"")
   private lazy val noTableLibrary =
@@ -879,6 +882,65 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val written = out.listFiles().filter(_.getName.startsWith("part-"))
       .flatMap(file => Files.readAllLines(file.toPath).asScala)
     assert(written.map(_.toLong).sorted.toSeq == (0L until 10L))
+  }
+
+  nativeTest("limit the rows of each micro-batch with admission control") {
+    val session = newSession(defaultPackage)
+    // Runs the query until it read the rows [0, 12), all available from the start, and returns
+    // the number of rows of each micro-batch and the latest offset that the last one reported.
+    def run(availableNow: Boolean, options: (String, String)*): (Seq[Long], String) = {
+      val writer = session.readStream.format("native_counter").option("max_offset", "12")
+        .options(options.toMap).load()
+        .writeStream
+        .format("noop")
+        .option("checkpointLocation", Utils.createTempDir().getPath)
+      val query = (if (availableNow) writer.trigger(Trigger.AvailableNow()) else writer).start()
+      try {
+        if (availableNow) query.awaitTermination() else query.processAllAvailable()
+        val batches = query.recentProgress.filter(_.numInputRows > 0).toSeq
+        (batches.map(_.numInputRows), batches.last.sources.head.latestOffset)
+      } finally {
+        query.stop()
+      }
+    }
+    // Each micro-batch reads at most 5 rows, while the progress reports the latest offset
+    // without the limit.
+    assert(run(availableNow = false, "max_rows_per_trigger" -> "5") ==
+      ((Seq(5L, 5L, 2L), """{"offset":12}""")))
+    // A run of Trigger.AvailableNow reads the rows available when it starts, within the limit.
+    assert(run(availableNow = true, "max_rows_per_trigger" -> "5")._1 == Seq(5L, 5L, 2L))
+    // Without the capability, Spark asks for all the available rows.
+    assert(run(availableNow = false, "max_rows_per_trigger" -> "5",
+      "capabilities" -> NativeLibrary.MICRO_BATCH_READ.toString)._1 == Seq(12L))
+  }
+
+  nativeTest("reject the read limits that a micro-batch cannot have") {
+    def check(format: String, options: Map[String, String], msg: String): Unit = {
+      val packages = if (format.startsWith("nrl_")) {
+        createPackage(noReadLimitLibrary, dataSources("nrl_"))
+      } else {
+        defaultPackage
+      }
+      val e = intercept[Exception] {
+        val query = newSession(packages).readStream.format(format).options(options).load()
+          .writeStream
+          .format("noop")
+          .option("checkpointLocation", Utils.createTempDir().getPath)
+          .start()
+        try query.processAllAvailable() finally query.stop()
+      }
+      checkError(
+        exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
+        condition = "NATIVE_DATA_SOURCE_ERROR",
+        parameters = Map("action" -> "plan a scan of", "name" -> format, "msg" -> msg))
+    }
+    check("native_counter", Map("bad_read_limit" -> "kind"),
+      "default_read_limit returned the unknown kind of read limit 7.")
+    check("native_counter", Map("bad_read_limit" -> "rows"),
+      "default_read_limit returned a maximum of 0 rows, but a micro-batch reads at least 1 row.")
+    // A data source must not declare a capability whose functions are NULL.
+    check("nrl_native_counter", Map("max_rows_per_trigger" -> "5"),
+      "The library does not implement default_read_limit.")
   }
 
   nativeTest("reject offsets that are not JSON on a single line") {

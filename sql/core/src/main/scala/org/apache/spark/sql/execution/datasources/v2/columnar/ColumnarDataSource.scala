@@ -21,6 +21,7 @@ import java.util
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
@@ -115,12 +116,22 @@ trait ColumnarStreamReader extends Serializable {
   def initialOffset(): String
 
   /**
-   * Returns the latest offset available.
+   * Returns the limit on the data of each micro-batch, which Spark asks for once, when the query
+   * starts: `ReadLimit.allAvailable()` by default, or a `ReadLimit.maxRows`.
+   */
+  def defaultReadLimit(): ReadLimit = ReadLimit.allAvailable()
+
+  /**
+   * Returns the latest offset available, within a limit.
    *
    * @param start the offset that the next micro-batch starts after: the end of the last
    *              micro-batch, or the initial offset before the first one
+   * @param limit `ReadLimit.allAvailable()`, or the default read limit: the latest offset is then
+   *              the end of the data of the next micro-batch
+   * @param end with `Trigger.AvailableNow` and a limit, the offset that the run reads up to, which
+   *            the latest offset does not go beyond
    */
-  def latestOffset(start: String): String
+  def latestOffset(start: String, limit: ReadLimit, end: Option[String]): String
 
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]

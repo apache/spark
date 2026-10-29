@@ -49,6 +49,9 @@
 //                   creates that file. With the option "checkpoint_path", creating the stream
 //                   reader writes its checkpoint location to that file, and with "starts_path",
 //                   each call to latest_offset appends its start offset to that file, as a line.
+//                   With the option "max_rows_per_trigger", it declares the capability
+//                   SPARK_DS_ADMISSION_CONTROL, and its default read limit is that many rows, or
+//                   with "bad_read_limit", an unknown "kind" of limit or a maximum of 0 "rows".
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -912,7 +915,11 @@ uint64_t capabilitiesOf(const DataSource& source) {
   if (!declared.empty()) return std::stoull(declared);
   if (source.name == name("native_range")) return SPARK_DS_BATCH_READ;
 #ifndef READ_ONLY
-  if (source.name == name("native_counter")) return SPARK_DS_MICRO_BATCH_READ;
+  if (source.name == name("native_counter")) {
+    bool limited = !get(source.options, "max_rows_per_trigger", "").empty() ||
+                   !get(source.options, "bad_read_limit", "").empty();
+    return SPARK_DS_MICRO_BATCH_READ | (limited ? SPARK_DS_ADMISSION_CONTROL : 0);
+  }
   if (source.name == name("native_sink")) {
     return SPARK_DS_BATCH_WRITE | SPARK_DS_STREAMING_WRITE | SPARK_DS_BATCH_TRUNCATE |
            SPARK_DS_STREAMING_TRUNCATE;
@@ -1023,7 +1030,8 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
-         {"commit_path", "bad_offset", "closed_path", "starts_path", "states"}) {
+         {"commit_path", "bad_offset", "closed_path", "starts_path", "states",
+          "max_rows_per_trigger", "bad_read_limit"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1103,6 +1111,16 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
     auto start = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     int64_t latest =
         std::min(getLong(state, "max_offset", 10), start + getLong(state, "step", 10));
+    // Within the limit, and up to the end of a run of Trigger.AvailableNow.
+    if (info->limit_kind == SPARK_DS_READ_MAX_ROWS) {
+      latest = std::min(latest, start + info->max_rows);
+    } else if (info->limit_kind != SPARK_DS_READ_ALL_AVAILABLE) {
+      throw std::runtime_error("unknown kind of read limit " + std::to_string(info->limit_kind));
+    }
+    if (info->end != nullptr) {
+      latest = std::min(
+          latest, static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number));
+    }
     std::string bad_offset = get(state, "bad_offset", "");
     if (bad_offset == "none") return;
     if (bad_offset == "multiline") {
@@ -1399,6 +1417,23 @@ int abortDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info) {
   });
 }
 
+int defaultReadLimit(void* handle, SparkDsReadLimit* limit) {
+  return guarded([&] {
+    checkSize("SparkDsReadLimit", limit->size, sizeof(SparkDsReadLimit));
+    const Options& state = fromHandle<Reader>(handle)->state;
+    std::string bad = get(state, "bad_read_limit", "");
+    if (bad == "kind") {
+      limit->kind = 7;
+    } else if (bad == "rows") {
+      limit->kind = SPARK_DS_READ_MAX_ROWS;
+      limit->max_rows = 0;
+    } else if (!get(state, "max_rows_per_trigger", "").empty()) {
+      limit->kind = SPARK_DS_READ_MAX_ROWS;
+      limit->max_rows = getLong(state, "max_rows_per_trigger", 0);
+    }
+  });
+}
+
 void closeDataWriter(void* handle) {
   if (usedAfterClose(handle)) return;
   std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
@@ -1449,6 +1484,7 @@ void closeDataWriter(void* handle) {
   table.commit_data_writer = commitDataWriter;
   table.abort_data_writer = abortDataWriter;
   table.close_data_writer = closeDataWriter;
+  table.default_read_limit = defaultReadLimit;
 #endif
   return table;
 }
