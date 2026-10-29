@@ -141,7 +141,10 @@ function reports an error by returning a non-zero value, with the message return
 `last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
 must not cross the interface. Each handle that a `create` function returns is released exactly
 once, by the `close` function of its kind. The close functions cannot fail, and they can run after
-the query, so do the work that can fail, such as flushing data, in `commit`. Strings are UTF-8.
+the query, so do the work that can fail, such as flushing data, in `commit`. After a function on
+a handle fails, Spark only closes the handle, except that it aborts a writer or a data writer whose
+commit or write failed, and it never aborts one whose commit succeeded: the header lists the order
+of the calls that a library can rely on. Strings are UTF-8.
 
 A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
 data source must not declare a capability whose functions are `NULL`:

@@ -100,6 +100,19 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     session
   }
 
+  // The test libraries record the calls that the order of the calls of the header rules out.
+  override def afterEach(): Unit = {
+    try {
+      if (orderViolations.exists()) {
+        val violations = Files.readString(orderViolations.toPath)
+        orderViolations.delete()
+        fail(s"The test library got calls that the header rules out:\n$violations")
+      }
+    } finally {
+      super.afterEach()
+    }
+  }
+
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
     try f finally SparkSession.setActiveSession(spark)
@@ -1185,12 +1198,23 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         message.contains("a message from native code") &&
         message.contains(System.mapLibraryName("test_native_datasource"))
     })
+    // The library does not log a warning when Spark logs errors only.
+    val errorAppender = new LogAppender("native data source error logs")
+    withLogAppender(errorAppender, loggerNames = Seq(classOf[NativeLibrary].getName),
+        level = Some(org.apache.logging.log4j.Level.ERROR)) {
+      range(session, "log" -> "a message that Spark does not log")
+    }
+    assert(!errorAppender.loggingEvents.exists(
+      _.getMessage.getFormattedMessage.contains("a message that Spark does not log")))
 
     // is_log_enabled follows the level of the log of Spark: the library gets whether Spark logs
     // each level, from error to trace.
     val levels = new File(Utils.createTempDir(), "levels")
     Seq(
+      org.apache.logging.log4j.Level.TRACE -> "1,1,1,1,1",
       org.apache.logging.log4j.Level.DEBUG -> "1,1,1,1,0",
+      org.apache.logging.log4j.Level.INFO -> "1,1,1,0,0",
+      org.apache.logging.log4j.Level.WARN -> "1,1,0,0,0",
       org.apache.logging.log4j.Level.ERROR -> "1,0,0,0,0").foreach { case (level, expected) =>
       withLogAppender(new LogAppender("native data source log levels"),
           loggerNames = Seq(classOf[NativeLibrary].getName), level = Some(level)) {

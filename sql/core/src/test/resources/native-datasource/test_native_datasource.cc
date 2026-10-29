@@ -79,6 +79,9 @@
 //                   the functions after it.
 //   INIT_FAILURE    1 to make spark_ds_init fail, after logging why, 2 to make it succeed without
 //                   a table.
+//   ORDER_VIOLATIONS_PATH
+//                   A file to which the calls that the order of the calls of the header rules out
+//                   are appended, as lines, which the suite checks after each test.
 //   NO_INIT         Leaves out spark_ds_init, which makes the library invalid.
 
 #include "spark_datasource.h"
@@ -755,6 +758,28 @@ void writeFile(const std::string& path, const std::string& content) {
   std::fclose(file);
 }
 
+// Records a call that the order of the calls of the header rules out.
+std::mutex order_violations_lock;
+void orderViolation(const std::string& call) {
+#ifdef ORDER_VIOLATIONS_PATH
+  std::lock_guard<std::mutex> guard(order_violations_lock);
+  FILE* file = std::fopen(ORDER_VIOLATIONS_PATH, "a");
+  if (file == nullptr) return;
+  std::fputs((call + "\n").c_str(), file);
+  std::fclose(file);
+#else
+  (void)call;
+#endif
+}
+
+// Runs a function on a handle with `guarded`, and records in `failed` whether it failed.
+template <typename F>
+int tracked(bool* failed, F&& f) {
+  int status = guarded(f);
+  if (status != 0) *failed = true;
+  return status;
+}
+
 void makeDirs(const std::string& path) {
   for (size_t pos = path.find('/', 1); pos != std::string::npos; pos = path.find('/', pos + 1)) {
     mkdir(path.substr(0, pos).c_str(), 0755);
@@ -778,6 +803,11 @@ void recordTask(const Options& options, const SparkDsTaskContext* task) {
 // The driver-side reader of native_range and native_counter.
 struct Reader {
   Options state;  // Serialized to the executors.
+  // Whether a function failed, and which functions of a batch reader were called, for the order of
+  // the calls.
+  bool failed = false;
+  bool pruned = false;
+  bool planned = false;
 };
 
 // Reads the ids [lo, hi) of the columns in the state, in batches.
@@ -844,6 +874,10 @@ struct Writer {
   // The file that closeWriter creates, so that the tests can check that the writer of a committed
   // or aborted write is closed: _CLOSED for a batch write, _CLOSED_<epoch> for a streaming one.
   std::string closed_marker;
+  // The calls of commit and abort, and whether commit succeeded, for the order of the calls.
+  bool commit_called = false;
+  bool abort_called = false;
+  bool committed = false;
 };
 
 [[maybe_unused]] std::string closedMarker(int64_t epoch_id) {
@@ -857,7 +891,19 @@ struct DataWriter {
   Options state;
   bool committed;
   ArrowSchema schema;  // The schema of the data, moved from create_data_writer.
+  // Whether write or commit_data_writer failed, and the calls of commit_data_writer and
+  // abort_data_writer, for the order of the calls.
+  bool failed = false;
+  bool commit_called = false;
+  bool abort_called = false;
 };
+
+// Records a write or a commit of a data writer that the order of the calls rules out.
+[[maybe_unused]] void checkWriteOrCommit(const DataWriter* writer, const std::string& function) {
+  if (writer->failed) orderViolation(function + " after a failed call");
+  if (writer->commit_called) orderViolation(function + " after commit_data_writer");
+  if (writer->abort_called) orderViolation(function + " after abort_data_writer");
+}
 
 // The data writers that Spark closed, with the path of their write, so that using one of them
 // afterwards, which the header forbids, is recorded in the file _DATA_WRITER_USED_AFTER_CLOSE
@@ -1043,8 +1089,9 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
 }
 
 int pushLimit(void* handle, int32_t limit, bool* applied) {
-  return guarded([&] {
-    auto* reader = fromHandle<Reader>(handle);
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("push_limit after a failed call");
+  return tracked(&reader->failed, [&] {
     // Spark calls push_limit at most once.
     if (reader->state.count("limit") > 0) throw std::runtime_error("pushLimit was called twice");
     reader->state["limit"] = std::to_string(limit);
@@ -1053,10 +1100,14 @@ int pushLimit(void* handle, int32_t limit, bool* applied) {
 }
 
 int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* pruned) {
-  return guarded([&] {
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("prune_columns after a failed call");
+  if (reader->pruned) orderViolation("prune_columns called twice");
+  reader->pruned = true;
+  return tracked(&reader->failed, [&] {
     auto names = toStrings(columns, count);
     for (const auto& column : names) findColumn(column);
-    fromHandle<Reader>(handle)->state["columns"] = join(names);
+    reader->state["columns"] = join(names);
     *pruned = true;
   });
 }
@@ -1064,8 +1115,11 @@ int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* 
 #endif  // READ_ONLY
 
 int planPartitions(void* handle, SparkDsSink add_partition, SparkDsSink set_state, void* sink) {
-  return guarded([&] {
-    auto* reader = fromHandle<Reader>(handle);
+  auto* reader = fromHandle<Reader>(handle);
+  if (reader->failed) orderViolation("partitions after a failed call");
+  if (reader->planned) orderViolation("partitions called twice");
+  reader->planned = true;
+  return tracked(&reader->failed, [&] {
     maybeFail(reader->state, "plan");
     int64_t lo = getLong(reader->state, "lo", 0);
     int64_t hi = getLong(reader->state, "hi", 0);
@@ -1228,8 +1282,11 @@ int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInf
 
 int commitWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
                 const int64_t* message_lengths, int64_t num_messages) {
+  auto* writer = fromHandle<Writer>(handle);
+  if (writer->commit_called) orderViolation("commit called twice");
+  if (writer->abort_called) orderViolation("commit after abort");
+  writer->commit_called = true;
   return guarded([&] {
-    auto* writer = fromHandle<Writer>(handle);
     std::string path = writer->state["path"];
     maybeFail(writer->state, "commit");
     bool has_null = false;
@@ -1245,6 +1302,7 @@ int commitWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
     writeFile(path + (epoch_id < 0 ? "/_SUCCESS" : "/_EPOCH_" + std::to_string(epoch_id)),
               std::to_string(temp_files.size()));
     writer->closed_marker = closedMarker(epoch_id);
+    writer->committed = true;
   });
 }
 
@@ -1252,8 +1310,11 @@ int commitWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
 // one, with the number of tasks that did not commit, whose messages are NULL.
 int abortWrite(void* handle, int64_t epoch_id, const uint8_t* const* messages,
                const int64_t* message_lengths, int64_t num_messages) {
+  auto* writer = fromHandle<Writer>(handle);
+  if (writer->abort_called) orderViolation("abort called twice");
+  if (writer->committed) orderViolation("abort after a successful commit");
+  writer->abort_called = true;
   return guarded([&] {
-    auto* writer = fromHandle<Writer>(handle);
     writer->closed_marker = closedMarker(epoch_id);
     bool has_null = false;
     for (const auto& temp_file :
@@ -1322,8 +1383,9 @@ int createDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo
 }
 
 int writeBatch(void* handle, struct ArrowArray* array) {
-  return guarded([&] {
-    auto* writer = fromHandle<DataWriter>(handle);
+  auto* writer = fromHandle<DataWriter>(handle);
+  checkWriteOrCommit(writer, "write");
+  return tracked(&writer->failed, [&] {
     // The batch is released here, so Spark does not release it after the call.
     std::unique_ptr<ArrowArray, void (*)(ArrowArray*)> array_owner(
         array, [](ArrowArray* a) { a->release(a); });
@@ -1348,8 +1410,10 @@ int writeBatch(void* handle, struct ArrowArray* array) {
 
 int commitDataWriter(void* handle, SparkDsSink set_message, void* sink) {
   if (usedAfterClose(handle)) return 0;
-  return guarded([&] {
-    auto* writer = fromHandle<DataWriter>(handle);
+  auto* writer = fromHandle<DataWriter>(handle);
+  checkWriteOrCommit(writer, "commit_data_writer");
+  writer->commit_called = true;
+  return tracked(&writer->failed, [&] {
     // If the commit fails, Spark aborts the data writer.
     maybeFail(writer->state, "commitDataWriter");
     // With the option "commit_messages", the message is passed that many times.
@@ -1363,10 +1427,13 @@ int commitDataWriter(void* handle, SparkDsSink set_message, void* sink) {
 
 int abortDataWriter(void* handle) {
   if (usedAfterClose(handle)) return 0;
+  auto* writer = fromHandle<DataWriter>(handle);
+  if (writer->abort_called) orderViolation("abort_data_writer called twice");
+  writer->abort_called = true;
   return guarded([&] {
-    auto* writer = fromHandle<DataWriter>(handle);
     // Spark does not abort a data writer that committed: records it if it does.
     if (writer->committed) {
+      orderViolation("abort_data_writer after a successful commit");
       writeFile(writer->state["path"] + "/_ABORTED_COMMITTED_DATA_WRITER", "");
       return;
     }

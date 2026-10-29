@@ -119,10 +119,10 @@
  *   source handle right after creating it.
  * - Order of the calls. After a function on a handle fails, Spark calls no other function on the
  *   handle than its close function, except that it aborts a writer whose commit failed and a data
- *   writer whose write or commit failed. It calls each function of a batch reader at most once. It
- *   calls commit and abort at most once each for a writer, and commit_data_writer and
- *   abort_data_writer at most once each for a data writer, with all the calls to write before
- *   them.
+ *   writer whose write or commit failed. It does not abort a writer or a data writer whose commit
+ *   succeeded. It calls each function of a batch reader at most once. It calls commit and abort at
+ *   most once each for a writer, and commit_data_writer and abort_data_writer at most once each
+ *   for a data writer, with all the calls to write before them.
  * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
  *   names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
@@ -291,14 +291,19 @@ typedef struct SparkDsHost {
   const char* spark_version;
   /*
    * Logs a message, a NUL-terminated UTF-8 string, at one of the SPARK_DS_LOG_* levels: in the log
-   * of the driver or of the executor, with the path of the library.
+   * of the driver or of the executor, with the path of the library. Another level is treated as
+   * SPARK_DS_LOG_INFO.
    */
   void (*log)(int32_t level, const char* message);
   /*
-   * Returns whether log writes the messages of one of the SPARK_DS_LOG_* levels, so that the
-   * library only formats the messages that Spark writes, and gets those that Spark writes at the
-   * levels that a library would not log by default, such as debug. It follows the configuration of
-   * the log of Spark, which can change while Spark runs.
+   * Returns whether the logger of Spark that log writes to is enabled for one of the
+   * SPARK_DS_LOG_* levels, another level being treated as SPARK_DS_LOG_INFO, so that the library
+   * only formats the messages that Spark may write, and gets those that Spark writes at the levels
+   * that a library would not log by default, such as debug. The configuration of the log can still
+   * drop a message of an enabled level, for example with a filter. It follows the level of the
+   * logger, which can change while Spark runs, but each call is a call into the JVM: a library
+   * may keep the answer for a while, and ask again from time to time. It is never NULL in a struct
+   * whose size holds it.
    */
   bool (*is_log_enabled)(int32_t level);
 } SparkDsHost;

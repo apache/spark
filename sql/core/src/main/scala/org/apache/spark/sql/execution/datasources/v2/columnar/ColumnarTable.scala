@@ -96,6 +96,8 @@ class ColumnarScanBuilder(
   // The limit passed to the reader, and whether the reader applies it.
   private var limitResult: Option[(Int, Boolean)] = None
   private var readSchema: StructType = schema
+  // Whether the columns were pruned.
+  private var pruned = false
 
   private def batchPlanner: ColumnarBatchPlanner = {
     if (planner == null) {
@@ -126,8 +128,16 @@ class ColumnarScanBuilder(
     // columns it reads.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
-    if (required.length < schema.length && batchPlanner.pruneColumns(required)) {
-      readSchema = required
+    if (!pruned) {
+      // The reader is asked at most once, as the header promises, though Spark prunes the columns
+      // of a scan builder once anyway.
+      pruned = true
+      if (required.length < schema.length && batchPlanner.pruneColumns(required)) {
+        readSchema = required
+      }
+    } else if (!required.fieldNames.forall(readSchema.fieldNames.contains)) {
+      throw SparkException.internalError(
+        "The columns of a scan were pruned again, with columns that it does not read.")
     }
   }
 

@@ -37,6 +37,12 @@ object NativeDataSourceTestUtils {
 
   private val libraries = new ConcurrentHashMap[String, File]()
 
+  /**
+   * The file to which the test libraries append the calls that the order of the calls of the
+   * header rules out, one per line. It does not exist as long as there are none.
+   */
+  lazy val orderViolations: File = new File(buildDir, "order_violations")
+
   // The executors store the files of the sessions that are not isolated in the same directory, so
   // each package has its own name.
   private val packageCount = new AtomicInteger()
@@ -75,7 +81,9 @@ object NativeDataSourceTestUtils {
     val library = new File(buildDir, System.mapLibraryName(name))
     // The symbols are hidden, as libraries are often built, so only spark_ds_init is exported.
     run(Seq(compiler, "-std=c++17", "-O1", "-shared", "-fPIC", "-fvisibility=hidden") ++
-      includes.map("-I" + _) ++ defines ++ Seq("-o", library.getPath, source.getPath))
+      includes.map("-I" + _) ++ defines ++
+      Seq(s"-DORDER_VIOLATIONS_PATH=\"${orderViolations.getPath}\"", "-o", library.getPath,
+        source.getPath))
     library
   }
 

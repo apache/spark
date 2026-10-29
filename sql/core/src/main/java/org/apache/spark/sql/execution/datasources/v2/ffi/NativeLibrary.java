@@ -525,20 +525,38 @@ final class NativeLibrary {
   }
 
   /**
+   * The SPARK_DS_LOG_* levels, which {@link #log} and {@link #isLogEnabled} share: a level that
+   * is not one of them is treated as SPARK_DS_LOG_INFO.
+   */
+  private enum LogLevel {
+    ERROR, WARN, INFO, DEBUG, TRACE;
+
+    static LogLevel of(int level) {
+      return switch (level) {
+        case 1 -> ERROR;
+        case 2 -> WARN;
+        case 4 -> DEBUG;
+        case 5 -> TRACE;
+        default -> INFO;
+      };
+    }
+  }
+
+  /**
    * Called by the library, through {@code SparkDsHost.log}, with the path of the library. It must
    * not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void log(String path, int level, long message) {
     try {
       String text = message == 0 ? "" : new String(readCString(message), StandardCharsets.UTF_8);
-      switch (level) {
-        case 1 -> LOGGER.error("Native data source library {}: {}",
+      switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.error("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 2 -> LOGGER.warn("Native data source library {}: {}",
+        case WARN -> LOGGER.warn("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 4 -> LOGGER.debug("Native data source library {}: {}", path, text);
-        case 5 -> LOGGER.trace("Native data source library {}: {}", path, text);
-        default -> LOGGER.info("Native data source library {}: {}",
+        case DEBUG -> LOGGER.debug("Native data source library {}: {}", path, text);
+        case TRACE -> LOGGER.trace("Native data source library {}: {}", path, text);
+        case INFO -> LOGGER.info("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
       }
     } catch (Throwable e) {
@@ -548,17 +566,16 @@ final class NativeLibrary {
 
   /**
    * Called by the library, through {@code SparkDsHost.is_log_enabled}, with the level of the
-   * messages of {@link #log}, which logs the levels that it does not know as info. It must not
-   * throw: an exception thrown by an upcall crashes the JVM.
+   * messages of {@link #log}. It must not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static boolean isLogEnabled(int level) {
     try {
-      return switch (level) {
-        case 1 -> LOGGER.isErrorEnabled();
-        case 2 -> LOGGER.isWarnEnabled();
-        case 4 -> LOGGER.isDebugEnabled();
-        case 5 -> LOGGER.isTraceEnabled();
-        default -> LOGGER.isInfoEnabled();
+      return switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.isErrorEnabled();
+        case WARN -> LOGGER.isWarnEnabled();
+        case INFO -> LOGGER.isInfoEnabled();
+        case DEBUG -> LOGGER.isDebugEnabled();
+        case TRACE -> LOGGER.isTraceEnabled();
       };
     } catch (Throwable e) {
       return false;
