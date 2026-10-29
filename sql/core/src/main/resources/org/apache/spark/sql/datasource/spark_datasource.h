@@ -61,20 +61,22 @@
  *   state of the reader. If Spark never plans the partitions, for example to only explain the plan
  *   of the query, it closes the reader once the reader is no longer referenced.
  * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader, with
- *   the location of the checkpoint of the source, and keeps it until the streaming query stops. For
- *   each micro-batch, or only before the first one with Trigger.AvailableNow, it asks for the
- *   latest_offset, with the offset that the micro-batch starts after, plans the partitions with
- *   stream_partitions, which also returns the state of the stream reader, then calls read on the
- *   executors. Offsets are defined by the library, as compact JSON on a single line: Spark stores
- *   each offset as a line of the offset log of the checkpoint, so it rejects an offset that is not
- *   valid JSON or contains a line break. When a streaming query restarts, from its checkpoint,
- *   Spark creates a new stream reader and may call stream_partitions again for the last range that
- *   it planned before, so the partitions of a range must read the same data each time.
+ *   the columns to read and the location of the checkpoint of the source, and keeps it until the
+ *   streaming query stops. When the checkpoint does not have the initial offset of the source yet,
+ *   Spark asks for it with initial_offset, and keeps it in the checkpoint. For each micro-batch, or
+ *   only before the first one with Trigger.AvailableNow, it asks for the latest_offset, with the
+ *   offset that the micro-batch starts after, plans the partitions with stream_partitions, which
+ *   also returns the state of the stream reader, then calls read on the executors. Offsets are
+ *   defined by the library, as compact JSON on a single line: Spark stores each offset as a line of
+ *   the offset log of the checkpoint, so it rejects an offset that is not valid JSON or contains a
+ *   line break. When a streaming query restarts, from its checkpoint, Spark creates a new stream
+ *   reader and may call stream_partitions again for the last range that it planned before, so the
+ *   partitions of a range must read the same data each time.
  * - Writes. On the driver, right before it starts the tasks of the write (or of a micro-batch),
  *   Spark creates a writer with create_writer, which also returns the state of the writer. If Spark
  *   rejects what create_writer returned, such as a state set more than once, it aborts the writer,
- *   with the field rejected of SparkDsFinishWriteInfo set, before it closes it. With adaptive query
- *   execution, Spark first runs the stages of the data to write that end with a shuffle, and
+ *   with the field rejected of SparkDsFinishWriteInfo set to 1, before it closes it. With adaptive
+ *   query execution, Spark first runs the stages of the data to write that end with a shuffle, and
  *   creates no writer if they fail. The rest of the data, such as its last stage, is computed in
  *   the tasks of the write, so a writer may still be aborted because computing the data failed: do
  *   irreversible work, such as removing the existing data for an overwrite, in commit. On the
@@ -353,17 +355,13 @@ typedef struct SparkDsStreamReaderInfo {
    * recover from a failure. It stays the same when the query restarts from its checkpoint. It is a
    * fully qualified Hadoop path, whose characters are not escaped as in a URI: a space stays a
    * space, and % stays %. Its file system may be one that the library cannot access, such as s3a
-   * or hdfs.
+   * or hdfs. Spark keeps what it needs there under the names that start with _spark, such as the
+   * initial offset of the source, and the library must not use them.
    */
   const char* checkpoint_location;
 } SparkDsStreamReaderInfo;
 
-/*
- * A request for the initial offset of a stream reader, as initial_offset gets it. Spark may call
- * initial_offset more than once for a query, for example when it restarts before its first
- * micro-batch is committed, so it must return the same offset each time: a library whose initial
- * offset depends on when it is asked, such as the latest data, keeps it under checkpoint_location.
- */
+/* A request for the initial offset of a stream reader, as initial_offset gets it. */
 typedef struct SparkDsInitialOffsetInfo {
   /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
   int64_t size;
@@ -436,8 +434,9 @@ typedef struct SparkDsReadInfo {
    */
   int32_t kind;
   /*
-   * The schema to read: the schema that create_reader or create_stream_reader got, or only the
-   * columns that prune_columns pruned it to. The stream that read initializes has this schema.
+   * The schema to read: the schema that create_reader got, or only the columns that prune_columns
+   * pruned it to, or the schema that create_stream_reader got. The stream that read initializes
+   * has this schema.
    */
   struct ArrowSchema* schema;
   /* The state that partitions or stream_partitions returned with the partition, or empty. */
@@ -505,10 +504,10 @@ typedef struct SparkDsFinishWriteInfo {
   const int64_t* message_lengths;
   int64_t num_messages;
   /*
-   * For abort, whether Spark rejected what create_writer returned, such as a state set more than
-   * once: no task ran, so there are no messages.
+   * For abort, 1 if Spark rejected what create_writer returned, such as a state set more than
+   * once: no task ran, so there are no messages. 0 otherwise.
    */
-  bool rejected;
+  int64_t rejected;
 } SparkDsFinishWriteInfo;
 
 /* The end of the data written by a task, as commit_data_writer and abort_data_writer get it. */
@@ -583,7 +582,9 @@ typedef struct SparkDsLibrary {
   /*
    * Creates a reader for a micro-batch streaming scan.
    *
-   * schema: the schema to read: the one the user specified, or the one returned by schema
+   * schema: the columns to read: those of the schema that the user specified, or of the one
+   *         returned by schema, or only the top-level columns of it that the query needs. Each
+   *         array that read returns has exactly these columns.
    * info: the location of the checkpoint of the source
    * reader: set to the stream reader handle
    */
@@ -648,8 +649,9 @@ typedef struct SparkDsLibrary {
    * ------------------------------------------------------------------------------------------- */
 
   /*
-   * Returns the offset to start from when the streaming query has no checkpoint, the same one each
-   * time (see SparkDsInitialOffsetInfo).
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it
+   * under checkpoint_location, and only asks for it when the checkpoint does not have it yet: a
+   * query that restarts before its first micro-batch is committed starts from the same offset.
    *
    * info: nothing yet but its size, so that inputs can be added within this version
    * set_offset: called once with the offset, as compact JSON on a single line
