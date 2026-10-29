@@ -537,9 +537,14 @@ case class EnsureRequirements(
       if (specOpt.isEmpty) return None
       specOpt.get
     }
-    if (Seq(left, right).zip(specs).exists { case (p, s) => isBuiltFromReducedScan(p, s) } ||
-        Seq(left, right).exists(hasReducedScanOutsideJoin)) {
+    if (Seq(left, right).zip(specs).exists { case (p, s) => isBuiltFromReducedScan(p, s) }) {
       return None
+    }
+    // A scan that carries reducers with no join above it in a child was planned by an earlier
+    // run of this rule, which already pushed this join's pairing into both sides. Keep that
+    // pairing rather than derive the reducers again.
+    if (Seq(left, right).exists(hasReducedScanOutsideJoin)) {
+      return Some(Seq(left, right))
     }
 
     val leftSpec = specs.head
@@ -759,8 +764,7 @@ case class EnsureRequirements(
   /**
    * Project common partition values onto `projectionPositions` of the layout `expressions`
    * describes and deduplicate. Values that collapse to the same key are read as one group, so
-   * they become one partition, unless the scan is partially clustered, where each split of the
-   * group still gets its own partition and the split counts add up.
+   * they become one partition.
    *
    * The keys keep the order in which they first appear, as `KeyGroupedPartitioning.apply` does.
    * A one-side shuffle routes the other child into that order, so partition i of both sides must
@@ -769,17 +773,13 @@ case class EnsureRequirements(
   private def projectAndDedupeCommonPartitionValues(
       values: Seq[(InternalRow, Int)],
       expressions: Seq[Expression],
-      projectionPositions: Seq[Int],
-      partiallyClustered: Boolean): Seq[(InternalRow, Int)] = {
+      projectionPositions: Seq[Int]): Seq[(InternalRow, Int)] = {
     val projectedExpressions = projectionPositions.map(expressions(_))
-    val projected = values.map { case (partValue, numSplits) =>
+    val projected = values.map { case (partValue, _) =>
       val row = KeyGroupedPartitioning.project(expressions, projectionPositions, partValue)
-      (InternalRowComparableWrapper(row, projectedExpressions), numSplits)
+      InternalRowComparableWrapper(row, projectedExpressions)
     }
-    val splitsPerKey = projected.groupMapReduce(_._1)(_._2)(_ + _)
-    projected.map(_._1).distinct.map { wrapper =>
-      (wrapper.row, if (partiallyClustered) splitsPerKey(wrapper) else 1)
-    }
+    projected.distinct.map(wrapper => (wrapper.row, 1))
   }
 
   /**
@@ -803,11 +803,10 @@ case class EnsureRequirements(
       newPositions: Option[Seq[Int]]): Option[Seq[(InternalRow, Int)]] = {
     (pushedValues, existing.commonPartitionValues, newPositions, reportedLayout(existing)) match {
       case (Some(values), _, _, _) => Some(values)
-      case (None, Some(values), Some(positions), Some(layout))
-          if values.nonEmpty && values.head._1.numFields == layout.length &&
-            positions != layout.indices =>
-        Some(projectAndDedupeCommonPartitionValues(
-          values, layout, positions, existing.applyPartialClustering))
+      case (None, Some(values), Some(positions), Some(layout)) if positions != layout.indices =>
+        assert(values.forall(_._1.numFields == layout.length),
+          "common partition values must sit in the scan's reported layout")
+        Some(projectAndDedupeCommonPartitionValues(values, layout, positions))
       case (None, values, _, _) => values
     }
   }
