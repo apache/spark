@@ -81,10 +81,11 @@
  *   the tasks of the write, so a writer may still be aborted because computing the data failed: do
  *   irreversible work, such as removing the existing data for an overwrite, in commit. On the
  *   executors, each task creates a data writer with create_data_writer, with the schema of the data
- *   and the state of the writer, calls write for each batch of at most
- *   spark.sql.execution.arrow.maxRecordsPerBatch rows, which also ends once it holds
- *   spark.sql.execution.arrow.maxBytesPerBatch bytes, and calls commit_data_writer, or
- *   abort_data_writer if the task or the commit fails, before it closes the data writer. Then the
+ *   and the state of the writer, and calls write for each batch. A batch has at most
+ *   spark.sql.execution.arrow.maxRecordsPerBatch rows, and also ends once it holds
+ *   spark.sql.execution.arrow.maxBytesPerBatch bytes, or earlier when Spark copies the batches of
+ *   a scan, which end with them. The task then calls commit_data_writer, or abort_data_writer if
+ *   the task or the commit fails, before it closes the data writer. Then the
  *   driver calls commit with the messages of the tasks if they all succeeded, or abort otherwise,
  *   including when commit fails, and closes the writer. Several attempts of a task may write the
  *   same partition, after a failure or with speculative execution, each with a data writer of its

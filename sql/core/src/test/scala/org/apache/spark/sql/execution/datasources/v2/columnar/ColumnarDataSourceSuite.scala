@@ -41,6 +41,7 @@ import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.execution.{ColumnarToRowExec, RowToColumnConverter, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.{AdaptiveSparkPlanExec, AdaptiveSparkPlanHelper}
 import org.apache.spark.sql.execution.arrow.ArrowWriter
+import org.apache.spark.sql.execution.columnar.InMemoryTableScanExec
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec, V2TableWriteExec}
 import org.apache.spark.sql.execution.streaming.runtime.{MemoryStream, StreamingQueryWrapper}
 import org.apache.spark.sql.execution.vectorized.{OnHeapColumnVector, ReusedArrowColumnVector, WritableColumnVector}
@@ -159,7 +160,10 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     }
     val expected = (0L until 10L).map(id => (id, s"name$id"))
 
-    withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "3") {
+    withSQLConf(
+        SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "3",
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true",
+        SQLConf.ADAPTIVE_EXECUTION_FORCE_APPLY.key -> "false") {
       // The data writers get the batches of the scan, without a transition to rows. On-heap
       // vectors are converted to Arrow value by value, into batches that end as those of rows do.
       assert(copy("columnar_write").isInstanceOf[BatchScanExec])
@@ -197,6 +201,25 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
       assert(shuffled.isInstanceOf[AdaptiveSparkPlanExec], shuffled)
       assert(find(shuffled)(_.isInstanceOf[ColumnarToRowExec]).isDefined, shuffled)
       assert(TestColumnarSink.rows("shuffled_write").sorted == expected)
+
+      // A query that supports rows too, such as the scan of a cached DataFrame, is written as rows.
+      val cached = spark.read.format(format).option("end", "10").load().select("id").cache()
+      try {
+        cached.count()
+        val writes = QueryTest.withQueryExecutionsCaptured(spark) {
+          cached.write.format(format).option("table", "cached_write").mode("append").save()
+        }.flatMap(_.executedPlan.collectFirst { case writeExec: V2TableWriteExec => writeExec })
+        val write = writes.head
+        assert(write.supportsColumnarInput, write)
+        assert(write.query.isInstanceOf[InMemoryTableScanExec], write.query)
+        assert(write.query.supportsColumnar && write.query.supportsRowBased, write.query)
+        assert(!write.writesColumnar, write)
+        assert(TestColumnarSink.rows("cached_write").sorted == expected.map { case (id, _) =>
+          (id, "")
+        })
+      } finally {
+        cached.unpersist()
+      }
       assert(TestColumnarSink.rows("row_write") == expected.map { case (id, name) =>
         (id, name.toUpperCase(Locale.ROOT))
       })
@@ -909,7 +932,10 @@ class TestDataWriter(fail: Boolean, keep: Boolean = false) extends DataWriter[Co
 
   private def read(batch: ColumnarBatch): Unit = {
     (0 until batch.numRows()).foreach { i =>
-      rows += ((batch.column(0).getLong(i), batch.column(1).getUTF8String(i).toString))
+      // A batch without the column of the names, such as that of a cached DataFrame of the ids,
+      // gets empty names.
+      val name = if (batch.numCols() > 1) batch.column(1).getUTF8String(i).toString else ""
+      rows += ((batch.column(0).getLong(i), name))
     }
   }
 

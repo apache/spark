@@ -204,8 +204,9 @@ object ArrowBatchingOptions {
  * Each column of a columnar batch that is an Arrow vector in the layout of the Arrow schema of the
  * write is copied buffer by buffer, with its values as they are, which are not checked as the
  * converted ones are, and the other columns are converted value by value. The batches end as those
- * of rows do, though a batch with copied columns also ends with the columnar batch. A columnar
- * batch without columns to copy is converted as rows are.
+ * of rows do, though a batch with copied columns also ends with the columnar batch, so small
+ * columnar batches give small batches, which are not merged. A columnar batch without columns to
+ * copy is converted as rows are.
  */
 class ArrowBatchingDataWriter(delegate: DataWriter[ColumnarBatch], options: ArrowBatchingOptions)
   extends ColumnarInputDataWriter {

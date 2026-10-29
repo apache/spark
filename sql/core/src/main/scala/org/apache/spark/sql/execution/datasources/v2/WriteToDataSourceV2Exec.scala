@@ -621,11 +621,19 @@ trait V2TableWriteExec
 
   /**
    * Whether the data writers take the columnar batches of the query, see
-   * [[SupportsColumnarInput]]. A columnar query then gets no transition to rows (see
+   * [[SupportsColumnarInput]].
+   */
+  def supportsColumnarInput: Boolean = false
+
+  /**
+   * Whether the write takes the columnar batches of the query: when the data writers take them,
+   * and the query only supports columnar output. A query that supports rows too, such as a scan
+   * of a cached DataFrame, is written as rows. The query then gets no transition to rows (see
    * `ApplyColumnarRulesAndInsertTransitions`), and its batches are written with
    * `WritingSparkTask.runColumnar` of `writingTask`.
    */
-  def supportsColumnarInput: Boolean = false
+  def writesColumnar: Boolean =
+    supportsColumnarInput && query.supportsColumnar && !query.supportsRowBased
 
   var commitProgress: Option[StreamWriterCommitProgress] = None
 
@@ -641,7 +649,7 @@ trait V2TableWriteExec
     "numOutputRows" -> numOutputRowsMetric)
 
   protected def writeWithV2(batchWrite: BatchWrite): Seq[InternalRow] = {
-    val columnar = supportsColumnarInput && query.supportsColumnar
+    val columnar = writesColumnar
     val rdd: RDD[_] = {
       val tempRdd = if (columnar) query.executeColumnar() else query.execute()
       // SPARK-23271 If we are attempting to write a zero partition rdd, create a dummy single
@@ -754,15 +762,15 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
   }
 
   /**
-   * Writes the data of the task with `write`, which returns the number of rows that it wrote, and
-   * commits the data writer, once the output commit coordinator authorizes it if
+   * Writes the data of the task with `writeData`, which returns the number of rows that it wrote,
+   * and commits the data writer, once the output commit coordinator authorizes it if
    * `useCommitCoordinator` is true. Aborts the data writer if either fails, and closes it.
    */
   protected def writeAndCommit(
       dataWriter: DataWriter[_],
       context: TaskContext,
       useCommitCoordinator: Boolean,
-      customMetrics: Map[String, SQLMetric])(write: => Long): DataWritingSparkTaskResult = {
+      customMetrics: Map[String, SQLMetric])(writeData: => Long): DataWritingSparkTaskResult = {
     val stageId = context.stageId()
     val stageAttempt = context.stageAttemptNumber()
     val partId = context.partitionId()
@@ -771,7 +779,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 
     // write the data and commit this writer.
     Utils.tryWithSafeFinallyAndFailureCallbacks(block = {
-      val numRows = write
+      val numRows = writeData
 
       CustomMetrics.updateMetrics(
         dataWriter.currentMetricsValues.toImmutableArraySeq, customMetrics)

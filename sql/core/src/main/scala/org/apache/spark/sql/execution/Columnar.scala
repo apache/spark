@@ -590,9 +590,9 @@ case class ApplyColumnarRulesAndInsertTransitions(
         case write: DataWritingCommandExec
             if write.cmd.isInstanceOf[V1WriteCommand] && conf.plannedWriteEnabled =>
           write.child.supportsColumnar
-        // A V2 write whose data writers take columnar batches writes those of a columnar query.
-        case write: V2TableWriteExec if write.supportsColumnarInput =>
-          write.query.supportsColumnar
+        // A V2 write whose data writers take columnar batches writes those of a query that only
+        // supports columnar output.
+        case write: V2TableWriteExec if write.writesColumnar => true
         // If it is not required to output columnar (`outputsColumnar` is false), and the plan
         // supports row-based and columnar, we don't need to output row-based data on its children
         // nodes. So we set `outputsColumnar` to true.

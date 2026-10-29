@@ -43,8 +43,10 @@ converting them to rows: it copies the buffers of their columns, since a library
 that it writes until it closes its data writer, and converts value by value the columns of other
 Arrow types than those of the schema, such as `utf8_view` strings. The copied values are written as
 the scan returned them, without the checks of a conversion, such as the precision of a decimal.
-With adaptive query execution, the data of a query with a shuffle or a subquery is still converted
-to rows.
+The batches that Spark copies end with the batches of the scan, so a library may get smaller
+batches than `spark.sql.execution.arrow.maxRecordsPerBatch` rows then. The data of a query in which
+Spark also filters, projects or shuffles the rows is still converted to rows, and with adaptive
+query execution, so is the data of a query with a subquery.
 
 Spark calls native data sources with the
 [Foreign Function and Memory API](https://openjdk.org/jeps/454) of Java, which is final from Java
@@ -241,7 +243,8 @@ Spark does not manage the memory of native data sources. The memory that a libra
 the Arrow buffers that it exports, which Spark reads without copying them, are not accounted by the
 memory manager of Spark, nor limited by `spark.memory.offHeap.size`. Neither are the Arrow batches
 that Spark writes, which end at `spark.sql.execution.arrow.maxRecordsPerBatch` rows or once they
-hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, while the size of the batches that a
+hold `spark.sql.execution.arrow.maxBytesPerBatch` bytes, or earlier when Spark copies the batches
+of a scan, while the size of the batches that a
 library reads is up to the library. This memory comes out of the memory overhead of the driver and
 the executors, `spark.driver.memoryOverhead` and `spark.executor.memoryOverhead`, which are 10% of
 their memory, and at least 384 MiB, by default. Increase it for libraries that use much memory, and

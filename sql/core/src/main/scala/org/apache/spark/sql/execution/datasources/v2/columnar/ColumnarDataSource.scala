@@ -151,7 +151,9 @@ trait ColumnarStreamReader extends Serializable {
  * data, until it is closed: the buffers belong to the data writer, which must release them by
  * the time its `close` returns. The columns that Spark copies from the Arrow batches of a scan
  * have the values that the scan returned: they are not checked as converted values are, for
- * example against the precision of a decimal.
+ * example against the precision of a decimal. The batches have at most
+ * `spark.sql.execution.arrow.maxRecordsPerBatch` rows, and may have fewer, since the batches that
+ * Spark copies end with the batches of the scan.
  */
 trait ColumnarWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch]
