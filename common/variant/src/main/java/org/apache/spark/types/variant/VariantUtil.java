@@ -605,10 +605,12 @@ public class VariantUtil {
   // Validate whether a variant is well-formed. Returns true if the variant binary is structurally
   // well-formed (all bounds and type-info checks pass), false if it is malformed.
   //
-  // This is close to, but not strictly equivalent to, "`toJson` does not throw": this function
-  // does not enforce the `SIZE_LIMIT` check that the `Variant` constructor applies (which throws
-  // `VARIANT_CONSTRUCTOR_SIZE_LIMIT`). The implementation otherwise has the same structure as
-  // `toJson` (see `Variant.toJsonImpl`).
+  // This is close to, but not strictly equivalent to, "`toJson` does not throw". It is more
+  // lenient in that it does not enforce the `SIZE_LIMIT` check that the `Variant` constructor
+  // applies (which throws `VARIANT_CONSTRUCTOR_SIZE_LIMIT`). It is stricter in that it requires
+  // every object and array to have its final offset, and its data and children to lie within
+  // their bounds. The implementation otherwise has the same structure as `toJson` (see
+  // `Variant.toJsonImpl`).
   //
   // Implementation note: this `try { ... } catch (SparkRuntimeException e)` is sound only because
   // every helper invoked by `validateImpl` throws `MALFORMED_VARIANT` /
@@ -630,22 +632,36 @@ public class VariantUtil {
     switch (getType(value, pos)) {
       case OBJECT:
         handleObject(value, pos, (size, idSize, offsetSize, idStart, offsetStart, dataStart) -> {
+          // The offset list has `size + 1` entries. The last one is the size of the field data,
+          // which must lie within `value`.
+          int dataSize = readUnsigned(value, offsetStart + offsetSize * size, offsetSize);
+          if ((long) dataStart + dataSize > value.length) throw malformedVariant();
           for (int i = 0; i < size; ++i) {
             int id = readUnsigned(value, idStart + idSize * i, idSize);
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
             getMetadataKey(metadata, id);
             validateImpl(value, metadata, elementPos);
+            // Sub-values are sliced by `valueSize` (e.g. `Variant.getValue`), so a field that
+            // extends past the field data of the object would be truncated.
+            if ((long) offset + valueSize(value, elementPos) > dataSize) throw malformedVariant();
           }
           return null;
         });
         break;
       case ARRAY:
         handleArray(value, pos, (size, offsetSize, offsetStart, dataStart) -> {
+          // The offset list has `size + 1` entries. The last one is the size of the element data,
+          // which must lie within `value`.
+          int dataSize = readUnsigned(value, offsetStart + offsetSize * size, offsetSize);
+          if ((long) dataStart + dataSize > value.length) throw malformedVariant();
           for (int i = 0; i < size; ++i) {
             int offset = readUnsigned(value, offsetStart + offsetSize * i, offsetSize);
             int elementPos = dataStart + offset;
             validateImpl(value, metadata, elementPos);
+            // Sub-values are sliced by `valueSize` (e.g. `Variant.getValue`), so an element that
+            // extends past the element data of the array would be truncated.
+            if ((long) offset + valueSize(value, elementPos) > dataSize) throw malformedVariant();
           }
           return null;
         });

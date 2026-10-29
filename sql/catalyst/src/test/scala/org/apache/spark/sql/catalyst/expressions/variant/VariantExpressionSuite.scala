@@ -1468,6 +1468,101 @@ class VariantExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
       /* offset list */ 0, 2,
       /* field data: INT8 with only 1 byte */ primitiveHeader(INT8), 0), metadata)
 
+    // Malformed containers: the final offset is missing. A container with n children requires
+    // n + 1 offsets, so even an empty container requires one.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 0))
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 0))
+    invalid(Array(arrayHeader(false, 4),
+      /* size */ 0,
+      /* truncated offset list */ 0, 0))
+    valid(Array(arrayHeader(false, 4),
+      /* size */ 0,
+      /* offset list */ 0, 0, 0, 0))
+    invalid(Array(arrayHeader(true, 1),
+      /* size */ 0, 0, 0, 0))
+    valid(Array(arrayHeader(true, 1),
+      /* size */ 0, 0, 0, 0,
+      /* offset list */ 0))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 2,
+      /* element data: empty array without its offset list */ arrayHeader(false, 1), 0))
+
+    // Malformed containers: the final offset points past the end of the value.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 5))
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 0,
+      /* offset list */ 5))
+
+    // Valid container: the final offset may cover unused bytes within the value.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 2,
+      /* unused data */ 0, 0))
+
+    // Malformed containers: a child does not end within the data of its container.
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 1,
+      /* element data: 3-byte INT2 */ primitiveHeader(INT2), 1, 0))
+    invalid(Array(objectHeader(false, 1, 1),
+      /* size */ 1,
+      /* id list */ 0,
+      /* offset list */ 0, 1,
+      /* field data: 2-byte INT1 */ primitiveHeader(INT1), 1), metadata)
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list: the element starts at the final offset */ 1, 1,
+      /* element data */ primitiveHeader(TRUE), primitiveHeader(TRUE)))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 1,
+      /* element data: 5-byte nested array */
+      arrayHeader(false, 1), 1, 0, 1, primitiveHeader(TRUE)))
+    invalid(Array(arrayHeader(false, 1),
+      /* size */ 1,
+      /* offset list */ 0, 2,
+      /* element data: 7-byte LONG_STR */ primitiveHeader(LONG_STR), 2, 0, 0, 0, 'a', 'b'))
+
+    // Valid container: unused bytes between children.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 2,
+      /* offset list */ 0, 2, 3,
+      /* element data */ primitiveHeader(TRUE), /* unused */ 0, primitiveHeader(FALSE)))
+
+    // Valid object: field data is not required to be in the order of the offset list.
+    valid(Array(objectHeader(false, 1, 1),
+      /* size */ 2,
+      /* id list */ 0, 1,
+      /* offset list */ 2, 0, 4,
+      /* field data */ primitiveHeader(INT1), 2, primitiveHeader(INT1), 1), metadata)
+
+    // Valid value: trailing bytes after the top-level value are ignored.
+    valid(Array(arrayHeader(false, 1),
+      /* size */ 0,
+      /* offset list */ 0,
+      /* trailing bytes */ 99))
+
+    // Variants built by `parse_json` are valid.
+    Seq(
+      "{}",
+      "[]",
+      """{"a": {}, "b": []}""",
+      """[[], {}, [1, [2, {"c": "d"}]]]""",
+      """{"a": 1, "b": {"c": [true, null, 1.5]}}""",
+      s"""["${"x" * 100}", {"k": "${"y" * 100}"}]"""
+    ).foreach { json =>
+      val v = parseJson(json)
+      valid(v.getValue, v.getMetadata)
+    }
+    val dedup = VariantExpressionEvalUtils.parseJson(
+      UTF8String.fromString("""{"a": 1, "a": {"b": [1, 2]}, "c": 3}"""), allowDuplicateKeys = true)
+    valid(dedup.getValue, dedup.getMetadata)
+
     // Unknown primitive type (type info 17 is not defined).
     invalid(Array(primitiveHeader(17)))
 
