@@ -1,0 +1,92 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+name: "Sample post-merge Build"
+
+on:
+  push:
+    branches:
+    - branch-4.x
+
+jobs:
+  check-commit-count:
+    name: Check commit count and dispatch Build
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Check out the full branch history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check whether this is every tenth commit
+        id: count
+        run: |
+          count=$(git rev-list --count HEAD)
+          remainder=$((count % 10))
+
+          if ((remainder == 0)); then
+            should_run=true
+            icon=":white_check_mark:"
+            title="Commit count matched"
+            details="Commit count $count is divisible by 10."
+          else
+            should_run=false
+            icon=":pause_button:"
+            title="Commit count not matched"
+            details="Commit count $count is not divisible by 10."
+          fi
+
+          echo "should-run=$should_run" >> "$GITHUB_OUTPUT"
+          echo "Branch: $GITHUB_REF_NAME"
+          echo "Commit: $GITHUB_SHA"
+          echo "Commit count: $count"
+          echo "Remainder: $remainder"
+          echo "Should run: $should_run"
+          echo "Details: $details"
+          echo "::notice title=$title::$details"
+          echo "### $icon Commit count check" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Branch: $GITHUB_REF_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit count: $count" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Remainder: $remainder" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Should run: $should_run" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Details: $details" >> "$GITHUB_STEP_SUMMARY"
+      - name: Dispatch Build for the selected commit
+        if: >-
+          github.repository != 'apache/spark'
+          || steps.count.outputs.should-run == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const upstream = process.env.GITHUB_REPOSITORY === 'apache/spark';
+            const subject = context.payload.head_commit.message.split('\n')[0];
+            await github.rest.actions.createWorkflowDispatch({
+              ...context.repo,
+              workflow_id: 'build_main.yml',
+              ref: context.ref.replace('refs/heads/', ''),
+              inputs: {
+                sha: upstream ? context.sha : '',
+                before: upstream ? context.payload.before : '',
+                title: `${subject} (${context.sha.slice(0, 7)})`
+              }
+            });

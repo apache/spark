@@ -31,6 +31,16 @@ on:
         required: false
         type: string
         default: branch-4.x
+      ref:
+        description: Pinned commit to build instead of the branch head
+        required: false
+        type: string
+        default: ''
+      base-sha:
+        description: Base commit for change detection when dispatched from a push
+        required: false
+        type: string
+        default: ''
       hadoop:
         description: Hadoop version to run with. HADOOP_PROFILE environment variable should accept it.
         required: false
@@ -62,7 +72,7 @@ jobs:
     # Please see https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job#standard-github-hosted-runners-for-public-repositories
     runs-on: ubuntu-slim
     env:
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
     outputs:
       required: ${{ steps.set-outputs.outputs.required }}
       # Pinned so every downstream job checks out the same snapshot, even if `master` advances mid-run.
@@ -82,7 +92,7 @@ jobs:
       id: checkout
       uses: ./.github/actions/checkout-and-sync
       with:
-        ref: ${{ inputs.branch }}
+        ref: ${{ inputs.ref || inputs.branch }}
     - name: Check all modules
       id: set-outputs
       run: |
@@ -331,7 +341,7 @@ jobs:
       INCLUDED_TAGS: ${{ matrix.included-tags }}
       HADOOP_PROFILE: ${{ matrix.hadoop }}
       HIVE_PROFILE: ${{ matrix.hive }}
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -538,7 +548,7 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
     steps:
     - name: Bootstrap composite actions
       uses: actions/checkout@v7
@@ -643,7 +653,7 @@ jobs:
       MODULES_TO_TEST: ${{ matrix.modules }}
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -808,7 +818,7 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
@@ -977,7 +987,7 @@ jobs:
     env:
       LC_ALL: C.UTF-8
       LANG: C.UTF-8
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
       BRANCH: ${{ inputs.branch }}
     container:
       image: ${{ needs.precondition.outputs.image_lint_url_link }}
@@ -1114,7 +1124,7 @@ jobs:
       LANG: C.UTF-8
       PYSPARK_DRIVER_PYTHON: python3.9
       PYSPARK_PYTHON: python3.9
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
     container:
       image: ${{ needs.precondition.outputs.image_docs_url_link }}
     steps:
@@ -1330,7 +1340,7 @@ jobs:
     env:
       HADOOP_PROFILE: ${{ inputs.hadoop }}
       HIVE_PROFILE: hive2.3
-      GITHUB_PREV_SHA: ${{ github.event.before }}
+      GITHUB_PREV_SHA: ${{ inputs.base-sha || github.event.before }}
       SPARK_LOCAL_IP: localhost
       SKIP_UNIDOC: true
       SKIP_MIMA: true
