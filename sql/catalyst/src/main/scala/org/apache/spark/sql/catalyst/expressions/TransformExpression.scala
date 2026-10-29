@@ -324,7 +324,6 @@ case class TransformExpression(
       case _ => return NotReducible
     }
     if (!sameArgumentLayout(other) ||
-        !literalParamsMatchInputTypes || !other.literalParamsMatchInputTypes ||
         !noComplexLiteralParams || !other.noComplexLiteralParams ||
         literalChildren.exists(_.value == null) || other.literalChildren.exists(_.value == null)) {
       return NotReducible
@@ -348,17 +347,22 @@ case class TransformExpression(
       case Failure(e) => Threw(e)
     }
 
-    // Prefer the generalized overload. Use the deprecated one only if the generalized one is not
-    // implemented; any other outcome is final.
+    // Prefer the generalized overload. It reads its literal parameters by type, so it is asked only
+    // when they have their declared types; otherwise it counts as not implemented. Use another
+    // overload only if the generalized one is not implemented; any other outcome is final.
+    val typesMatch = literalParamsMatchInputTypes && other.literalParamsMatchInputTypes
     val outcome =
-      probe(thisFunction.reducer(thisParams, otherFunction, otherParams)) match {
+      (if (typesMatch) probe(thisFunction.reducer(thisParams, otherFunction, otherParams))
+       else Unimplemented) match {
         // A parameterless pair falls back to the parameterless overload.
         case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
           probe(thisFunction.reducer(otherFunction))
-        // The deprecated overload is documented for bucket against bucket, so only offer it a
-        // pair of the same function.
+        // The deprecated overload is documented for bucket against bucket, so only offer it a pair
+        // of the same function in the `bucket(n, col)` layout, with the count first.
         case Unimplemented if isSingleInt(thisParams) && isSingleInt(otherParams) &&
-            function.canonicalName() == other.function.canonicalName() =>
+            function.canonicalName() == other.function.canonicalName() &&
+            children.headOption.exists(_.isInstanceOf[Literal]) &&
+            other.children.headOption.exists(_.isInstanceOf[Literal]) =>
           probe(thisFunction.reducer(
             thisParams(0).value().asInstanceOf[Int], otherFunction,
             otherParams(0).value().asInstanceOf[Int]))

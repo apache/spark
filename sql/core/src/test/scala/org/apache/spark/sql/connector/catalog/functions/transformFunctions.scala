@@ -372,6 +372,48 @@ object LiteralFirstIntFunction extends ScalarFunction[Int] with ReducibleFunctio
 }
 
 /**
+ * A bucket function that implements only the deprecated `reducer(int, func, int)`, declaring
+ * `declared` as its input types: a count type other than `INT`, or the column alone. The deprecated
+ * overload gets the count as an `int` whatever is declared.
+ */
+class LegacyBucketDeclaring(declared: Array[DataType])
+    extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = declared
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "legacy_bucket_declaring"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Int = 0
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+    if (otherFunc == this && gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+  }
+}
+
+/**
+ * A `truncate`-shaped function, width last, that inherits a bucket-style implementation of the
+ * deprecated `reducer(int, func, int)` and does not check what the other function is.
+ */
+object BucketLogicTruncateFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket_logic_truncate"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Int = input.getInt(0)
+
+  override def reducer(
+      thisNumBuckets: Int,
+      otherFunc: ReducibleFunction[_, _],
+      otherNumBuckets: Int): Reducer[Int, Int] = {
+    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+  }
+}
+
+/**
  * A bucket function that implements BOTH reducer overloads: the deprecated `reducer(int, ..., int)`
  * always returns null (not reducible via the old API), while the new `reducer(Literal[], ...)`
  * returns a GCD-based reducer. Used to verify that the dispatch uses the generalized overload and

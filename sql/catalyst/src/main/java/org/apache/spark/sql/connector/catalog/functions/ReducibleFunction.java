@@ -87,7 +87,7 @@ public interface ReducibleFunction<I, O> {
    * {@link UnsupportedOperationException}) does Spark fall back: to
    * {@link #reducer(ReducibleFunction)} when neither side has a parameter, or to the deprecated
    * {@code reducer(int, ReducibleFunction, int)} overload when both sides are the same function
-   * and each has a single non-null integer parameter. If every
+   * and each has a single non-null integer parameter in the first position. If every
    * eligible overload throws {@link UnsupportedOperationException}, Spark logs an "implements no
    * reducer" warning; any other exception, from either side's call, is logged and the pair is
    * treated as not reducible (the join falls back to a shuffle).
@@ -114,7 +114,10 @@ public interface ReducibleFunction<I, O> {
   }
 
   /**
-   * This method is for the bucket function.
+   * This method is for the bucket function. When the generalized overload is not implemented,
+   * Spark offers it a pair of the same function whose single integer parameter comes first, as in
+   * {@code bucket(n, col)}, so an implementation should check {@code otherBucketFunction} rather
+   * than assume it is a bucket.
    *
    * If this bucket function is 'reducible' on another bucket function,
    * return the {@link Reducer} function.

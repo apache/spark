@@ -7673,6 +7673,32 @@ class KeyGroupedPartitioningSuite
     assert(r.reduce(2) == 0, s"Expected reduce(2) == 0, got ${r.reduce(2)}")
   }
 
+  test("SPARK-50593: the deprecated int reducer is offered only the bucket(n, col) layout") {
+    // A width-last truncate whose deprecated overload has bucket logic would otherwise get a gcd
+    // reducer for its own pair, and apply it to keys from a different key space.
+    val id = attr("id")
+    val t2 = TransformExpression(BucketLogicTruncateFunction, Seq(id, Literal(2)))
+    val t4 = TransformExpression(BucketLogicTruncateFunction, Seq(id, Literal(4)))
+    assert(t4.reducers(t2).isEmpty && t2.reducers(t4).isEmpty)
+    // The count-first layout still reaches it.
+    val b2 = TransformExpression(BucketLogicTruncateFunction, Seq(Literal(2), id))
+    val b4 = TransformExpression(BucketLogicTruncateFunction, Seq(Literal(4), id))
+    assert(b4.reducers(b2).isDefined)
+  }
+
+  test("SPARK-50593: the deprecated int reducer does not depend on the declared count type") {
+    // The literal-type check guards only the generalized overload, which reads literals by type.
+    // The deprecated one gets the count as an int, so a bucket declaring BIGINT for it, or only
+    // the column, still reduces, as on master.
+    val id = attr("id")
+    Seq(Array[DataType](LongType, LongType), Array[DataType](LongType)).foreach { declared =>
+      val fn = new LegacyBucketDeclaring(declared)
+      val b8 = TransformExpression(fn, Seq(Literal(8), id))
+      val b4 = TransformExpression(fn, Seq(Literal(4), id))
+      assert(b8.reducers(b4).isDefined, s"declared ${declared.mkString(", ")}")
+    }
+  }
+
   test("SPARK-50593: the deprecated int reducer is only offered a pair of the same function") {
     // The deprecated overload is documented for bucket against bucket, so a connector may not
     // check the other function. CarelessLegacyBucketFunction does not, and would return a gcd
