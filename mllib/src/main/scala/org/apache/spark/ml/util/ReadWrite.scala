@@ -772,7 +772,7 @@ private[ml] object DefaultParamsReader {
 
   def loadParamsInstanceReader[T](path: String, spark: SparkSession): MLReader[T] = {
     val metadata = DefaultParamsReader.loadMetadata(path, spark)
-    val cls = Utils.classForName(metadata.className)
+    val cls = MLAllowListedLoader.load(metadata.className)
     cls.getMethod("read").invoke(null).asInstanceOf[MLReader[T]]
   }
 }
