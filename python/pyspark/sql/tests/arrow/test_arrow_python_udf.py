@@ -831,7 +831,7 @@ class ArrowStreamTimingTests(unittest.TestCase):
                 serializer = ArrowStreamSerializer(
                     write_start_stream=write_start_stream,
                     flush_per_batch=flush_per_batch,
-                    collect_timing=True,
+                    detailed_timing_enabled=True,
                 )
                 with patch(
                     "pyspark.sql.pandas.serializers.time.perf_counter_ns", side_effect=clock
@@ -931,7 +931,7 @@ class ArrowStreamTimingTests(unittest.TestCase):
             serializer = ArrowStreamSerializer(
                 write_start_stream=write_start_stream,
                 flush_per_batch=flush_per_batch,
-                collect_timing=timed,
+                detailed_timing_enabled=timed,
             )
             if fail:
                 with self.assertRaisesRegex(RuntimeError, "batch producer failed"):
