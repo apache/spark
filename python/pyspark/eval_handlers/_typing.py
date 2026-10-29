@@ -22,10 +22,14 @@ import at runtime, as elsewhere in the worker.
 """
 
 from collections.abc import Iterator
-from typing import TYPE_CHECKING, TypeVar
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Optional, Protocol, TypeVar
 
 if TYPE_CHECKING:
     import pyarrow as pa
+
+    from pyspark.sql.types import StructType
+    from pyspark.sql.udtf import AnalyzeResult
 
 # Grouped-category input element, matching what the serializer yields: a group
 # serializer yields a lazy iterator; a co-group serializer materializes each side.
@@ -35,3 +39,45 @@ CoGroupedBatch = tuple[list["pa.RecordBatch"], list["pa.RecordBatch"]]
 # Handler input and output stream element types.
 InputBatch = TypeVar("InputBatch")
 OutputBatch = TypeVar("OutputBatch")
+
+
+@dataclass(frozen=True)
+class UDF:
+    """One UDF as the worker reads it; each handler takes the fields it needs."""
+
+    # The functions applied in turn to the UDF's arguments, as unpickled. EvalTypeHandler.__init__
+    # chains them into one as the handler's _raw_funcs, and keeps that wrapped for profiling and,
+    # for most eval types, in fail_on_stopiteration, as the handler's _funcs.
+    funcs: list[Any]
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    # The DataType of the last function in the chain; a StructType for the eval types that
+    # return rows.
+    return_type: Any
+    # The id the profiler reports the UDF's results under.
+    result_id: int
+
+
+class UDTFInstance(Protocol):
+    """An instance of the user's UDTF class, or the PartitionedUDTF wrapping one: an object whose
+    methods are called, not a function. ``terminate`` and ``cleanup`` are optional."""
+
+    def eval(self, *args: Any, **kwargs: Any) -> Any: ...
+
+
+@dataclass(frozen=True)
+class UDTF:
+    """The UDTF as the worker reads it; ``UDTFHandlerBase.__init__`` instantiates it as the
+    handler's ``_udtf``."""
+
+    # The user's UDTF class, as unpickled.
+    udtf_cls: type
+    args_offsets: list[int]
+    kwargs_offsets: dict[str, int]
+    return_type: "StructType"
+    # The child indexes of the TABLE argument's PARTITION BY expressions, if any.
+    partition_child_indexes: list[int]
+    # Passed to the UDTF's __init__ when it takes one argument.
+    analyze_result: Optional["AnalyzeResult"]
+    # The UDTF's name in error messages.
+    name: str

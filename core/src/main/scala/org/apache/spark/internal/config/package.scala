@@ -1314,6 +1314,8 @@ package object config {
       SparkContext.VALID_LOG_LEVELS.mkString(","))
     .createOptional
 
+  private[spark] val SPARK_LOG_LEVEL_PREFIX = "spark.log.level."
+
   private[spark] val FILES_MAX_PARTITION_BYTES = ConfigBuilder("spark.files.maxPartitionBytes")
     .doc("The maximum number of bytes to pack into a single partition when reading files.")
     .version("2.1.0")
@@ -2426,6 +2428,9 @@ package object config {
         "cost because of excessive JNI call overhead")
       .version("2.3.0")
       .bytesConf(ByteUnit.BYTE)
+      .checkValue(v => v > 0 && v <= ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH,
+        s"The buffer size must be positive and less than or equal to" +
+          s" ${ByteArrayMethods.MAX_ROUNDED_ARRAY_LENGTH}.")
       .createWithDefaultString("32k")
 
   private[spark] val IO_COMPRESSION_ZSTD_BUFFERPOOL_ENABLED =

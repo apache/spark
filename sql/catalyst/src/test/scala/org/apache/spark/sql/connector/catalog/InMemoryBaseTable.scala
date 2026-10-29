@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, BoundReference, Cast, EvalMode, Expression => CatalystExpression, GenericInternalRow, GetStructField, JoinedRow, Literal, MetadataStructFieldWithLogicalName, Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, ArrayData, CaseInsensitiveMap, CharVarcharUtils, DateTimeUtils, GenericArrayData, MapData, ResolveDefaultColumns}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
-import org.apache.spark.sql.connector.catalog.functions.FlipLowBitFunction
+import org.apache.spark.sql.connector.catalog.functions.{FlipLowBitFunction, SelfReduceFunction}
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
 import org.apache.spark.sql.connector.expressions._
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal}
@@ -76,6 +76,8 @@ abstract class InMemoryBaseTable(
   // Stores the table version validated during the last `ALTER TABLE ... ADD CONSTRAINT` operation.
   private var validatedTableVersion: String = null
 
+  private var tableDisplayProperties: util.Map[String, String] = null
+
   // Assign column IDs to columns that do not have one, including nested struct fields within
   // arrays and maps. This simulates connectors that support column identity tracking.
   private var tableColumns: Array[Column] = InMemoryBaseTable.assignMissingIds(initialColumns)
@@ -86,6 +88,15 @@ abstract class InMemoryBaseTable(
     tableColumns = newColumns
   }
 
+  override def displayProperties(): util.Map[String, String] = {
+    Option(tableDisplayProperties).map(util.Collections.unmodifiableMap(_))
+      .getOrElse(super.displayProperties())
+  }
+
+  def setDisplayProperties(displayProperties: util.Map[String, String]): Unit = {
+    tableDisplayProperties = new util.HashMap[String, String](displayProperties)
+  }
+
   override def version(): String = tableVersion.toString
 
   def setVersion(version: String): Unit = {
@@ -93,7 +104,7 @@ abstract class InMemoryBaseTable(
   }
 
   /**
-   * Copies version and validated version from another table.
+   * Copies version, validated version and display-only metadata from another table.
    *
    * Some test catalogs (e.g. [[NullColumnIdInMemoryTableCatalog]],
    * [[NullTableIdAndNullColumnIdInMemoryTableCatalog]]) create a new table object
@@ -104,7 +115,8 @@ abstract class InMemoryBaseTable(
    * [[InMemoryTable]].copy, validated-version propagation, and the join-refresh
    * tests in [[DSv2IncrementallyConstructedQueryTests]]).
    */
-  def setVersionAndValidatedVersionFrom(sourceTable: InMemoryBaseTable): Unit = {
+  def copyTableStateFrom(sourceTable: InMemoryBaseTable): Unit = {
+    setDisplayProperties(sourceTable.displayProperties())
     setVersion(sourceTable.version())
     if (sourceTable.validatedVersion() != null) {
       setValidatedVersion(sourceTable.validatedVersion())
@@ -217,6 +229,7 @@ abstract class InMemoryBaseTable(
     case NamedTransform("truncate", Seq(_: NamedReference, _: V2Literal[_])) =>
     case NamedTransform("signed_zeros", Seq(_: NamedReference)) =>
     case NamedTransform("flip_low_bit", Seq(_: NamedReference)) =>
+    case NamedTransform("self_reduce", Seq(_: NamedReference)) =>
     case t if !allowUnsupportedTransforms =>
       throw new IllegalArgumentException(s"Transform $t is not a supported transform")
   }
@@ -350,6 +363,12 @@ abstract class InMemoryBaseTable(
       case NamedTransform("flip_low_bit", Seq(ref: NamedReference)) =>
         extractor(ref.fieldNames, cleanedSchema, row) match {
           case (value: Long, LongType) => FlipLowBitFunction.produceResult(InternalRow(value))
+          case (v, t) =>
+            throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
+        }
+      case NamedTransform("self_reduce", Seq(ref: NamedReference)) =>
+        extractor(ref.fieldNames, cleanedSchema, row) match {
+          case (value: Long, LongType) => SelfReduceFunction.produceResult(InternalRow(value))
           case (v, t) =>
             throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
         }

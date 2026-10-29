@@ -7461,6 +7461,35 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertDataStructuresEmpty()
   }
 
+  test("SPARK-60497: a map-stage job that depends on a pipelined shuffle is rejected") {
+    // A map-stage job runs its missing ancestor stages, so a pipelined producer below its
+    // dependency would be co-scheduled without any of the pipelined-group setup of a result job.
+    // As in the result-job path, a pipelined shuffle below a regular one is rejected up front,
+    // both when the map stage reads it directly and when it sits below another regular shuffle.
+    // No stage is submitted and no partial state remains.
+    val producerRdd = new MyRDD(sc, 2, Nil)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    // consumer --[regular, the map-stage job's dependency]-->
+    val directDep = new ShuffleDependency(consumerRdd, new HashPartitioner(2))
+    // consumer --[regular]--> mid --[regular, the map-stage job's dependency]-->
+    val midRdd = new MyRDD(sc, 2, List(new ShuffleDependency(consumerRdd, new HashPartitioner(2))),
+      tracker = mapOutputTracker)
+    val deepDep = new ShuffleDependency(midRdd, new HashPartitioner(2))
+    for (dep <- Seq(directDep, deepDep)) {
+      val failure = new java.util.concurrent.atomic.AtomicReference[Exception]()
+      val failListener = new JobListener {
+        override def taskSucceeded(index: Int, result: Any): Unit = {}
+        override def jobFailed(exception: Exception): Unit = failure.set(exception)
+      }
+      submitMapStage(dep, listener = failListener)
+      assertPipelinedUnsupported(
+        failure.get(), "a map-stage job that depends on a pipelined shuffle")
+    }
+    assert(taskSets.isEmpty)
+    assertDataStructuresEmpty()
+  }
+
   test("regular shuffle map-stage job with speculation enabled is NOT rejected (inertness)") {
     // The map-stage speculation fail-fast must be inert for a regular ShuffleDependency.
     sc.conf.set(config.SPECULATION_ENABLED, true)
@@ -9786,9 +9815,10 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
         edgeReads.foreach(_.set(0))
         submit(result, Array(0, 1))
         assert(failure === null)
-        // Classification, cache-intent collection, admission, and group collection each visit
-        // once. A checkpoint or cache search adds one visit, regardless of the number of roots.
-        val expected = if (roots == "no-checkpoint") 4 else 5
+        // Classification, cache-intent collection, admission, group collection, and the member
+        // resource-profile search each visit once. A checkpoint or cache search adds one visit,
+        // regardless of the number of roots.
+        val expected = if (roots == "no-checkpoint") 5 else 6
         assert(preflightEdgeReads === Seq.fill(edgeReads.size)(expected))
         pipelined.foreach { dep =>
           completeShuffleMapStageSuccessfully(
@@ -10204,6 +10234,67 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
     assertPipelinedUnsupported(
       submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-60496: pipelined shuffle: a non-default resource profile on a materialized " +
+      "regular prefix does not reject the pipelined suffix") {
+    // The materialized prefix never runs in the pipelined job (see JobShuffleShape), so its
+    // profile is not a group member's profile. A task-only profile is the only non-default kind
+    // a pipelined job can use, since dynamic allocation is rejected for it.
+    val taskRp = new TaskResourceProfile(new TaskResourceRequests().cpus(1).requests)
+    val regularRoot = new MyRDD(sc, 2, Nil).withResources(taskRp)
+    val regularDep = new ShuffleDependency(regularRoot, new HashPartitioner(3))
+    val prefixReader = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    // A non-default profile needs non-null job properties when its stage is submitted.
+    submit(prefixReader, Array(0, 1, 2), properties = new Properties())
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 3)
+    complete(taskSets(1), Seq((Success, 1), (Success, 2), (Success, 3)))
+    assert(results === Map(0 -> 1, 1 -> 2, 2 -> 3))
+    results.clear()
+    val taskSetsBefore = taskSets.size
+
+    // producer(reads the materialized regular prefix) --[pipelined]--> consumer (result stage).
+    // Both members are on the default profile.
+    val producerRdd = new MyRDD(sc, 3, List(regularDep), tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    submit(consumerRdd, Array(0, 1))
+
+    assert(failure === null, s"the prefix's profile must not reject the job, got: $failure")
+    assert(taskSets.size === taskSetsBefore + 2,
+      s"expected producer and consumer submitted concurrently, got ${taskSets.size} task sets")
+    assert(!scheduler.runningStages.exists(_.rdd eq regularRoot),
+      "the materialized prefix stage must not re-run")
+    completeShuffleMapStageSuccessfully(taskSets(taskSetsBefore).stageId, 0, 2)
+    complete(taskSets(taskSetsBefore + 1), Seq((Success, 42), (Success, 43)))
+    assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty()
+  }
+
+  test("SPARK-60496: pipelined shuffle: a non-default resource profile on an RDD shared by a " +
+      "materialized prefix and a member stage is rejected") {
+    // `shared` is the materialized prefix's map RDD and also a narrow parent of the pipelined
+    // producer, so it runs inside that member stage too. The member check must reach it through
+    // the narrow edge even though the prefix itself is not checked.
+    val taskRp = new TaskResourceProfile(new TaskResourceRequests().cpus(1).requests)
+    val shared = new MyRDD(sc, 2, Nil).withResources(taskRp)
+    val regularDep = new ShuffleDependency(shared, new HashPartitioner(2))
+    val prefixReader = new MyRDD(sc, 2, List(regularDep), tracker = mapOutputTracker)
+    // A non-default profile needs non-null job properties when its stage is submitted.
+    submit(prefixReader, Array(0, 1), properties = new Properties())
+    completeShuffleMapStageSuccessfully(taskSets.head.stageId, 0, 2)
+    complete(taskSets(1), Seq((Success, 1), (Success, 2)))
+    assert(results === Map(0 -> 1, 1 -> 2))
+    val taskSetsBefore = taskSets.size
+
+    val producerRdd = new MyRDD(sc, 2, List(regularDep, new OneToOneDependency(shared)),
+      tracker = mapOutputTracker)
+    val pipelinedDep = new PipelinedShuffleDependency(producerRdd, new HashPartitioner(2))
+    val consumerRdd = new MyRDD(sc, 2, List(pipelinedDep), tracker = mapOutputTracker)
+    assertPipelinedUnsupported(
+      submitAndCaptureFailure(consumerRdd, Array(0, 1)), "non-default resource profile")
+    assert(taskSets.size === taskSetsBefore, "no stage should be submitted for a rejected job")
     assertDataStructuresEmpty()
   }
 

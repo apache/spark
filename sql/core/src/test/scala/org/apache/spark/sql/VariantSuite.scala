@@ -212,6 +212,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
       sql("SELECT to_json(variant_delete(parse_json('[1, 2, 3]'), '$[1]'))"),
       rows("[1,3]"))
 
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        val input = Seq("""{"a\nb":1,"a\\nb":2}""").toDF("json")
+        checkAnswer(
+          input.selectExpr("""to_json(variant_delete(parse_json(json), r"$['a\nb']"))"""),
+          rows(if (legacy) """{"a\nb":1}""" else """{"a\\nb":2}"""))
+      }
+    }
+
     checkAnswer(
       sql("SELECT to_json(variant_delete(CAST(NULL AS VARIANT), '$.a'))"),
       rows(null))
@@ -775,6 +784,15 @@ class VariantSuite extends SharedSparkSession with ExpressionEvalHelper {
     checkAnswer(
       sql("SELECT to_json(variant_pick(parse_json('{\"a\": 1}'), '$'))"),
       rows("""{"a":1}"""))
+
+    Seq(false, true).foreach { legacy =>
+      withSQLConf(SQLConf.LEGACY_VARIANT_PATH_BACKSLASH_AS_LITERAL.key -> legacy.toString) {
+        val input = Seq("""{"a\nb":1,"a\\nb":2}""").toDF("json")
+        checkAnswer(
+          input.selectExpr("""to_json(variant_pick(parse_json(json), r"$['a\nb']"))"""),
+          rows(if (legacy) """{"a\\nb":2}""" else """{"a\nb":1}"""))
+      }
+    }
 
     // The String* DataFrame-API overload compiles each path to a literal.
     val df = Seq("""{"a": 1, "b": 2, "c": 3}""").toDF("json")

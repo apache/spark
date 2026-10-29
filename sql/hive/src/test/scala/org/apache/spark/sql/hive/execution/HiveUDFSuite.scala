@@ -455,6 +455,31 @@ class HiveUDFSuite extends QueryTest with TestHiveSingleton {
     }
   }
 
+  test("SPARK-60519: geospatial types are unsupported as Hive UDF arguments") {
+    withUserDefinedFunction("testGenericUDFHash" -> true) {
+      sql(s"CREATE TEMPORARY FUNCTION testGenericUDFHash AS '${classOf[GenericUDFHash].getName}'")
+      // WKB of POINT(1 2).
+      val wkb = "0101000000000000000000F03F0000000000000040"
+      Seq(
+        // Non-foldable arguments, which are mapped to Hive object inspectors by their data types.
+        s"ST_GeomFromWKB(X'$wkb', 4326)" -> GeometryType(4326),
+        s"ST_GeogFromWKB(X'$wkb')" -> GeographyType(4326),
+        // Foldable arguments, which are mapped to constant Hive object inspectors.
+        "CAST(NULL AS GEOMETRY(4326))" -> GeometryType(4326),
+        "CAST(NULL AS GEOGRAPHY(4326))" -> GeographyType(4326)
+      ).foreach { case (arg, dt) =>
+        // The Hive UDF resolver wraps the failure in CANNOT_INSTANTIATE_HIVE_FUNCTION.
+        val e = intercept[AnalysisException] {
+          sql(s"SELECT testGenericUDFHash($arg)").collect()
+        }
+        checkError(
+          exception = e.getCause.asInstanceOf[AnalysisException],
+          condition = "UNSUPPORTED_DATATYPE",
+          parameters = Map("typeName" -> s"\"${dt.sql}\""))
+      }
+    }
+  }
+
   test("Hive UDFs with insufficient number of input arguments should trigger an analysis error") {
     withTempView("testUDF") {
       Seq((1, 2)).toDF("a", "b").createOrReplaceTempView("testUDF")

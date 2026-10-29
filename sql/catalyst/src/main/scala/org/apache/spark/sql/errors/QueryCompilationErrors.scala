@@ -24,7 +24,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.{SPARK_DOC_ROOT, SparkException, SparkIllegalArgumentException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, FunctionIdentifier, InternalRow, QualifiedTableName, TableIdentifier}
-import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedRegex}
+import org.apache.spark.sql.catalyst.analysis.{CannotReplaceMissingTableException, FunctionAlreadyExistsException, NamedRelation, NamespaceAlreadyExistsException, NoSuchFunctionException, NoSuchNamespaceException, NoSuchPartitionException, NoSuchTableException, Star, TableAlreadyExistsException, UnresolvedPlanId, UnresolvedRegex}
 import org.apache.spark.sql.catalyst.catalog.{CatalogTable, InvalidUDFClassException}
 import org.apache.spark.sql.catalyst.catalog.CatalogTypes.TablePartitionSpec
 import org.apache.spark.sql.catalyst.expressions.{Alias, Attribute, AttributeReference, AttributeSet, CreateMap, CreateStruct, Expression, GroupingID, NamedExpression, SortOrder, SpecifiedWindowFrame, WindowFrame, WindowFunction, WindowSpecDefinition}
@@ -2020,6 +2020,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       cause = Some(cause))
   }
 
+  def nativeDataSourcePackageConflictError(name: String, packages: Seq[String]): Throwable = {
+    new AnalysisException(
+      errorClass = "NATIVE_DATA_SOURCE_PACKAGE_CONFLICT",
+      messageParameters = Map("name" -> name, "packages" -> packages.mkString(", ")))
+  }
+
   def findMultipleDataSourceError(provider: String, sourceNames: Seq[String]): Throwable = {
     new AnalysisException(
       errorClass = "MULTIPLE_DATA_SOURCES",
@@ -2240,6 +2246,13 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1165",
       messageParameters = Map.empty)
+  }
+
+  def specifyWriteOrderingNotAllowedWhenTableSchemaNotDefinedError(origin: Origin): Throwable = {
+    new AnalysisException(
+      errorClass = "SPECIFY_WRITE_ORDERING_IS_NOT_ALLOWED",
+      messageParameters = Map.empty,
+      origin = origin)
   }
 
   def bucketingColumnCannotBePartOfPartitionColumnsError(
@@ -4875,6 +4888,14 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       errorClass = "CANNOT_RESOLVE_DATAFRAME_COLUMN",
       messageParameters = Map("name" -> toSQLExpr(e)),
       origin = e.origin
+    )
+  }
+
+  def subqueryPlanNotAttached(u: UnresolvedPlanId): Throwable = {
+    new AnalysisException(
+      errorClass = "CONNECT_INVALID_PLAN.SUBQUERY_PLAN_NOT_ATTACHED",
+      messageParameters = Map("planId" -> u.planId.toString),
+      origin = u.origin
     )
   }
 

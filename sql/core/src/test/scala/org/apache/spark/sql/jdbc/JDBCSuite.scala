@@ -27,6 +27,7 @@ import java.util.concurrent.{CountDownLatch, Executors, TimeUnit}
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
+import org.apache.logging.log4j.Level
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -42,18 +43,21 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.ShowCreateTable
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, CharVarcharUtils, DateTimeTestUtils, DateTimeUtils}
 import org.apache.spark.sql.connector.catalog.Identifier
-import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue}
+import org.apache.spark.sql.connector.expressions.{Cast => V2Cast, Expression => V2Expression, FieldReference, GeneralScalarExpression, LiteralValue, NullOrdering, SortDirection, SortValue}
+import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Sum}
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.execution.{DataSourceScanExec, ExtendedMode, ProjectExec}
 import org.apache.spark.sql.execution.command.{ExplainCommand, ShowCreateTableCommand}
 import org.apache.spark.sql.execution.datasources.{LogicalRelation, LogicalRelationWithTable}
 import org.apache.spark.sql.execution.datasources.jdbc.{JDBCOptions, JDBCPartition, JDBCRelation, JdbcUtils}
+import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCScanBuilder
 import org.apache.spark.sql.execution.metric.InputOutputMetricsHelper
 import org.apache.spark.sql.functions.{lit, percentile_approx}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.sources._
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
+import org.apache.spark.unsafe.types.UTF8String
 import org.apache.spark.util.Utils
 
 class JDBCSuite extends SharedSparkSession {
@@ -1432,7 +1436,6 @@ class JDBCSuite extends SharedSparkSession {
 
     // LIKE-family operators render with a trailing ESCAPE clause and must be delimited too.
     // LiteralValue for StringType must use UTF8String (Spark's internal string type).
-    import org.apache.spark.unsafe.types.UTF8String
     for ((op, pattern) <- Seq(
         "STARTS_WITH" -> "abc%", "ENDS_WITH" -> "%abc", "CONTAINS" -> "%abc%")) {
       val like = new Predicate(op,
@@ -1656,6 +1659,10 @@ class JDBCSuite extends SharedSparkSession {
       Some(ArrayType(DecimalType.SYSTEM_DEFAULT)))
     assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_bpchar", 64, md) ==
       Some(ArrayType(CharType(64))))
+    assert(Postgres.getCatalystType(java.sql.Types.CHAR, "char", 1, md) === Some(StringType))
+    assert(Postgres.getCatalystType(java.sql.Types.CHAR, "bpchar", 5, md) === None)
+    assert(Postgres.getCatalystType(java.sql.Types.ARRAY, "_char", 1, md) ==
+      Some(ArrayType(StringType)))
     assert(Postgres.getJDBCType(FloatType).map(_.databaseTypeDefinition).get == "FLOAT4")
     assert(Postgres.getJDBCType(DoubleType).map(_.databaseTypeDefinition).get == "FLOAT8")
     assert(Postgres.getJDBCType(ByteType).map(_.databaseTypeDefinition).get == "SMALLINT")
@@ -2350,13 +2357,91 @@ class JDBCSuite extends SharedSparkSession {
     assert(getJdbcType(oracleDialect, TimestampNTZType) == "TIMESTAMP")
   }
 
+  test("SPARK-60479: dialects compile CHAR_READ_SIDE_PADDING") {
+    val pad = new GeneralScalarExpression(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING,
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val eq = new Predicate("=",
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val rpad = new GeneralScalarExpression("RPAD",
+      Array[V2Expression](
+        FieldReference("flag"),
+        LiteralValue(5, IntegerType),
+        LiteralValue(UTF8String.fromString(" "), StringType)))
+    val rpadEq = new Predicate("=",
+      Array[V2Expression](rpad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+
+    Seq(
+      "jdbc:h2:mem:testdb0",
+      "jdbc:postgresql://127.0.0.1/db",
+      "jdbc:sqlserver://127.0.0.1/db",
+      "jdbc:oracle://127.0.0.1/db").foreach { url =>
+      assert(
+        JdbcDialects.get(url).compileExpression(eq).get === """("flag") = 'Y    '""", url)
+    }
+    Seq(
+      "jdbc:mysql://127.0.0.1/db",
+      "jdbc:db2://127.0.0.1/db",
+      "jdbc:derby:memory:db").foreach { url =>
+      assert(JdbcDialects.get(url).compileExpression(eq).isEmpty, url)
+    }
+
+    val h2 = JdbcDialects.get("jdbc:h2:mem:testdb0")
+    assert(h2.compileExpression(rpadEq).get === """(RPAD("flag", 5, ' ')) = 'Y    '""")
+
+    val oracle = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
+    assert(oracle.compileExpression(rpadEq).isEmpty)
+
+    val y = LiteralValue(UTF8String.fromString("Y    "), StringType)
+    val n = LiteralValue(UTF8String.fromString("N    "), StringType)
+    val inSmall = new Predicate("IN", Array[V2Expression](pad, y, n))
+    assert(oracle.compileExpression(inSmall).get === """"flag" IN ('Y    ', 'N    ')""")
+    val notIn = new Predicate("NOT", Array[V2Expression](inSmall))
+    assert(oracle.compileExpression(notIn).get === """NOT ("flag" IN ('Y    ', 'N    '))""")
+
+    val many = (1 to 1001).map { i =>
+      LiteralValue(UTF8String.fromString(f"$i%05d"), StringType)
+    }
+    val inLarge = new Predicate("IN", (pad +: many).toArray[V2Expression])
+    val largeSql = oracle.compileExpression(inLarge).get
+    assert(largeSql.startsWith("(") && largeSql.endsWith(")"))
+    assert(largeSql.contains(" OR "))
+    assert(" IN \\(".r.findAllMatchIn(largeSql).length === 2)
+    many.foreach { lit =>
+      assert(largeSql.contains(lit.value.toString))
+    }
+
+    val leftoverEq = new Predicate("=",
+      Array[V2Expression](pad, LiteralValue(UTF8String.fromString("Y    "), StringType)))
+    val isNull = new Predicate("IS_NULL", Array[V2Expression](FieldReference("flag")))
+    val caseWhen = new GeneralScalarExpression("CASE_WHEN",
+      Array[V2Expression](leftoverEq, LiteralValue(1, IntegerType)))
+    val agg = new Aggregation(Array(new Sum(caseWhen, false)), Array.empty)
+    val sort = SortValue(leftoverEq, SortDirection.ASCENDING, NullOrdering.NULLS_LAST)
+    val options = new JDBCOptions("jdbc:derby:memory:db", "t", Map.empty[String, String])
+    val builder = JDBCScanBuilder(spark, new StructType().add("flag", StringType), options)
+    val logAppender = new LogAppender("compile V2")
+    withLogAppender(logAppender, level = Some(Level.WARN)) {
+      val leftover = builder.pushPredicates(Array(leftoverEq, isNull))
+      assert(leftover.exists(_.name() == "="))
+      assert(!leftover.exists(_.name() == "IS_NULL"))
+      assert(builder.pushedPredicates().exists(_.name() == "IS_NULL"))
+      assert(!builder.pushAggregation(agg))
+      assert(!builder.pushTopN(Array(sort), 1))
+    }
+    assert(!logAppender.loggingEvents.exists { ev =>
+      ev.getMessage.getFormattedMessage.contains("Error occurs while compiling V2 expression")
+    })
+  }
+
   test("Oracle TRUNC pushdown should map Spark format strings to Oracle format") {
     val oracleDialect = JdbcDialects.get("jdbc:oracle://127.0.0.1/db")
     val dateRef = FieldReference("d")
 
     // LiteralValue for StringType must use UTF8String (Spark's internal string type)
     // to match what V2ExpressionBuilder produces in the real pushdown path.
-    import org.apache.spark.unsafe.types.UTF8String
     def truncExpr(fmt: String): GeneralScalarExpression = new GeneralScalarExpression("TRUNC",
       Array[V2Expression](dateRef, LiteralValue(UTF8String.fromString(fmt), StringType)))
 
