@@ -47,8 +47,9 @@ trait DataSourceV2ScanExecBase
 
   /**
    * Optional partitioning expressions provided by the V2 data sources, through
-   * `SupportsReportPartitioning`. `None` means either the source reported no key, or
-   * storage-partitioned join is off for this scan: the planner gates it on
+   * `SupportsReportPartitioning`. `None` means the source reported no key,
+   * `V2ScanPartitioningAndOrdering` dropped it (a key it cannot resolve, or none left after
+   * pruning), or storage-partitioned join is off for this scan: the planner gates it on
    * `spark.sql.sources.v2.bucketing.enabled` when the scan is built (see `DataSourceV2Strategy`),
    * so a copy of the planned node (such as the one `PlanAdaptiveDynamicPruningFilters` makes at
    * stage creation) keeps that decision instead of reading the config again (SPARK-60260).

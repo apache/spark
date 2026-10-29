@@ -422,8 +422,10 @@ trait KeyGroupedPartitioningRuntimeFilterTests extends KeyGroupedPartitioningSui
         // Re-collected, because under AQE executedPlan only reaches the rebuilt scans once the
         // query has run. Without this fix the rebuilt keyed scan reports UnknownPartitioning here.
         val executed = df.queryExecution.executedPlan
-        assert(
-          collectScans(executed).exists(_.outputPartitioning.isInstanceOf[KeyedPartitioning]),
+        // The scan with the DPP filter is the one PlanAdaptiveDynamicPruningFilters rebuilds.
+        val rebuilt = collectScans(executed).filter(_.runtimeFilters.nonEmpty)
+        assert(rebuilt.nonEmpty &&
+          rebuilt.forall(_.outputPartitioning.isInstanceOf[KeyedPartitioning]),
           s"expected the rebuilt scan to keep its keyed layout:\n$executed")
       }
     }
