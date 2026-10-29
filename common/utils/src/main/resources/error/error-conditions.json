@@ -8098,6 +8098,12 @@
     ],
     "sqlState" : "42K03"
   },
+  "STREAMING_FILE_SINK_PARTITIONING_MISMATCH" : {
+    "message" : [
+      "The streaming sink of the table <tableName> writes with the partition columns [<expectedPartCols>], but the files that the sink already committed to it have the partition columns [<recordedPartCols>]. Appending files in another layout hides the committed files from reads. Write to a new table location with a new checkpoint location, or rewrite the committed files with the partition columns of the table."
+    ],
+    "sqlState" : "55019"
+  },
   "STREAMING_OUTPUT_MODE" : {
     "message" : [
       "Invalid streaming output mode: <outputMode>."
