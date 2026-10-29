@@ -36,6 +36,9 @@ private[sql] object ArrowCompressionUtils {
    * carry a compression level, so that factory overload always builds a codec at the default
    * level, silently dropping the configured one. The level only matters on the write side; the
    * read side looks up the codec by the type recorded in the IPC message, so it is unaffected.
+   *
+   * For zstd it must also be a [[BoundedZstdCompressionCodec]], which neither factory overload
+   * returns, not even `createCodec(codecType, compressionLevel)`, which does keep the level.
    */
   def createCompressionCodec(
       codecName: String,
@@ -52,9 +55,9 @@ private[sql] object ArrowCompressionUtils {
 }
 
 /**
- * A [[ZstdCompressionCodec]] that never lets zstd write past its output buffer. Arrow 18.3 and
- * 19.0 pass `compressBound(len) + 8` as the destination capacity while pointing zstd 8 bytes into
- * a buffer of that size, so zstd can overrun it by up to 8 bytes; here the capacity is
+ * A [[ZstdCompressionCodec]] that never lets zstd write past its output buffer. arrow-java up to
+ * 19.0 passes `compressBound(len) + 8` as the destination capacity while pointing zstd 8 bytes
+ * into a buffer of that size, so zstd can overrun it by up to 8 bytes; here the capacity is
  * `compressBound(len)`. Remove once on Arrow 20.0.0 (apache/arrow-java#1119).
  */
 private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)

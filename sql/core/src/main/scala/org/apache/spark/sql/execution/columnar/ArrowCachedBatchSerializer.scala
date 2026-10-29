@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters._
 import org.apache.arrow.flatbuf.{RecordBatch => FlatBufRecordBatch}
 import org.apache.arrow.memory.BufferAllocator
 import org.apache.arrow.vector.{TypeLayout, VectorLoader, VectorSchemaRoot, VectorUnloader}
-import org.apache.arrow.vector.compression.{CompressionCodec, NoCompressionCodec}
+import org.apache.arrow.vector.compression.NoCompressionCodec
 import org.apache.arrow.vector.ipc.{ReadChannel, WriteChannel}
 import org.apache.arrow.vector.ipc.message.{ArrowBodyCompression, ArrowFieldNode}
 import org.apache.arrow.vector.ipc.message.{ArrowRecordBatch, MessageSerializer}
@@ -261,14 +261,6 @@ private object ArrowCachedBatchSerializer {
       throw ExecutionErrors.unsupportedDataTypeError(attr.dataType)
     }
   }
-
-  // scalastyle:off caselocale
-  def createCompressionCodec(
-      codecName: String,
-      compressionLevel: Int): CompressionCodec = {
-    ArrowCompressionUtils.createCompressionCodec(codecName.toLowerCase, compressionLevel)
-  }
-  // scalastyle:on caselocale
 
   def serializeBatch(batch: ArrowRecordBatch): Array[Byte] = {
     val out = new ByteArrayOutputStream()
@@ -993,7 +985,7 @@ private class InternalRowToArrowCachedBatchIterator(
     compressionCodecName: String,
     compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
 
-  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+  private val compressionCodec = ArrowCompressionUtils.createCompressionCodec(
     compressionCodecName,
     compressionLevel)
 
@@ -1100,7 +1092,7 @@ private class ColumnarBatchToArrowCachedBatchIterator(
     compressionCodecName: String,
     compressionLevel: Int) extends Iterator[ArrowCachedBatch] {
 
-  private val compressionCodec = ArrowCachedBatchSerializer.createCompressionCodec(
+  private val compressionCodec = ArrowCompressionUtils.createCompressionCodec(
     compressionCodecName,
     compressionLevel)
 
