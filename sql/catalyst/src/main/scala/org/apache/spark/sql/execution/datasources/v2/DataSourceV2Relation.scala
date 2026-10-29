@@ -154,6 +154,53 @@ case class DataSourceV2Relation(
 }
 
 /**
+ * A logical placeholder for a table that supports external lookup but not batch scan.
+ *
+ * The placeholder lets a Dataset carry the table until an external lookup join reads it as its
+ * lookup side. It must never be planned as an ordinary scan.
+ */
+case class ExternalLookupRelation(relation: DataSourceV2Relation)
+  extends DataSourceV2RelationBase(
+    relation.table,
+    relation.output,
+    relation.catalog,
+    relation.identifier,
+    relation.options,
+    relation.timeTravelSpec) {
+
+  def table: Table = relation.table
+
+  override def output: Seq[AttributeReference] = relation.output
+
+  override def newInstance(): ExternalLookupRelation =
+    copy(relation = relation.newInstance())
+
+  override def computeStats(): Statistics = Statistics(sizeInBytes = conf.defaultSizeInBytes)
+
+  override val nodePatterns: Seq[TreePattern] = Seq(DATA_SOURCE_V2_RELATION)
+}
+
+/** Finds the table that an external lookup join would read. */
+object ExternalLookupRelations {
+  /** The table of a DSv2 relation, including the placeholder of a lookup-only table. */
+  def table(plan: LogicalPlan): Option[Table] = plan match {
+    case relation: DataSourceV2Relation => Some(relation.table)
+    case relation: ExternalLookupRelation => Some(relation.table)
+    case _ => None
+  }
+
+  /** Whether only an external lookup join can read the table, because it has no batch scan. */
+  def isLookupOnly(table: Table): Boolean = {
+    val capabilities = table.capabilities()
+    capabilities.contains(TableCapability.EXTERNAL_LOOKUP) &&
+      !capabilities.contains(TableCapability.BATCH_READ)
+  }
+
+  /** The table of a relation that only an external lookup join can read. */
+  def lookupOnlyTable(plan: LogicalPlan): Option[Table] = table(plan).filter(isLookupOnly)
+}
+
+/**
  * A logical plan for a DSv2 table with a scan already created.
  *
  * This is used in the optimizer to push filters and projection down before conversion to physical
