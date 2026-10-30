@@ -262,6 +262,14 @@ class CatalystTranspiler(AbstractTranspiler):
     variety = "catalyst"
 
     def __init__(self) -> None:
+        from pyspark.sql import SparkSession
+
+        session = SparkSession.getActiveSession()
+        self._null_strictness = (
+            session.conf.get("spark.sql.experimental.optimizer.transpileNullStrictness", "strict")
+            if session is not None
+            else None
+        ) or "strict"
         self._param_categories: dict[int, str] = {}
         self._category_cache: dict[int, str] = {}
 
@@ -490,6 +498,12 @@ class CatalystTranspiler(AbstractTranspiler):
         value info, so it is documented, not guarded): Spark orders ``NaN``
         as greater than every value, whereas Python's ``NaN`` comparisons
         are all ``False``.
+
+        ``spark.sql.experimental.optimizer.transpileNullStrictness`` controls
+        this guard. Under ``strict`` (the default) a NULL operand raises,
+        matching Python's TypeError. Under ``loose`` the guard is skipped and
+        NULL propagates as NULL, allowing more UDFs to transpile at the cost of
+        that semantic difference on NULL inputs.
         """
         lc = self._category(params, left_node)
         rc = self._category(params, right_node)
@@ -501,6 +515,8 @@ class CatalystTranspiler(AbstractTranspiler):
             )
         left_col = self._convert_chunk(params, left_node)
         right_col = self._convert_chunk(params, right_node)
+        if self._null_strictness == "loose":
+            return op(left_col, right_col)
         null_guard = left_col.isNull() | right_col.isNull()
         err = lit(
             "Python UDF transpiler: cannot compare NULL with operator "
