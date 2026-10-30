@@ -85,8 +85,8 @@ connect = [
     {include-group = "internal_pandas"},
     {include-group = "internal_protobuf"},
     {include-group = "internal_pyarrow"},
-    "grpcio>=1.76.0",
-    "grpcio-status>=1.76.0",
+    "grpcio>=1.84.1",
+    "grpcio-status>=1.84.1",
     "googleapis-common-protos>=1.71.0",
     "zstandard>=0.25.0",
     "graphviz>=0.20",
@@ -218,8 +218,8 @@ dev = [
 
 internal_ci_connect = [
     {include-group = "connect"},
-    "grpcio==1.76.0",
-    "grpcio-status==1.76.0",
+    "grpcio==1.84.1",
+    "grpcio-status==1.84.1",
     "googleapis-common-protos==1.71.0",
     "zstandard==0.25.0",
     "protobuf==6.33.5",
@@ -276,8 +276,8 @@ ci_classic_pandas_3 = [
 ]
 
 ci_connect_pandas_3 = [
-    "grpcio==1.76.0",
-    "grpcio-status==1.76.0",
+    "grpcio==1.84.1",
+    "grpcio-status==1.84.1",
     "googleapis-common-protos==1.71.0",
     "zstandard==0.25.0",
     "protobuf==6.33.5",
