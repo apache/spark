@@ -19,8 +19,13 @@ import unittest
 import uuid
 from collections.abc import Generator
 from typing import Any, Optional, Union
+from unittest.mock import patch
 
-from pyspark.testing.connectutils import connect_requirement_message, should_test_connect
+from pyspark.testing.connectutils import (
+    connect_requirement_message,
+    disable_ml_cache_cleanup,
+    should_test_connect,
+)
 from pyspark.testing.utils import eventually
 
 if should_test_connect:
@@ -262,10 +267,66 @@ if should_test_connect:
                 resp.operation_statuses.append(op_status)
             return resp
 
+    class ExitRecordingStub:
+        """Records every RPC by name, so a test can assert which RPCs the client sent.
+
+        Answers the RPCs the exit hook may send; any other RPC is recorded and then fails.
+        """
+
+        def __init__(
+            self,
+            session_id: str,
+            release_server_side_session_id: str = "",
+            release_error: Optional[Exception] = None,
+        ):
+            self._session_id = session_id
+            # ReleaseSession carries no server-side ID when the session never existed.
+            self._release_server_side_session_id = release_server_side_session_id
+            self._release_error = release_error
+            self.calls = []
+
+        def Config(self, req, metadata, timeout=None):
+            self.calls.append("Config")
+            resp = proto.ConfigResponse(
+                session_id=self._session_id, server_side_session_id="server-session-id"
+            )
+            for key in req.operation.get.keys:
+                resp.pairs.add(key=key)
+            return resp
+
+        def ExecutePlan(self, req, metadata, timeout=None):
+            self.calls.append("ExecutePlan")
+            return [
+                proto.ExecutePlanResponse(
+                    session_id=self._session_id,
+                    server_side_session_id="server-session-id",
+                    operation_id=req.operation_id,
+                )
+            ]
+
+        def ReleaseSession(self, req, metadata, timeout=None):
+            self.calls.append("ReleaseSession")
+            if self._release_error is not None:
+                raise self._release_error
+            return proto.ReleaseSessionResponse(
+                session_id=self._session_id,
+                server_side_session_id=self._release_server_side_session_id,
+            )
+
+        def __getattr__(self, name):
+            if name.startswith("__"):
+                raise AttributeError(name)
+
+            def unexpected_rpc(*args, **kwargs):
+                self.calls.append(name)
+                raise RuntimeError(f"Unexpected RPC: {name}")
+
+            return unexpected_rpc
+
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
-    SparkConnectClient._cleanup_ml_cache = lambda _: None
+    _real_cleanup_ml_cache = disable_ml_cache_cleanup()
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
@@ -652,6 +713,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = True
         client._closed = False
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"release_session": 0, "close": 0}
 
@@ -669,11 +731,54 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(call_tracker["release_session"], 1)
         self.assertEqual(call_tracker["close"], 1)
 
+    def test_on_exit_skips_ml_cleanup_without_server_session(self):
+        """Test _on_exit skips only ML cache cleanup when no server-side session ID was seen."""
+        for server_session_id in [None, ""]:
+            with self.subTest(server_session_id=server_session_id):
+                client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+                client._server_session_id = server_session_id
+
+                call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
+
+                def mock_cleanup_ml_cache():
+                    call_tracker["cleanup_ml_cache"] += 1
+
+                def mock_release_session():
+                    call_tracker["release_session"] += 1
+
+                def mock_close():
+                    call_tracker["close"] += 1
+
+                client._cleanup_ml_cache = mock_cleanup_ml_cache
+                client.release_session = mock_release_session
+                client.close = mock_close
+
+                # Release disabled: no RPCs.
+                client._release_session_on_exit = False
+                client._on_exit()
+                self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
+                self.assertEqual(call_tracker["release_session"], 0)
+                self.assertEqual(call_tracker["close"], 0)
+
+                # Release enabled: release and close, but skip ML cleanup.
+                client._release_session_on_exit = True
+                client._on_exit()
+                self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
+                self.assertEqual(call_tracker["release_session"], 1)
+                self.assertEqual(call_tracker["close"], 1)
+
+                # Server-side session ID seen: ML cleanup runs.
+                client._server_session_id = "server-session-id"
+                client._release_session_on_exit = False
+                client._on_exit()
+                self.assertEqual(call_tracker["cleanup_ml_cache"], 1)
+
     def test_on_exit_does_not_call_when_release_disabled(self):
         """Test _on_exit does nothing when _release_session_on_exit is False."""
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = False
         client._closed = False
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"release_session": 0, "close": 0}
 
@@ -691,38 +796,48 @@ class SparkConnectClientTestCase(unittest.TestCase):
         self.assertEqual(call_tracker["release_session"], 0)
         self.assertEqual(call_tracker["close"], 0)
 
-    def test_on_exit_does_not_call_when_already_closed(self):
-        """Test _on_exit does nothing when client is already closed."""
+    def test_on_exit_does_not_call_when_closed_or_released(self):
+        """Test _on_exit does nothing when the client is closed or its session was released."""
+        for flag in ["_closed", "_session_released"]:
+            with self.subTest(flag=flag):
+                client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+                client._release_session_on_exit = True
+                client._server_session_id = "server-session-id"
+                setattr(client, flag, True)
+
+                call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
+
+                def mock_cleanup_ml_cache():
+                    call_tracker["cleanup_ml_cache"] += 1
+
+                def mock_release_session():
+                    call_tracker["release_session"] += 1
+
+                def mock_close():
+                    call_tracker["close"] += 1
+
+                client._cleanup_ml_cache = mock_cleanup_ml_cache
+                client.release_session = mock_release_session
+                client.close = mock_close
+                client._on_exit()
+
+                self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
+                self.assertEqual(call_tracker["release_session"], 0)
+                self.assertEqual(call_tracker["close"], 0)
+
+    def test_close_unregisters_exit_hook(self):
+        """Test close() drops the atexit reference, since a closed client has no exit cleanup."""
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
-        client._release_session_on_exit = True
-        client._closed = True
-
-        call_tracker = {"cleanup_ml_cache": 0, "release_session": 0, "close": 0}
-
-        def mock_cleanup_ml_cache():
-            call_tracker["cleanup_ml_cache"] += 1
-
-        def mock_release_session():
-            call_tracker["release_session"] += 1
-
-        def mock_close():
-            call_tracker["close"] += 1
-
-        client._cleanup_ml_cache = mock_cleanup_ml_cache
-        client.release_session = mock_release_session
-        client.close = mock_close
-
-        client._on_exit()
-
-        self.assertEqual(call_tracker["cleanup_ml_cache"], 0)
-        self.assertEqual(call_tracker["release_session"], 0)
-        self.assertEqual(call_tracker["close"], 0)
+        with patch("atexit.unregister") as unregister:
+            client.close()
+        unregister.assert_called_once_with(client._on_exit)
 
     def test_on_exit_catches_release_session_exception(self):
         """Test _on_exit continues to call close even if release_session raises."""
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = True
         client._closed = False
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"release_session": 0, "close": 0}
 
@@ -747,6 +862,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = True
         client._closed = False
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"release_session": 0, "close": 0}
 
@@ -771,6 +887,7 @@ class SparkConnectClientTestCase(unittest.TestCase):
         client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
         client._release_session_on_exit = True
         client._closed = False
+        client._server_session_id = "server-session-id"
 
         call_tracker = {"release_session": 0, "close": 0}
 
@@ -790,6 +907,70 @@ class SparkConnectClientTestCase(unittest.TestCase):
 
         self.assertEqual(call_tracker["release_session"], 1)
         self.assertEqual(call_tracker["close"], 1)
+
+    def test_on_exit_sends_no_rpc_without_live_session(self):
+        """Test _on_exit sends no RPC for a session that was never established or was released.
+
+        RPCs are recorded at the stub, so any new exit-time RPC is covered, not only the ones
+        _on_exit sends today.
+        """
+
+        def exit_rpcs(
+            observed_id, release_on_exit, release_first=False, release_id="", release_error=None
+        ):
+            client = SparkConnectClient("sc://foo/", use_reattachable_execute=False)
+            # Use the real ML cache cleanup, which this module patches out.
+            client._cleanup_ml_cache = _real_cleanup_ml_cache.__get__(client)
+            self.addCleanup(client.close)
+            stub = ExitRecordingStub(client._session_id, release_id, release_error)
+            client._stub = stub
+            client._server_session_id = observed_id
+            client._release_session_on_exit = release_on_exit
+            if release_first:
+                if release_error is None:
+                    client.release_session()
+                else:
+                    with self.assertRaises(Exception):
+                        client.release_session()
+                # Only a release that closed a server-side session marks it as released.
+                self.assertEqual(client._session_released, bool(release_id) and not release_error)
+                stub.calls.clear()
+            client._on_exit()
+            return stub.calls
+
+        # Control: a live session cleans its ML cache at exit, so exit-time RPCs are recorded.
+        self.assertIn("ExecutePlan", exit_rpcs("server-session-id", release_on_exit=False))
+
+        for release_on_exit in [False, True]:
+            with self.subTest(state="released after use", release_on_exit=release_on_exit):
+                calls = exit_rpcs(
+                    "server-session-id",
+                    release_on_exit,
+                    release_first=True,
+                    release_id="server-session-id",
+                )
+                self.assertEqual(calls, [])
+            with self.subTest(state="released before use", release_on_exit=release_on_exit):
+                # The server had no session to close, so a session created later (for example
+                # by an artifact upload) is still released by the opt-in release.
+                expected = ["ReleaseSession"] if release_on_exit else []
+                self.assertEqual(exit_rpcs(None, release_on_exit, release_first=True), expected)
+            with self.subTest(state="release failed", release_on_exit=release_on_exit):
+                calls = exit_rpcs(
+                    "server-session-id",
+                    release_on_exit,
+                    release_first=True,
+                    release_error=RuntimeError("release failed"),
+                )
+                self.assertIn("ExecutePlan", calls)
+
+        for observed_id in [None, ""]:
+            with self.subTest(state="never established", observed_id=observed_id):
+                self.assertEqual(exit_rpcs(observed_id, release_on_exit=False), [])
+                # The opt-in release still runs: artifact uploads and cloneSession() can create
+                # a server-side session without the client observing its ID.
+                calls = exit_rpcs(observed_id, release_on_exit=True)
+                self.assertEqual(calls, ["ReleaseSession"])
 
     def test_get_operations_statuses_all(self):
         """Test get_operations_statuses returns all operation statuses when no IDs specified."""
