@@ -324,6 +324,12 @@ class NativeDataSourceStreamReader(
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
   // the executors with the partitions of that micro-batch.
   private var readerState: Array[Byte] = Array.emptyByteArray
+  // The range that was planned last, and its partitions, which only the driver keeps. All the
+  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
+  // source with itself, so they read the partitions of a single stream_partitions call, whose
+  // state readerState is.
+  @transient private var plannedRange: (String, String) = _
+  @transient private var plannedPartitions: Array[InputPartition] = _
 
   @transient private lazy val library = NativeLibraries.get(location)
 
@@ -359,11 +365,15 @@ class NativeDataSourceStreamReader(
   }
 
   override def partitions(start: String, end: String): Array[InputPartition] = {
-    val planned = call(name, "plan a scan of") {
-      library.streamPartitions(handle.get, start, end)
+    if (plannedRange != (start, end)) {
+      val planned = call(name, "plan a scan of") {
+        library.streamPartitions(handle.get, start, end)
+      }
+      readerState = bytesOrEmpty(Option(planned.state))
+      plannedPartitions = NativeInputPartition.from(planned.partitions)
+      plannedRange = (start, end)
     }
-    readerState = bytesOrEmpty(Option(planned.state))
-    NativeInputPartition.from(planned.partitions)
+    plannedPartitions
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {

@@ -39,6 +39,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.read.SupportsPushDownRequiredColumns
+import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
@@ -561,9 +562,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       check("The column m contains an array with a length of 1, but its parent refers to 2 " +
         "values.", "extra" -> "map", "short" -> array)
     }
-    // Spark reads the last offset of a map through the pointer to its buffers.
+    // Spark reads the last offset of a map through the pointer to its buffers, and the validity
+    // of a batch through the one of the batch.
     check("The column m has 2 buffers, but a NULL pointer to them.", "extra" -> "map",
       "short" -> "buffers")
+    check("The batch has 1 buffers, but a NULL pointer to them.", "short" -> "batch_buffers")
     check("The column dec contains the Arrow type Decimal(10, 2, 256), which is not supported.",
       "extra" -> "decimal256")
     // Arrow Java would also extend the elements of a list view with nulls, and Spark does not
@@ -950,9 +953,51 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     try {
       assert(Files.readString(columnsPath.toPath) == "mod")
       assert(scan.readSchema() == StructType.fromDDL("mod INT"))
+      // read gets these columns as the schema to read, which the test library checks, and its
+      // batches only have them.
+      val start = stream.initialOffset()
+      val end = stream.asInstanceOf[SupportsAdmissionControl]
+        .latestOffset(start, ReadLimit.allAvailable())
+      val factory = stream.createReaderFactory()
+      val mods = stream.planInputPartitions(start, end).toSeq.flatMap { partition =>
+        val reader = factory.createColumnarReader(partition)
+        try {
+          Iterator.continually(reader.next()).takeWhile(identity).flatMap { _ =>
+            val batch = reader.get()
+            assert(batch.numCols() == 1)
+            (0 until batch.numRows()).map(batch.column(0).getInt)
+          }.toList
+        } finally {
+          reader.close()
+        }
+      }
+      assert(mods == (0 until 10).map(_ % 3))
     } finally {
       stream.stop()
     }
+  }
+
+  nativeTest("plan each micro-batch once, also when a query reads a source twice") {
+    val session = newSession(defaultPackage)
+    val ranges = new File(Utils.createTempDir(), "ranges")
+    val counter = session.readStream.format("native_counter")
+      .option("max_offset", "6").option("step", "3").option("ranges_path", ranges.getPath)
+      .load()
+    // Both sides of the union read the stream of the source. The partitions and the state of each
+    // stream_partitions call have the number of the call, so read fails if it gets a partition of
+    // a call with the state of another.
+    val query = counter.union(counter).writeStream.format("memory")
+      .queryName("native_counter_self_union").start()
+    try {
+      query.processAllAvailable()
+      checkRows(session.table("native_counter_self_union"),
+        (0L until 6L).flatMap(id => Seq(Row(id), Row(id))))
+    } finally {
+      query.stop()
+    }
+    // stream_partitions is called once for each micro-batch.
+    assert(Files.readAllLines(ranges.toPath).asScala.toSeq ==
+      Seq("""{"offset":0} {"offset":3}""", """{"offset":3} {"offset":6}"""))
   }
 
   nativeTest("reject offsets that are not JSON on a single line") {
@@ -1099,6 +1144,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(Files.readString(new File(streamDir, "_ABORTED").toPath) == "0,0,1")
     assert(!new File(streamDir, "_ABORTED_0").exists())
     assert(new File(streamDir, "_CLOSED").isFile)
+  }
+
+  nativeTest("read and write without a state") {
+    // A reader or a writer without a state does not call set_state. read then fails unless it
+    // gets a state of length 0, and takes the columns from the schema to read. A data writer that
+    // gets a state of length 0 passes its rows in its message, and commit fails unless the
+    // messages have rows.
+    val session = newSession(defaultPackage)
+    checkRows(range(session, "end" -> "10", "stateless" -> "true"),
+      (0L until 10L).map(expectedRow))
+    checkRows(range(session, "end" -> "10", "stateless" -> "true").select("name", "id"),
+      (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
+    val query = session.readStream.format("native_counter")
+      .option("max_offset", "6").option("step", "3").option("stateless", "true").load()
+      .writeStream.format("memory").queryName("native_counter_stateless").start()
+    try {
+      query.processAllAvailable()
+      checkRows(session.table("native_counter_stateless"), (0L until 6L).map(Row(_)))
+    } finally {
+      query.stop()
+    }
+    val dir = Utils.createTempDir()
+    range(session, "end" -> "4", "stateless" -> "true").select("id", "name")
+      .write.format("native_sink").option("path", dir.getPath).option("stateless", "true")
+      .mode("append").save()
+    val written = dir.listFiles().filter(_.getName.startsWith("part-"))
+      .flatMap(file => Files.readAllLines(file.toPath).asScala)
+    assert(written.sorted.toSeq == Seq("0,null", "1,n1", "2,n2", "3,n3"))
+    assert(Files.readString(new File(dir, "_SUCCESS").toPath) == "2")
   }
 
   nativeTest("a scan whose planning failed fails again with the same error") {

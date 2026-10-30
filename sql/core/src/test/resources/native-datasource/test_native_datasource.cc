@@ -29,13 +29,14 @@
 //                   "short", an array of the batches has one value fewer than its parent refers to,
 //                   although its buffers hold them all: "id" shortens the column id, "entries" the
 //                   entries of the map and their fields, and "values" the values of the entries.
-//                   "children" exports the batches without their columns, with n_children = 0, and
-//                   "buffers" exports the map with a NULL pointer to its buffers. With the option
-//                   "null_rows", the struct of a batch has a validity buffer that marks its first
-//                   row as null, and a null_count of 1 for "count" or -1 for "unknown";
-//                   "unknown_valid" has one without nulls and a null_count of -1, and "no_buffer" a
-//                   null_count of -1 without a validity buffer. "column" gives the first column,
-//                   which has no validity buffer, a null_count of -1 instead. With the option
+//                   "children" exports the batches without their columns, with n_children = 0,
+//                   "buffers" exports the map with a NULL pointer to its buffers, and
+//                   "batch_buffers" the batches with one. With the option "null_rows", the struct
+//                   of a batch has a validity buffer that marks its first row as null, and a
+//                   null_count of 1 for "count" or -1 for "unknown"; "unknown_valid" has one
+//                   without nulls and a null_count of -1, and "no_buffer" a null_count of -1
+//                   without a validity buffer. "column" gives the first column, which has no
+//                   validity buffer, a null_count of -1 instead. With the option
 //                   "wait_for_interrupt", the stream of a partition creates the file
 //                   <wait_for_interrupt>.waiting, waits until its task is killed, and then creates
 //                   the file <wait_for_interrupt> and fails.
@@ -54,7 +55,10 @@
 //                   initial_offset appends a line to that file, and returns the number of calls
 //                   before it as the offset, as an initial offset that depends on when it is asked
 //                   does. With "columns_path", creating the stream reader writes the columns to
-//                   read to that file.
+//                   read to that file, and with "ranges_path", each call to stream_partitions
+//                   appends the start and the end offsets that it got to that file, as a line.
+//                   The partitions and the state that stream_partitions returns have the number of
+//                   the call, which read checks.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -67,10 +71,15 @@
 // With the option "fail", a step fails with an error. With the option "zero", a function that
 // creates a handle succeeds without setting it: "create", "create_reader",
 // "create_stream_reader", "create_writer" or "create_data_writer". With the option "states", the
-// functions that return a state pass it that many times.
+// functions that return a state pass it that many times. With the option "stateless", readers and
+// writers have no state: partitions, stream_partitions and create_writer do not call set_state.
+// read then fails unless it gets a state of length 0, and takes the columns from the schema to
+// read. A data writer that gets a state of length 0 passes its rows to commit in its message,
+// and commit fails unless the messages have rows.
 //
 // read fails unless it gets the kind of read of its reader and the schema to read, the columns
-// that the reader returns, with the names and the formats that the reader got them with.
+// that the reader returns, with the names and the formats that the reader got them with, and for
+// a micro-batch, the state of the stream_partitions call that returned the partition.
 // create_data_writer fails unless it gets the schema that create_writer got, with the same names
 // and formats, and write fails unless its batches have the columns of that schema.
 //
@@ -479,6 +488,8 @@ void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi
   }
   // The columns are still released with the batch.
   if (short_array == "children") out->n_children = 0;
+  // Its buffers are still released with it, through its private data.
+  if (short_array == "batch_buffers") out->buffers = nullptr;
 }
 
 // Sets the nulls of the struct of a batch, as the option "null_rows".
@@ -792,8 +803,12 @@ void recordTask(const Options& options, const SparkDsTaskContext* task) {
 
 // The driver-side reader of native_range and native_counter.
 struct Reader {
-  Options state;  // Serialized to the executors.
+  Options state;  // Serialized to the executors, unless the reader is stateless.
+  int64_t stream_partitions_calls = 0;
 };
+
+// Whether a reader or a writer has no state, with the option "stateless".
+bool stateless(const Options& state) { return get(state, "stateless", "") == "true"; }
 
 // The name and the format of each column of the schema that a reader got, for its state.
 Options fieldsOf(const ArrowSchema* schema) {
@@ -891,6 +906,10 @@ struct DataWriter {
   Options state;
   bool committed;
   ArrowSchema schema;  // The schema of the data, moved from create_data_writer.
+  // Whether the data writer got no state, so that it passes its rows to commit in its message
+  // rather than writing them to a file.
+  bool stateless;
+  std::string rows;
 };
 
 // The data writers that Spark closed, with the path of their write, so that using one of them
@@ -1031,8 +1050,8 @@ int createReader(void* handle, struct ArrowSchema* schema, const SparkDsReaderIn
     reader->state["hi"] = get(source->options, "end", "10");
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
-    for (const char* option :
-         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path", "states"}) {
+    for (const char* option : {"fail", "slice", "short", "null_rows", "wait_for_interrupt",
+                               "task_path", "states", "stateless"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1077,8 +1096,7 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
-          "initial_offsets_path",
-          "states"}) {
+          "initial_offsets_path", "ranges_path", "states", "stateless"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1121,11 +1139,15 @@ int planPartitions(void* handle, const SparkDsPartitionsInfo* info, SparkDsSink 
       count = 1;
     }
     int64_t step = std::max<int64_t>(1, (hi - lo + count - 1) / count);
+    // The partitions of a reader without a state say so, for read.
+    std::string prefix = stateless(reader->state) ? "stateless," : "";
     for (int64_t start = lo; start < hi; start += step) {
       int64_t stop = std::min(hi, start + step);
-      sendBytes(add_partition, sink, std::to_string(start) + "," + std::to_string(stop));
+      sendBytes(add_partition, sink, prefix + std::to_string(start) + "," + std::to_string(stop));
     }
-    sendState(reader->state, set_state, sink, serialize(reader->state));
+    if (!stateless(reader->state)) {
+      sendState(reader->state, set_state, sink, serialize(reader->state));
+    }
   });
 }
 
@@ -1159,6 +1181,8 @@ int initialOffset(void* handle, const SparkDsInitialOffsetInfo* info, SparkDsSin
     if (!path.empty()) {
       FILE* file = std::fopen(path.c_str(), "a+");
       if (file == nullptr) throw std::runtime_error("cannot write " + path);
+      // C leaves where an "a+" stream starts reading to the platform. The writes still append.
+      std::rewind(file);
       for (int c = std::fgetc(file); c != EOF; c = std::fgetc(file)) offset += c == '\n';
       std::fputs("initial_offset\n", file);
       std::fclose(file);
@@ -1192,11 +1216,30 @@ int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
                      SparkDsSink add_partition, SparkDsSink set_state, void* sink) {
   return guarded([&] {
     checkSize("SparkDsStreamPartitionsInfo", info->size, sizeof(SparkDsStreamPartitionsInfo));
+    auto* reader = fromHandle<Reader>(handle);
+    std::string ranges_path = get(reader->state, "ranges_path", "");
+    if (!ranges_path.empty()) {
+      FILE* file = std::fopen(ranges_path.c_str(), "a");
+      if (file == nullptr) throw std::runtime_error("cannot write " + ranges_path);
+      std::fputs((std::string(info->start) + " " + info->end + "\n").c_str(), file);
+      std::fclose(file);
+    }
     auto lo = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     auto hi = static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number);
-    if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
-    const Options& state = fromHandle<Reader>(handle)->state;
-    sendState(state, set_state, sink, serialize(state));
+    // The partitions and the state of each call have its number, so that read can check that it
+    // gets the state of the call that returned its partition. Calls on a handle never run
+    // concurrently.
+    std::string call = std::to_string(++reader->stream_partitions_calls);
+    std::string prefix = stateless(reader->state) ? "stateless," : "";
+    if (hi > lo) {
+      sendBytes(add_partition, sink,
+                prefix + std::to_string(lo) + "," + std::to_string(hi) + "," + call);
+    }
+    if (!stateless(reader->state)) {
+      Options state = reader->state;
+      state["call"] = call;
+      sendState(state, set_state, sink, serialize(state));
+    }
   });
 }
 
@@ -1222,22 +1265,43 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
                   struct ArrowArrayStream* stream) {
   return guarded([&] {
     checkSize("SparkDsReadInfo", info->size, sizeof(SparkDsReadInfo));
-    // Releases the schema, so Spark does not release it after the call.
     std::string fields = describeFields(info->schema);
-    info->schema->release(info->schema);
-    Options state = deserialize(toBytes(info->reader_state, info->reader_state_length));
-    maybeFail(state, "open");
-    // Returns success without initializing the stream, which Spark must reject.
-    if (get(state, "fail", "") == "uninitialized") return;
-    if (std::to_string(info->kind) != get(state, "kind", "")) {
-      throw std::runtime_error("read got the kind " + std::to_string(info->kind) +
-                               " for a reader of the kind " + get(state, "kind", ""));
-    }
-    if (fields != readerFields(state)) {
-      throw std::runtime_error("read got the schema to read (" + fields +
-                               "), but the reader returns (" + readerFields(state) + ")");
-    }
+    // Releases the schema, so Spark does not release it after the call.
+    auto columns = importColumns(info->schema);
     auto bounds = split(toBytes(info->partition, info->partition_length));
+    Options state;
+    if (!bounds.empty() && bounds[0] == "stateless") {
+      // A partition of a reader without a state, which reads the columns of the schema to read.
+      if (info->reader_state_length != 0) {
+        throw std::runtime_error("read got a state of " +
+                                 std::to_string(info->reader_state_length) +
+                                 " bytes, but the reader returned none");
+      }
+      bounds.erase(bounds.begin());
+      state["columns"] = join(columns);
+    } else {
+      state = deserialize(toBytes(info->reader_state, info->reader_state_length));
+      maybeFail(state, "open");
+      // Returns success without initializing the stream, which Spark must reject.
+      if (get(state, "fail", "") == "uninitialized") return;
+      if (std::to_string(info->kind) != get(state, "kind", "")) {
+        throw std::runtime_error("read got the kind " + std::to_string(info->kind) +
+                                 " for a reader of the kind " + get(state, "kind", ""));
+      }
+      if (fields != readerFields(state)) {
+        throw std::runtime_error("read got the schema to read (" + fields +
+                                 "), but the reader returns (" + readerFields(state) + ")");
+      }
+    }
+    if (info->kind == SPARK_DS_READ_MICRO_BATCH) {
+      if (bounds.size() != 3) throw std::runtime_error("invalid partition");
+      if (state.count("kind") > 0 && bounds[2] != get(state, "call", "")) {
+        throw std::runtime_error("read got the partition of the call " + bounds[2] +
+                                 " of stream_partitions with the state of the call " +
+                                 get(state, "call", ""));
+      }
+      bounds.pop_back();
+    }
     if (bounds.size() != 2) throw std::runtime_error("invalid partition");
     recordTask(state, task);
     stream->get_schema = streamGetSchema;
@@ -1284,6 +1348,7 @@ int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInf
     writer->state["zero"] = get(source->options, "zero", "");
     writer->state["commit_messages"] = get(source->options, "commit_messages", "1");
     writer->state["task_path"] = get(source->options, "task_path", "");
+    writer->state["stateless"] = get(source->options, "stateless", "");
     // The data writers check that they get the schema of the writer.
     writer->state["fields"] = describeFields(schema);
     // Records that a writer was created, which Spark then commits or aborts, and the ID of the
@@ -1291,7 +1356,9 @@ int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInf
     makeDirs(path);
     writeFile(path + "/_CREATED", "");
     if (info->query_id != nullptr) writeFile(path + "/_QUERY_ID", info->query_id);
-    sendState(source->options, set_state, sink, serialize(writer->state));
+    if (!stateless(writer->state)) {
+      sendState(source->options, set_state, sink, serialize(writer->state));
+    }
     *out = writer;
   });
 }
@@ -1305,18 +1372,28 @@ int commitWrite(void* handle, const SparkDsFinishWriteInfo* info) {
     std::string path = writer->state["path"];
     maybeFail(writer->state, "commit");
     bool has_null = false;
-    auto temp_files =
+    auto messages =
         toByteStrings(info->messages, info->message_lengths, info->num_messages, &has_null);
     if (has_null) throw std::runtime_error("commit got a null message");
     if (writer->state["overwrite"] == "true") {
       for (const auto& file : listFiles(path, "part-")) unlink((path + "/" + file).c_str());
     }
-    for (const auto& temp_file : temp_files) {
-      std::string file_name = temp_file.substr(temp_file.rfind('/') + 1);
-      std::rename(temp_file.c_str(), (path + "/part-" + file_name).c_str());
+    for (size_t i = 0; i < messages.size(); i++) {
+      if (stateless(writer->state)) {
+        // The message of a data writer without a state has its rows.
+        if (messages[i].rfind("rows\n", 0) != 0) {
+          throw std::runtime_error("commit got a message without rows from a data writer");
+        }
+        writeFile(path + "/part-" + std::to_string(epoch_id) + "-" + std::to_string(i) + ".csv",
+                  messages[i].substr(5));
+      } else {
+        // The message of a data writer is its temporary file.
+        std::string file_name = messages[i].substr(messages[i].rfind('/') + 1);
+        std::rename(messages[i].c_str(), (path + "/part-" + file_name).c_str());
+      }
     }
     writeFile(path + (epoch_id < 0 ? "/_SUCCESS" : "/_EPOCH_" + std::to_string(epoch_id)),
-              std::to_string(temp_files.size()));
+              std::to_string(messages.size()));
     writer->closed_marker = closedMarker(epoch_id);
   });
 }
@@ -1332,9 +1409,10 @@ int abortWrite(void* handle, const SparkDsFinishWriteInfo* info) {
     auto* writer = fromHandle<Writer>(handle);
     writer->closed_marker = closedMarker(epoch_id);
     bool has_null = false;
-    for (const auto& temp_file :
+    for (const auto& message :
          toByteStrings(info->messages, info->message_lengths, info->num_messages, &has_null)) {
-      unlink(temp_file.c_str());
+      // The temporary file of a data writer, unless it has no state.
+      if (!stateless(writer->state)) unlink(message.c_str());
     }
     int64_t null_messages = 0;
     for (int64_t i = 0; i < info->num_messages; i++) {
@@ -1374,6 +1452,18 @@ int createDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo
     Options state = deserialize(toBytes(info->writer_state, info->writer_state_length));
     if (returnsZero(state, "create_data_writer")) return;
     if (info->schema->n_children == 0) throw std::runtime_error("no columns to write");
+    if (info->writer_state_length == 0) {
+      // A data writer of a writer without a state, which keeps its rows for its message. Moves
+      // the schema, as below.
+      auto* writer = new DataWriter{"", nullptr, state, false, *info->schema, true, ""};
+      info->schema->release = nullptr;
+      {
+        std::lock_guard<std::mutex> guard(closed_data_writers_lock);
+        closed_data_writers.erase(writer);
+      }
+      *out = writer;
+      return;
+    }
     std::string fields = describeFields(info->schema);
     if (fields != state["fields"]) {
       throw std::runtime_error("create_data_writer got the schema (" + fields +
@@ -1391,7 +1481,7 @@ int createDataWriter(const SparkDsTaskContext* task, const SparkDsDataWriterInfo
     writeFile(state["path"] + "/_created_data_writers/" + temp_path.substr(dir.size() + 1), "");
     // Moves the schema to keep it, as the C data interface defines a move, so that Spark does not
     // release it after the call.
-    auto* writer = new DataWriter{temp_path, file, state, false, *info->schema};
+    auto* writer = new DataWriter{temp_path, file, state, false, *info->schema, false, ""};
     info->schema->release = nullptr;
     {
       // The allocator may reuse the address of a closed data writer.
@@ -1422,7 +1512,11 @@ int writeBatch(void* handle, struct ArrowArray* array) {
         line += formatValue(schema.children[c], array->children[c], array->offset + i);
       }
       line += "\n";
-      std::fputs(line.c_str(), writer->file);
+      if (writer->stateless) {
+        writer->rows += line;
+      } else {
+        std::fputs(line.c_str(), writer->file);
+      }
     }
   });
 }
@@ -1435,6 +1529,11 @@ int commitDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info,
     auto* writer = fromHandle<DataWriter>(handle);
     // If the commit fails, Spark aborts the data writer.
     maybeFail(writer->state, "commitDataWriter");
+    if (writer->stateless) {
+      sendBytes(set_message, sink, "rows\n" + writer->rows);
+      writer->committed = true;
+      return;
+    }
     // With the option "commit_messages", the message is passed that many times.
     int64_t messages = getLong(writer->state, "commit_messages", 1);
     for (int64_t i = 0; i < messages; i++) sendBytes(set_message, sink, writer->temp_path);
@@ -1449,6 +1548,11 @@ int abortDataWriter(void* handle, const SparkDsFinishDataWriterInfo* info) {
   return guarded([&] {
     checkSize("SparkDsFinishDataWriterInfo", info->size, sizeof(SparkDsFinishDataWriterInfo));
     auto* writer = fromHandle<DataWriter>(handle);
+    // A data writer without a state has no file, nor a path to record anything under.
+    if (writer->stateless) {
+      writer->rows.clear();
+      return;
+    }
     // Spark does not abort a data writer that committed: records it if it does.
     if (writer->committed) {
       writeFile(writer->state["path"] + "/_ABORTED_COMMITTED_DATA_WRITER", "");
@@ -1466,6 +1570,8 @@ void closeDataWriter(void* handle) {
   if (usedAfterClose(handle)) return;
   std::unique_ptr<DataWriter> writer(fromHandle<DataWriter>(handle));
   if (writer->schema.release != nullptr) writer->schema.release(&writer->schema);
+  // A data writer without a state has no file, nor a path to record its close under.
+  if (writer->stateless) return;
   guarded([&] {
     if (writer->file != nullptr) std::fclose(writer->file);
     std::string path = writer->state["path"];
