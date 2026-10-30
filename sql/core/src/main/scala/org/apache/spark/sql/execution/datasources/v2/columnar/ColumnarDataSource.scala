@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -47,8 +48,17 @@ trait ColumnarDataSource {
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
-  /** Returns a reader for a micro-batch streaming scan of the given schema. */
-  def streamReader(schema: StructType): ColumnarStreamReader
+  /**
+   * Returns a reader for a micro-batch streaming scan of the given schema: the columns to read,
+   * which may be only the top-level columns of the schema of the data that the query needs. The
+   * partitions return exactly these columns.
+   *
+   * @param checkpointLocation the location of a directory in the checkpoint of the streaming
+   *                           query that is reserved for this source. It stays the same when the
+   *                           query restarts from its checkpoint. The names that start with
+   *                           `_spark` are reserved for Spark there.
+   */
+  def streamReader(schema: StructType, checkpointLocation: String): ColumnarStreamReader
 
   /**
    * Returns a writer for a batch write.
@@ -102,17 +112,36 @@ case class ColumnarPlannedBatch(
 /**
  * Reads the data of a [[ColumnarDataSource]] for a micro-batch streaming scan, with offsets in
  * JSON. Spark plans the partitions of each micro-batch on the driver, then serializes the reader
- * to the executors, where `read` is called for each partition.
+ * factory of `readerFactory` to the executors, which reads each partition, by default with `read`
+ * of this reader.
  */
 trait ColumnarStreamReader extends Serializable {
+  /**
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it in
+   * the checkpoint of the source, and only asks for it when the checkpoint does not have it yet.
+   */
   def initialOffset(): String
 
-  def latestOffset(): String
+  /**
+   * Returns the latest offset available.
+   *
+   * @param start the offset that the next micro-batch starts after: the end of the last
+   *              micro-batch, or the initial offset before the first one
+   */
+  def latestOffset(start: String): String
 
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]
 
   def read(partition: InputPartition): PartitionReader[ColumnarBatch]
+
+  /**
+   * Returns the reader factory of a micro-batch, which Spark serializes to the executors. By
+   * default, it reads each partition with `read`, so that this reader is serialized with it. A
+   * reader may return a factory that also implements other interfaces of reader factories, such as
+   * `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`.
+   */
+  def readerFactory(): PartitionReaderFactory = new ColumnarStreamPartitionReaderFactory(this)
 
   /** Tells the data source that Spark has processed all the data up to and including `end`. */
   def commit(end: String): Unit = {}
@@ -132,6 +161,12 @@ trait ColumnarWriter extends Serializable {
   def commit(messages: Array[WriterCommitMessage]): Unit
 
   def abort(messages: Array[WriterCommitMessage]): Unit
+
+  /**
+   * The time zone of the timestamps of the Arrow batches that the data writers get, read on the
+   * driver: by default, the session time zone when the data writers are planned.
+   */
+  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }
 
 /** Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. */
@@ -141,4 +176,7 @@ trait ColumnarStreamWriter extends Serializable {
   def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit
 
   def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit
+
+  /** As for [[ColumnarWriter.timeZoneId]]. */
+  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }
