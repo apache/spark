@@ -25,6 +25,7 @@ from py4j.protocol import Py4JJavaError
 from pyspark.errors import PySparkNotImplementedError
 from pyspark.errors.exceptions.connect import PythonException
 from pyspark.sql import Row
+from pyspark.storagelevel import StorageLevel
 from pyspark.testing.connectutils import ReusedConnectTestCase
 from pyspark.testing.utils import QuietTest, have_numpy, have_pandas
 from pyspark.tests.test_rdd import RDDTestsMixin
@@ -38,6 +39,20 @@ class RDDParityTests(RDDTestsMixin, ReusedConnectTestCase):
     @property
     def sc(self):
         return self.spark.sparkContext
+
+    def test_persist_rdd_of_dataframe_keeps_dataframe_cache(self):
+        df = self.spark.range(3)
+        df.cache()
+        try:
+            level = df.storageLevel
+            rdd = df.rdd
+            self.assertEqual(rdd.getStorageLevel(), StorageLevel.NONE)
+            rdd.cache()
+            self.assertEqual(rdd.collect(), df.collect())
+            rdd.unpersist()
+            self.assertEqual(df.storageLevel, level)
+        finally:
+            df.unpersist()
 
     def test_parallelize_chained_maps_fused_logical_results(self):
         """parallelize attaches a stable partition column; chained map preserves semantics."""

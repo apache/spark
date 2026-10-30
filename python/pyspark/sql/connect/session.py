@@ -1454,6 +1454,8 @@ class SparkSession:
             overwrite_conf["spark.master"] = master
             if "spark.remote" in overwrite_conf:
                 del overwrite_conf["spark.remote"]
+            if "spark.api.mode" in overwrite_conf:
+                del overwrite_conf["spark.api.mode"]
 
             # Check for a user provided authentication token, creating a new one if not,
             # and make sure it's set in the environment,

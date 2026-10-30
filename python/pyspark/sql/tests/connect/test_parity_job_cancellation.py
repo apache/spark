@@ -19,11 +19,11 @@ import threading
 from unittest import mock
 
 from pyspark import inheritable_thread_target
+from pyspark.core.connect.context import SparkContext as ConnectSparkContext
+from pyspark.core.context import SparkContext as SparkContextFacade
 from pyspark.errors import PySparkNotImplementedError, PySparkTypeError
 from pyspark.sql.tests.test_job_cancellation import JobCancellationTestsMixin
 from pyspark.testing.connectutils import ReusedConnectTestCase
-from pyspark.core.context import SparkContext as SparkContextFacade
-from pyspark.core.connect.context import SparkContext as ConnectSparkContext
 
 
 class JobCancellationParityTests(JobCancellationTestsMixin, ReusedConnectTestCase):
@@ -69,6 +69,18 @@ class JobCancellationParityTests(JobCancellationTestsMixin, ReusedConnectTestCas
             [],
         )
         self.spark.clearTags()
+
+    def test_set_job_group_replaces_the_job_group(self):
+        # A thread has one job group, as in Spark Classic, so cancelJobGroup("a") does not
+        # cancel the jobs of the group set after it.
+        sc = self.spark.sparkContext
+        self.spark.clearTags()
+        try:
+            sc.setJobGroup("a", "first group")
+            sc.setJobGroup("b", "second group")
+            self.assertEqual(self.spark.getTags(), {"b"})
+        finally:
+            self.spark.clearTags()
 
     def test_inheritable_tags_with_deco(self):
         @inheritable_thread_target(self.spark)

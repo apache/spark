@@ -37,6 +37,7 @@ from pyspark.serializers import (
     UTF8Deserializer,
 )
 from pyspark.sql import SparkSession
+from pyspark.storagelevel import StorageLevel
 from pyspark.testing.sqlutils import SPARK_HOME
 from pyspark.testing.utils import QuietTest, ReusedPySparkTestCase, have_numpy, have_pandas
 
@@ -1117,6 +1118,52 @@ class RDDTestsMixin:
         self.assertEqual(self.sc.pythonVer, "%d.%d" % sys.version_info[:2])
         self.assertIsInstance(self.sc.appName, str)
         self.assertIsInstance(self.sc.master, str)
+
+    def test_parallelize_slices_batches(self):
+        # The batches of 6 elements, not the elements, are sliced over the 3 partitions.
+        self.assertEqual(
+            self.sc.parallelize(list(range(20)), 3).glom().collect(),
+            [list(range(6)), list(range(6, 12)), list(range(12, 20))],
+        )
+
+    def test_coalesce_to_more_partitions_than_the_input_has(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lines.txt")
+            with open(path, "w") as f:
+                f.write("0\n1")
+            coalesced = self.sc.textFile(path).coalesce(10)
+            self.assertEqual(coalesced.getNumPartitions(), len(coalesced.glom().collect()))
+            indexed = self.sc.parallelize([2, 3], 2).mapPartitionsWithIndex(
+                lambda i, it: [(i, x) for x in it]
+            )
+            self.assertEqual(coalesced.union(indexed).collect(), ["0", "1", (0, 2), (1, 3)])
+
+    def test_text_file_with_min_partitions_keeps_order(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "lines.txt")
+            lines = ["line%d" % i for i in range(100)]
+            with open(path, "w") as f:
+                f.write("\n".join(lines))
+            rdd = self.sc.textFile(path, 4)
+            self.assertGreaterEqual(rdd.getNumPartitions(), 4)
+            self.assertEqual(rdd.collect(), lines)
+            self.assertEqual(rdd.zipWithIndex().values().collect(), list(range(100)))
+
+    def test_storage_level_of_rdd_derived_from_cached_rdd(self):
+        cached = self.sc.parallelize([1, 2], 2).cache()
+        try:
+            self.assertEqual(cached.map(lambda x: x).getStorageLevel(), StorageLevel.NONE)
+        finally:
+            cached.unpersist()
+
+    def test_text_file_with_comma_separated_paths(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b = os.path.join(d, "a.txt"), os.path.join(d, "b.txt")
+            with open(a, "w") as f:
+                f.write("a0\na1")
+            with open(b, "w") as f:
+                f.write("b0")
+            self.assertEqual(sorted(self.sc.textFile(a + "," + b).collect()), ["a0", "a1", "b0"])
 
 
 class RDDTests(RDDTestsMixin, ReusedPySparkTestCase):

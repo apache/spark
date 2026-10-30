@@ -590,7 +590,9 @@ class RDD(RDDFacade, Generic[T_co]):
         return self.persist(StorageLevel.MEMORY_ONLY)
 
     def persist(self: "RDD[T]", storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY) -> "RDD[T]":
-        if self._func is None:
+        # The RDD of a DataFrame caches its rows as chunks of its own, as Spark Classic caches
+        # them in the RDD, so that unpersisting the RDD leaves the cache of the DataFrame alone.
+        if self._func is None and self._source != rt.SOURCE_ROWS:
             df = self._df
         else:
             df = self._chunk_df()
@@ -609,7 +611,8 @@ class RDD(RDDFacade, Generic[T_co]):
         return self
 
     def getStorageLevel(self) -> StorageLevel:
-        return self._df.storageLevel
+        # The DataFrame may be cached for another RDD or by the user.
+        return self._df.storageLevel if self.is_cached else StorageLevel.NONE
 
     def _checkpoint(self, local: bool) -> None:
         sealed = self._sealed()
@@ -880,8 +883,8 @@ class RDD(RDDFacade, Generic[T_co]):
     def getNumPartitions(self) -> int:
         """
         The number of partitions. It is known without running a job for RDDs from
-        ``parallelize``, ``range``, shuffles, ``coalesce``, and narrow transformations of those;
-        otherwise one job counts them.
+        ``parallelize``, ``range`` and shuffles, and for ``coalesce`` and narrow transformations
+        of those; otherwise one job counts them.
         """
         if self._num_partitions is None:
             from pyspark.sql.connect import functions as F
@@ -950,12 +953,57 @@ class RDD(RDDFacade, Generic[T_co]):
         else:
             df = sealed._chunk_df().coalesce(numPartitions)
             source = rt.SOURCE_CHUNKS
+        # Coalescing never adds partitions, so the count stays unknown when the input's is.
         known = sealed._num_partitions
-        num = numPartitions if known is None else min(numPartitions, known)
+        num = None if known is None else min(numPartitions, known)
         rdd: RDD[T] = RDD(
             df, self._cctx, num, source, None, sealed._row_schema, sealed._binary_as_bytes
         )
         return rdd
+
+    def _spread(self: "RDD[T]", minPartitions: int) -> "RDD[T]":
+        """
+        This RDD in at least ``minPartitions`` partitions: as it is when it has that many, and
+        otherwise split into ``minPartitions`` partitions of consecutive elements, which keeps
+        their order as the splits of Spark Classic's file sources do. One job counts the
+        elements of each partition.
+        """
+        from pyspark.sql.connect import functions as F
+
+        rdd = self._sealed()
+        counts = dict(rdd.mapPartitionsWithIndex(lambda i, it: [(i, sum(1 for _ in it))]).collect())
+        rdd._num_partitions = len(counts)
+        if len(counts) >= minPartitions:
+            return rdd
+        total = max(sum(counts.values()), 1)
+        starts: Dict[int, int] = {}
+        position = 0
+        for i in sorted(counts):
+            starts[i] = position
+            position += counts[i]
+
+        def tag(split: int, iterator: Iterator[Any]) -> Iterator[Tuple[bytes, int, int]]:
+            # The element at index g of the RDD goes to the partition g * minPartitions // total.
+            indexed = enumerate(iterator, starts.get(split, 0))
+            for pid, group in itertools.groupby(indexed, lambda e: e[0] * minPartitions // total):
+                for blob, n in rt.encode_chunks(x for _, x in group):
+                    yield blob, n, pid
+
+        tagged = rdd._run(rt.emit_pid_chunks, _pid_chunk_schema(), func=tag).select(
+            rt.CHUNK_COL,
+            rt.COUNT_COL,
+            rt.PID_COL,
+            # The order of the chunks in the RDD, which a partition gets from several tasks.
+            F.monotonically_increasing_id().alias("__seq"),
+        )
+        df = (
+            _place(tagged, minPartitions, F.lit(0).cast("long").alias("__seq"))
+            .sortWithinPartitions("__seq")
+            .select(rt.CHUNK_COL, rt.COUNT_COL, rt.PID_COL)
+        )
+        spread: RDD[T] = RDD(df, self._cctx, minPartitions)
+        spread._df_has_pid = True
+        return spread
 
     def repartitionAndSortWithinPartitions(
         self: "RDD[Tuple[Any, Any]]",

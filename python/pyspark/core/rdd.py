@@ -4233,7 +4233,16 @@ class RDD(Generic[T_co]):
 
     def toDF(
         self: "RDD[Any]", schema: Optional[Any] = None, sampleRatio: Optional[float] = None
-    ) -> "DataFrame": ...
+    ) -> "DataFrame":
+        # A Spark Classic SparkSession replaces this method when it is created, and the Spark
+        # Connect RDD overrides it.
+        raise PySparkRuntimeError(
+            errorClass="CALL_BEFORE_INITIALIZE",
+            messageParameters={
+                "func_name": "RDD.toDF",
+                "object": "SparkSession",
+            },
+        )
 
 
 def __getattr__(name: str) -> Any:

@@ -100,6 +100,11 @@ def _connect_remote_endpoint(master: Optional[str], conf_pairs: List[Tuple[str, 
     return f"sc://localhost:{DefaultChannelBuilder.default_port()}"
 
 
+def _input_paths(path: str) -> List[str]:
+    """The paths of a comma-separated list of inputs, as Spark Classic's file sources take."""
+    return [p.strip() for p in path.split(",") if p.strip()]
+
+
 def _resource_uri(path: str) -> str:
     """The URI Spark Classic lists for a resource added from ``path``."""
     from urllib.parse import urlparse
@@ -435,9 +440,16 @@ class SparkContext:
         """
         Mirrors classic job grouping via Spark Connect tagging for use with
         :meth:`interruptTag <pyspark.sql.SparkSession.interruptTag>` or
-        :meth:`SparkContext.cancelJobGroup`.
+        :meth:`SparkContext.cancelJobGroup`. As in Spark Classic, a thread has one job group, so
+        this replaces the job group that the thread had.
         """
+        # Kept with the thread's tags, which threads created with inheritable_thread_target copy.
+        thread_local = self._session.client.thread_local
+        previous = getattr(thread_local, "connect_rdd_job_group", None)
+        if previous is not None and previous != groupId:
+            self._discard_connect_job_tag_if_present(previous)
         self._session.addTag(groupId)
+        thread_local.connect_rdd_job_group = groupId
         _ = description
         if interruptOnCancel:
             warnings.warn(
@@ -566,14 +578,13 @@ class SparkContext:
     def _with_min_partitions(self, rdd: "RDD[T]", minPartitions: Optional[int]) -> "RDD[T]":
         """
         Honor an explicit ``minPartitions`` for file sources. Spark SQL decides file splits from
-        session configurations, so count them, and spread the elements over ``minPartitions``
-        partitions only when there are fewer.
+        session configurations, so count them, and split the elements into ``minPartitions``
+        partitions of consecutive elements only when there are fewer, which keeps their order as
+        Spark Classic's splits do.
         """
         if minPartitions is None or minPartitions <= 1:
             return rdd
-        if rdd.getNumPartitions() >= minPartitions:
-            return rdd
-        return rdd.repartition(minPartitions)
+        return rdd._spread(minPartitions)
 
     def textFile(
         self,
@@ -582,9 +593,10 @@ class SparkContext:
         use_unicode: bool = True,
     ) -> "RDD[str]":
         """
-        Read a text file through the Spark SQL text source, one element per line. File splits
-        follow the session's file source configurations; ``minPartitions`` is honored as a
-        minimum, which takes a job to count the splits.
+        Read a text file, or comma-separated paths, through the Spark SQL text source, one
+        element per line. File splits follow the session's file source configurations;
+        ``minPartitions`` is honored as a minimum, which takes a job to count the lines of each
+        split, and keeps the lines in order.
         """
         from pyspark.core.connect.rdd import RDD
 
@@ -595,7 +607,8 @@ class SparkContext:
                 UserWarning,
                 stacklevel=2,
             )
-        rdd: RDD[str] = RDD(self._session.read.text(name), self, None, rt.SOURCE_VALUES)
+        df = self._session.read.text(_input_paths(name))
+        rdd: RDD[str] = RDD(df, self, None, rt.SOURCE_VALUES)
         return self._with_min_partitions(rdd, minPartitions)
 
     def wholeTextFiles(
@@ -618,15 +631,14 @@ class SparkContext:
                 stacklevel=2,
             )
 
-        paths = [p.strip() for p in path.split(",") if p.strip()]
-        df = self._session.read.text(paths, wholetext=True).select(
+        df = self._session.read.text(_input_paths(path), wholetext=True).select(
             F.input_file_name(), F.col("value")
         )
         rdd: RDD[Tuple[str, str]] = RDD(df, self, None, rt.SOURCE_PAIRS)
         return self._with_min_partitions(rdd, minPartitions)
 
     def _binary_files_df(self, path: str) -> "DataFrame":
-        paths = [p.strip() for p in path.split(",") if p.strip()]
+        paths = _input_paths(path)
         reader = self._session.read.format("binaryFile")
         df = reader.load(paths[0]) if len(paths) == 1 else reader.load(paths)
         return df.select(F.col("path"), F.col("content"))
@@ -674,7 +686,7 @@ class SparkContext:
         """
         from pyspark.core.connect.rdd import RDD
 
-        df = self._session.read.parquet(name).select(
+        df = self._session.read.parquet(*_input_paths(name)).select(
             F.col("value").alias(rt.CHUNK_COL), F.col("n").alias(rt.COUNT_COL)
         )
         rdd: RDD[Any] = RDD(df, self, None)
@@ -708,9 +720,9 @@ class SparkContext:
 
     def parallelize(self, c: Iterable[T], numSlices: Optional[int] = None) -> "RDD[T]":
         """
-        Distribute a local Python collection: it is sliced like Spark Classic's
-        ``ParallelCollectionRDD``, pickled in chunks on the driver, and placed with
-        :meth:`DataFrame.repartitionById`.
+        Distribute a local Python collection: it is sliced like Spark Classic's ``parallelize``
+        (batches of elements sliced as ``ParallelCollectionRDD`` does), pickled in chunks on the
+        driver, and placed with :meth:`DataFrame.repartitionById`.
         """
         import pyarrow as pa
 
@@ -734,11 +746,17 @@ class SparkContext:
         elems: Sequence[Any] = c if isinstance(c, (list, tuple)) else list(c)
         n = len(elems)
         k = max(1, num_partitions)
+        # Spark Classic pickles the collection in batches of this many elements and slices the
+        # batches, not the elements, over the partitions, so the partitions hold the same
+        # elements here.
+        batch = max(1, min(n // k, 1024))
+        num_batches = -(-n // batch)
         blobs: List[bytes] = []
         counts: List[int] = []
         pids: List[int] = []
         for p in range(k):
-            lo, hi = (p * n) // k, ((p + 1) * n) // k
+            lo = min((p * num_batches) // k * batch, n)
+            hi = min(((p + 1) * num_batches) // k * batch, n)
             for blob, cnt in rt.encode_chunks(elems[lo:hi]):
                 blobs.append(blob)
                 counts.append(cnt)

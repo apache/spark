@@ -493,6 +493,9 @@ class SparkSession(SparkConversionMixin):
 
             with self._lock:
                 api_mode = opts.get("spark.api.mode", os.environ.get("SPARK_API_MODE", "")).lower()
+                # A Spark Classic JVM cannot start with spark.api.mode=connect, so an explicit
+                # Spark Connect API mode starts a local Spark Connect server without a master.
+                is_explicit_api_mode_connect = api_mode == "connect"
                 if api_mode not in ("classic", "connect"):
                     api_mode = default_api_mode()
                 is_api_mode_connect = api_mode == "connect"
@@ -509,6 +512,7 @@ class SparkSession(SparkConversionMixin):
                     or "SPARK_REMOTE" in os.environ
                     or "spark.remote" in opts
                     or opts.get("spark.remote") is not None
+                    or is_explicit_api_mode_connect
                     or (is_api_mode_connect and has_cluster_or_remote)
                     or ("SPARK_CONNECT_MODE_ENABLED" in os.environ and has_cluster_or_remote)
                 )
