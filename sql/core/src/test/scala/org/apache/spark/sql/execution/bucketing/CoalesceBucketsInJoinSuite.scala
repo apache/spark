@@ -17,20 +17,22 @@
 
 package org.apache.spark.sql.execution.bucketing
 
+import org.apache.spark.sql.Row
 import org.apache.spark.sql.catalyst.catalog.BucketSpec
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans.Inner
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FileSourceScanExec, SparkPlan}
+import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.{HadoopFsRelation, InMemoryFileIndex, PartitionSpec}
 import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastNestedLoopJoinExec, ShuffledHashJoinExec, SortMergeJoinExec}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.IntegerType
 
-class CoalesceBucketsInJoinSuite extends SharedSparkSession {
+class CoalesceBucketsInJoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper {
   private val SORT_MERGE_JOIN = "sortMergeJoin"
   private val SHUFFLED_HASH_JOIN = "shuffledHashJoin"
   private val BROADCAST_HASH_JOIN = "broadcastHashJoin"
@@ -259,6 +261,161 @@ class CoalesceBucketsInJoinSuite extends SharedSparkSession {
         rightRelation = lRel,
         joinOperator = SHUFFLED_HASH_JOIN,
         shjBuildSide = Some(BuildRight)))
+    }
+  }
+
+  test("SPARK-60382: broadcast join coalescing uses the streamed side bucket count") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      def scan(cols: Seq[Attribute], numBuckets: Int): FileSourceScanExec = {
+        val relation = HadoopFsRelation(
+          location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
+          partitionSchema = PartitionSpec.emptySpec.partitionColumns,
+          dataSchema = DataTypeUtils.fromAttributes(cols),
+          bucketSpec = Some(BucketSpec(numBuckets, Seq("i"), Nil)),
+          fileFormat = new ParquetFileFormat(),
+          options = Map.empty)(spark)
+        FileSourceScanExec(
+          relation, None, cols, relation.dataSchema, Nil, None, None, Nil, None)
+      }
+
+      def cols(): Seq[Attribute] = Seq(
+        AttributeReference("i", IntegerType)(),
+        AttributeReference("k", IntegerType)())
+
+      def coalesced(plan: SparkPlan): Seq[(Int, Option[Int])] = {
+        plan.collect { case f: FileSourceScanExec =>
+          (f.relation.bucketSpec.get.numBuckets, f.optionalNumCoalescedBuckets)
+        }
+      }
+
+      // Streamed side is 100 buckets. 100 % 8 != 0, so nothing is coalesced,
+      // including the 16-bucket build scan that sits on the left.
+      val build = cols()
+      val stream = cols()
+      val other = Seq(AttributeReference("i", IntegerType)())
+      val hashJoin = BroadcastHashJoinExec(
+        Seq(build(1)), Seq(stream(1)), Inner, BuildLeft, None,
+        scan(build, 16), scan(stream, 100))
+      val plan = CoalesceBucketsInJoin(SortMergeJoinExec(
+        Seq(stream.head), Seq(other.head), Inner, None, hashJoin, scan(other, 8)))
+      assert(coalesced(plan) == Seq((16, None), (100, None), (8, None)))
+
+      val nestedLoop = BroadcastNestedLoopJoinExec(
+        scan(build, 16), scan(stream, 100), BuildLeft, Inner, None)
+      val nestedPlan = CoalesceBucketsInJoin(SortMergeJoinExec(
+        Seq(stream.head), Seq(other.head), Inner, None, nestedLoop, scan(other, 8)))
+      assert(coalesced(nestedPlan) == Seq((16, None), (100, None), (8, None)))
+
+      // Streamed side is 16 buckets and the other input is 8. Only the
+      // streamed scan is rewritten to 8. The 100-bucket build scan is not.
+      val buildDiv = cols()
+      val streamDiv = cols()
+      val otherDiv = Seq(AttributeReference("i", IntegerType)())
+      val hashJoinDiv = BroadcastHashJoinExec(
+        Seq(buildDiv(1)), Seq(streamDiv(1)), Inner, BuildLeft, None,
+        scan(buildDiv, 100), scan(streamDiv, 16))
+      val planDiv = CoalesceBucketsInJoin(SortMergeJoinExec(
+        Seq(streamDiv.head), Seq(otherDiv.head), Inner, None,
+        hashJoinDiv, scan(otherDiv, 8)))
+      assert(coalesced(planDiv) == Seq((100, None), (16, Some(8)), (8, None)))
+
+      val nestedLoopDiv = BroadcastNestedLoopJoinExec(
+        scan(buildDiv, 100), scan(streamDiv, 16), BuildLeft, Inner, None)
+      val nestedPlanDiv = CoalesceBucketsInJoin(SortMergeJoinExec(
+        Seq(streamDiv.head), Seq(otherDiv.head), Inner, None,
+        nestedLoopDiv, scan(otherDiv, 8)))
+      assert(coalesced(nestedPlanDiv) == Seq((100, None), (16, Some(8)), (8, None)))
+    }
+  }
+
+  test("SPARK-60382: a bucketed join inside a broadcast build side keeps its own bucket count") {
+    withSQLConf(SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+      def scan(cols: Seq[Attribute], numBuckets: Int): FileSourceScanExec = {
+        val relation = HadoopFsRelation(
+          location = new InMemoryFileIndex(spark, Nil, Map.empty, None),
+          partitionSchema = PartitionSpec.emptySpec.partitionColumns,
+          dataSchema = DataTypeUtils.fromAttributes(cols),
+          bucketSpec = Some(BucketSpec(numBuckets, Seq("i"), Nil)),
+          fileFormat = new ParquetFileFormat(),
+          options = Map.empty)(spark)
+        FileSourceScanExec(
+          relation, None, cols, relation.dataSchema, Nil, None, None, Nil, None)
+      }
+
+      def coalesced(plan: SparkPlan): Seq[(Int, Option[Int])] = {
+        plan.collect { case f: FileSourceScanExec =>
+          (f.relation.bucketSpec.get.numBuckets, f.optionalNumCoalescedBuckets)
+        }
+      }
+
+      // SMJ(s.i = o.i)(BHJ(BuildRight, s16, SMJ(a.i = c.i)(a100, c8)), o8). The outer join
+      // coalesces s16 (the streamed side of the inner broadcast join) to 8. The inner
+      // sort-merge join is then judged on its own: 100 is not divisible by 8, so a100 and
+      // c8 are left untouched even though they sit inside the outer join's coalesced side.
+      val s = Seq(
+        AttributeReference("i", IntegerType)(), AttributeReference("k", IntegerType)())
+      val a = Seq(
+        AttributeReference("i", IntegerType)(), AttributeReference("k", IntegerType)())
+      val c = Seq(AttributeReference("i", IntegerType)())
+      val o = Seq(AttributeReference("i", IntegerType)())
+
+      val inner = SortMergeJoinExec(
+        Seq(a.head), Seq(c.head), Inner, None, scan(a, 100), scan(c, 8))
+      val bhj = BroadcastHashJoinExec(
+        Seq(s(1)), Seq(a(1)), Inner, BuildRight, None, scan(s, 16), inner)
+      val plan = CoalesceBucketsInJoin(SortMergeJoinExec(
+        Seq(s.head), Seq(o.head), Inner, None, bhj, scan(o, 8)))
+      assert(coalesced(plan) == Seq((16, Some(8)), (100, None), (8, None), (8, None)))
+    }
+  }
+
+  test("SPARK-60382: broadcast hash join bucket coalescing keeps the sort-merge match") {
+    Seq(true, false).foreach { aqeEnabled =>
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqeEnabled.toString,
+        SQLConf.COALESCE_BUCKETS_IN_JOIN_ENABLED.key -> "true") {
+        withTable("dim16", "fact100", "other8") {
+          withTempView("picked") {
+            spark.sql(
+              """CREATE TABLE dim16 (i INT, k INT) USING parquet
+                |CLUSTERED BY (i) INTO 16 BUCKETS""".stripMargin)
+            spark.sql(
+              """CREATE TABLE fact100 (i INT, k INT, v STRING) USING parquet
+                |CLUSTERED BY (i) INTO 100 BUCKETS""".stripMargin)
+            spark.sql(
+              """CREATE TABLE other8 (i INT, v STRING) USING parquet
+                |CLUSTERED BY (i) INTO 8 BUCKETS""".stripMargin)
+            spark.sql("INSERT INTO dim16 VALUES (0, 1)")
+            spark.sql(
+              """CREATE OR REPLACE TEMP VIEW picked AS
+                |SELECT CAST(id AS INT) AS i
+                |FROM range(0, 4000)
+                |WHERE pmod(pmod(hash(CAST(id AS INT)), 100), 8)
+                |      <> pmod(hash(CAST(id AS INT)), 8)
+                |ORDER BY id
+                |LIMIT 1""".stripMargin)
+            spark.sql("INSERT INTO fact100 SELECT i, 1, 'fact' FROM picked")
+            spark.sql("INSERT INTO other8 SELECT i, 'other' FROM picked")
+            val key = spark.sql("SELECT i FROM picked").head().getInt(0)
+
+            val query =
+              """SELECT /*+ BROADCAST(dim16), MERGE(fact100, other8) */
+                |  fact100.i, fact100.v, other8.v
+                |FROM dim16
+                |JOIN fact100 ON dim16.k = fact100.k
+                |JOIN other8 ON fact100.i = other8.i""".stripMargin
+            val df = spark.sql(query)
+            val executed = df.queryExecution.executedPlan
+            val scans = collect(executed) { case f: FileSourceScanExec =>
+              (f.relation.bucketSpec.map(_.numBuckets), f.optionalNumCoalescedBuckets)
+            }
+            assert(scans == Seq((Some(16), None), (Some(100), None), (Some(8), None)), executed)
+            assert(collectFirst(executed) { case b: BroadcastHashJoinExec => b.buildSide }
+              .contains(BuildLeft), executed)
+            checkAnswer(df, Seq(Row(key, "fact", "other")))
+          }
+        }
+      }
     }
   }
 
