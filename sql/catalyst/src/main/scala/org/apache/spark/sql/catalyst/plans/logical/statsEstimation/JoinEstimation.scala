@@ -43,6 +43,8 @@ case class JoinEstimation(join: Join) extends Logging {
         estimateInnerOuterJoin()
       case LeftSemi | LeftAnti =>
         estimateLeftSemiAntiJoin()
+      case ExistenceJoin(_) =>
+        estimateExistenceJoin()
       case _ =>
         logDebug(s"[CBO] Unsupported join type: ${join.joinType}")
         None
@@ -348,6 +350,34 @@ case class JoinEstimation(join: Join) extends Logging {
       val leftStats = join.left.stats
       // Propagate the original column stats for cartesian product
       val outputRows = leftStats.rowCount.get
+      Some(Statistics(
+        sizeInBytes = getOutputSize(join.output, outputRows, leftStats.attributeStats),
+        rowCount = Some(outputRows),
+        attributeStats = leftStats.attributeStats))
+    } else {
+      None
+    }
+  }
+
+  /**
+   * Estimate the statistics of an existence join, which returns every row of its left child with
+   * one extra non-nullable Boolean attribute recording whether the right child had a match.
+   *
+   * The cardinality is therefore exactly the left child's, whatever the right child holds, and
+   * the output width is the left child's plus that attribute. Neither may be scaled by the right
+   * child's cardinality, which is what the generic product estimate would do, and which can
+   * disqualify a broadcast of an otherwise small build side.
+   *
+   * Only the left child's row count has to exist, since the right child's cardinality does not
+   * enter the result; a right child with no statistics, or with an empty one, is still estimated.
+   */
+  private def estimateExistenceJoin(): Option[Statistics] = {
+    if (rowCountsExist(join.left)) {
+      val outputRows = leftStats.rowCount.get
+      // `join.output` is the left child's output plus the `exists` attribute, so the appended
+      // width is accounted for. That attribute has no column statistics, so getSizePerRow falls
+      // back to the default size of its type for it. Only the left child's attribute statistics
+      // are propagated: the right child's describe attributes this join does not output.
       Some(Statistics(
         sizeInBytes = getOutputSize(join.output, outputRows, leftStats.attributeStats),
         rowCount = Some(outputRows),
