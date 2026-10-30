@@ -153,6 +153,8 @@ Spark calls the functions of the table as follows:
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
 returns them, and the offsets, by passing them to a `SparkDsSink` callback, which copies them. A
+reader or a writer without a state does not call the `set_state` sink of `partitions`,
+`stream_partitions` or `create_writer`: `read` and `create_data_writer` then get an empty state. A
 function reports an error by returning a non-zero value, with the message returned by
 `last_error`, and Spark reports it as a `NATIVE_DATA_SOURCE_ERROR`. A C++ exception or a Rust panic
 must not cross the interface. Each handle that a `create` function returns is released exactly

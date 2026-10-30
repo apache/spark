@@ -649,7 +649,9 @@ typedef struct SparkDsLibrary {
                        void* sink);
 
   /*
-   * Plans the partitions of a micro-batch.
+   * Plans the partitions of a micro-batch. All the scans of the source in a micro-batch, such as
+   * both sides of a union of the source with itself, read the partitions of a single call, with
+   * the state that it returned.
    *
    * info: the offsets that the micro-batch reads the data after, up to and including the end
    * add_partition: called with each partition, serialized in a format defined by the library
