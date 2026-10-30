@@ -308,18 +308,19 @@ private[spark] class TaskContextImpl(
           invokeTaskCompletionListeners(error, mode)
         } catch {
           // The failure to warn came after the pre-completion listeners' failures, but before
-          // those of the completion listeners.
-          case e: Throwable if warningFailure.exists(_ ne e) => warningFailure.get.addSuppressed(e)
+          // those of the completion listeners. A fatal error propagates instead.
+          case e if !Utils.isFatalError(e) && warningFailure.exists(_ ne e) =>
+            warningFailure.get.addSuppressed(e)
         }
         warningFailure.foreach(throw _)
       } catch {
         // Merge the completion listeners' own failures, not the exception that wraps them, and
-        // any other non-fatal failure, e.g. of the `getMessage` of a listener's exception or of
-        // the warning, so that the pre-completion listeners' failures are reported first. A fatal
-        // error (e.g. an OutOfMemoryError) propagates, so that the executor still sees it.
+        // any other failure that is not fatal (see `Utils.isFatalError()`), e.g. of the warning,
+        // so that the pre-completion listeners' failures are reported first. A fatal error (e.g.
+        // an OutOfMemoryError) propagates and ends the task's listeners, as it ends the executor.
         case e: TaskCompletionListenerException if preCompletionExceptions.nonEmpty =>
           preCompletionExceptions ++= e.getSuppressed.toSeq
-        case NonFatal(e) if preCompletionExceptions.nonEmpty =>
+        case e if !Utils.isFatalError(e) && preCompletionExceptions.nonEmpty =>
           preCompletionExceptions += e
       }
     } finally {
@@ -358,10 +359,9 @@ private[spark] class TaskContextImpl(
         try {
           markTaskFailed(e)
         } catch {
-          // Failures of the failure listeners, or e.g. of the `getMessage` of one of their
-          // exceptions, which is listener code too. A fatal error (e.g. an OutOfMemoryError)
-          // propagates, so that the executor still sees it.
-          case NonFatal(t) => e.addSuppressed(t)
+          // Failures of the failure listeners. A fatal error (see `Utils.isFatalError()`, e.g. an
+          // OutOfMemoryError) propagates and ends the task's listeners, as it ends the executor.
+          case t if !Utils.isFatalError(t) => e.addSuppressed(t)
         }
         listenerExceptions += e
         // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
@@ -378,8 +378,17 @@ private[spark] class TaskContextImpl(
   private def newTaskCompletionListenerException(
       listenerExceptions: Seq[Throwable],
       error: Option[Throwable]): TaskCompletionListenerException = {
-    val exception = new TaskCompletionListenerException(listenerExceptions.map(_.getMessage), error)
-    listenerExceptions.foreach(exception.addSuppressed)
+    // `getMessage` is listener code. Report its failure in place of the exception it fails for:
+    // `printStackTrace`, e.g. in `Utils.exceptionString`, would fail on that exception as well.
+    val (reported, messages) = listenerExceptions.map { e =>
+      try {
+        (e, e.getMessage)
+      } catch {
+        case t if !Utils.isFatalError(t) => (t, t.getMessage)
+      }
+    }.unzip
+    val exception = new TaskCompletionListenerException(messages, error)
+    reported.foreach(exception.addSuppressed)
     exception
   }
 
@@ -391,7 +400,10 @@ private[spark] class TaskContextImpl(
    * `PipelinedWriterTask.awaitExit()` in `BasePythonRunner` drops them instead, because it is a
    * listener itself and the listeners right after it must still be able to clean up. This wait
    * is not a listener but part of `markTaskCompleted()`, so it leaves the interrupt status (e.g.
-   * set by a task kill) as the completion listeners would see it without the wait.
+   * set by a task kill) as the completion listeners would see it without the wait. If the other
+   * thread is a kill thread, the interrupt of that kill does not come during the wait: `Task.kill`
+   * interrupts the task thread once `markInterrupted()` has returned, after the handover, so with
+   * `interruptThread` it may come while the completion listeners run here.
    *
    * A failure to warn (e.g. an OutOfMemoryError while logging) does not end the wait either, like
    * in `PipelinedWriterTask.awaitExit()`: the other thread does not run the completion listeners,
@@ -530,10 +542,7 @@ private[spark] class TaskContextImpl(
       }
     }
     if (listenerExceptions.nonEmpty) {
-      val exception = new TaskCompletionListenerException(
-        listenerExceptions.map(_.getMessage).toSeq, Option(error))
-      listenerExceptions.foreach(exception.addSuppressed)
-      throw exception
+      throw newTaskCompletionListenerException(listenerExceptions.toSeq, Option(error))
     }
   }
 
@@ -548,11 +557,13 @@ private[spark] class TaskContextImpl(
    * the completion listener that releases the state store, if that one has not run yet. This is
    * the order of a failure listener invocation that a failing completion listener starts, and,
    * likewise, the failures of these failure listeners are reported with those of the completion
-   * listeners. Any other invocation does not run the listeners of another kind left to it, since
-   * its thread may be one on which they must not run, e.g. a kill thread, or the task thread once
-   * `Task.run` has unset its `TaskContext` and the executor has released the task's block locks
-   * and memory. Unless `mode` is `Nested`, this thread releases the invocation when it is done, or
-   * hands it over to a thread waiting for it in `markTaskCompleted()`.
+   * listeners. Any other invocation does not run the listeners of another kind that other threads
+   * left to it, since its thread may be one on which they must not run, e.g. a kill thread, or the
+   * task thread once `Task.run` has unset its `TaskContext` and the executor has released the
+   * task's block locks and memory. A listener that fails here still starts the failure listeners
+   * on this thread (see `runListener`). Unless `mode` is `Nested`, this thread releases the
+   * invocation when it is done, or hands it over to a thread waiting for it in
+   * `markTaskCompleted()`.
    *
    * Exceptions of the failure listeners left to this invocation are reported to the caller of
    * this method, together with those of `listeners`.
@@ -638,10 +649,9 @@ private[spark] class TaskContextImpl(
           try {
             markTaskFailed(e, Nested)
           } catch {
-            // Failures of the failure listeners, or e.g. of the `getMessage` of one of their
-            // exceptions, which is listener code too. A fatal error (e.g. an OutOfMemoryError)
-            // propagates, through the release below.
-            case NonFatal(t) => e.addSuppressed(t)
+            // Failures of the failure listeners. A fatal error (see `Utils.isFatalError()`, e.g.
+            // an OutOfMemoryError) propagates, through the release below.
+            case t if !Utils.isFatalError(t) => e.addSuppressed(t)
           }
           listenerExceptions += e
           // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
@@ -660,10 +670,10 @@ private[spark] class TaskContextImpl(
         invokeTaskFailureListeners(cause, Nested)
       } catch {
         // Merge the listeners' own failures, which the nested invocation has logged, not the
-        // exception that wraps them. A fatal error (e.g. an OutOfMemoryError) propagates, through
-        // the release below.
+        // exception that wraps them. A fatal error (see `Utils.isFatalError()`, e.g. an
+        // OutOfMemoryError) propagates, through the release below.
         case e: TaskCompletionListenerException => listenerExceptions ++= e.getSuppressed.toSeq
-        case NonFatal(t) => listenerExceptions += t
+        case t if !Utils.isFatalError(t) => listenerExceptions += t
       }
     }
 
@@ -701,10 +711,7 @@ private[spark] class TaskContextImpl(
       }
     }
     if (listenerExceptions.nonEmpty) {
-      val exception = new TaskCompletionListenerException(
-        listenerExceptions.map(_.getMessage).toSeq, error)
-      listenerExceptions.foreach(exception.addSuppressed)
-      throw exception
+      throw newTaskCompletionListenerException(listenerExceptions.toSeq, error)
     }
   }
 
