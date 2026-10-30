@@ -192,21 +192,12 @@ object ParseSqlResult {
           JObject(ctx.obj.map {
             case ("startIndex", _) => "startIndex" -> JInt(1)
             case ("stopIndex", _) => "stopIndex" -> JInt(length)
-            case ("fragment", _) =>
-              "fragment" -> JString(codePointSlice(statement, 0, length))
+            case ("fragment", _) => "fragment" -> JString(statement)
             case other => other
           })
         }
       case _ => ctx
     }
-  }
-
-  /** Code points `[from, until)` of `text`, clamped to its bounds. */
-  private def codePointSlice(text: String, from: Int, until: Int): String = {
-    val count = text.codePointCount(0, text.length)
-    val begin = math.max(0, math.min(from, count))
-    val end = math.max(begin, math.min(until, count))
-    text.substring(text.offsetByCodePoints(0, begin), text.offsetByCodePoints(0, end))
   }
 
   private def errorJson(
