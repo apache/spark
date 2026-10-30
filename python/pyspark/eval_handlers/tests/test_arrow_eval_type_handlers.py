@@ -366,6 +366,19 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
         out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[0] * 10)])))
         self.assertEqual(out[0].column(0).to_pylist(), [v * 2 for v in range(10)])
 
+    def test_concurrency_level_multi_and_zero_arg(self):
+        conf = RunnerConf({"spark.sql.execution.pythonUDF.arrow.concurrency.level": "4"})
+        handler = self._handler((lambda a, b: a - b, [0, 1], {}, LongType()), runner_conf=conf)
+        out = list(handler.run(0, iter([self._batch(a=list(range(10)), b=[1] * 10)])))
+        self.assertEqual(out[0].column(0).to_pylist(), [v - 1 for v in range(10)])
+
+        handler = self._handler(
+            (lambda: 7, [], {}, LongType()), runner_conf=conf, input_type=StructType()
+        )
+        empty = pa.RecordBatch.from_pydict({"a": [1, 2, 3]}).select([])
+        out = list(handler.run(0, iter([empty])))
+        self.assertEqual(out[0].column(0).to_pylist(), [7, 7, 7])
+
     def test_stop_iteration_raises_runtime_error(self):
         def stop(a):
             raise StopIteration()
