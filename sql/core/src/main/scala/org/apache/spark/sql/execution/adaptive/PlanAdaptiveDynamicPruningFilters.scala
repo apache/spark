@@ -19,7 +19,7 @@ package org.apache.spark.sql.execution.adaptive
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, BindReferences, BroadcastValueProjection, DynamicPruningExpression, Expression, Literal}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight}
-import org.apache.spark.sql.catalyst.plans.logical.Aggregate
+import org.apache.spark.sql.catalyst.plans.logical.{Aggregate, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.execution._
@@ -120,7 +120,12 @@ case class PlanAdaptiveDynamicPruningFilters(
           case None =>
             val aliases = indices.map(idx =>
               Alias(buildKeys(idx), buildKeys(idx).toString)())
-            val aggregate = Aggregate(aliases, aliases, buildPlan)
+            // Alias the keys in a Project instead of making them the grouping expressions.
+            // Grouping on plain attributes lets the aggregate keep the build side's partitioning
+            // (e.g. KeyedPartitioning) instead of requiring a shuffle. See
+            // AliasAwareOutputExpression.
+            val groupingAttrs = aliases.map(_.toAttribute)
+            val aggregate = Aggregate(groupingAttrs, groupingAttrs, Project(aliases, buildPlan))
             val sparkPlan = QueryExecution.prepareExecutedPlan(aggregate, adaptivePlan.context)
             assert(sparkPlan.isInstanceOf[AdaptiveSparkPlanExec])
             val newAdaptivePlan = sparkPlan.asInstanceOf[AdaptiveSparkPlanExec]
