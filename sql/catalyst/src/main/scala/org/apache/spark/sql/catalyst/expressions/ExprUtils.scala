@@ -247,18 +247,23 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    * branch of an If/CaseWhen, or hoisting a streamed-side join conjunct above the probe
    * so it also runs for streamed rows that have no match.
    *
-   * Only a whitelist of total, deterministic expressions qualifies:
+   * Only an allowlist of total, deterministic expressions qualifies:
    *   - leaves: attribute references and literals;
    *   - total accessors: GetStructField, GetArrayStructFields and GetMapValue never throw.
    *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
-   *     when ANSI mode is on;
+   *     when ANSI mode is on. A GetStructField over a CreateNamedStruct, which evaluates every
+   *     field of the struct, qualifies when all of them do;
    *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
    *     Coalesce, In and InSet are total boolean functions;
    *   - Size, which returns -1 or NULL for a NULL input rather than raising;
+   *   - StartsWith, EndsWith and Contains, which are total for every collation, unlike Like
+   *     and RLike, which raise on an invalid pattern;
+   *   - Length and OctetLength, which only count the characters or bytes of a string or binary,
+   *     and with which `LikeSimplification` guards a StartsWith and an EndsWith;
    *   - a cast that widens a numeric type to another one (`Cast.canUpCast`), such as the INT
    *     to BIGINT cast that type coercion adds to a comparison.
-   * Anything else (arithmetic, other casts, string functions, UDFs, nested IF/CASE WHEN, ...)
-   * conservatively returns false. On top of the whitelist, the expression must be
+   * Anything else (arithmetic, other casts, other string functions, UDFs, nested IF/CASE
+   * WHEN, ...) conservatively returns false. On top of the allowlist, the expression must be
    * deterministic and must not contain subqueries.
    *
    * Note: this deliberately does not rely on [[Expression.throwable]], which is opt-in
@@ -278,10 +283,13 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
 
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
     case _: AttributeReference | _: Literal => true
+    case GetStructField(struct: CreateNamedStruct, _, _) =>
+      struct.children.forall(canEvaluateUnconditionallyInternal)
     case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
       e.children.forall(canEvaluateUnconditionallyInternal)
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
-         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet | _: Size =>
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet | _: Size | _: StartsWith |
+         _: EndsWith | _: Contains | _: Length | _: OctetLength =>
       e.children.forall(canEvaluateUnconditionallyInternal)
     case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) =>
       canEvaluateUnconditionallyInternal(c.child)

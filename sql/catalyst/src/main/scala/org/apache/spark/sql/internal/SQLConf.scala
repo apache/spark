@@ -681,12 +681,13 @@ object SQLConf {
         "deterministic condition over columns and literals, such as a comparison, IN or IS " +
         "NULL, where a column the projection defines with a cheap expression counts as that " +
         "expression; otherwise it stays above in its written order, so it is only evaluated " +
-        "where none of the conditions before it is false, and an error it would raise on other " +
-        "rows (e.g. a division by zero or an invalid cast in ANSI mode, or an exception in a " +
-        "UDF) is not raised. The projection is not split then either. This covers the " +
-        "expensive elements evaluated in the projection, such as Scala UDFs, but not Python " +
-        "UDFs, which are evaluated below it. Otherwise, the projection split may still compute " +
-        "the expensive element a later condition reads ahead of the conditions before it.")
+        "where none of the conditions before it is false, and an error it would raise itself " +
+        "on other rows (e.g. a division by zero or an invalid cast in ANSI mode, or an " +
+        "exception in a UDF) is not raised. The projection is not split then either. This " +
+        "covers the expensive elements evaluated in the projection, such as Scala UDFs, also " +
+        "over Python UDFs, but not Python UDFs alone, which are evaluated below it. Otherwise, " +
+        "the projection split may still compute the expensive element a later condition reads " +
+        "ahead of the conditions before it.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

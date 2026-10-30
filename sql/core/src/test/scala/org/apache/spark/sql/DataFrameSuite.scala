@@ -32,7 +32,7 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, Cast, Contains, EndsWith, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, StartsWith}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, S
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
-import org.apache.spark.sql.expressions.{Aggregator, Window}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -2964,6 +2964,16 @@ class DataFrameSuite extends SharedSparkSession
     def udfQuery(): DataFrame = spark.range(0, 10, 1, 1)
       .select($"id", f($"id") as "f")
       .where($"f" > 5 && h($"id") > 0)
+    // The same inside a projected alias. `InferFiltersFromConstraints` adds `isnotnull(x)` in
+    // front, which must not be pushed either. `nf` is nullable, so `isnotnull(f)` is added too.
+    val nf = udf((i: Long) => java.lang.Long.valueOf(i))
+    def divideAliasQuery(fn: UserDefinedFunction): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", fn($"id") as "f", lit(10L) / ($"id" - 3) as "x")
+      .where($"f" > 5 && $"x" > 0)
+    def castAliasQuery(fn: UserDefinedFunction): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", fn($"id") as "f",
+        when($"id" > 5, lit("1")).otherwise(lit("x")).cast("int") as "i")
+      .where($"f" > 5 && $"i" > 0)
     // With three expensive aliases, so the projection split is involved too. The division over
     // `g` can fail, so the projection is not split and the filter stays as written.
     val k = udf((i: Long) => i)
@@ -2990,7 +3000,6 @@ class DataFrameSuite extends SharedSparkSession
       .where($"f" >= 0 && rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0 && $"g" > 0)
     // With nullable UDFs, `InferFiltersFromConstraints` adds `IS NOT NULL` conditions in front,
     // which must not let the split compute `nr` ahead of `ng + 1 > 6`.
-    val nf = udf((i: Long) => java.lang.Long.valueOf(i))
     val ng = udf((i: Long) => java.lang.Long.valueOf(i))
     val nr = udf((i: Long) => { require(i > 5, s"nr called with $i"); java.lang.Long.valueOf(i) })
     val ns = udf((i: Long) => java.lang.Long.valueOf(i))
@@ -3023,6 +3032,11 @@ class DataFrameSuite extends SharedSparkSession
         if (codegen || !avoid) {
           checkAnswer(laterQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
           checkAnswer(inferredQuery(), (6L until 10L).map(i => Row(i, i, i, i, i)))
+          // An interpreted projection computes `x` and `i` for every row it gets.
+          Seq(f, nf).foreach { fn =>
+            checkAnswer(divideAliasQuery(fn), (6L until 10L).map(i => Row(i, i, 10.0 / (i - 3))))
+            checkAnswer(castAliasQuery(fn), (6L until 10L).map(i => Row(i, i, 1)))
+          }
         }
       }
     }
@@ -3057,6 +3071,17 @@ class DataFrameSuite extends SharedSparkSession
     // The legacy config pushes it below the projection again, ahead of `p > 0`.
     withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
       checkAnswer(query($"id" + 1 > 6), expected)
+    }
+    // A LIKE without `_` becomes plain string checks, so it is pushed too.
+    val s = udf((v: String) => v)
+    Seq("1%", "%2", "%0%", "1%2").foreach { pattern =>
+      val likePlan = Seq("12", "102").toDF("v").select($"v", s($"v") as "s")
+        .where($"s" =!= "x" && $"v".like(pattern)).queryExecution.optimizedPlan
+      val pushed = likePlan.collectFirst {
+        case Project(_, Filter(condition, _)) => condition.exists(_.isInstanceOf[StartsWith]) ||
+          condition.exists(_.isInstanceOf[EndsWith]) || condition.exists(_.isInstanceOf[Contains])
+      }
+      assert(pushed === Some(true), likePlan)
     }
   }
 
