@@ -45,6 +45,12 @@
 //                   for the task context, "true" for one that Spark freed meanwhile. Releasing
 //                   the stream creates the file <slow_read>, which says whether Spark released it
 //                   "during get_next", which it must not, or "after get_next" otherwise.
+//                   It uses the domain of id that Spark pushes to skip the blocks of "block"
+//                   rows, 10 by default, whose ids are not in it: it then reads one partition
+//                   for each block that may match, with all its rows. With the option
+//                   "use_domains", it uses "all" the domains, or "none". With the option
+//                   "domains_path", it writes the domains to that file, one per line: the path
+//                   of the column, "null" or "-", "nan" or "-", and the ranges, or "*".
 //   native_sink     Writes the rows as CSV files under the directory in the option "path". With
 //                   the option "commit_messages", a data writer passes its commit message that
 //                   many times. Creating and closing a data writer create a file named after
@@ -639,11 +645,11 @@ std::string join(const std::vector<std::string>& values) {
   return result;
 }
 
-std::vector<std::string> split(const std::string& text) {
+std::vector<std::string> split(const std::string& text, char separator = ',') {
   std::vector<std::string> values;
   std::string value;
   std::istringstream stream(text);
-  while (std::getline(stream, value, ',')) values.push_back(value);
+  while (std::getline(stream, value, separator)) values.push_back(value);
   return values;
 }
 
@@ -1018,13 +1024,15 @@ int createReader(void* handle, struct ArrowSchema* schema, void** out) {
     if (returnsZero(source->options, "create_reader")) return;
     auto* reader = new Reader();
     reader->state["columns"] = join(columns);
+    for (int64_t i = 0; i < schema->n_children; i++) {
+      reader->state["format." + columns[i]] = schema->children[i]->format;
+    }
     reader->state["lo"] = "0";
     reader->state["hi"] = get(source->options, "end", "10");
     reader->state["partitions"] = get(source->options, "partitions", "2");
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
-    for (const char* option :
-         {"fail", "slice", "short", "null_rows", "wait_for_interrupt", "task_path",
-          "slow_read"}) {
+    for (const char* option : {"fail", "slice", "short", "null_rows", "wait_for_interrupt",
+                               "task_path", "use_domains", "domains_path", "block", "slow_read"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1075,6 +1083,108 @@ int pruneColumns(void* handle, const char* const* columns, int64_t count, bool* 
   });
 }
 
+bool boolAt(const ArrowArray* array, int64_t i) {
+  int64_t bit = array->offset + i;
+  return (static_cast<const uint8_t*>(array->buffers[1])[bit / 8] >> (bit % 8)) & 1;
+}
+
+// Formats the ranges of a domain, such as "[1,5) (7,+inf)", after checking their schema.
+std::string formatRanges(const SparkDsDomain* domain, const std::string& format) {
+  const ArrowSchema* schema = domain->ranges_schema;
+  const ArrowArray* array = domain->ranges;
+  if (schema == nullptr || std::string(schema->format) != "+s" || schema->n_children != 4 ||
+      array->n_children != 4) {
+    throw std::runtime_error("the ranges are not a struct array of 4 fields");
+  }
+  const char* names[] = {"low", "high", "low_inclusive", "high_inclusive"};
+  for (int i = 0; i < 4; i++) {
+    std::string expected = i < 2 ? format : "b";
+    if (std::string(schema->children[i]->name) != names[i] ||
+        (!expected.empty() && std::string(schema->children[i]->format) != expected)) {
+      throw std::runtime_error(std::string("unexpected field ") + schema->children[i]->name +
+                               " of format " + schema->children[i]->format);
+    }
+  }
+  std::string ranges;
+  for (int64_t r = 0; r < array->length; r++) {
+    bool low_inclusive = boolAt(array->children[2], r);
+    bool high_inclusive = boolAt(array->children[3], r);
+    std::string low = isValid(array->children[0], r)
+                          ? formatValue(schema->children[0], array->children[0], r) : "-inf";
+    std::string high = isValid(array->children[1], r)
+                           ? formatValue(schema->children[1], array->children[1], r) : "+inf";
+    ranges += std::string(r > 0 ? " " : "") + (low_inclusive ? "[" : "(") + low + "," + high +
+              (high_inclusive ? "]" : ")");
+  }
+  return ranges;
+}
+
+// The ids [lo, hi) that the domain of id has, as "lo,hi;lo,hi".
+std::string idRanges(const SparkDsDomain* domain) {
+  if (domain->ranges == nullptr) return std::to_string(INT64_MIN) + "," + std::to_string(INT64_MAX);
+  const ArrowArray* array = domain->ranges;
+  std::string result;
+  for (int64_t r = 0; r < array->length; r++) {
+    const ArrowArray* low = array->children[0];
+    const ArrowArray* high = array->children[1];
+    int64_t lo = INT64_MIN;
+    int64_t hi = INT64_MAX;
+    if (isValid(low, r)) {
+      lo = static_cast<const int64_t*>(low->buffers[1])[low->offset + r];
+      if (!boolAt(array->children[2], r) && lo < INT64_MAX) lo++;
+    }
+    if (isValid(high, r)) {
+      hi = static_cast<const int64_t*>(high->buffers[1])[high->offset + r];
+      if (boolAt(array->children[3], r) && hi < INT64_MAX) hi++;
+    }
+    result += (result.empty() ? "" : ";") + std::to_string(lo) + "," + std::to_string(hi);
+  }
+  return result;
+}
+
+int pushDomains(void* handle, const SparkDsDomain* const* domains, int64_t count, bool* used) {
+  return guarded([&] {
+    auto* reader = fromHandle<Reader>(handle);
+    // Spark calls push_domains at most once, with at least one domain, and before push_limit.
+    if (reader->state.count("id_ranges") > 0 || reader->state.count("domains") > 0) {
+      throw std::runtime_error("pushDomains was called twice");
+    }
+    if (count == 0) throw std::runtime_error("pushDomains was called without domains");
+    if (reader->state.count("limit") > 0) throw std::runtime_error("pushDomains after pushLimit");
+    reader->state["domains"] = std::to_string(count);
+    auto columns = split(get(reader->state, "columns", ""));
+    std::string use = get(reader->state, "use_domains", "");
+    std::string lines;
+    for (int64_t i = 0; i < count; i++) {
+      const SparkDsDomain* domain = domains[i];
+      if (domain->size < static_cast<int64_t>(sizeof(SparkDsDomain))) {
+        throw std::runtime_error("a domain of " + std::to_string(domain->size) + " bytes");
+      }
+      if (domain->path_length < 1 || domain->path[0] < 0 ||
+          domain->path[0] >= static_cast<int32_t>(columns.size())) {
+        throw std::runtime_error("a domain of an unknown column");
+      }
+      std::string column = columns[domain->path[0]];
+      std::string path;
+      for (int64_t j = 0; j < domain->path_length; j++) {
+        path += (j > 0 ? "." : "") + std::to_string(domain->path[j]);
+      }
+      // The format of the bounds is checked for the top-level columns.
+      std::string format =
+          domain->path_length == 1 ? get(reader->state, "format." + column, "") : "";
+      std::string ranges = domain->ranges == nullptr ? "*" : formatRanges(domain, format);
+      lines += path + " " + (domain->null_allowed ? "null" : "-") + " " +
+               (domain->nan_allowed ? "nan" : "-") + " " + ranges + "\n";
+      bool is_id = domain->path_length == 1 && column == "id" && ID_SIGN == 1;
+      used[i] = use == "all" || (use.empty() && is_id);
+      // Nulls are not ids: the ids are never null.
+      if (is_id && use != "none") reader->state["id_ranges"] = idRanges(domain);
+    }
+    std::string path = get(reader->state, "domains_path", "");
+    if (!path.empty()) writeFile(path, lines);
+  });
+}
+
 #endif  // READ_ONLY
 
 int planPartitions(void* handle, SparkDsSink add_partition, void* sink) {
@@ -1084,6 +1194,27 @@ int planPartitions(void* handle, SparkDsSink add_partition, void* sink) {
     int64_t lo = getLong(reader->state, "lo", 0);
     int64_t hi = getLong(reader->state, "hi", 0);
     int64_t count = getLong(reader->state, "partitions", 1);
+    if (reader->state.count("id_ranges") > 0) {
+      // Reads the blocks whose ids may be in the domain of id: [start, stop) has the ids from
+      // start to stop - 1, as the statistics of a block would say.
+      std::string block_option = get(reader->state, "block", "");
+      int64_t block = std::max<int64_t>(1, block_option.empty() ? 10 : std::stoll(block_option));
+      std::vector<std::pair<int64_t, int64_t>> ranges;
+      for (const auto& range : split(get(reader->state, "id_ranges", ""), ';')) {
+        auto bounds = split(range);
+        ranges.emplace_back(std::stoll(bounds[0]), std::stoll(bounds[1]));
+      }
+      for (int64_t start = lo; start < hi; start += block) {
+        int64_t stop = std::min(hi, start + block);
+        bool may_match = std::any_of(ranges.begin(), ranges.end(), [&](const auto& range) {
+          return range.first < stop && start < range.second;
+        });
+        if (may_match) {
+          sendBytes(add_partition, sink, std::to_string(start) + "," + std::to_string(stop));
+        }
+      }
+      return;
+    }
     if (reader->state.count("limit") > 0) {
       // A pushed limit is applied by reading a single partition with at most `limit` rows.
       hi = std::min(hi, lo + getLong(reader->state, "limit", 0));
@@ -1405,6 +1536,7 @@ void closeDataWriter(void* handle) {
   table.create_writer = createWriter;
   table.push_limit = pushLimit;
   table.prune_columns = pruneColumns;
+  table.push_domains = pushDomains;
   table.initial_offset = initialOffset;
   table.latest_offset = latestOffset;
   table.stream_partitions = streamPartitions;

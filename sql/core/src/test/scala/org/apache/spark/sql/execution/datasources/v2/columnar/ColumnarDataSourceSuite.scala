@@ -83,6 +83,44 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(scan(limited).getMetaData()("PushedLimit") == "LIMIT 2")
   }
 
+  test("push down the domains of filtered columns") {
+    val df = spark.read.format(format).option("end", "100").load()
+      .filter("id >= 40 AND id < 50 AND name <> 'x'")
+    checkAnswer(df, (40L until 50L).map(id => Row(id, s"name$id")))
+    // The data source only uses the domain of id, to read the ids in it.
+    val metadata = scan(df).getMetaData()
+    assert(metadata("PushedDomains") == "[id: [40L, 50L)]")
+    val pushed = metadata("PushedFilters")
+    assert(pushed.contains("id >= 40") && pushed.contains("id < 50"), pushed)
+    assert(!pushed.contains("name"), pushed)
+    assert(scan(df).toBatch.planInputPartitions().toSeq ==
+      Seq(TestRangePartition(40, 45), TestRangePartition(45, 50)))
+
+    // Spark evaluates all the filters after reading: the data source only keeps the hull of the
+    // ranges of id, so it reads the ids from 0 to 7, and Spark drops 3 with the pushed id <> 3.
+    val hull = spark.read.format(format).option("end", "10").load().filter("id <> 3 AND id < 8")
+    checkAnswer(hull, Seq(0L, 1L, 2L, 4L, 5L, 6L, 7L).map(id => Row(id, s"name$id")))
+    assert(scan(hull).getMetaData()("PushedDomains") == "[id: (-inf, 3L), (3L, 8L)]")
+    assert(scan(hull).toBatch.planInputPartitions().toSeq ==
+      Seq(TestRangePartition(0, 4), TestRangePartition(4, 8)))
+
+    // A filter that is not a domain is not pushed: the data source reads all the ids, and Spark
+    // evaluates both filters.
+    val other = spark.read.format(format).option("end", "10").load()
+      .filter("id <> 3 AND id % 2 = 0")
+    checkAnswer(other, Seq(0L, 2L, 4L, 6L, 8L).map(id => Row(id, s"name$id")))
+    assert(scan(other).getMetaData()("PushedDomains") == "[id: (-inf, 3L), (3L, +inf)]")
+    val otherPushed = scan(other).getMetaData()("PushedFilters")
+    assert(otherPushed.contains("NOT (id = 3)") && !otherPushed.contains("%"), otherPushed)
+
+    withSQLConf(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key -> "false") {
+      val all = spark.read.format(format).option("end", "100").load().filter("id >= 95")
+      checkAnswer(all, (95L until 100L).map(id => Row(id, s"name$id")))
+      assert(scan(all).getMetaData()("PushedFilters") == "[]")
+      assert(!scan(all).getMetaData().contains("PushedDomains"))
+    }
+  }
+
   test("tables in a catalog") {
     withTable("columnar_range") {
       sql(s"CREATE TABLE columnar_range USING $format OPTIONS (end 3, table 'catalog_write')")
@@ -305,6 +343,23 @@ class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: Atom
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
+  // The ids [lo, hi) that contain the domain of id.
+  private var ids = (0L, Long.MaxValue)
+
+  override def pushDomains(domains: Seq[ColumnDomain]): Seq[Boolean] = domains.map { domain =>
+    domain.ranges match {
+      case Some(ranges) if domain.path == Seq(0) && ranges.nonEmpty =>
+        val lo = ranges.head.low.map { case low: Long =>
+          if (ranges.head.lowInclusive) low else low + 1
+        }.getOrElse(0L)
+        val hi = ranges.last.high.map { case high: Long =>
+          if (ranges.last.highInclusive) high + 1 else high
+        }.getOrElse(Long.MaxValue)
+        ids = (math.max(0L, lo), hi)
+        true
+      case _ => false
+    }
+  }
 
   override def pushLimit(limit: Int): Boolean = {
     this.limit = limit
@@ -321,10 +376,10 @@ class TestRangePlanner(end: Long, schema: StructType, fail: Boolean, plans: Atom
     if (fail) {
       throw new IllegalStateException("injected planning failure")
     }
-    val hi = math.min(end, limit)
-    val mid = hi / 2
+    val (lo, hi) = (ids._1, math.min(math.min(end, limit), ids._2))
+    val mid = lo + (hi - lo) / 2
     ColumnarPlannedBatch(
-      Array(TestRangePartition(0, mid), TestRangePartition(mid, hi)),
+      Array(TestRangePartition(lo, mid), TestRangePartition(mid, hi)),
       new TestRangeReaderFactory(readSchema))
   }
 }
