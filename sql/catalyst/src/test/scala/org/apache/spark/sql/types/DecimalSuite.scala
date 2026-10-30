@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.types
 
+import java.math.{MathContext, RoundingMode}
+
 import org.scalatest.PrivateMethodTester
 
 import org.apache.spark.{SparkArithmeticException, SparkException, SparkFunSuite, SparkNumberFormatException}
@@ -243,6 +245,138 @@ class DecimalSuite extends SparkFunSuite with PrivateMethodTester with SQLHelper
     assert(Decimal(100) % Decimal(3) === Decimal(1))
     assert(Decimal(-100) % Decimal(3) === Decimal(-1))
     assert(Decimal(100) % Decimal(0) === null)
+  }
+
+  Seq(
+    ("10000000000000000000000000000000000000", "0.0007", "0.0005"),
+    ("99999999999999999999999999999999999999", "0.0007", "0.0004"),
+    ("99999999999999999999999999999999999999", "7E-38", "2E-38"),
+    ("99999999999999999999999999999999999999", "1E-38", "0")
+  ).foreach { case (dividend, divisor, expected) =>
+    test(s"decimal remainder with a large integral quotient: $dividend % $divisor") {
+      val left = Decimal(dividend)
+      val right = Decimal(divisor)
+      val remainder = Decimal(expected)
+      assert(left % right == remainder)
+      assert(left % -right == remainder)
+      assert(-left % right == -remainder)
+      assert(-left % -right == -remainder)
+      assert((left % right).scale == remainder.scale)
+      assert(left % Decimal(0) == null)
+    }
+  }
+
+  Seq(
+    (38, "99999999999999999999999999999999999999", "7", "1", 38),
+    (39, "99999999999999999999999999999999999999", "0.7", "0.3", 39),
+    (40, "99999999999999999999999999999999999999", "0.07", "0.02", 40),
+    (40, "10000000000000000000000000000000000000", "0.07", "0.06", 39)
+  ).foreach { case (bound, dividend, divisor, expected, quotientDigits) =>
+    test(s"decimal remainder with quotient bound $bound and $quotientDigits actual digits") {
+      val left = Decimal(dividend)
+      val right = Decimal(divisor)
+      val quotient = left.toJavaBigDecimal.divideToIntegralValue(right.toJavaBigDecimal)
+      assert(quotient.toBigInteger.toString.length == quotientDigits)
+      for (leftSign <- Seq(1, -1); rightSign <- Seq(1, -1)) {
+        val signedLeft = if (leftSign < 0) -left else left
+        val signedRight = if (rightSign < 0) -right else right
+        val remainder = if (leftSign < 0) -Decimal(expected) else Decimal(expected)
+        assert((signedLeft % signedRight).toJavaBigDecimal == remainder.toJavaBigDecimal)
+      }
+    }
+  }
+
+  test("decimal remainder preserves zero quotients, trailing zeros and compact operands") {
+    Seq(
+      (Decimal("0.00"), Decimal("0.7"), Decimal("0.00")),
+      (Decimal("1.00"), Decimal("7.0"), Decimal("1.00")),
+      (Decimal(120000L, 6, 2), Decimal(70L, 2, 1), Decimal("3.00")),
+      // The 40-digit quotient is representable by the old context because it has trailing zeros.
+      (Decimal("10000000000000000000000000000000000000"), Decimal("0.01"), Decimal("0"))
+    ).foreach { case (left, right, expected) =>
+      assert((left % right).toJavaBigDecimal == expected.toJavaBigDecimal)
+      assert((-left % right).toJavaBigDecimal == (-expected).toJavaBigDecimal)
+      assert((left % -right).toJavaBigDecimal == expected.toJavaBigDecimal)
+      assert(left % Decimal(0) == null)
+    }
+  }
+
+  test("decimal remainder preserves negative and extreme scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      Seq(
+        (Decimal("123E+4"), Decimal("7E+2"), Decimal("1E+2")),
+        (Decimal("9E+39"), Decimal("7"), Decimal("5")),
+        (Decimal(3L, 1, Int.MinValue), Decimal(2L, 1, Int.MinValue),
+          Decimal(1L, 1, Int.MinValue)),
+        (Decimal(3L, 1, Int.MaxValue), Decimal(2L, 1, Int.MaxValue),
+          Decimal(1L, 1, Int.MaxValue)),
+        (Decimal(3L, 1, Int.MinValue), Decimal(2L, 1, Int.MinValue + 1),
+          Decimal(0L, 1, Int.MinValue + 1)),
+        (Decimal(3L, 1, Int.MaxValue), Decimal(2L, 1, Int.MaxValue - 1),
+          Decimal(3L, 1, Int.MaxValue)),
+        // These scale differences exceed Int's range, but their remainders are representable.
+        (Decimal(0L, 1, Int.MinValue), Decimal(2L, 1, Int.MaxValue), Decimal(0L, 1, -1)),
+        (Decimal(0L, 1, Int.MaxValue), Decimal(2L, 1, Int.MinValue),
+          Decimal(0L, 1, Int.MaxValue)),
+        (Decimal(1L, 1, Int.MaxValue), Decimal(2L, 1, Int.MinValue),
+          Decimal(1L, 1, Int.MaxValue))
+      ).foreach { case (left, right, expected) =>
+        assert((left % right).toJavaBigDecimal == expected.toJavaBigDecimal)
+        assert((-left % right).toJavaBigDecimal == (-expected).toJavaBigDecimal)
+        assert((left % -right).toJavaBigDecimal == expected.toJavaBigDecimal)
+      }
+    }
+  }
+
+  test("decimal remainder preserves huge trailing-zero quotients at extreme negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      for {
+        scale <- Seq(Int.MinValue, Int.MinValue + 1, Int.MinValue + 2)
+        leftSign <- Seq(1L, -1L)
+        rightSign <- Seq(1L, -1L)
+      } {
+        val left = Decimal(leftSign, 1, scale)
+        val right = Decimal(rightSign)
+        val result = left % right
+        assert(result.isZero)
+        assert(result.scale == scale)
+      }
+    }
+  }
+
+  test("decimal remainder bounds exact retries by divisor scale") {
+    val left = Decimal(1L)
+    val right = Decimal("3E-100")
+    // The divisor alone puts the quotient beyond the retry bound. Without its scale term,
+    // exact division would succeed here and allow enormous quotients for smaller divisors.
+    val original = intercept[ArithmeticException] {
+      left.toJavaBigDecimal.remainder(right.toJavaBigDecimal,
+        new MathContext(39, RoundingMode.DOWN))
+    }
+    val error = intercept[ArithmeticException] {
+      left % right
+    }
+    assert(error.getMessage == original.getMessage)
+  }
+
+  test("decimal remainder bounds exact retries for legacy negative scales") {
+    withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> "true") {
+      val divisor = Decimal(3L)
+      // This upper bound is twice the maximum SQL decimal precision.
+      val withinBound = Decimal(1L, 1, -(2 * DecimalType.MAX_PRECISION - 1))
+      assert(withinBound % divisor == Decimal(1L))
+      for (scale <- Seq(-2 * DecimalType.MAX_PRECISION, -1000000000, Int.MinValue)) {
+        val dividend = Decimal(1L, 1, scale)
+        val original = intercept[ArithmeticException] {
+          dividend.toJavaBigDecimal.remainder(
+            divisor.toJavaBigDecimal, new MathContext(39, RoundingMode.DOWN))
+        }
+        val error = intercept[ArithmeticException] {
+          dividend % divisor
+        }
+        assert(error.getMessage == original.getMessage)
+      }
+    }
   }
 
   test("longVal arithmetic") {
