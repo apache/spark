@@ -20,6 +20,7 @@ import java.lang.ref.{Cleaner, WeakReference}
 import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
+import javax.annotation.concurrent.GuardedBy
 
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
@@ -484,6 +485,15 @@ object NativeWriterCommitMessage {
 /**
  * Reads a partition of a native data source: each array of the Arrow stream exported by the
  * library is checked, and imported into the Arrow vectors that back the returned batch.
+ *
+ * A reader can be closed while another thread is in [[next]]: some operators read their input on
+ * a thread of their own that the task does not wait for, such as the stdin writer thread of
+ * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
+ * not get the release of the stream during get_next, and the task context must stay valid until
+ * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
+ * for it and keep the task from completing. That [[next]] then returns false, or throws the error
+ * of its read. A [[next]] called once the reader is closed returns false without calling the
+ * library.
  */
 class NativePartitionReader(
     location: NativeLibraryLocation,
@@ -503,16 +513,26 @@ class NativePartitionReader(
   private var task: NativeLibrary.Task = _
   private var root: VectorSchemaRoot = _
   private var batch: ColumnarBatch = _
+  @GuardedBy("this")
+  private var closed = false
+  // Whether a thread is in next. While it is, only that thread uses the stream and the vectors,
+  // and it releases them if the reader was closed meanwhile. Otherwise, they are only released
+  // under the lock.
+  @GuardedBy("this")
+  private var reading = false
 
-  try {
-    openStream()
-    root = VectorSchemaRoot.create(importSchema(), allocator)
-    checkSchema()
-    batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
-  } catch {
-    case e: Throwable =>
-      close()
-      throw e
+  // Synchronized so that a close on another thread sees the task and the vectors.
+  synchronized {
+    try {
+      openStream()
+      root = VectorSchemaRoot.create(importSchema(), allocator)
+      checkSchema()
+      batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
+    } catch {
+      case e: Throwable =>
+        close()
+        throw e
+    }
   }
 
   private def openStream(): Unit = {
@@ -683,6 +703,24 @@ class NativePartitionReader(
   }
 
   override def next(): Boolean = {
+    // A reader that was closed while it read has released the batch that it read.
+    startReading() && Utils.tryWithSafeFinally(readNext())(stopReading()) && synchronized(!closed)
+  }
+
+  private def startReading(): Boolean = synchronized {
+    reading = !closed
+    reading
+  }
+
+  private def stopReading(): Unit = synchronized {
+    reading = false
+    if (closed) {
+      // The reader was closed by another thread, which no longer gets a failure from here.
+      Utils.tryLogNonFatalError(closeResources())
+    }
+  }
+
+  private def readNext(): Boolean = {
     val array = ArrowArray.allocateNew(allocator)
     try {
       call(name, "read")(stream.getNext(array))
@@ -833,7 +871,16 @@ class NativePartitionReader(
 
   override def get(): ColumnarBatch = batch
 
-  override def close(): Unit = {
+  override def close(): Unit = synchronized {
+    if (!closed) {
+      closed = true
+      if (!reading) {
+        closeResources()
+      }
+    }
+  }
+
+  private def closeResources(): Unit = {
     Utils.tryWithSafeFinally {
       Utils.tryWithSafeFinally {
         if (root != null) {

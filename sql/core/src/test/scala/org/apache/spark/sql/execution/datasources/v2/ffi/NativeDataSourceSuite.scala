@@ -23,7 +23,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
-import java.util.concurrent.{Callable, CountDownLatch, TimeUnit}
+import java.util.concurrent.{Callable, CountDownLatch, ExecutionException, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ArrayBuffer
@@ -31,7 +31,7 @@ import scala.jdk.CollectionConverters._
 
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
+import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TestUtils}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
@@ -1288,6 +1288,88 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // The job fails right away, and its task ends once the library sees that it was killed.
     eventually(timeout(1.minute)) {
       assert(marker.isFile && Files.readString(marker.toPath) == "interrupted")
+    }
+  }
+
+  nativeTest("release a stream only once get_next returns") {
+    assume(TestUtils.testCommandAvailable("cat"))
+    val session = newSession(defaultPackage)
+    val marker = new File(Utils.createTempDir(), "released")
+    val reading = marker.getPath + ".reading"
+    val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+    try {
+      // PipedRDD reads the scan on a thread of its own, which the task does not wait for. The
+      // task completes without reading the output of the command, once that thread is in
+      // get_next, which waits for the file .continue, and closes the reader then. The job runs
+      // with the artifacts of the session, as in a SQL execution: see checkRows.
+      val count = session.artifactManager.withResources {
+        df.rdd.pipe("cat").mapPartitions { _ =>
+          val deadline = System.nanoTime() + TimeUnit.MINUTES.toNanos(1)
+          while (!new File(reading).isFile && System.nanoTime() < deadline) {
+            Thread.sleep(10)
+          }
+          Iterator.empty[String]
+        }.count()
+      }
+      assert(count == 0)
+      assert(new File(reading).isFile, "get_next was not called.")
+      if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+    } finally {
+      new File(marker.getPath + ".continue").createNewFile()
+    }
+    // The thread in get_next releases the stream once get_next returns.
+    eventually(timeout(1.minute)) {
+      assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
+    }
+    // The task context was still valid once get_next continued: Spark answers that a context
+    // that it freed is interrupted, and this task was not.
+    assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+  }
+
+  nativeTest("close a reader while another thread reads it") {
+    val session = newSession(defaultPackage)
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    // Closes a reader while another thread is in get_next. The reader releases the stream once
+    // get_next returns, also when it fails, and then next returns false or throws.
+    def closeWhileReading(failing: Boolean): Either[Throwable, Boolean] = {
+      val marker = new File(Utils.createTempDir(), "released")
+      val options = Seq("end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath) ++
+        (if (failing) Seq("fail" -> "slow_read") else Nil)
+      val batch = scan(range(session, options: _*)).toBatch
+      val reader =
+        batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+      try {
+        val read = pool.submit(new Callable[Boolean] {
+          override def call(): Boolean = reader.next()
+        })
+        eventually(timeout(1.minute)) {
+          assert(new File(marker.getPath + ".reading").isFile)
+        }
+        reader.close()
+        if (marker.isFile) fail(s"The stream was released: ${Files.readString(marker.toPath)}.")
+        new File(marker.getPath + ".continue").createNewFile()
+        val result = try Right(read.get(1, TimeUnit.MINUTES)) catch {
+          case e: ExecutionException => Left(e.getCause)
+        }
+        assert(Files.readString(marker.toPath) == "after get_next")
+        // The task context was still valid once get_next continued, as in the test above.
+        assert(Files.readString(new File(marker.getPath + ".interrupted").toPath) == "false")
+        // A reader that was closed reads nothing more, and closing it again does not fail.
+        assert(!reader.next())
+        reader.close()
+        result
+      } finally {
+        // Lets get_next continue, and does not hide a failure of the test if closing fails.
+        new File(marker.getPath + ".continue").createNewFile()
+        Utils.tryLogNonFatalError(reader.close())
+      }
+    }
+    try {
+      assert(closeWhileReading(failing = false) == Right(false))
+      val error = closeWhileReading(failing = true).swap.getOrElse(fail("next did not fail"))
+      assert(error.getMessage.contains("injected failure after a slow get_next"))
+    } finally {
+      pool.shutdown()
     }
   }
 
