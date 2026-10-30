@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.ByteArrayOutputStream
-import java.nio.ByteOrder
+import java.nio.{ByteBuffer, ByteOrder}
 import java.nio.channels.Channels
 
 import scala.util.Random
@@ -31,7 +31,8 @@ import org.apache.arrow.vector.ipc.WriteChannel
 import org.apache.arrow.vector.ipc.message.MessageSerializer
 
 import org.apache.spark.{SparkException, SparkFunSuite}
-import org.apache.spark.sql.types.{StringType, StructField, StructType}
+import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.types.{LongType, StringType, StructField, StructType}
 import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
@@ -189,27 +190,73 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
       Seq(1, 100, 4096, 100000).foreach { n =>
         val compressible = Array.tabulate[Byte](n)(i => (i % 7).toByte)
         val incompressible = random.nextBytes(n)
-        Seq(compressible, incompressible).foreach { expected =>
-          val input = allocator.buffer(n)
-          input.setBytes(0, expected)
-          input.writerIndex(n)
-          val compressed = codec.compress(allocator, input)
-          // The buffer starts with the uncompressed length, or -1 if Arrow kept the input as is
-          // because zstd did not make it smaller. Check which path each case takes.
-          val expectZstdFrame = (expected eq compressible) && n >= 100
-          val prefix = compressed.nioBuffer(0, 8).order(ByteOrder.LITTLE_ENDIAN).getLong(0)
-          assert(prefix === (if (expectZstdFrame) n.toLong else -1L))
-          val decompressed = codec.decompress(allocator, compressed)
-          try {
-            val actual = new Array[Byte](n)
-            decompressed.getBytes(0, actual)
-            assert(actual.sameElements(expected))
-          } finally {
-            decompressed.close()
-          }
+        Seq(compressible -> (n >= 100), incompressible -> false).foreach {
+          case (expected, expectZstdFrame) =>
+            val input = allocator.buffer(n)
+            input.setBytes(0, expected)
+            input.writerIndex(n)
+            val compressed = codec.compress(allocator, input)
+            // The buffer starts with the uncompressed length, or -1 if Arrow kept the input as is
+            // because zstd did not make it smaller. Check which path each case takes.
+            val prefix = compressed.nioBuffer(0, 8).order(ByteOrder.LITTLE_ENDIAN).getLong(0)
+            assert(prefix === (if (expectZstdFrame) n.toLong else -1L))
+            val decompressed = codec.decompress(allocator, compressed)
+            try {
+              val actual = new Array[Byte](n)
+              decompressed.getBytes(0, actual)
+              assert(actual.sameElements(expected))
+            } finally {
+              decompressed.close()
+            }
         }
       }
     } {
+      allocator.close()
+    }
+  }
+
+  test("SPARK-60707: batches written through VectorUnloader keep their length prefixes") {
+    // Writes batches the way ArrowConverters does, with one reused root, and checks the length
+    // prefix of every data buffer. An overrun of one buffer can overwrite the prefix of the next
+    // buffer in the same batch, which makes the batch fail to decompress when it is read. How
+    // often that happens depends on the memory allocator's layout, so this cannot replace the
+    // guard test above, but it covers the path that readers see.
+    val rows = 55
+    val columns = 3
+    val sparkSchema = StructType(
+      (0 until columns).map(i => StructField(s"c$i", LongType, nullable = false)))
+    val arrowSchema = ArrowUtils.toArrowSchema(sparkSchema, "UTC", true, false)
+    val allocator =
+      ArrowUtils.rootAllocator.newChildAllocator(this.getClass.getSimpleName, 0, Long.MaxValue)
+    val root = VectorSchemaRoot.create(arrowSchema, allocator)
+    val writer = ArrowWriter.create(root)
+    val unloader = new VectorUnloader(
+      root, true, ArrowCompressionUtils.createCompressionCodec("zstd", 3), true)
+    val random = new Random(2)
+    Utils.tryWithSafeFinally {
+      (0 until 300).foreach { _ =>
+        val values = ByteBuffer.wrap(noisyBytes(random, rows * columns * 8))
+          .order(ByteOrder.LITTLE_ENDIAN).asLongBuffer()
+        (0 until rows).foreach { _ =>
+          writer.write(InternalRow.fromSeq(Seq.fill(columns)(values.get())))
+        }
+        writer.finish()
+        val batch = unloader.getRecordBatch()
+        try {
+          // The buffers of a column are its validity buffer and then its data buffer.
+          (0 until columns).foreach { c =>
+            val dataBuffer = batch.getBuffers.get(2 * c + 1)
+            val prefix = dataBuffer.nioBuffer(0, 8).order(ByteOrder.LITTLE_ENDIAN).getLong(0)
+            assert(prefix === -1L || prefix === rows * 8L,
+              s"the length prefix of column $c was overwritten")
+          }
+        } finally {
+          batch.close()
+        }
+        writer.reset()
+      }
+    } {
+      root.close()
       allocator.close()
     }
   }
