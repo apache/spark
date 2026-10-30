@@ -117,6 +117,43 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
     }
   }
 
+  /** The value of `metric` in the one SortMergeAsOfJoinExec of `df`, read after `df` ran. */
+  private def asOfJoinMetric(df: DataFrame, metric: String): Long = {
+    val plan = df.queryExecution.executedPlan
+    val joins = collect(plan) { case j: SortMergeAsOfJoinExec => j }
+    assert(joins.length == 1, s"Expected one SortMergeAsOfJoinExec in plan:\n$plan")
+    joins.head.metrics(metric).value
+  }
+
+  /**
+   * Checks `query` with the cursor scan off and on. A right group spills from its second row,
+   * so a cursor scan that buffered rows would show a spill. One partition puts every equi-key
+   * in one task, so the cursor scan also has to move between groups.
+   */
+  private def checkCursorScan(query: => DataFrame, expected: Seq[Row]): Unit = {
+    withSQLConf(
+        SQLConf.SHUFFLE_PARTITIONS.key -> "1",
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_CURSOR_SCAN_ENABLED.key -> "false") {
+        val buffered = query
+        checkAnswer(buffered, expected)
+        assert(asOfJoinMetric(buffered, "numAsOfCursorTasks") == 0)
+      }
+      val cursor = query
+      checkAnswer(cursor, expected)
+      assert(asOfJoinMetric(cursor, "numAsOfCursorTasks") > 0, "Expected the cursor scan")
+      assert(asOfJoinMetric(cursor, "spillSize") == 0, "The cursor scan buffered right rows")
+    }
+  }
+
+  /** Checks `query`, and that it keeps the buffered scan with the cursor scan on. */
+  private def checkBufferedScan(query: => DataFrame, expected: Seq[Row]): Unit = {
+    val df = query
+    checkAnswer(df, expected)
+    assert(asOfJoinMetric(df, "numAsOfCursorTasks") == 0, "Expected the buffered scan")
+  }
+
   test("INNER ASOF JOIN with TIMESTAMP MATCH_CONDITION") {
     setupTradeQuoteViews()
     checkSortMergeAsOf(
@@ -1392,5 +1429,284 @@ class AsOfJoinSortMergeSQLSuite extends QueryTest
           |  MATCH_CONDITION (t.a >= r.a)
           |""".stripMargin),
       Row(Seq(Row(1, 2))) :: Nil)
+  }
+
+  test("cursor scan: backward match moves forward across trades and keys") {
+    // B has no quotes, C has quotes but no trades, and NULL keys never match. A best row kept
+    // from key A would give B a match.
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.sym, t.ts, q.tag
+          |FROM VALUES ('A', 2), ('A', 6), ('A', 7), ('B', 4), ('D', 5), (NULL, 3) AS t(sym, ts)
+          |LEFT ASOF JOIN VALUES ('A', 1, 'a1'), ('A', 3, 'a3'), ('A', 5, 'a5'), ('A', 8, 'a8'),
+          |  ('C', 1, 'c1'), ('D', 2, 'd2'), ('D', 6, 'd6'), (NULL, 1, 'n1') AS q(sym, ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.sym = q.sym
+          |""".stripMargin),
+      Row("A", 2, "a1") :: Row("A", 6, "a5") :: Row("A", 7, "a5") :: Row("B", 4, null) ::
+        Row("D", 5, "d2") :: Row(null, 3, null) :: Nil)
+  }
+
+  test("cursor scan: forward match is kept while later trades still pass it") {
+    // A3 reuses q4, A6 must drop it, and B1 must not reuse q7 from key A.
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.sym, t.ts, q.tag
+          |FROM VALUES ('A', 2), ('A', 3), ('A', 6), ('B', 1), ('C', 9) AS t(sym, ts)
+          |LEFT ASOF JOIN VALUES ('A', 1, 'q1'), ('A', 4, 'q4'), ('A', 7, 'q7'),
+          |  ('B', 0, 'b0'), ('B', 2, 'b2'), ('C', 5, 'c5') AS q(sym, ts, tag)
+          |  MATCH_CONDITION (t.ts <= q.ts)
+          |  ON t.sym = q.sym
+          |""".stripMargin),
+      Row("A", 2, "q4") :: Row("A", 3, "q4") :: Row("A", 6, "q7") :: Row("B", 1, "b2") ::
+        Row("C", 9, null) :: Nil)
+  }
+
+  test("cursor scan: strict and non-strict MATCH_CONDITION ties") {
+    // The second of two equal trades must see the same right rows as the first.
+    Seq(">=" -> "q5", ">" -> "q3", "<=" -> "q5", "<" -> "q7").foreach { case (op, tag) =>
+      withClue(s"$op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 5), (2, 5) AS t(id, ts)
+               |ASOF JOIN VALUES (3, 'q3'), (5, 'q5'), (7, 'q7') AS q(ts, tag)
+               |  MATCH_CONDITION (t.ts $op q.ts)
+               |""".stripMargin),
+          Row(1, tag) :: Row(2, tag) :: Nil)
+      }
+    }
+  }
+
+  test("cursor scan: NULL as-of keys never match and do not move the cursor") {
+    // The NULL trade sorts first. If it moved a forward cursor, trade 2 would lose q3.
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.id, q.tag
+          |FROM VALUES (1, NULL), (2, 2) AS t(id, ts)
+          |LEFT ASOF JOIN VALUES (NULL, 'qn'), (3, 'q3') AS q(ts, tag)
+          |  MATCH_CONDITION (t.ts <= q.ts)
+          |""".stripMargin),
+      Row(1, null) :: Row(2, "q3") :: Nil)
+    // The NULL quote sorts first. If it stopped a backward cursor, trade 2 would get no match.
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.id, q.tag
+          |FROM VALUES (1, NULL), (2, 2) AS t(id, ts)
+          |LEFT ASOF JOIN VALUES (NULL, 'qn'), (1, 'q1') AS q(ts, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |""".stripMargin),
+      Row(1, null) :: Row(2, "q1") :: Nil)
+  }
+
+  test("cursor scan: scalar MATCH_CONDITION types") {
+    val numbers = Seq("TINYINT", "SMALLINT", "INT", "BIGINT", "FLOAT", "DOUBLE", "DECIMAL(38, 18)")
+      .map(t => (t, s"CAST(1 AS $t)", s"CAST(2 AS $t)", s"CAST(3 AS $t)"))
+    def lcase(value: String): String = s"'$value' COLLATE UTF8_LCASE"
+    val others = Seq(
+      ("STRING", "'a'", "'b'", "'c'"),
+      // Binary order is 'B' < 'a' < 'c', but UTF8_LCASE order is 'a' < 'B' < 'c'.
+      ("STRING COLLATE UTF8_LCASE", lcase("a"), lcase("B"), lcase("c")),
+      ("BINARY", "X'01'", "X'02'", "X'03'"),
+      ("DATE", "DATE'2026-01-01'", "DATE'2026-01-02'", "DATE'2026-01-03'"),
+      ("TIMESTAMP", "TIMESTAMP'2026-01-01 00:00:01'", "TIMESTAMP'2026-01-01 00:00:02'",
+        "TIMESTAMP'2026-01-01 00:00:03'"),
+      ("TIMESTAMP_NTZ", "TIMESTAMP_NTZ'2026-01-01 00:00:01'",
+        "TIMESTAMP_NTZ'2026-01-01 00:00:02'", "TIMESTAMP_NTZ'2026-01-01 00:00:03'"),
+      ("INTERVAL YEAR TO MONTH", "INTERVAL '1-1' YEAR TO MONTH", "INTERVAL '1-2' YEAR TO MONTH",
+        "INTERVAL '1-3' YEAR TO MONTH"),
+      ("INTERVAL DAY TO SECOND", "INTERVAL '1 00:00:01' DAY TO SECOND",
+        "INTERVAL '1 00:00:02' DAY TO SECOND", "INTERVAL '1 00:00:03' DAY TO SECOND"))
+    for {
+      (typeName, before, at, after) <- numbers ++ others
+      (op, tag) <- Seq(">=" -> "before", "<=" -> "after")
+    } {
+      withClue(s"$typeName $op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT q.tag
+               |FROM VALUES ($at) AS t(k)
+               |ASOF JOIN VALUES ($before, 'before'), ($after, 'after') AS q(k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |""".stripMargin),
+          Row(tag) :: Nil)
+      }
+    }
+  }
+
+  test("cursor scan: DOUBLE NaN and negative zero MATCH_CONDITION") {
+    // Spark orders -0.0 equal to 0.0, and NaN above every other value.
+    Seq(">=", "<=").foreach { op =>
+      withClue(s"$op: ") {
+        checkCursorScan(
+          sql(
+            s"""
+               |SELECT t.id, q.tag
+               |FROM VALUES (1, 0.0D), (2, CAST('NaN' AS DOUBLE)) AS t(id, k)
+               |ASOF JOIN VALUES (-0.0D, 'negative zero'), (1.0D, 'one'),
+               |  (CAST('NaN' AS DOUBLE), 'nan') AS q(k, tag)
+               |  MATCH_CONDITION (t.k $op q.k)
+               |""".stripMargin),
+          Row(1, "negative zero") :: Row(2, "nan") :: Nil)
+      }
+    }
+  }
+
+  test("cursor scan: MATCH_CONDITION sides that are expressions of a column") {
+    // Each side sorts on its whole operand, so the cursor walks the operand values in order,
+    // even when the operand reverses the column order.
+    Seq(
+      // (match condition, backward rows, forward rows)
+      ("t.k + 10 OP q.k", Seq(Row(1, 8), Row(5, 12)), Seq(Row(1, 12), Row(5, 20))),
+      ("-t.k OP q.k", Seq(Row(1, -3), Row(5, -6)), Seq(Row(1, 0), Row(5, -3))),
+      ("t.k OP -q.k", Seq(Row(1, 0), Row(5, -3)), Seq(Row(1, -3), Row(5, -6)))
+    ).foreach { case (condition, backwardRows, forwardRows) =>
+      Seq(">=" -> backwardRows, "<=" -> forwardRows).foreach { case (op, expected) =>
+        val matchCondition = condition.replace("OP", op)
+        withClue(s"$matchCondition: ") {
+          checkCursorScan(
+            sql(
+              s"""
+                 |SELECT t.k, q.k
+                 |FROM VALUES (1), (5) AS t(k)
+                 |LEFT ASOF JOIN VALUES (-6), (-3), (0), (3), (6), (8), (12), (20) AS q(k)
+                 |  MATCH_CONDITION ($matchCondition)
+                 |""".stripMargin),
+            expected)
+        }
+      }
+    }
+  }
+
+  test("cursor scan: STRING against INT MATCH_CONDITION casts both sides") {
+    Seq(true, false).foreach { ansi =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        Seq(">=" -> 3, "<=" -> 7).foreach { case (op, expected) =>
+          withClue(s"ansi=$ansi, $op: ") {
+            checkCursorScan(
+              sql(
+                s"""
+                   |SELECT q.n
+                   |FROM VALUES ('5') AS t(s)
+                   |ASOF JOIN VALUES (3), (7) AS q(n)
+                   |  MATCH_CONDITION (t.s $op q.n)
+                   |""".stripMargin),
+              Row(expected) :: Nil)
+          }
+        }
+      }
+    }
+  }
+
+  test("cursor scan: mixed TIMESTAMP_LTZ and TIMESTAMP_NTZ sides across a DST gap") {
+    // On 2024-03-10 Los Angeles skips 02:00 to 03:00, so NTZ 02:50 becomes 10:50Z, after
+    // 03:00 (10:00Z) and 03:15 (10:15Z). The NTZ order and the LTZ order differ.
+    withSQLConf(SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles") {
+      val ltzRows = "(TIMESTAMP_LTZ '2024-03-10 10:05:00Z', 1), " +
+        "(TIMESTAMP_LTZ '2024-03-10 10:55:00Z', 2)"
+      val ntzRows = "(TIMESTAMP_NTZ '2024-03-10 02:50:00', 1), " +
+        "(TIMESTAMP_NTZ '2024-03-10 03:00:00', 2), (TIMESTAMP_NTZ '2024-03-10 03:15:00', 3)"
+      def query(leftRows: String, rightRows: String, op: String): DataFrame = sql(
+        s"""
+           |SELECT l.id, r.id
+           |FROM VALUES $leftRows AS l(ts, id)
+           |LEFT ASOF JOIN VALUES $rightRows AS r(ts, id)
+           |  MATCH_CONDITION (l.ts $op r.ts)
+           |""".stripMargin)
+
+      // The NTZ quotes sort on their LTZ cast, the same value the condition compares.
+      checkCursorScan(query(ltzRows, ntzRows, ">="), Row(1, 2) :: Row(2, 1) :: Nil)
+      checkCursorScan(query(ltzRows, ntzRows, "<="), Row(1, 3) :: Row(2, null) :: Nil)
+
+      // The NTZ trades sort on their raw NTZ value, but the condition compares their LTZ cast.
+      // A cursor would walk them in the wrong order: it would give trade 2 the quote of trade 1.
+      checkBufferedScan(query(ntzRows, ltzRows, ">="),
+        Row(1, 1) :: Row(2, null) :: Row(3, 1) :: Nil)
+      checkBufferedScan(query(ntzRows, ltzRows, "<="),
+        Row(1, 2) :: Row(2, 1) :: Row(3, 2) :: Nil)
+    }
+  }
+
+  test("cursor scan: a right-only ON predicate is pushed down, so the cursor scan applies") {
+    checkCursorScan(
+      sql(
+        """
+          |SELECT t.id, q.tag
+          |FROM VALUES (1, 'A', 10) AS t(id, sym, ts)
+          |LEFT ASOF JOIN VALUES ('A', 1, 50, 'cheap'), ('A', 5, 500, 'pricey')
+          |  AS q(sym, ts, price, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.sym = q.sym AND q.price <= 100
+          |""".stripMargin),
+      Row(1, "cheap") :: Nil)
+  }
+
+  test("cursor scan: a residual ON predicate keeps the buffered scan") {
+    withSQLConf(
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_IN_MEMORY_THRESHOLD.key -> "1",
+        SQLConf.SORT_MERGE_JOIN_EXEC_BUFFER_SPILL_THRESHOLD.key -> "1") {
+      // The latest quote within the price limit is the older one. A scan that keeps only the
+      // latest quote would miss it.
+      val twoSided = sql(
+        """
+          |SELECT t.id, q.tag
+          |FROM VALUES (1, 'A', 10, 100) AS t(id, sym, ts, max_price)
+          |LEFT ASOF JOIN VALUES ('A', 1, 50, 'cheap'), ('A', 5, 500, 'pricey')
+          |  AS q(sym, ts, price, tag)
+          |  MATCH_CONDITION (t.ts >= q.ts)
+          |  ON t.sym = q.sym AND q.price <= t.max_price
+          |""".stripMargin)
+      checkBufferedScan(twoSided, Row(1, "cheap") :: Nil)
+      assert(asOfJoinMetric(twoSided, "spillSize") > 0)
+
+      // A LEFT ASOF JOIN keeps a left-only ON predicate in the join.
+      checkBufferedScan(
+        sql(
+          """
+            |SELECT t.id, q.tag
+            |FROM VALUES (1, 'A', 10, true), (2, 'A', 12, false) AS t(id, sym, ts, active)
+            |LEFT ASOF JOIN VALUES ('A', 1, 'q1'), ('A', 5, 'q5') AS q(sym, ts, tag)
+            |  MATCH_CONDITION (t.ts >= q.ts)
+            |  ON t.sym = q.sym AND t.active
+            |""".stripMargin),
+        Row(1, "q5") :: Row(2, null) :: Nil)
+    }
+  }
+
+  test("cursor scan: tuple, STRUCT and mixed type MATCH_CONDITIONs keep the buffered scan") {
+    checkBufferedScan(
+      sql(
+        """
+          |SELECT r.tag
+          |FROM VALUES (1, 5) AS t(a, b)
+          |ASOF JOIN VALUES (1, 3, 'r13'), (1, 7, 'r17') AS r(a, b, tag)
+          |  MATCH_CONDITION ((t.a, t.b) >= (r.a, r.b))
+          |""".stripMargin),
+      Row("r13") :: Nil)
+    checkBufferedScan(
+      sql(
+        """
+          |SELECT r.tag
+          |FROM VALUES (named_struct('x', 5)) AS t(s)
+          |ASOF JOIN VALUES (named_struct('x', 3), 'r3'), (named_struct('x', 7), 'r7') AS r(s, tag)
+          |  MATCH_CONDITION (t.s >= r.s)
+          |""".stripMargin),
+      Row("r3") :: Nil)
+    // The comparison casts the INT side to BIGINT, but that side sorts on the INT column.
+    checkBufferedScan(
+      sql(
+        """
+          |SELECT r.tag
+          |FROM VALUES (5) AS t(k)
+          |ASOF JOIN VALUES (CAST(3 AS BIGINT), 'r3'), (CAST(7 AS BIGINT), 'r7') AS r(k, tag)
+          |  MATCH_CONDITION (t.k >= r.k)
+          |""".stripMargin),
+      Row("r3") :: Nil)
   }
 }
