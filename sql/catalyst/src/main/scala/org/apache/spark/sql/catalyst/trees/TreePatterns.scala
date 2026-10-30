@@ -160,6 +160,7 @@ object TreePattern extends Enumeration  {
   val EVENT_TIME_WATERMARK: Value = Value
   val EXCEPT: Value = Value
   val EXECUTE_IMMEDIATE: Value = Value
+  val EXTERNAL_LOOKUP_JOIN: Value = Value
   val INTERSECT: Value = Value
   val FILTER: Value = Value
   val GENERATE: Value = Value
