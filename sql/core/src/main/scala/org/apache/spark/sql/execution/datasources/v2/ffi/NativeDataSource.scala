@@ -41,7 +41,6 @@ import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
 import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
-import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
@@ -496,6 +495,8 @@ class NativePartitionReader(
   // The task that reads the partition, which the library may use until the stream is released.
   private var task: NativeLibrary.Task = _
   private var root: VectorSchemaRoot = _
+  // The column vectors of the batch, which read the buffers of each batch that `readNext` imports.
+  private var columns: Array[NativeColumnVector] = _
   private var batch: ColumnarBatch = _
   @GuardedBy("this")
   private var closed = false
@@ -511,7 +512,8 @@ class NativePartitionReader(
       openStream()
       root = VectorSchemaRoot.create(importSchema(), allocator)
       checkSchema()
-      batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
+      columns = root.getFieldVectors.asScala.map(columnVector).toArray
+      batch = new ColumnarBatch(columns.toArray[ColumnVector])
     } catch {
       case e: Throwable =>
         close()
@@ -670,14 +672,16 @@ class NativePartitionReader(
   }
 
   /**
-   * Wraps a vector of the root, into which every batch is imported. It is not freeable between
-   * batches: Spark must not close it when it moves to the next batch, as `ColumnarToRowExec` does
-   * with the column vectors that are freeable, because closing a struct column also drops its
-   * child column vectors. The reader closes the Arrow vectors at the end.
+   * Wraps a vector of the root, into which every batch is imported, in a `NativeColumnVector`,
+   * which reads the buffers of the batch that `readNext` imported last. Like the other
+   * `ReusedArrowColumnVector`s, it is not freeable between batches: Spark must not close it when
+   * it moves to the next batch, as `ColumnarToRowExec` does with the column vectors that are
+   * freeable, because closing a struct column also drops its child column vectors. The reader
+   * closes the Arrow vectors at the end.
    */
-  private def columnVector(vector: FieldVector): ColumnVector = {
+  private def columnVector(vector: FieldVector): NativeColumnVector = {
     try {
-      new ReusedArrowColumnVector(vector)
+      NativeColumnVector.create(vector)
     } catch {
       case NonFatal(e) =>
         throw QueryExecutionErrors.nativeDataSourceError("read", name,
@@ -722,6 +726,7 @@ class NativePartitionReader(
         }
         call(name, "read")(Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries))
         checkNulls()
+        columns.foreach(_.refresh())
         batch.setNumRows(root.getRowCount)
         true
       }
