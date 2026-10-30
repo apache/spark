@@ -56,6 +56,8 @@ case class SimpleCost(numSkewJoins: Int, numShuffles: Int, numLocalSorts: Int) e
  * plan. With union shuffle push-down enabled, tagged new exchanges are excluded and each tagged
  * union counts as one shuffle instead. Query-stage contents are not visited, while a surviving
  * tagged union still contributes one even after its input exchanges have become stages.
+ * Preparation restores the mark for direct requirement or retargeted column shuffles and stages.
+ * This keeps equivalent re-plans from gaining a shuffle-cost credit when a moved branch finishes.
  * See [[SimpleCost]] for how the components are compared.
  */
 case class SimpleCostEvaluator(
