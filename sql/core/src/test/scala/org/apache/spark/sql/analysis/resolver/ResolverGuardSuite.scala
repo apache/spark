@@ -143,8 +143,8 @@ class ResolverGuardSuite extends ResolverGuardSuiteBase {
   test("SQL JSON constructor and path functions") {
     checkResolverGuard("""SELECT JSON_ARRAY(1, 'x', true)""")
     checkResolverGuard("""SELECT JSON_ARRAY('[1]' FORMAT JSON)""")
-    // Nested clause-free JSON_ARRAY routes as UnresolvedJsonArray before resolution; assert the
-    // guard admits it so tentative single-pass mode can cover it.
+    // Nested clause-free JSON_ARRAY routes as UnresolvedRoutedJsonArray before resolution; the
+    // guard gives it the flat call's owner check and admits the unshadowed built-in.
     checkResolverGuard("""SELECT JSON_ARRAY(JSON_ARRAY(1))""")
     checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a')""")
     checkResolverGuard("""SELECT JSON_VALUE('{"a":1}', '$.a' RETURNING INT)""")

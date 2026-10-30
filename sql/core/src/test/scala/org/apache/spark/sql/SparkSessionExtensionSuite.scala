@@ -231,10 +231,10 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-59243: injected json_array replacement wins a nested clause-free call") {
-    // A nested clause-free `json_array(json_array(1))` routes through `UnresolvedJsonArray`, which
-    // must respect an injected replacement just like the flat call does -- not hard-code the stock
-    // splicing built-in. The replacement returns its argument count, so the outer call yields 1
-    // (one argument: the inner stock `json_array(1)`) iff the injection won.
+    // A nested clause-free `json_array(json_array(1))` routes through `UnresolvedRoutedJsonArray`,
+    // which must respect an injected replacement just like the flat call does -- not hard-code the
+    // stock splicing built-in. The replacement returns its argument count, so the outer call yields
+    // 1 (one argument: the inner stock `json_array(1)`) iff the injection won.
     val extensions = create { extensions =>
       extensions.injectFunction((
         FunctionIdentifier("json_array"),
@@ -265,8 +265,40 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
     }
   }
 
+  test("SPARK-59243: injected replacements keep their type for nested calls under a view " +
+      "default collation") {
+    // A routed wrapper must not be cast to the view's default collation before its owner is
+    // known: an INT-returning replacement keeps INT for nested calls, like the flat call. Strict
+    // single-pass rejects a view body with a non-builtin function, so only fixed-point applies.
+    val extensions = create { extensions =>
+      Seq("json_array", "json_object").foreach { name =>
+        extensions.injectFunction((
+          FunctionIdentifier(name),
+          new ExpressionInfo("noClass", name),
+          (children: Seq[Expression]) => Literal(children.size)))
+      }
+    }
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key, "true")
+      try {
+        session.sql(
+          """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT json_array(json_array(1)) AS a,
+            |       json_object('a', json_object('b', 1)) AS o,
+            |       json_object('a' VALUE json_object('b' VALUE 1)) AS ov""".stripMargin)
+        val schema = session.table("v").schema
+        Seq("a", "o", "ov").foreach { c =>
+          assert(schema(c).dataType === IntegerType, s"for $c")
+        }
+        assert(session.table("v").collect() === Array(Row(1, 2, 2)))
+      } finally {
+        session.sql("DROP VIEW IF EXISTS v")
+      }
+    }
+  }
+
   test("SPARK-59243: injected json_array replacement receives expanded star in a nested call") {
-    // The outer clause-free call routes through `UnresolvedJsonArray` because of the nested
+    // The outer clause-free call routes through `UnresolvedRoutedJsonArray` because of the nested
     // JSON_ARRAY sibling. If an injected replacement owns `json_array`, the direct star must expand
     // for that replacement instead of taking the stock built-in rejection path.
     val extensions = create { extensions =>
@@ -339,7 +371,7 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
 
   test("SPARK-59243: injected json_object replacement receives an expanded star") {
     // A routed JSON_OBJECT with a direct star (`'a' VALUE *`) plus a nested JSON_OBJECT sibling
-    // goes through `UnresolvedJsonObject`. If an injected replacement owns `json_object`, the
+    // goes through `UnresolvedRoutedJsonObject`. If an injected replacement owns `json_object`, the
     // direct star must expand for that replacement instead of taking the stock built-in rejection
     // -- the json_object analog of the nested json_array star case. The replacement returns its
     // argument count, so the flattened list ['a', a, b, 'b', json_object('c' VALUE 1)] yields 5

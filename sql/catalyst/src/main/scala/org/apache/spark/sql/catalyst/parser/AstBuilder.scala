@@ -4403,14 +4403,9 @@ class AstBuilder extends DataTypeAstBuilder
     } else if (clauseFree) {
       // Nested clause-free call: route so a routine can shadow it, but carry the per-value splice
       // decision, frozen now from the lexical argument, through resolution (see
-      // [[UnresolvedJsonArray]]).
-      UnresolvedJsonArray(
-        arrayValues,
-        arrayValues.map(ImplicitlyFormattedAsJson.isImplicitlyJson),
-        arrayValues.map(_ => false),
-        JsonConstructorNullBehavior.Absent,
-        StringType,
-        routeThroughResolution = true)
+      // [[UnresolvedRoutedJsonArray]]).
+      UnresolvedRoutedJsonArray(
+        arrayValues, arrayValues.map(ImplicitlyFormattedAsJson.isImplicitlyJson))
     } else {
       // Decide each element's FORMAT JSON flags now, from the lexical argument, so a later
       // rewrite that wraps or swaps the child cannot change them (see [[JsonArray]]):
@@ -4441,13 +4436,7 @@ class AstBuilder extends DataTypeAstBuilder
       val nullBehavior = Option(ctx.nullBehavior)
         .map(buildJsonConstructorNullBehavior)
         .getOrElse(JsonConstructorNullBehavior.Absent)
-      UnresolvedJsonArray(
-        arrayValues,
-        formatJson,
-        needsValidation,
-        nullBehavior,
-        returning,
-        routeThroughResolution = false)
+      UnresolvedJsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
     }
   }
 
@@ -4501,13 +4490,7 @@ class AstBuilder extends DataTypeAstBuilder
       UnresolvedFunction("json_object", members.flatMap { case (k, v) => Seq(k, v) },
         isDistinct = false)
     } else if (routeThroughResolution) {
-      UnresolvedJsonObject(
-        members,
-        rawJson,
-        needsValidation,
-        JsonConstructorNullBehavior.Null,
-        StringType,
-        routeThroughResolution = true)
+      UnresolvedRoutedJsonObject(members, rawJson)
     } else {
       // Default RETURNING is STRING (the result is JSON text). A CHAR/VARCHAR RETURNING is
       // normalized to STRING: JSON_OBJECT serializes the fragment itself and never advertises a
@@ -4521,13 +4504,7 @@ class AstBuilder extends DataTypeAstBuilder
       // JSON_OBJECT defaults to NULL ON NULL per the standard (emits keys with null values).
       val nullBehavior = Option(body.nullBehavior)
         .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
-      UnresolvedJsonObject(
-        members,
-        rawJson,
-        needsValidation,
-        nullBehavior,
-        returning,
-        routeThroughResolution = false)
+      UnresolvedJsonObject(members, rawJson, needsValidation, nullBehavior, returning)
     }
   }
 
