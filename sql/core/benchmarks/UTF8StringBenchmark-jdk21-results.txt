@@ -1,0 +1,21 @@
+================================================================================================
+UTF8String ASCII case conversion
+================================================================================================
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 9V74 80-Core Processor
+toLowerCase:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+all lowercase                                       147            148           0         13.9          71.9       1.0X
+all uppercase                                       269            276          10          7.6         131.5       0.5X
+mixed case                                          996           1009           6          2.1         486.1       0.1X
+
+OpenJDK 64-Bit Server VM 21.0.12+8-LTS on Linux 6.17.0-1022-azure
+AMD EPYC 9V74 80-Core Processor
+toUpperCase:                              Best Time(ms)   Avg Time(ms)   Stdev(ms)    Rate(M/s)   Per Row(ns)   Relative
+------------------------------------------------------------------------------------------------------------------------
+all lowercase                                       327            328           1          6.3         159.7       1.0X
+all uppercase                                       241            242           1          8.5         117.8       1.4X
+mixed case                                          996           1016          17          2.1         486.4       0.3X
+
+
