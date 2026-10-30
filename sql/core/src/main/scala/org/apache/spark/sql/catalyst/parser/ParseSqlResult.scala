@@ -76,6 +76,7 @@ object ParseSqlResult {
 
   private def parseStatement(segment: PositionedSqlStatement, charStart: Int): JObject = {
     val sql = segment.statement
+    val length = sql.codePointCount(0, sql.length)
     try {
       // Do not inherit the outer query's origin from the parse_sql expression.
       // Errors and parsed nodes refer to the individual statement. Parser
@@ -83,33 +84,33 @@ object ParseSqlResult {
       val origin = if (sql.nonEmpty) {
         Origin(
           startIndex = Some(0),
-          stopIndex = Some(sql.codePointCount(0, sql.length) - 1),
+          stopIndex = Some(length - 1),
           sqlText = Some(sql))
       } else {
         Origin(sqlText = Some(sql))
       }
       CurrentOrigin.withOrigin(origin) {
         val plan = parser.get().parsePlan(sql)
-        successJson(plan, segment, charStart)
+        successJson(plan, charStart, length)
       }
     } catch {
       // User-facing parse / scripting failures become JSON; everything else fails.
       case e: ParseException =>
-        errorJson(e, segment, charStart)
+        errorJson(e, segment, charStart, length)
       case e: SqlScriptingException =>
-        errorJson(e, segment, charStart)
+        errorJson(e, segment, charStart, length)
     }
   }
 
   /** Build success JSON from an already-parsed unresolved plan. */
   private def successJson(
       plan: LogicalPlan,
-      segment: PositionedSqlStatement,
-      charStart: Int): JObject = {
+      charStart: Int,
+      length: Int): JObject = {
     val classification = SqlStatementCodes.classify(plan)
     val fields = mutable.ListBuffer.empty[JField]
     fields += "start" -> JInt(charStart)
-    fields += "length" -> JInt(charLength(segment))
+    fields += "length" -> JInt(length)
     fields += "parse_success" -> JBool(true)
     fields += "statement_identifier" -> JString(classification.statementIdentifier)
     fields += "statement_code" -> JInt(classification.statementCode)
@@ -156,36 +157,35 @@ object ParseSqlResult {
     }
   }
 
-  /** Unicode code-point length of the trimmed statement text. */
-  private def charLength(segment: PositionedSqlStatement): Int = {
-    val text = segment.statement
-    text.codePointCount(0, text.length)
-  }
-
   /**
    * Keep statement-level `queryContext` indexes inside the statement.
    * In-range contexts keep the shared renderer's fragment. A context that
    * falls outside the statement is widened to cover all of it. Contexts of
    * another object (a view body) are left as is.
    */
-  private def rewriteErrorCharIndexes(errorObj: JObject, statement: String): JObject = {
+  private def rewriteErrorCharIndexes(
+      errorObj: JObject,
+      statement: String,
+      length: Int): JObject = {
     JObject(errorObj.obj.map {
       case ("queryContext", JArray(contexts)) =>
         "queryContext" -> JArray(contexts.map {
-          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement)
+          case ctx: JObject => rewriteQueryContextIndexes(ctx, statement, length)
           case other => other
         }.toList)
       case other => other
     })
   }
 
-  private def rewriteQueryContextIndexes(ctx: JObject, statement: String): JObject = {
+  private def rewriteQueryContextIndexes(
+      ctx: JObject,
+      statement: String,
+      length: Int): JObject = {
     val objectType = ctx.obj.collectFirst { case ("objectType", JString(t)) => t }
     val start = ctx.obj.collectFirst { case ("startIndex", JInt(n)) => n.toInt }
     val stop = ctx.obj.collectFirst { case ("stopIndex", JInt(n)) => n.toInt }
     (objectType, start, stop) match {
       case (Some(""), Some(from), Some(to)) =>
-        val length = statement.codePointCount(0, statement.length)
         if (from >= 1 && to >= from && to <= length) {
           ctx
         } else {
@@ -203,7 +203,8 @@ object ParseSqlResult {
   private def errorJson(
       e: SparkThrowable with Throwable,
       segment: PositionedSqlStatement,
-      charStart: Int): JObject = {
+      charStart: Int,
+      length: Int): JObject = {
     val errorObj = parseJson(
       SparkThrowableHelper.getMessage(e, ErrorMessageFormat.STANDARD)).asInstanceOf[JObject]
     val origin = e match {
@@ -219,10 +220,12 @@ object ParseSqlResult {
     }
     JObject(
       "start" -> JInt(charStart),
-      "length" -> JInt(charLength(segment)),
+      "length" -> JInt(length),
       "parse_success" -> JBool(false),
       "error" -> rewriteErrorCharIndexes(
-        JObject(errorObj.obj ++ contextFields ++ locationFields), segment.statement)
+        JObject(errorObj.obj ++ contextFields ++ locationFields),
+        segment.statement,
+        length)
     )
   }
 
