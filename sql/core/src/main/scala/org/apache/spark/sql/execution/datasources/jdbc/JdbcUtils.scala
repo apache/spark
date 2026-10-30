@@ -718,54 +718,57 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
     var totalRowCount = 0L
-    def classifyWriteException[T](f: => T): T = {
+    def classifyWriteException(e: SQLException): Nothing = {
+      val cause = e.getNextException
+      if (cause != null && e.getCause != cause) {
+        // If there is no cause already, set 'next exception' as cause. If cause is null,
+        // it *may* be because no cause was set yet
+        if (e.getCause == null) {
+          try {
+            e.initCause(cause)
+          } catch {
+            // Or it may be null because the cause *was* explicitly initialized, to *null*,
+            // in which case this fails. There is no other way to detect it.
+            // addSuppressed in this case as well.
+            case _: IllegalStateException => e.addSuppressed(cause)
+          }
+        } else {
+          e.addSuppressed(cause)
+        }
+      }
+      // Closing the connection on task cancellation can cause a SQLException. Do not
+      // report that cancellation side effect as a JDBC write failure.
+      if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
+        throw e
+      }
+      throw dialect.classifyException(
+        e,
+        condition = "FAILED_JDBC.WRITE",
+        messageParameters = Map("url" -> options.getRedactUrl(), "tableName" -> table),
+        description = "Write rows to the table.",
+        isRuntime = true)
+    }
+
+    def withWriteException[T](f: => T): T = {
       try {
         f
       } catch {
-        case e: SQLException =>
-          val cause = e.getNextException
-          if (cause != null && e.getCause != cause) {
-            // If there is no cause already, set 'next exception' as cause. If cause is null,
-            // it *may* be because no cause was set yet
-            if (e.getCause == null) {
-              try {
-                e.initCause(cause)
-              } catch {
-                // Or it may be null because the cause *was* explicitly initialized, to *null*,
-                // in which case this fails. There is no other way to detect it.
-                // addSuppressed in this case as well.
-                case _: IllegalStateException => e.addSuppressed(cause)
-              }
-            } else {
-              e.addSuppressed(cause)
-            }
-          }
-          // Closing the connection on task cancellation can cause a SQLException. Do not
-          // report that cancellation side effect as a JDBC write failure.
-          if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
-            throw e
-          }
-          throw dialect.classifyException(
-            e,
-            condition = "FAILED_JDBC.WRITE",
-            messageParameters = Map("url" -> options.getRedactUrl(), "tableName" -> table),
-            description = "Write rows to the table.",
-            isRuntime = true)
+        case e: SQLException => classifyWriteException(e)
       }
     }
 
     try {
-      classifyWriteException {
+      withWriteException {
         if (supportsTransactions) {
           conn.setAutoCommit(false) // Everything in the same db transaction.
           conn.setTransactionIsolation(finalIsolationLevel)
         }
       }
-      val stmt = classifyWriteException { conn.prepareStatement(insertStmt) }
-      val setters = classifyWriteException {
+      val stmt = withWriteException { conn.prepareStatement(insertStmt) }
+      val setters = withWriteException {
         rddSchema.fields.map(f => makeSetter(conn, dialect, f.dataType, options))
       }
-      val nullTypes = classifyWriteException {
+      val nullTypes = withWriteException {
         rddSchema.fields.map(f => getJdbcType(f.dataType, dialect).jdbcNullType)
       }
       val numFields = rddSchema.fields.length
@@ -773,11 +776,11 @@ object JdbcUtils extends Logging with SQLConfHelper {
       try {
         var rowCount = 0
 
-        classifyWriteException { stmt.setQueryTimeout(options.queryTimeout) }
+        withWriteException { stmt.setQueryTimeout(options.queryTimeout) }
 
         while (iterator.hasNext) {
           val row = iterator.next()
-          classifyWriteException {
+          try {
             var i = 0
             while (i < numFields) {
               if (row.isNullAt(i)) {
@@ -788,6 +791,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
               i = i + 1
             }
             stmt.addBatch()
+          } catch {
+            case e: SQLException => classifyWriteException(e)
           }
           rowCount += 1
           totalRowCount += 1
@@ -796,18 +801,18 @@ object JdbcUtils extends Logging with SQLConfHelper {
             // opening the connection in this method) closes conn to unblock. JDBC 4.0 section 9.6:
             // methods on a closed Connection throw SQLException (expected for major drivers).
             // Mid-batch kill may drop the in-flight batch; still better than hanging forever.
-            classifyWriteException { stmt.executeBatch() }
+            withWriteException { stmt.executeBatch() }
             rowCount = 0
           }
         }
         if (rowCount > 0) {
-          classifyWriteException { stmt.executeBatch() }
+          withWriteException { stmt.executeBatch() }
         }
       } finally {
-        classifyWriteException { stmt.close() }
+        withWriteException { stmt.close() }
       }
       if (supportsTransactions) {
-        classifyWriteException { conn.commit() }
+        withWriteException { conn.commit() }
       }
       committed = true
     } finally {

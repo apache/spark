@@ -102,9 +102,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
               executeHolder.sessionHolder.userId,
               executeHolder.sessionHolder.sessionId,
               Some(executeHolder.eventsManager),
-              true,
-              clientType = executeHolder.request.getClientType)(
-              new SparkSQLException("OPERATION_CANCELED", Map.empty))
+              true)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
           } finally {
             executeHolder.cleanup()
           }
@@ -156,8 +154,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
           executeHolder.sessionHolder.userId,
           executeHolder.sessionHolder.sessionId,
           Some(executeHolder.eventsManager),
-          false,
-          clientType = executeHolder.request.getClientType)(e)
+          false)(e)
     } finally {
       // Make sure to transition to completed in order to prevent the thread from being interrupted
       // afterwards.
@@ -175,9 +172,7 @@ private[connect] class ExecuteThreadRunner(executeHolder: ExecuteHolder) extends
                 executeHolder.sessionHolder.userId,
                 executeHolder.sessionHolder.sessionId,
                 Some(executeHolder.eventsManager),
-                true,
-                clientType = executeHolder.request.getClientType)(
-                new SparkSQLException("OPERATION_CANCELED", Map.empty))
+                true)(new SparkSQLException("OPERATION_CANCELED", Map.empty))
             } finally {
               executeHolder.cleanup()
             }

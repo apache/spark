@@ -78,8 +78,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         "execute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
-        sessionId = request.getSessionId,
-        clientType = request.getClientType)
+        sessionId = request.getSessionId)
     }
   }
 
@@ -185,8 +184,7 @@ class SparkConnectService(debug: Boolean) extends AsyncService with BindableServ
         "reattachExecute",
         observer = responseObserver,
         userId = request.getUserContext.getUserId,
-        sessionId = request.getSessionId,
-        clientType = request.getClientType)
+        sessionId = request.getSessionId)
   }
 
   /**

@@ -48,8 +48,7 @@ class SparkConnectFetchErrorDetailsHandler(
 
         ErrorUtils.throwableToFetchErrorDetailsResponse(
           st = error,
-          serverStackTraceEnabled = true,
-          clientType = v.getClientType)
+          serverStackTraceEnabled = true)
       }
       .getOrElse(FetchErrorDetailsResponse.newBuilder().build())
 

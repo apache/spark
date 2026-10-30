@@ -167,6 +167,51 @@ class JdbcTaskInterruptSuite extends SharedSparkSession {
         parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
       assert(error.getCause eq batchFailure)
       assert(batchFailure.getNextException eq nextFailure)
+      assert(batchFailure.getCause eq nextFailure)
+    } finally {
+      TaskContext.unset()
+      JdbcDialects.unregisterDialect(dialect)
+    }
+  }
+
+  test("savePartition classifies JDBC commit failures") {
+    val conn = mock(classOf[Connection])
+    val metadata = mock(classOf[DatabaseMetaData])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.getMetaData).thenReturn(metadata)
+    when(metadata.supportsTransactions()).thenReturn(true)
+    when(metadata.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED))
+      .thenReturn(true)
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+
+    val commitFailure = new SQLException("commit rejected", "40001")
+    doThrow(commitFailure).when(conn).commit()
+    val dialect = new JdbcDialect with NoLegacyJDBCError {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+    }
+    registerDialect(dialect)
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      val options = newWriteOptions()
+      val error = intercept[SparkRuntimeException] {
+        JdbcUtils.savePartition(
+          "t",
+          Iterator(Row(1)),
+          StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)",
+          batchSize = 1,
+          dialect,
+          Connection.TRANSACTION_READ_COMMITTED,
+          options)
+      }
+      checkError(
+        exception = error,
+        condition = "FAILED_JDBC.WRITE",
+        sqlState = Some("HV000"),
+        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
+      assert(error.getCause eq commitFailure)
+      verify(conn).rollback()
     } finally {
       TaskContext.unset()
       JdbcDialects.unregisterDialect(dialect)
