@@ -272,7 +272,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         true
       }
     } {
-      // The package is at `target` already, so failing to delete the copy fails nothing.
+      // Only deletes the temporary copy, so failing to delete it must not replace the result or
+      // the error of the add. Utils.createTempDir deletes it at shutdown anyway.
       copyDir.foreach(dir => Utils.tryLogNonFatalError(Utils.deleteRecursively(dir.toFile)))
     }
   }

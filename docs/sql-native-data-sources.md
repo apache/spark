@@ -331,14 +331,14 @@ also needed because the sessions that are not isolated share the files they add.
 more than one configured package provides its data source. `spark.addArtifact` fails for a package
 that Spark cannot read, whose version it does not support, or that has no library for the platform
 of the driver, which loads the library to plan a query, instead of adding a package that the session
-could not use: the session would ignore it and silently keep using the package that it added before,
-or fail every query on its data sources. After the failure, the session keeps the packages that it
-had, and a call that adds several artifacts still adds the others, except in Python without Spark
-Connect, where `spark.addArtifacts` adds the packages first, one at a time, so a rejected package
-stops the rest of the call. Spark does not load the library then, so a library that fails to load
-fails the queries that use it. Spark ignores, and logs, a configured package that it cannot read or
-whose version it does not support, unless its manifest lists the data source that a query uses and
-no other package or installed library provides it.
+could not use: the session would ignore it and silently keep using the package or library that it
+used before, or fail every query on its data sources. After the failure, the session keeps the
+packages that it had, and a call that adds several artifacts still adds the others, except in Python
+without Spark Connect, where `spark.addArtifacts` adds the packages first, one at a time, so a
+rejected package stops the rest of the call. Spark does not load the library then, so a library that
+fails to load fails the queries that use it. Spark ignores, and logs, a configured package that it
+cannot read or whose version it does not support, unless its manifest lists the data source that a
+query uses and no other package or installed library provides it.
 
 ## Example in Rust
 

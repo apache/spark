@@ -1527,7 +1527,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val only = Utils.createTempDir()
     val pkg = createPackage(library, dataSources(""), dir = only, fileName = "c.sparkpkg")
     checkRows(range(newSession(pkg, only), "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
-    // A package that a session adds takes precedence over the same one in the configured paths.
+    // Nor is the same package, configured and also added by the session.
     val session = newSession(first)
     session.addArtifact(first.getPath)
     checkRows(range(session, "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
