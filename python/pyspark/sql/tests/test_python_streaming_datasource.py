@@ -333,20 +333,20 @@ class BasePythonStreamingDataSourceTestsMixin:
 
         # Non-empty list with an advanced end offset is cached and readable.
         wrapper = _SimpleStreamReaderWrapper(ListReader([(0,), (1,)], advance=True))
-        end = wrapper.latestOffset(start, ReadAllAvailable())
+        end = wrapper.latestOffset()
         self.assertEqual(end, {"offset": 2})
         self.assertEqual(list(wrapper.getCache(start, end)), [(0,), (1,)])
 
         # Empty list with end == start is allowed and not cached.
         wrapper = _SimpleStreamReaderWrapper(ListReader([], advance=False))
-        end = wrapper.latestOffset(start, ReadAllAvailable())
+        end = wrapper.latestOffset()
         self.assertEqual(end, start)
         self.assertEqual(len(wrapper.cache), 0)
 
         # Non-empty list with end == start raises the offset validation error.
         wrapper = _SimpleStreamReaderWrapper(ListReader([(0,)], advance=False))
         with self.assertRaises(PySparkException) as cm:
-            wrapper.latestOffset(start, ReadAllAvailable())
+            wrapper.latestOffset()
         self.assertEqual(
             cm.exception.getCondition(),
             "SIMPLE_STREAM_READER_OFFSET_DID_NOT_ADVANCE",
