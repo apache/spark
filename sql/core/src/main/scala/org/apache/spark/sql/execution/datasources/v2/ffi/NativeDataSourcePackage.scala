@@ -134,8 +134,8 @@ object NativeDataSourcePackage extends Logging {
 
   /**
    * Checks a package that a session adds with `spark.addArtifact`, in the given file, before the
-   * session gets it: fails if Spark cannot read the package, does not support its version of the
-   * interface, or if it has no library for the platform of the driver, which loads the library to
+   * session gets it: fails if the file is not a valid package, if Spark does not support its
+   * version of the interface, or if it has no library for the platform of the driver, which loads the library to
    * plan a query. The package that a session added last takes precedence, and a session cannot
    * remove an artifact, so Spark rejects such a package rather than ignore it, as it ignores the
    * configured ones, which would keep the session on the package or library that it used before,

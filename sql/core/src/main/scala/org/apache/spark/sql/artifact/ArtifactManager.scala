@@ -270,8 +270,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         val copy = dir.toPath.resolve(normalizedRemoteRelativePath.getFileName)
         Files.copy(serverLocalStagingPath, copy)
       }.getOrElse(serverLocalStagingPath)
-      // The package is checked before the check for an existing artifact, which then runs right
-      // before the transfer, but its error is reported after that check.
+      // The package is checked before the comparison below, which then runs right before the
+      // transfer, but its error is reported after it.
       val check = Try(NativeDataSourcePackage.checkAdded(
         staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString)))
       if (exists(staged)) {

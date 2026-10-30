@@ -150,7 +150,7 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
                 spark.addArtifact("my_source:1.sparkpkg")
             finally:
                 os.chdir(cwd)
-            # A package that Spark cannot read is rejected.
+            # A file that is not a valid package is rejected.
             invalid = os.path.join(d, "invalid.sparkpkg")
             with open(invalid, "wb") as f:
                 f.write(b"not a zip")

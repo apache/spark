@@ -664,7 +664,7 @@ abstract class SparkSession extends Serializable with Closeable {
    * file that is not a valid package, or a package whose version Spark does not support, or that
    * has no library for the platform of the driver, is rejected: the session does not get it, and
    * the call fails after it adds the other artifacts. A file that does not exist or cannot be read
-   * fails the call as for the other artifacts, which does not add the artifacts after it.
+   * fails as for the other artifacts.
    *
    * @since 4.0.0
    */
