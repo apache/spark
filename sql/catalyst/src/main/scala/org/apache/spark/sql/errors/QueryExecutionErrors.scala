@@ -1419,7 +1419,7 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
   def concurrentQueryInstanceError(): Throwable = {
     new SparkConcurrentModificationException(
       errorClass = "CONCURRENT_QUERY",
-      messageParameters = Map.empty[String, String])
+      messageParameters = Map.empty)
   }
 
   def concurrentStreamLogUpdate(batchId: Long): Throwable = {
@@ -1531,6 +1531,62 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       messageParameters = Map(
         "paramName" -> paramName),
       cause = null)
+  }
+
+  def conflictingFwfColspecsAndWidthsError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_COLSPECS.CONFLICTING_OPTIONS",
+      messageParameters = Map.empty[String, String])
+  }
+
+  def malformedFwfWidthsError(value: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_COLSPECS.MALFORMED_WIDTHS",
+      messageParameters = Map("value" -> value))
+  }
+
+  def malformedFwfColspecsError(value: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_COLSPECS.MALFORMED_COLSPECS",
+      messageParameters = Map("value" -> value))
+  }
+
+  def fwfWriteRequiresExplicitColspecsError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_COLSPECS.REQUIRED_FOR_WRITE",
+      messageParameters = Map.empty[String, String])
+  }
+
+  def fwfWidthCountMismatchError(numWidths: Int, numColumns: Int): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_COLSPECS.WIDTH_COUNT_MISMATCH",
+      messageParameters = Map(
+        "numWidths" -> numWidths.toString,
+        "numColumns" -> numColumns.toString))
+  }
+
+  def fwfColspecsInferWithUserSchemaError(): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_COLSPECS.CANNOT_INFER_WITH_USER_SCHEMA",
+      messageParameters = Map.empty[String, String])
+  }
+
+  def malformedFwfSkipRowsError(value: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_SKIP_ROWS.MALFORMED",
+      messageParameters = Map("value" -> value))
+  }
+
+  def negativeFwfSkipRowsError(value: String): SparkIllegalArgumentException = {
+    new SparkIllegalArgumentException(
+      errorClass = "INVALID_FIXED_WIDTH_SKIP_ROWS.NEGATIVE",
+      messageParameters = Map("value" -> value))
+  }
+
+  def malformedFwfRecordError(badRecord: String): SparkRuntimeException = {
+    new SparkRuntimeException(
+      errorClass = "MALFORMED_FWF_RECORD",
+      messageParameters = Map("badRecord" -> badRecord))
   }
 
   def foundNullValueForNotNullableFieldError(name: String): SparkRuntimeException = {

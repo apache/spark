@@ -946,6 +946,83 @@ class DataFrameReader(OptionUtils):
                 },
             )
 
+    def fwf(
+        self,
+        path: Union[str, List[str]],
+        colspecs: Optional[str] = None,
+        widths: Optional[str] = None,
+        inferNrows: Optional[Union[int, str]] = None,
+        header: Optional[Union[bool, str]] = None,
+        comment: Optional[str] = None,
+        delimiter: Optional[str] = None,
+        skiprows: Optional[Union[int, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        timeZone: Optional[str] = None,
+        locale: Optional[str] = None,
+        mode: Optional[str] = None,
+        columnNameOfCorruptRecord: Optional[str] = None,
+        encoding: Optional[str] = None,
+        schema: Optional[Union[StructType, str]] = None,
+    ) -> "DataFrame":
+        r"""Loads a fixed-width file and returns the result as a :class:`DataFrame`.
+
+        This function will go through the input once to determine the input schema if no
+        ``schema`` is specified. To avoid going through the entire data, specify the schema
+        explicitly using ``schema``, and ``colspecs`` or ``widths``.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        path : str or list
+            string, or list of strings, for input path(s).
+        colspecs : str, optional
+            a comma-separated list of half-open ``from-to`` character intervals, one per field
+            (e.g. ``"0-5,5-10,10-20"``), or ``"infer"`` to detect them from a sample of the data.
+        widths : str, optional
+            a comma-separated list of contiguous field widths (e.g. ``"5,5,10"``). At most one of
+            ``colspecs`` and ``widths`` may be given.
+        skiprows : int or str, optional
+            0-indexed row numbers to skip, before ``header`` is applied: an integer (skip the
+            first N rows) or a comma-separated list of row numbers (e.g. ``"0,2,5"``).
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-fwf.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        >>> spark.read.fwf("data.txt", widths="5,5")  # doctest: +SKIP
+        """
+        self._set_opts(
+            schema=schema,
+            colspecs=colspecs,
+            widths=widths,
+            inferNrows=inferNrows,
+            header=header,
+            comment=comment,
+            delimiter=delimiter,
+            skipRows=skiprows,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            timeZone=timeZone,
+            locale=locale,
+            mode=mode,
+            columnNameOfCorruptRecord=columnNameOfCorruptRecord,
+            encoding=encoding,
+        )
+        if isinstance(path, str):
+            path = [path]
+        return self.load(path=path, format="fwf")
+
     def xml(
         self,
         path: Union[str, List[str], "RDD[str]", "DataFrame"],
@@ -2245,6 +2322,76 @@ class DataFrameWriter(OptionUtils):
             lineSep=lineSep,
         )
         self._jwrite.csv(path)
+
+    def fwf(
+        self,
+        path: str,
+        mode: Optional[str] = None,
+        colspecs: Optional[str] = None,
+        widths: Optional[str] = None,
+        header: Optional[Union[bool, str]] = None,
+        nullValue: Optional[str] = None,
+        dateFormat: Optional[str] = None,
+        timestampFormat: Optional[str] = None,
+        timeZone: Optional[str] = None,
+        encoding: Optional[str] = None,
+    ) -> None:
+        r"""Saves the content of the :class:`DataFrame` in fixed-width format at the specified
+        path.
+
+        Requires explicit ``colspecs`` or ``widths``.
+
+        .. versionadded:: 4.4.0
+
+        Parameters
+        ----------
+        path : str
+            the path in any Hadoop supported file system
+        mode : str, optional
+            specifies the behavior of the save operation when data already exists.
+
+            * ``append``: Append contents of this :class:`DataFrame` to existing data.
+            * ``overwrite``: Overwrite existing data.
+            * ``ignore``: Silently ignore this operation if data already exists.
+            * ``error`` or ``errorifexists`` (default case): Throw an exception if data already \
+                exists.
+        colspecs : str, optional
+            a comma-separated list of half-open ``from-to`` character intervals, one per column.
+        widths : str, optional
+            a comma-separated list of contiguous column widths, used instead of ``colspecs``
+            when the columns have no gaps between them. Exactly one of ``colspecs`` and
+            ``widths`` must be given.
+        header : bool or str, optional
+            writes out names of columns as the first line.
+
+        Other Parameters
+        ----------------
+        Extra options
+            For the extra options, refer to
+            `Data Source Option <https://spark.apache.org/docs/latest/sql-data-sources-fwf.html#data-source-option>`_
+            for the version you use.
+
+            .. # noqa
+
+        Examples
+        --------
+        >>> import tempfile
+        >>> with tempfile.TemporaryDirectory(prefix="fwf") as d:
+        ...     df = spark.createDataFrame([(100, "Bob")], schema=["age", "name"])
+        ...     df.write.mode("overwrite").fwf(d, widths="3,10")
+        """
+        self.mode(mode)
+        self._set_opts(
+            colspecs=colspecs,
+            widths=widths,
+            header=header,
+            nullValue=nullValue,
+            dateFormat=dateFormat,
+            timestampFormat=timestampFormat,
+            timeZone=timeZone,
+            encoding=encoding,
+        )
+        self._jwrite.fwf(path)
 
     def xml(
         self,
