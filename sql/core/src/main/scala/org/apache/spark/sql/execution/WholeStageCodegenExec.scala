@@ -999,7 +999,8 @@ case class WholeStageCodegenExec(child: SparkPlan)(val codegenStageId: Int)
     val unmarked = if (ctx.wholeStageSplitsRecorded.isEmpty) {
       source
     } else {
-      ctx.wholeStageSplitDigest = JavaUtils.sha256Hex(source)
+      ctx.wholeStageSplitDigest =
+        JavaUtils.sha256Hex(CodeGenerator.wholeStageSplitDigestSource(source))
       CodeGenerator.stripWholeStageSplitMarkers(source)
     }
     // try to compile, helpful for debug
