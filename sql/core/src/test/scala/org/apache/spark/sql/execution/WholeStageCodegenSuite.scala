@@ -2079,6 +2079,25 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60049: a trial that finds the class in the compile cache does not compile it") {
+    // Compiled first outside a trial, as with the split off: the trial gets the method sizes and
+    // the reports from the cache, so the class is not dropped and compiled again.
+    withTempView("t") {
+      spark.range(100).selectExpr("id AS v").createOrReplaceTempView("t")
+      val (_, code) = stageOf(sql(caseWhenOverT(300, end = -19))).generate(WholeStageSplit.Record)
+      for (backend <- Seq("janino", "jdk")) {
+        withSQLConf(SQLConf.CODEGEN_COMPILER.key -> backend) {
+          val (generated, _) = CodeGenerator.compile(code)
+          val trial = WholeStageCodegenExec.trialCompile(code, failureExpected = false)
+          assert(trial.methodSizes.get.exists(
+            _.values.max > CodeGenerator.DEFAULT_JVM_HUGE_METHOD_LIMIT), backend)
+          assert(CodeGenerator.compile(code)._1 eq generated, backend)
+          assert(reportsHugeMethod(trial.report()), backend)
+        }
+      }
+    }
+  }
+
   test("SPARK-33301: which code a stage keeps, from its trial compiles") {
     // `chooseCode`'s decisions, with the compile replaced, so that a method can be as large as a
     // decision needs and a split can fail to compile.
@@ -2226,8 +2245,8 @@ class WholeStageCodegenSuite extends SharedSparkSession
       assert(nothingToSplit.choose(throwSplitFailure = true) eq nothingToSplit.code._2)
       assert(nothingToSplit.compiles === 1 && nothingToSplit.splitAsked === Seq(None))
       assert(nothingToSplit.replayed.isEmpty)
-      // Sizes unknown, a second compile cache hit, keep the code in one piece and decide nothing,
-      // so the next generation compiles again.
+      // Sizes unknown, where no method's size could be read, keep the code in one piece and decide
+      // nothing, so the next generation compiles again.
       val unknownWhole = new Run(unknown, notCompiling)
       assert(unknownWhole.choose() eq unknownWhole.code._2)
       assert(unknownWhole.choose() eq unknownWhole.code._2)

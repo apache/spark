@@ -2529,12 +2529,16 @@ object CodeGenerator extends Logging {
   /**
    * Compile the Java source code into a Java class via the active [[CodeCompiler]]
    * backend (normally the one [[SQLConf.CODEGEN_COMPILER]] selects; see
-   * [[CodeCompiler.active]] for the deterministic routing overrides).
+   * [[CodeCompiler.active]] for the deterministic routing overrides). In a trial
+   * ([[CodeCompiler.trial]]), the trial holds what the class's compile held, also where the class
+   * is found in the compile cache, so that a hit needs no second compile.
    *
    * @return a pair of a generated class and the bytecode statistics of generated functions.
    */
   def compile(code: CodeAndComment): (GeneratedClass, ByteCodeStats) = try {
-    cache.get(cacheKey(code))
+    val (generated, stats, heldCompile) = cache.get(cacheKey(code))
+    Option(CodeCompiler.activeTrial).foreach(_.holdAll(heldCompile))
+    (generated, stats)
   } catch {
     // Cache.get() may wrap the original exception. See the following URL
     // https://guava.dev/releases/14.0.1/api/docs/com/google/common/cache/
@@ -2567,7 +2571,8 @@ object CodeGenerator extends Logging {
     cache.invalidate(cacheKey(code))
 
   /**
-   * A cache of generated classes.
+   * A cache of generated classes, each kept with what its compile held ([[CodeCompiler.held]]):
+   * the size of each method and the compile's reports.
    *
    * From the Guava Docs: A Cache is similar to ConcurrentMap, but not quite the same. The most
    * fundamental difference is that a ConcurrentMap persists all elements that are added to it until
@@ -2581,20 +2586,23 @@ object CodeGenerator extends Logging {
    */
   private val cache = {
     val loadFunc: ((HashableWeakReference, CodeCompiler, CodeAndComment))
-        => (GeneratedClass, ByteCodeStats) = {
+        => (GeneratedClass, ByteCodeStats, CodeCompiler.HeldCompile) = {
       case (_, backend, code) =>
-        val startTime = System.nanoTime()
-        val result = backend.compile(code)
-        val endTime = System.nanoTime()
-        val duration = endTime - startTime
-        val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
-        CodeCompiler.reportOrHold {
-          CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
-          CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
-          logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
-          _compileTime.add(duration)
+        val ((generated, stats), heldCompile) = CodeCompiler.held {
+          val startTime = System.nanoTime()
+          val result = backend.compile(code)
+          val endTime = System.nanoTime()
+          val duration = endTime - startTime
+          val timeMs: Double = duration.toDouble / NANOS_PER_MILLIS
+          CodeCompiler.reportOrHold {
+            CodegenMetrics.METRIC_SOURCE_CODE_SIZE.update(code.body.length)
+            CodegenMetrics.METRIC_COMPILATION_TIME.update(timeMs.toLong)
+            logInfo(log"Code generated in ${MDC(TOTAL_TIME, timeMs)} ms")
+            _compileTime.add(duration)
+          }
+          result
         }
-        result
+        (generated, stats, heldCompile)
     }
     NonFateSharingCache(loadFunc, SQLConf.get.codegenCacheMaxEntries)
   }
