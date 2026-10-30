@@ -231,10 +231,8 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   }
 
   test("SPARK-59243: injected json_array replacement wins a nested clause-free call") {
-    // A nested clause-free `json_array(json_array(1))` routes through `UnresolvedRoutedJsonArray`,
-    // which must respect an injected replacement just like the flat call does -- not hard-code the
-    // stock splicing built-in. The replacement returns its argument count, so the outer call yields
-    // 1 (one argument: the inner stock `json_array(1)`) iff the injection won.
+    // An injected replacement must own `json_array(json_array(1))`, as it owns the flat call. It
+    // returns its argument count, so the result is 1 (the inner built-in call) iff it won.
     val extensions = create { extensions =>
       extensions.injectFunction((
         FunctionIdentifier("json_array"),
@@ -267,9 +265,8 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
 
   test("SPARK-59243: injected replacements keep their type for nested calls under a view " +
       "default collation") {
-    // A routed wrapper must not be cast to the view's default collation before its owner is
-    // known: an INT-returning replacement keeps INT for nested calls, like the flat call. Strict
-    // single-pass rejects a view body with a non-builtin function, so only fixed-point applies.
+    // An INT-returning replacement keeps INT for nested calls under a view default collation.
+    // Strict single-pass rejects a view body with a non-builtin function, so only fixed-point.
     val extensions = create { extensions =>
       Seq("json_array", "json_object").foreach { name =>
         extensions.injectFunction((
