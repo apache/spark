@@ -18,12 +18,20 @@
 package org.apache.spark.sql.execution.python
 
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, Row}
+import org.apache.arrow.memory.BufferAllocator
+
+import org.apache.spark.{SparkEnv, SparkException}
+import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
+import org.apache.spark.sql.{AnalysisException, DataFrame, IntegratedUDFTestUtils, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.types.{LongType, StringType, StructType}
+import org.apache.spark.sql.util.ArrowUtils
+import org.apache.spark.unsafe.types.UTF8String
 
 class PythonUDFSuite extends SharedSparkSession {
   import testImplicits._
@@ -334,6 +342,46 @@ class PythonUDFSuite extends SharedSparkSession {
             s"but was $peakPickledBatchBytes")
       } finally {
         spark.sessionState.catalog.dropTempFunction(udtf.name, ignoreIfNotExists = true)
+      }
+    }
+  }
+
+  test("SPARK-60737: Close the Arrow input of a pandas UDF when the task ends before the input") {
+    assume(shouldTestPandasUDFs)
+    registerTestUDF(TestScalarPandasUDF(name = "pandas_udf", returnType = Some(StringType)), spark)
+    val payload = UTF8String.fromString("x" * 1000)
+    // More input than the socket to the Python worker can buffer, so that the input is not
+    // exhausted when the task ends. Asking for the row at `failAt` throws.
+    def input(failAt: Int): DataFrame = {
+      val rdd = spark.sparkContext.parallelize(Seq(0), 1).mapPartitions { _ =>
+        Iterator.tabulate(100000) { i =>
+          if (i == failAt) throw new IllegalStateException("input failure")
+          InternalRow(payload)
+        }
+      }
+      spark.internalCreateDataFrame(rdd, new StructType().add("s", StringType))
+    }
+    // The open allocators of the Arrow input of Python workers.
+    def inputAllocators(): Set[BufferAllocator] = ArrowUtils.rootAllocator.getChildAllocators
+      .asScala.filter(_.getName.startsWith("stdout writer for")).toSet
+
+    Seq(false, true).foreach { pipelined =>
+      SparkEnv.get.conf.set(PYTHON_UDF_PIPELINED_EXECUTION, pipelined)
+      try {
+        withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "100") {
+          val allocatorsBefore = inputAllocators()
+          // The task fails.
+          val e = intercept[SparkException] {
+            input(failAt = 1000).selectExpr("pandas_udf(s)").collect()
+          }
+          assert(e.getMessage.contains("input failure"))
+          // The task stops reading the output early. The filter keeps the limit above the UDF.
+          assert(input(failAt = -1).selectExpr("pandas_udf(s) AS u").filter("u IS NOT NULL")
+            .limit(1).collect().length == 1)
+          assert((inputAllocators() -- allocatorsBefore).isEmpty)
+        }
+      } finally {
+        SparkEnv.get.conf.remove(PYTHON_UDF_PIPELINED_EXECUTION)
       }
     }
   }

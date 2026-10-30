@@ -21,6 +21,7 @@ import java.util
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicLong
 import java.util.function.BooleanSupplier
+import javax.annotation.concurrent.GuardedBy
 
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
@@ -335,6 +336,13 @@ class NativeDataSourceStreamReader(
   extends ColumnarStreamReader {
   import NativeCalls._
 
+  // The range that was planned last, and its partitions, which only the driver keeps. All the
+  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
+  // source with itself, so they read the partitions of a single stream_partitions call, with the
+  // state that it returned.
+  @transient private var plannedRange: (String, String) = _
+  @transient private var plannedPartitions: Array[InputPartition] = _
+
   @transient private lazy val library = NativeLibraries.get(location)
 
   override def initialOffset(): String = {
@@ -369,17 +377,22 @@ class NativeDataSourceStreamReader(
   }
 
   override def partitions(start: String, end: String): Array[InputPartition] = {
-    val planned = call(name, "plan a scan of") {
-      library.streamPartitions(handle.get, start, end)
+    if (plannedRange != (start, end)) {
+      val planned = call(name, "plan a scan of") {
+        library.streamPartitions(handle.get, start, end)
+      }
+      val partitions = NativeInputPartition.from(planned.partitions)
+      // The executors fetch the state once for the micro-batch, as a broadcast, rather than with
+      // each of its tasks. The partitions keep the broadcast, which the ContextCleaner removes once
+      // the driver no longer refers to them: in the plan of the micro-batch, in an engine, or here
+      // until the next range is planned.
+      val state = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map { bytes =>
+        SparkSession.active.sparkContext.broadcast(bytes)
+      }
+      plannedPartitions = partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
+      plannedRange = (start, end)
     }
-    val partitions = NativeInputPartition.from(planned.partitions)
-    // The executors fetch the state once for the micro-batch, as a broadcast, rather than with each
-    // of its tasks. The partitions keep the broadcast, which the ContextCleaner removes once the
-    // driver no longer refers to them, neither in the plan of the micro-batch nor in an engine.
-    val state = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map { bytes =>
-      SparkSession.active.sparkContext.broadcast(bytes)
-    }
-    partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
+    plannedPartitions
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
@@ -551,6 +564,15 @@ object NativeWriterCommitMessage {
  * Reads a partition of a native data source: each array of the Arrow stream exported by the
  * library is checked, and imported into the Arrow vectors that back the returned batch.
  *
+ * A reader can be closed while another thread is in [[next]]: some operators read their input on
+ * a thread of their own that the task does not wait for, such as the stdin writer thread of
+ * `PipedRDD`, while `DataSourceRDD` closes the reader once the task completes. The library must
+ * not get the release of the stream during get_next, and the task context must stay valid until
+ * then, so [[close]] then leaves the release to [[next]], once get_next returns, rather than wait
+ * for it and keep the task from completing. That [[next]] then returns false, or throws the error
+ * of its read. A [[next]] called once the reader is closed returns false without calling the
+ * library.
+ *
  * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
  * @param partition the partition, whose index in the scan the library gets as `partition_id`
  * @param schema the schema to read
@@ -577,17 +599,27 @@ class NativePartitionReader(
   private var task: NativeLibrary.Task = _
   private var root: VectorSchemaRoot = _
   private var batch: ColumnarBatch = _
+  @GuardedBy("this")
+  private var closed = false
+  // Whether a thread is in next. While it is, only that thread uses the stream and the vectors,
+  // and it releases them if the reader was closed meanwhile. Otherwise, they are only released
+  // under the lock.
+  @GuardedBy("this")
+  private var reading = false
 
-  try {
-    task = NativePartitionReader.openStream(location, name, kind, readerState, partition, schema,
-      timeZoneId, stream.memoryAddress())
-    root = VectorSchemaRoot.create(importSchema(), allocator)
-    checkSchema()
-    batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
-  } catch {
-    case e: Throwable =>
-      close()
-      throw e
+  // Synchronized so that a close on another thread sees the task and the vectors.
+  synchronized {
+    try {
+      task = NativePartitionReader.openStream(location, name, kind, readerState, partition,
+        schema, timeZoneId, stream.memoryAddress())
+      root = VectorSchemaRoot.create(importSchema(), allocator)
+      checkSchema()
+      batch = new ColumnarBatch(root.getFieldVectors.asScala.map(columnVector).toArray)
+    } catch {
+      case e: Throwable =>
+        close()
+        throw e
+    }
   }
 
   private def importSchema(): Schema = {
@@ -744,6 +776,24 @@ class NativePartitionReader(
   }
 
   override def next(): Boolean = {
+    // A reader that was closed while it read has released the batch that it read.
+    startReading() && Utils.tryWithSafeFinally(readNext())(stopReading()) && synchronized(!closed)
+  }
+
+  private def startReading(): Boolean = synchronized {
+    reading = !closed
+    reading
+  }
+
+  private def stopReading(): Unit = synchronized {
+    reading = false
+    if (closed) {
+      // The reader was closed by another thread, which no longer gets a failure from here.
+      Utils.tryLogNonFatalError(closeResources())
+    }
+  }
+
+  private def readNext(): Boolean = {
     val array = ArrowArray.allocateNew(allocator)
     try {
       call(name, "read")(stream.getNext(array))
@@ -906,7 +956,16 @@ class NativePartitionReader(
 
   override def get(): ColumnarBatch = batch
 
-  override def close(): Unit = {
+  override def close(): Unit = synchronized {
+    if (!closed) {
+      closed = true
+      if (!reading) {
+        closeResources()
+      }
+    }
+  }
+
+  private def closeResources(): Unit = {
     Utils.tryWithSafeFinally {
       Utils.tryWithSafeFinally {
         if (root != null) {

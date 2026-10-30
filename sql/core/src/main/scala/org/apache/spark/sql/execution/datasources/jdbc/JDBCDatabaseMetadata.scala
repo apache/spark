@@ -60,6 +60,28 @@ object JDBCDatabaseMetadata extends Logging {
   }
 
   /**
+   * Reads the metadata from an open JDBC Connection without closing it,
+   * handling errors for each field individually.
+   */
+  def fromJDBCConnection(conn: Connection): JDBCDatabaseMetadata = {
+    try {
+      // getMetaData itself can throw, so we catch that and return None for all fields
+      val databaseMetadata = conn.getMetaData
+
+      JDBCDatabaseMetadata(
+        databaseMajorVersion = safeGet(databaseMetadata.getDatabaseMajorVersion),
+        databaseMinorVersion = safeGet(databaseMetadata.getDatabaseMinorVersion),
+        databaseDriverMajorVersion = safeGet(databaseMetadata.getDriverMajorVersion),
+        databaseDriverMinorVersion = safeGet(databaseMetadata.getDriverMinorVersion)
+      )
+    } catch {
+      case NonFatal(e) =>
+        logWarning(log"Exception while getting database metadata object from connection", e)
+        JDBCDatabaseMetadata(None, None, None, None)
+    }
+  }
+
+  /**
    * Creates a DatabaseMetadata instance from a JDBC Connection,
    * handling errors for each field individually.
    *
@@ -82,15 +104,7 @@ object JDBCDatabaseMetadata extends Logging {
 
     try {
       conn = getConnection(-1)
-      // getMetaData itself can throw, so we catch that and return None for all fields
-      val databaseMetadata = conn.getMetaData
-
-      JDBCDatabaseMetadata(
-        databaseMajorVersion = safeGet(databaseMetadata.getDatabaseMajorVersion),
-        databaseMinorVersion = safeGet(databaseMetadata.getDatabaseMinorVersion),
-        databaseDriverMajorVersion = safeGet(databaseMetadata.getDriverMajorVersion),
-        databaseDriverMinorVersion = safeGet(databaseMetadata.getDriverMinorVersion)
-      )
+      fromJDBCConnection(conn)
     } catch {
       case NonFatal(e) =>
         logWarning(log"Exception while getting database metadata object from connection", e)
