@@ -646,7 +646,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       cached => {
         var refreshed = false
         // lookupAndRefresh has side effects: exists would stop after the first matching read.
-        // Refresh every matching file index before rebuilding a cache with multiple reads.
+        // Refresh matching indexes in the operator tree before rebuilding a multi-read cache.
+        // As before, this traversal does not enter plans held by subquery expressions.
         cached.plan.foreach { plan =>
           if (lookupAndRefresh(plan, fs, qualifiedPath, includeTimeTravel, refreshedIndexes)) {
             refreshed = true
@@ -657,10 +658,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
-   * [[org.apache.spark.sql.execution.datasources.FileIndex]] of any [[HadoopFsRelation]] nodes
-   * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
-   * false.
+   * Checks whether `plan` is a V1 [[HadoopFsRelation]] or V2 [[FileTable]] read with a file-index
+   * root path under `qualifiedPath`. Time-travel snapshots are skipped unless `includeTimeTravel`
+   * is true. A matching index is refreshed only the first time it is seen during the current
+   * recacheByPath call, as tracked by `refreshedIndexes`.
+   * @return whether the read matches, including one whose index was already refreshed.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,

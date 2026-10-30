@@ -920,6 +920,39 @@ class CachedTableSuite extends SharedSparkSession
     (df, index)
   }
 
+  test("refreshByPath recaches a matching read followed by an unrelated read") {
+    withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "parquet") {
+      withTempDir { dir =>
+        val matchingPath = new File(dir, "matching").getCanonicalPath
+        val unrelatedPath = new File(dir, "unrelated").getCanonicalPath
+        spark.range(1).write.parquet(matchingPath)
+        spark.range(10, 11).write.parquet(unrelatedPath)
+        val (matching, matchingIndex) = readWithRefreshCount(matchingPath)
+        val (unrelated, unrelatedIndex) = readWithRefreshCount(unrelatedPath)
+        val cached = matching.union(unrelated).cache()
+        try {
+          checkAnswer(cached.select("*"), Seq(Row(0L), Row(10L)))
+          appendParquetWithoutRefresh(matchingPath, 1L)
+          appendParquetWithoutRefresh(unrelatedPath, 11L)
+          checkAnswer(cached.select("*"), Seq(Row(0L), Row(10L)))
+
+          // The trailing non-match must not erase the earlier match that selects this cache.
+          spark.catalog.refreshByPath(matchingPath)
+          assert(matchingIndex.refreshCount == 1)
+          assert(unrelatedIndex.refreshCount == 0)
+          checkAnswer(cached.select("*"), Seq(Row(0L), Row(1L), Row(10L)))
+
+          spark.catalog.refreshByPath(matchingPath)
+          assert(matchingIndex.refreshCount == 2)
+          assert(unrelatedIndex.refreshCount == 0)
+          checkAnswer(cached.select("*"), Seq(Row(0L), Row(1L), Row(10L)))
+        } finally {
+          cached.unpersist(blocking = true)
+        }
+      }
+    }
+  }
+
   for (sharedIndex <- Seq(true, false)) {
     test(s"refreshByPath refreshes each index object once: sharedIndex=$sharedIndex") {
       withTempPath { dir =>
