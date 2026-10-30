@@ -752,7 +752,10 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       ".{0,9}a.{0,9}a.{0,9}x",
       // A quantifier that ends the pattern or an alternative, and alternatives on their own.
       "a.*b.*", "a{2,}b+", "\\d+\\s*", "a+?b.*", "(foo.*bar.*)", "a.*b.*|x", "a.*b|a.*c",
-      "foo.*bar|baz.*qux", "colou?r.*x",
+      "foo.*bar|baz.*qux", "colou?r.*x", "(.*)\\1", ".*.{1000}",
+      // Groups that hold a `|`, a long fixed repetition and a backreference on their own.
+      ".*(k1|k2|k3|k4|k5|k6|k7|k8).*", ".{1000}x", "\\d{4}-\\d{2}-\\d{2}.*", "(\\w)\\1x",
+      "^(\\w+)\\s\\1.*",
       // Anchored.
       "^.*a.*b", "\\A.*a.*b", "(?i)^.*a.*b", "^v[0-9]+_.*", "^(a|b).*c.*").foreach { p =>
       assert(!RLike(str, Literal(p)).expensive, p)
@@ -760,9 +763,17 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     Seq(".*a.*b", "^.*a.*a.*b", "\\b.*a.*b", "a.*b.*$", ".{0,50}a.{0,50}b", "^a|.*b.*c",
       "(?m)^.*a.*b", ".{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}x", ".{0,9}a.{0,9}a.{0,8}a.*b",
       "a?" * 24 + "b", "(a.*b.*)c", "x|a.*b.*c",
+      // Groups that hold a `|`, which multiply like `?`.
+      "(a|a)" * 24 + "b", "(a|)" * 24 + "b", "(?:a|aa)" * 24 + "b", "(\\w|\\d)" * 24 + "x",
+      // An anchor that a quantifier makes optional.
+      "^?.*a.*b", "\\A?.*a.*b", "^{0,1}.*a.*b",
+      // A backreference, and a long repetition next to a quantifier.
+      "(.*)\\1x", "(.+)\\1\\1x", "(?<g>.*)\\k<g>x", ".*.{1000}x", ".*.{1000}+x",
+      ".*.{1000,1005}x",
       // A repeated group that holds a quantifier or an alternation.
       "(a+)+b", "^(a+)+b", "^(.*?,){11}P", "(.*a){3}x", "^((.*a)b){2}", "(a{1,9}){6}b",
       "(a|aa){20}b", "^(\\d|\\w){24}x", "(a?a?){16}b", "^(.?.?){16}x",
+      "^(.*?,)\\Q\\E{11}P",
       // COMMENTS mode.
       "(?x) ^ (.*?,) {11} P", "(?x)(.*a) {3}x",
       // A `[` that does not open a class, and a `]` that does not close one.

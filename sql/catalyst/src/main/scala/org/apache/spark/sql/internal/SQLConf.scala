@@ -681,7 +681,7 @@ object SQLConf {
       "checkpoint without it uses 0.")
     .version("4.2.2")
     .intConf
-    .checkValues(Set(0, 1))
+    .checkValue(_ >= 0, "The version of the regex pattern cost estimate must be nonnegative.")
     .createWithDefault(1)
 
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =

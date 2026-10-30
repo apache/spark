@@ -387,6 +387,23 @@ class FilterPushdownSuite extends PlanTest {
         comparePlans(Optimize.execute(originalQuery), originalQuery)
       }
     }
+
+    // Version 0 also splits the projection between two LIKE/RLIKE aliases.
+    withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
+      val originalQuery = testStringRelation
+        .select($"a", $"e".rlike("^1") as "f", $"e".rlike("^2") as "g", $"b")
+        .where($"f" && $"g")
+        .analyze
+
+      val correctAnswer = testStringRelation
+        .select($"a", $"b", $"e", $"e".rlike("^1") as "f")
+        .where($"f")
+        .select($"a", $"f", $"e".rlike("^2") as "g", $"b")
+        .where($"g")
+        .analyze
+
+      comparePlans(Optimize.execute(originalQuery), correctAnswer)
+    }
   }
 
   test("SPARK-55014: split the projection so a second expensive element sees fewer rows") {

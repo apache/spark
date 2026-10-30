@@ -199,6 +199,7 @@ class StreamingQueryManagerSuite extends StreamTest {
       assert(run("b"))
     }
   }
+
   test("streaming EXCEPT compatibility uses the query session checkpoint location") {
     withTempDir { checkpointRoot =>
       withTempDir { otherCheckpointRoot =>

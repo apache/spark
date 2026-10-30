@@ -2900,8 +2900,14 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
       aliasMap.collect { case (attr, alias) if isExpensive(alias.child) => attr })
     // Expensive sub-expressions behind each expensive alias, to spot when two aliases are the
     // same piece of work. Cheap aliases have none, so we skip the (possibly wide) cheap rest.
+    // Two aliases share work exactly when they share a regex, so version 0 of the estimate
+    // collects the regex expressions and not their ancestors.
+    val regexIsExpensive = conf.getConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == 0
     val expensivePartsOf = AttributeMap(expensiveAliases.toSeq.map { attr =>
-      attr -> aliasMap(attr).child.collect { case e if isExpensive(e) => e.canonicalized }.toSet
+      attr -> aliasMap(attr).child.collect {
+        case e if e.expensive || (regexIsExpensive && e.isInstanceOf[StringRegexExpression]) =>
+          e.canonicalized
+      }.toSet
     })
     def expensiveParts(attr: Attribute): Set[Expression] =
       expensivePartsOf.getOrElse(attr, Set.empty)

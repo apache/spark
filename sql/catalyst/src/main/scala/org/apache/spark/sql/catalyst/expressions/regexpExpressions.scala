@@ -123,12 +123,15 @@ private[catalyst] object StringRegexExpression {
   // Leading inline flags, e.g. `(?i)` or `(?s-m)`.
   private val leadingFlags = """(?:\(\?[a-zA-Z]*(?:-[a-zA-Z]*)?\))*""".r
 
+  // `^` or `\A`, unless a quantifier may make it optional.
+  private val leadingAnchor = """(?:\^|\\A)(?![?*{])""".r
+
   // Whether `regex` starts with `^` or `\A`. A leading flag that mentions MULTILINE, under which
   // `^` also matches after every line terminator, makes it not anchored.
   private def startsWithAnchor(regex: String): Boolean = {
     val flags = leadingFlags.findPrefixOf(regex).getOrElse("")
     val rest = regex.substring(flags.length)
-    !flags.contains('m') && (rest.startsWith("^") || rest.startsWith("\\A"))
+    !flags.contains('m') && leadingAnchor.findPrefixOf(rest).isDefined
   }
 
   // An inline flag, e.g. `(?x)` or `(?ix:`, that turns on COMMENTS mode, which lets whitespace
@@ -148,7 +151,11 @@ private[catalyst] object StringRegexExpression {
    *  - one that ends the regex or an alternative of it, possibly inside groups that end there too,
    *    which a failed match never backtracks into;
    *  - `?` and a `{n,m}` that spans fewer than 10, which add a small factor. The choices of such
-   *    quantifiers multiply, so they count as one quantifier each time their product reaches 100.
+   *    quantifiers, and of groups that hold a `|`, multiply, so they count as one quantifier each
+   *    time their product reaches 100.
+   * A repetition of at least 100, which adds its length to every attempt even when it cannot
+   * backtrack, and a backreference, which compares as many characters as its group holds, count
+   * as one quantifier each, unless they end the regex or an alternative of it.
    * The count is `Int.MaxValue` for a repeated group that holds a quantifier that can backtrack or
    * a `|`, for a regex in COMMENTS mode, and for a `[` that is never closed, since the scan cannot
    * follow them.
@@ -176,30 +183,36 @@ private[catalyst] object StringRegexExpression {
     // regex or a `|` outside any group.
     def endsAlternative(j: Int): Boolean = {
       var end = j
-      var depth = groups.length
-      while (end < regex.length && depth > 0 && regex.charAt(end) == ')') {
+      var open = groups
+      while (end < regex.length && open.nonEmpty && regex.charAt(end) == ')') {
         end += 1
-        depth -= 1
+        open = open.tail
       }
-      end == regex.length || (depth == 0 && regex.charAt(end) == '|')
+      end == regex.length || (open.isEmpty && regex.charAt(end) == '|')
+    }
+    // Adds a choice among `n` to the product, which counts as one quantifier when it gets large.
+    def addChoices(n: Int): Unit = {
+      smallRanges *= n
+      if (smallRanges >= smallRangesLimit) {
+        count += 1
+        smallRanges = 1
+      }
     }
     // Handles the quantifier that ends at `i`, which repeats its operand `min` to `max` times,
     // and moves `i` past its modifier.
     def quantifier(min: Int, max: Int): Unit = {
-      val possessive = i + 1 < regex.length && regex.charAt(i + 1) == '+'
-      if (i + 1 < regex.length && (regex.charAt(i + 1) == '+' || regex.charAt(i + 1) == '?')) {
-        i += 1
-      }
-      if (!possessive && max > min && !endsAlternative(i + 1)) {
-        markGroup()
-        if (max - min >= 10) {
+      val possessive = regex.startsWith("+", i + 1)
+      if (possessive || regex.startsWith("?", i + 1)) i += 1
+      if (!endsAlternative(i + 1)) {
+        if (!possessive && max - min >= 10) {
+          markGroup()
           count += 1
         } else {
-          smallRanges *= max - min + 1
-          if (smallRanges >= smallRangesLimit) {
-            count += 1
-            smallRanges = 1
+          if (!possessive && max > min) {
+            markGroup()
+            addChoices(max - min + 1)
           }
+          if (min >= 100) count += 1
         }
       }
     }
@@ -213,6 +226,9 @@ private[catalyst] object StringRegexExpression {
               i = if (end < 0) regex.length else end + 1
             // `\cX` is a control character, and `X` may be `[`.
             case 'c' => i += 1
+            case c if ((c >= '1' && c <= '9') || c == 'k') && classDepth == 0 &&
+                !endsAlternative(i + 1) =>
+              count += 1
             case c if "pPxN".indexOf(c) >= 0 &&
                 i + 1 < regex.length && regex.charAt(i + 1) == '{' =>
               val end = regex.indexOf('}', i)
@@ -247,7 +263,10 @@ private[catalyst] object StringRegexExpression {
           maxCount = math.max(maxCount, count)
           count = 0
           smallRanges = 1
-        case '|' => markGroup()
+        case '|' =>
+          // A group adds one factor, however many alternatives it has.
+          if (!groups.head) addChoices(2)
+          markGroup()
         case '*' => quantifier(0, Int.MaxValue)
         case '+' => quantifier(1, Int.MaxValue)
         case '?' => quantifier(0, 1)
@@ -268,6 +287,8 @@ private[catalyst] object StringRegexExpression {
     regex.charAt(i) match {
       case '*' | '+' => true
       case '{' => bounds(regex, i).exists(_._3 >= 2)
+      // `Pattern` removes an empty quote before it parses the regex.
+      case '\\' if regex.startsWith("\\Q\\E", i) => repeats(regex, i + 4)
       case _ => false
     }
   }
