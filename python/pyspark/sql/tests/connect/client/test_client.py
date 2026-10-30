@@ -305,8 +305,18 @@ if should_test_connect:
     # The _cleanup_ml_cache invocation will hang in this test (no valid spark cluster)
     # and it blocks the test process exiting because it is registered as the atexit handler
     # in `SparkConnectClient` constructor. To bypass the issue, patch the method in the test.
-    _real_cleanup_ml_cache = SparkConnectClient._cleanup_ml_cache
-    SparkConnectClient._cleanup_ml_cache = lambda _: None
+    # The real method stays reachable through __wrapped__ because the test runner can import
+    # this module twice (as __main__ and by name), and the second import must not capture the
+    # no-op.
+    _real_cleanup_ml_cache = getattr(
+        SparkConnectClient._cleanup_ml_cache, "__wrapped__", SparkConnectClient._cleanup_ml_cache
+    )
+
+    def _skip_cleanup_ml_cache(self):
+        pass
+
+    _skip_cleanup_ml_cache.__wrapped__ = _real_cleanup_ml_cache
+    SparkConnectClient._cleanup_ml_cache = _skip_cleanup_ml_cache
 
 
 @unittest.skipIf(not should_test_connect, connect_requirement_message)
