@@ -675,6 +675,7 @@ class Analyzer(
       ResolveUnresolvedInsert ::
       new ResolveCatalogs(catalogManager) ::
       ResolveInsertInto ::
+      ResolveInsertIntoSuppliedRelation ::
       ResolveRelations ::
       ResolveChangelogTable ::
       ResolvePartitionSpec ::
@@ -1394,11 +1395,21 @@ class Analyzer(
     private def lookupTableOrView(
         identifier: Seq[String],
         viewOnly: Boolean = false): Option[LogicalPlan] = {
+      val sessionOverlay =
+        if (identifier.length == 1 || CatalogManager.isSessionQualifiedViewName(identifier)) {
+          relationResolution.lookupSuppliedTempRelation(
+            identifier, SuppliedRelationRegistry.sessionIdentity(identifier.last))
+        } else {
+          None
+        }
+      sessionOverlay.orElse {
       relationResolution.lookupTempView(identifier).map { tempView =>
         ResolvedTempView(identifier.asIdentifier, tempView.tableMeta)
       }.orElse {
         relationResolution.expandIdentifier(identifier) match {
           case CatalogAndIdentifier(catalog, ident) =>
+            val nameParts = ident.toQualifiedNameParts(catalog)
+            relationResolution.lookupSuppliedRelation(nameParts).orElse {
             if (viewOnly && !CatalogV2Util.isSessionCatalog(catalog) &&
                 !catalog.isInstanceOf[ViewCatalog]) {
               throw QueryCompilationErrors.missingCatalogViewsAbilityError(catalog)
@@ -1453,8 +1464,10 @@ class Analyzer(
                   }
                 }
             }
+            }
           case _ => None
         }
+      }
       }
     }
 
@@ -1484,6 +1497,58 @@ class Analyzer(
       _.containsPattern(UNRESOLVED_INSERT), ruleId) {
       case insert @ UnresolvedInsert(target: UnresolvedInsertTarget, _, _, _, _, _, _, _, _) =>
         insert.toInsertIntoStatement(target.toUnresolvedRelation)
+    }
+  }
+
+  /**
+   * Finish analysis of INSERT when the target is a caller-supplied overlay
+   * relation. [[InsertIntoStatement]] stays unresolved as a ParsedStatement.
+   */
+  object ResolveInsertIntoSuppliedRelation extends ResolveInsertionBase {
+    override def apply(plan: LogicalPlan): LogicalPlan = {
+      if (SuppliedRelationRegistry.get().isEmpty) {
+        plan
+      } else {
+        plan.resolveOperatorsUp {
+          case i: InsertIntoStatement
+              if i.query.resolved && SuppliedRelationRegistry.isSupplied(i.table) =>
+            EliminateSubqueryAliases(i.table) match {
+              case local: LocalRelation => resolveInsert(i, local)
+              case _ => i
+            }
+        }
+      }
+    }
+
+    private def resolveInsert(
+        i: InsertIntoStatement,
+        local: LocalRelation): LogicalPlan = {
+      val name = local.getTagValue(SuppliedRelationRegistry.IDENTITY_TAG).getOrElse(Nil).quoted
+      val byName = i.byName || i.userSpecifiedCols.nonEmpty
+      val query =
+        if (i.userSpecifiedCols.nonEmpty) createProjectForByNameQuery(name, i) else i.query
+      val staticPartitions = i.partitionSpec.collect { case (col, Some(value)) =>
+        val attr = local.resolve(Seq(col), this.resolver).getOrElse(
+          throw QueryCompilationErrors.unresolvedAttributeError(
+            "UNRESOLVED_COLUMN", col, local.output.map(_.name), i.origin))
+        attr.name -> Alias(Cast(Literal(value), attr.dataType), attr.name)()
+      }
+      val withPartitions = if (staticPartitions.isEmpty) {
+        query
+      } else if (byName) {
+        Project(query.output ++ staticPartitions.values, query)
+      } else {
+        val dynamic = query.output.iterator
+        val columns = local.output.flatMap { attr =>
+          staticPartitions.collectFirst {
+            case (col, value) if this.resolver(col, attr.name) => value
+          }.orElse(if (dynamic.hasNext) Some(dynamic.next()) else None)
+        }
+        Project(columns ++ dynamic, query)
+      }
+      val newQuery = TableOutputResolver.resolveOutputColumns(
+        name, local.output, withPartitions, byName, conf, FILL)
+      InsertIntoSuppliedRelation(local, newQuery)
     }
   }
 
