@@ -1105,12 +1105,11 @@ object DateTimeUtils extends SparkDateTimeUtils {
     }
   }
 
-  /** The whole seconds and the nanos of the second of a seconds value with a fraction. */
-  case class SecondsAndNanos(seconds: Int, nanos: Int)
-
   /**
    * Splits the seconds of a minute with a fraction of 6 digits (microseconds) into the whole
-   * seconds and the nanos of the second, as `LocalTime.of` and `LocalDateTime.of` take them.
+   * seconds and the nanos of the second, as `LocalTime.of` and `LocalDateTime.of` take them,
+   * packed into a long, the seconds in the high 32 bits and the nanos in the low 32 bits, so
+   * that nothing is allocated per row: `(packed >> 32).toInt` and `packed.toInt`.
    *
    * The whole seconds are checked to be in the int range and not negative before they are
    * narrowed. A value outside of the int range would overflow when converted from long to int,
@@ -1123,7 +1122,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * left to them, which check their fields in order, so an invalid date or hour is reported
    * before such seconds, while a negative value or one above `Int.MaxValue` is reported first.
    */
-  def splitSecsAndMicros(secsAndMicros: Decimal): SecondsAndNanos = {
+  def splitSecsAndMicros(secsAndMicros: Decimal): Long = {
+    assert(secsAndMicros.scale == 6)
     val unscaledSecFrac = secsAndMicros.toUnscaledLong
     val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
     if (fullSecs > Int.MaxValue || fullSecs < 0) {
@@ -1136,7 +1136,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
         s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown")
     }
     val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
-    SecondsAndNanos(fullSecs.toInt, nanos.toInt)
+    (fullSecs << 32) | nanos
   }
 
   /**
@@ -1150,7 +1150,7 @@ object DateTimeUtils extends SparkDateTimeUtils {
   def makeTime(hours: Int, minutes: Int, secsAndMicros: Decimal): Long = {
     try {
       val secs = splitSecsAndMicros(secsAndMicros)
-      val lt = LocalTime.of(hours, minutes, secs.seconds, secs.nanos)
+      val lt = LocalTime.of(hours, minutes, (secs >> 32).toInt, secs.toInt)
       localTimeToNanos(lt)
     } catch {
       case e @ (_: DateTimeException | _: ArithmeticException) =>

@@ -15,6 +15,8 @@ SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678);
 -- make_timestamp_ntz should not accept time zone input
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp_ntz(2021, 07, 11, 6, 30, 60.007);
+-- SPARK-60743: seconds whose microseconds do not fit an int must not wrap to a valid value.
+SELECT make_timestamp_ntz(1, 1, 1, 1, 1, 4324.967296);
 SELECT make_timestamp_ntz(make_date(2021, 07, 11), make_time(6, 30, 45.678));
 SELECT make_timestamp_ntz(NULL, TIME'00:00:00');
 SELECT make_timestamp_ntz(DATE'1970-01-01', NULL);

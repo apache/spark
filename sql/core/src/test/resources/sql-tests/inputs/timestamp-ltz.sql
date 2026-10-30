@@ -14,6 +14,8 @@ select to_timestamp_ltz(to_timestamp_ntz(null)), to_timestamp_ltz(to_timestamp_n
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678);
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 45.678, 'CET');
 SELECT make_timestamp_ltz(2021, 07, 11, 6, 30, 60.007);
+-- SPARK-60743: seconds whose microseconds do not fit an int must not wrap to a valid value.
+SELECT make_timestamp_ltz(1, 1, 1, 1, 1, 4324.967296);
 
 -- TimestampLTZ date/time fields constructor
 SELECT make_timestamp_ltz(make_date(2021, 07, 11), make_time(6, 30, 45.678));
