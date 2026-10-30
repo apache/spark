@@ -49,9 +49,12 @@ import org.apache.spark.util.Utils
 /**
  * Checks that `SparkConnectPlanExecution.processAsArrowBatches` and
  * `SparkConnectPlanner.handleSqlCommand` release the Arrow memory of the converter when they
- * convert rows on the driver, where no TaskContext closes it, and the conversion or sending fails.
+ * convert rows on the driver, where no TaskContext closes it, and the conversion or sending
+ * fails.
  */
-class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with SparkConnectPlanTest {
+class SparkConnectPlanExecutionArrowLeakSuite
+    extends SharedSparkSession
+    with SparkConnectPlanTest {
 
   override def beforeEach(): Unit = {
     super.beforeEach()
@@ -70,18 +73,21 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
 
   private case class Outcome(error: Option[Throwable], leaked: Seq[BufferAllocator], bytes: Long)
 
-  /** Runs `body` and returns its error and the converter allocators and bytes it leaves behind. */
+  /**
+   * Runs `body` and returns its error and the converter allocators and bytes it leaves behind.
+   */
   private def measure(body: => Unit): Outcome = {
     val before = converterAllocators()
     val beforeBytes = ArrowUtils.rootAllocator.getAllocatedMemory
-    val error = try {
-      body
-      None
-    } catch {
-      case t: Throwable => Some(t)
-    } finally {
-      Thread.interrupted()
-    }
+    val error =
+      try {
+        body
+        None
+      } catch {
+        case t: Throwable => Some(t)
+      } finally {
+        Thread.interrupted()
+      }
     val leaked = converterAllocators().filterNot(a => before.exists(_ eq a))
     val bytes = ArrowUtils.rootAllocator.getAllocatedMemory - beforeBytes
     Outcome(error, leaked, bytes)
@@ -120,7 +126,8 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
   private def runArrowBatches(df: DataFrame)(onArrowBatch: Int => Unit): Unit = {
     val sessionHolder = SparkConnectTestUtils.createDummySessionHolder(spark)
     val holder = SparkConnectTestUtils.createDummyExecuteHolder(
-      sessionHolder, proto.Command.getDefaultInstance)
+      sessionHolder,
+      proto.Command.getDefaultInstance)
     var numBatches = 0
     val observer = new StreamObserver[proto.ExecutePlanResponse] {
       override def onNext(r: proto.ExecutePlanResponse): Unit = if (r.hasArrowBatch) {
@@ -177,7 +184,9 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
   test("SPARK-60736: LocalTableScanExec: interrupt while filling a batch") {
     withSQLConf(SQLConf.ARROW_EXECUTION_MAX_RECORDS_PER_BATCH.key -> "100") {
       val df = localDf(1000, interruptAtRow = 50)
-      val row = df.queryExecution.executedPlan.asInstanceOf[LocalTableScanExec].rows(50)
+      val row = df.queryExecution.executedPlan
+        .asInstanceOf[LocalTableScanExec]
+        .rows(50)
         .asInstanceOf[InterruptingRow]
       Thread.interrupted()
       row.armed = true
@@ -209,8 +218,9 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
     assertNoLeak(outcome)
   }
 
-  test("SPARK-60736: ArrowBatchWithSchemaIterator: close after a failure while serializing " +
-    "the batch") {
+  test(
+    "SPARK-60736: ArrowBatchWithSchemaIterator: close after a failure while serializing " +
+      "the batch") {
     val toUnsafe = UnsafeProjection.create(schema)
     def rows(interruptAt: Int): Iterator[InternalRow] = Iterator.tabulate(100) { i =>
       if (i == interruptAt) Thread.currentThread().interrupt()
@@ -221,8 +231,13 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
     Seq(-1, 50).foreach { interruptAt =>
       val outcome = measure {
         val batches = ArrowConverters.toBatchWithSchemaIterator(
-          rows(interruptAt), schema, 100, 0, "UTC",
-          errorOnDuplicatedFieldNames = false, largeVarTypes = false)
+          rows(interruptAt),
+          schema,
+          100,
+          0,
+          "UTC",
+          errorOnDuplicatedFieldNames = false,
+          largeVarTypes = false)
         if (interruptAt < 0) Thread.currentThread().interrupt()
         Utils.tryWithSafeFinally(batches.next())(batches.close())
       }
@@ -238,8 +253,9 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
       .find(_.getName.endsWith(s"_opId=$operationId"))
       .get
     Eventually.eventually(Eventually.timeout(60.seconds)) {
-      assert(thread.getState == Thread.State.BLOCKED &&
-        thread.getStackTrace.exists(_.getMethodName == "tryOnNext"))
+      assert(
+        thread.getState == Thread.State.BLOCKED &&
+          thread.getStackTrace.exists(_.getMethodName == "tryOnNext"))
     }
   }
 
@@ -280,9 +296,13 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
     val instance = new SparkConnectService(false)
     val request = newRequest(plan)
     val sessionHolder = SparkConnectService.getOrCreateIsolatedSession(
-      request.getUserContext.getUserId, request.getSessionId, None)
+      request.getUserContext.getUserId,
+      request.getSessionId,
+      None)
     val holder = SparkConnectService.executionManager.createExecuteHolder(
-      ExecuteKey(request, sessionHolder), request, sessionHolder)
+      ExecuteKey(request, sessionHolder),
+      request,
+      sessionHolder)
     holder.responseObserver.responseLock.synchronized {
       holder.start()
       waitUntilBlockedOnNext(holder.operationId)
@@ -300,13 +320,14 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
         })
     }
     var error = Option.empty[Throwable]
-    holder.runGrpcResponseSender(new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](
-      holder,
-      new StreamObserver[proto.ExecutePlanResponse] {
-        override def onNext(r: proto.ExecutePlanResponse): Unit = {}
-        override def onError(t: Throwable): Unit = error = Some(t)
-        override def onCompleted(): Unit = {}
-      }))
+    holder.runGrpcResponseSender(
+      new ExecuteGrpcResponseSender[proto.ExecutePlanResponse](
+        holder,
+        new StreamObserver[proto.ExecutePlanResponse] {
+          override def onNext(r: proto.ExecutePlanResponse): Unit = {}
+          override def onError(t: Throwable): Unit = error = Some(t)
+          override def onCompleted(): Unit = {}
+        }))
     error
   }
 
@@ -330,12 +351,11 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
       .setCommand(
         proto.Command
           .newBuilder()
-          .setSqlCommand(
-            proto.SqlCommand
+          .setSqlCommand(proto.SqlCommand
+            .newBuilder()
+            .setInput(proto.Relation
               .newBuilder()
-              .setInput(proto.Relation
-                .newBuilder()
-                .setSql(proto.SQL.newBuilder().setQuery(s"BEGIN SELECT $bigInterval AS i; END")))))
+              .setSql(proto.SQL.newBuilder().setQuery(s"BEGIN SELECT $bigInterval AS i; END")))))
       .build()
     var error = Option.empty[Throwable]
     val outcome = measure {
@@ -348,7 +368,8 @@ class SparkConnectPlanExecutionArrowLeakSuite extends SharedSparkSession with Sp
   test("SPARK-60736: E2E: Interrupt RPC for a LocalRelation result") {
     val toUnsafe = UnsafeProjection.create(schema)
     val relation = createLocalRelationProto(
-      schema, (0 until 1000).map(i => toUnsafe(new GenericInternalRow(rowValues(i))).copy()))
+      schema,
+      (0 until 1000).map(i => toUnsafe(new GenericInternalRow(rowValues(i))).copy()))
     var error = Option.empty[Throwable]
     val outcome = measure {
       error = executeAndInterrupt(proto.Plan.newBuilder().setRoot(relation).build())
