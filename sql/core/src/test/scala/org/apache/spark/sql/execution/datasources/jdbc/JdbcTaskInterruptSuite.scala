@@ -26,10 +26,10 @@ import scala.util.control.NonFatal
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.TaskContext
-import org.apache.spark.sql.Row
+import org.apache.spark.{SparkRuntimeException, TaskContext}
+import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
-import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects}
+import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, NoLegacyJDBCError}
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 
@@ -55,6 +55,94 @@ class JdbcTaskInterruptSuite extends SharedSparkSession {
   private def registerDialect(dialect: JdbcDialect): Unit = {
     JdbcDialects.unregisterDialect(dialect)
     JdbcDialects.registerDialect(dialect)
+  }
+
+  test("savePartition classifies JDBC batch write failures") {
+    val conn = mock(classOf[Connection])
+    val metadata = mock(classOf[DatabaseMetaData])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.getMetaData).thenReturn(metadata)
+    when(metadata.supportsTransactions()).thenReturn(false)
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+
+    val batchFailure = new SQLException("batch rejected", "23000", 2627)
+    val nextFailure = new SQLException("duplicate key detail")
+    batchFailure.setNextException(nextFailure)
+    when(stmt.executeBatch()).thenThrow(batchFailure)
+
+    val dialect = new JdbcDialect with NoLegacyJDBCError {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+    }
+    registerDialect(dialect)
+    val context = TaskContext.empty()
+    TaskContext.setTaskContext(context)
+    try {
+      val options = newWriteOptions()
+      val error = intercept[SparkRuntimeException] {
+        JdbcUtils.savePartition(
+          "t",
+          Iterator(Row(1)),
+          StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)",
+          batchSize = 1,
+          dialect,
+          Connection.TRANSACTION_NONE,
+          options)
+      }
+      checkError(
+        exception = error,
+        condition = "FAILED_JDBC.WRITE",
+        sqlState = Some("HV000"),
+        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
+      assert(error.getCause eq batchFailure)
+      assert(batchFailure.getNextException eq nextFailure)
+    } finally {
+      TaskContext.unset()
+      JdbcDialects.unregisterDialect(dialect)
+    }
+  }
+
+  test("savePartition preserves classification from a legacy JDBC dialect") {
+    val conn = mock(classOf[Connection])
+    val metadata = mock(classOf[DatabaseMetaData])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.getMetaData).thenReturn(metadata)
+    when(metadata.supportsTransactions()).thenReturn(false)
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+
+    val batchFailure = new SQLException("batch rejected", "23000", 2627)
+    when(stmt.executeBatch()).thenThrow(batchFailure)
+
+    val dialect = new JdbcDialect {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+    }
+    registerDialect(dialect)
+    val context = TaskContext.empty()
+    TaskContext.setTaskContext(context)
+    try {
+      val error = intercept[AnalysisException] {
+        JdbcUtils.savePartition(
+          "t",
+          Iterator(Row(1)),
+          StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)",
+          batchSize = 1,
+          dialect,
+          Connection.TRANSACTION_NONE,
+          newWriteOptions())
+      }
+      checkError(
+        exception = error,
+        condition = "FAILED_JDBC.UNCLASSIFIED",
+        sqlState = Some("HV000"),
+        parameters = Map("url" -> "jdbc:", "message" -> "Write rows to the table."))
+      assert(error.getCause eq batchFailure)
+    } finally {
+      TaskContext.unset()
+      JdbcDialects.unregisterDialect(dialect)
+    }
   }
 
   test("SPARK-56019: savePartition closes JDBC connection when task is interrupted") {

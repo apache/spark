@@ -786,7 +786,17 @@ object JdbcUtils extends Logging with SQLConfHelper {
             e.addSuppressed(cause)
           }
         }
-        throw e
+        // Closing the connection on task cancellation can cause a SQLException. Do not
+        // report that cancellation side effect as a JDBC write failure.
+        if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
+          throw e
+        }
+        throw dialect.classifyException(
+          e,
+          condition = "FAILED_JDBC.WRITE",
+          messageParameters = Map("url" -> options.getRedactUrl(), "tableName" -> table),
+          description = "Write rows to the table.",
+          isRuntime = true)
     } finally {
       if (!committed) {
         // The stage must fail.  We got here through an exception path, so
