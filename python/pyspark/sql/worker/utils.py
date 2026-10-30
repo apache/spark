@@ -121,9 +121,8 @@ def worker_run(main: Callable, infile: IO, outfile: IO) -> None:
 
             if main.__module__ == "__main__":
                 try:
-                    worker_module = (
-                        sys.modules["__main__"].__spec__.name  # type: ignore[union-attr]
-                    )
+                    spec = sys.modules["__main__"].__spec__
+                    worker_module = spec.name if spec is not None else "__main__"
                 except Exception:
                     worker_module = "__main__"
             else:
