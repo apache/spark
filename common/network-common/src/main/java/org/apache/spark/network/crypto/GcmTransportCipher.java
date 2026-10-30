@@ -41,6 +41,9 @@ public class GcmTransportCipher implements TransportCipher {
     private static final String HKDF_ALG = "HmacSha256";
     @VisibleForTesting
     static final int LENGTH_HEADER_BYTES = 8;
+    // Size of the GCM authentication tag appended to every encrypted segment.
+    @VisibleForTesting
+    static final int TAG_SIZE_BYTES = 16;
     @VisibleForTesting
     static final int CIPHERTEXT_BUFFER_SIZE = 32 * 1024; // 32KB
     // Maximum plaintext bytes to accumulate before flushing to downstream handlers, even
@@ -369,11 +372,22 @@ public class GcmTransportCipher implements TransportCipher {
                     return false;
                 }
                 expectedLengthBuffer.flip();
-                expectedLength = expectedLengthBuffer.getLong();
-                if (expectedLength < LENGTH_HEADER_BYTES + headerLength) {
+                long length = expectedLengthBuffer.getLong();
+                // A message is either empty (just the length prefix and the Tink header) or
+                // carries at least one segment, and the smallest segment that can be
+                // decrypted is the bare TAG_SIZE_BYTES authentication tag. Lengths between
+                // those two cases cannot come from a valid sender and can never be
+                // decrypted, so reject them here instead of waiting for bytes that will
+                // never arrive. The local is validated before it is stored so that a
+                // rejected value does not clear the "length not read yet" sentinel
+                // (expectedLength < 0) and let the next read skip validation.
+                int minimumLength = LENGTH_HEADER_BYTES + headerLength;
+                if (length < minimumLength ||
+                        (length > minimumLength && length < minimumLength + TAG_SIZE_BYTES)) {
                     throw new IllegalStateException(
-                            "Invalid expected ciphertext length: " + expectedLength);
+                            "Invalid expected ciphertext length: " + length);
                 }
+                expectedLength = length;
                 ciphertextRead += LENGTH_HEADER_BYTES;
             }
             return true;
@@ -450,11 +464,10 @@ public class GcmTransportCipher implements TransportCipher {
                         ciphertextBuffer.limit(ciphertextBuffer.position() + bytesToRead);
                         ciphertextNettyBuf.readBytes(ciphertextBuffer);
                         ciphertextRead += bytesToRead;
-                        // Check if this is the last segment
+                        // Check if this is the last segment. bytesToRead is capped by
+                        // expectedRemaining, so ciphertextRead cannot pass expectedLength.
                         if (ciphertextRead == expectedLength) {
                             completed = true;
-                        } else if (ciphertextRead > expectedLength) {
-                            throw new IllegalStateException("Read more ciphertext than expected.");
                         }
                         // If the ciphertext buffer is full, or this is the last segment,
                         // then decrypt it and fire a read.
