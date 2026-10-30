@@ -20,9 +20,9 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.{Collections, IdentityHashMap}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, EqualTo, Expression,
-  Literal, PredicateHelper}
+  Literal, PredicateHelper, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, LocalRelation, LogicalPlan,
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Filter, LogicalPlan,
   PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.EXTERNAL_LOOKUP_JOIN
@@ -60,16 +60,21 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       case _ => false
     })
 
-  private def emptyJoinResult(join: ExternalLookupJoin): LogicalPlan = join.joinType match {
-    case LeftOuter =>
-      val nullLookupColumns = join.right.output.map { attr =>
-        Alias(Literal(null, attr.dataType), attr.name)(attr.exprId)
-      }
-      Project(join.left.output ++ nullLookupColumns, join.left)
-    case _ => LocalRelation(join.output, Seq.empty, join.isStreaming)
+  private def emptyJoinResult(join: ExternalLookupJoin): LogicalPlan = {
+    val nullLookupColumns = join.right.output.map { attr =>
+      Alias(Literal(null, attr.dataType), attr.name)(attr.exprId)
+    }
+    val unmatched = Project(join.left.output ++ nullLookupColumns, join.left)
+    join.joinType match {
+      case LeftOuter => unmatched
+      // The stream side is kept under a false filter rather than replaced by an empty relation,
+      // so that its sources, watermarks and stateful operators still run in every micro-batch.
+      // PruneFilters decides whether a streaming subplan may be pruned.
+      case _ => Filter(Literal.FalseLiteral, unmatched)
+    }
   }
 
-  private def prepare(join: ExternalLookupJoin): PreparedExternalLookupJoin = {
+  private def prepare(join: ExternalLookupJoin): LogicalPlan = {
     val relation = extractLookupPlan(join.right).getOrElse {
       throw QueryCompilationErrors.unsupportedExternalLookupJoinError("LOOKUP_PLAN")
     }
@@ -84,6 +89,12 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     // Each conjunct keeps its position, so the residual keeps the written order: a conjunct that
     // can throw is never evaluated before the conjuncts written ahead of it.
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
+    // The residual is evaluated inside the lookup join, where a Python UDF over lookup columns
+    // cannot be extracted. As ExtractPythonUDFFromJoinCondition does for other joins, an inner join
+    // evaluates such a conjunct in a filter above the join, and an outer join is rejected.
+    if (join.joinType == LeftOuter && conjuncts.exists(hasLookupSidePythonUDF(join, _))) {
+      throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
+    }
     val offeredCandidates = conjuncts.zipWithIndex.collect {
       case (EqualTo(leftExpr, rightAttr: Attribute), index)
           if isLookupEquality(join, leftExpr, rightAttr) =>
@@ -113,9 +124,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val selectedPredicates = selectedCandidates(tableName, offeredPredicates, offeredCandidates,
       lookupBuilder.selectLookupPredicates(offeredPredicates.clone()))
     val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
-    val residual = conjuncts.zipWithIndex.collect {
+    val (residual, joinFilter) = conjuncts.zipWithIndex.collect {
       case (conjunct, index) if !selectedConjuncts.contains(index) => conjunct
-    }
+    }.partition(!hasLookupSidePythonUDF(join, _))
 
     val scan = scanBuilder.build()
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
@@ -156,8 +167,9 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     }
     val readerFactory = externalLookup.createReaderFactory()
 
-    PreparedExternalLookupJoin(
+    val prepared = PreparedExternalLookupJoin(
       join.left,
+      tableName,
       scan,
       readerFactory,
       maxParameterRowsPerRequest,
@@ -167,7 +179,13 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
       selectedPredicates.map(_.nullSafe),
       join.joinType,
       residual.reduceOption(And))
+    joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
   }
+
+  private def hasLookupSidePythonUDF(join: ExternalLookupJoin, conjunct: Expression): Boolean =
+    conjunct.exists { e =>
+      PythonUDF.isScalarPythonUDF(e) && !e.references.subsetOf(join.left.outputSet)
+    }
 
   /** An equality between a bare lookup column and an expression over the stream side. */
   private def isLookupEquality(

@@ -22,8 +22,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.collection.mutable
 
-import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkIllegalStateException,
-  TaskContext}
+import org.apache.spark.{PartitionEvaluator, PartitionEvaluatorFactory, SparkException,
+  SparkIllegalStateException, TaskContext}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.{Attribute, CollationKey, Expression,
   GenericInternalRow, JoinedRow, Predicate, UnsafeProjection, UnsafeRow}
@@ -32,6 +32,7 @@ import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReader, ExternalLookupReaderFactory,
   ExternalLookupResultCursor}
+import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.{CustomMetrics, SQLMetric}
 import org.apache.spark.util.Utils
 
@@ -41,13 +42,15 @@ import org.apache.spark.util.Utils
  *
  * An evaluator joins its partition one batch of up to `maxParameterRowsPerRequest` stream rows at
  * a time. For each batch it sends one request with the distinct parameters that can match, and
- * streams the connector's result rows into output rows.
+ * streams the connector's result rows into output rows. Parameters are deduplicated per request,
+ * that is within one batch: a key repeated in a later batch is requested again.
  */
 class ExternalLookupJoinEvaluatorFactory(
+    tableName: String,
     lookupParameters: Seq[Expression],
     nullSafeParameters: Seq[Boolean],
     streamOutput: Seq[Attribute],
-    lookupOutput: Seq[Attribute],
+    lookupInput: Seq[Attribute],
     output: Seq[Attribute],
     joinType: JoinType,
     residualCondition: Option[Expression],
@@ -106,12 +109,13 @@ class ExternalLookupJoinEvaluatorFactory(
       if (inputExhausted && !batch.hasNext) reader.close()
     }
 
-    private def readBatch(): Seq[InternalRow] = {
+    // An array, because a batch's rows are read by position for every key, match and output row.
+    private def readBatch(): Array[InternalRow] = {
       val rows = mutable.ArrayBuffer.empty[InternalRow]
       while (rows.length < maxParameterRowsPerRequest && input.hasNext) {
         rows += input.next().copy()
       }
-      rows.toSeq
+      rows.toArray
     }
   }
 
@@ -128,11 +132,11 @@ class ExternalLookupJoinEvaluatorFactory(
    * retains, as with other join iterators.
    */
   private class BatchJoinIterator(
-      rows: Seq[InternalRow],
+      rows: Array[InternalRow],
       parameters: LookupParameters,
       joinOutput: JoinOutput,
       reader: LookupReader) extends Iterator[InternalRow] {
-    metrics.inputRows += rows.size
+    metrics.inputRows += rows.length
     metrics.inputBatches += 1
 
     private val matched = Array.fill(rows.length)(false)
@@ -196,11 +200,10 @@ class ExternalLookupJoinEvaluatorFactory(
 
     private def requestedKey(ordinal: Int): UnsafeRow = {
       if (ordinal < 0 || ordinal >= requestedKeys.length) {
-        throw new SparkIllegalStateException(
-          errorClass = "INTERNAL_ERROR",
-          messageParameters = Map("message" ->
-            (s"External lookup returned invalid input ordinal $ordinal for " +
-              s"${requestedKeys.length} requested parameter rows")))
+        throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+          tableName,
+          "INVALID_INPUT_ORDINAL",
+          Map("ordinal" -> ordinal.toString, "numParameterRows" -> requestedKeys.length.toString))
       }
       requestedKeys(ordinal)
     }
@@ -276,13 +279,14 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /** Evaluates the residual condition on joined rows and builds output rows per join type. */
   private class JoinOutput(partitionIndex: Int) {
-    private val joinedLookupOutput =
-      if (joinType == LeftOuter) lookupOutput.map(_.withNullability(true)) else lookupOutput
-    private val joinedInput = streamOutput ++ joinedLookupOutput
+    // Value rows follow the read schema, and the residual and output are bound to its fields.
+    private val joinedLookupInput =
+      if (joinType == LeftOuter) lookupInput.map(_.withNullability(true)) else lookupInput
+    private val joinedInput = streamOutput ++ joinedLookupInput
     private val joinedRow = new JoinedRow()
     private val residual = residualCondition.map(Predicate.create(_, joinedInput))
     private val projection = UnsafeProjection.create(output, joinedInput)
-    private val nullLookupRow = new GenericInternalRow(lookupOutput.length)
+    private val nullLookupRow = new GenericInternalRow(lookupInput.length)
     residual.foreach(_.initialize(partitionIndex))
     projection.initialize(partitionIndex)
 
@@ -308,7 +312,9 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
-   * first request, and closed once, after the last batch or when the task completes.
+   * first request, and closed once, after the last batch or when the task completes. Once closed,
+   * it sends no more requests and opens no new reader, even if a thread other than the task's
+   * still drives the join.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
@@ -320,17 +326,22 @@ class ExternalLookupJoinEvaluatorFactory(
 
     /** Sends one request and returns the cursor over its result rows. */
     def lookup(requestRows: Array[UnsafeRow]): ExternalLookupResultCursor = {
+      if (closed.get()) {
+        throw SparkException.internalError("External lookup reader used after it was closed")
+      }
       metrics.requests += 1
       metrics.parameterRows += requestRows.length
       if (reader == null) {
-        reader = readerFactory.createReader()
+        reader = Option(readerFactory.createReader()).getOrElse {
+          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+            tableName, "NULL_LOOKUP_READER")
+        }
         taskReaders.opened(reader)
       }
       activeCursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
         .getOrElse {
-          throw new SparkIllegalStateException(
-            errorClass = "INTERNAL_ERROR",
-            messageParameters = Map("message" -> "External lookup returned a null result cursor"))
+          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+            tableName, "NULL_RESULT_CURSOR")
         }
       activeCursor
     }
@@ -372,10 +383,13 @@ private class ExternalLookupReaderMetrics(customMetrics: Map[String, SQLMetric])
 
   def forCurrentTask(): TaskLookupReaders = Option(TaskContext.get()) match {
     case Some(context) =>
-      readersByTask.computeIfAbsent(context.taskAttemptId(), { taskAttemptId =>
+      val taskAttemptId = context.taskAttemptId()
+      val readers = new TaskLookupReaders(customMetrics)
+      Option(readersByTask.putIfAbsent(taskAttemptId, readers)).getOrElse {
+        // Registered outside the map update: a completed task runs the listener right away.
         context.addTaskCompletionListener[Unit](_ => readersByTask.remove(taskAttemptId))
-        new TaskLookupReaders(customMetrics)
-      })
+        readers
+      }
     case None => new TaskLookupReaders(customMetrics)
   }
 }

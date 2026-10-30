@@ -53,6 +53,7 @@ case class ExternalLookupJoin(
 /** A lookup join after its optimized lookup side has been converted to an external operation. */
 case class PreparedExternalLookupJoin(
     child: LogicalPlan,
+    tableName: String,
     @transient scan: Scan,
     readerFactory: ExternalLookupReaderFactory,
     maxParameterRowsPerRequest: Int,

@@ -751,9 +751,6 @@ class Analyzer(
       Seq(ResolveUpdateEventTimeWatermarkColumn) ++
       extendedResolutionRules ++
       Seq(NameStreamingSources) : _*),
-    // Must run after `Resolution`: it rewrites only joins whose sides are resolved, and a USING
-    // join gets its condition there. It has no ordering constraint with the batches after it.
-    Batch("Resolve External Lookup Join", Once, ResolveExternalLookupJoin),
     Batch("Remove TempResolvedColumn", Once, RemoveTempResolvedColumn),
     Batch("Post-Hoc Resolution", Once,
       Seq(ResolveCommandsWithIfExists) ++

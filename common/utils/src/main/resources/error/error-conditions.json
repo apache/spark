@@ -2371,6 +2371,11 @@
           "`selectLookupPredicates()` returned the predicate <predicate> more than once."
         ]
       },
+      "INVALID_INPUT_ORDINAL" : {
+        "message" : [
+          "The lookup result cursor returned the input ordinal <ordinal>, but the request had <numParameterRows> parameter rows."
+        ]
+      },
       "MISSING_SCAN_FIELD" : {
         "message" : [
           "The lookup scan did not return the table column <field>, which the join requires."
@@ -2381,9 +2386,19 @@
           "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
         ]
       },
+      "NULL_LOOKUP_READER" : {
+        "message" : [
+          "`createReader()` returned null."
+        ]
+      },
       "NULL_PREDICATE_SELECTION" : {
         "message" : [
           "`selectLookupPredicates()` returned null or an array containing null."
+        ]
+      },
+      "NULL_RESULT_CURSOR" : {
+        "message" : [
+          "`lookupBatch()` returned null."
         ]
       },
       "UNKNOWN_SCAN_FIELD" : {
@@ -2871,6 +2886,11 @@
       "The join cannot be executed as an external lookup join:"
     ],
     "subClass" : {
+      "CHAR_VARCHAR_COLUMN" : {
+        "message" : [
+          "The column <column> of the lookup-only table <relation> needs read-side CHAR padding or a VARCHAR length check, which an external lookup join does not support."
+        ]
+      },
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
           "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
