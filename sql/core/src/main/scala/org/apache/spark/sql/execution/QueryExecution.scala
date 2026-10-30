@@ -28,6 +28,7 @@ import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkContext, SparkException}
 import org.apache.spark.internal.LogKeys.EXTENDED_EXPLAIN_GENERATOR
+import org.apache.spark.internal.config.ConfigEntry
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{AnalysisException, ExtendedExplainGenerator, Row}
 import org.apache.spark.sql.catalyst.{InternalRow, QueryPlanningTracker}
@@ -425,11 +426,7 @@ class QueryExecution(
         !hasShuffle(executedPlan)) {
       this
     } else {
-      val session = SparkSession.getOrCloneSessionWithConfigsOff(
-        sparkSession, Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
-      new QueryExecution(session, commandExecuted, mode = mode,
-        shuffleCleanupModeOpt = shuffleCleanupModeOpt,
-        refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
+      withConfigsOff(Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED))
     }
   }
 
@@ -444,15 +441,20 @@ class QueryExecution(
     if (!sparkSession.sessionState.conf.v2ScanPartitionPackingEnabled) {
       withRegularShuffle
     } else {
-      val session = SparkSession.getOrCloneSessionWithConfigsOff(sparkSession,
+      withConfigsOff(
         Seq(SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED, SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED))
-      new QueryExecution(session, commandExecuted, mode = mode,
-        shuffleCleanupModeOpt = shuffleCleanupModeOpt,
-        refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
     }
   }
 
   private[sql] def forCheckpoint: QueryExecution = lazyForCheckpoint.get
+
+  /** A separate execution of the same plan, planned with `configs` turned off. */
+  private def withConfigsOff(configs: Seq[ConfigEntry[Boolean]]): QueryExecution = {
+    val session = SparkSession.getOrCloneSessionWithConfigsOff(sparkSession, configs)
+    new QueryExecution(session, commandExecuted, mode = mode,
+      shuffleCleanupModeOpt = shuffleCleanupModeOpt,
+      refreshPhaseEnabled = refreshPhaseEnabled, analyzerOpt = Some(analyzer))
+  }
 
   val lazyToRdd = LazyTry {
     new SQLExecutionRDD(

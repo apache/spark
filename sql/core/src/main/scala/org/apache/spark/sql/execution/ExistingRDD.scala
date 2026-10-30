@@ -186,7 +186,7 @@ object LogicalRDD extends Logging {
       originDataset: Dataset[_],
       isStreaming: Boolean,
       fromCheckpoint: Boolean = false,
-      executedPlan: Option[SparkPlan] = None): LogicalRDD = {
+      producedBy: Option[QueryExecution] = None): LogicalRDD = {
     // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
     // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
     // joins.
@@ -198,10 +198,12 @@ object LogicalRDD extends Logging {
       }
     }
 
+    // The statistics, partitioning and ordering reported for `rdd` must describe the execution
+    // that produced it, which can be a re-planned copy of the Dataset's own (see `producedBy`).
+    val execution = producedBy.getOrElse(originDataset.queryExecution)
     val logicalPlan = originDataset.logicalPlan
-    val optimizedPlan = originDataset.queryExecution.optimizedPlan
-    // The partitioning and ordering reported for `rdd` must describe the plan that produced it.
-    val layoutPlan = executedPlan.getOrElse(originDataset.queryExecution.executedPlan)
+    val optimizedPlan = execution.optimizedPlan
+    val layoutPlan = execution.executedPlan
 
     val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
 
