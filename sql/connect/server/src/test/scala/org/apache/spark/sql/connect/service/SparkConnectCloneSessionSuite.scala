@@ -283,8 +283,8 @@ class SparkConnectCloneSessionSuite extends SharedSparkSession {
 
     val sourceSession = SparkConnectService.sessionManager
       .getOrCreateIsolatedSession(sourceKey, None)
-    sourceSession.session.conf.set(
-      "spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
+    sourceSession.session.conf
+      .set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
     val sourceCatalog = sourceSession.withSession {
       _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
     }

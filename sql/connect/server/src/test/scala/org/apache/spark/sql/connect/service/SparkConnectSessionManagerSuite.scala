@@ -181,7 +181,8 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
   test("Catalogs loaded by the session are closed when the session holder is closed") {
     val key = SessionKey("user", UUID.randomUUID().toString)
     val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
-    sessionHolder.session.conf.set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
+    sessionHolder.session.conf
+      .set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
     // Catalogs are loaded with the active session's conf.
     val catalog = sessionHolder.withSession {
       _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
