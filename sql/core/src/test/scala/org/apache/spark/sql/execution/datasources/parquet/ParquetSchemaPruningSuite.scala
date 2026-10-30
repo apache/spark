@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.datasources.parquet
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
@@ -26,6 +26,7 @@ import org.apache.spark.sql.execution.datasources.v2.BatchScanExec
 import org.apache.spark.sql.execution.datasources.v2.parquet.ParquetScan
 import org.apache.spark.sql.functions.{col, udf}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types._
 import org.apache.spark.tags.ExtendedSQLTest
 
 abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanHelper {
@@ -34,6 +35,44 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
   override protected val vectorizedReaderNestedEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
+
+  test("dynamic array selection preserves root and nested Parquet field IDs") {
+    withSQLConf(
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true",
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val rootId = new MetadataBuilder()
+          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 1).build()
+        val leafId = new MetadataBuilder()
+          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 17).build()
+        val leafType = new StructType()
+          .add("old_id", IntegerType, nullable = true, metadata = leafId)
+          .add("payload", StringType)
+        def schema(rootName: String, leaf: StructType): StructType = new StructType()
+          .add(rootName, ArrayType(new StructType().add("children", ArrayType(leaf))),
+            nullable = true, metadata = rootId)
+          .add("idx", IntegerType)
+        val writeSchema = schema("old_items", leafType)
+        val readSchema = schema("new_items", StructType(Seq(
+          leafType("old_id").copy(name = "new_id"), leafType("payload"))))
+        val rows = Seq(Row(Seq(Row(Seq(Row(42, "unused")))), 0))
+        val path = dir.getCanonicalPath
+        spark.createDataFrame(spark.sparkContext.parallelize(rows), writeSchema)
+          .write.parquet(path)
+
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+            val query = spark.read.schema(readSchema).parquet(path)
+              .selectExpr("new_items[idx].children.new_id")
+            checkScanSchemata(query,
+              "struct<new_items:array<struct<children:array<struct<new_id:int>>>>,idx:int>")
+            checkAnswer(query, Row(Seq(42)))
+          }
+        }
+      }
+    }
+  }
 
 }
 

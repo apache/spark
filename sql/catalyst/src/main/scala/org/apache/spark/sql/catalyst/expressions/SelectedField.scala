@@ -111,10 +111,10 @@ object SelectedField {
         }
         val newField = StructField(field.name, newFieldDataType, field.nullable, field.metadata)
         selectField(child, Option(ArrayType(struct(newField), containsNull)))
-      case GetMapValue(child, key) if key.foldable =>
+      case GetMapValue(child, _) =>
         // GetMapValue does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
-        // See comment on GetArrayItem regarding the need for key.foldable
+        // SchemaPruning separately collects the fields used by the lookup key.
         val MapType(keyType, _, valueContainsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => MapType(keyType, dt, valueContainsNull))
         selectField(child, opt)
@@ -140,15 +140,14 @@ object SelectedField {
             throw QueryCompilationErrors.dataTypeUnsupportedByClassError(x, "MapKeys")
         }
         selectField(child, opt)
-      case GetArrayItem(child, index, _) if index.foldable =>
+      case GetArrayItem(child, _, _) =>
         // GetArrayItem does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
-        // If index is not foldable, we'd need to also return the field selected by index, which
-        // the SelectedField interface doesn't support, so only allow a foldable index for now.
+        // SchemaPruning separately collects the fields used by the index.
         val ArrayType(_, containsNull) = child.dataType
         val opt = dataTypeOpt.map(dt => ArrayType(dt, containsNull))
         selectField(child, opt)
-      case ElementAt(left, right, _, _) if right.foldable =>
+      case ElementAt(left, _, _, _) =>
         // ElementAt does not select a field from a struct (i.e. prune the struct) so it can't be
         // the top-level extractor. However it can be part of an extractor chain.
         // For example:

@@ -151,16 +151,16 @@ object SchemaPruning extends SQLConfHelper {
           derivedFromAtt = true) :: Nil
       case SelectedField(field) =>
         RootField(field, derivedFromAtt = false) +:
-          getArrayReturningHigherOrderFunctionRootFields(expr)
+          getAdditionalRootFields(expr)
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.
       case IsNotNull(SelectedField(field)) =>
         RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
-          getArrayReturningHigherOrderFunctionRootFields(expr)
+          getAdditionalRootFields(expr)
       case IsNull(SelectedField(field)) =>
         RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
-          getArrayReturningHigherOrderFunctionRootFields(expr)
+          getAdditionalRootFields(expr)
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
       case s: SubqueryExpression =>
@@ -185,7 +185,7 @@ object SchemaPruning extends SQLConfHelper {
     }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
     if (nestedRootFields.nonEmpty) {
       nestedRootFields ++ getRootFields(lambda.function) ++
-        getArrayReturningHigherOrderFunctionRootFields(argument)
+        getAdditionalRootFields(argument)
     } else {
       expr.children.flatMap(getRootFields)
     }
@@ -213,8 +213,16 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
-  private def getArrayReturningHigherOrderFunctionRootFields(expr: Expression): Seq[RootField] = {
+  // SelectedField follows the collection input of an extractor. Its selector and any lambda
+  // predicates can read other fields, including fields beneath the same root attribute.
+  private def getAdditionalRootFields(expr: Expression): Seq[RootField] = {
     expr match {
+      case GetMapValue(argument, key) =>
+        getRootFields(key) ++ getAdditionalRootFields(argument)
+      case GetArrayItem(argument, index, _) =>
+        getRootFields(index) ++ getAdditionalRootFields(argument)
+      case ElementAt(argument, index, _, _) =>
+        getRootFields(index) ++ getAdditionalRootFields(argument)
       case ArrayFilter(argument, lambda: LambdaFunction) =>
         getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 1)
       case ArraySort(argument, lambda: LambdaFunction, allowNullComparisonResult)
@@ -225,7 +233,7 @@ object SchemaPruning extends SQLConfHelper {
       case ArraySort(argument, lambda: LambdaFunction, _) =>
         getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 2)
       case _ =>
-        expr.children.flatMap(getArrayReturningHigherOrderFunctionRootFields)
+        expr.children.flatMap(getAdditionalRootFields)
     }
   }
 
@@ -262,7 +270,7 @@ object SchemaPruning extends SQLConfHelper {
     }
     nestedRootFields.map(field => RootField(field, derivedFromAtt = false)) ++
       getRootFields(lambda.function) ++
-      getArrayReturningHigherOrderFunctionRootFields(argument)
+      getAdditionalRootFields(argument)
   }
 
   /**

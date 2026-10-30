@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
@@ -146,6 +146,89 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     val schema = StructType(Seq(field))
     val prunedSchema = SchemaPruning.pruneSchema(schema, rootFields)
     assert(prunedSchema.head.metadata.getString("foo") == "bar")
+  }
+
+  test("dynamic selector dependencies remain required beneath null checks") {
+    val valueType = StructType.fromDDL("payload string, id int")
+    val inputType = StructType(Seq(
+      StructField("unused", StringType),
+      StructField("key", StringType),
+      StructField("index", IntegerType),
+      StructField("m", MapType(StringType, valueType)),
+      StructField("items", ArrayType(valueType))))
+    val input = AttributeReference("input", inputType)()
+    val key = GetStructField(input, 1, Some("key"))
+    val index = GetStructField(input, 2, Some("index"))
+    val map = GetStructField(input, 3, Some("m"))
+    val items = GetStructField(input, 4, Some("items"))
+    val accesses = Seq(
+      GetMapValue(map, key) -> GetMapValue(map, Literal("key")),
+      ElementAt(map, key) -> ElementAt(map, Literal("key")),
+      GetArrayItem(items, index) -> GetArrayItem(items, Literal(0)),
+      ElementAt(items, index) -> ElementAt(items, Literal(1)))
+
+    for {
+      (access, constantAccess) <- accesses
+      predicate <- Seq(IsNull(access), IsNotNull(access))
+    } {
+      val id = GetStructField(constantAccess, 1, Some("id"))
+      val roots = SchemaPruning.identifyRootFields(Seq(Alias(id, "id")()), Seq(predicate))
+      val schema = SchemaPruning.pruneSchema(
+        StructType(Seq(StructField("input", inputType))), roots)
+      val expected = if (access.left.dataType.isInstanceOf[MapType]) {
+        "input struct<key:string,m:map<string,struct<id:int>>>"
+      } else {
+        "input struct<index:int,items:array<struct<id:int>>>"
+      }
+      assert(schema === StructType.fromDDL(expected))
+      val projection = ProjectionOverSchema(schema, AttributeSet(Seq(input)))
+      val projected = id.transformDown { case projection(expression) => expression }
+      assert(projected.dataType == IntegerType)
+      assert(projected.asInstanceOf[GetStructField].ordinal == 0)
+    }
+  }
+
+  test("dynamic array projection preserves nulls and index errors") {
+    val valueType = StructType.fromDDL("payload string, id int")
+    val items = AttributeReference("items", ArrayType(valueType))()
+    val index = AttributeReference("index", IntegerType)()
+    val schema = StructType.fromDDL("items array<struct<id:int>>, index int")
+    val projection = ProjectionOverSchema(schema, AttributeSet(Seq(items, index)))
+    val inputAttributes = Seq(items.withDataType(schema("items").dataType), index)
+    val values = new GenericArrayData(Array(InternalRow(7), null))
+
+    for {
+      failOnError <- Seq(false, true)
+      elementAt <- Seq(false, true)
+    } {
+      val access = if (elementAt) {
+        ElementAt(items, index, failOnError = failOnError)
+      } else {
+        GetArrayItem(items, index, failOnError)
+      }
+      val id = GetStructField(access, 1, Some("id"))
+      val projected = id.transformDown { case projection(expression) => expression }
+      val bound = BindReferences.bindReference(projected, inputAttributes)
+      assert(bound.eval(InternalRow(values, if (elementAt) 1 else 0)) == 7)
+      assert(bound.eval(InternalRow(values, if (elementAt) 2 else 1)) == null)
+      assert(bound.eval(InternalRow(null, 1)) == null)
+      assert(bound.eval(InternalRow(values, null)) == null)
+      if (failOnError) {
+        val error = intercept[SparkArrayIndexOutOfBoundsException] {
+          bound.eval(InternalRow(values, 3))
+        }
+        assert(error.getCondition ==
+          (if (elementAt) "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" else "INVALID_ARRAY_INDEX"))
+      } else {
+        assert(bound.eval(InternalRow(values, 3)) == null)
+      }
+      if (elementAt) {
+        assert(bound.eval(InternalRow(values, -2)) == 7)
+        assert(intercept[SparkRuntimeException] {
+          bound.eval(InternalRow(values, 0))
+        }.getCondition == "INVALID_INDEX_OF_ZERO")
+      }
+    }
   }
 
   test("collect nested fields used by ArrayTransform lambda") {
