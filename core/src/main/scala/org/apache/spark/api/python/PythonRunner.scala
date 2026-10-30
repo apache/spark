@@ -1340,6 +1340,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
     private var nextObj: OUT = _
     private var eos = false
     private var initialized = false
+    private var initResponseTimeMs = 0L
 
     // Track batches and data size for logging
     protected var batchesProcessed: Long = 0
@@ -1393,6 +1394,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
               s"Expected the Python worker init response, but got $other")
         }
       } catch handleException
+      initResponseTimeMs = System.currentTimeMillis()
       initialized = true
     }
 
@@ -1413,7 +1415,7 @@ private[spark] abstract class BasePythonRunner[IN, OUT](
       // startTime. Use the later timestamp to exclude the worker's idle time from initialization.
       val pythonWorkerInitializationStartTime = math.max(startTime, bootTime)
       val boot = pythonWorkerInitializationStartTime - startTime
-      val init = initTime - pythonWorkerInitializationStartTime
+      val init = initResponseTimeMs - pythonWorkerInitializationStartTime
       val total = finishTime - startTime
       val finish = finishTime - initTime
       val calculatedMetrics = Map(
