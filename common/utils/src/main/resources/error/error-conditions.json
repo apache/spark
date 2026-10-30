@@ -5090,6 +5090,16 @@
           "expects a positive integer, but got <actual>."
         ]
       },
+      "PARSE_SQL_CONTEXT" : {
+        "message" : [
+          "expects a valid catalog, schema, SQL path, variable, relation, or parameter marker specification, but got <invalidValue>."
+        ]
+      },
+      "PARSE_SQL_MODE" : {
+        "message" : [
+          "expects one of 'PARSE', 'ANALYZE', but got <invalidValue>."
+        ]
+      },
       "PATTERN" : {
         "message" : [
           "<value>."
@@ -6921,6 +6931,12 @@
       "The function <funcName> doesn't support the <mode> mode. Acceptable modes are PERMISSIVE and FAILFAST."
     ],
     "sqlState" : "42601"
+  },
+  "PARSE_SQL_ANALYZE_REQUIRES_SESSION" : {
+    "message" : [
+      "parse_sql ANALYZE mode requires an active Spark session with catalog access."
+    ],
+    "sqlState" : "0A000"
   },
   "PARSE_SYNTAX_ERROR" : {
     "message" : [

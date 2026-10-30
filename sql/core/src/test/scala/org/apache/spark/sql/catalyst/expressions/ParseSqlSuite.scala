@@ -63,6 +63,22 @@ class ParseSqlSuite extends SparkFunSuite with ExpressionEvalHelper with SQLHelp
     withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
       assert(ParseSql(Literal("SELECT 1")).checkInputDataTypes() ===
         TypeCheckResult.TypeCheckSuccess)
+      assert(ParseSql(Literal("SELECT 1"), Literal("ANALYZE")).checkInputDataTypes() ===
+        TypeCheckResult.TypeCheckSuccess)
+    }
+  }
+
+  test("parse_sql rejects an invalid mode") {
+    withSQLConf(SQLConf.PARSE_SQL_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[AnalysisException] {
+          ParseSql(Literal("SELECT 1"), Literal("bogus")).checkInputDataTypes()
+        },
+        condition = "INVALID_PARAMETER_VALUE.PARSE_SQL_MODE",
+        parameters = Map(
+          "functionName" -> "`parse_sql`",
+          "parameter" -> "`mode`",
+          "invalidValue" -> "\"bogus\""))
     }
   }
 
