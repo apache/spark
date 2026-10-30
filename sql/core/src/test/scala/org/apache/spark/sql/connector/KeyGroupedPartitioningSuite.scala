@@ -25,7 +25,7 @@ import org.apache.spark.{SparkConf, SparkException}
 import org.apache.spark.rdd.SortedMergeCoalescedRDD
 import org.apache.spark.sql.{AnalysisException, DataFrame, ExplainSuiteHelper, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, Descending, ExprId, Literal, TransformExpression}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, AttributeReference, BloomFilterMightContain, Descending, DynamicPruningExpression, ExprId, Literal, TransformExpression}
 import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
@@ -11093,6 +11093,42 @@ class KeyGroupedPartitioningCatalystRuntimeFilterSuite
 
   after {
     catalog.clearTables()
+    catalog.clearFunctions()
+  }
+
+  test("SPARK-60702: a storage-partitioned join gets the bloom filter that its dropped dpp " +
+    "filter used to keep out") {
+    // The scan offers the source column of `bucket(4, id)` for runtime filtering, so
+    // `PartitionPruning` adds a DPP filter on `f.id`. Nothing can broadcast its build plan, so
+    // physical planning plans it as `true`. The key gets a bloom filter instead, and the join
+    // still shuffles neither side.
+    catalog.createFunction(Identifier.of(Array.empty, UnboundBucketFunction.name()),
+      UnboundBucketFunction)
+    createTable("fact", Array(Column.create("id", LongType), Column.create("v", IntegerType)),
+      Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.fact VALUES " +
+      (0 until 16).map(i => s"($i, ${i * 10})").mkString(", "))
+    createTable("dim", Array(Column.create("id", LongType), Column.create("flag", IntegerType)),
+      Array(bucket(4, "id")))
+    sql("INSERT INTO testcat.ns.dim VALUES (1, 1), (2, 0), (3, 1), (5, 1), (6, 0), (9, 1)")
+    Seq(true, false).foreach { adaptive =>
+      withSQLConf(
+          SQLConf.V2_BUCKETING_ENABLED.key -> "true",
+          SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+          SQLConf.RUNTIME_BLOOM_FILTER_APPLICATION_SIDE_SCAN_SIZE_THRESHOLD.key -> "0",
+          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> adaptive.toString) {
+        val df = sql("SELECT f.id, f.v FROM testcat.ns.fact f JOIN testcat.ns.dim d " +
+          "ON f.id = d.id WHERE d.flag = 1")
+        checkAnswer(df, Seq(Row(1, 10), Row(3, 30), Row(5, 50), Row(9, 90)))
+        val plan = df.queryExecution.executedPlan
+        val runtimeFilters = collectScans(plan)
+          .filter(_.table.name().endsWith("fact"))
+          .flatMap(_.runtimeFilters)
+        assert(runtimeFilters.exists(_.exists(_.isInstanceOf[BloomFilterMightContain])), plan)
+        assert(runtimeFilters.contains(DynamicPruningExpression(Literal.TrueLiteral)), plan)
+        assert(collect(plan) { case s: ShuffleExchangeLike => s }.isEmpty, plan)
+      }
+    }
   }
 }
 

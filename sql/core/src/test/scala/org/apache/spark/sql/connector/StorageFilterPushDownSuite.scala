@@ -352,10 +352,8 @@ class StorageFilterPushDownSuite
     test("a scan with a column named like the checked column gets the filter, and runtime " +
         s"filtering still resolves that column (AQE $aqe)") {
       // Runtime filtering resolves the declared filter attributes by name, which the checked column
-      // the scan appends would make ambiguous. Dynamic partition pruning on `k` would take the
-      // bloom's place.
-      withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+      // the scan appends would make ambiguous.
+      withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
         val plan = runBloomJoin(
           "columnar" -> "true", "valueName" -> checkedName, "runtimeFiltering" -> "v2")
         val scan = scanOf(plan)
@@ -370,9 +368,7 @@ class StorageFilterPushDownSuite
     }
 
     test(s"a bloom the scan fully evaluates through runtime filtering is not offered (AQE $aqe)") {
-      // Dynamic partition pruning on `k` would take the bloom's place.
-      withBloomJoin(SQLConf.DYNAMIC_PARTITION_PRUNING_ENABLED.key -> "false",
-          SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
+      withBloomJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> aqe.toString) {
         val plan = runBloomJoin("columnar" -> "true", "runtimeFiltering" -> "catalyst")
         val scan = scanOf(plan)
         assert(scan.runtimeFilters.exists(_.exists(_.isInstanceOf[BloomFilterMightContain])) &&
