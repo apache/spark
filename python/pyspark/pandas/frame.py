@@ -5272,7 +5272,11 @@ defaultdict(<class 'list'>, {'col..., 'col...})]
             diff = set(subset_list).difference(set(self._internal.column_labels))
             if len(diff) > 0:
                 raise KeyError(", ".join([name_like_string(d) for d in diff]))
-        group_cols = [self._internal.spark_column_name_for(label) for label in subset_list]
+        group_cols = [
+            scol_for(self._internal.resolved_copy.spark_frame,
+                     self._internal.spark_column_name_for(label))
+            for label in subset_list
+        ]
 
         sdf = self._internal.resolved_copy.spark_frame
 
