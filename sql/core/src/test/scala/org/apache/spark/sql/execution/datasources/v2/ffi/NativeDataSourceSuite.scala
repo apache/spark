@@ -16,7 +16,7 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.ffi
 
-import java.io.File
+import java.io.{ByteArrayOutputStream, File, ObjectOutputStream}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
@@ -30,9 +30,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
 
-import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, Data}
+import org.apache.arrow.c.{ArrowArray, ArrowArrayStream, ArrowSchema, CDataDictionaryProvider, Data}
 import org.apache.arrow.memory.BufferAllocator
-import org.apache.arrow.vector.BigIntVector
+import org.apache.arrow.vector.{BigIntVector, VectorSchemaRoot}
 import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
@@ -43,7 +43,7 @@ import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.read.{InputPartition, SupportsArrowStreamRead, SupportsPushDownRequiredColumns}
-import org.apache.spark.sql.connector.read.streaming.Offset
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
 import org.apache.spark.sql.execution.WholeStageCodegenExec
 import org.apache.spark.sql.execution.datasources.DataSource
 import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, DataSourceV2ScanRelation, MicroBatchScanExec}
@@ -1386,11 +1386,13 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val scan = df.queryExecution.executedPlan.collectFirst { case s: BatchScanExec => s }.get
       (scan.readerFactory.asInstanceOf[SupportsArrowStreamRead], scan.inputPartitions)
     }
-    // Runs `f` in a task that only gets the files of the session.
+    // Runs `f` in a task that only gets the files of the session. It is the task of the partition
+    // 1, so that the partition of the scan that a read gets is not the partition of its task.
     def inTask[T: ClassTag](f: => T): T = session.artifactManager.withResources {
-      session.sparkContext.parallelize(Seq(0), 1).map(_ => f).collect().head
+      session.sparkContext.parallelize(Seq(0, 1), 2).flatMap(i => if (i == 1) Seq(f) else Nil)
+        .collect().head
     }
-    import TestArrowEngine.{callbacks, readIds}
+    import TestArrowEngine.{callbacks, readIds, readIdsInPlace}
     // Reads the given partitions in a single task, as an engine does.
     def readAll(factory: SupportsArrowStreamRead, partitions: Seq[InputPartition]): Seq[Long] = {
       inTask {
@@ -1419,6 +1421,8 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       assert(NativeLibrary.openTaskContexts() == before + delta)
       result
     }
+    // The size of struct ArrowArrayStream, which the layout test compares with the header.
+    val streamSize = NativeLibrary.layout().get("ArrowArrayStream").longValue
 
     // An engine reads both partitions of the scan in a single task.
     val taskDir = Utils.createTempDir()
@@ -1438,23 +1442,27 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val released = new File(Utils.createTempDir(), "released")
     val (laterFactory, laterPartitions) =
       plannedScan(range(session, "end" -> "6", "released_path" -> released.getPath).select("id"))
-    // Opens a stream in a task, which it returns unreleased.
-    def openInTask(factory: SupportsArrowStreamRead, partition: InputPartition): Long = inTask {
-      val stream = Platform.allocateMemory(40)
-      Platform.setMemory(stream, 0.toByte, 40)
+    // Opens a stream in a task, and returns it unreleased, with what `read` returned from it in
+    // the task.
+    def openInTask[T: ClassTag](factory: SupportsArrowStreamRead, partition: InputPartition)(
+        read: ArrowArrayStream => T): (Long, T) = inTask {
+      val stream = Platform.allocateMemory(streamSize)
+      Platform.setMemory(stream, 0.toByte, streamSize)
       factory.openArrowStream(partition, stream)
-      stream
+      (stream, read(ArrowArrayStream.wrap(stream)))
     }
     val (address, copy) = checkContexts(1) {
-      val address = openInTask(laterFactory, laterPartitions.head)
+      // The engine reads the stream to its end in the task, but releases it later.
+      val (address, ids) = openInTask(laterFactory, laterPartitions.head)(readIdsInPlace)
+      assert(ids == (0L until 3L))
       assert(NativeLibrary.openEngineStreams() == 1 && !released.exists())
       // A copy of the stream, as an engine that moves the stream may leave behind.
-      val copy = Platform.allocateMemory(40)
-      Platform.copyMemory(null, address, null, copy, 40)
+      val copy = Platform.allocateMemory(streamSize)
+      Platform.copyMemory(null, address, null, copy, streamSize)
       (address, copy)
     }
     checkContexts(-1) {
-      assert(readIds(ArrowArrayStream.wrap(address), ArrowUtils.rootAllocator) == (0L until 3L))
+      ArrowArrayStream.wrap(address).release()
       assert(NativeLibrary.openEngineStreams() == 0 && released.exists())
     }
     Platform.freeMemory(address)
@@ -1479,7 +1487,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val (waitingFactory, waitingPartitions) = plannedScan(
       range(session, "end" -> "6", "wait_for_interrupt" -> marker.getPath).select("id"))
     checkContexts(0) {
-      val waiting = openInTask(waitingFactory, waitingPartitions.head)
+      val (waiting, _) = openInTask(waitingFactory, waitingPartitions.head)(_ => ())
       val error = intercept[Exception] {
         readIds(ArrowArrayStream.wrap(waiting), ArrowUtils.rootAllocator)
       }
@@ -1489,8 +1497,10 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       Platform.freeMemory(waiting)
     }
 
-    // So does the reader factory of a micro-batch scan, with the state of its stream reader.
-    val query = session.readStream.format("native_counter").option("max_offset", "4").load()
+    // So does the reader factory of a micro-batch scan, with the state of its micro-batch.
+    val streamTaskDir = Utils.createTempDir()
+    val query = session.readStream.format("native_counter").option("max_offset", "4")
+      .option("task_path", streamTaskDir.getPath).load()
       .writeStream.format("noop").start()
     val microBatchScan = try {
       query.processAllAvailable()
@@ -1499,41 +1509,73 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     } finally {
       query.stop()
     }
+    // Only the reads of the engine record their tasks from now on.
+    streamTaskDir.listFiles().foreach(_.delete())
     val streamFactory = microBatchScan.readerFactory.asInstanceOf[SupportsArrowStreamRead]
-    assert(readAll(streamFactory, microBatchScan.inputPartitions).sorted == (0L until 4L))
+    val streamPartitions = microBatchScan.inputPartitions.toSeq
+    checkContexts(0) {
+      assert(readAll(streamFactory, streamPartitions).sorted == (0L until 4L))
+    }
     assert(NativeLibrary.openEngineStreams() == 0)
+    // The library got the partition of the scan, the only one of the micro-batch.
+    assert(streamTaskDir.listFiles().map(_.getName.toInt).toSet == Set(0))
     // The partitions of a micro-batch keep the state that the stream reader returned with them:
     // a reader factory that an engine keeps reads them with it, also once Spark planned the next
     // micro-batch, and so does the reader of Spark.
-    val relation = session.readStream.format("native_counter").option("max_offset", "4").load()
-      .queryExecution.analyzed.collectFirst { case relation: StreamingRelationV2 => relation }.get
-    val stream = relation.table.asInstanceOf[SupportsRead].newScanBuilder(relation.extraOptions)
-      .build().toMicroBatchStream(Utils.createTempDir().getPath)
-    try {
+    def microBatchStream(options: (String, String)*): MicroBatchStream = {
+      val relation = session.readStream.format("native_counter").options(options.toMap).load()
+        .queryExecution.analyzed.collectFirst { case relation: StreamingRelationV2 => relation }.get
+      relation.table.asInstanceOf[SupportsRead].newScanBuilder(relation.extraOptions)
+        .build().toMicroBatchStream(Utils.createTempDir().getPath)
+    }
+    def plan(stream: MicroBatchStream, start: Int, end: Int): Seq[InputPartition] = {
       def offset(i: Int): Offset = stream.deserializeOffset(s"""{"offset":$i}""")
-      val first = stream.planInputPartitions(offset(0), offset(2)).toSeq
+      stream.planInputPartitions(offset(start), offset(end)).toSeq
+    }
+    val stream = microBatchStream("max_offset" -> "4")
+    try {
+      val first = plan(stream, 0, 2)
       val keptFactory = stream.createReaderFactory()
-      val second = stream.planInputPartitions(offset(2), offset(4)).toSeq
-      assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], first) == Seq(0L, 1L))
-      assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], second) == Seq(2L, 3L))
-      val read = inTask {
-        first.flatMap { partition =>
-          val reader = keptFactory.createColumnarReader(partition)
-          try {
-            val ids = ArrayBuffer.empty[Long]
-            while (reader.next()) {
-              val batch = reader.get()
-              (0 until batch.numRows()).foreach(i => ids += batch.column(0).getLong(i))
+      val second = plan(stream, 2, 4)
+      // The executors get the state of a micro-batch once, as a broadcast that its partitions
+      // keep, rather than with the partition of each task.
+      Seq(first, second).foreach { partitions =>
+        val partition = partitions.head.asInstanceOf[NativeMicroBatchPartition]
+        assert(partition.state.isDefined && partition.readerState.nonEmpty)
+        val serialized = new ByteArrayOutputStream()
+        Utils.tryWithResource(new ObjectOutputStream(serialized))(_.writeObject(partition))
+        assert(!serialized.toByteArray.toSeq.containsSlice(partition.readerState.toSeq))
+      }
+      checkContexts(0) {
+        assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], first) == Seq(0L, 1L))
+        assert(readAll(keptFactory.asInstanceOf[SupportsArrowStreamRead], second) == Seq(2L, 3L))
+        val read = inTask {
+          first.flatMap { partition =>
+            val reader = keptFactory.createColumnarReader(partition)
+            try {
+              val ids = ArrayBuffer.empty[Long]
+              while (reader.next()) {
+                val batch = reader.get()
+                (0 until batch.numRows()).foreach(i => ids += batch.column(0).getLong(i))
+              }
+              ids.toSeq
+            } finally {
+              reader.close()
             }
-            ids.toSeq
-          } finally {
-            reader.close()
           }
         }
+        assert(read == Seq(0L, 1L))
       }
-      assert(read == Seq(0L, 1L))
     } finally {
       stream.stop()
+    }
+    // A micro-batch without a state is not broadcast.
+    val stateless = microBatchStream("max_offset" -> "4", "states" -> "0")
+    try {
+      assert(plan(stateless, 0, 2).map(_.asInstanceOf[NativeMicroBatchPartition].state) ==
+        Seq(None))
+    } finally {
+      stateless.stop()
     }
 
     // It runs in the running task, with a stream whose release callback is NULL.
@@ -1553,6 +1595,34 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(Utils.exceptionString(completed).contains("must be called in the running task"))
     val noStream = intercept[Exception](inTask(factory.openArrowStream(partitions.head, 0)))
     assert(Utils.exceptionString(noStream).contains("whose release callback is NULL"))
+    // The arguments are checked before the partition, which must be of the kind of the scan of the
+    // factory: a partition of a micro-batch fails for a batch scan, and the other way around.
+    val outsideWithOtherKind = intercept[IllegalStateException] {
+      streamFactory.openArrowStream(partitions.head, 0)
+    }
+    assert(outsideWithOtherKind.getMessage.contains("must be called in the running task"))
+    val otherKinds = checkContexts(0) {
+      inTask {
+        Seq(streamFactory -> partitions.head, factory -> streamPartitions.head).map {
+          case (kindFactory, partition) =>
+            val stream = Platform.allocateMemory(streamSize)
+            try {
+              Platform.setMemory(stream, 0.toByte, streamSize)
+              kindFactory.openArrowStream(partition, stream)
+              None
+            } catch {
+              case e: IllegalArgumentException => Some(e.getMessage)
+            } finally {
+              Platform.freeMemory(stream)
+            }
+        }
+      }
+    }
+    assert(otherKinds == Seq(
+      Some("openArrowStream needs a partition of the scan of the reader factory, a " +
+        s"NativeMicroBatchPartition, but got ${classOf[NativeInputPartition].getName}."),
+      Some("openArrowStream needs a partition of the scan of the reader factory, a " +
+        s"NativeInputPartition, but got ${classOf[NativeMicroBatchPartition].getName}.")))
     // A stream whose release callback is not NULL, such as an open one, is left as it is.
     val (rejected, unchanged, ids) = checkContexts(0) {
       inTask {
@@ -1593,10 +1663,15 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
             val stream = ArrowArrayStream.allocateNew(ArrowUtils.rootAllocator)
             try {
               failing.openArrowStream(failingPartitions.head, stream.memoryAddress())
+            } catch {
+              // Keeps the failure, but not as the cause, which findError would find.
+              case e: Throwable if stream.snapshot().release != 0 =>
+                val notReleased = new IllegalStateException(
+                  s"The stream is not released after the failure $fail.")
+                notReleased.addSuppressed(e)
+                throw notReleased
             } finally {
-              val notReleased = stream.snapshot().release != 0
               stream.close()
-              if (notReleased) throw new IllegalStateException("The stream is not released.")
             }
           }
         }
@@ -2239,6 +2314,50 @@ object TestArrowEngine {
     val snapshot = stream.snapshot()
     Seq(snapshot.get_schema, snapshot.get_next, snapshot.get_last_error, snapshot.release,
       snapshot.private_data)
+  }
+
+  /**
+   * Reads the ids of a stream to its end on the calling thread, without moving or releasing it, as
+   * an engine that releases the stream later does.
+   */
+  def readIdsInPlace(stream: ArrowArrayStream): Seq[Long] = {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("engine", 0, Long.MaxValue)
+    val dictionaries = new CDataDictionaryProvider()
+    try {
+      val schema = ArrowSchema.allocateNew(allocator)
+      val root = try {
+        stream.getSchema(schema)
+        VectorSchemaRoot.create(Data.importSchema(allocator, schema, dictionaries), allocator)
+      } finally {
+        schema.close()
+      }
+      try {
+        val ids = ArrayBuffer.empty[Long]
+        var more = true
+        while (more) {
+          // A new array for each batch, since the import closes it, as in NativePartitionReader.
+          val array = ArrowArray.allocateNew(allocator)
+          try {
+            stream.getNext(array)
+            // The stream ends with a released array.
+            more = array.snapshot().release != 0
+            if (more) {
+              Data.importIntoVectorSchemaRoot(allocator, array, root, dictionaries)
+              val vector = root.getVector("id").asInstanceOf[BigIntVector]
+              (0 until root.getRowCount).foreach(i => ids += vector.get(i))
+            }
+          } finally {
+            array.close()
+          }
+        }
+        ids.toSeq
+      } finally {
+        root.close()
+      }
+    } finally {
+      dictionaries.close()
+      allocator.close()
+    }
   }
 
   /** Reads the ids of a stream on another thread, as an engine may, and releases the stream. */

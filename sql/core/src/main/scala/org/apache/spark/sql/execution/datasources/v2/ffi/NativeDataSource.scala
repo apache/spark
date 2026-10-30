@@ -23,6 +23,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.function.BooleanSupplier
 
 import scala.jdk.CollectionConverters._
+import scala.reflect.ClassTag
 import scala.util.control.NonFatal
 
 import com.fasterxml.jackson.core.JsonProcessingException
@@ -34,13 +35,15 @@ import org.apache.arrow.vector.complex.{ListVector, MapVector, StructVector}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
 import org.apache.spark.{SparkException, SparkThrowable, SparkUnsupportedOperationException, TaskContext}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.internal.Logging
+import org.apache.spark.sql.classic.SparkSession
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory, SupportsArrowStreamRead}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
-import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamPartitionReaderFactory, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
+import org.apache.spark.sql.execution.datasources.v2.columnar.{ColumnarBatchPlanner, ColumnarDataSource, ColumnarOnlyPartitionReaderFactory, ColumnarPlannedBatch, ColumnarStreamReader, ColumnarStreamWriter, ColumnarWriter}
 import org.apache.spark.sql.execution.vectorized.ReusedArrowColumnVector
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
@@ -284,7 +287,7 @@ class NativeBatchPlanner(
     try {
       val planned = call(name, "plan a scan of")(library.partitions(handle.get))
       ColumnarPlannedBatch(
-        NativeInputPartition.from(planned.partitions),
+        NativeInputPartition.from(planned.partitions).toArray[InputPartition],
         new NativePartitionReaderFactory(executorLocation, name,
           bytesOrEmpty(Option(planned.state)), readSchema, timeZoneId))
     } finally {
@@ -311,8 +314,10 @@ class NativePartitionReaderFactory(
   }
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    val nativePartition =
+      NativePartitionReader.engineStreamPartition[NativeInputPartition](partition, streamAddress)
     NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_BATCH, readerState,
-      partition.asInstanceOf[NativeInputPartition], readSchema, timeZoneId, streamAddress)
+      nativePartition, readSchema, timeZoneId, streamAddress)
   }
 }
 
@@ -367,28 +372,22 @@ class NativeDataSourceStreamReader(
     val planned = call(name, "plan a scan of") {
       library.streamPartitions(handle.get, start, end)
     }
-    val readerState = bytesOrEmpty(Option(planned.state))
-    NativeInputPartition.from(planned.partitions).map { partition =>
-      NativeMicroBatchPartition(partition.asInstanceOf[NativeInputPartition], readerState)
+    val partitions = NativeInputPartition.from(planned.partitions)
+    // The executors fetch the state once for the micro-batch, as a broadcast, rather than with each
+    // of its tasks. The partitions keep the broadcast, which the ContextCleaner removes once the
+    // driver no longer refers to them, neither in the plan of the micro-batch nor in an engine.
+    val state = Option(planned.state).filter(_.nonEmpty && partitions.nonEmpty).map { bytes =>
+      SparkSession.active.sparkContext.broadcast(bytes)
     }
+    partitions.map[InputPartition](NativeMicroBatchPartition(_, state))
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    val microBatchPartition = partition.asInstanceOf[NativeMicroBatchPartition]
-    new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH,
-      microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId)
+    readerFactory().createColumnarReader(partition)
   }
 
-  // An engine can also get the Arrow C stream of a partition, see [[SupportsArrowStreamRead]].
   override def readerFactory(): PartitionReaderFactory = {
-    new ColumnarStreamPartitionReaderFactory(this) with SupportsArrowStreamRead {
-      override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
-        val microBatchPartition = partition.asInstanceOf[NativeMicroBatchPartition]
-        NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
-          microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId,
-          streamAddress)
-      }
-    }
+    new NativeMicroBatchPartitionReaderFactory(location, name, schema, timeZoneId)
   }
 
   override def commit(end: String): Unit = {
@@ -402,6 +401,34 @@ object NativeDataSourceStreamReader {
   // Parses the offsets of the libraries to check them, and rejects anything after the JSON value.
   private val mapper =
     JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build()
+}
+
+/**
+ * Reads the partitions of a micro-batch of a native data source, on the executors, each with the
+ * state of its micro-batch. An engine can also get the Arrow C stream of a partition from it, see
+ * [[SupportsArrowStreamRead]].
+ *
+ * @param timeZoneId the time zone of the timestamps of the schema that the stream reader got
+ */
+class NativeMicroBatchPartitionReaderFactory(
+    location: NativeLibraryLocation,
+    name: String,
+    schema: StructType,
+    timeZoneId: String)
+  extends ColumnarOnlyPartitionReaderFactory with SupportsArrowStreamRead {
+  override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
+    val microBatchPartition = partition.asInstanceOf[NativeMicroBatchPartition]
+    new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH,
+      microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId)
+  }
+
+  override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+    val microBatchPartition = NativePartitionReader
+      .engineStreamPartition[NativeMicroBatchPartition](partition, streamAddress)
+    NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
+      microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId,
+      streamAddress)
+  }
 }
 
 /**
@@ -486,7 +513,7 @@ class NativeDataSourceStreamWriter(
 case class NativeInputPartition(index: Int, bytes: Array[Byte]) extends InputPartition
 
 object NativeInputPartition {
-  def from(partitions: Array[Array[Byte]]): Array[InputPartition] = {
+  def from(partitions: Array[Array[Byte]]): Array[NativeInputPartition] = {
     Option(partitions).getOrElse(Array.empty).zipWithIndex.map { case (bytes, i) =>
       NativeInputPartition(i, Option(bytes).getOrElse(Array.emptyByteArray))
     }
@@ -495,12 +522,18 @@ object NativeInputPartition {
 
 /**
  * A partition of a micro-batch, with the state that the stream reader returned with the
- * partitions of the micro-batch. The state changes with each micro-batch, so it goes with the
- * partitions rather than with the reader factory, which an engine may keep while Spark plans the
- * next micro-batch.
+ * partitions of the micro-batch, if any. The state changes with each micro-batch, so it goes with
+ * the partitions rather than with the reader factory, which an engine may keep while Spark plans
+ * the next micro-batch. It is broadcast, so that each executor fetches it once for the
+ * micro-batch rather than with each task.
  */
-case class NativeMicroBatchPartition(partition: NativeInputPartition, readerState: Array[Byte])
-  extends InputPartition
+case class NativeMicroBatchPartition(
+    partition: NativeInputPartition,
+    state: Option[Broadcast[Array[Byte]]])
+  extends InputPartition {
+  /** The state to read the partition with, empty if the stream reader returned none. */
+  def readerState: Array[Byte] = state.map(_.value).getOrElse(Array.emptyByteArray)
+}
 
 /** The message returned by the data writer of a task of a native library. */
 case class NativeWriterCommitMessage(bytes: Array[Byte]) extends WriterCommitMessage
@@ -899,8 +932,35 @@ object NativePartitionReader {
   import NativeCalls._
 
   /**
+   * Checks the arguments of `SupportsArrowStreamRead.openArrowStream` before it looks at the
+   * partition, and returns the partition as a `P`, the class of the partitions of the scan of the
+   * reader factory.
+   */
+  def engineStreamPartition[P <: InputPartition](
+      partition: InputPartition,
+      streamAddress: Long)(implicit tag: ClassTag[P]): P = {
+    val context = TaskContext.get()
+    if (context == null || context.isCompleted()) {
+      throw new IllegalStateException(
+        "openArrowStream must be called in the running task that reads the partition.")
+    }
+    if (streamAddress == 0 || ArrowArrayStream.wrap(streamAddress).snapshot().release != 0) {
+      throw new IllegalArgumentException(
+        "openArrowStream needs the address of a stream whose release callback is NULL.")
+    }
+    partition match {
+      case expected: P => expected
+      case _ =>
+        throw new IllegalArgumentException("openArrowStream needs a partition of the scan of " +
+          s"the reader factory, a ${tag.runtimeClass.getSimpleName}, but got " +
+          s"${Option(partition).map(_.getClass.getName).orNull}.")
+    }
+  }
+
+  /**
    * Initializes the stream at `streamAddress` with the data of a partition for an engine, see
-   * [[SupportsArrowStreamRead]]: the context of its task is closed once the stream is released.
+   * [[SupportsArrowStreamRead]], once `engineStreamPartition` checked the arguments: the context
+   * of its task is closed once the stream is released.
    */
   def openEngineStream(
       location: NativeLibraryLocation,
@@ -911,15 +971,6 @@ object NativePartitionReader {
       schema: StructType,
       timeZoneId: String,
       streamAddress: Long): Unit = {
-    val context = TaskContext.get()
-    if (context == null || context.isCompleted()) {
-      throw new IllegalStateException(
-        "openArrowStream must be called in the running task that reads the partition.")
-    }
-    if (streamAddress == 0 || ArrowArrayStream.wrap(streamAddress).snapshot().release != 0) {
-      throw new IllegalArgumentException(
-        "openArrowStream needs the address of a stream whose release callback is NULL.")
-    }
     val task = openStream(location, name, kind, readerState, partition, schema, timeZoneId,
       streamAddress, mayOutliveTask = true)
     try {

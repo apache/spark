@@ -188,6 +188,13 @@ final class NativeLibrary {
   private static final long FINISH_WRITE_INFO_NUM_MESSAGES = 32;
   private static final long FINISH_WRITE_INFO_REJECTED = 40;
   private static final long FINISH_DATA_WRITER_INFO_SIZE = 8;
+  // struct ArrowArrayStream of the Arrow C stream interface, which Spark wraps for engines.
+  private static final long STREAM_GET_SCHEMA = 0;
+  private static final long STREAM_GET_NEXT = 8;
+  private static final long STREAM_GET_LAST_ERROR = 16;
+  private static final long STREAM_RELEASE = 24;
+  private static final long STREAM_PRIVATE_DATA = 32;
+  private static final long STREAM_SIZE = 40;
 
   // The structs that only hold their size, which the library gets as const pointers. Until fields
   // are added to them, a single struct of each kind is allocated once, and never freed.
@@ -1126,8 +1133,10 @@ final class NativeLibrary {
 
   /**
    * The {@code SparkDsTaskContext} of a task that reads a partition or writes data. The reader or
-   * the data writer closes it once the library no longer uses it, which frees it. It can be closed
-   * from any thread, as when an engine releases the stream of a read, see {@link EngineStream}.
+   * the data writer closes it once the library no longer uses it, which frees it. For the stream of
+   * a read that an engine got, the release of the stream closes it, on whichever thread the engine
+   * releases the stream: only the release that removes the stream from {@code engineStreams} does,
+   * so it is closed once (see {@link EngineStream}).
    */
   static final class Task implements AutoCloseable {
     final long address;
@@ -1153,7 +1162,7 @@ final class NativeLibrary {
     }
 
     @Override
-    public synchronized void close() {
+    public void close() {
       if (!closed) {
         closed = true;
         // A call to is_interrupted that is still running only looks the address up.
@@ -1186,13 +1195,6 @@ final class NativeLibrary {
   // Streams of engines
   // ---------------------------------------------------------------------------------------------
 
-  // The offsets of the fields of struct ArrowArrayStream, and its size.
-  private static final long STREAM_GET_SCHEMA = 0;
-  private static final long STREAM_GET_NEXT = 8;
-  private static final long STREAM_GET_LAST_ERROR = 16;
-  private static final long STREAM_RELEASE = 24;
-  private static final long STREAM_PRIVATE_DATA = 32;
-  private static final long STREAM_SIZE = 40;
   // The errno values that the callbacks of a stream return.
   private static final int EINVAL = 22;
   private static final int EIO = 5;

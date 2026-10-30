@@ -112,7 +112,8 @@ case class ColumnarPlannedBatch(
 /**
  * Reads the data of a [[ColumnarDataSource]] for a micro-batch streaming scan, with offsets in
  * JSON. Spark plans the partitions of each micro-batch on the driver, then serializes the reader
- * to the executors, where `read` is called for each partition.
+ * factory of `readerFactory` to the executors, which reads each partition, by default with `read`
+ * of this reader.
  */
 trait ColumnarStreamReader extends Serializable {
   /**
@@ -135,9 +136,9 @@ trait ColumnarStreamReader extends Serializable {
   def read(partition: InputPartition): PartitionReader[ColumnarBatch]
 
   /**
-   * Returns the reader factory of a micro-batch, which Spark serializes to the executors with this
-   * reader. By default, it reads each partition with `read`. A reader may return a factory that
-   * also implements other interfaces of reader factories, such as
+   * Returns the reader factory of a micro-batch, which Spark serializes to the executors. By
+   * default, it reads each partition with `read`, so that this reader is serialized with it. A
+   * reader may return a factory that also implements other interfaces of reader factories, such as
    * `org.apache.spark.sql.connector.read.SupportsArrowStreamRead`.
    */
   def readerFactory(): PartitionReaderFactory = new ColumnarStreamPartitionReaderFactory(this)
