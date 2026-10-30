@@ -46,10 +46,14 @@ import org.apache.spark.sql.types.StringType
  *
  * Staggered-overlap builds cover the regime between those: a fraction of build
  * intervals -- from a small minority at 5%/10%/25% to half or more at 50%/90% --
- * overlap each probe window, miss intervals are interleaved so no subtree's
- * max high falls under the probe, and the build has no common core, so the
- * tree is walked without pruning and evaluated per candidate. Long and double
- * (boxed) keys run at 5%, 10%, 25%, 50%, and 90% overlap.
+ * overlap each probe window, and the build has no common core, so no shortcut
+ * answers the probe outright. At 50% and 90% each miss is isolated, so the
+ * walk prunes no multi-node subtree. It does drop size-1 miss spans whose max
+ * high is below the probe (504 and 100 in the 2,000-row build); the other
+ * misses are visited and rejected. At 5%, 10%, and 25%, misses run in long
+ * stretches, so the walk also prunes whole subtrees; see the comment above
+ * `staggerBuild` for those counts.
+ * Long and double (boxed) keys run at 5%, 10%, 25%, 50%, and 90% overlap.
  *
  * To run this benchmark:
  * {{{
@@ -164,12 +168,18 @@ object RangeJoinBenchmark extends SqlBasedBenchmark {
   private lazy val largePoints: DataFrame = cached(spark.range(largeProbeRows).select(
     ((col("id") * width + width / 2) % lit(largeBuildRows.toLong * width)).as("p")))
 
-  // Staggered high-overlap builds. Every miss interval ends before the probe
-  // window starts and every keep interval spans it, but the two interleave in
-  // low order, so no subtree's max high falls under the probe and the walk
-  // prunes nothing. The build has no common core either, so no shortcut can
-  // answer the probe: this measures the full walk plus K candidate checks
-  // against nested loop's B condition checks, at K/B of 5%, 10%, 25%, 50%, and 90%.
+  // Staggered high-overlap builds. Every miss interval ends before the probe window
+  // starts and every span interval covers it, and the build has no common core, so
+  // the all-covering shortcut never answers the probe outright. At 50% and 90% each
+  // miss is isolated, so no multi-node subtree has its max high below the probe.
+  // Size-1 miss spans still do: the walk drops 504 and 100 of them in the 2,000-row
+  // build and does not enter those leaves. The other 496 and 100 misses are
+  // midpoints of a larger span, so the walk visits them and the row check rejects
+  // them. At 5%, 10%, and 25%, misses run in stretches of up to 19, 9, and 3, long enough
+  // that whole subtrees are all misses too: the walk prunes 231, 279, and 124
+  // multi-node subtrees of the 2,000-row build at those three levels, and none at
+  // 50% or 90%. Either way this measures the walk plus K candidate checks against
+  // nested loop's B condition checks, at K/B of 5%, 10%, 25%, 50%, and 90%.
   private val staggerBuildRows = 2000
   private val staggerProbeRows = 10000
   private def staggerBuild(overlapPct: Int, boxedAsDouble: Boolean = false): DataFrame = {
