@@ -22,9 +22,10 @@ import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Attribu
 import org.apache.spark.sql.catalyst.expressions.Literal.{FalseLiteral, TrueLiteral}
 import org.apache.spark.sql.catalyst.expressions.aggregate.AggregateExpression
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftAnti, LeftOuter, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{DeleteAction, ExposesMetadataColumns, Filter, HintInfo, InsertAction, InsertOnlyMerge, Join, JoinHint, LogicalPlan, MergeAction, MergeIntoTable, MergeRows, NO_BROADCAST_AND_REPLICATION, Project, ReplaceData, UpdateAction, WriteDelta}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Copy, Delete, Discard, Insert, Instruction, Keep, ROW_ID, Split, Update}
 import org.apache.spark.sql.catalyst.trees.TreePattern.MERGE_INTO_TABLE
+import org.apache.spark.sql.catalyst.util.MetadataColumnHelper
 import org.apache.spark.sql.catalyst.util.RowDeltaUtils.{COPY_OPERATION, INSERT_OPERATION, OPERATION_COLUMN, UPDATE_OPERATION}
 import org.apache.spark.sql.connector.catalog.SupportsRowLevelOperations
 import org.apache.spark.sql.connector.write.{RowLevelOperationTable, SupportsDelta}
@@ -262,7 +263,33 @@ object RewriteMergeIntoTable extends RewriteRowLevelCommand with PredicateHelper
     val outerRefs = condWithOuterRefs.collect {
       case OuterReference(e) => e
     }
-    Exists(Filter(condWithOuterRefs, source), outerRefs)
+    // the condition may refer to source metadata columns that are not in the source output
+    // AddMetadataColumns adds them to the source in the join but does not reach this subquery
+    val sourceMetadataAttrs =
+      AttributeSet(source.metadataOutput).intersect(cond.references) -- source.outputSet
+    val filterSource = if (sourceMetadataAttrs.isEmpty) {
+      source
+    } else {
+      addMetadataAttrs(source, sourceMetadataAttrs)
+    }
+    Exists(Filter(condWithOuterRefs, filterSource), outerRefs)
+  }
+
+  // adds the given metadata attributes to the output of a plan like AddMetadataColumns does
+  private def addMetadataAttrs(plan: LogicalPlan, attrs: AttributeSet): LogicalPlan = {
+    plan match {
+      case r: ExposesMetadataColumns if r.metadataOutput.exists(attrs.contains) =>
+        r.withMetadataColumns()
+      case p: Project if p.metadataOutput.exists(attrs.contains) =>
+        val newAttrs = p.metadataOutput.filter(a => attrs.contains(a) && !p.outputSet.contains(a))
+        val newProject = p.copy(
+          projectList = p.projectList ++ newAttrs.map(_.markAsAllowAnyAccess()),
+          child = addMetadataAttrs(p.child, attrs))
+        newProject.copyTagsFrom(p)
+        newProject
+      case _ =>
+        plan.withNewChildren(plan.children.map(addMetadataAttrs(_, attrs)))
+    }
   }
 
   // build a rewrite plan for sources that support row deltas
