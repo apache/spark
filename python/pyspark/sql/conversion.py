@@ -517,6 +517,7 @@ class PandasToArrowConversion:
         import pyarrow as pa
 
         from pyspark.errors import PySparkTypeError, PySparkValueError
+        from pyspark.sql.pandas.conversion import _create_array_from_pandas
         from pyspark.sql.pandas.types import _create_converter_from_pandas, to_arrow_type
 
         field_name = field.name
@@ -543,7 +544,9 @@ class PandasToArrowConversion:
             # trigger the cast fallback when arrow_cast is enabled.
             try:
                 try:
-                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+                    return _create_array_from_pandas(
+                        series, arrow_type, mask=mask, safecheck=safecheck
+                    )
                 except pa.lib.ArrowException:  # broad: includes ArrowTypeError
                     if arrow_cast:
                         return pa.Array.from_pandas(series, mask=mask).cast(
@@ -571,7 +574,9 @@ class PandasToArrowConversion:
             # ArrowTypeError must NOT be silently cast.
             try:
                 try:
-                    return pa.Array.from_pandas(series, mask=mask, type=arrow_type, safe=safecheck)
+                    return _create_array_from_pandas(
+                        series, arrow_type, mask=mask, safecheck=safecheck
+                    )
                 except pa.lib.ArrowInvalid:  # narrow: skip ArrowTypeError
                     if arrow_cast:
                         return pa.Array.from_pandas(series, mask=mask).cast(
