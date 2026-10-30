@@ -19,7 +19,7 @@ package org.apache.spark.sql.internal
 
 import java.util.{Locale, Properties, TimeZone}
 import java.util
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 import java.util.regex.Pattern
 
@@ -66,8 +66,8 @@ object SQLConf {
 
   private[this] val sqlConfEntriesUpdateLock = new Object
 
-  @volatile
-  private[this] var sqlConfEntries: util.Map[String, ConfigEntry[_]] = util.Collections.emptyMap()
+  // Concurrent map so registration does not copy the whole registry and reads stay lock-free.
+  private[this] val sqlConfEntries = new ConcurrentHashMap[String, ConfigEntry[_]]()
 
   // Advanced after every `sqlConfEntries` update, so a reader that sees a version also sees the
   // entries it counts.
@@ -85,17 +85,13 @@ object SQLConf {
     require(!ConfigRegistry.containsConfig(entry.key),
       s"${entry.key} is defined in a .textproto config file. " +
         s"Use buildConfFromConfigFile instead of buildConf.")
-    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
-    updatedMap.put(entry.key, entry)
-    sqlConfEntries = updatedMap
+    sqlConfEntries.put(entry.key, entry)
     sqlConfEntriesVersion += 1
   }
 
   // For testing only
   private[sql] def unregister(entry: ConfigEntry[_]): Unit = sqlConfEntriesUpdateLock.synchronized {
-    val updatedMap = new java.util.HashMap[String, ConfigEntry[_]](sqlConfEntries)
-    updatedMap.remove(entry.key)
-    sqlConfEntries = updatedMap
+    sqlConfEntries.remove(entry.key)
     sqlConfEntriesVersion += 1
   }
 
@@ -134,8 +130,12 @@ object SQLConf {
       s"$settingsVersion, entriesVersion=$entriesVersion, keys=${retained.size})"
   }
 
+  // ConcurrentHashMap rejects null keys; treat a null key as unregistered.
+  private[this] def registeredEntry(key: String): ConfigEntry[_] =
+    if (key == null) null else sqlConfEntries.get(key)
+
   private[internal] def getConfigEntry(key: String): ConfigEntry[_] = {
-    Option(sqlConfEntries.get(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
+    Option(registeredEntry(key)).getOrElse(ConfigEntry.findProtoDefinedEntry(key))
   }
 
   private[sql] def isSessionBindingPolicy(key: String): Boolean = {
@@ -171,7 +171,7 @@ object SQLConf {
   }
 
   private[sql] def containsConfigKey(key: String): Boolean = {
-    sqlConfEntries.containsKey(key) || ConfigRegistry.containsConfig(key)
+    registeredEntry(key) != null || ConfigRegistry.containsConfig(key)
   }
 
   def registerStaticConfigKey(key: String): Unit = staticConfKeysUpdateLock.synchronized {
