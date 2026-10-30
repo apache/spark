@@ -281,6 +281,13 @@ final class NativeLibrary {
     layout.put("SparkDsFinishWriteInfo.rejected", FINISH_WRITE_INFO_REJECTED);
     layout.put("SparkDsFinishDataWriterInfo", FINISH_DATA_WRITER_INFO_SIZE);
     layout.put("SparkDsFinishDataWriterInfo.size", 0L);
+    // The streams of engines, which Spark wraps, see EngineStream.
+    layout.put("ArrowArrayStream", STREAM_SIZE);
+    layout.put("ArrowArrayStream.get_schema", STREAM_GET_SCHEMA);
+    layout.put("ArrowArrayStream.get_next", STREAM_GET_NEXT);
+    layout.put("ArrowArrayStream.get_last_error", STREAM_GET_LAST_ERROR);
+    layout.put("ArrowArrayStream.release", STREAM_RELEASE);
+    layout.put("ArrowArrayStream.private_data", STREAM_PRIVATE_DATA);
     return layout;
   }
 

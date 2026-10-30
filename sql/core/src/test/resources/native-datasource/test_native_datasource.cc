@@ -69,7 +69,8 @@
 // functions that return a state pass it that many times.
 //
 // read fails unless it gets the kind of read of its reader and the schema to read, the columns
-// that the reader returns. create_data_writer fails unless it gets the schema that create_writer
+// that the reader returns, and for a micro-batch, the state that stream_partitions returned with
+// the partition. create_data_writer fails unless it gets the schema that create_writer
 // got, with the same names and formats, and write fails unless its batches have the columns of
 // that schema.
 //
@@ -1148,7 +1149,9 @@ int streamPartitions(void* handle, const SparkDsStreamPartitionsInfo* info,
     auto lo = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     auto hi = static_cast<int64_t>(JsonParser(info->end).parse()["offset"].number);
     if (hi > lo) sendBytes(add_partition, sink, std::to_string(lo) + "," + std::to_string(hi));
-    const Options& state = fromHandle<Reader>(handle)->state;
+    // The state of a micro-batch has its range, which read checks.
+    Options state = fromHandle<Reader>(handle)->state;
+    state["micro_batch"] = std::to_string(lo) + "," + std::to_string(hi);
     sendState(state, set_state, sink, serialize(state));
   });
 }
@@ -1191,6 +1194,11 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
     }
     auto bounds = split(toBytes(info->partition, info->partition_length));
     if (bounds.size() != 2) throw std::runtime_error("invalid partition");
+    std::string micro_batch = get(state, "micro_batch", "");
+    if (!micro_batch.empty() && micro_batch != bounds[0] + "," + bounds[1]) {
+      throw std::runtime_error("read got the partition " + bounds[0] + "," + bounds[1] +
+                               " with the state of the micro-batch " + micro_batch);
+    }
     recordTask(state, task);
     stream->get_schema = streamGetSchema;
     stream->get_next = streamGetNext;

@@ -312,7 +312,7 @@ class NativePartitionReaderFactory(
 
   override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
     NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_BATCH, readerState,
-      partition, readSchema, timeZoneId, streamAddress)
+      partition.asInstanceOf[NativeInputPartition], readSchema, timeZoneId, streamAddress)
   }
 }
 
@@ -329,10 +329,6 @@ class NativeDataSourceStreamReader(
     @transient private val handle: NativeHandle)
   extends ColumnarStreamReader {
   import NativeCalls._
-
-  // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
-  // the executors with the partitions of that micro-batch.
-  private var readerState: Array[Byte] = Array.emptyByteArray
 
   @transient private lazy val library = NativeLibraries.get(location)
 
@@ -371,21 +367,26 @@ class NativeDataSourceStreamReader(
     val planned = call(name, "plan a scan of") {
       library.streamPartitions(handle.get, start, end)
     }
-    readerState = bytesOrEmpty(Option(planned.state))
-    NativeInputPartition.from(planned.partitions)
+    val readerState = bytesOrEmpty(Option(planned.state))
+    NativeInputPartition.from(planned.partitions).map { partition =>
+      NativeMicroBatchPartition(partition.asInstanceOf[NativeInputPartition], readerState)
+    }
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH, readerState,
-      partition.asInstanceOf[NativeInputPartition], schema, timeZoneId)
+    val microBatchPartition = partition.asInstanceOf[NativeMicroBatchPartition]
+    new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH,
+      microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId)
   }
 
   // An engine can also get the Arrow C stream of a partition, see [[SupportsArrowStreamRead]].
   override def readerFactory(): PartitionReaderFactory = {
     new ColumnarStreamPartitionReaderFactory(this) with SupportsArrowStreamRead {
       override def openArrowStream(partition: InputPartition, streamAddress: Long): Unit = {
+        val microBatchPartition = partition.asInstanceOf[NativeMicroBatchPartition]
         NativePartitionReader.openEngineStream(location, name, NativeLibrary.READ_MICRO_BATCH,
-          readerState, partition, schema, timeZoneId, streamAddress)
+          microBatchPartition.readerState, microBatchPartition.partition, schema, timeZoneId,
+          streamAddress)
       }
     }
   }
@@ -490,6 +491,15 @@ object NativeInputPartition {
     }
   }
 }
+
+/**
+ * A partition of a micro-batch, with the state that the stream reader returned with the
+ * partitions of the micro-batch. The state changes with each micro-batch, so it goes with the
+ * partitions rather than with the reader factory, which an engine may keep while Spark plans the
+ * next micro-batch.
+ */
+case class NativeMicroBatchPartition(partition: NativeInputPartition, readerState: Array[Byte])
+  extends InputPartition
 
 /** The message returned by the data writer of a task of a native library. */
 case class NativeWriterCommitMessage(bytes: Array[Byte]) extends WriterCommitMessage
@@ -884,7 +894,7 @@ object NativePartitionReader {
       name: String,
       kind: Int,
       readerState: Array[Byte],
-      partition: InputPartition,
+      partition: NativeInputPartition,
       schema: StructType,
       timeZoneId: String,
       streamAddress: Long): Unit = {
@@ -897,9 +907,8 @@ object NativePartitionReader {
       throw new IllegalArgumentException(
         "openArrowStream needs the address of a stream whose release callback is NULL.")
     }
-    val task = openStream(location, name, kind, readerState,
-      partition.asInstanceOf[NativeInputPartition], schema, timeZoneId, streamAddress,
-      mayOutliveTask = true)
+    val task = openStream(location, name, kind, readerState, partition, schema, timeZoneId,
+      streamAddress, mayOutliveTask = true)
     try {
       NativeLibrary.wrapEngineStream(streamAddress, task, name)
     } catch {
@@ -921,7 +930,7 @@ object NativePartitionReader {
    * @param mayOutliveTask whether an engine may read the stream after the task ended, see
    *                       `NativeTask.create`
    */
-  def openStream(
+  private[ffi] def openStream(
       location: NativeLibraryLocation,
       name: String,
       kind: Int,
@@ -961,7 +970,10 @@ object NativePartitionReader {
    * the task that it may use, and marks it released in case its release callback did not. A
    * failure to clean up is added to `failure`.
    */
-  def releaseOnFailure(failure: Throwable, streamAddress: Long, task: NativeLibrary.Task): Unit = {
+  private[ffi] def releaseOnFailure(
+      failure: Throwable,
+      streamAddress: Long,
+      task: NativeLibrary.Task): Unit = {
     try {
       Utils.tryWithSafeFinally {
         val stream = ArrowArrayStream.wrap(streamAddress)

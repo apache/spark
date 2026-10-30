@@ -379,8 +379,8 @@ typedef struct SparkDsCommitOffsetInfo {
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
  * that read returns is released, or until the data writer is closed. An engine that runs a query
- * in native code may get the stream of read from Spark. It reads the stream in the task that
- * opened it, but may release it once the task ended, from another thread: the task stays valid
+ * in native code may get the stream that read returns from Spark. It reads the stream in the task
+ * that opened it, but may release it once the task ended, from another thread: the task stays valid
  * until then too, and is_interrupted then also returns true once the task failed or completed, so
  * the library may stop reading then. Such an engine may also keep the arrays of the stream after
  * it released the stream, so the release of an array must not use the stream or the task.
@@ -394,7 +394,8 @@ typedef struct SparkDsTaskContext {
   /*
    * The partition: for read, the index of the partition in the list that partitions or
    * stream_partitions returned, which is not the partition of the task when Spark reads several
-   * scans or partitions in one task, for example after a union or a coalesce. For
+   * scans or partitions in one task, for example after a union or a coalesce. It is unique within
+   * a scan, but a task that reads several scans may get the same index for each. For
    * create_data_writer, the partition of the task that writes. Then the attempt number of the
    * task.
    */

@@ -29,10 +29,12 @@ import org.apache.spark.annotation.Evolving;
  * returns.
  * <p>
  * Each array of the stream is a struct array whose fields are the columns of the read schema of
- * the scan. Spark does not check the stream, while it checks the streams that it reads itself, so
- * the engine checks what its import of the arrays requires, such as the schema of the stream
- * against the read schema, and the offsets and the lengths of the arrays. The callbacks of the
- * stream can be called from any thread, but never concurrently.
+ * the scan. Spark only checks that the source initialized the callbacks of the stream, not its
+ * arrays, while it checks the arrays of the streams that it reads itself, so the engine checks
+ * what its import of the arrays requires, such as the schema of the stream against the read
+ * schema, and the offsets and the lengths of the arrays. The callbacks of the stream can be called
+ * from any thread, but never concurrently. They call into the JVM, so the engine releases the
+ * stream before the JVM exits.
  *
  * @since 4.4.0
  */
