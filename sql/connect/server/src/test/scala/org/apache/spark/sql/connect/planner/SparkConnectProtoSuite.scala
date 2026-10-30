@@ -31,8 +31,9 @@ import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent}
 import org.apache.spark.sql.{AnalysisException, Column, Observation, Row, SaveMode}
 import org.apache.spark.sql.catalyst.analysis
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, GenericInternalRow, UnresolvedInSubqueryPlanId, UnsafeProjection}
+import org.apache.spark.sql.catalyst.optimizer.RewriteAsOfJoin
 import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftAnti, LeftOuter, LeftSemi, PlanTest, RightOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{AsOfJoin, CollectMetrics, Deduplicate, DeduplicateWithinWatermark, Distinct, LocalRelation, LogicalPlan}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.classic.ClassicConversions._
 import org.apache.spark.sql.classic.DataFrame
@@ -1103,6 +1104,52 @@ class SparkConnectProtoSuite extends PlanTest with SparkConnectPlanTest {
               .setStratum(toLiteralProto("a"))
               .setFraction(0.5)))
         .build()
+    }
+  }
+
+  gridTest("joinAsOf resolves Connect keys with both analyzers")(Seq(false, true)) { singlePass =>
+    withSQLConf(
+      SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "true",
+      SQLConf.SESSION_LOCAL_TIMEZONE.key -> "America/Los_Angeles",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString,
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED_TENTATIVELY.key -> "false",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLE_ASOF_JOIN_RESOLUTION.key -> "true") {
+      for ((leftType, rightType, comparisonType) <- Seq(
+          (IntegerType, LongType, LongType),
+          (TimestampNTZType, TimestampType, TimestampType),
+          (TimestampType, TimestampNTZType, TimestampType),
+          (StringType, StringType, StringType))) {
+        val left = createLocalRelationProto(
+          attrs = Seq(AttributeReference("lk", leftType)()),
+          data = Seq.empty)
+        val right = createLocalRelationProto(
+          attrs = Seq(AttributeReference("rk", rightType)()),
+          data = Seq.empty)
+        val relation = proto.Relation
+          .newBuilder()
+          .setAsOfJoin(
+            proto.AsOfJoin
+              .newBuilder()
+              .setLeft(left)
+              .setRight(right)
+              .setLeftAsOf("lk".protoAttr)
+              .setRightAsOf("rk".protoAttr)
+              .setJoinType("inner")
+              .setAllowExactMatches(true)
+              .setDirection("backward"))
+          .build()
+        val analyzed = spark.sessionState.executePlan(transform(relation)).analyzed
+        val join = analyzed.collectFirst { case j: AsOfJoin => j }.get
+        assert(join.leftSortExprs.head.dataType == leftType)
+        val rightSortType = if (comparisonType == TimestampType) TimestampType else rightType
+        assert(join.rightSortExprs.head.dataType == rightSortType)
+        assert(join.asOfCondition.children.map(_.dataType) == Seq(comparisonType, comparisonType))
+
+        withSQLConf(SQLConf.SORT_MERGE_AS_OF_JOIN_ENABLED.key -> "false") {
+          comparePlans(RewriteAsOfJoin(analyzed), analyzed)
+        }
+      }
     }
   }
 

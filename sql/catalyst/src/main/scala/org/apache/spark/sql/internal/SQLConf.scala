@@ -1165,8 +1165,10 @@ object SQLConf {
   val SORT_MERGE_AS_OF_JOIN_ENABLED =
     buildConf("spark.sql.join.sortMergeAsOfJoin.enabled")
       .internal()
-      .doc("When true, use a dedicated sort-merge physical operator for AS-OF joins " +
-        "instead of rewriting to a correlated subquery. The sort-merge operator evaluates " +
+      .doc("When true, use a dedicated sort-merge physical operator for DataFrame AS-OF joins " +
+        "instead of rewriting to a correlated subquery. The strategy is selected during " +
+        "analysis; later changes to this setting do not affect already analyzed joins. " +
+        "SQL AS-OF joins always use sort-merge. The sort-merge operator evaluates " +
         "AS-OF joins in O(N log N) by co-sorting both sides on the as-of key and scanning " +
         "in a single pass.")
       .version("4.3.0")
@@ -5582,8 +5584,10 @@ object SQLConf {
         "the columnar-based operator implemented by third-party libraries. Spark will try to " +
         "create batches with the size equal or less than this value. Normally it should not " +
         "happen, but if in extreme case that even one record is still larger than this value, " +
-        "Spark will create a batch with one record. applyInPandasWithState, Arrow Python " +
-        "UDTFs and Arrow Python UDFs that take columnar input directly ignore this config.")
+        "Spark will create a batch with one record. A batch that Arrow cannot slice, e.g. one " +
+        "with a fixed-width column of 2 GiB or more, is sent as a whole. " +
+        "applyInPandasWithState, Arrow Python UDTFs and Arrow Python UDFs that " +
+        "take columnar input directly ignore this config.")
       .version("4.1.0")
       .internal()
       .bytesConf(ByteUnit.BYTE)
@@ -9024,6 +9028,18 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS =
+    buildConf("spark.sql.legacy.ignoreMetadataColumnAssignments")
+      .internal()
+      .doc("When true, UPDATE and MERGE on a Data Source V2 table do not reject assignments to " +
+        "metadata columns of the table, as in Spark 4.3 and earlier, where such assignments " +
+        "passed analysis and were usually ignored. When false, such assignments fail analysis, " +
+        "because the values of metadata columns are produced by the data source.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.SESSION)
+      .booleanConf
+      .createWithDefault(false)
+
   val TIME_TYPE_ENABLED =
     buildConf("spark.sql.timeType.enabled")
       .internal()
@@ -9788,14 +9804,6 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def sqlAsOfJoinEnabled: Boolean = getConf(SQL_ASOF_JOIN_ENABLED)
 
-  /**
-   * Whether to keep [[AsOfJoin]] for the sort-merge physical operator instead of the
-   * correlated-subquery rewrite. SQL ASOF JOIN always requires sort-merge; the DataFrame
-   * API is gated separately on [[sortMergeAsOfJoinEnabled]].
-   */
-  def useSortMergeAsOfJoinOperator(requiresSortMergeAsOfJoin: Boolean): Boolean =
-    sortMergeAsOfJoinEnabled || requiresSortMergeAsOfJoin
-
   def enableRadixSort: Boolean = getConf(RADIX_SORT_ENABLED)
 
   def isParquetSchemaMergingEnabled: Boolean = getConf(PARQUET_SCHEMA_MERGING_ENABLED)
@@ -10114,7 +10122,10 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def arrowMaxRecordsPerOutputBatch: Int = getConf(ARROW_EXECUTION_MAX_RECORDS_PER_OUTPUT_BATCH)
 
-  def arrowMaxBytesPerOutputBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH)
+  // Zero or negative means no limit; clamp it so that a value below Int.MinValue does not wrap
+  // around to a positive limit when narrowed to an int.
+  def arrowMaxBytesPerOutputBatch: Long =
+    math.max(getConf(ARROW_EXECUTION_MAX_BYTES_PER_OUTPUT_BATCH), 0L)
 
   def arrowMaxBytesPerBatch: Long = getConf(ARROW_EXECUTION_MAX_BYTES_PER_BATCH)
 
