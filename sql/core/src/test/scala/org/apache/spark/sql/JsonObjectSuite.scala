@@ -32,7 +32,7 @@ import org.apache.spark.sql.catalyst.expressions.{
   JsonConstructorNullBehavior,
   JsonObjectExpr,
   Literal,
-  UnresolvedJsonObject
+  UnresolvedJsonConstructor
 }
 import org.apache.spark.sql.catalyst.parser.{ParseException, SparkParserBailErrorStrategy, SqlBaseLexer, SqlBaseParser}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, Join}
@@ -1324,6 +1324,15 @@ world'))"""))
           }
           assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"for $body")
         }
+        // Stock-owned (clause-bearing or FORMAT JSON) bodies do not reference the temp shadow.
+        Seq(
+          "json_object('a' VALUE 1 NULL ON NULL)" -> """{"a":1}""",
+          "json_object('a' VALUE json_object('b' VALUE 1) ABSENT ON NULL)" -> """{"a":{"b":1}}""",
+          "json_object('id' VALUE '[1]' FORMAT JSON)" -> """{"id":[1]}"""
+        ).foreach { case (body, expected) =>
+          sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+          checkAnswer(sql("SELECT spark_catalog.default.perm_json_fn()"), Row(expected))
+        }
       } finally {
         sql("SET PATH = DEFAULT_PATH")
         sql("DROP FUNCTION IF EXISTS perm_json_fn")
@@ -1442,8 +1451,69 @@ world'))"""))
         sql(
           """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
             |SELECT builtin.json_object('a', json_object('b', 1)) AS q,
-            |       json_object('a', json_object('b', 1)) AS u""".stripMargin)
-        checkAnswer(spark.table("t"), Row("""{"a":{"b":1}}""", """{"a":{"b":1}}"""))
+            |       json_object('a', json_object('b', 1)) AS u,
+            |       builtin.json_object('a', json_object('b', 1) COLLATE UNICODE) AS c
+            |""".stripMargin)
+        val expected = """{"a":{"b":1}}"""
+        checkAnswer(spark.table("t"), Row(expected, expected, expected))
+      }
+    }
+  }
+
+  test("SPARK-59243: routed/qualified JSON_OBJECT splices under a view default collation") {
+    // Reading the view re-analyzes it (under dual-run in tests), so both analyzers must see
+    // through their own default-collation casts, including one under a user COLLATE.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withView("v") {
+        sql(
+          """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT builtin.json_object('a', json_object('b', 1)) AS q,
+            |       json_object('a', json_object('b', 1)) AS u,
+            |       json_object('a' VALUE builtin.json_object('b', 1)) AS v,
+            |       builtin.json_object('a', json_object('b', 1) COLLATE UNICODE) AS c
+            |""".stripMargin)
+        val expected = """{"a":{"b":1}}"""
+        checkAnswer(spark.table("v"), Row(expected, expected, expected, expected))
+        val schema = spark.table("v").schema
+        Seq("q", "u", "v").foreach { c =>
+          assert(schema(c).dataType === StringType("UTF8_LCASE"), s"for $c")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59243: a shadowed nested call keeps the owner's type under a default collation") {
+    // A routed wrapper stands for an ordinary call until its owner is known, so the default
+    // collation must not cast a shadow's result: each nested spelling matches the flat call.
+    withSQLConf(
+      SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true",
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      Seq("INT" -> "7" -> 7, "STRING" -> "'shadowed'" -> "shadowed").foreach {
+        case ((returnType, body), value) =>
+          try {
+            sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) " +
+              s"RETURNS $returnType RETURN $body")
+            sql("SET PATH = system.session, system.builtin")
+            withTable("t") {
+              sql(
+                """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
+                  |SELECT json_object('a', json_object('b', 1)) AS comma,
+                  |       json_object('a' VALUE json_object('b' VALUE 1)) AS value,
+                  |       json_object('a': json_object('b': 1)) AS colon,
+                  |       json_object('a', 'x') AS flat""".stripMargin)
+              // Read back on the default path, which reaches the current schema.
+              sql("SET PATH = DEFAULT_PATH")
+              val schema = spark.table("t").schema
+              Seq("comma", "value", "colon").foreach { c =>
+                assert(schema(c).dataType === schema("flat").dataType, s"$c for $returnType")
+              }
+              checkAnswer(spark.table("t"), Row(value, value, value, value))
+            }
+          } finally {
+            sql("SET PATH = DEFAULT_PATH")
+            sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+          }
       }
     }
   }
@@ -1558,8 +1628,8 @@ world'))"""))
       Seq(
         "SELECT json_object('id', 7)",
         "SELECT json_object('vals', array(*)) FROM VALUES (1, 2) AS t(a, b)",
-        // A routed nested producer keeps its raw-splice flag in UnresolvedJsonObject until the
-        // stock built-in path finalizes it.
+        // A routed nested producer keeps its raw-splice flag in UnresolvedRoutedJsonObject until
+        // the stock built-in path finalizes it.
         "SELECT json_object('a', json_object('b', 1))",
         "SELECT json_object('a' VALUE json_object('b' VALUE 1), " +
           "'c' VALUE builtin.json_object('d', 2))"
@@ -1572,7 +1642,7 @@ world'))"""))
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
           s"star should not survive analysis for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(
-          _.isInstanceOf[UnresolvedJsonObject]))),
+          _.isInstanceOf[UnresolvedJsonConstructor]))),
           s"wrapper should not survive analysis for $query")
         // The wrapper must preserve rawJson = true, not merely disappear: otherwise the nested
         // object would be quoted instead of spliced raw.

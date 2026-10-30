@@ -709,7 +709,6 @@ class Analyzer(
       ResolveAliases ::
       ResolveSubquery ::
       ResolveSubqueryColumnAliases ::
-      ResolveJsonConstructors ::
       ApplyDefaultCollation ::
       ResolveWindowOrder ::
       ResolveWindowFrame ::
@@ -2500,47 +2499,17 @@ class Analyzer(
   }
 
   /**
-   * Resolves unresolved SQL/JSON constructors before `ApplyDefaultCollation` so built-ins
-   * materialize in time to be recolored. Parse-time flags keep lexical nested constructors and
-   * explicit `FORMAT JSON`; resolved children recover qualified/routed nested constructors that
-   * were not visible to the parser.
-   */
-  object ResolveJsonConstructors extends Rule[LogicalPlan] {
-    // Finalize bottom-up and set the built-in's time zone as it materializes, so a nested wrapper
-    // is a resolved child before its parent in the same pass. Otherwise the `childrenResolved`
-    // guard peels one nesting level per iteration (depth-scaled, risking analyzer maxIterations).
-    def apply(plan: LogicalPlan): LogicalPlan = plan.resolveExpressionsUpWithPruning(
-      _.containsPattern(UNRESOLVED_JSON_CONSTRUCTOR)) {
-      case j: UnresolvedJsonConstructor =>
-        if (functionResolution.routesJsonConstructorToFunction(j)) {
-          // A shadow/replacement owns the name: resolve as an ordinary call, like the flat path.
-          j.toUnresolvedFunction
-        } else {
-          val directStars = j.arguments.collect { case s: Star => s }
-          if (directStars.nonEmpty) {
-            throw QueryCompilationErrors.invalidStarUsageError(
-              s"expression `${j.prettyName}`", directStars)
-          } else if (!j.childrenResolved) {
-            // Wait for children that can later become JSON producers, e.g. qualified constructors
-            // inside a higher-order-function lambda whose variables bind later in this batch.
-            j
-          } else {
-            j.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
-          }
-        }
-    }
-  }
-
-  /**
    * Replaces [[UnresolvedFunctionName]]s with concrete [[LogicalPlan]]s.
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedGenerator]]s with concrete [[Expression]]s.
    * Replaces [[UnresolvedTableValuedFunction]]s with concrete [[LogicalPlan]]s.
+   * Replaces [[UnresolvedJsonConstructor]]s with the owning call or the stock built-in.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsUpWithPruning(
       _.containsAnyPattern(UNRESOLVED_FUNC, UNRESOLVED_FUNCTION, GENERATOR,
-        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES), ruleId) {
+        UNRESOLVED_TABLE_VALUED_FUNCTION, UNRESOLVED_TVF_ALIASES, UNRESOLVED_JSON_CONSTRUCTOR),
+      ruleId) {
       // Resolve scalar/table functions and get the function metadata for DESCRIBE FUNCTION.
       case u @ UnresolvedFunctionName(nameParts, _, _) =>
         functionResolution.lookupBuiltinOrTempFunction(nameParts, None)
@@ -2652,18 +2621,39 @@ class Analyzer(
 
       case q: LogicalPlan =>
         q.transformExpressionsUpWithPruning(
-          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
+          _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR, UNRESOLVED_JSON_CONSTRUCTOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _)
-              if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
-            functionResolution.resolveFunction(u) match {
-              case func: HigherOrderFunction => func
-              case other => other.failAnalysis(
-                errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
-                messageParameters = Map(
-                  "class" -> other.getClass.getCanonicalName))
+          case u @ UnresolvedFunction(_, arguments, _, _, _, _, _, _)
+              if functionResolution.hasLambdaAndResolvedArguments(arguments) =>
+            resolveHigherOrderFunction(u)
+
+          // Decide a SQL/JSON constructor's owner in this same bottom-up pass, so an enclosing call
+          // and its alias see the result without an extra iteration per nesting level.
+          case j: UnresolvedJsonConstructor
+              if functionResolution.routesJsonConstructorToFunction(j) =>
+            // A shadow/replacement owns the name: resolve exactly like the flat call.
+            val u = j.toUnresolvedFunction
+            if (functionResolution.hasLambdaAndResolvedArguments(u.arguments)) {
+              resolveHigherOrderFunction(u)
+            } else if (!u.childrenResolved) {
+              u
+            } else {
+              functionResolution.resolveFunction(u)
             }
-          }
+
+          case j: UnresolvedJsonConstructor =>
+            val directStars = j.arguments.collect { case s: Star => s }
+            if (directStars.nonEmpty) {
+              throw QueryCompilationErrors.invalidStarUsageError(
+                s"expression `${j.prettyName}`", directStars)
+            } else if (!j.childrenResolved) {
+              // Wait for children that can later become JSON producers, e.g. qualified
+              // constructors inside a lambda whose variables bind later in this batch.
+              j
+            } else {
+              // Set the time zone now so the constructor is resolved before its parent.
+              j.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
+            }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.
 
@@ -2699,6 +2689,16 @@ class Analyzer(
               newChildren, u.evalType, u.udfDeterministic, u.resultId, None, u.tableArguments)
           }
         }
+    }
+
+    private def resolveHigherOrderFunction(u: UnresolvedFunction): Expression = withPosition(u) {
+      functionResolution.resolveFunction(u) match {
+        case func: HigherOrderFunction => func
+        case other => other.failAnalysis(
+          errorClass = "INVALID_LAMBDA_FUNCTION_CALL.NON_HIGHER_ORDER_FUNCTION",
+          messageParameters = Map(
+            "class" -> other.getClass.getCanonicalName))
+      }
     }
   }
 

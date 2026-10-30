@@ -1336,17 +1336,20 @@ object ImplicitlyFormattedAsJson {
   /**
    * The routed/qualified splice decision made by `JsonArrayExpressionBuilder` /
    * `JsonObjectExpressionBuilder` on a resolved argument. Like [[isImplicitlyJson]], but also sees
-   * through an analyzer-inserted collation `Cast`: under an object/view default collation,
-   * `ApplyDefaultCollation` wraps a nested producer in a `Cast` to the default `StringType` before
-   * the builder runs, which would otherwise hide the producer and quote it (unlike the direct
-   * grammar path, which freezes the decision at parse time). Only a genuine collation change is
-   * unwrapped (the cast recolors existing JSON text); a user `CAST(... AS STRING)` or the
-   * `string(...)` alias still detaches, so the explicit-cast quoting is preserved.
+   * through an analyzer-inserted collation `Cast`, in any interleaving with `Collate`: under an
+   * object/view default collation, `ApplyDefaultCollation` wraps a nested producer (also one under
+   * a user `COLLATE`) in a `Cast` to the default `StringType` before the builder runs, which would
+   * otherwise hide the producer and quote it. The stock-owned grammar wrappers apply the same
+   * predicate when they finalize their flags. Only a genuine collation change is unwrapped (the
+   * cast recolors existing JSON text); a user `CAST(... AS STRING)` or the `string(...)` alias
+   * still detaches, so the explicit-cast quoting is preserved.
    */
   @scala.annotation.tailrec
   def splicesThroughCollationCast(e: Expression): Boolean = e match {
+    case c: Collate => splicesThroughCollationCast(c.child)
     case c: Cast if isAnalyzerCollationCast(c) => splicesThroughCollationCast(c.child)
-    case _ => isImplicitlyJson(e)
+    case i: ImplicitlyFormattedAsJson => i.emitsImplicitJsonText
+    case _ => false
   }
 
   private def isAnalyzerCollationCast(c: Cast): Boolean = {
@@ -1375,12 +1378,12 @@ object ImplicitlyFormattedAsJson {
  * RETURNING defaults to STRING.
  *
  * `formatJson(i)` marks element `i` as already-JSON text (SQL/JSON `FORMAT JSON`), so it is spliced
- * in verbatim instead of quoted as a string. It is set once, at parse time, from the lexical
- * argument -- implicitly for a nested JSON constructor and explicitly for a `... FORMAT JSON`
- * clause -- and is a plain field (not a child), so optimizer rewrites that swap the child
- * expression (e.g. `CollapseProject`) leave it unchanged. This keeps the output independent of plan
- * shape: a value is spliced iff it was written as JSON in the source, never because a rewrite
- * happened to substitute a JSON constructor into an argument position.
+ * in verbatim instead of quoted as a string. The parser sets it from the lexical argument --
+ * implicitly for a nested JSON constructor and explicitly for a `... FORMAT JSON` clause -- and
+ * analysis adds a splice for a resolved qualified/routed stock constructor child before this node
+ * is built. It is a plain field (not a child) and frozen once the node exists, so optimizer
+ * rewrites that swap the child expression (e.g. `CollapseProject`) leave it unchanged: a value is
+ * never spliced because a rewrite happened to substitute a JSON constructor into an argument.
  *
  * {{{
  *   JSON_ARRAY(1, 'x', true)                    -- '[1,"x",true]'
@@ -1411,11 +1414,12 @@ case class JsonArray(
 
   // `formatJson(i)` freezes whether element `i` is spliced raw (vs quoted); `needsValidation(i)`
   // freezes whether its raw text is arbitrary user input that must be JSON-validated at eval (an
-  // explicit `FORMAT JSON` on a non-constructor). Both are decided from the lexical argument at
-  // parse time (see `AstBuilder.visitJsonArray`) and never re-derived from the child expression,
-  // so an analyzer/optimizer rewrite that wraps a child (e.g. a default-collation `Cast` around a
-  // trusted nested constructor) cannot flip splicing or spuriously mark a trusted value as needing
-  // validation. A validated element implies a spliced one.
+  // explicit `FORMAT JSON` on a non-constructor). Both are finalized before this node is built
+  // (see `AstBuilder.visitJsonArray` and `StockJsonConstructor.finalizeFlags`) and never
+  // re-derived from the child expression afterward, so an analyzer/optimizer rewrite that wraps a
+  // child (e.g. a default-collation `Cast` around a trusted nested constructor) cannot flip
+  // splicing or spuriously mark a trusted value as needing validation. A validated element implies
+  // a spliced one.
   assert(values.length == formatJson.length && values.length == needsValidation.length,
     "JsonArray requires one formatJson and one needsValidation flag per value")
   assert(needsValidation.lazyZip(formatJson).forall((nv, fj) => !nv || fj),
@@ -1638,7 +1642,7 @@ case class JsonArray(
           // nested JSON constructor emits well-formed JSON by construction, but an explicit FORMAT
           // JSON string is arbitrary user input, so validate it is exactly one well-formed JSON
           // value before splicing to avoid corrupting the surrounding array. Whether validation is
-          // needed is the frozen parse-time `needsValidation(i)`, not a re-derivation from the
+          // needed is the frozen `needsValidation(i)` flag, not a re-derivation from the
           // (possibly rewritten) child -- an analyzer cast around a trusted nested constructor must
           // not turn into a spurious per-row validation.
           sb.append(formatJsonText(i, v))
@@ -1765,16 +1769,12 @@ object JsonArray {
  * resolution: parser flags keep explicit `FORMAT JSON` and lexical nested constructors, and the
  * resolved children add qualified/routed nested constructors the parser cannot see.
  *
- * A clause-free call sets `routeThroughResolution` so a same-named routine (or an `injectFunction`
- * replacement) can shadow it; it then resolves as a plain `prettyName(arguments...)` call. Other
- * calls are owned by the stock built-in.
+ * [[StockJsonConstructor]]s are owned by the stock built-in. [[RoutedJsonConstructor]]s are
+ * clause-free calls a same-named routine (or an `injectFunction` replacement) can shadow; they then
+ * resolve as a plain `prettyName(arguments...)` call.
  */
-trait UnresolvedJsonConstructor
-  extends Unevaluable
-  with DefaultStringProducingExpression
-  with ImplicitlyFormattedAsJson {
+sealed trait UnresolvedJsonConstructor extends Unevaluable with ImplicitlyFormattedAsJson {
   def routeThroughResolution: Boolean
-  def returning: DataType
   /** The flattened argument list a routed call passes to a same-named routine. */
   def arguments: Seq[Expression] = children
   /** The stock built-in over the current children, with splice flags finalized. */
@@ -1783,13 +1783,22 @@ trait UnresolvedJsonConstructor
   def toUnresolvedFunction: UnresolvedFunction =
     UnresolvedFunction(prettyName, arguments, isDistinct = false)
 
+  override def dataType: DataType = throw new UnresolvedException("dataType")
+  override def nullable: Boolean = throw new UnresolvedException("nullable")
+  override lazy val resolved: Boolean = false
+  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_JSON_CONSTRUCTOR)
+}
+
+/** An [[UnresolvedJsonConstructor]] the stock built-in owns (clause-bearing or `FORMAT JSON`). */
+sealed trait StockJsonConstructor
+  extends UnresolvedJsonConstructor
+  with DefaultStringProducingExpression {
+  def returning: DataType
+  final override def routeThroughResolution: Boolean = false
   // Report the actual RETURNING type (not the default from `DefaultStringProducingExpression`) so
   // `ApplyDefaultCollation` sees an explicit `RETURNING STRING COLLATE c` on this still-unresolved
   // node and does not recolor it to the object/view default.
   override def dataType: DataType = returning
-  override def nullable: Boolean = throw new UnresolvedException("nullable")
-  override lazy val resolved: Boolean = false
-  final override val nodePatterns: Seq[TreePattern] = Seq(UNRESOLVED_JSON_CONSTRUCTOR)
 
   // A parser flag stays set; a resolved child that splices through a collation cast adds one.
   // An added splice is a trusted constructor, so it never needs validation.
@@ -1802,14 +1811,22 @@ trait UnresolvedJsonConstructor
   }
 }
 
+/**
+ * An [[UnresolvedJsonConstructor]] whose owner is not known until resolution. Deliberately not a
+ * `DefaultStringProducingExpression`: until a routine is ruled out it stands for an ordinary call,
+ * so default-collation rules must not cast it (a shadow keeps its own result type).
+ */
+sealed trait RoutedJsonConstructor extends UnresolvedJsonConstructor {
+  final override def routeThroughResolution: Boolean = true
+}
+
 case class UnresolvedJsonArray(
     values: Seq[Expression],
     formatJson: Seq[Boolean],
     needsValidation: Seq[Boolean],
     nullBehavior: JsonConstructorNullBehavior,
-    returning: DataType,
-    routeThroughResolution: Boolean)
-  extends UnresolvedJsonConstructor {
+    returning: DataType)
+  extends StockJsonConstructor {
   assert(values.length == formatJson.length && values.length == needsValidation.length,
     "UnresolvedJsonArray requires one formatJson and one needsValidation flag per value")
   assert(needsValidation.lazyZip(formatJson).forall((nv, fj) => !nv || fj),
@@ -1827,14 +1844,28 @@ case class UnresolvedJsonArray(
   }
 }
 
+/** A clause-free `JSON_ARRAY(...)` with a lexically nested constructor (see [[JsonArray]]). */
+case class UnresolvedRoutedJsonArray(values: Seq[Expression], formatJson: Seq[Boolean])
+  extends RoutedJsonConstructor {
+  assert(values.length == formatJson.length,
+    "UnresolvedRoutedJsonArray requires one formatJson flag per value")
+  override def children: Seq[Expression] = values
+  override def prettyName: String = "json_array"
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedRoutedJsonArray = copy(values = newChildren)
+
+  override def toBuiltin: JsonArray = UnresolvedJsonArray(
+    values, formatJson, values.map(_ => false), JsonConstructorNullBehavior.Absent, StringType
+  ).toBuiltin
+}
+
 case class UnresolvedJsonObject(
     members: Seq[(Expression, Expression)],
     rawJson: Seq[Boolean],
     needsValidation: Seq[Boolean],
     nullBehavior: JsonConstructorNullBehavior,
-    returning: DataType,
-    routeThroughResolution: Boolean)
-  extends UnresolvedJsonConstructor {
+    returning: DataType)
+  extends StockJsonConstructor {
   assert(members.length == rawJson.length && members.length == needsValidation.length,
     "UnresolvedJsonObject requires one rawJson and one needsValidation flag per member")
   @transient private lazy val childrenSeq: Seq[Expression] =
@@ -1842,16 +1873,32 @@ case class UnresolvedJsonObject(
   override def children: Seq[Expression] = childrenSeq
   override def prettyName: String = "json_object"
   override protected def withNewChildrenInternal(
-      newChildren: IndexedSeq[Expression]): UnresolvedJsonObject = {
-    val newMembers = newChildren.grouped(2).map { case Seq(k, v) => (k, v) }.toSeq
-    copy(members = newMembers)
-  }
+      newChildren: IndexedSeq[Expression]): UnresolvedJsonObject =
+    copy(members = newChildren.grouped(2).map { case Seq(k, v) => (k, v) }.toSeq)
 
   override def toBuiltin: JsonObjectExpr = {
     val (finalRawJson, finalNeedsValidation) =
       finalizeFlags(rawJson, needsValidation, members.map(_._2))
     JsonObjectExpr(members, finalRawJson, finalNeedsValidation, nullBehavior, returning)
   }
+}
+
+/** A clause-free `JSON_OBJECT(...)` with a lexically nested producer value. */
+case class UnresolvedRoutedJsonObject(members: Seq[(Expression, Expression)], rawJson: Seq[Boolean])
+  extends RoutedJsonConstructor {
+  assert(members.length == rawJson.length,
+    "UnresolvedRoutedJsonObject requires one rawJson flag per member")
+  @transient private lazy val childrenSeq: Seq[Expression] =
+    members.flatMap { case (k, v) => Seq(k, v) }
+  override def children: Seq[Expression] = childrenSeq
+  override def prettyName: String = "json_object"
+  override protected def withNewChildrenInternal(
+      newChildren: IndexedSeq[Expression]): UnresolvedRoutedJsonObject =
+    copy(members = newChildren.grouped(2).map { case Seq(k, v) => (k, v) }.toSeq)
+
+  override def toBuiltin: JsonObjectExpr = UnresolvedJsonObject(
+    members, rawJson, members.map(_ => false), JsonConstructorNullBehavior.Null, StringType
+  ).toBuiltin
 }
 
 // Built-in forms for the plain SQL/JSON constructor and path-function calls that `AstBuilder`
@@ -2563,7 +2610,8 @@ case class JsonObjectExpr(
   // `rawJson(i)` splices member `i`'s value verbatim (already-JSON text) rather than quoting it;
   // `needsValidation(i)` marks that raw text as arbitrary user input to JSON-validate at eval (an
   // explicit `FORMAT JSON` on a non-constructor). Both are finalized before this node is built (see
-  // `AstBuilder.visitJsonObject` and `ResolveJsonConstructors`). A validated value is always raw.
+  // `AstBuilder.visitJsonObject` and `StockJsonConstructor.finalizeFlags`). A validated value is
+  // always raw.
   require(members.length == rawJson.length && members.length == needsValidation.length,
     "JsonObjectExpr requires one rawJson and one needsValidation flag per member")
   require(needsValidation.lazyZip(rawJson).forall((nv, raw) => !nv || raw),
