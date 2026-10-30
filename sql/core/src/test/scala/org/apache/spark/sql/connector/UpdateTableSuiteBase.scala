@@ -545,6 +545,44 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
+  test("SPARK-60721: update with assignments to metadata columns") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    Seq(
+      s"UPDATE $tableNameAsString SET index = 5 WHERE pk = 1" -> "index",
+      s"UPDATE $tableNameAsString t SET t.id = -1, t._partition = 'x' WHERE t.pk = 1" ->
+        "_partition",
+      // the implicit cast in the condition resolves the command in a later analyzer iteration
+      s"UPDATE $tableNameAsString SET index = 5 WHERE id < 1.5" -> "index"
+    ).foreach { case (updateStmt, metadataCol) =>
+      val e = intercept[AnalysisException](sql(updateStmt))
+      assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+      assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-60721: update ignores assignments to metadata columns in legacy mode") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(s"UPDATE $tableNameAsString SET id = -1, index = 5 WHERE pk = 1")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
   test("update with IN subqueries") {
     withTempView("updated_id", "updated_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
@@ -913,6 +951,50 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
         Row(3, Row("x  ", "y"), "hr") :: Nil)
 
     checkUpdateMetrics(numUpdatedRows = 2, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with metadata columns") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    sql(s"UPDATE $tableNameAsString SET id = -1 WHERE id IN (1, 2) AND _partition = 'hr'")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 1)
+
+    sql(s"UPDATE $tableNameAsString t SET t.id = t.index + 10 WHERE t.pk = 2")
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 10, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
+    checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
+  }
+
+  test("SPARK-60708: update char/varchar table with an outer metadata reference") {
+    createTable("pk INT NOT NULL, id INT, dep STRING, name VARCHAR(10)")
+
+    append("pk INT NOT NULL, id INT, dep STRING, name STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr", "name": "a" }
+        |{ "pk": 2, "id": 2, "dep": "software", "name": "b" }
+        |{ "pk": 3, "id": 3, "dep": "hr", "name": "c" }
+        |""".stripMargin)
+
+    withTempView("deps") {
+      Seq("hr").toDF("d").createOrReplaceTempView("deps")
+      sql(s"UPDATE $tableNameAsString t SET id = -1 " +
+        "WHERE id IN (1, 2) AND EXISTS (SELECT 1 FROM deps WHERE deps.d = t._partition)")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr", "a") :: Row(2, 2, "software", "b") :: Row(3, 3, "hr", "c") :: Nil)
   }
 
   test("update with NOT NULL checks") {
