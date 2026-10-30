@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.expressions.json.{GetJsonObjectEvaluator, J
   MultiGetJsonObjectEvaluator, PathInstruction, SchemaOfJsonEvaluator, StructsToJsonEvaluator}
 import org.apache.spark.sql.catalyst.expressions.objects.{Invoke, StaticInvoke}
 import org.apache.spark.sql.catalyst.json._
+import org.apache.spark.sql.catalyst.trees.CurrentOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern.{GET_JSON_OBJECT, JSON_TO_STRUCT,
   RUNTIME_REPLACEABLE, TreePattern, UNRESOLVED_JSON_CONSTRUCTOR}
 import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, GenericArrayData}
@@ -1780,8 +1781,9 @@ sealed trait UnresolvedJsonConstructor extends Unevaluable with ImplicitlyFormat
   /** The stock built-in over the current children, with splice flags finalized. */
   def toBuiltin: TimeZoneAwareExpression
   /** The ordinary call a routed constructor resolves as when a routine owns the name. */
-  def toUnresolvedFunction: UnresolvedFunction =
+  def toUnresolvedFunction: UnresolvedFunction = CurrentOrigin.withOrigin(origin) {
     UnresolvedFunction(prettyName, arguments, isDistinct = false)
+  }
 
   override def dataType: DataType = throw new UnresolvedException("dataType")
   override def nullable: Boolean = throw new UnresolvedException("nullable")
