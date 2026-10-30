@@ -123,4 +123,28 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
       comparePlans(optimized2, correctAnswer2)
     }
   }
+
+  test("Do not reorder associative operators across different evaluation modes") {
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
+      // Numeric try_add and try_multiply are replaced by TRY-mode Add and Multiply.
+      val tryAdd = Add($"a", $"b", EvalMode.TRY)
+      val tryMultiply = Multiply($"a", $"b", EvalMode.TRY)
+      val originalQuery = testRelation.select(
+        (tryAdd + 1).as("try_add_plus_1"),
+        (tryMultiply * 2).as("try_multiply_times_2"),
+        Add($"a" + $"b", 1, EvalMode.TRY).as("try_add_of_ansi_add"),
+        Multiply($"a" * $"b", 2, EvalMode.TRY).as("try_multiply_of_ansi_multiply"),
+        (tryAdd + 1 + 2).as("try_add_plus_1_plus_2")).analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = testRelation.select(
+        (tryAdd + 1).as("try_add_plus_1"),
+        (tryMultiply * 2).as("try_multiply_times_2"),
+        Add($"a" + $"b", 1, EvalMode.TRY).as("try_add_of_ansi_add"),
+        Multiply($"a" * $"b", 2, EvalMode.TRY).as("try_multiply_of_ansi_multiply"),
+        (tryAdd + 3).as("try_add_plus_1_plus_2")).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
 }
