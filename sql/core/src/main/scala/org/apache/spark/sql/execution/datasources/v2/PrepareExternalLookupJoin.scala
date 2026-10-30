@@ -20,7 +20,7 @@ package org.apache.spark.sql.execution.datasources.v2
 import java.util.{Collections, IdentityHashMap}
 
 import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, EqualTo, Expression,
-  Literal, PredicateHelper, PythonUDF}
+  ExternalUserDefinedFunction, Literal, PredicateHelper, PythonUDF}
 import org.apache.spark.sql.catalyst.plans.LeftOuter
 import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Filter, LogicalPlan,
   PreparedExternalLookupJoin, Project}
@@ -89,11 +89,17 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     // Each conjunct keeps its position, so the residual keeps the written order: a conjunct that
     // can throw is never evaluated before the conjuncts written ahead of it.
     val conjuncts = join.condition.toSeq.flatMap(splitConjunctivePredicates)
-    // The residual is evaluated inside the lookup join, where a Python UDF over lookup columns
-    // cannot be extracted. As ExtractPythonUDFFromJoinCondition does for other joins, an inner join
-    // evaluates such a conjunct in a filter above the join, and an outer join is rejected.
-    if (join.joinType == LeftOuter && conjuncts.exists(hasLookupSidePythonUDF(join, _))) {
-      throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
+    // The residual is evaluated inside the lookup join, where a Python or external UDF over lookup
+    // columns cannot be extracted. As ExtractPythonUDFFromJoinCondition and PlanExternalUDFs do for
+    // other joins, an inner join evaluates such a conjunct in a filter above the join, and an
+    // outer join is rejected.
+    if (join.joinType == LeftOuter) {
+      conjuncts.flatMap(lookupSideUDF(join, _)).headOption.foreach {
+        case _: ExternalUserDefinedFunction =>
+          throw QueryCompilationErrors.useExternalUDFInJoinConditionUnsupportedError(join.joinType)
+        case _ =>
+          throw QueryCompilationErrors.usePythonUDFInJoinConditionUnsupportedError(join.joinType)
+      }
     }
     val offeredCandidates = conjuncts.zipWithIndex.collect {
       case (EqualTo(leftExpr, rightAttr: Attribute), index)
@@ -126,7 +132,7 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     val selectedConjuncts = selectedPredicates.map(_.conjunctIndex).toSet
     val (residual, joinFilter) = conjuncts.zipWithIndex.collect {
       case (conjunct, index) if !selectedConjuncts.contains(index) => conjunct
-    }.partition(!hasLookupSidePythonUDF(join, _))
+    }.partition(lookupSideUDF(join, _).isEmpty)
 
     val scan = scanBuilder.build()
     // Fields bind to table columns by exact name, as in `PushDownUtils.toOutputAttrs`. CHAR and
@@ -182,9 +188,11 @@ object PrepareExternalLookupJoin extends Rule[LogicalPlan] with PredicateHelper
     joinFilter.reduceOption(And).map(Filter(_, prepared)).getOrElse(prepared)
   }
 
-  private def hasLookupSidePythonUDF(join: ExternalLookupJoin, conjunct: Expression): Boolean =
-    conjunct.exists { e =>
-      PythonUDF.isScalarPythonUDF(e) && !e.references.subsetOf(join.left.outputSet)
+  /** A Python or external UDF in the conjunct that reads lookup columns. */
+  private def lookupSideUDF(join: ExternalLookupJoin, conjunct: Expression): Option[Expression] =
+    conjunct.find { e =>
+      (PythonUDF.isScalarPythonUDF(e) || e.isInstanceOf[ExternalUserDefinedFunction]) &&
+        !e.references.subsetOf(join.left.outputSet)
     }
 
   /** An equality between a bare lookup column and an expression over the stream side. */

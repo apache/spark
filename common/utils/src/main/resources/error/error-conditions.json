@@ -2936,6 +2936,11 @@
           "An external lookup join must be a stream-static join, but the left side of the join over <relation> is not a streaming query."
         ]
       },
+      "SUBQUERY_IN_JOIN_CONDITION" : {
+        "message" : [
+          "The join condition of an external lookup join over <relation> cannot contain a subquery."
+        ]
+      },
       "TABLE" : {
         "message" : [
           "Table <table> does not support external lookup."

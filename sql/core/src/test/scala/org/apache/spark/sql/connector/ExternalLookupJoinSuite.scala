@@ -52,7 +52,7 @@ import org.apache.spark.sql.execution.streaming.operators.stateful.StreamingDedu
 import org.apache.spark.sql.execution.streaming.runtime.{IncrementalExecution, MemoryStream,
   StreamingQueryWrapper}
 import org.apache.spark.sql.execution.streaming.sources.LowLatencyMemoryStream
-import org.apache.spark.sql.functions.{coalesce, col, concat, length, lit, to_json}
+import org.apache.spark.sql.functions.{coalesce, col, concat, expr, length, lit, to_json}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.streaming.{StreamingQueryException, StreamRealTimeModeE2ESuiteBase}
 import org.apache.spark.sql.test.SharedSparkSession
@@ -348,6 +348,42 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     assert(fullOuter.getCondition === "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.JOIN_TYPE")
     assert(fullOuter.getMessageParameters.asScala.toMap - "supportedJoinTypes" ===
       Map("joinType" -> "FULL OUTER", "relation" -> "`SimpleExternalLookupTable`"))
+  }
+
+  test("a common expression in the join condition is evaluated in the lookup join") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq((1, "b"), (2, "c")).toDF("id", "code"))
+    val sameId = left("id") === lookup("id")
+    // BETWEEN evaluates its input once, and upper() is not cheap enough to repeat, so it would
+    // otherwise be computed in a projection below the join: over the lookup side, or the stream.
+    Seq(
+      expr("upper(department) BETWEEN 'F' AND 'Z'") ->
+        Seq(Row(1, "b", 1, "research"), Row(2, "c", 2, "sales")),
+      expr("upper(code) BETWEEN 'A' AND 'B'") ->
+        Seq(Row(1, "b", 1, "engineering"), Row(1, "b", 1, "research"))).foreach {
+      case (between, expected) =>
+        val run = runStream(left.join(lookup, sameId && between))
+        assert(run.plan.exists(_.isInstanceOf[PreparedExternalLookupJoin]))
+        QueryTest.sameRows(expected, run.rows).foreach(fail(_))
+    }
+  }
+
+  test("a subquery in the join condition of a lookup join is rejected") {
+    val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
+    val left = streamOf(Seq((1, 1)).toDF("id", "x"))
+    val values = Seq(1).toDF("v")
+    val sameId = left("id") === lookup("id")
+    // The optimizer rewrites such subqueries only in a Join, so they fail when the DataFrame is
+    // built. The scalar subquery references neither side, so it could be offered as a parameter.
+    Seq(
+      sameId && left("x").isin(values),
+      sameId && values.where(col("v") === 1).exists(),
+      lookup("id") === values.scalar()).foreach { condition =>
+      checkError(
+        exception = intercept[AnalysisException](left.join(lookup, condition)),
+        condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.SUBQUERY_IN_JOIN_CONDITION",
+        parameters = Map("relation" -> "`SimpleExternalLookupTable`"))
+    }
   }
 
   test("Dataset join APIs that analyze a join plan lookup joins or fail with a named error") {
