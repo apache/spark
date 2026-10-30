@@ -305,9 +305,9 @@ is a zip file with the extension `.sparkpkg`, which contains a manifest named
 - `dataSources` lists the names of the data sources that the library implements. The names are
   case-insensitive, and Spark passes the name to `create`.
 - `libraries` maps each platform, `<os>-<arch>` with an `os` of `linux`, `osx` or `windows` and an
-  `arch` of `x86_64` or `aarch64`, to the path of the library in the package. `linux` is Linux with
-  glibc: Linux with musl, as Alpine Linux, is `linux-<arch>-musl`, such as `linux-x86_64-musl`, on
-  which native data sources do not run yet.
+  `arch` of `x86_64` or `aarch64`, to the path of the library file in the package. `linux` is Linux
+  with glibc: Linux with musl, as Alpine Linux, is `linux-<arch>-musl`, such as `linux-x86_64-musl`,
+  on which native data sources do not run yet.
 
 A session finds the packages in two places, and the executors get them automatically:
 

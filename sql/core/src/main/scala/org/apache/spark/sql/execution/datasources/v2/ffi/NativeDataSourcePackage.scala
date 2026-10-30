@@ -266,7 +266,8 @@ object NativeDataSourcePackage extends Logging {
     }
     try {
       Utils.tryWithResource(new ZipFile(file)) { zip =>
-        Option(zip.getEntry(MANIFEST_NAME)) match {
+        // getEntry also finds the directory entry `<name>/`, which is not a file.
+        Option(zip.getEntry(MANIFEST_NAME)).filterNot(_.isDirectory) match {
           case None => invalid(s"The package does not contain the manifest $MANIFEST_NAME.")
           case Some(entry) =>
             val json = Utils.tryWithResource(zip.getInputStream(entry)) { in =>
@@ -275,7 +276,6 @@ object NativeDataSourcePackage extends Logging {
             parseManifest(json) match {
               case Left(reason) => invalid(reason)
               case Right(manifest) =>
-                // getEntry also finds the directory entry `<path>/`, which is not a library.
                 manifest.libraries.values.find { library =>
                   Option(zip.getEntry(library)).forall(_.isDirectory)
                 } match {

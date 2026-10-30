@@ -1586,12 +1586,16 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
           dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8)),
       "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib.so."))
-    // ZipFile.getEntry("lib") also finds the directory entry "lib/".
+    // ZipFile.getEntry("lib") also finds the directory entry "lib/", as for the manifest below.
     check(createZip(dir, "range-2.7.sparkpkg",
         NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
           dataSources(""), Map(NativePlatform.current -> "lib")).getBytes(UTF_8),
         "lib/" -> Array.emptyByteArray, "lib/x" -> "x".getBytes(UTF_8)),
       "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib."))
+    check(createZip(dir, "range-2.8.sparkpkg",
+        s"${NativeDataSourcePackage.MANIFEST_NAME}/" -> Array.emptyByteArray),
+      "INVALID_MANIFEST", Map("reason" ->
+        s"The package does not contain the manifest ${NativeDataSourcePackage.MANIFEST_NAME}."))
     val notAZip = new File(dir, "range-2.2.sparkpkg")
     Files.writeString(notAZip.toPath, "not a zip")
     check(notAZip, "INVALID_MANIFEST", Map.empty)
