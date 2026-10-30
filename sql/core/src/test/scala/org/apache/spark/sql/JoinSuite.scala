@@ -22,13 +22,16 @@ import java.util.Locale
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 
+import org.apache.spark.TaskContext
 import org.apache.spark.TestUtils.{assertNotSpilled, assertSpilled}
 import org.apache.spark.internal.config.SHUFFLE_SPILL_NUM_ELEMENTS_FORCE_SPILL_THRESHOLD
 import org.apache.spark.sql.catalyst.TableIdentifier
-import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.catalyst.expressions.{Ascending, GenericRow, SortOrder}
+import org.apache.spark.sql.catalyst.analysis.{UnresolvedAttribute, UnresolvedRelation}
+import org.apache.spark.sql.catalyst.expressions.{Ascending, BinaryExpression, CodegenObjectFactoryMode, Expression, GenericRow, SortOrder}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide, JoinSelectionHelper}
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, HintInfo, Join, JoinHint, NO_BROADCAST_AND_REPLICATION}
+import org.apache.spark.sql.classic.ExpressionUtils
 import org.apache.spark.sql.execution.{BinaryExecNode, FilterExec, ProjectExec, SortExec, SparkPlan, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.exchange.{ShuffleExchangeExec, ShuffleExchangeLike}
@@ -36,8 +39,9 @@ import org.apache.spark.sql.execution.joins._
 import org.apache.spark.sql.execution.python.BatchEvalPythonExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{SharedSparkSession, TestSparkSession}
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{BooleanType, DataType, StructType}
 import org.apache.spark.tags.SlowSQLTest
+import org.apache.spark.util.CollectionAccumulator
 
 @SlowSQLTest
 class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
@@ -1959,6 +1963,126 @@ class JoinSuite extends SharedSparkSession with AdaptiveSparkPlanHelper
       cached.unpersist()
     }
   }
+
+  // Whole-stage codegen, expression codegen alone, and no codegen at all.
+  private val codegenModes = Seq(
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "true"),
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false"),
+    Seq(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> "false",
+      SQLConf.CODEGEN_FACTORY_MODE.key -> CodegenObjectFactoryMode.NO_CODEGEN.toString))
+
+  test("SPARK-60541: a hash semi join condition reads a binary build column") {
+    // Two build rows hold key 1, so the probes switch between build rows. The condition compares
+    // the binary column with a streamed column, so it stays in the join rather than in a filter
+    // below it.
+    withTempView("l", "r") {
+      Seq((1, Array[Byte](0)), (1, Array[Byte](1)), (1, Array[Byte](2)), (2, Array[Byte](2)),
+          (2, Array[Byte](3)))
+        .toDF("a", "lb").createOrReplaceTempView("l")
+      Seq((1, Array[Byte](1)), (1, Array[Byte](2)), (2, Array[Byte](3)))
+        .toDF("c", "bin").createOrReplaceTempView("r")
+      for {
+        hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+        conf <- codegenModes
+      } {
+        withSQLConf(conf: _*) {
+          val df =
+            sql(s"SELECT /*+ $hint(r) */ a, lb FROM l LEFT SEMI JOIN r ON a = c AND lb < bin")
+          checkAnswer(df, Seq(
+            Row(1, Array[Byte](0)), Row(1, Array[Byte](1)), Row(2, Array[Byte](2))))
+          assert(collect(df.queryExecution.executedPlan) { case j: HashJoin => j }.nonEmpty)
+        }
+      }
+    }
+  }
+
+  test("SPARK-60541: a hash semi join condition gets one array per build row") {
+    // The join reads the array again whenever the build row changes. So the five streamed rows of
+    // each key come in a row. The condition reads a streamed column too, so it stays in the join
+    // rather than in a filter below it.
+    val l = (0 until 10).map(i => (i / 5, i)).toDF("a", "x")
+    val r = Seq((0, Array[Byte](0)), (1, Array[Byte](1))).toDF("c", "bin")
+    // The binary arrays the condition got, by task and key.
+    val binaries = spark.sparkContext.collectionAccumulator[(Long, Int, Int)]("binaries")
+    val record = ExpressionUtils.column(
+      RecordBinary(UnresolvedAttribute("a"), UnresolvedAttribute("bin"), binaries))
+    for {
+      hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+      conf <- codegenModes
+    } {
+      withSQLConf(conf: _*) {
+        binaries.reset()
+        val df = l.join(r.hint(hint), $"a" === $"c" && record, "left_semi")
+        checkAnswer(df, (0 until 10).map(i => Row(i / 5, i)))
+        // The arrays one task got for each build row.
+        val arrays = binaries.value.asScala.distinct.groupBy { case (task, a, _) => (task, a) }
+        assert(arrays.nonEmpty && arrays.values.forall(_.size == 1),
+          s"with $hint and $conf, got $arrays")
+      }
+    }
+  }
+
+  test("SPARK-60541: a hash semi join condition hands user code an array of its own") {
+    // The function changes the array it gets. With one array per build row, the next probe of the
+    // build row would see that change. In the second condition a built-in expression reads another
+    // binary column, which would get one array per build row without the function.
+    withTempView("l", "r") {
+      withUserDefinedFunction("first_then_bump" -> true) {
+        Seq((1, 1), (1, 2), (1, 3)).toDF("k", "x").createOrReplaceTempView("l")
+        Seq((1, Array[Byte](0), Array[Byte](0))).toDF("k2", "bin", "bin2")
+          .createOrReplaceTempView("r")
+        spark.udf.register("first_then_bump", (bin: Array[Byte], x: Int) => {
+          val first = bin(0)
+          bin(0) = (bin(0) + 1).toByte
+          first + x * 0
+        })
+        for {
+          condition <- Seq(
+            "first_then_bump(bin, x) = 0",
+            "length(bin2) + x > 0 AND first_then_bump(bin, x) = 0")
+          hint <- Seq("SHUFFLE_HASH", "BROADCAST")
+          conf <- codegenModes
+        } {
+          withSQLConf(conf: _*) {
+            val df = sql(s"SELECT /*+ $hint(r) */ x FROM l LEFT SEMI JOIN r " +
+              s"ON k = k2 AND $condition")
+            checkAnswer(df, Seq(Row(1), Row(2), Row(3)))
+          }
+        }
+      }
+    }
+  }
+
+}
+
+/**
+ * True, after it records the binary array it reads, with its task and key. Its generated code
+ * calls `record`, so a condition that holds it stays in whole-stage codegen.
+ */
+private case class RecordBinary(
+    key: Expression,
+    bin: Expression,
+    sink: CollectionAccumulator[(Long, Int, Int)]) extends BinaryExpression {
+  override def left: Expression = key
+  override def right: Expression = bin
+  override def dataType: DataType = BooleanType
+
+  def record(k: Int, b: Array[Byte]): Boolean = {
+    sink.add((TaskContext.get().taskAttemptId(), k, System.identityHashCode(b)))
+    true
+  }
+
+  override protected def nullSafeEval(k: Any, b: Any): Any =
+    record(k.asInstanceOf[Int], b.asInstanceOf[Array[Byte]])
+
+  override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
+    val self = ctx.addReferenceObj("recordBinary", this)
+    nullSafeCodeGen(ctx, ev, (k, b) => s"${ev.value} = $self.record($k, $b);")
+  }
+
+  override protected def withNewChildrenInternal(
+      newLeft: Expression, newRight: Expression): RecordBinary =
+    copy(key = newLeft, bin = newRight)
 }
 
 class ThreadLeakInSortMergeJoinSuite

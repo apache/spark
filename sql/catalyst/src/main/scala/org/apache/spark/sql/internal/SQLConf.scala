@@ -967,11 +967,27 @@ object SQLConf {
       .booleanConf
       .createWithDefault(true)
 
+  val RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED =
+    buildConf("spark.sql.optimizer.runtime.bloomFilter.perPartition.enabled")
+      .doc("When true, a runtime bloom filter can be built per partition. This needs the join " +
+        "key of each side of a join to come from a V2 scan, and both scans to report a keyed " +
+        "partitioning by the same partition transform of that key (other than identity). Each " +
+        "partition of the application side is then checked against the bloom filter of the " +
+        "matching partition of the creation side, in a left semi join. That semi join is dropped " +
+        "when it adds a shuffle or cuts the tasks that read the application side, or when a " +
+        "scan of the application side applies the bloom filter of the whole creation side as a " +
+        "storage filter. Otherwise it stays and replaces that bloom filter, if there is one.")
+      .version("5.0.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(false)
+
   val RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD =
     buildConf("spark.sql.optimizer.runtime.bloomFilter.creationSideThreshold")
       .doc("Size threshold of the bloom filter creation side plan. Estimated size needs to be " +
         "under this value to try to inject a bloom filter, unless the creation side is fully " +
-        "materialized and has accurate statistics.")
+        "materialized and has accurate statistics. A per-partition bloom filter needs the " +
+        "estimated size of one partition of the creation side to be under it.")
       .version("3.3.0")
       .bytesConf(ByteUnit.BYTE)
       .createWithDefaultString("10MB")
@@ -9322,6 +9338,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def runtimeFilterBloomFilterEnabled: Boolean =
     getConf(RUNTIME_BLOOM_FILTER_ENABLED)
+
+  def runtimeBloomFilterPerPartitionEnabled: Boolean =
+    getConf(RUNTIME_BLOOM_FILTER_PER_PARTITION_ENABLED)
 
   def runtimeFilterCreationSideThreshold: Long =
     getConf(RUNTIME_BLOOM_FILTER_CREATION_SIDE_THRESHOLD)

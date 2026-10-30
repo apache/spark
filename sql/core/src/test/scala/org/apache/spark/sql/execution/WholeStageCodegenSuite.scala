@@ -30,11 +30,12 @@ import org.apache.spark.{SparkArithmeticException, SparkException, SparkNumberFo
 import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
-import org.apache.spark.sql.catalyst.expressions.{And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, With}
+import org.apache.spark.sql.catalyst.expressions.{Alias, And, Attribute, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal, TransformExpression, With}
 import org.apache.spark.sql.catalyst.expressions.codegen.{ByteCodeStats, CodeAndComment, CodegenContext, CodeGenerator, WholeStageSplit, WholeStageSplitKey}
-import org.apache.spark.sql.catalyst.plans.logical.MergeRows
+import org.apache.spark.sql.catalyst.plans.logical.{MergeRows, Project}
 import org.apache.spark.sql.catalyst.plans.logical.MergeRows.{Keep, Update}
 import org.apache.spark.sql.classic
+import org.apache.spark.sql.connector.catalog.functions.{BucketFunction, YearsFunction}
 import org.apache.spark.sql.errors.DataTypeErrors.{toSQLConf, toSQLId}
 import org.apache.spark.sql.execution.adaptive.DisableAdaptiveExecutionSuite
 import org.apache.spark.sql.execution.aggregate.{HashAggregateExec, SortAggregateExec}
@@ -3215,6 +3216,30 @@ class WholeStageCodegenSuite extends SharedSparkSession
         assert(code.exists(c => qualifiedCall.findFirstIn(c.body).nonEmpty))
         checkAnswer(df, withoutWholeStage(df))
       }
+    }
+  }
+
+  test("SPARK-60541: whole-stage codegen runs a partition transform's function call") {
+    // `years` has a magic `invoke`, so its call generates code. `bucket` has only `produceResult`,
+    // whose call falls back to `eval` on the input row. So its project runs outside whole-stage
+    // codegen.
+    val base = spark.range(3)
+      .select(col("id"), timestamp_seconds(col("id") * 400 * 86400).as("ts"))
+      .queryExecution.analyzed
+    val Seq(id, ts) = base.output
+    Seq(
+      TransformExpression(YearsFunction, Seq(ts)) -> true,
+      TransformExpression(BucketFunction, Seq(id), Some(4)) -> false
+    ).foreach { case (transform, wholeStage) =>
+      val df = classic.Dataset.ofRows(spark, Project(Seq(Alias(transform, "key")()), base))
+      val inWholeStage = df.queryExecution.executedPlan.collect {
+        case w: WholeStageCodegenExec => w
+      }.exists(_.child.exists {
+        case p: ProjectExec => p.projectList.exists(_.exists(_.isInstanceOf[TransformExpression]))
+        case _ => false
+      })
+      assert(inWholeStage == wholeStage, df.queryExecution.executedPlan)
+      checkAnswer(df, Seq(Row(0), Row(1), Row(2)))
     }
   }
 }

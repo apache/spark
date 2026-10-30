@@ -22,6 +22,8 @@ import org.apache.spark.sql.catalyst.analysis.CastSupport
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.BindReferences.bindReferences
 import org.apache.spark.sql.catalyst.expressions.codegen._
+import org.apache.spark.sql.catalyst.expressions.codegen.Block.BlockHelper
+import org.apache.spark.sql.catalyst.expressions.objects.InvokeLike
 import org.apache.spark.sql.catalyst.optimizer.{BuildLeft, BuildRight, BuildSide}
 import org.apache.spark.sql.catalyst.plans._
 import org.apache.spark.sql.catalyst.plans.physical.Partitioning
@@ -29,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.UnsafeRowUtils
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.{CodegenSupport, ExplainUtils, RowIterator}
 import org.apache.spark.sql.execution.metric.SQLMetric
-import org.apache.spark.sql.types.{BooleanType, DataType, IntegralType, LongType}
+import org.apache.spark.sql.types.{BinaryType, BooleanType, DataType, IntegralType, LongType}
 
 /**
  * @param relationTerm variable name for HashedRelation
@@ -140,6 +142,31 @@ trait HashJoin extends JoinCodegenSupport {
 
   protected def streamSideKeyGenerator(): UnsafeProjection =
     UnsafeProjection.create(streamedBoundKeys)
+
+  /**
+   * The ordinals of the build side columns of `BinaryType` that the condition reads. An `UnsafeRow`
+   * copies a binary value out on every read. A build row stays at one address of the
+   * [[HashedRelation]] once the relation is built, so the semi join reads such a value again only
+   * when that address changes. An expression that keeps state derived from its input, as
+   * `BloomFilterMightContain` does, then sees the same array again. User code may change an array
+   * it gets. So with a UDF or an `InvokeLike` anywhere in the condition, every read copies.
+   */
+  @transient protected lazy val conditionBinaryBuildOrdinals: Seq[Int] = condition match {
+    case Some(c) =>
+      val callsUserCode = c.exists {
+        case _: UserDefinedExpression | _: InvokeLike => true
+        case _ => false
+      }
+      if (callsUserCode) {
+        Nil
+      } else {
+        val references = c.references
+        buildPlan.output.zipWithIndex.collect {
+          case (a, i) if a.dataType == BinaryType && references.contains(a) => i
+        }
+      }
+    case None => Nil
+  }
 
   @transient protected[this] lazy val boundCondition = if (condition.isDefined) {
     if ((joinType == FullOuter || joinType == LeftOuter) && buildSide == BuildLeft) {
@@ -276,7 +303,11 @@ trait HashJoin extends JoinCodegenSupport {
       streamIter: Iterator[InternalRow],
       hashedRelation: HashedRelation): Iterator[InternalRow] = {
     val joinKeys = streamSideKeyGenerator()
-    val joinedRow = new JoinedRow
+    val joinedRow = if (conditionBinaryBuildOrdinals.isEmpty) {
+      new JoinedRow
+    } else {
+      new BuildBinaryReusingJoinedRow(buildPlan.output.length)
+    }
 
     if (hashedRelation == EmptyHashedRelation) {
       Iterator.empty
@@ -639,12 +670,45 @@ trait HashJoin extends JoinCodegenSupport {
   }
 
   /**
+   * The build side variables for the condition, which read each column of
+   * `conditionBinaryBuildOrdinals` as `BuildBinaryReusingJoinedRow` does outside whole-stage
+   * codegen.
+   */
+  private def genConditionBuildVars(ctx: CodegenContext, row: String): Seq[ExprCode] = {
+    val vars = genOneSideJoinVars(ctx, row, buildPlan, setDefaultValue = false)
+    conditionBinaryBuildOrdinals.foldLeft(vars) { (updated, i) =>
+      val bytes = ctx.addMutableState("byte[]", "buildBinary", forceInline = true)
+      val base = ctx.addMutableState("Object", "buildBinaryBase", forceInline = true)
+      val offset = ctx.addMutableState("long", "buildBinaryOffset", v => s"$v = -1L;",
+        forceInline = true)
+      val isNull = ctx.freshName("isNull")
+      val code =
+        code"""
+           |if ($row.getBaseObject() != $base || $row.getBaseOffset() != $offset) {
+           |  $bytes = $row.isNullAt($i) ? null : $row.getBinary($i);
+           |  $base = $row.getBaseObject();
+           |  $offset = $row.getBaseOffset();
+           |}
+           |boolean $isNull = $bytes == null;
+         """.stripMargin
+      updated.updated(i,
+        ExprCode(code, JavaCode.isNullVariable(isNull), JavaCode.global(bytes, BinaryType)))
+    }
+  }
+
+  /**
    * Generates the code for left semi join.
    */
   protected def codegenSemi(ctx: CodegenContext, input: Seq[ExprCode]): String = {
     val HashedRelationInfo(relationTerm, keyIsUnique, isEmptyHashedRelation) = prepareRelation(ctx)
     val (keyEv, anyNull) = genStreamSideJoinKey(ctx, input)
-    val (matched, checkCondition, _) = getJoinCondition(ctx, input, streamedPlan, buildPlan)
+    val (matched, checkCondition, _) = if (conditionBinaryBuildOrdinals.isEmpty) {
+      getJoinCondition(ctx, input, streamedPlan, buildPlan)
+    } else {
+      val row = ctx.freshName("buildRow")
+      getJoinCondition(ctx, condition.get, input, streamedPlan, buildPlan, row,
+        genConditionBuildVars(ctx, row))
+    }
     val numOutput = metricTerm(ctx, "numOutputRows")
 
     if (isEmptyHashedRelation) {
@@ -934,6 +998,32 @@ object HashJoin extends CastSupport with SQLConfHelper {
         dataType = keys(index).dataType,
         timeZoneId = Option(conf.sessionLocalTimeZone),
         ansiEnabled = false)
+    }
+  }
+}
+
+/**
+ * A [[JoinedRow]] of a streamed row and a build row of a [[HashedRelation]]. It reads a binary
+ * value of the build row again only when the build row's address changes (see
+ * `HashJoin.conditionBinaryBuildOrdinals`). Only the join condition reads the joined row, so only
+ * the binary columns it reads are kept.
+ */
+private[joins] class BuildBinaryReusingJoinedRow(numBuildFields: Int) extends JoinedRow {
+  private[this] val bytes = new Array[Array[Byte]](numBuildFields)
+  private[this] val bases = new Array[AnyRef](numBuildFields)
+  private[this] val offsets = Array.fill(numBuildFields)(-1L)
+
+  override def getBinary(i: Int): Array[Byte] = {
+    val ordinal = i - getLeft.numFields
+    getRight match {
+      case row: UnsafeRow if ordinal >= 0 =>
+        if (!(row.getBaseObject eq bases(ordinal)) || row.getBaseOffset != offsets(ordinal)) {
+          bytes(ordinal) = row.getBinary(ordinal)
+          bases(ordinal) = row.getBaseObject
+          offsets(ordinal) = row.getBaseOffset
+        }
+        bytes(ordinal)
+      case _ => super.getBinary(i)
     }
   }
 }

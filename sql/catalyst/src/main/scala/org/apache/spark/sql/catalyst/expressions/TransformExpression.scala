@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, CodegenFallback, ExprCode}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.types.DataType
@@ -181,13 +181,24 @@ case class TransformExpression(
     case _ => None
   }
 
+  /**
+   * Whether the code of [[resolvedFunction]] falls back to `eval` on the input row, as the call of
+   * a function with only `produceResult` does. This transform is not a [[CodegenFallback]], so the
+   * places that keep such code apart name it (see `CodegenFallback.generate`).
+   */
+  lazy val fallsBackToEval: Boolean =
+    resolvedFunction.exists(_.exists(_.isInstanceOf[CodegenFallback]))
+
   override def eval(input: InternalRow): Any = resolvedFunction match {
     case Some(fn) => fn.eval(input)
     case None => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
-    throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    resolvedFunction match {
+      case Some(fn) => fn.genCode(ctx)
+      case None => throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
+    }
 }
 
 object TransformExpression {

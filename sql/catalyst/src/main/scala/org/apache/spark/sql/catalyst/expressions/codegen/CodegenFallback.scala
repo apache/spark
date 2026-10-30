@@ -44,7 +44,8 @@ object CodegenFallback {
    * dispatch on the node in hand: `EquivalentExpressions.childrenToRecurse`, which keeps a subtree
    * that only `eval` reaches out of subexpression elimination, and
    * `With.refUnderCodegenFallback`, which decides whether a memoized reference is reached that way.
-   * A caller that is not a `CodegenFallback` is invisible to those two and has to be named in each.
+   * A node that falls back without being a `CodegenFallback` is invisible to those two and has to
+   * be named in each.
    * One that falls back for a reason other than holding such a descendant would have to be named in
    * `CollapseCodegenStages` as well, since nothing else would tell it that the input row this code
    * needs is not there.
