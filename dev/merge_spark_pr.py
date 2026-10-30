@@ -1976,12 +1976,11 @@ def update_jira_for_pr(pr_num, title, merge_branches, title_components, is_rever
     # without Title.parse, which rejects some older titles such as [SPARK-N][FOLLOWUP][MINOR].
     tags = leading_title_tags(title)
     if jira_ids:
-        # Title.parse rejects an id next to [MINOR] or [TRIVIAL], so a subject has both only if
-        # it predates that rule or the committer added the marker at the component prompt. The
-        # former was normally merged as the fix for that id, so the id is updated.
+        # Title.parse rejects an id next to [MINOR] or [TRIVIAL], and prompt_for_components()
+        # rejects both markers, so only a subject that predates the rule or was not merged with
+        # this script has both. Such a commit was normally merged as the fix for that id, so
+        # the id is updated.
         tags -= _LEADING_TAGS
-    # Components the committer chose at the prompt in main() still apply.
-    tags |= set(title_components)
     skipped = [tag for tag in skip_jira_title_tags if tag in tags]
     if skipped:
         print()
@@ -2071,13 +2070,13 @@ class Component:
 
     @classmethod
     def normalize(cls, token):
-        """Return the registered tag for ``token``, or ``token`` itself if none matches.
+        """Return the registered tag for ``token``, or the stripped, upper-cased token if none.
 
-        >>> Component.normalize("FOLLOW-UP"), Component.normalize("BOGUS")
+        >>> Component.normalize(" follow-up "), Component.normalize(" bogus ")
         ('FOLLOWUP', 'BOGUS')
         """
         c = cls.find(token)
-        return c.tag if c is not None else token
+        return c.tag if c is not None else token.strip().upper()
 
 
 # Full SPARK JIRA component list (sorted alphabetically by tag), followed
@@ -2384,11 +2383,15 @@ def leading_title_tags(title: str) -> set[str]:
 def prompt_for_components():
     """
     Prompt the committer for component(s) when the PR title lacks a primary
-    component. Each entered token is normalized via Component.find
-    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"). Unrecognized tokens are
-    passed through as-is. Re-prompts until at least one entered token resolves
-    to a primary Component (one with primary=True). Returns an uppercase list
-    of tags in insertion order.
+    component. Each entered token is normalized via Component.normalize
+    (e.g. "DOCS" -> "DOC", "PYSPARK" -> "PYTHON"); unrecognized tokens are only
+    upper-cased. Re-prompts until at least one entered token resolves to a
+    primary Component (one with primary=True) and every token is one that the
+    bracket-tag scan reads back from the title as a component. So a token with
+    other characters, such as "SPARK CORE", is rejected. A SPARK id is rejected
+    too: it belongs in the PR title. So are [MINOR] and [TRIVIAL]: they mark a PR
+    without a JIRA ticket and belong at the start of its title, where Title.parse
+    checks them. Returns an uppercase list of tags in insertion order.
     """
     print("PR title is missing a primary [COMPONENT] tag.")
     print("Primary components (one of these is required):")
@@ -2411,6 +2414,28 @@ def prompt_for_components():
                 components.append(Component.normalize(t))
         if not components:
             print_error("Component(s) cannot be empty. Please enter at least one.")
+            continue
+        # A tag that the bracket scan cannot read would hide the tags after it, such as
+        # FOLLOWUP, from the JIRA skip check, at this merge and at a later revert. A SPARK id
+        # would become an extra linked ticket or an id after a component.
+        invalid = [
+            t
+            for t in components
+            if not _BRACKET_TAG_RE.fullmatch("[%s]" % t) or _SPARK_ID_RE.match(t)
+        ]
+        if invalid:
+            print_error(
+                "Invalid component(s): %s. Use letters, digits, '.', '_', or '-', and no SPARK id."
+                % ", ".join(invalid)
+            )
+            continue
+        markers = [t for t in components if t in _LEADING_TAGS]
+        if markers:
+            print_error(
+                "%s cannot be entered here. A PR without a JIRA ticket puts [MINOR] or "
+                "[TRIVIAL] at the start of its title instead; a PR with one cannot be marked so."
+                % ", ".join("[%s]" % t for t in markers)
+            )
             continue
         if not has_primary:
             print_error(
@@ -3055,9 +3080,9 @@ __test__ = {
     >>> update('Revert "SPARK-49004"', ["master"], is_revert=True)
     >>> reverter.assert_called_once_with(["master"], "SPARK-49004")
 
-    Wrapped skip tags follow the same policy as direct merges for MINOR, TRIVIAL, and FOLLOWUP
-    changes, including the FOLLOW-UP alias. The tags are read even from a wrapped title that
-    Title.parse rejects.
+    Wrapped skip tags follow the same policy as direct merges for FOLLOWUP, including the
+    FOLLOW-UP alias, and for MINOR and TRIVIAL when the title has no leading id. The tags are
+    read even from a wrapped title that Title.parse rejects.
 
     >>> for title in ('Revert "[MINOR][SQL] Fix"', 'Revert "[TRIVIAL][SQL] Fix"',
     ...               'Revert "[SPARK-1234][SQL][FOLLOWUP] Fix"',
@@ -3070,20 +3095,16 @@ __test__ = {
     ...     resolver.assert_not_called()
     ...     confirm.assert_not_called()
 
-    Title.parse rejects an id next to MINOR or TRIVIAL, so a subject that opens with an id
-    has one only if it predates that rule or the committer added it at the component prompt.
-    An older commit was normally merged as the fix for its id, so the id is updated. A MINOR
-    that the committer chooses at the prompt for this merge still skips.
+    Title.parse rejects an id next to MINOR or TRIVIAL, and so does the component prompt, so
+    only an older subject opens with an id and has one. Such a commit was normally merged as
+    the fix for its id, so the id is updated.
 
     >>> update('Revert "[SPARK-1234][SQL][MINOR] Fix"', ["master"], is_revert=True)
     >>> reverter.assert_called_once_with(["master"], "SPARK-1234")
-    >>> update("[SPARK-1234][SQL][MINOR] Fix", ["master"], components=["SQL", "MINOR"])
-    >>> resolver.assert_not_called()
-    >>> confirm.assert_not_called()
 
-    Direct merges read the markers from the title, since main() passes only components.
+    The skip tags come from the title alone, so direct merges skip through it.
 
-    >>> for title in ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix"):
+    >>> for title in ("[MINOR][SQL] Fix", "[TRIVIAL][SQL] Fix", "[SPARK-1234][SQL][FOLLOWUP] Fix"):
     ...     update(title, ["master"], components=["SQL"])
     ...     reverter.assert_not_called()
     ...     resolver.assert_not_called()
@@ -3162,6 +3183,33 @@ __test__ = {
     True
     >>> all("because title has" not in o for o in disabled_outputs)
     True
+    """,
+    "prompt_for_components": """
+    The prompt rejects MINOR and TRIVIAL, which belong at the start of the title, tokens that
+    the bracket-tag scan cannot read back, and SPARK ids, and asks again until the components
+    include a primary one.
+
+    >>> from contextlib import redirect_stdout
+    >>> from io import StringIO
+    >>> from unittest.mock import patch
+    >>> output = StringIO()
+    >>> answers = ["sql,minor", " Trivial ", "sql, spark core", "sql,[tests]", "sql,spark-2",
+    ...            "sql][minor", "tests", "sql, follow-up"]
+    >>> with (
+    ...     patch.dict(prompt_for_components.__globals__, bold_input=lambda _: answers.pop(0)),
+    ...     redirect_stdout(output),
+    ... ):
+    ...     components = prompt_for_components()
+    >>> components
+    ['SQL', 'FOLLOWUP']
+    >>> answers
+    []
+    >>> "[MINOR] cannot be entered here" in output.getvalue()
+    True
+    >>> "[TRIVIAL] cannot be entered here" in output.getvalue()
+    True
+    >>> for bad in ("SPARK CORE", "[TESTS]", "SPARK-2", "SQL][MINOR"):
+    ...     assert "Invalid component(s): %s." % bad in output.getvalue(), bad
     """,
     "check_linked_jira_issues": """
     Only the leading ids are fetched and checked, so an Epic that the title body mentions
