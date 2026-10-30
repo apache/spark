@@ -373,14 +373,17 @@ class FilterPushdownSuite extends PlanTest {
     }
   }
 
-  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias without the pattern estimate") {
-    withSQLConf(SQLConf.ESTIMATE_REGEX_PATTERN_COST.key -> "false") {
-      Seq($"e".rlike("^1"), $"e".like("1_")).foreach { pred =>
-        val originalQuery = testStringRelation
-          .select($"a", pred as "f")
-          .where($"f")
-          .analyze
+  test("SPARK-60632: Do not push a filter on a LIKE/RLIKE alias with version 0 of the estimate") {
+    Seq($"e".rlike("^1"), $"e".like("1_"), !$"e".rlike("^1")).foreach { pred =>
+      val originalQuery = testStringRelation
+        .select($"a", pred as "f")
+        .where($"f")
+        .analyze
 
+      // A parent expression caches whether its child is expensive, so optimize the same plan
+      // with version 1 first.
+      Optimize.execute(originalQuery)
+      withSQLConf(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0") {
         comparePlans(Optimize.execute(originalQuery), originalQuery)
       }
     }

@@ -750,17 +750,19 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // Possessive quantifiers and small ranges.
       "a*+b", "a?+b?+", "a{3}+b", ".*+a.*+b", "a{1,9}b{1,9}", "(ab){3}.*",
       ".{0,9}a.{0,9}a.{0,9}x",
-      // A quantifier that ends the pattern.
-      "a.*b.*", "a{2,}b+", "\\d+\\s*", "a+?b.*",
+      // A quantifier that ends the pattern or an alternative, and alternatives on their own.
+      "a.*b.*", "a{2,}b+", "\\d+\\s*", "a+?b.*", "(foo.*bar.*)", "a.*b.*|x", "a.*b|a.*c",
+      "foo.*bar|baz.*qux", "colou?r.*x",
       // Anchored.
       "^.*a.*b", "\\A.*a.*b", "(?i)^.*a.*b", "^v[0-9]+_.*", "^(a|b).*c.*").foreach { p =>
       assert(!RLike(str, Literal(p)).expensive, p)
     }
     Seq(".*a.*b", "^.*a.*a.*b", "\\b.*a.*b", "a.*b.*$", ".{0,50}a.{0,50}b", "^a|.*b.*c",
-      "(?m)^.*a.*b", ".{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}x",
+      "(?m)^.*a.*b", ".{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}a.{0,9}x", ".{0,9}a.{0,9}a.{0,8}a.*b",
+      "a?" * 24 + "b", "(a.*b.*)c", "x|a.*b.*c",
       // A repeated group that holds a quantifier or an alternation.
       "(a+)+b", "^(a+)+b", "^(.*?,){11}P", "(.*a){3}x", "^((.*a)b){2}", "(a{1,9}){6}b",
-      "(a|aa){20}b", "^(\\d|\\w){24}x",
+      "(a|aa){20}b", "^(\\d|\\w){24}x", "(a?a?){16}b", "^(.?.?){16}x",
       // COMMENTS mode.
       "(?x) ^ (.*?,) {11} P", "(?x)(.*a) {3}x",
       // A `[` that does not open a class, and a `]` that does not close one.
@@ -797,11 +799,5 @@ class RegexpExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     val udf = ScalaUDF((s: String) => s, StringType, Seq(str), Seq(None))
     assert(RLike(udf, Literal("^1")).expensive)
     assert(Like(udf, Literal("1_"), '\\').expensive)
-
-    // Without the estimate, every LIKE and RLIKE is expensive.
-    withSQLConf(SQLConf.ESTIMATE_REGEX_PATTERN_COST.key -> "false") {
-      assert(RLike(str, Literal("^1")).expensive)
-      assert(Like(str, Literal("1_"), '\\').expensive)
-    }
   }
 }

@@ -670,17 +670,19 @@ object SQLConf {
     .booleanConf
     .createWithDefault(true)
 
-  val ESTIMATE_REGEX_PATTERN_COST =
-    buildConf("spark.sql.optimizer.estimateRegexPatternCost")
+  val REGEX_PATTERN_COST_ESTIMATE_VERSION =
+    buildConf("spark.sql.optimizer.regexPatternCostEstimateVersion")
     .internal()
     .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
-    .doc(s"When true, ${AVOID_DOUBLE_FILTER_EVAL.key} treats a LIKE or RLIKE expression as " +
-      "expensive only when its pattern is likely to be expensive to match. When false, every " +
-      "LIKE and RLIKE expression is expensive, as in 4.2.0. A streaming query keeps the value " +
-      "recorded in its checkpoint, and one restarted from a checkpoint without it uses false.")
-    .version("4.4.0")
-    .booleanConf
-    .createWithDefault(true)
+    .doc(s"How ${AVOID_DOUBLE_FILTER_EVAL.key} decides whether a LIKE or RLIKE expression is " +
+      "expensive. 0: every LIKE and RLIKE expression is expensive, as in 4.2.0 for a subject " +
+      "that is not a literal. 1: only one whose pattern is likely to be expensive to match. A " +
+      "streaming query keeps the version recorded in its checkpoint, and one restarted from a " +
+      "checkpoint without it uses 0.")
+    .version("4.2.2")
+    .intConf
+    .checkValues(Set(0, 1))
+    .createWithDefault(1)
 
   val ATTEMPT_TRANSPILATION_OF_PYTHON_UDFS =
     buildConf("spark.sql.experimental.optimizer.transpilePyUDFs")

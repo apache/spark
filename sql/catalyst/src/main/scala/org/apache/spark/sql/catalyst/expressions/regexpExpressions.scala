@@ -84,8 +84,7 @@ abstract class StringRegexExpression extends BinaryExpression
     }
   }
 
-  override def expensive: Boolean = hasExpensiveChild ||
-    !SQLConf.get.getConf(SQLConf.ESTIMATE_REGEX_PATTERN_COST) || _expensivePattern
+  override def expensive: Boolean = hasExpensiveChild || _expensivePattern
 
   // Heuristic, not designed to be perfect. A pattern that is not foldable is compiled for every
   // row; a foldable one is left to `isExpensivePattern`. Like `ConstantFolding`, evaluate a fresh
@@ -137,22 +136,30 @@ private[catalyst] object StringRegexExpression {
   private val commentsFlag = Pattern.compile("""\(\?[a-zA-Z]*x""")
 
   // The product of the choices of the uncounted ranges that makes them count as one quantifier.
-  private val smallRangesLimit = 1000
+  private val smallRangesLimit = 100
 
   /**
-   * Counts the repeating quantifiers (`*`, `+` and `{n,m}`) in a regex that can backtrack, and
-   * tells whether the regex has a `|` outside any group. Escaped characters, quoted text,
-   * character classes and the braces of `\p{..}`, `\x{..}` and `\N{..}` are skipped. These
-   * quantifiers are not counted:
+   * Counts the repeating quantifiers (`*`, `+`, `?` and `{n,m}`) in a regex that can backtrack,
+   * and tells whether the regex has a `|` outside any group. Escaped characters, quoted text,
+   * character classes and the braces of `\p{..}`, `\x{..}` and `\N{..}` are skipped. The
+   * alternatives of a `|` outside any group are tried one after another, so each is counted on its
+   * own and the largest count is returned. These quantifiers are not counted:
    *  - a possessive one, which never backtracks;
-   *  - one that ends the regex, which a failed match never backtracks into;
-   *  - a `{n,m}` that spans fewer than 10, which adds a small factor. The choices of such ranges
-   *    multiply, so they count as one quantifier each time their product reaches 1000.
+   *  - one that ends the regex or an alternative of it, possibly inside groups that end there too,
+   *    which a failed match never backtracks into;
+   *  - `?` and a `{n,m}` that spans fewer than 10, which add a small factor. The choices of such
+   *    quantifiers multiply, so they count as one quantifier each time their product reaches 100.
    * The count is `Int.MaxValue` for a repeated group that holds a quantifier that can backtrack or
    * a `|`, for a regex in COMMENTS mode, and for a `[` that is never closed, since the scan cannot
    * follow them.
+   *
+   * A streaming query pins `SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION` in its checkpoint, since
+   * a pattern that turns cheap can move a filter below a stateful operator. So a change that makes
+   * any pattern cheaper needs a new version of the estimate, and the old one has to be kept.
    */
   private def scanQuantifiers(regex: String): (Int, Boolean) = {
+    // The largest count of the alternatives before the current one.
+    var maxCount = 0
     var count = 0
     var smallRanges = 1
     var classDepth = 0
@@ -165,6 +172,17 @@ private[catalyst] object StringRegexExpression {
       case _ :: outer => true :: outer
       case Nil => Nil
     }
+    // Whether nothing but the closing `)` of open groups comes between `j` and the end of the
+    // regex or a `|` outside any group.
+    def endsAlternative(j: Int): Boolean = {
+      var end = j
+      var depth = groups.length
+      while (end < regex.length && depth > 0 && regex.charAt(end) == ')') {
+        end += 1
+        depth -= 1
+      }
+      end == regex.length || (depth == 0 && regex.charAt(end) == '|')
+    }
     // Handles the quantifier that ends at `i`, which repeats its operand `min` to `max` times,
     // and moves `i` past its modifier.
     def quantifier(min: Int, max: Int): Unit = {
@@ -172,7 +190,7 @@ private[catalyst] object StringRegexExpression {
       if (i + 1 < regex.length && (regex.charAt(i + 1) == '+' || regex.charAt(i + 1) == '?')) {
         i += 1
       }
-      if (!possessive && max > min && i + 1 < regex.length) {
+      if (!possessive && max > min && !endsAlternative(i + 1)) {
         markGroup()
         if (max - min >= 10) {
           count += 1
@@ -209,8 +227,12 @@ private[catalyst] object StringRegexExpression {
         case ']' if classDepth > 0 => classDepth -= 1
         case _ if classDepth > 0 =>
         case '(' =>
-          if (matcherAt(commentsFlag, regex, i).lookingAt()) {
-            return (Int.MaxValue, topLevelAlternation)
+          if (regex.startsWith("(?", i)) {
+            if (matcherAt(commentsFlag, regex, i).lookingAt()) {
+              return (Int.MaxValue, topLevelAlternation)
+            }
+            // The `?` of `(?:`, `(?=`, `(?<name>` or `(?i)` is not a quantifier.
+            i += 1
           }
           groups = false :: groups
         case ')' if groups.nonEmpty =>
@@ -220,11 +242,15 @@ private[catalyst] object StringRegexExpression {
             if (repeats(regex, i + 1)) return (Int.MaxValue, topLevelAlternation)
             markGroup()
           }
-        case '|' => if (groups.isEmpty) topLevelAlternation = true else markGroup()
+        case '|' if groups.isEmpty =>
+          topLevelAlternation = true
+          maxCount = math.max(maxCount, count)
+          count = 0
+          smallRanges = 1
+        case '|' => markGroup()
         case '*' => quantifier(0, Int.MaxValue)
         case '+' => quantifier(1, Int.MaxValue)
-        // `?` adds at most a factor of 2 and is not counted.
-        case '?' => quantifier(0, 0)
+        case '?' => quantifier(0, 1)
         case '{' =>
           bounds(regex, i).foreach { case (end, min, max) =>
             i = end
@@ -234,7 +260,7 @@ private[catalyst] object StringRegexExpression {
       }
       i += 1
     }
-    (if (classDepth > 0) Int.MaxValue else count, topLevelAlternation)
+    (if (classDepth > 0) Int.MaxValue else math.max(maxCount, count), topLevelAlternation)
   }
 
   // Whether a quantifier that can repeat its operand more than once starts at `i`.

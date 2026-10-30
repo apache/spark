@@ -52,18 +52,18 @@ class OffsetSeqLogSuite extends SharedSparkSession {
     assert(metadata.conf.get(SQLConf.ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key).contains("false"))
   }
 
-  test("SPARK-60632: regex pattern cost estimate is disabled for old checkpoints") {
+  test("SPARK-60632: regex pattern cost estimate is version 0 for old checkpoints") {
     val (_, offsetSeq) = readFromResource("offset-log-version-2.1.0")
     val metadata = offsetSeq.metadataOpt.get
-    assert(!metadata.conf.contains(SQLConf.ESTIMATE_REGEX_PATTERN_COST.key))
-    assert(!OffsetSeqMetadata.readValue(
-      metadata, SQLConf.ESTIMATE_REGEX_PATTERN_COST).toBoolean)
+    assert(!metadata.conf.contains(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key))
+    assert(OffsetSeqMetadata.readValue(
+      metadata, SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION) == "0")
   }
 
-  test("SPARK-60632: regex pattern cost estimate is enabled for new checkpoints") {
+  test("SPARK-60632: regex pattern cost estimate is version 1 for new checkpoints") {
     val metadata = OffsetSeqMetadata(
       batchWatermarkMs = 0, batchTimestampMs = 0, spark.conf)
-    assert(metadata.conf.get(SQLConf.ESTIMATE_REGEX_PATTERN_COST.key).contains("true"))
+    assert(metadata.conf.get(SQLConf.REGEX_PATTERN_COST_ESTIMATE_VERSION.key).contains("1"))
   }
 
   test("SPARK-59919: v1 and v2 metadata persist rebound stateful shuffle partitions") {

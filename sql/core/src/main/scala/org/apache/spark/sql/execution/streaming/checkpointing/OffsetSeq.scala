@@ -208,7 +208,7 @@ object OffsetSeqMetadata extends Logging {
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT,
     DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER,
     ALLOW_EXCEPT_ON_STREAMING_DATAFRAME,
-    ESTIMATE_REGEX_PATTERN_COST
+    REGEX_PATTERN_COST_ESTIMATE_VERSION
   )
 
   /**
@@ -282,7 +282,7 @@ object OffsetSeqMetadata extends Logging {
     STATEFUL_OPERATOR_ALWAYS_NULLABLE_OUTPUT.key -> "false",
     DROP_DUPLICATES_DETERMINISTIC_KEY_ORDER.key -> "false",
     ALLOW_EXCEPT_ON_STREAMING_DATAFRAME.key -> "true",
-    ESTIMATE_REGEX_PATTERN_COST.key -> "false"
+    REGEX_PATTERN_COST_ESTIMATE_VERSION.key -> "0"
   )
 
   def readValue[T](metadataLog: OffsetSeqMetadataBase, confKey: ConfigEntry[T]): String = {
