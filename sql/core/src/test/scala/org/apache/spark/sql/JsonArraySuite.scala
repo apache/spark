@@ -1036,6 +1036,37 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59243: a routed nested call is checked for cyclic SQL function references") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'x'")
+        sql("SET PATH = system.session, system.builtin")
+        // A routed nested call references the same-named function, like the flat call.
+        Seq("json_array(a)", "json_array(json_array(1))").foreach { body =>
+          val e = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE TEMPORARY FUNCTION json_array(a STRING) " +
+              s"RETURNS STRING RETURN $body")
+          }
+          assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", s"for $body")
+        }
+        // Stock-owned (clause-bearing or FORMAT JSON) bodies are not routine calls.
+        Seq(
+          "json_array(json_array(1) NULL ON NULL)" -> "[[1]]",
+          "json_array('[1]' FORMAT JSON)" -> "[[1]]"
+        ).foreach { case (body, expected) =>
+          sql("CREATE OR REPLACE TEMPORARY FUNCTION json_array(a STRING) " +
+            s"RETURNS STRING RETURN $body")
+          checkAnswer(sql("SELECT json_array('ignored')"), Row(expected))
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
   test("plain JSON_ARRAY with star can be shadowed by a persistent function in PATH") {
     withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
       withDatabase("path_json_array") {

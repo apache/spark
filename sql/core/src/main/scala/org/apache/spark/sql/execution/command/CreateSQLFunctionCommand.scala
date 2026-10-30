@@ -431,22 +431,28 @@ case class CreateSQLFunctionCommand(
     def checkExpression(expression: Expression, path: Seq[FunctionIdentifier]): Unit = {
       expression.foreach {
         case s: SubqueryExpression => checkPlan(s.plan, path)
-        case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _) =>
-          val funcId = nameParts.asFunctionIdentifier
-          val info = catalog.lookupFunctionInfo(funcId)
-          if (isSQLFunction(info.getClassName)) {
-            val f = withPosition(u) {
-              catalog.lookupFunction(funcId, arguments).asInstanceOf[SQLFunctionExpression]
-            }
-            // Check cyclic reference using qualified function names.
-            val newPath = path :+ f.function.name
-            if (f.function.name == name) {
-              throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
-            }
-            val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
-            checkPlan(plan, newPath)
-          }
+        case u: UnresolvedFunction => checkFunction(u, path)
+        // A routed nested SQL/JSON constructor is a call a SQL function may own, like a flat call.
+        case j: UnresolvedJsonConstructor if j.routeThroughResolution =>
+          checkFunction(j.toUnresolvedFunction, path)
         case _ =>
+      }
+    }
+
+    def checkFunction(u: UnresolvedFunction, path: Seq[FunctionIdentifier]): Unit = {
+      val funcId = u.nameParts.asFunctionIdentifier
+      val info = catalog.lookupFunctionInfo(funcId)
+      if (isSQLFunction(info.getClassName)) {
+        val f = withPosition(u) {
+          catalog.lookupFunction(funcId, u.arguments).asInstanceOf[SQLFunctionExpression]
+        }
+        // Check cyclic reference using qualified function names.
+        val newPath = path :+ f.function.name
+        if (f.function.name == name) {
+          throw UserDefinedFunctionErrors.cyclicFunctionReference(newPath.mkString(" -> "))
+        }
+        val plan = catalog.makeSQLFunctionPlan(f.name, f.function, f.inputs)
+        checkPlan(plan, newPath)
       }
     }
 
