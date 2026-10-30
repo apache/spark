@@ -56,18 +56,39 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite {
     }
   }
 
+  test("SPARK-60332: GeneratePredicate evaluates a common subexpression of later conjuncts " +
+      "after the conjuncts before it") {
+    // `Not(leaf)` is common to the last two conjuncts, and evaluated just before the first of
+    // them, so the first conjunct decides whether `leaf` is evaluated at all: a FALSE one stops
+    // the evaluation, while a TRUE or a NULL one does not, as `And.eval` does.
+    Seq(true, false).foreach { useSubexprElimination =>
+      Seq((false, false, false), (true, true, true), (null, true, false)).foreach {
+        case (first, leafEvaluated, result) =>
+          val leaf = ExprWithEvaluatedState()
+          val cond = And(And(ExprWithEvaluatedState(first, isNullable = first == null),
+            Not(leaf)), Not(leaf))
+          val instance = GeneratePredicate.generate(cond, useSubexprElimination)
+          instance.initialize(0)
+          withClue(s"useSubexprElimination = $useSubexprElimination, first = $first: ") {
+            assert(instance.eval(null) === result)
+            assert(leaf.evaluated === leafEvaluated)
+          }
+      }
+    }
+  }
 }
 
 /**
  * An expression with evaluated state so we can know whether it is evaluated.
  */
-case class ExprWithEvaluatedState() extends LeafExpression with CodegenFallback {
+case class ExprWithEvaluatedState(value: Any = false, isNullable: Boolean = false)
+  extends LeafExpression with CodegenFallback {
   var evaluated: Boolean = false
   override def eval(input: InternalRow): Any = {
     evaluated = true
-    false
+    value
   }
 
-  override def nullable: Boolean = false
+  override def nullable: Boolean = isNullable
   override def dataType: DataType = BooleanType
 }
