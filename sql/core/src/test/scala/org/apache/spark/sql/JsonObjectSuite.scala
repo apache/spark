@@ -1341,6 +1341,44 @@ world'))"""))
     }
   }
 
+  test("SPARK-59243: a routed nested call is checked for cyclic SQL function references") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_object(a STRING, b STRING) RETURNS STRING " +
+          "RETURN 'x'")
+        sql("SET PATH = system.session, system.builtin")
+        // Every routed spelling references the same-named function, like the flat call.
+        Seq(
+          "json_object(a, b)",
+          "json_object('a', json_object('b', 1))",
+          "json_object('a' VALUE json_object('b' VALUE 1))",
+          "json_object('a': json_object('b': 1))"
+        ).foreach { body =>
+          val e = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE TEMPORARY FUNCTION json_object(a STRING, b STRING) " +
+              s"RETURNS STRING RETURN $body")
+          }
+          assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", s"for $body")
+        }
+        // Stock-owned (clause-bearing or FORMAT JSON) bodies are not routine calls.
+        Seq(
+          "json_object('a' VALUE json_object('b' VALUE 1) NULL ON NULL)" ->
+            """{"a":{"b":1}}""",
+          "json_object('id' VALUE '[1]' FORMAT JSON)" -> """{"id":[1]}"""
+        ).foreach { case (body, expected) =>
+          sql("CREATE OR REPLACE TEMPORARY FUNCTION json_object(a STRING, b STRING) " +
+            s"RETURNS STRING RETURN $body")
+          checkAnswer(sql("SELECT json_object('p', 'q')"), Row(expected))
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_object")
+      }
+    }
+  }
+
   test("a shadowing routine receives the routed nested producer's JSON text") {
     // The routine returns its value argument, so this observes what the shadow receives.
     withSQLConf(
