@@ -23,10 +23,12 @@ import java.text.SimpleDateFormat
 import java.time.Period
 import java.util.Locale
 
+import org.apache.spark.SparkArithmeticException
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.functions.{log => logarithm}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
+import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType}
 
 private object MathFunctionsTestData {
   case class DoubleData(a: java.lang.Double, b: java.lang.Double)
@@ -362,6 +364,140 @@ class MathFunctionsSuite extends SharedSparkSession {
       df4.select(truncate($"a", lit(2))),
       Seq(Row(Double.NaN), Row(Double.PositiveInfinity), Row(Double.NegativeInfinity))
     )
+  }
+
+  test("scaled floor/ceil preserves floating-point boundaries in SQL and DataFrames") {
+    for (ansi <- Seq(false, true); codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansi.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        checkAnswer(sql(
+          "SELECT floor(CAST('0.9999999999999999' AS DOUBLE)), " +
+            "floor(CAST('0.9999999999999999' AS DOUBLE), 0), " +
+            "ceil(CAST('0.9000000000000001' AS DOUBLE), 1)"),
+          Row(0L, BigDecimal(0), BigDecimal("1.0")))
+
+        val doubleValues = Seq(0.8999999999999999, 0.9000000000000001,
+          -0.8999999999999999, -0.9000000000000001)
+        val floatValues = Seq(java.lang.Math.nextDown(0.9f), java.lang.Math.nextUp(0.9f),
+          -java.lang.Math.nextDown(0.9f), -java.lang.Math.nextUp(0.9f))
+        Seq(doubleValues.map(lit), floatValues.map(lit)).foreach { values =>
+          val input = spark.range(values.size).select(
+            element_at(array(values: _*), ($"id" + 1).cast("int")).as("value"))
+          val result = input.select(floor($"value", lit(1)), ceil($"value", lit(1)))
+          checkAnswer(result, Seq(
+            Row(BigDecimal("0.8"), BigDecimal("0.9")),
+            Row(BigDecimal("0.9"), BigDecimal("1.0")),
+            Row(BigDecimal("-0.9"), BigDecimal("-0.8")),
+            Row(BigDecimal("-1.0"), BigDecimal("-0.9"))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil uses Spark floating-point conversion in runtime SQL") {
+    val cases = Seq(
+      (FloatType, DecimalType(9, 1), DecimalType(15, 7), Seq(
+        Seq("0.1", "0.2", "0.1000000", "0.1000001"),
+        Seq("0.8", "0.9", "0.8999999", "0.9000000"),
+        Seq("-0.2", "-0.1", "-0.1000001", "-0.1000000"),
+        Seq("-0.9", "-0.8", "-0.9000000", "-0.8999999"))),
+      (DoubleType, DecimalType(17, 1), DecimalType(31, 15), Seq(
+        Seq("0.1", "0.1", "0.1", "0.1"),
+        Seq("0.9", "0.9", "0.9", "0.9"),
+        Seq("-0.1", "-0.1", "-0.1", "-0.1"),
+        Seq("-0.9", "-0.9", "-0.9", "-0.9"))))
+    for (ansi <- Seq(false, true); codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansi.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        cases.foreach { case (inputType, scaleOneType, cappedType, expected) =>
+          val values = Seq("0.1", "0.9", "-0.1", "-0.9").map(lit)
+          // The range index keeps the lookup and rounding inputs non-foldable.
+          val input = spark.range(values.size).select(
+            element_at(array(values: _*), ($"id" + 1).cast("int"))
+              .cast(inputType).as("value"))
+          assert(input.schema("value").dataType == inputType)
+          val result = input.selectExpr(
+            "floor(value, 1)", "ceil(value, 1)", "floor(value, 20)", "ceil(value, 20)")
+          assert(result.schema.map(_.dataType).toSeq ==
+            Seq(scaleOneType, scaleOneType, cappedType, cappedType))
+          checkAnswer(result, expected.map(row => Row.fromSeq(row.map(BigDecimal(_)))))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil preserves direction in numeric comparisons") {
+    val cases = Seq(
+      (1, Seq("0.1", "0.9", "1.1", "12345.1")),
+      (5, Seq("128.00002")))
+    for (ansi <- Seq(false, true); codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")) {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> ansi.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        cases.foreach { case (scale, positiveValues) =>
+          val values = positiveValues.flatMap(value => Seq(value, s"-$value")).map(lit)
+          val input = spark.range(values.size).select(
+            element_at(array(values: _*), ($"id" + 1).cast("int"))
+              .cast(FloatType).as("value"))
+          // Comparisons promote Decimal and Float to Double. Float.toString before rounding
+          // can make floor exceed its input, e.g. 12345.1f is stored below decimal 12345.1.
+          val result = input.selectExpr(
+            s"floor(value, $scale) <= value", s"ceil(value, $scale) >= value")
+          checkAnswer(result, Seq.fill(values.size)(Row(true, true)))
+        }
+      }
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil result overflow respects ANSI mode in runtime SQL") {
+    val inputTypes = Seq(FloatType, DoubleType, DecimalType(38, 20))
+    val zero = BigDecimal(0)
+    val unit = BigDecimal("1e37")
+    for {
+      legacy <- Seq(false, true)
+      ansi <- Seq(false, true)
+      codegen <- Seq("CODEGEN_ONLY", "NO_CODEGEN")
+    } {
+      withSQLConf(
+          SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key -> legacy.toString,
+          SQLConf.ANSI_ENABLED.key -> ansi.toString,
+          SQLConf.CODEGEN_FACTORY_MODE.key -> codegen,
+          SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> (codegen == "CODEGEN_ONLY").toString) {
+        val input = spark.range(2).select($"id",
+          element_at(array(lit("1e-20"), lit("-1e-20")), ($"id" + 1).cast("int"))
+            .as("value"))
+        def rounded(scale: Int): DataFrame = input.select(inputTypes.flatMap { dt =>
+          Seq(floor($"value".cast(dt), lit(scale)), ceil($"value".cast(dt), lit(scale)))
+        }: _*)
+
+        val representable = rounded(-37)
+        assert(representable.schema.forall(_.dataType == DecimalType(38, 0)))
+        checkAnswer(representable, Seq(
+          Row(zero, unit, zero, unit, zero, unit),
+          Row(-unit, zero, -unit, zero, -unit, zero)))
+
+        val overflowing = rounded(-38)
+        assert(overflowing.schema.forall(_.dataType == DecimalType(38, 0)))
+        if (ansi) {
+          for (dt <- inputTypes; (function, index) <- Seq(("ceil", 0), ("floor", 1))) {
+            val error = intercept[SparkArithmeticException] {
+              input.where($"id" === index)
+                .selectExpr(s"$function(CAST(value AS ${dt.sql}), -38)").collect()
+            }
+            assert(error.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
+          }
+        } else {
+          checkAnswer(overflowing, Seq(
+            Row(zero, null, zero, null, zero, null),
+            Row(null, zero, null, zero, null, zero)))
+        }
+      }
+    }
   }
 
   test("round/bround/ceil/floor") {

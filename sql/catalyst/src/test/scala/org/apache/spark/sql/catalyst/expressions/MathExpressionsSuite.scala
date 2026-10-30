@@ -30,6 +30,7 @@ import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateMutableProjection
 import org.apache.spark.sql.catalyst.optimizer.SimpleTestOptimizer
 import org.apache.spark.sql.catalyst.plans.logical.{OneRowRelation, Project}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 
 class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -748,6 +749,222 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     checkEvaluation(Truncate(Literal(1.23), Literal.create(null, IntegerType)), null)
   }
 
+  Seq("floor", "ceil").foreach { name =>
+    test(s"SPARK-60202: scaled $name preserves Double rounding boundaries") {
+      val cases = if (name == "floor") {
+        Seq(
+          (0.8999999999999999, 1, "0.8"),
+          (1.7999999999999998, 1, "1.7"),
+          (0.9999999999999999, 0, "0"),
+          (-0.9000000000000001, 1, "-1.0"))
+      } else {
+        Seq(
+          (0.9000000000000001, 1, "1.0"),
+          (-0.8999999999999999, 1, "-0.8"),
+          (-1.7999999999999998, 1, "-1.7"),
+          (-0.9999999999999999, 0, "0"))
+      }
+      cases.foreach { case (value, scale, expected) =>
+        val input = BoundReference(0, DoubleType, nullable = true)
+        val rounding = if (name == "floor") {
+          RoundFloor(input, Literal(scale))
+        } else {
+          RoundCeil(input, Literal(scale))
+        }
+        val expression = checkDataTypeAndCast(rounding)
+        assert(expression.dataType == DecimalType(16 + scale, scale))
+        checkEvaluation(expression, Decimal(BigDecimal(expected)), InternalRow(value))
+      }
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil preserves Float rounding boundaries") {
+    val cases = Seq(
+      (java.lang.Math.nextDown(0.1f), "0.0", "0.1"),
+      (java.lang.Math.nextUp(0.9f), "0.9", "1.0"),
+      (-java.lang.Math.nextDown(0.1f), "-0.1", "0.0"),
+      (-java.lang.Math.nextUp(0.9f), "-1.0", "-0.9"))
+    cases.foreach { case (value, down, up) =>
+      val input = BoundReference(0, FloatType, nullable = true)
+      checkEvaluation(checkDataTypeAndCast(RoundFloor(input, Literal(1))),
+        Decimal(BigDecimal(down)), InternalRow(value))
+      checkEvaluation(checkDataTypeAndCast(RoundCeil(input, Literal(1))),
+        Decimal(BigDecimal(up)), InternalRow(value))
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil accepts inputs just inside the magnitude limit") {
+    for (ansi <- Seq(false, true)) {
+      val doubleInput = BoundReference(0, DoubleType, nullable = false)
+      val doubleValue = java.lang.Math.nextDown(1e15)
+      val floatInput = BoundReference(0, FloatType, nullable = false)
+      val floatValue = 9999999.0f
+      val cases = Seq(
+        (doubleInput, doubleValue, 0, "999999999999999", "1000000000000000"),
+        (doubleInput, doubleValue, 1, "999999999999999.9", "999999999999999.9"),
+        (floatInput, floatValue.toDouble, 0, "9999999", "9999999"),
+        (floatInput, floatValue.toDouble, 1, "9999999.0", "9999999.0"),
+        (floatInput, floatValue.toDouble, -1, "9999990", "10000000"))
+      cases.foreach { case (input, value, scale, down, up) =>
+        def row(negative: Boolean): InternalRow = {
+          val signed = if (negative) -value else value
+          if (input.dataType == FloatType) InternalRow(signed.toFloat) else InternalRow(signed)
+        }
+        val floor = RoundFloor(input, Literal(scale), ansiEnabled = ansi)
+        val ceil = RoundCeil(input, Literal(scale), ansiEnabled = ansi)
+        // Carry may exceed the input limit while fitting the result's extra integral digit.
+        val integralDigits = if (input.dataType == FloatType) 8 else 16
+        val resultScale = math.max(scale, 0)
+        assert(floor.dataType == DecimalType(integralDigits + resultScale, resultScale))
+        assert(ceil.dataType == floor.dataType)
+        checkEvaluation(floor, Decimal(down), row(negative = false))
+        checkEvaluation(ceil, Decimal(up), row(negative = false))
+        checkEvaluation(floor, Decimal(-BigDecimal(up)), row(negative = true))
+        checkEvaluation(ceil, Decimal(-BigDecimal(down)), row(negative = true))
+      }
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil preserves result types and explicit decimal casts") {
+    Seq(ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType).foreach { dt =>
+      Seq(-3, 0, 1, 15, 20).foreach { scale =>
+        val input = BoundReference(0, dt, nullable = true)
+        val decimal = Cast(input, DecimalType.forType(dt))
+        val actual = Seq(RoundFloor(input, Literal(scale)), RoundCeil(input, Literal(scale)))
+        val previous = Seq(RoundFloor(decimal, Literal(scale)), RoundCeil(decimal, Literal(scale)))
+        actual.zip(previous).foreach { case (rounding, control) =>
+          assert(checkDataTypeAndCast(rounding).dataType == control.dataType)
+        }
+      }
+    }
+    val input = BoundReference(0, DoubleType, nullable = true)
+    val explicitCast = Cast(input, DecimalType(30, 15))
+    checkEvaluation(RoundFloor(explicitCast, Literal(1)), Decimal(BigDecimal("0.9")),
+      InternalRow(0.8999999999999999))
+    checkEvaluation(RoundCeil(explicitCast, Literal(1)), Decimal(BigDecimal("0.9")),
+      InternalRow(0.9000000000000001))
+  }
+
+  test("SPARK-60202: scaled floor/ceil preserves null, non-finite and input overflow behavior") {
+    for (ansi <- Seq(false, true); dt <- Seq(FloatType, DoubleType)) {
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansi.toString) {
+        def toInput(value: Double): Any = if (dt == FloatType) value.toFloat else value
+        val input = BoundReference(0, dt, nullable = true)
+        val expressions = Seq(RoundFloor(input, Literal(1)), RoundCeil(input, Literal(1)))
+          .map(checkDataTypeAndCast)
+        expressions.foreach { expression =>
+          checkEvaluation(expression, null, InternalRow(null))
+          Seq(Double.NaN, Double.PositiveInfinity, Double.NegativeInfinity).foreach { value =>
+            checkEvaluation(expression, null, InternalRow(toInput(value)))
+          }
+          Seq(0.0, -0.0).foreach { value =>
+            checkEvaluation(expression, Decimal(0), InternalRow(toInput(value)))
+          }
+          val limit = if (dt == FloatType) 1e7 else 1e15
+          Seq(limit, -limit).foreach { value =>
+            val row = InternalRow(toInput(value))
+            if (ansi) {
+              checkExceptionInExpression[SparkArithmeticException](
+                expression, row, "NUMERIC_VALUE_OUT_OF_RANGE")
+            } else {
+              checkEvaluation(expression, null, row)
+            }
+          }
+        }
+      }
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil handles small values and negative scales") {
+    Seq(-1, 0, 1).foreach { scale =>
+      val input = BoundReference(0, DoubleType, nullable = true)
+      val down = checkDataTypeAndCast(RoundFloor(input, Literal(scale)))
+      val up = checkDataTypeAndCast(RoundCeil(input, Literal(scale)))
+      val unit = Decimal(BigDecimal(java.math.BigDecimal.ONE.scaleByPowerOfTen(-scale)))
+      val negativeUnit = Decimal(-BigDecimal(java.math.BigDecimal.ONE.scaleByPowerOfTen(-scale)))
+      checkEvaluation(down, Decimal(0), InternalRow(java.lang.Double.MIN_VALUE))
+      checkEvaluation(up, unit, InternalRow(java.lang.Double.MIN_VALUE))
+      checkEvaluation(down, negativeUnit, InternalRow(-java.lang.Double.MIN_VALUE))
+      checkEvaluation(up, Decimal(0), InternalRow(-java.lang.Double.MIN_VALUE))
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil result overflow respects ANSI mode") {
+    for (ansi <- Seq(false, true); dt <- Seq(FloatType, DoubleType, DecimalType(21, 20))) {
+      val input = BoundReference(0, dt, nullable = true)
+      def value(negative: Boolean): Any = dt match {
+        case FloatType => if (negative) -1e-20f else 1e-20f
+        case DoubleType => if (negative) -1e-20 else 1e-20
+        case _: DecimalType => Decimal(if (negative) "-1e-20" else "1e-20")
+      }
+      for (scale <- Seq(-37, -38, -39); negative <- Seq(false, true)) {
+        val expression = if (negative) {
+          RoundFloor(input, Literal(scale), ansiEnabled = ansi)
+        } else {
+          RoundCeil(input, Literal(scale), ansiEnabled = ansi)
+        }
+        val row = InternalRow(value(negative))
+        assert(expression.dataType == DecimalType(38, 0))
+        if (scale == -37) {
+          val expected = Decimal(if (negative) "-1e37" else "1e37")
+          checkEvaluation(expression, expected, row)
+        } else if (ansi) {
+          checkExceptionInExpression[SparkArithmeticException](
+            expression, row, "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
+        } else {
+          checkEvaluation(expression, null, row)
+        }
+      }
+      // Rounding in the other direction remains representable at the same scale.
+      checkEvaluation(RoundFloor(input, Literal(-38), ansiEnabled = ansi),
+        Decimal(0), InternalRow(value(negative = false)))
+      checkEvaluation(RoundCeil(input, Literal(-38), ansiEnabled = ansi),
+        Decimal(0), InternalRow(value(negative = true)))
+    }
+  }
+
+  test("SPARK-60202: scaled floor/ceil checks Decimal carry overflow") {
+    val input = BoundReference(0, DecimalType(38, 0), nullable = true)
+    val positive = Decimal("99999999999999999999999999999999999999")
+    val negative = Decimal("-99999999999999999999999999999999999999")
+    for (allowNegativeScale <- Seq(false, true); ansi <- Seq(false, true)) {
+      withSQLConf(SQLConf.LEGACY_ALLOW_NEGATIVE_SCALE_OF_DECIMAL_ENABLED.key ->
+          allowNegativeScale.toString) {
+        val up = RoundCeil(input, Literal(-1), ansiEnabled = ansi)
+        val down = RoundFloor(input, Literal(-1), ansiEnabled = ansi)
+        assert(up.dataType == DecimalType(38, 0))
+        assert(down.dataType == DecimalType(38, 0))
+        if (ansi) {
+          checkExceptionInExpression[SparkArithmeticException](
+            up, InternalRow(positive), "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
+          checkExceptionInExpression[SparkArithmeticException](
+            down, InternalRow(negative), "NUMERIC_VALUE_OUT_OF_RANGE.WITH_SUGGESTION")
+        } else {
+          checkEvaluation(up, null, InternalRow(positive))
+          checkEvaluation(down, null, InternalRow(negative))
+        }
+        checkEvaluation(down, Decimal("99999999999999999999999999999999999990"),
+          InternalRow(positive))
+        checkEvaluation(up, Decimal("-99999999999999999999999999999999999990"),
+          InternalRow(negative))
+        // The carry still fits when reducing the scale of a precision-38 fractional value.
+        val fractional = BoundReference(0, DecimalType(38, 1), nullable = false)
+        checkEvaluation(RoundCeil(fractional, Literal(0), ansiEnabled = ansi), Decimal("1e37"),
+          InternalRow(Decimal("9999999999999999999999999999999999999.9")))
+      }
+    }
+  }
+
+  test("SPARK-60202: a null scale does not evaluate the floor/ceil input") {
+    Seq(FloatType, DoubleType, DecimalType(10, 2)).foreach { dt =>
+      val input = BoundReference(0, dt, nullable = false)
+      val scale = Literal.create(null, IntegerType)
+      // EmptyRow has no input field, so evaluating the child would fail.
+      checkEvaluation(RoundFloor(input, scale), null, EmptyRow)
+      checkEvaluation(RoundCeil(input, scale), null, EmptyRow)
+    }
+  }
+
   test("round/bround/floor/ceil") {
     val scales = -6 to 6
     val doublePi: Double = math.Pi
@@ -789,8 +1006,9 @@ class MathExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
 
     def floatResultsFloor(i: Int): Any = {
+      // 3.1415f is represented as 3.141499996185302734375.
       val results = Seq(0, 0, 0, 0, 0, 0, 3,
-        3.1, 3.14, 3.141, 3.1415, 3.1415, 3.1415)
+        3.1, 3.14, 3.141, 3.1414, 3.14149, 3.141499)
       Decimal(results(i))
     }
 
