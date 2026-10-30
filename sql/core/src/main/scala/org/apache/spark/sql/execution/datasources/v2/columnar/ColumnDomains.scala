@@ -127,7 +127,8 @@ case class ColumnDomains(domains: Seq[ColumnDomain], columns: Seq[Set[Seq[Int]]]
  * other value, -0.0 is equal to 0.0, and strings and binary values are compared by their bytes, as
  * unsigned bytes. A predicate that cannot be expressed this way does not constrain any column. Only
  * the columns and the fields of structs of the types that a data source can compare get a domain:
- * not the strings of a non-binary collation, nor arrays, maps and structs.
+ * not the strings of a non-binary collation, nor arrays, maps and structs. A field of a struct only
+ * gets a domain that does not have null.
  */
 object ColumnDomains {
 
@@ -156,9 +157,13 @@ object ColumnDomains {
     val columns = constraints.map(_.map(_.keySet.map(_.path)).getOrElse(Set.empty[Seq[Int]]))
     val domains = constraints.foldLeft(All)(and) match {
       case Some(values) =>
-        values.toSeq.map { case (column, v) =>
-          ColumnDomain(column.path, column.name, column.dataType, v.nullAllowed, v.nanAllowed,
-            v.ranges)
+        values.toSeq.collect {
+          // A field of a struct is null in the rows where the struct, or a struct that contains it,
+          // is null, which the statistics of its Arrow child array may not count as nulls. So a
+          // field only gets a domain without null, which these rows never match.
+          case (column, v) if column.path.length == 1 || !v.nullAllowed =>
+            ColumnDomain(column.path, column.name, column.dataType, v.nullAllowed, v.nanAllowed,
+              v.ranges)
         }.sortBy(_.path)(Ordering.Implicits.seqOrdering[Seq, Int])
       // A predicate that is always false, which Spark usually removes before it scans the data.
       case None => Nil
@@ -269,12 +274,18 @@ object ColumnDomains {
         case (last :: rest, v) if column.ordering.equiv(last, v) => last :: rest
         case (acc, v) => v :: acc
       }.reverse
-    if (!negated) {
+    if (values.isEmpty) {
+      // x IN () is false, also for null, unless spark.sql.legacy.nullInEmptyListBehavior makes it
+      // null for null. So it is never true, and NOT (x IN ()) is true for any value, and by
+      // default for null.
+      if (negated) All else single(column, NoValue)
+    } else if (!negated) {
       single(column, Values(nullAllowed = false, hasNaN, Some(points.map(point))))
     } else if (nonNull.length < values.length) {
       // NOT (x IN (..., NULL)) is never true: it is false or null.
       single(column, NoValue)
     } else if (points.isEmpty) {
+      // NOT (x IN (NaN)) is true for the values other than NaN.
       single(column, Values(nullAllowed = false, !hasNaN, None))
     } else {
       // The values between the points.
@@ -440,9 +451,11 @@ object ColumnDomains {
 
   // Intersects two lists of sorted ranges that neither overlap nor touch, by sweeping them.
   private def intersectRanges(
-      a: Seq[ValueRange],
-      b: Seq[ValueRange],
+      left: Seq[ValueRange],
+      right: Seq[ValueRange],
       ordering: Ordering[Any]): Seq[ValueRange] = {
+    // The ranges are usually lists, such as those of IN, so the sweep indexes copies of them.
+    val (a, b) = (left.toIndexedSeq, right.toIndexedSeq)
     val result = ArrayBuffer.empty[ValueRange]
     var i = 0
     var j = 0

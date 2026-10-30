@@ -21,19 +21,25 @@ import java.sql.Date
 import scala.jdk.CollectionConverters._
 import scala.util.Random
 
-import org.apache.spark.sql.{QueryTest, Row}
-import org.apache.spark.sql.catalyst.CatalystTypeConverters
+import org.scalatest.concurrent.TimeLimits
+import org.scalatest.time.SpanSugar._
+
+import org.apache.spark.sql.{Column, QueryTest, Row}
+import org.apache.spark.sql.catalyst.{CatalystTypeConverters, InternalRow}
 import org.apache.spark.sql.catalyst.expressions.{Literal, PredicateHelper}
 import org.apache.spark.sql.catalyst.plans.logical.Filter
+import org.apache.spark.sql.connector.expressions.{Expression => V2Expression, FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Strategy
-import org.apache.spark.sql.functions.expr
+import org.apache.spark.sql.functions.{col, expr, not}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
 /** Tests how [[ColumnDomains]] derives the domains of columns from the predicates of a query. */
-class ColumnDomainsSuite extends QueryTest with SharedSparkSession with PredicateHelper {
+class ColumnDomainsSuite extends QueryTest with SharedSparkSession with PredicateHelper
+  with TimeLimits {
 
   private val schema = StructType.fromDDL("id BIGINT, i INT, d DOUBLE, f FLOAT, s STRING, " +
     "b BINARY, flag BOOLEAN, dt DATE, ts TIMESTAMP, dec DECIMAL(10, 2), " +
@@ -46,6 +52,10 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
    * constants folded: the optimizer would rewrite some of them, such as NOT (x > 1).
    */
   private def predicates(filter: String, schema: StructType): Seq[Predicate] = {
+    predicates(expr(filter), schema)
+  }
+
+  private def predicates(filter: Column, schema: StructType): Seq[Predicate] = {
     val df = spark.createDataFrame(Seq.empty[Row].asJava, schema)
     val condition = df.where(filter).queryExecution.analyzed.collectFirst {
       case Filter(condition, _) => condition
@@ -55,7 +65,9 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     }).flatMap(DataSourceV2Strategy.translateFilterV2)
   }
 
-  private def domains(filter: String): Seq[String] = {
+  private def domains(filter: String): Seq[String] = domains(expr(filter))
+
+  private def domains(filter: Column): Seq[String] = {
     ColumnDomains.derive(predicates(filter, schema), schema).domains.map(_.toString)
   }
 
@@ -67,7 +79,7 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("id = 5") == Seq("id: 5L"))
     assert(domains("id <> 5") == Seq("id: (-inf, 5L), (5L, +inf)"))
     assert(domains("id <=> 5") == Seq("id: 5L"))
-    // x <=> v is true for null when false, and so is NOT (x <=> v).
+    // x <=> v is false, not null, when x is null, so NOT (x <=> v) is true for null.
     assert(domains("NOT (id <=> 5)") == Seq("id: NULL, (-inf, 5L), (5L, +inf)"))
     assert(domains("id <=> NULL") == Seq("id: NULL"))
     assert(domains("NOT (id <=> NULL)") == Seq("id: ANY"))
@@ -80,6 +92,11 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("NOT (id = NULL)") == Seq("id: NONE"))
     assert(domains("id IN (1, NULL)") == Seq("id: 1L"))
     assert(domains("NOT (id IN (1, NULL))") == Seq("id: NONE"))
+    // x IN (), which only the DataFrame API builds, is never true: it is false, and null for null
+    // with spark.sql.legacy.nullInEmptyListBehavior. So NOT (x IN ()) constrains no column.
+    assert(domains(col("id").isin()) == Seq("id: NONE"))
+    assert(domains(not(col("id").isin())).isEmpty)
+    assert(domains(not(col("id").isInCollection(Nil)) && col("id") > 5) == Seq("id: (5L, +inf)"))
     assert(domains("id = 1 AND id = 2") == Seq("id: NONE"))
     // The domains of all the predicates, which are combined with AND, at most one per column.
     assert(domains("id > 5 AND i = 1 AND id < 8") == Seq("id: (5L, 8L)", "i: 1"))
@@ -173,9 +190,17 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
     assert(domains("ts < TIMESTAMP '2020-01-01 00:00:00'") ==
       Seq("ts: (-inf, TIMESTAMP '2020-01-01 00:00:00')"))
     assert(domains("dec = 1.5") == Seq("dec: 1.50BD"))
-    assert(domains("st.x > 1 AND st.y IS NULL") == Seq("st.x: (1, +inf)", "st.y: NULL"))
     assert(ColumnDomains.derive(predicates("st.x > 1", schema), schema).domains.map(_.path) ==
       Seq(Seq(10, 0)))
+    // A field of a struct is null where the struct is null, which the statistics of its Arrow
+    // child array may not count as nulls, so it only gets a domain without null.
+    assert(domains("st.x > 1 AND st.y IS NULL") == Seq("st.x: (1, +inf)"))
+    assert(domains("NOT (st.x <=> 1)").isEmpty)
+    assert(domains("st.y IS NULL OR st.y = 'a'").isEmpty)
+    assert(domains("st.y IS NULL AND st.y = 'a'") == Seq("st.y: NONE"))
+    val nullable = predicates("st.y IS NULL", schema) ++ predicates("id > 1", schema)
+    assert(ColumnDomains.derive(nullable, schema).pushedPredicates(nullable.toArray, Seq(true))
+      .toSeq == nullable.drop(1))
     // Arrays, maps and structs have other rules, such as nulls equal to each other inside them.
     assert(domains("arr IS NULL").isEmpty)
     assert(domains("st IS NOT NULL").isEmpty)
@@ -197,27 +222,31 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
    */
   test("the domains have the values of the matching rows") {
     val testSchema = StructType.fromDDL("id INT, i INT, d DOUBLE, s STRING, f FLOAT, b BINARY, " +
-      "dec DECIMAL(5, 2), dt DATE")
+      "dec DECIMAL(5, 2), dt DATE, st STRUCT<x: INT>")
     val (emoji, eAcute, replacement, max) = (char(0x1F600), char(0xE9), char(0xFFFD),
       char(0x10FFFF))
     def bytes(values: Int*): Array[Byte] = values.map(_.toByte).toArray
     def decimal(value: String): java.math.BigDecimal = new java.math.BigDecimal(value)
     val rows = Seq(
-      Row(0, 1, 0.0, "a", 0.1f, bytes(0x00), decimal("1.00"), Date.valueOf("2020-01-01")),
-      Row(1, 2, -0.0, "", 1.5f, bytes(0x7F), decimal("-1.50"), Date.valueOf("1970-01-01")),
-      Row(2, null, Double.NaN, eAcute, null, bytes(0x80), null, null),
+      Row(0, 1, 0.0, "a", 0.1f, bytes(0x00), decimal("1.00"), Date.valueOf("2020-01-01"),
+        Row(1)),
+      Row(1, 2, -0.0, "", 1.5f, bytes(0x7F), decimal("-1.50"), Date.valueOf("1970-01-01"),
+        null),
+      Row(2, null, Double.NaN, eAcute, null, bytes(0x80), null, null, Row(null)),
       Row(3, 3, Double.PositiveInfinity, emoji, 0.1f, bytes(0xFF), decimal("999.99"),
-        Date.valueOf("2020-01-02")),
+        Date.valueOf("2020-01-02"), Row(3)),
       Row(4, 1, Double.NegativeInfinity, null, 0.5f, bytes(0x7F, 0x00), decimal("0.00"),
-        Date.valueOf("1969-12-31")),
-      Row(5, null, 1.5, "ab", 2.0f, bytes(), decimal("-999.99"), Date.valueOf("2020-01-01")),
-      Row(6, 2, null, "b" + eAcute, Float.NaN, null, decimal("1.01"), Date.valueOf("2000-02-29")),
+        Date.valueOf("1969-12-31"), Row(-1)),
+      Row(5, null, 1.5, "ab", 2.0f, bytes(), decimal("-999.99"), Date.valueOf("2020-01-01"),
+        null),
+      Row(6, 2, null, "b" + eAcute, Float.NaN, null, decimal("1.01"), Date.valueOf("2000-02-29"),
+        Row(0)),
       Row(7, 4, 2.5, replacement, 3.0f, bytes(0x01, 0x02), decimal("2.50"),
-        Date.valueOf("2020-01-01")),
+        Date.valueOf("2020-01-01"), Row(1)),
       Row(8, Int.MinValue, -1.0, "a" + max, -0.0f, bytes(0x61), decimal("0.01"),
-        Date.valueOf("2021-06-15")),
+        Date.valueOf("2021-06-15"), Row(Int.MinValue)),
       Row(9, Int.MaxValue, 0.5, "abc", Float.PositiveInfinity, bytes(0x61, 0x62),
-        decimal("10.00"), Date.valueOf("1999-12-31")))
+        decimal("10.00"), Date.valueOf("1999-12-31"), Row(Int.MaxValue)))
 
     val fixed = Seq(
       "d = 0.0D", "d = -0.0D", "d < 0.0D", "d > 1.0D", "d >= 2.5D", "d <> 0.0D", "d <=> 0.0D",
@@ -230,7 +259,8 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
       s"s = '$emoji'", s"s > '$replacement'", "s < 'b'", "startswith(s, 'a')",
       s"startswith(s, 'a$max')", "NOT startswith(s, 'ab')", s"s IN ('', '$eAcute')",
       "b > X'7F'", "b < X'80'", "b IN (X'', X'7F00')", "dec > 0", "dec <= -1.5",
-      "dt < DATE '2000-01-01'", "dt IN (DATE '2020-01-01', NULL)", "(id > 3) = (id < 3)")
+      "dt < DATE '2000-01-01'", "dt IN (DATE '2020-01-01', NULL)", "(id > 3) = (id < 3)",
+      "st.x = 1", "st.x IS NULL", "NOT (st.x <=> 1)", "st.x > 0 OR st.x < 0", "st IS NULL")
 
     // Random combinations of comparisons, with the values of the rows and edge values.
     val random = new Random(42)
@@ -250,7 +280,8 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
       "b" -> Seq("X''", "X'00'", "X'7F'", "X'80'", "X'FF'", "X'7F00'", "X'61'", "NULL"),
       "dec" -> Seq("CAST(0 AS DECIMAL(5, 2))", "CAST(1.5 AS DECIMAL(5, 2))",
         "CAST(-999.99 AS DECIMAL(5, 2))", "CAST(1.01 AS DECIMAL(5, 2))", "NULL"),
-      "dt" -> Seq("DATE '2020-01-01'", "DATE '1970-01-01'", "DATE '2021-06-15'", "NULL"))
+      "dt" -> Seq("DATE '2020-01-01'", "DATE '1970-01-01'", "DATE '2021-06-15'", "NULL"),
+      "st.x" -> Seq("-1", "0", "1", "2147483647", "NULL"))
     val ops = Seq("=", "<>", "<=>", "<", "<=", ">", ">=")
     def leaf(): String = {
       val column = pick(literals.keys.toSeq.sorted)
@@ -276,30 +307,75 @@ class ColumnDomainsSuite extends QueryTest with SharedSparkSession with Predicat
         }
       }
     }
-    val filters = fixed ++ Seq.fill(400)(filter(3))
+    // x IN (), which only the DataFrame API builds.
+    val emptyLists = Seq(col("i").isin(), not(col("i").isin()), not(col("st.x").isin()),
+      not(col("d").isin()) && col("id") > 3, col("i").isin() || col("i").isNull)
+    val filters = (fixed ++ Seq.fill(400)(filter(3))).map(expr) ++ emptyLists
 
-    // Evaluates all the filters in one job, with the semantics of Spark SQL.
-    val df = spark.createDataFrame(rows.asJava, testSchema)
-    val results = df.select(filters.zipWithIndex.map { case (f, i) => expr(f).as(s"f$i") }: _*)
-      .collect()
-    val converters = testSchema.fields.map(f => CatalystTypeConverters.createToCatalystConverter(
-      f.dataType))
-    var constrained = 0
-    filters.zipWithIndex.foreach { case (filter, i) =>
-      val domains = ColumnDomains.derive(predicates(filter, testSchema), testSchema).domains
-      if (domains.nonEmpty) constrained += 1
-      rows.zip(results).foreach { case (row, result) =>
-        if (!result.isNullAt(i) && result.getBoolean(i)) {
-          domains.foreach { domain =>
-            val column = domain.path.head
-            val value = converters(column)(row.get(column))
-            assert(domain.contains(value),
-              s"The row $row matches $filter, but $domain does not have its value.")
-          }
-        }
+    // The value of a column, or of a field of a struct, which is null where a struct on its path
+    // is null.
+    def valueAt(row: InternalRow, path: Seq[Int], schema: StructType): Any = {
+      val dataType = schema.fields(path.head).dataType
+      if (row.isNullAt(path.head)) {
+        null
+      } else if (path.length == 1) {
+        row.get(path.head, dataType)
+      } else {
+        val struct = dataType.asInstanceOf[StructType]
+        valueAt(row.getStruct(path.head, struct.length), path.tail, struct)
       }
     }
+    val toInternal = CatalystTypeConverters.createToCatalystConverter(testSchema)
+    val internalRows = rows.map(toInternal(_).asInstanceOf[InternalRow])
+    // Evaluates all the filters in one job, with the semantics of Spark SQL, and returns how many
+    // of them constrain a column.
+    def check(filters: Seq[Column]): Int = {
+      val df = spark.createDataFrame(rows.asJava, testSchema)
+      val results = df.select(filters.zipWithIndex.map { case (f, i) => f.as(s"f$i") }: _*)
+        .collect()
+      filters.zipWithIndex.count { case (filter, i) =>
+        val domains = ColumnDomains.derive(predicates(filter, testSchema), testSchema).domains
+        rows.zip(internalRows).zip(results).foreach { case ((row, internalRow), result) =>
+          if (!result.isNullAt(i) && result.getBoolean(i)) {
+            domains.foreach { domain =>
+              assert(domain.contains(valueAt(internalRow, domain.path, testSchema)),
+                s"The row $row matches $filter, but $domain does not have its value.")
+            }
+          }
+        }
+        domains.nonEmpty
+      }
+    }
+    val constrained = check(filters)
     // Most filters constrain a column.
     assert(constrained > filters.length / 2, s"$constrained of ${filters.length} filters")
+    // x IN () is null for null with the legacy behavior.
+    withSQLConf(SQLConf.LEGACY_NULL_IN_EMPTY_LIST_BEHAVIOR.key -> "true") {
+      check(emptyLists)
+    }
+  }
+
+  test("the domains of long IN lists") {
+    // OptimizeIn turns a long IN list into an InSet, which Data Source V2 pushes as an IN. The
+    // ranges of IN, and those of NOT IN, are intersected with the range of the other predicate in
+    // a linear sweep: it takes a fraction of a second here, and more than a minute when it walks
+    // lists of ranges by index.
+    val id = FieldReference("id")
+    val values = (0L until 200000L by 2).map(LiteralValue(_, LongType))
+    val in = new Predicate("IN", (id +: values).toArray[V2Expression])
+    val notIn = new Predicate("NOT", Array[V2Expression](in))
+    val above = new Predicate(">", Array[V2Expression](id, LiteralValue(100L, LongType)))
+    failAfter(20.seconds) {
+      val points = ColumnDomains.derive(Seq(in, above), schema).domains.map(_.ranges.get)
+      assert(points.map(_.length) == Seq(99949))
+      assert(points.head.head == ValueRange(Some(102L), lowInclusive = true, Some(102L),
+        highInclusive = true))
+      val gaps = ColumnDomains.derive(Seq(above, notIn), schema).domains.map(_.ranges.get)
+      assert(gaps.map(_.length) == Seq(99950))
+      assert(gaps.head.head == ValueRange(Some(100L), lowInclusive = false, Some(102L),
+        highInclusive = false))
+      assert(gaps.head.last == ValueRange(Some(199998L), lowInclusive = false, None,
+        highInclusive = false))
+    }
   }
 }

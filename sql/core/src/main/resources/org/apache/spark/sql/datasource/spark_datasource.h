@@ -383,7 +383,12 @@ typedef struct SparkDsDomain {
    */
   const int32_t* path;
   int64_t path_length;
-  /* Whether null is in the domain. */
+  /*
+   * Whether null is in the domain. A field of a struct is null in the rows where the struct, or a
+   * struct that contains it, is null, whatever the child array of the field holds there. Spark
+   * never sets it for a field of a struct, since statistics computed from that child array may not
+   * count these rows as nulls.
+   */
   bool null_allowed;
   /*
    * Whether NaN is in the domain. Always false for the columns of types other than float and
@@ -690,10 +695,11 @@ typedef struct SparkDsLibrary {
    *
    * Spark passes domains for the columns and the fields of structs of the types boolean, tinyint,
    * smallint, int, bigint, float, double, decimal, string, binary, date, timestamp and
-   * timestamp_ntz, but not for strings with a non-binary collation, such as UTF8_LCASE. A later
-   * version of Spark may pass domains for other columns, so a reader must ignore a domain that it
-   * cannot use. Spark calls it at most once for a reader, before push_limit and prune_columns, with
-   * at least one domain, and at most one domain for each column.
+   * timestamp_ntz, but not for strings with a non-binary collation, such as UTF8_LCASE, and only
+   * domains without null for the fields of structs (see null_allowed). A later version of Spark
+   * may pass domains for other columns, so a reader must ignore a domain that it cannot use. Spark
+   * calls it at most once for a reader, before push_limit and prune_columns, with at least one
+   * domain, and at most one domain for each column.
    *
    * domains: the count domains
    * used: an array of count values, all false, to set to true for the domains that the reader

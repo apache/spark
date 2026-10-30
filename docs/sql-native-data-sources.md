@@ -103,9 +103,9 @@ Spark calls the functions of the table as follows:
 - **Batch reads**: on the driver, Spark creates a reader with `create_reader`, pushes operations
   down with `push_domains` (see [Filter Pushdown](#filter-pushdown)), `push_limit` and
   `prune_columns`, plans the partitions with `partitions`, and serializes the state of the reader
-  with `serialize_reader`. Then it calls `read` on the
-  executors, in one task for each partition, and `read` exports an `ArrowArrayStream`. Its
-  callbacks can be called from any thread, but never concurrently.
+  with `serialize_reader`. Then it calls `read` on the executors, in one task for each partition,
+  and `read` exports an `ArrowArrayStream`. Its callbacks can be called from any thread, but never
+  concurrently.
 - **Streaming reads**: on the driver, Spark creates a stream reader with `create_stream_reader`.
   For each micro-batch, it asks for the `latest_offset`, plans the partitions with
   `stream_partitions`, and calls `read` on the executors. Offsets are defined by the library, as
@@ -207,7 +207,10 @@ Spark derives the domains from the comparisons of a column with literals (`=`, `
 are true, and may have others: a column that only one side of an `OR` constrains gets no domain
 from it, and the other filters, such as `id + 1 > 5`, `a = b` or `ENDS_WITH(name, 'x')`, constrain
 no column. Columns of strings with a non-binary collation, such as `UTF8_LCASE`, and arrays, maps
-and structs, get no domain.
+and structs, get no domain. A field of a struct is null in the rows where the struct, or a struct
+that contains it, is null, whatever the Arrow child array of the field holds there, so statistics
+computed from that array may not count these rows as nulls: Spark only passes domains without null
+for the fields of structs.
 
 A library compares values with the order of Spark SQL: numbers, dates and timestamps by their
 values, with -0.0 equal to 0.0 (use IEEE 754 comparisons, not a total order such as
@@ -215,18 +218,19 @@ values, with -0.0 equal to 0.0 (use IEEE 754 comparisons, not a total order such
 true. It must never skip a row whose values are all in their domains, which Spark cannot detect,
 but it can return rows that are not: Spark evaluates all the filters again after reading. So a
 library only uses the domains to read less data, and Spark does not push a `LIMIT` down with a
-filter. The library sets `used` to whether it uses each domain,
-and the plan of the query shows the filters of the used domains as `PushedFilters`, and the
-domains as `PushedDomains`. Set `spark.sql.dataSource.native.filterPushdown.enabled` to false to
-read without passing the domains, for example to check whether a library skips data that matches.
+filter. The library sets `used` to whether it uses each domain, and the plan of the query shows the
+filters of the used domains as `PushedFilters`, and the domains as `PushedDomains`. Set
+`spark.sql.dataSource.native.filterPushdown.enabled` to false to read without passing the domains,
+for example to check whether a library skips data that matches.
 
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
 `SparkDsHost`, `SparkDsCreateInfo`, `SparkDsTaskContext`, `SparkDsWriteInfo` and `SparkDsDomain`,
 start with their size, so that they can grow. `push_domains` was added this way, at the end of the
-table: Spark does not call it for a library built against a header without it. The version of the interface, 1, is `SPARK_DS_ABI_VERSION`, which the
-table and the manifest of a package declare. Within a version:
+table: Spark does not call it for a library built against a header without it. The version of the
+interface, 1, is `SPARK_DS_ABI_VERSION`, which the table and the manifest of a package declare.
+Within a version:
 
 - fields are only appended to these structs, and the existing fields and the semantics of the
   existing functions never change;

@@ -456,11 +456,37 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     checkRows(empty, Nil)
     assert(received() == Seq("0 - - "))
     assert(scan(empty).toBatch.planInputPartitions().isEmpty)
+    // Domains with null, and with more than one range: the library reads the blocks that one of
+    // the ranges of id may match.
+    val nullSafe = read().filter("NOT (id <=> 5)")
+    checkRows(nullSafe, (0L until 45L).filter(_ != 5).map(expectedRow))
+    assert(received() == Seq("0 null - (-inf,5) (5,+inf)"))
+    val nullNames = read().filter("name IS NULL")
+    checkRows(nullNames, (0L until 45L by 5).map(expectedRow))
+    assert(received() == Seq("2 null - "))
+    val notIn = read().filter("id NOT IN (5, 20)")
+    checkRows(notIn, (0L until 45L).filter(id => id != 5 && id != 20).map(expectedRow))
+    assert(received() == Seq("0 - - (-inf,5) (5,20) (20,+inf)"))
+    val between = read().filter("id < 3 OR (id > 22 AND id < 25)")
+    checkRows(between, Seq(0L, 1L, 2L, 23L, 24L).map(expectedRow))
+    assert(received() == Seq("0 - - (-inf,3) (22,25)"))
+    assert(scan(between).toBatch.planInputPartitions().length == 2)
     // Filters on other expressions are not pushed: Spark evaluates them.
     val functions = read().filter("id % 7 = 0 AND upper(name) = 'N14'")
     checkRows(functions, Seq(expectedRow(14L)))
     val notPushed = scan(functions).getMetaData()("PushedFilters")
     assert(!notPushed.contains("%") && !notPushed.contains("UPPER"), notPushed)
+
+    // A library compares strings by their bytes, so a column of a non-binary collation gets no
+    // domain, even for a library that uses all the domains.
+    file.delete()
+    val collated = newSession(defaultPackage).read
+      .schema("id BIGINT, name STRING COLLATE UTF8_LCASE").format("native_range")
+      .options(Map("end" -> "6", "domains_path" -> file.getPath, "use_domains" -> "all")).load()
+      .filter("name = 'N1' AND id < 5")
+    checkRows(collated, Seq(Row(1L, "n1")))
+    assert(received() == Seq("0 - - (-inf,5)"))
+    assert(!scan(collated).getMetaData()("PushedFilters").contains("name"))
 
     val session = newSession(defaultPackage)
     session.conf.set(SQLConf.NATIVE_DATA_SOURCE_FILTER_PUSHDOWN_ENABLED.key, "false")
