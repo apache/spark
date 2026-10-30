@@ -1231,8 +1231,9 @@ object SQLConf {
       "so three trade-offs apply uniformly. First, a build where some, but not all, " +
       "intervals overlap each probe can run slower than a nested loop join, and how much " +
       "overlap triggers that depends heavily on the key family: boxed keys " +
-      "(double, string, wide decimal) slow down at far lower overlap than long-specialized " +
-      "keys (boolean, byte, short, int, date, long, timestamp, compact decimal): long keys " +
+      "(double, float, string, binary, wide decimal) slow down at far lower overlap than " +
+      "long-specialized keys (boolean, byte, short, int, date, long, timestamp, " +
+      "timestamp_ntz, compact decimal): long keys " +
       "stay close to parity (0.8X-1.2X) through about 10% interleaved overlap and settle " +
       "around 0.7X-0.8X from 25% on, while boxed keys fall off much sooner, already down to " +
       "0.5X-0.6X by 10% overlap (and on some platforms by 5%), and no worse than that through " +

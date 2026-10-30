@@ -104,9 +104,11 @@ private[joins] sealed trait LongKeyConversion extends RangeRelation {
   @volatile private[this] var _toLong: Any => Long = _
 
   /**
-   * One evaluated streamed key to its order-preserving long. `RangePredicate`
-   * gives both sides of a range predicate one type after analysis, so the
-   * streamed key type is this index's `keyType`.
+   * One evaluated streamed key to its order-preserving long. Within a predicate, the
+   * analyzer's comparison type coercion gives both sides one type; across the two
+   * predicates an interval-overlap join pairs, `ExtractRangeJoinKeys`' own same-type
+   * guards keep the streamed key on the build side's type, so the streamed key type
+   * is this index's `keyType`.
    */
   private[joins] def toLong(key: Any): Long = {
     var f = _toLong
@@ -173,9 +175,10 @@ private[joins] object RangeIndex {
   /**
    * Every key maps to one order-preserving long. [[RangeRelationBroadcastMode]] picks
    * the index family by this test and [[BroadcastRangeJoinExec]] picks its probe
-   * code by the same one, so the two cannot drift apart. `RangePredicate` gives
-   * both sides of a range predicate one type after analysis, so testing the
-   * build keys also settles the streamed keys.
+   * code by the same one, so the two cannot drift apart. Within a predicate, the
+   * analyzer's comparison type coercion gives both sides one type; across predicates,
+   * `ExtractRangeJoinKeys`' own same-type guards keep build and streamed keys aligned,
+   * so testing the build keys also settles the streamed keys.
    */
   def canMapKeysToLong(keys: Seq[Expression]): Boolean =
     keys.forall(k => longKey(k.dataType).isDefined)
