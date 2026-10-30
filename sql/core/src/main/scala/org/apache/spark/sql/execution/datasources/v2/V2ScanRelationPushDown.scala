@@ -38,6 +38,7 @@ import org.apache.spark.sql.connector.expressions.aggregate.{Aggregation, Avg, C
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, ScanContext, Statistics => V2Statistics, SupportsPushDownAggregates, SupportsPushDownFilters, SupportsPushDownJoin, SupportsPushDownRequiredColumns, SupportsPushDownV2Filters, SupportsPushDownVariantExtractions, SupportsReportStatistics, V1Scan, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, SchemaPruning, VariantInRelation, VariantMetadata}
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcTable
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{SupportsPushDownCatalystFilters, VariantExtractionImpl}
 import org.apache.spark.sql.sources
@@ -1018,7 +1019,8 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
 
   def pruneColumns(plan: LogicalPlan, isSubquery: Boolean): LogicalPlan = plan.transform {
     case op @ SchemaPruning.GeneratorsOverScan(segments, generators, sHolder: ScanBuilderHolder)
-        if !hasBlockingPushdown(sHolder) =>
+        if !hasBlockingPushdown(sHolder) && !sHolder.relation.table.isInstanceOf[OrcTable] =>
+      // ORC is not pruned through generators yet, see `SchemaPruning.GeneratorsOverScan`.
       // Fields read from the generators' elements above them narrow the scan below them. This
       // prunes and builds the holder's builder before the plan above is re-resolved. If that is
       // then rejected, the builder must not be pruned again with a wider schema (a builder may
@@ -1056,8 +1058,9 @@ object V2ScanRelationPushDown extends Rule[LogicalPlan] with PredicateHelper {
     val relation = sHolder.relation
     val pushable = (sHolder.pushedFilterExpressions ++ scan.filtersPushDown).reduceOption(And)
       .map(Filter(_, relation)).getOrElse(relation)
-    val filtered = scan.filtersStayUp.reduceOption(And)
-      .map(Filter(_, pushable)).getOrElse(pushable)
+    // one Filter per condition, in order: combining them could evaluate a condition that an
+    // earlier one would have skipped (e.g. a cast that fails under ANSI)
+    val filtered = scan.filtersStayUp.foldLeft(pushable)((plan, cond) => Filter(cond, plan))
     applyWithContext(Project(scan.projects, filtered), isSubquery)
   }
 

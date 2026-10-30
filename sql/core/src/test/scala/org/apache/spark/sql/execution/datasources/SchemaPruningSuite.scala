@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.datasources
 
 import java.io.File
+import java.time.LocalDateTime
 
 import org.scalactic.Equality
 
@@ -28,8 +29,9 @@ import org.apache.spark.sql.catalyst.expressions.{Concat, Expression, GetArraySt
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{Expand, Generate}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.execution.FileSourceScanExec
+import org.apache.spark.sql.execution.{FileSourceScanExec, SparkPlan}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.datasources.v2.{BatchScanExec, FileScan}
 import org.apache.spark.sql.execution.streaming.runtime.StreamingQueryWrapper
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
@@ -117,6 +119,11 @@ abstract class SchemaPruningSuite
   case class KeyedMap(m: Map[Keyed, String])
   val keyedMaps =
     KeyedMap(Map(Keyed(1, 23, 17) -> "x", Keyed(2, 23, 17) -> "y")) :: Nil
+  // struct map keys, equal without their `id`, inside an exploded element
+  case class KeyedItem(idx: Int, note: String, m: Map[Keyed, String])
+  case class KeyedItems(items: Array[KeyedItem])
+  val keyedItems = KeyedItems(Array(KeyedItem(4, "n",
+    Map(Keyed(1, 23, 17) -> "x", Keyed(2, 23, 17) -> "y")))) :: Nil
   // two array columns, each exploded by its own generator
   case class TwoArrays(a1: Array[Point], a2: Array[Pair])
   val twoArrays =
@@ -417,19 +424,19 @@ abstract class SchemaPruningSuite
     val exploded = spark.table("contacts").select(explode(col("friends")).as("friend"))
 
     val query1 = exploded.select(col("friend.first"), col("friend.last"))
-    checkScan(query1, "struct<friends:array<struct<first:string,last:string>>>")
+    checkGeneratorScan(query1, "struct<friends:array<struct<first:string,last:string>>>")
     checkAnswer(query1, Row("Susan", "Smith") :: Nil)
 
     // a filter between the generator and the projection reads its fields too
     // (`first` is also read by the `size(friends) > 0` filter inferred for the explode)
     val query2 = exploded.where(col("friend.middle").isNotNull).select(col("friend.first"))
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkGeneratorScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan") :: Nil)
 
     val query3 = sql(
       "select id, pos, friend.first, friend.last from contacts " +
         "lateral view outer posexplode(friends) t as pos, friend")
-    checkScan(query3, "struct<id:int,friends:array<struct<first:string,last:string>>>")
+    checkGeneratorScan(query3, "struct<id:int,friends:array<struct<first:string,last:string>>>")
     // contacts 2 and 3 have no friends column, so the outer generator gives them a null row too
     checkAnswer(query3,
       Row(0, 0, "Susan", "Smith") :: Row(1, null, null, null) ::
@@ -440,7 +447,8 @@ abstract class SchemaPruningSuite
     val query = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select(col("friend"), col("friend.first"))
-    checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkGeneratorScan(query,
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query, Row(Row("Susan", "Z.", "Smith"), "Susan") :: Nil)
   }
 
@@ -448,11 +456,11 @@ abstract class SchemaPruningSuite
     // only the array sizes are needed; the `size(friends) > 0` filter inferred for the inner
     // explode already reads the same (smallest) field
     val query1 = sql("select id from contacts lateral view explode(friends) t as friend")
-    checkScan(query1, "struct<id:int,friends:array<struct<first:string>>>")
+    checkGeneratorScan(query1, "struct<id:int,friends:array<struct<first:string>>>")
     checkAnswer(query1, Row(0) :: Nil)
 
     val query2 = sql("select id from contacts lateral view outer explode(friends) t as friend")
-    checkScan(query2, "struct<id:int,friends:array<struct<first:string>>>")
+    checkGeneratorScan(query2, "struct<id:int,friends:array<struct<first:string>>>")
     checkAnswer(query2, Row(0) :: Row(1) :: Row(2) :: Row(3) :: Nil)
   }
 
@@ -460,7 +468,7 @@ abstract class SchemaPruningSuite
     val query = sql(
       "select id, count(friend.first), max(friend.last) " +
         "from contacts lateral view explode(friends) t as friend group by id")
-    checkScan(query, "struct<id:int,friends:array<struct<first:string,last:string>>>")
+    checkGeneratorScan(query, "struct<id:int,friends:array<struct<first:string,last:string>>>")
     checkAnswer(query, Row(0, 1L, "Smith") :: Nil)
   }
 
@@ -468,7 +476,7 @@ abstract class SchemaPruningSuite
     withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
       val query = sql(
         "select friend.FIRST, friend.Last from contacts lateral view explode(friends) t as friend")
-      checkScan(query, "struct<friends:array<struct<first:string,last:string>>>")
+      checkGeneratorScan(query, "struct<friends:array<struct<first:string,last:string>>>")
       checkAnswer(query, Row("Susan", "Smith") :: Nil)
     }
   }
@@ -478,7 +486,8 @@ abstract class SchemaPruningSuite
       val query = spark.table("contacts")
         .select(explode(col("friends")).as("friend"))
         .select(col("friend.first"), col("friend.last"))
-      checkScan(query, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+      checkGeneratorScan(query,
+        "struct<friends:array<struct<first:string,middle:string,last:string>>>")
       checkAnswer(query, Row("Susan", "Smith") :: Nil)
     }
   }
@@ -487,7 +496,7 @@ abstract class SchemaPruningSuite
     val query = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select(col("friend.first"))
-    checkScan(query, "struct<friends:array<struct<first:string>>>")
+    checkGeneratorScan(query, "struct<friends:array<struct<first:string>>>")
     // GeneratorNestedColumnAliasing rewrote `explode(friends)` into `explode(friends.first)`
     // before schema pruning, which leaves nothing to prune through the generator
     val generatorInputTypes = query.queryExecution.optimizedPlan.collect {
@@ -503,13 +512,14 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: a field of the inner element of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query1 = sql(s"select id, part.pid $explodeOrderParts")
-      checkScan(query1, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
+      checkGeneratorScan(query1, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
       checkAnswer(query1, Row(0, 1) :: Row(0, 2) :: Row(0, null) :: Row(1, null) :: Nil)
 
       // the inferred `size(items) > 0` filter reads the smallest field of the outer element
       val query2 = sql("select part.pid from orders lateral view explode(items) t1 as item " +
         "lateral view explode(item.parts) t2 as part")
-      checkScan(query2, "struct<items:array<struct<qty:int,parts:array<struct<pid:int>>>>>")
+      checkGeneratorScan(query2,
+        "struct<items:array<struct<qty:int,parts:array<struct<pid:int>>>>>")
       checkAnswer(query2, Row(1) :: Row(2) :: Nil)
     }
   }
@@ -517,7 +527,8 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: multiple fields of the inner element of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select part.pid, part.label $explodeOrderParts")
-      checkScan(query, "struct<items:array<struct<parts:array<struct<pid:int,label:string>>>>>")
+      checkGeneratorScan(query,
+        "struct<items:array<struct<parts:array<struct<pid:int,label:string>>>>>")
       checkAnswer(query,
         Row(1, "p1") :: Row(2, "p2") :: Row(null, null) :: Row(null, null) :: Nil)
     }
@@ -526,7 +537,7 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: fields of both elements of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select item.sku, part.label, part.weight $explodeOrderParts")
-      checkScan(query,
+      checkGeneratorScan(query,
         "struct<items:array<struct<sku:string,parts:array<struct<label:string,weight:double>>>>>")
       checkAnswer(query,
         Row("a", "p1", 1.5) :: Row("a", "p2", 2.5) :: Row("b", null, null) ::
@@ -539,7 +550,7 @@ abstract class SchemaPruningSuite
       val query = sql("select i, j, part.label from orders " +
         "lateral view outer posexplode(items) t1 as i, item " +
         "lateral view outer posexplode(item.parts) t2 as j, part")
-      checkScan(query, "struct<items:array<struct<parts:array<struct<label:string>>>>>")
+      checkGeneratorScan(query, "struct<items:array<struct<parts:array<struct<label:string>>>>>")
       checkAnswer(query,
         Row(0, 0, "p1") :: Row(0, 1, "p2") :: Row(1, null, null) :: Row(null, null, null) :: Nil)
     }
@@ -548,7 +559,7 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: aggregate over fields of two chained explodes") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select id, count(part.pid), max(item.sku) $explodeOrderParts group by id")
-      checkScan(query,
+      checkGeneratorScan(query,
         "struct<id:int,items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
       checkAnswer(query, Row(0, 2L, "b") :: Row(1, 0L, null) :: Nil)
     }
@@ -557,7 +568,7 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: an inner element used whole is not pruned") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select item.sku, part $explodeOrderParts")
-      checkScan(query, "struct<items:array<struct<sku:string," +
+      checkGeneratorScan(query, "struct<items:array<struct<sku:string," +
         "parts:array<struct<pid:int,label:string,weight:double>>>>>")
       checkAnswer(query,
         Row("a", Row(1, "p1", 1.5)) :: Row("a", Row(2, "p2", 2.5)) :: Row("b", null) ::
@@ -570,7 +581,7 @@ abstract class SchemaPruningSuite
       // `size(items)` reads the smallest field of `items`, the explode reads `sku`
       val query = sql("select item.sku from orders lateral view explode(items) t1 as item " +
         "where size(items) > 1")
-      checkScan(query, "struct<items:array<struct<qty:int,sku:string>>>")
+      checkGeneratorScan(query, "struct<items:array<struct<qty:int,sku:string>>>")
       checkAnswer(query, Row("a") :: Row("b") :: Nil)
     }
   }
@@ -578,7 +589,8 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: non-adjacent fields of the inner element") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select part.pid, part.weight $explodeOrderParts")
-      checkScan(query, "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
+      checkGeneratorScan(query,
+        "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
       checkAnswer(query,
         Row(1, 1.5) :: Row(2, 2.5) :: Row(null, null) :: Row(null, null) :: Nil)
     }
@@ -587,7 +599,7 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: an outer element used whole above an inner explode") {
     withDataSourceTable(orders, "orders") {
       val query = sql(s"select item, part.pid $explodeOrderParts")
-      checkScan(query, "struct<items:array<struct<qty:int,sku:string," +
+      checkGeneratorScan(query, "struct<items:array<struct<qty:int,sku:string," +
         "parts:array<struct<pid:int,label:string,weight:double>>>>>")
       val itemA = Row(1, "a", Seq(Row(1, "p1", 1.5), Row(2, "p2", 2.5)))
       checkAnswer(query,
@@ -602,14 +614,14 @@ abstract class SchemaPruningSuite
       val query1 = sql("select i, part.label from orders " +
         "lateral view outer posexplode(items) t1 as i, item " +
         "lateral view outer explode(item.parts) t2 as part")
-      checkScan(query1, "struct<items:array<struct<parts:array<struct<label:string>>>>>")
+      checkGeneratorScan(query1, "struct<items:array<struct<parts:array<struct<label:string>>>>>")
       checkAnswer(query1,
         Row(0, "p1") :: Row(0, "p2") :: Row(1, null) :: Row(null, null) :: Nil)
 
       val query2 = sql("select part.label, j from orders " +
         "lateral view outer explode(items) t1 as item " +
         "lateral view outer posexplode(item.parts) t2 as j, part")
-      checkScan(query2, "struct<items:array<struct<parts:array<struct<label:string>>>>>")
+      checkGeneratorScan(query2, "struct<items:array<struct<parts:array<struct<label:string>>>>>")
       checkAnswer(query2,
         Row("p1", 0) :: Row("p2", 1) :: Row(null, null) :: Row(null, null) :: Nil)
     }
@@ -620,11 +632,11 @@ abstract class SchemaPruningSuite
       val explodeCells = "from matrices lateral view outer explode(rows) t1 as r " +
         "lateral view outer explode(r) t2 as cell"
       val query1 = sql(s"select cell.pid $explodeCells")
-      checkScan(query1, "struct<rows:array<array<struct<pid:int>>>>")
+      checkGeneratorScan(query1, "struct<rows:array<array<struct<pid:int>>>>")
       checkAnswer(query1, Row(1) :: Row(2) :: Row(3) :: Nil)
 
       val query2 = sql(s"select cell.pid, cell.weight $explodeCells")
-      checkScan(query2, "struct<rows:array<array<struct<pid:int,weight:double>>>>")
+      checkGeneratorScan(query2, "struct<rows:array<array<struct<pid:int,weight:double>>>>")
       checkAnswer(query2, Row(1, 1.5) :: Row(2, 2.5) :: Row(3, 3.5) :: Nil)
     }
   }
@@ -633,7 +645,7 @@ abstract class SchemaPruningSuite
     withDataSourceTable(organizations, "organizations") {
       val query = sql("select m.id, m.company.name from organizations " +
         "lateral view outer explode(team.members) t as m")
-      checkScan(query,
+      checkGeneratorScan(query,
         "struct<team:struct<members:array<struct<id:int,company:struct<name:string>>>>>")
       checkAnswer(query, Row(null, null) :: Row(1, null) :: Row(0, "abc") :: Nil)
     }
@@ -643,7 +655,7 @@ abstract class SchemaPruningSuite
     withDataSourceTable(orders, "orders") {
       val query = sql("select tag from orders lateral view outer explode(items) t1 as item " +
         "lateral view outer explode(array(item.sku, 'x')) t2 as tag")
-      checkScan(query, "struct<items:array<struct<sku:string>>>")
+      checkGeneratorScan(query, "struct<items:array<struct<sku:string>>>")
       checkAnswer(query,
         Row("a") :: Row("x") :: Row("b") :: Row("x") :: Row(null) :: Row("x") :: Nil)
     }
@@ -656,12 +668,12 @@ abstract class SchemaPruningSuite
       val friends = Row("Z.", "Smith") :: Row(null, null) :: Row(null, null) ::
         Row(null, null) :: Nil
       val query1 = sql(s"select FRIEND.middle, FRIEND.last $explodeFriends")
-      checkScan(query1, "struct<friends:array<struct<middle:string,last:string>>>")
+      checkGeneratorScan(query1, "struct<friends:array<struct<middle:string,last:string>>>")
       checkAnswer(query1, friends)
 
       // the same element in two cases
       val query2 = sql(s"select FRIEND.middle, friend.last $explodeFriends")
-      checkScan(query2, "struct<friends:array<struct<middle:string,last:string>>>")
+      checkGeneratorScan(query2, "struct<friends:array<struct<middle:string,last:string>>>")
       checkAnswer(query2, friends)
 
       // an inner element, and the input of the inner generator
@@ -669,7 +681,7 @@ abstract class SchemaPruningSuite
         val query3 = sql("select PART.pid, PART.weight from orders " +
           "lateral view outer explode(items) t1 as item " +
           "lateral view outer explode(ITEM.parts) t2 as part")
-        checkScan(query3,
+        checkGeneratorScan(query3,
           "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
         checkAnswer(query3,
           Row(1, 1.5) :: Row(2, 2.5) :: Row(null, null) :: Row(null, null) :: Nil)
@@ -681,16 +693,18 @@ abstract class SchemaPruningSuite
     withDataSourceTable(orders, "orders") {
       val explodeItems = "from orders lateral view outer explode(items) t1 as item"
       val query1 = sql(s"select item.sku, transform(item.parts, p -> p.pid) $explodeItems")
-      checkScan(query1, "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
+      checkGeneratorScan(query1,
+        "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
       checkAnswer(query1, Row("a", Seq(1, 2)) :: Row("b", Seq.empty) :: Row(null, null) :: Nil)
 
       val query2 = sql(s"select item.sku, exists(item.parts, p -> p.weight > 2) $explodeItems")
-      checkScan(query2,
+      checkGeneratorScan(query2,
         "struct<items:array<struct<sku:string,parts:array<struct<weight:double>>>>>")
       checkAnswer(query2, Row("a", true) :: Row("b", false) :: Row(null, null) :: Nil)
 
       val query3 = sql(s"select item.sku, item.parts[0].pid $explodeItems")
-      checkScan(query3, "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
+      checkGeneratorScan(query3,
+        "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
       checkAnswer(query3, Row("a", 1) :: Row("b", null) :: Row(null, null) :: Nil)
     }
   }
@@ -702,7 +716,8 @@ abstract class SchemaPruningSuite
         .select(explode_outer(col("items")).as("x"))
         .select(explode_outer(col("x.parts")).as("x"))
         .select(col("x.pid"), col("x.weight"))
-      checkScan(query1, "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
+      checkGeneratorScan(query1,
+        "struct<items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
       checkAnswer(query1,
         Row(1, 1.5) :: Row(2, 2.5) :: Row(null, null) :: Row(null, null) :: Nil)
 
@@ -711,7 +726,7 @@ abstract class SchemaPruningSuite
         .select(explode_outer(col("items")).as("x"))
         .select(col("x.sku"), explode_outer(col("x.parts")).as("x"))
         .select(col("sku"), col("x.label"))
-      checkScan(query2,
+      checkGeneratorScan(query2,
         "struct<items:array<struct<sku:string,parts:array<struct<label:string>>>>>")
       checkAnswer(query2,
         Row("a", "p1") :: Row("a", "p2") :: Row("b", null) :: Row(null, null) :: Nil)
@@ -721,7 +736,7 @@ abstract class SchemaPruningSuite
   test("SPARK-47230: nulls at each level of two chained explodes") {
     withDataSourceTable(ordersWithNulls, "orders") {
       val query1 = sql(s"select id, part.pid, part.weight $explodeOrderParts")
-      checkScan(query1,
+      checkGeneratorScan(query1,
         "struct<id:int,items:array<struct<parts:array<struct<pid:int,weight:double>>>>>")
       checkAnswer(query1,
         Row(0, null, null) :: Row(0, null, null) :: Row(0, null, null) :: Row(0, 1, 1.5) ::
@@ -730,19 +745,19 @@ abstract class SchemaPruningSuite
       // not outer: the inferred `size(...) > 0` filters drop the nulls
       val query2 = sql("select id, part.pid, part.weight from orders " +
         "lateral view explode(items) t1 as item lateral view explode(item.parts) t2 as part")
-      checkScan(query2, "struct<id:int,items:array<struct<qty:int," +
+      checkGeneratorScan(query2, "struct<id:int,items:array<struct<qty:int," +
         "parts:array<struct<pid:int,weight:double>>>>>")
       checkAnswer(query2, Row(0, null, null) :: Row(0, 1, 1.5) :: Nil)
 
       // `size` of a null array is -1 here (ANSI mode is off in this suite)
       val query3 = sql("select id, size(item.parts) from orders " +
         "lateral view outer explode(items) t1 as item")
-      checkScan(query3, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
+      checkGeneratorScan(query3, "struct<id:int,items:array<struct<parts:array<struct<pid:int>>>>>")
       checkAnswer(query3, Row(0, -1) :: Row(0, -1) :: Row(0, 2) :: Row(1, -1) :: Nil)
 
       // the element is not read: only the array sizes are needed
       val query4 = sql("select id from orders lateral view outer explode(items) t1 as item")
-      checkScan(query4, "struct<id:int,items:array<struct<qty:int>>>")
+      checkGeneratorScan(query4, "struct<id:int,items:array<struct<qty:int>>>")
       checkAnswer(query4, Row(0) :: Row(0) :: Row(0) :: Row(1) :: Nil)
     }
   }
@@ -751,13 +766,13 @@ abstract class SchemaPruningSuite
     // a map is not pruned through, alone or in a chain with an array
     val query1 = sql(
       "select k, v.first, v.last from contacts lateral view explode(relatives) t as k, v")
-    checkScan(query1,
+    checkGeneratorScan(query1,
       "struct<relatives:map<string,struct<first:string,middle:string,last:string>>>")
     checkAnswer(query1, Row("brother", "John", "Doe") :: Row("sister", "Jane", "Doe") :: Nil)
 
     val query2 = sql("select friend.first, friend.last, v.last from contacts " +
       "lateral view explode(friends) t1 as friend lateral view explode(relatives) t2 as k, v")
-    checkScan(query2, "struct<friends:array<struct<first:string,last:string>>," +
+    checkGeneratorScan(query2, "struct<friends:array<struct<first:string,last:string>>," +
       "relatives:map<string,struct<first:string,middle:string,last:string>>>")
     checkAnswer(query2, Row("Susan", "Smith", "Doe") :: Nil)
   }
@@ -766,7 +781,7 @@ abstract class SchemaPruningSuite
     withDataSourceTable(orders, "orders") {
       val query = sql("select item.sku from (select id, first(items) as items from orders " +
         "group by id) lateral view explode(items) t1 as item")
-      checkScan(query, "struct<id:int,items:array<struct<qty:int,sku:string," +
+      checkGeneratorScan(query, "struct<id:int,items:array<struct<qty:int,sku:string," +
         "parts:array<struct<pid:int,label:string,weight:double>>>>>")
       checkAnswer(query, Row("a") :: Row("b") :: Nil)
     }
@@ -776,7 +791,7 @@ abstract class SchemaPruningSuite
     withDataSourceTable(orders, "orders") {
       val query = sql("with c as (select * from orders) " +
         "select item.sku, item.qty from c lateral view outer explode(items) t1 as item")
-      checkScan(query, "struct<items:array<struct<qty:int,sku:string>>>")
+      checkGeneratorScan(query, "struct<items:array<struct<qty:int,sku:string>>>")
       checkAnswer(query, Row("a", 1) :: Row("b", 2) :: Row(null, null) :: Nil)
     }
   }
@@ -801,7 +816,7 @@ abstract class SchemaPruningSuite
             .asInstanceOf[StructType]
           implicit val equality = schemaEquality
           assert(scanSchemas.size === 1)
-          assert(scanSchemas.head === expected)
+          if (prunesThroughGenerators) assert(scanSchemas.head === expected)
           checkAnswer(spark.table("spark_47230_stream"),
             Row(1, "p1") :: Row(2, "p2") :: Row(null, null) :: Row(null, null) :: Nil)
         } finally {
@@ -818,7 +833,7 @@ abstract class SchemaPruningSuite
       val query = sql("select positioned.pos.a, t2.y from positioned " +
         "lateral view posexplode(items) t1 as pos, item " +
         "lateral view explode(array(t1.pos + item.x)) t2 as y")
-      checkScan(query, "struct<pos:struct<a:int>,items:array<struct<x:int>>>")
+      checkGeneratorScan(query, "struct<pos:struct<a:int>,items:array<struct<x:int>>>")
       checkAnswer(query, Row(1, 10) :: Row(1, 31) :: Nil)
     }
   }
@@ -829,8 +844,49 @@ abstract class SchemaPruningSuite
       // `items` is still narrowed (the column passes through the posexplode and is read whole)
       val query = sql("select t1.pos, item.x, item.y, positioned.pos is not null as f, " +
         "positioned.pos.a as pa from positioned lateral view posexplode(items) t1 as pos, item")
-      checkScan(query, "struct<pos:struct<a:int,b:int>,items:array<struct<x:int,y:int>>>")
+      checkGeneratorScan(query, "struct<pos:struct<a:int,b:int>,items:array<struct<x:int,y:int>>>")
       checkAnswer(query, Row(0, 10, 20, true, 1) :: Row(1, 30, 40, true, 1) :: Nil)
+    }
+  }
+
+  test("SPARK-47230: map keys read above a generator keep the keys whole") {
+    withDataSourceTable(keyedItems, "keyed_items") {
+      val query = sql("select e.idx, map_keys(e.m).key from keyed_items " +
+        "lateral view outer explode(items) g as e")
+      checkGeneratorScan(query,
+        "struct<items:array<struct<idx:int,m:map<struct<id:int,key:int,z:int>,string>>>>")
+      checkAnswer(query, Row(4, Seq(23, 23)) :: Nil)
+
+      val filtered = sql("select e.idx from keyed_items lateral view outer explode(items) g as e " +
+        "where array_size(filter(map_keys(e.m).key, k -> k = 23)) > 1")
+      checkAnswer(filtered, Row(4) :: Nil)
+    }
+  }
+
+  test("SPARK-47230: ORC queries through generators read as before") {
+    if (!prunesThroughGenerators) {
+      withTempPath { dir =>
+        val path = dir.getCanonicalPath
+        // a nested TIMESTAMP next to the TIMESTAMP_NTZ that is read
+        sql("select array(named_struct('a', TIMESTAMP '2024-01-02 01:02:03', " +
+          "'b', TIMESTAMP_NTZ '2025-01-02 01:02:03', 'c', 22)) as items")
+          .write.format(dataSourceName).save(s"$path/ts")
+        // `_colN` field names make ORC map fields by position
+        sql("select array(named_struct('a', 11, 'b', 22, 'c', 33)) as _col0")
+          .write.format(dataSourceName).save(s"$path/positional")
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+            checkAnswer(
+              spark.read.format(dataSourceName).load(s"$path/ts")
+                .selectExpr("explode_outer(items) as e").selectExpr("e.b", "e.c"),
+              Row(LocalDateTime.of(2025, 1, 2, 1, 2, 3), 22) :: Nil)
+            checkAnswer(
+              spark.read.format(dataSourceName).load(s"$path/positional")
+                .selectExpr("explode_outer(_col0) as e").selectExpr("e.b", "e.c"),
+              Row(22, 33) :: Nil)
+          }
+        }
+      }
     }
   }
 
@@ -840,7 +896,7 @@ abstract class SchemaPruningSuite
       // ORC row reader) would keep one of them
       val query = sql("select pos, e.key, e.z from keyed_maps " +
         "lateral view outer posexplode(map_keys(m)) v as pos, e")
-      checkScan(query, "struct<m:map<struct<id:int,key:int,z:int>,string>>")
+      checkGeneratorScan(query, "struct<m:map<struct<id:int,key:int,z:int>,string>>")
       checkAnswer(query, Row(0, 23, 17) :: Row(1, 23, 17) :: Nil)
     }
   }
@@ -851,7 +907,7 @@ abstract class SchemaPruningSuite
       // column, which reads it whole although only `x` and `y` of its elements are used
       val query = sql("select b.x, b.y from two_arrays " +
         "lateral view explode(a1) t1 as a lateral view explode(a2) t2 as b")
-      checkScan(query,
+      checkGeneratorScan(query,
         "struct<a1:array<struct<a:int>>,a2:array<struct<x:int,y:int,z:string>>>")
       checkAnswer(query, Row(10, 20) :: Row(30, 40) :: Nil)
     }
@@ -863,7 +919,8 @@ abstract class SchemaPruningSuite
         // not outer: the inferred `size(...) > 0` filters read only the smallest fields
         val query1 = sql("select part.pid from orders " +
           "lateral view explode(items) t1 as item lateral view explode(item.parts) t2 as part")
-        checkScan(query1, "struct<items:array<struct<qty:int,parts:array<struct<pid:int>>>>>")
+        checkGeneratorScan(query1,
+          "struct<items:array<struct<qty:int,parts:array<struct<pid:int>>>>>")
         checkAnswer(query1, Row(1) :: Row(2) :: Nil)
 
         // `size` of a null array is null under ANSI, with and without the rewrite
@@ -873,7 +930,8 @@ abstract class SchemaPruningSuite
           sql(sizes).collect().toSeq
         }
         val query2 = sql(sizes)
-        checkScan(query2, "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
+        checkGeneratorScan(query2,
+          "struct<items:array<struct<sku:string,parts:array<struct<pid:int>>>>>")
         checkAnswer(query2, expected)
         assert(expected.exists(_.isNullAt(1)))
       }
@@ -885,14 +943,14 @@ abstract class SchemaPruningSuite
       // the default comparator orders the whole struct, `a` first
       val query1 = sql("select pos, item.b, item.c from rankings " +
         "lateral view outer posexplode(array_sort(items)) t as pos, item")
-      checkScan(query1, "struct<items:array<struct<a:int,b:int,c:int>>>")
+      checkGeneratorScan(query1, "struct<items:array<struct<a:int,b:int,c:int>>>")
       checkAnswer(query1, Row(0, 20, 200) :: Row(1, 10, 100) :: Row(null, null, null) :: Nil)
 
       // a comparator on one field still prunes the others
       val query2 = sql("select pos, item.c from rankings lateral view outer posexplode(" +
         "array_sort(items, (l, r) -> case when l.b < r.b then -1 when l.b > r.b then 1 " +
         "else 0 end)) t as pos, item")
-      checkScan(query2, "struct<items:array<struct<b:int,c:int>>>")
+      checkGeneratorScan(query2, "struct<items:array<struct<b:int,c:int>>>")
       checkAnswer(query2, Row(0, 100) :: Row(1, 200) :: Row(null, null) :: Nil)
     }
   }
@@ -902,13 +960,13 @@ abstract class SchemaPruningSuite
       // the predicate compares the whole element
       val query1 = sql("select item.c from rankings lateral view outer explode(" +
         "filter(items, x -> x != named_struct('a', 2, 'b', 10, 'c', 100))) t as item")
-      checkScan(query1, "struct<items:array<struct<a:int,b:int,c:int>>>")
+      checkGeneratorScan(query1, "struct<items:array<struct<a:int,b:int,c:int>>>")
       checkAnswer(query1, Row(200) :: Row(null) :: Nil)
 
       // a predicate on one field still prunes the others
       val query2 = sql("select item.c from rankings " +
         "lateral view outer explode(filter(items, x -> x.a > 1)) t as item")
-      checkScan(query2, "struct<items:array<struct<a:int,c:int>>>")
+      checkGeneratorScan(query2, "struct<items:array<struct<a:int,c:int>>>")
       checkAnswer(query2, Row(100) :: Row(null) :: Nil)
     }
   }
@@ -925,7 +983,7 @@ abstract class SchemaPruningSuite
           sql(sqlText).collect().toSeq
         }
         val query = sql(sqlText)
-        checkScan(query, expectedSchema)
+        checkGeneratorScan(query, expectedSchema)
         assert(sizeInputs(query).nonEmpty)
         assert(!sizeInputs(query).exists(_.isInstanceOf[GetArrayStructFields]),
           query.queryExecution.optimizedPlan)
@@ -1242,19 +1300,20 @@ abstract class SchemaPruningSuite
     val query1 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first")
-    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkGeneratorScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
     val query2 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkGeneratorScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = spark.table("contacts")
       .select(explode(col("friends")).as("friend"))
       .select("friend.first", "friend.middle", "friend")
-    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkGeneratorScan(query3,
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
 
@@ -1276,12 +1335,12 @@ abstract class SchemaPruningSuite
 
   testSchemaPruning("SPARK-41961: nested schema pruning on table-valued generator functions") {
     val query1 = sql("select friend.first from contacts, lateral explode(friends) t(friend)")
-    checkScan(query1, "struct<friends:array<struct<first:string>>>")
+    checkGeneratorScan(query1, "struct<friends:array<struct<first:string>>>")
     checkAnswer(query1, Row("Susan") :: Nil)
 
     val query2 = sql(
       "select friend.first, friend.middle from contacts, lateral explode(friends) t(friend)")
-    checkScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
+    checkGeneratorScan(query2, "struct<friends:array<struct<first:string,middle:string>>>")
     checkAnswer(query2, Row("Susan", "Z.") :: Nil)
 
     val query3 = sql(
@@ -1289,7 +1348,8 @@ abstract class SchemaPruningSuite
         |select friend.first, friend.middle, friend
         |from contacts, lateral explode(friends) t(friend)
         |""".stripMargin)
-    checkScan(query3, "struct<friends:array<struct<first:string,middle:string,last:string>>>")
+    checkGeneratorScan(query3,
+      "struct<friends:array<struct<first:string,middle:string,last:string>>>")
     checkAnswer(query3, Row("Susan", "Z.", Row("Susan", "Z.", "Smith")) :: Nil)
   }
 
@@ -1761,6 +1821,31 @@ abstract class SchemaPruningSuite
         case otherType: StructType => DataTypeUtils.sameType(a, otherType)
         case _ => false
       }
+  }
+
+  /** Whether this format is pruned through generators; ORC is not yet. */
+  protected def prunesThroughGenerators: Boolean = true
+
+  /**
+   * Checks the scan of a query that is pruned through generators. Formats that are not pruned
+   * through them must scan the same as with pruning through generators disabled.
+   */
+  protected def checkGeneratorScan(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
+    if (prunesThroughGenerators) {
+      checkScan(df, expectedSchemaCatalogStrings: _*)
+    } else {
+      def scanSchemata(plan: SparkPlan): Seq[StructType] = collect(plan) {
+        case scan: FileSourceScanExec => scan.requiredSchema
+        case scan: BatchScanExec if scan.scan.isInstanceOf[FileScan] =>
+          scan.scan.asInstanceOf[FileScan].readDataSchema
+      }
+      val unpruned = withSQLConf(
+          SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_ENABLED.key -> "false") {
+        scanSchemata(spark.sessionState.executePlan(df.queryExecution.logical).executedPlan)
+      }
+      assert(scanSchemata(df.queryExecution.executedPlan) === unpruned)
+      df.collect()
+    }
   }
 
   protected def checkScan(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {

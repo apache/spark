@@ -50,7 +50,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
   override def apply(plan: LogicalPlan): LogicalPlan =
     plan transformDown {
       case op @ GeneratorsOverScan(_, _,
-          l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _)) =>
+          l @ LogicalRelationWithTable(hadoopFsRelation: HadoopFsRelation, _))
+          if !hadoopFsRelation.fileFormat.isInstanceOf[OrcFileFormat] =>
         // Fields read from the generators' elements above them narrow the scan below them.
         pruneThroughGenerators(op, l) { (scan, otherProjects, inputRootFields) =>
           val allFilters = scan.filtersPushDown.reduceOption(And).toSeq ++ scan.filtersStayUp
@@ -82,6 +83,13 @@ object SchemaPruning extends Rule[LogicalPlan] {
   }
 
   /**
+   * ORC is not pruned through generators yet. Its readers mishandle some narrowed nested schemas:
+   * positional schema evolution (explicit, or inferred from `_colN` file schemas) maps nested
+   * fields by position, the ORC V1 timestamp compatibility check compares nested fields by ordinal,
+   * and the row reader merges map keys that become equal. Ordinary nested pruning already hits
+   * these on ORC; skipping generators keeps the queries through them as they are until the ORC
+   * readers are fixed.
+   *
    * Matches `explode` / `posexplode` generators stacked over a leaf, each one optionally under
    * `Project`s and `Filter`s. Returns the segments from the top (the one above the top generator
    * first, the one over the leaf last), the generators from the top, and the leaf.
@@ -221,7 +229,14 @@ object SchemaPruning extends Rule[LogicalPlan] {
           scanRootFields ++= scanRootFieldsOf(input, scanRelation)
       }
     }
-    pruneScan(segments.last, inputs.last._2, scanRootFields.toSeq)
+    // map keys are read whole, also when only read by an expression that is not a field path
+    val scanTypes = scanRelation.output.map(a => a.name -> a.dataType).toMap
+    val wholeKeyRootFields = scanRootFields.toSeq.map { root =>
+      scanTypes.get(root.field.name).map { dataType =>
+        root.copy(field = root.field.copy(dataType = keepMapKeys(root.field.dataType, dataType)))
+      }.getOrElse(root)
+    }
+    pruneScan(segments.last, inputs.last._2, wholeKeyRootFields)
       .map(rebuildAbove(op, generators.last.child, _))
       .filter(newOp => newOp.resolved && newOp.schema == op.schema &&
         !conf.getConf(SQLConf.NESTED_SCHEMA_PRUNING_THROUGH_GENERATE_REJECT_FOR_TESTING))

@@ -25,6 +25,8 @@ import org.apache.spark.tags.ExtendedSQLTest
 @ExtendedSQLTest
 class OrcV1SchemaPruningSuite extends SchemaPruningSuite {
   override protected val dataSourceName: String = "orc"
+  // ORC is not pruned through generators yet, see `SchemaPruning.GeneratorsOverScan`
+  override protected def prunesThroughGenerators: Boolean = false
   override protected val vectorizedReaderEnabledKey: String =
     SQLConf.ORC_VECTORIZED_READER_ENABLED.key
   override protected val vectorizedReaderNestedEnabledKey: String =

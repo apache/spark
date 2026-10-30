@@ -178,12 +178,32 @@ object SchemaPruning extends SQLConfHelper {
         case (Seq(), _) => elementType
         // used whole: the input is needed whole, which still narrows what it is extracted from
         case _ if fields.exists(_.derivedFromAtt) => elementType
-        case _ =>
-          pruneSchema(StructType(Array(StructField(name, elementType))), fields).head.dataType
+        case _ => keepMapKeys(
+          pruneSchema(StructType(Array(StructField(name, elementType))), fields).head.dataType,
+          elementType)
       }
       SelectedField.withDataType(input, ArrayType(prunedElementType, containsNull))
         .map(RootField(_, derivedFromAtt = false))
     case _ => None
+  }
+
+  /**
+   * Restores the original key type of every map in `pruned`, a narrowed `original`. Narrowing a
+   * map key can make distinct keys equal, and a reader that builds the map then keeps only one.
+   */
+  def keepMapKeys(pruned: DataType, original: DataType): DataType = (pruned, original) match {
+    case (p: StructType, o: StructType) =>
+      val resolver = conf.resolver
+      StructType(p.fields.map { field =>
+        o.fields.find(f => resolver(f.name, field.name))
+          .map(f => field.copy(dataType = keepMapKeys(field.dataType, f.dataType)))
+          .getOrElse(field)
+      })
+    case (ArrayType(p, containsNull), ArrayType(o, _)) =>
+      ArrayType(keepMapKeys(p, o), containsNull)
+    case (MapType(_, p, valueContainsNull), MapType(keyType, o, _)) =>
+      MapType(keyType, keepMapKeys(p, o), valueContainsNull)
+    case _ => pruned
   }
 
   /**

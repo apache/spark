@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.sql.{QueryTest, Row}
+import org.apache.spark.sql.{sources, QueryTest, Row}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.execution.datasources.v2.parquet.{ParquetDataSourceV2, ParquetScan}
@@ -77,8 +77,10 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
   test("SPARK-47230: a rejected rewrite offers the data filters to the fresh builder") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
-      sql("select id as n, array(named_struct('a', id, 'b', id * 2, 'c', id * 3)) as items " +
-        "from range(10)").write.parquet(path)
+      // a fully handled partition predicate and a partially pushed data predicate
+      sql("select id as n, id % 2 as p, " +
+        "array(named_struct('a', id, 'b', id * 2, 'c', id * 3)) as items from range(10)")
+        .write.partitionBy("p").parquet(path)
       withSQLConf(SQLConf.USE_V1_SOURCE_LIST.key -> "") {
         Seq(false, true).foreach { reject =>
           withSQLConf(
@@ -87,11 +89,14 @@ class SchemaPruningThroughGenerateV2BuilderSuite extends QueryTest with SharedSp
             withTempView("t") {
               spark.read.parquet(path).createOrReplaceTempView("t")
               val query = sql("select item.a, item.c from t " +
-                "lateral view outer explode(items) e as item where n = 7")
+                "lateral view outer explode(items) e as item where p = 1 and n = 7")
               val pushed = query.queryExecution.optimizedPlan.collect {
                 case r: DataSourceV2ScanRelation => r.scan
               }.collect { case s: ParquetScan => s.pushedFilters.toSeq }.flatten
-              assert(pushed.exists(_.references.contains("n")), s"reject=$reject: $pushed")
+              assert(pushed.exists {
+                case sources.EqualTo("n", v) => v.toString == "7"
+                case _ => false
+              }, s"reject=$reject: $pushed")
               checkAnswer(query, Row(7, 21) :: Nil)
             }
           }
