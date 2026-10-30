@@ -83,6 +83,13 @@ case class ParquetPartitionReaderFactory(
   private val pushDownDecimal = sqlConf.parquetFilterPushDownDecimal
   private val pushDownStringPredicate = sqlConf.parquetFilterPushDownStringPredicate
   private val pushDownInFilterThreshold = sqlConf.parquetFilterPushDownInFilterThreshold
+  // A field-id read of a schema with field ids resolves pushed filters by id as well.
+  private val fieldIdReadSchema =
+    if (sqlConf.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(dataSchema)) {
+      Some(dataSchema)
+    } else {
+      None
+    }
   private val datetimeRebaseModeInRead = options.datetimeRebaseModeInRead
   private val int96RebaseModeInRead = options.int96RebaseModeInRead
 
@@ -246,6 +253,7 @@ case class ParquetPartitionReaderFactory(
           pushDownInFilterThreshold,
           isCaseSensitive,
           datetimeRebaseSpec,
+          fieldIdReadSchema = fieldIdReadSchema,
           readSchema = Some(readDataSchema))
         filters
           // Collects all converted Parquet filter predicates. Notice that not all predicates can be
