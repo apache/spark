@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.InternalRow;
  * <p>
  * {@link #inputOrdinal()} and {@link #get()} are valid after {@link #next()} returns
  * {@code true}, until the next {@code next} or {@link #close()}. The row may be reused; Spark
- * copies the rows it keeps. Spark may close the cursor before its end.
+ * copies the rows it keeps. Spark closes every cursor, which may be before its end.
  *
  * @since 4.4.0
  */

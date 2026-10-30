@@ -21,15 +21,17 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkConf, SparkFunSuite, SparkUnsupportedOperationException}
 import org.apache.spark.serializer.JavaSerializer
-import org.apache.spark.sql.connector.expressions.{Expression, FieldReference}
+import org.apache.spark.sql.connector.expressions.{Expression, FieldReference, LiteralValue}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.types.{IntegerType, StructType}
 
 class ExternalLookupApiSuite extends SparkFunSuite {
 
-  private val offeredPredicate: Predicate =
-    new Predicate("=", Array[Expression](
+  private def offer(name: String): Predicate =
+    new Predicate(name, Array[Expression](
       FieldReference.column("id"), new LookupParameter(IntegerType)))
+
+  private val offeredPredicate: Predicate = offer("=")
 
   private def javaRoundTrip[T: ClassTag](value: T): T = {
     val serializer = new JavaSerializer(new SparkConf()).newInstance()
@@ -43,6 +45,27 @@ class ExternalLookupApiSuite extends SparkFunSuite {
     assert(parameter.describe() === "?")
     assert(offeredPredicate.describe() === "id = ?")
     assert(offeredPredicate.toString === "id = ?")
+  }
+
+  test("a null-safe candidate renders its parameter once; a literal comparison still expands") {
+    assert(offer("<=>").describe() === "id <=> ?")
+    val reversed = new Predicate("<=>", Array[Expression](
+      new LookupParameter(IntegerType), FieldReference.column("id")))
+    assert(reversed.describe() === "? <=> id")
+    assert(offer(">=").describe() === "id >= ?")
+    val literal = new Predicate("<=>", Array[Expression](
+      FieldReference.column("id"), LiteralValue(1, IntegerType)))
+    assert(literal.describe() ===
+      "((id IS NOT NULL AND 1 IS NOT NULL AND id = 1) OR (id IS NULL AND 1 IS NULL))")
+  }
+
+  test("candidates of the same shape are distinct because each has its own parameter") {
+    val first = offer("=")
+    val second = offer("=")
+    assert(first.equals(first))
+    assert(second.equals(second))
+    assert(!first.equals(second))
+    assert(!first.children()(1).equals(second.children()(1)))
   }
 
   test("an offered predicate and a reader factory that retains it are Java serializable") {

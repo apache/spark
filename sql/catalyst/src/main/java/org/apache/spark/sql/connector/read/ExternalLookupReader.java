@@ -45,15 +45,17 @@ public interface ExternalLookupReader extends Closeable {
    *   cursor yields:    (0, a), (0, b), (2, c)    // (inputOrdinal, value row)
    *   => row 0 has two matches, row 1 is a miss, row 2 has one match
    * }</pre>
-   * Spark guarantees that {@code uniqueParameters} is non-null, non-empty and has at most
-   * {@link ExternalLookup#maxParameterRowsPerRequest()} non-null rows. Field {@code i} of each row
-   * is the value for the {@code i}-th selected predicate, in Spark's internal representation.
+   * Spark guarantees that {@code uniqueParameters} is non-null and holds between 1 and
+   * {@link ExternalLookup#maxParameterRowsPerRequest()} rows, none of them null. Field {@code i}
+   * of each row is the value for the {@code i}-th selected predicate, in Spark's internal
+   * representation.
    * Rows are distinct under Spark SQL equality (NaN equals NaN, {@code -0.0} equals {@code 0.0},
    * strings compare by collation). Only {@code <=>} parameters may be null at the top level.
    * <p>
    * The cursor must be non-null. Each row's results must be complete and depend only on the row;
    * Spark may reuse them for equal rows. The input is read-only and must not be kept after the
-   * cursor closes. Spark reads the cursor to the end, or closes it, before the next call.
+   * cursor closes. Spark closes every cursor it obtains, including one it has read to the end,
+   * before the next call and before closing this reader.
    */
   ExternalLookupResultCursor lookupBatch(InternalRow[] uniqueParameters) throws IOException;
 

@@ -41,6 +41,17 @@ class ToStringSQLBuilder extends V2ExpressionSQLBuilder with Serializable {
     s"""$funcName($distinct${inputs.mkString(", ")})"""
   }
 
+  // A parameter has no value to repeat, so the null-safe expansion would print one parameter as
+  // three markers and misstate how many parameter fields the predicate carries.
+  override protected def visitBinaryComparison(
+      name: String, le: Expression, re: Expression): String = {
+    if (name == "<=>" && (le.isInstanceOf[LookupParameter] || re.isInstanceOf[LookupParameter])) {
+      inputToSQL(le) + " <=> " + inputToSQL(re)
+    } else {
+      super.visitBinaryComparison(name, le, re)
+    }
+  }
+
   override protected def visitGetArrayItem(getArrayItem: GetArrayItem): String = {
     s"${getArrayItem.childArray.toString}[${getArrayItem.ordinal.toString}]"
   }

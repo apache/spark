@@ -31,9 +31,11 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate;
 public interface SupportsExternalLookup extends ScanBuilder {
   /**
    * Selects the offered predicates that this source serves as one lookup access path. Spark
-   * currently offers {@code =}, {@code <=>}, {@code <}, {@code <=}, {@code >}, {@code >=}
-   * comparisons of a lookup-side {@link NamedReference} with a {@link LookupParameter}; the array
-   * may be empty. For example:
+   * offers {@code =}, {@code <=>}, {@code <}, {@code <=}, {@code >}, {@code >=} comparisons of a
+   * lookup-side {@link NamedReference} with a {@link LookupParameter}; the array is never empty. In
+   * every offered comparison the reference is {@code children()[0]} and the parameter is
+   * {@code children()[1]}: when the query writes the lookup column on the right, Spark flips the
+   * operator, so {@code s.ts < t.event_time} is offered as {@code event_time > ?}. For example:
    * <pre>{@code
    *   candidates: [tenant = ?, event_time >= ?, event_time < ?, region = ?]
    *   returned:   [event_time >= ?, tenant = ?]
@@ -51,13 +53,15 @@ public interface SupportsExternalLookup extends ScanBuilder {
    *   <li>An empty result means no access path fits; the query then fails.</li>
    *   <li>The input array and its elements are read-only.</li>
    * </ul>
-   * Spark calls this method only on builders of lookup scans, exactly once, after filter pushdown
-   * and before column pruning. Spark calls no other pushdown method on a lookup builder
-   * (aggregate, limit, top-N, offset, sample, join or variant). The selection must survive
-   * {@code pruneColumns} and {@link #build()}. For example:
+   * Spark calls this method only on builders of lookup scans, at most once, after any filter
+   * pushdown and before column pruning. Besides filter pushdown and column pruning, Spark calls
+   * no pushdown method on a lookup builder (aggregate, limit, top-N, offset, sample, join or
+   * variant). Spark passes only whole top-level columns to {@code pruneColumns}, never nested
+   * fields. The selection must survive {@code pruneColumns} and {@link #build()}. For example,
+   * with a streaming {@code s}:
    * <pre>{@code
    *   SELECT s.*, t.name FROM s JOIN t ON t.id = s.id
-   *   => selected [id = ?], then pruneColumns(<name>), so readSchema() is (name);
+   *   => selected [id = ?], then pruneColumns(<name>), so readSchema() includes name;
    *      the connector must still look up by id
    * }</pre>
    */
