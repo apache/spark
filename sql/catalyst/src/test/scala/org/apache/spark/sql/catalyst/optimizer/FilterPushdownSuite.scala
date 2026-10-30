@@ -750,6 +750,169 @@ class FilterPushdownSuite extends PlanTest {
     assertTopFilterConjuncts(Optimize.execute(originalQuery), Seq(nonDeterministic, unplaced))
   }
 
+  // Raises for the rows with a <= 5, so it must only see the rows the conditions before it kept.
+  private val throwableOnA = attrA > 5 || IsNull(RaiseError(Literal("boom")))
+
+  test("SPARK-60633: a throwable condition is not pushed through a Python UDF evaluation " +
+    "ahead of the conditions before it") {
+    Seq(PythonEvalType.SQL_BATCHED_UDF, PythonEvalType.SQL_SCALAR_PANDAS_UDF).foreach { evalType =>
+      withClue(s"eval type $evalType: ") {
+        val pythonUDF = PythonUDF(
+          "pythonUDF", null, IntegerType, Seq(attrA), evalType, udfDeterministic = true)
+        val f = AttributeReference("f", IntegerType)()
+        def evalPython(child: LogicalPlan): LogicalPlan =
+          if (evalType == PythonEvalType.SQL_BATCHED_UDF) {
+            BatchEvalPython(Seq(pythonUDF), Seq(f), child)
+          } else {
+            ArrowEvalPython(Seq(pythonUDF), Seq(f), child, evalType)
+          }
+
+        // f > 5 cannot be pushed, so the throwable condition after it stays above too. b > 1
+        // is still pushed, as that only reduces the rows the throwable condition sees.
+        val originalQuery = Filter(f > 5 && throwableOnA && attrB > 1, evalPython(testRelation))
+        val correctAnswer =
+          Filter(f > 5 && throwableOnA, evalPython(Filter(attrB > 1, testRelation)))
+        comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+        // With nothing left above before it, a throwable condition is still pushed.
+        val throwableFirst = Filter(throwableOnA && f > 5, evalPython(testRelation))
+        val throwableFirstAnswer = Filter(f > 5, evalPython(Filter(throwableOnA, testRelation)))
+        comparePlans(Optimize.execute(throwableFirst), throwableFirstAnswer)
+
+        // The conditions left above keep their written order.
+        val nonDeterministic = Rand(10) > 0.5
+        val mixed = Filter(nonDeterministic && f > 5 && throwableOnA, evalPython(testRelation))
+        assertTopFilterConjuncts(
+          Optimize.execute(mixed), Seq(nonDeterministic, f > 5, throwableOnA))
+      }
+    }
+  }
+
+  test("SPARK-60633: a throwable condition is not pushed through a sort ahead of a " +
+    "non-deterministic condition before it") {
+    val originalQuery = testRelation.orderBy($"b".asc)
+      .where(Rand(10) > 0.5 && throwableOnA && $"b" > 1)
+      .analyze
+    val Seq(nonDeterministic, throwable, _) = splitConjunctivePredicates(
+      originalQuery.asInstanceOf[Filter].condition)
+    val correctAnswer = testRelation.where($"b" > 1).orderBy($"b".asc)
+      .where(Rand(10) > 0.5 && throwableOnA)
+      .analyze
+
+    val optimized = Optimize.execute(originalQuery)
+    comparePlans(optimized, correctAnswer)
+    assertTopFilterConjuncts(optimized, Seq(nonDeterministic, throwable))
+  }
+
+  test("SPARK-60633: a throwable condition is not pushed through a generate that can drop " +
+    "rows") {
+    val throwable = $"a" > 5 || IsNull(RaiseError(Literal("boom")))
+    // The generate outputs no row for an empty array, so below it the throwable condition would
+    // see rows it never sees above it, even though nothing is written before it.
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(throwable && $"b" > 1)
+      .analyze
+    val correctAnswer = testRelationWithArrayType.where($"b" > 1)
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(throwable)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // An outer generate outputs a row for every input row, so the condition is still pushed.
+    val outerQuery = testRelationWithArrayType
+      .generate(Explode($"c_arr"), outer = true, alias = Some("arr"))
+      .where(throwable && $"b" > 1)
+      .analyze
+    val outerAnswer = testRelationWithArrayType.where(throwable && $"b" > 1)
+      .generate(Explode($"c_arr"), outer = true, alias = Some("arr"))
+      .analyze
+    comparePlans(Optimize.execute(outerQuery), outerAnswer)
+  }
+
+  test("SPARK-60633: a throwable condition is not pushed through an aggregate ahead of the " +
+    "conditions before it") {
+    val originalQuery = testRelation.groupBy($"a")($"a", count($"b") as "c")
+      .where($"c" > 1 && throwableOnA && $"a" > 1)
+      .analyze
+    val correctAnswer = testRelation.where($"a" > 1).groupBy($"a")($"a", count($"b") as "c")
+      .where($"c" > 1 && throwableOnA)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // With nothing left above before it, a throwable condition is still pushed.
+    val throwableFirst = testRelation.groupBy($"a")($"a", count($"b") as "c")
+      .where(throwableOnA && $"c" > 1)
+      .analyze
+    val throwableFirstAnswer = testRelation.where(throwableOnA)
+      .groupBy($"a")($"a", count($"b") as "c")
+      .where($"c" > 1)
+      .analyze
+    comparePlans(Optimize.execute(throwableFirst), throwableFirstAnswer)
+  }
+
+  test("SPARK-60633: a condition over a throwable alias is not pushed through an aggregate " +
+    "ahead of the conditions before it") {
+    val originalQuery = testRelation
+      .groupBy($"a")($"a", count($"b") as "c", throwableOnA as "x")
+      .where($"c" > 1 && $"x" && $"a" > 1)
+      .analyze
+    // `x` is not throwable itself, but pushing `x` evaluates the throwable expression behind it.
+    val correctAnswer = testRelation.where($"a" > 1)
+      .groupBy($"a")($"a", count($"b") as "c", throwableOnA as "x")
+      .where($"c" > 1 && $"x")
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("SPARK-60633: a throwable condition is not pushed through a window ahead of the " +
+    "conditions before it") {
+    val winExpr = windowExpr(count($"b"),
+      windowSpec($"a" :: Nil, $"b".asc :: Nil, UnspecifiedFrame))
+    val originalQuery = testRelation
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .where($"window" > 1 && throwableOnA && $"a" > 1)
+      .analyze
+    val correctAnswer = testRelation.where($"a" > 1)
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .where($"window" > 1 && throwableOnA)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // The conditions left above keep their written order.
+    val withRand = testRelation
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .where(Rand(10) > 0.5 && $"window" > 1 && $"a" > 1)
+      .analyze
+    val Seq(nonDeterministic, stayUp, _) = splitConjunctivePredicates(
+      withRand.asInstanceOf[Filter].condition)
+    assertTopFilterConjuncts(Optimize.execute(withRand), Seq(nonDeterministic, stayUp))
+  }
+
+  test("SPARK-60633: a throwable condition is not pushed through a union ahead of a " +
+    "non-deterministic condition before it") {
+    val testRelation2 = LocalRelation($"d".int, $"e".int, $"f".int)
+    val originalQuery = Union(Seq(testRelation, testRelation2))
+      .where(Rand(10) > 0.5 && throwableOnA && $"b" > 1)
+      .analyze
+    val correctAnswer = Union(Seq(testRelation.where($"b" > 1), testRelation2.where($"e" > 1)))
+      .where(Rand(10) > 0.5 && throwableOnA)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
+  test("SPARK-60633: a throwable condition is not pushed through a watermark ahead of the " +
+    "conditions before it") {
+    val interval = new CalendarInterval(2, 2, 2000L)
+    val relation = LocalRelation(Seq(attrA, $"b".timestamp, attrC), Nil, isStreaming = true)
+    val nodeId = UUID.randomUUID()
+    val originalQuery = EventTimeWatermark(nodeId, $"b", interval, relation)
+      .where($"b" === new java.sql.Timestamp(0) && throwableOnA && $"c" === 5)
+    val correctAnswer = EventTimeWatermark(nodeId, $"b", interval, relation.where($"c" === 5))
+      .where($"b" === new java.sql.Timestamp(0) && throwableOnA)
+    comparePlans(Optimize.execute(originalQuery.analyze), correctAnswer.analyze)
+  }
+
   test("SPARK-55014: do not split the projection when configured") {
     withSQLConf(SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> "false") {
       val originalQuery = testStringRelation

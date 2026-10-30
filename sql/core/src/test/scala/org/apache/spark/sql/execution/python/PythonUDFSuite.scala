@@ -26,7 +26,7 @@ import org.apache.spark.{SparkEnv, SparkException}
 import org.apache.spark.internal.config.Python.PYTHON_UDF_PIPELINED_EXECUTION
 import org.apache.spark.sql.{AnalysisException, DataFrame, IntegratedUDFTestUtils, Row}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.functions.{aggregate, array, avg, col, count, lit, transform}
+import org.apache.spark.sql.functions.{aggregate, array, assert_true, avg, col, count, lit, transform}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.{LongType, StringType, StructType}
@@ -382,6 +382,29 @@ class PythonUDFSuite extends SharedSparkSession {
         }
       } finally {
         SparkEnv.get.conf.remove(PYTHON_UDF_PIPELINED_EXECUTION)
+      }
+    }
+  }
+
+  test("SPARK-60633: a throwable filter condition is not pushed below a Python UDF " +
+    "evaluation ahead of its order") {
+    assume(shouldTestPythonUDFs)
+    val udfs = Seq(pythonTestUDF) ++ (if (shouldTestPandasUDFs) {
+      Seq(TestScalarPandasUDF(name = "pandasUDF", Some(LongType)))
+    } else {
+      Nil
+    })
+    udfs.foreach { testUDF =>
+      // `assert_true(id > 5)` only holds for the rows `f > 5` keeps. Once the UDF is extracted
+      // into its own operator, `f > 5` cannot be pushed below it. The query is built inside the
+      // config loop, so it is planned under that config.
+      def df(): DataFrame = spark.range(0, 10, 1, 1)
+        .select($"id", testUDF($"id") as "f")
+        .where($"f" > 5 && assert_true($"id" > 5).isNull)
+      Seq(true, false).foreach { avoid =>
+        withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString) {
+          checkAnswer(df(), (6L until 10L).map(i => Row(i, i)))
+        }
       }
     }
   }
