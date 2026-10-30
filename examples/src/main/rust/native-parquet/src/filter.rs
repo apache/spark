@@ -13,14 +13,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! The pushed predicates that the reader evaluates in its `RowFilter`.
+//! The pushed predicates that the reader evaluates on the batches that it decodes.
 
 use std::sync::Arc;
 
 use arrow_arith::boolean::{and_kleene, is_not_null, is_null, not, or_kleene};
+use arrow_array::cast::AsArray;
+use arrow_array::types::{Float32Type, Float64Type};
 use arrow_array::{
-    ArrayRef, BinaryArray, BooleanArray, Date32Array, Decimal128Array, Int16Array, Int32Array,
-    Int64Array, Int8Array, RecordBatch, Scalar, StringArray, TimestampMicrosecondArray,
+    ArrayRef, BinaryArray, BinaryViewArray, BooleanArray, Date32Array, Decimal128Array,
+    Float32Array, Float64Array, Int16Array, Int32Array, Int64Array, Int8Array, RecordBatch, Scalar,
+    StringArray, StringViewArray, TimestampMicrosecondArray,
 };
 use arrow_ord::cmp;
 use arrow_schema::{ArrowError, DataType, Schema, TimeUnit};
@@ -101,7 +104,7 @@ impl Filter {
             }
             ("STARTS_WITH" | "ENDS_WITH" | "CONTAINS", [child, pattern]) => {
                 let (column, data_type) = column(child, schema)?;
-                if *data_type != DataType::Utf8 {
+                if !matches!(data_type, DataType::Utf8 | DataType::Utf8View) {
                     return None;
                 }
                 let op = match name.as_str() {
@@ -159,7 +162,7 @@ impl Filter {
     pub(crate) fn evaluate(&self, batch: &RecordBatch) -> Result<BooleanArray, ArrowError> {
         match self {
             Self::Compare { column, op, value } => {
-                let array = column_of(batch, column)?;
+                let array = &spark_ordered(column_of(batch, column)?);
                 let Some(value) = value else {
                     return Ok(match op {
                         Comparison::NullSafeEqual => is_null(array)?,
@@ -188,7 +191,7 @@ impl Filter {
             Self::In { column, values } => {
                 // The disjunction of the equalities: null when no value matches, and the column
                 // or a value is null.
-                let array = column_of(batch, column)?;
+                let array = &spark_ordered(column_of(batch, column)?);
                 let mut result: Option<BooleanArray> = None;
                 for value in values {
                     let matches = match value {
@@ -260,10 +263,9 @@ fn column<'a>(predicate: &Predicate, schema: &'a Schema) -> Option<(String, &'a 
     Some((name.clone(), field.data_type()))
 }
 
-/// A top-level column of a type that Arrow compares as Spark does. Floating-point types are
-/// not: Arrow orders them by the IEEE 754 total order, in which -0.0 is less than 0.0 and NaNs
-/// with the sign bit are less than all numbers, while Spark equates the zeros and orders NaN
-/// above all numbers.
+/// A top-level column of a type that Arrow compares as Spark does, in the schema that Spark
+/// reads or in the one that the reader reads, which has views of strings and binary values.
+/// Floats compare as Spark compares them once [`spark_ordered`] changes their zeros and NaNs.
 fn comparable_column<'a>(
     predicate: &Predicate,
     schema: &'a Schema,
@@ -275,8 +277,12 @@ fn comparable_column<'a>(
         | DataType::Int16
         | DataType::Int32
         | DataType::Int64
+        | DataType::Float32
+        | DataType::Float64
         | DataType::Utf8
+        | DataType::Utf8View
         | DataType::Binary
+        | DataType::BinaryView
         | DataType::Date32
         | DataType::Decimal128(_, _)
         | DataType::Timestamp(TimeUnit::Microsecond, _) => Some((name, data_type)),
@@ -303,9 +309,22 @@ fn literal(predicate: &Predicate, data_type: &DataType) -> Option<Option<ArrayRe
             Arc::new(Int32Array::from(vec![i32::try_from(value).ok()?]))
         }
         (DataType::Int64, LiteralValue::Integer(value)) => Arc::new(Int64Array::from(vec![value])),
+        // The SDK reads a float literal as the double of the same value.
+        (DataType::Float32, LiteralValue::Float(value)) if f64::from(value as f32) == value => {
+            Arc::new(Float32Array::from(vec![spark_f32(value as f32)]))
+        }
+        (DataType::Float64, LiteralValue::Float(value)) => {
+            Arc::new(Float64Array::from(vec![spark_f64(value)]))
+        }
         (DataType::Utf8, LiteralValue::String(value)) => Arc::new(StringArray::from(vec![value])),
+        (DataType::Utf8View, LiteralValue::String(value)) => {
+            Arc::new(StringViewArray::from_iter_values([value]))
+        }
         (DataType::Binary, LiteralValue::Binary(value)) => {
             Arc::new(BinaryArray::from_vec(vec![value.as_slice()]))
+        }
+        (DataType::BinaryView, LiteralValue::Binary(value)) => {
+            Arc::new(BinaryViewArray::from_iter_values([value.as_slice()]))
         }
         (DataType::Date32, LiteralValue::Date(value)) => Arc::new(Date32Array::from(vec![value])),
         (
@@ -333,6 +352,48 @@ fn literal(predicate: &Predicate, data_type: &DataType) -> Option<Option<ArrayRe
     Some(Some(array))
 }
 
+/// The values of a column, with floats that Arrow compares as Spark does. Arrow orders floats by
+/// the IEEE 754 total order, in which -0.0 is less than 0.0, and NaNs differ by their bits, those
+/// with the sign bit being less than all numbers. Spark equates the zeros and the NaNs, and orders
+/// NaN above all numbers, as the total order does once -0.0 is 0.0 and every NaN is the same
+/// positive NaN, as in the literals.
+fn spark_ordered(array: &ArrayRef) -> ArrayRef {
+    match array.data_type() {
+        DataType::Float32 => Arc::new(
+            array
+                .as_primitive::<Float32Type>()
+                .unary::<_, Float32Type>(spark_f32),
+        ),
+        DataType::Float64 => Arc::new(
+            array
+                .as_primitive::<Float64Type>()
+                .unary::<_, Float64Type>(spark_f64),
+        ),
+        _ => Arc::clone(array),
+    }
+}
+
+fn spark_f32(value: f32) -> f32 {
+    if value.is_nan() {
+        // The quiet NaN without the sign bit, whose bits f32::NAN does not guarantee.
+        f32::from_bits(0x7fc0_0000)
+    } else if value == 0.0 {
+        0.0
+    } else {
+        value
+    }
+}
+
+fn spark_f64(value: f64) -> f64 {
+    if value.is_nan() {
+        f64::from_bits(0x7ff8_0000_0000_0000)
+    } else if value == 0.0 {
+        0.0
+    } else {
+        value
+    }
+}
+
 fn column_of<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, ArrowError> {
     batch
         .column_by_name(name)
@@ -341,7 +402,7 @@ fn column_of<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a ArrayRef, Arr
 
 #[cfg(test)]
 mod tests {
-    use arrow_array::{Array, Float64Array};
+    use arrow_array::Array;
     use arrow_schema::{Field, Fields};
     use serde_json::{json, Value};
 
@@ -566,6 +627,68 @@ mod tests {
     }
 
     #[test]
+    fn floats_compare_as_spark_compares_them() {
+        // NaN with and without the sign bit, the zeros, and the infinities.
+        let negative_nan = f64::from_bits(0xfff8_0000_0000_0001);
+        let values = [
+            0.0,
+            -0.0,
+            f64::NAN,
+            negative_nan,
+            1.0,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        let batch = RecordBatch::try_from_iter([
+            (
+                "d",
+                Arc::new(Float64Array::from(values.to_vec())) as ArrayRef,
+            ),
+            (
+                "r",
+                Arc::new(Float32Array::from_iter_values(
+                    values.iter().map(|&v| v as f32),
+                )) as _,
+            ),
+        ])
+        .unwrap();
+        let rows = |value: Value| {
+            let filter = Filter::new(&predicate(value), &batch.schema()).unwrap();
+            let result = filter.evaluate(&batch).unwrap();
+            (0..result.len())
+                .map(|row| result.value(row))
+                .collect::<Vec<_>>()
+        };
+        let (t, f) = (true, false);
+        for (name, data_type) in [("d", "double"), ("r", "float")] {
+            let compare = |op: &str, value: f64| {
+                rows(function(
+                    op,
+                    vec![column(name), literal(data_type, json!(value))],
+                ))
+            };
+            // Spark equates the zeros and the NaNs, and orders NaN above all numbers.
+            assert_eq!(compare("=", 0.0), [t, t, f, f, f, f, f]);
+            assert_eq!(compare("=", -0.0), [t, t, f, f, f, f, f]);
+            assert_eq!(compare("<>", 0.0), [f, f, t, t, t, t, t]);
+            assert_eq!(compare("<", 0.0), [f, f, f, f, f, f, t]);
+            assert_eq!(compare("<=", -0.0), [t, t, f, f, f, f, t]);
+            assert_eq!(compare(">", 1.0), [f, f, t, t, f, t, f]);
+            assert_eq!(compare(">=", f64::from(f32::MAX)), [f, f, t, t, f, t, f]);
+            assert_eq!(compare("<=>", -0.0), [t, t, f, f, f, f, f]);
+            let in_list = function(
+                "IN",
+                vec![
+                    column(name),
+                    literal(data_type, json!(-0.0)),
+                    literal(data_type, json!(1.0)),
+                ],
+            );
+            assert_eq!(rows(in_list), [t, t, f, f, t, f, f]);
+        }
+    }
+
+    #[test]
     fn other_predicates_remain_for_spark() {
         let nested = Field::new_struct(
             "point",
@@ -575,17 +698,19 @@ mod tests {
         let schema = Schema::new(vec![
             Field::new("i", DataType::Int64, true),
             Field::new("f", DataType::Float64, true),
+            Field::new("g", DataType::Float32, true),
             Field::new("s", DataType::Utf8, true),
             nested,
         ]);
         let unsupported = |value: Value| Filter::new(&predicate(value), &schema).is_none();
-        // Spark equates -0.0 and 0.0 and orders NaN above all numbers, unlike Arrow.
+        // A double that no float equals.
         assert!(unsupported(function(
             "=",
-            vec![column("f"), literal("double", json!(0.0))]
+            vec![column("g"), literal("double", json!(0.1))]
         )));
         let nested_x = json!({"type": "column", "name": ["point", "x"]});
-        assert!(unsupported(function("=", vec![nested_x, bigint(1)])));
+        let nested = function("=", vec![nested_x, bigint(1)]);
+        assert!(unsupported(nested.clone()));
         assert!(unsupported(function(
             "=",
             vec![column("missing"), bigint(1)]
@@ -607,13 +732,12 @@ mod tests {
         )));
         assert!(unsupported(json!({"type": "future"})));
         // A conjunct that is not exact makes the whole predicate residual.
-        let float = function("<", vec![column("f"), literal("double", json!(1.0))]);
         let int = function("<", vec![column("i"), bigint(1)]);
         assert!(unsupported(function(
             "OR",
-            vec![int.clone(), float.clone()]
+            vec![int.clone(), nested.clone()]
         )));
-        assert!(unsupported(function("AND", vec![int, float])));
+        assert!(unsupported(function("AND", vec![int, nested])));
         // IS_NULL compares nothing, so it applies to any column.
         assert!(!unsupported(function("IS_NULL", vec![column("f")])));
         assert!(!unsupported(function("IS_NOT_NULL", vec![column("point")])));

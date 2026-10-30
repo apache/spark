@@ -27,10 +27,13 @@ use spark_native_source::Result;
 
 /// Loads the metadata of a file with the Arrow types that the source reads: the default
 /// conversion of its Parquet schema, ignoring any Arrow schema that a writer embedded, except
-/// for INT96 timestamps. Spark writes timestamps as INT96 by default, which arrow-rs reads as
-/// nanoseconds without a time zone; the source reads them as the microseconds since the epoch
-/// that they are to Spark, which also covers the years that nanoseconds overflow. With
-/// `page_index`, also loads the column and offset indexes of the pages, if the file has them.
+/// for INT96 timestamps, strings, and binary values. Spark writes timestamps as INT96 by default,
+/// which arrow-rs reads as nanoseconds without a time zone; the source reads them as the
+/// microseconds since the epoch that they are to Spark, which also covers the years that
+/// nanoseconds overflow. It reads strings and binary values as views, which refer to the values in
+/// the pages that arrow-rs decompresses, or in their dictionaries, rather than copying each value
+/// into the buffer of its batch. With `page_index`, also loads the column and offset indexes of the
+/// pages, if the file has them.
 pub(crate) fn load(file: &File, page_index: bool) -> Result<ArrowReaderMetadata> {
     let options = ArrowReaderOptions::new()
         .with_skip_arrow_metadata(true)
@@ -41,7 +44,7 @@ pub(crate) fn load(file: &File, page_index: bool) -> Result<ArrowReaderMetadata>
         .schema()
         .fields()
         .iter()
-        .map(|field| with_int96_timestamps(field, metadata.parquet_schema(), &mut leaf))
+        .map(|field| read_field(field, metadata.parquet_schema(), &mut leaf))
         .collect();
     if fields == *metadata.schema().fields() {
         return Ok(metadata);
@@ -54,32 +57,31 @@ pub(crate) fn load(file: &File, page_index: bool) -> Result<ArrowReaderMetadata>
     )?)
 }
 
-/// Reads the INT96 columns in a field as microsecond timestamps in UTC. Arrow types have
-/// their leaves in the order of the Parquet columns, which `leaf` counts.
-fn with_int96_timestamps(
-    field: &FieldRef,
-    parquet: &SchemaDescriptor,
-    leaf: &mut usize,
-) -> FieldRef {
+/// Reads the INT96 columns in a field as microsecond timestamps in UTC, and its strings and
+/// binary values as views. Arrow types have their leaves in the order of the Parquet columns,
+/// which `leaf` counts.
+fn read_field(field: &FieldRef, parquet: &SchemaDescriptor, leaf: &mut usize) -> FieldRef {
     let data_type = match field.data_type() {
         DataType::Struct(fields) => DataType::Struct(
             fields
                 .iter()
-                .map(|field| with_int96_timestamps(field, parquet, leaf))
+                .map(|field| read_field(field, parquet, leaf))
                 .collect(),
         ),
-        DataType::List(element) => DataType::List(with_int96_timestamps(element, parquet, leaf)),
+        DataType::List(element) => DataType::List(read_field(element, parquet, leaf)),
         DataType::Map(entries, sorted) => {
-            DataType::Map(with_int96_timestamps(entries, parquet, leaf), *sorted)
+            DataType::Map(read_field(entries, parquet, leaf), *sorted)
         }
         data_type => {
             let column = parquet.columns().get(*leaf);
             *leaf += 1;
-            match column {
-                Some(column) if column.physical_type() == PhysicalType::INT96 => {
+            match (data_type, column) {
+                (_, Some(column)) if column.physical_type() == PhysicalType::INT96 => {
                     DataType::Timestamp(TimeUnit::Microsecond, Some("UTC".into()))
                 }
-                _ => data_type.clone(),
+                (DataType::Utf8, _) => DataType::Utf8View,
+                (DataType::Binary, _) => DataType::BinaryView,
+                (data_type, _) => data_type.clone(),
             }
         }
     };
@@ -87,15 +89,16 @@ fn with_int96_timestamps(
 }
 
 /// The schema that Spark reads from a file: its columns, nullable, as Spark reads the columns
-/// of files. Fails for a type that version 1 of the native ABI does not carry, or that Spark
-/// reads differently, such as timestamps in other units than microseconds.
+/// of files, with strings and binary values, which the reader returns as views, in the Arrow
+/// types that Spark gives them. Fails for a type that version 1 of the native ABI does not carry,
+/// or that Spark reads differently, such as timestamps in other units than microseconds.
 pub(crate) fn spark_schema(file: &Schema) -> Result<SchemaRef> {
     let fields: Result<Vec<FieldRef>> = file
         .fields()
         .iter()
         .map(|field| {
             check_type(field.data_type(), field.name())?;
-            Ok(nullable(field))
+            Ok(spark_field(field, true))
         })
         .collect();
     Ok(Arc::new(Schema::new(fields?)))
@@ -111,7 +114,9 @@ fn check_type(data_type: &DataType, column: &str) -> Result<()> {
         | DataType::Float32
         | DataType::Float64
         | DataType::Utf8
+        | DataType::Utf8View
         | DataType::Binary
+        | DataType::BinaryView
         | DataType::Date32
         | DataType::Decimal128(_, _)
         | DataType::Timestamp(TimeUnit::Microsecond, _) => Ok(()),
@@ -127,27 +132,31 @@ fn check_type(data_type: &DataType, column: &str) -> Result<()> {
     }
 }
 
-/// Makes a field nullable at every level, except for the entries of maps and their keys,
-/// which Arrow requires to be non-null.
-fn nullable(field: &FieldRef) -> FieldRef {
+/// The field that Spark gets for a field that the reader reads: with strings and binary values
+/// instead of their views, and, if `nullable`, nullable at every level, except for the entries
+/// of maps and their keys, which Arrow requires to be non-null.
+fn spark_field(field: &FieldRef, nullable: bool) -> FieldRef {
+    let child = |field| spark_field(field, nullable);
     let data_type = match field.data_type() {
-        DataType::Struct(fields) => DataType::Struct(fields.iter().map(nullable).collect()),
-        DataType::List(element) => DataType::List(nullable(element)),
+        DataType::Struct(fields) => DataType::Struct(fields.iter().map(child).collect()),
+        DataType::List(element) => DataType::List(child(element)),
         DataType::Map(entries, sorted) => {
             let DataType::Struct(key_value) = entries.data_type() else {
                 unreachable!("the entries of a map are a struct");
             };
-            let key_value: Fields = vec![key_value[0].clone(), nullable(&key_value[1])].into();
+            let key_value: Fields =
+                vec![spark_field(&key_value[0], false), child(&key_value[1])].into();
             let entries = Field::new(entries.name(), DataType::Struct(key_value), false);
             DataType::Map(Arc::new(entries), *sorted)
         }
+        DataType::Utf8View => DataType::Utf8,
+        DataType::BinaryView => DataType::Binary,
         data_type => data_type.clone(),
     };
-    Arc::new(
-        field
-            .as_ref()
-            .clone()
-            .with_data_type(data_type)
-            .with_nullable(true),
-    )
+    let spark = field.as_ref().clone().with_data_type(data_type);
+    Arc::new(if nullable {
+        spark.with_nullable(true)
+    } else {
+        spark
+    })
 }

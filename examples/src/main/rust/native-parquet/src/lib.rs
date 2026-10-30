@@ -16,10 +16,10 @@
 //! A batch-read Parquet source on the arrow-rs Parquet reader.
 //!
 //! The driver splits the files of a path into byte ranges, as Spark splits the files of its own
-//! sources, and each task reads the row groups whose middle falls in its range. Pushed predicates
-//! become an arrow-rs `RowFilter`: the reader decodes the columns of the predicates first, and
-//! the other columns only for the rows that pass. Before it decodes, the reader skips the row
-//! groups and pages in which, by their statistics, no row passes the predicates.
+//! sources, and each task reads the row groups whose middle falls in its range. Before it decodes,
+//! the reader skips the row groups and pages in which, by their statistics, no row passes the
+//! pushed predicates. It evaluates the predicates on the batches that it decodes, and returns only
+//! the rows that pass, in batches of the batch size.
 
 mod filter;
 mod prune;
@@ -27,27 +27,37 @@ mod schema;
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
-use arrow_array::RecordBatch;
+use arrow_array::{RecordBatch, RecordBatchReader};
 use arrow_schema::{ArrowError, SchemaRef};
+use arrow_select::coalesce::BatchCoalescer;
 use parquet::arrow::arrow_reader::{
-    ArrowPredicate, ArrowPredicateFn, ArrowReaderMetadata, ParquetRecordBatchReaderBuilder,
-    RowFilter,
+    ArrowReaderMetadata, ParquetRecordBatchReader, ParquetRecordBatchReaderBuilder,
 };
 use parquet::arrow::ProjectionMask;
 use serde::{Deserialize, Serialize};
 use spark_native_source::{
     CreateInfo, DataSource, FilterSupport, LimitSupport, Options, PartitionReader,
     PartitionReaderFactory, Predicate, ReaderContext, Result, ScanBuilder, ScanInfo, ScanPlan,
-    Unsupported,
+    TaskContext, Unsupported,
 };
 
 use crate::filter::Filter;
+
+// The reader allocates buffers of hundreds of KiB for each page and batch. When the mmap threshold
+// of glibc is fixed, as MALLOC_TRIM_THRESHOLD_ and the other malloc settings of the environment fix
+// it, glibc maps each of them, and unmaps it when it is freed, so that every batch faults its
+// memory in again, and the threads of the tasks contend for the arenas that MALLOC_ARENA_MAX
+// limits. mimalloc reuses the memory of each thread, whatever the settings of glibc.
+#[global_allocator]
+static ALLOCATOR: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub struct ParquetSource {
     path: PathBuf,
     batch_size: usize,
     max_partition_bytes: u64,
+    open_cost_in_bytes: u64,
     row_filter: bool,
 }
 
@@ -56,6 +66,7 @@ pub struct ParquetScan {
     // The schema to read, from which the pushed predicates take their column types.
     schema: SchemaRef,
     max_partition_bytes: u64,
+    open_cost_in_bytes: u64,
     row_filter: bool,
     factory: ParquetReaderFactory,
 }
@@ -71,9 +82,15 @@ pub struct ParquetReaderFactory {
     limit: Option<usize>,
 }
 
-/// A byte range of a file: its task reads the row groups whose middle falls in the range.
+/// The byte ranges of files that a task reads, one after the other.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ParquetPartition {
+    ranges: Vec<FileRange>,
+}
+
+/// A byte range of a file: its task reads the row groups whose middle falls in the range.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileRange {
     path: PathBuf,
     start: u64,
     end: u64,
@@ -91,7 +108,7 @@ impl DataSource for ParquetSource {
         for key in options.keys() {
             if !matches!(
                 key.as_str(),
-                "path" | "batchsize" | "maxpartitionbytes" | "rowfilter"
+                "path" | "batchsize" | "maxpartitionbytes" | "opencostinbytes" | "rowfilter"
             ) {
                 return Err(format!("Unknown Parquet option: {key}").into());
             }
@@ -109,6 +126,7 @@ impl DataSource for ParquetSource {
             path,
             batch_size,
             max_partition_bytes,
+            open_cost_in_bytes: option(&options, "opencostinbytes", 4_u64 << 20)?,
             row_filter: option(&options, "rowfilter", true)?,
         })
     }
@@ -126,6 +144,7 @@ impl DataSource for ParquetSource {
             path: self.path.clone(),
             schema: info.schema,
             max_partition_bytes: self.max_partition_bytes,
+            open_cost_in_bytes: self.open_cost_in_bytes,
             row_filter: self.row_filter,
             factory: ParquetReaderFactory {
                 predicates: Vec::new(),
@@ -166,18 +185,40 @@ impl ScanBuilder for ParquetScan {
     }
 
     fn plan(self) -> Result<ScanPlan<ParquetReaderFactory>> {
-        let mut partitions = Vec::new();
+        let mut ranges = Vec::new();
         for (path, size) in data_files(&self.path)? {
             let mut start = 0;
             while start < size {
                 let end = size.min(start.saturating_add(self.max_partition_bytes));
-                partitions.push(ParquetPartition {
+                ranges.push(FileRange {
                     path: path.clone(),
                     start,
                     end,
                 });
                 start = end;
             }
+        }
+        // As Spark packs the files of its own sources into tasks: by decreasing size, each task
+        // takes ranges while their bytes, with the cost of opening each, fit in maxPartitionBytes.
+        ranges.sort_by_key(|range| std::cmp::Reverse(range.end - range.start));
+        let mut partitions = Vec::new();
+        let mut task = Vec::new();
+        let mut bytes = 0_u64;
+        for range in ranges {
+            let length = range.end - range.start;
+            if !task.is_empty() && bytes.saturating_add(length) > self.max_partition_bytes {
+                partitions.push(ParquetPartition {
+                    ranges: std::mem::take(&mut task),
+                });
+                bytes = 0;
+            }
+            bytes = bytes
+                .saturating_add(length)
+                .saturating_add(self.open_cost_in_bytes);
+            task.push(range);
+        }
+        if !task.is_empty() {
+            partitions.push(ParquetPartition { ranges: task });
         }
         Ok(ScanPlan::new(self.factory, partitions))
     }
@@ -191,9 +232,52 @@ impl PartitionReaderFactory for ParquetReaderFactory {
         partition: ParquetPartition,
         context: ReaderContext<'task>,
     ) -> Result<PartitionReader<'task>> {
-        let path = partition.path.display().to_string();
+        // Opens each file only once the reader of the previous one ends.
+        let factory = self.clone();
+        let ReaderContext { schema, task, .. } = context;
+        let batches =
+            partition
+                .ranges
+                .into_iter()
+                .flat_map(move |range| -> PartitionReader<'task> {
+                    match factory.open_range(&range, &schema, task) {
+                        Ok(Some(batches)) => Box::new(batches),
+                        Ok(None) => Box::new(std::iter::empty()),
+                        Err(error) => {
+                            Box::new(std::iter::once(Err(ArrowError::ExternalError(error))))
+                        }
+                    }
+                });
+        // The task stops after the limit, over its files, which then decode no more batches.
+        let mut remaining = self.limit;
+        Ok(Box::new(batches.map_while(move |batch| {
+            let Some(remaining) = &mut remaining else {
+                return Some(batch);
+            };
+            if *remaining == 0 {
+                return None;
+            }
+            Some(batch.map(|batch| {
+                let rows = batch.num_rows().min(*remaining);
+                *remaining -= rows;
+                batch.slice(0, rows)
+            }))
+        })))
+    }
+}
+
+impl ParquetReaderFactory {
+    /// The batches of a range of a file, or `None` if no row group of the range may have rows that
+    /// pass the predicates.
+    fn open_range<'task>(
+        &self,
+        range: &FileRange,
+        schema: &SchemaRef,
+        task: TaskContext<'task>,
+    ) -> Result<Option<Batches<'task>>> {
+        let path = range.path.display().to_string();
         let in_file = |error: Box<dyn std::error::Error + Send + Sync>| format!("{path}: {error}");
-        let file = File::open(&partition.path).map_err(|error| in_file(error.into()))?;
+        let file = File::open(&range.path).map_err(|error| in_file(error.into()))?;
         let metadata = schema::load(&file, !self.predicates.is_empty()).map_err(in_file)?;
         let file_schema = metadata.schema().clone();
         let parquet_schema = metadata.parquet_schema().clone();
@@ -207,70 +291,130 @@ impl PartitionReaderFactory for ParquetReaderFactory {
                 })
             })
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        let row_groups = row_groups_in(&metadata, partition.start, partition.end);
+        let row_groups = row_groups_in(&metadata, range.start, range.end);
         let (row_groups, selection) =
             prune::prune(&filters, &metadata, row_groups).map_err(|error| in_file(error.into()))?;
         if row_groups.is_empty() {
-            return Ok(Box::new(std::iter::empty()));
+            return Ok(None);
         }
 
-        // The reader returns the projected columns in the order of the file; `order` restores
-        // the order of the schema to read.
-        let indices = context
-            .schema
+        // The reader decodes the columns that Spark reads and those of the filters, in the order
+        // of the file.
+        let index_of = |name: &str| {
+            file_schema
+                .index_of(name)
+                .map_err(|_| format!("{path}: The file has no column {name}"))
+        };
+        let columns = schema
             .fields()
             .iter()
-            .map(|field| {
-                file_schema
-                    .index_of(field.name())
-                    .map_err(|_| format!("{path}: The file has no column {}", field.name()))
-            })
+            .map(|field| index_of(field.name()))
             .collect::<std::result::Result<Vec<_>, _>>()?;
-        let mut sorted = indices.clone();
-        sorted.sort_unstable();
-        let order: Vec<usize> = indices
+        let mut filter_columns = Vec::new();
+        for filter in &filters {
+            filter.columns(&mut filter_columns);
+        }
+        let mut read = columns.clone();
+        for column in filter_columns {
+            read.push(index_of(column)?);
+        }
+        read.sort_unstable();
+        read.dedup();
+        let output: Vec<usize> = columns
             .iter()
-            .map(|index| sorted.binary_search(index).expect("projected"))
+            .map(|index| read.binary_search(index).expect("read"))
             .collect();
 
         let mut builder = ParquetRecordBatchReaderBuilder::new_with_metadata(file, metadata)
             .with_row_groups(row_groups)
-            .with_projection(ProjectionMask::roots(&parquet_schema, indices))
+            .with_projection(ProjectionMask::roots(&parquet_schema, read))
             .with_batch_size(self.batch_size);
         if let Some(selection) = selection {
             builder = builder.with_row_selection(selection);
         }
-        if !filters.is_empty() {
-            let mut predicates: Vec<Box<dyn ArrowPredicate>> = Vec::new();
-            for filter in filters {
-                let mut columns = Vec::new();
-                filter.columns(&mut columns);
-                let columns = columns
-                    .iter()
-                    .map(|column| file_schema.index_of(column))
-                    .collect::<std::result::Result<Vec<_>, _>>()?;
-                let mask = ProjectionMask::roots(&parquet_schema, columns);
-                predicates.push(Box::new(ArrowPredicateFn::new(mask, move |batch| {
-                    filter.evaluate(&batch)
-                })));
-            }
-            builder = builder.with_row_filter(RowFilter::new(predicates));
-        }
-        if let Some(limit) = self.limit {
+        // With filters, the limit counts the rows that pass them, after the reader.
+        if let Some(limit) = self.limit.filter(|_| filters.is_empty()) {
             builder = builder.with_limit(limit);
         }
-        // Evaluates the row filter on the row groups of the task.
         let reader = builder.build().map_err(|error| in_file(error.into()))?;
+        let schema = Arc::new(reader.schema().project(&output)?);
+        // Batches of more than half the batch size pass through the coalescer, without a copy.
+        let coalescer = BatchCoalescer::new(schema, self.batch_size)
+            .with_biggest_coalesce_batch_size(Some(self.batch_size / 2));
+        let batches = Batches {
+            reader,
+            filter: filters
+                .into_iter()
+                .reduce(|left, right| Filter::And(Box::new(left), Box::new(right))),
+            output,
+            coalescer,
+            finished: false,
+            task,
+        };
+        Ok(Some(batches))
+    }
+}
 
-        let task = context.task;
-        Ok(Box::new(reader.map(move |batch| {
-            if task.is_interrupted() {
+/// The batches of a range of a file: those that the reader decodes, with the rows that pass the
+/// filter, and the columns that Spark reads, in its order. The filter evaluates the pushed
+/// predicates on each batch, rather than in an arrow-rs `RowFilter`, which decodes the columns of
+/// the predicates first, and the other columns only for the rows that pass. Spark checks the rows
+/// that a source returns against the pushed predicates again, so it also reads their columns,
+/// which a `RowFilter` decodes twice; and when the rows that pass are scattered over the pages,
+/// the selections of rows that it builds, with millions of ranges, cost more than decoding every
+/// row. The coalescer gathers the rows that pass into batches of the batch size.
+struct Batches<'task> {
+    reader: ParquetRecordBatchReader,
+    // The conjunction of the pushed predicates.
+    filter: Option<Filter>,
+    // The positions of the columns that Spark reads in the batches of the reader.
+    output: Vec<usize>,
+    coalescer: BatchCoalescer,
+    finished: bool,
+    // Checked before the reader decodes each batch: when few rows pass the filter, the reader may
+    // decode many batches for each batch that it returns.
+    task: TaskContext<'task>,
+}
+
+impl Batches<'_> {
+    fn push(&mut self, batch: RecordBatch) -> std::result::Result<(), ArrowError> {
+        let Some(filter) = &self.filter else {
+            return self.coalescer.push_batch(batch.project(&self.output)?);
+        };
+        let passes = filter.evaluate(&batch)?;
+        let batch = batch.project(&self.output)?;
+        self.coalescer.push_batch_with_filter(batch, &passes)
+    }
+
+    fn next_batch(&mut self) -> std::result::Result<Option<RecordBatch>, ArrowError> {
+        loop {
+            if let Some(batch) = self.coalescer.next_completed_batch() {
+                return Ok(Some(batch));
+            }
+            if self.finished {
+                return Ok(None);
+            }
+            if self.task.is_interrupted() {
                 return Err(ArrowError::ExternalError(
                     "The Parquet read was cancelled".into(),
                 ));
             }
-            batch.and_then(|batch: RecordBatch| batch.project(&order))
-        })))
+            match self.reader.next().transpose()? {
+                Some(batch) => self.push(batch)?,
+                None => {
+                    self.finished = true;
+                    self.coalescer.finish_buffered_batch()?;
+                }
+            }
+        }
+    }
+}
+
+impl Iterator for Batches<'_> {
+    type Item = std::result::Result<RecordBatch, ArrowError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_batch().transpose()
     }
 }
 
@@ -351,6 +495,7 @@ mod tests {
     use std::sync::Arc;
 
     use arrow_array::builder::{Int64Builder, ListBuilder, MapBuilder, StringBuilder};
+    use arrow_array::cast::AsArray;
     use arrow_array::{
         Array, ArrayRef, BinaryArray, BooleanArray, Date32Array, Decimal128Array, Float64Array,
         Int16Array, Int32Array, Int64Array, StringArray, StructArray, TimestampMicrosecondArray,
@@ -363,7 +508,6 @@ mod tests {
     use parquet::file::writer::SerializedFileWriter;
     use parquet::schema::parser::parse_message_type;
     use serde_json::{json, Value};
-    use spark_native_source::TaskContext;
 
     use super::*;
 
@@ -615,14 +759,28 @@ mod tests {
         let read = read(&source, None, &[], None).unwrap();
         let batches: Vec<_> = read.batches().collect();
         assert_eq!(batches.len(), 1);
+        // The reader returns strings and binary values as views, at every level.
+        let read_schema = batches[0].schema();
+        assert_eq!(read_schema.field(8).data_type(), &DataType::BinaryView);
+        let DataType::List(tag) = read_schema.field(9).data_type() else {
+            panic!("tags is a list");
+        };
+        assert_eq!(tag.data_type(), &DataType::Utf8View);
         for (index, column) in batch.columns().iter().enumerate() {
             let read = batches[0].column(index);
             assert_eq!(read.len(), column.len());
-            assert_eq!(
-                read.to_data().buffers(),
-                column.to_data().buffers(),
-                "column {index}"
-            );
+            if let Some(bytes) = column.as_binary_opt::<i32>() {
+                assert!(
+                    read.as_binary_view().iter().eq(bytes.iter()),
+                    "column {index}"
+                );
+            } else {
+                assert_eq!(
+                    read.to_data().buffers(),
+                    column.to_data().buffers(),
+                    "column {index}"
+                );
+            }
             assert_eq!(
                 read.logical_nulls(),
                 column.logical_nulls(),
@@ -669,7 +827,7 @@ mod tests {
     }
 
     #[test]
-    fn evaluates_the_pushed_predicates_in_a_row_filter() {
+    fn returns_the_rows_that_pass_the_pushed_predicates() {
         let directory = TempDirectory::new();
         write(&directory.join("rows.parquet"), &[rows(0, 1000)], 100);
         let predicates = [
@@ -722,11 +880,15 @@ mod tests {
                 literal("bigint", json!(512)),
             ],
         );
+        let label_starts = function(
+            "STARTS_WITH",
+            vec![column("label"), literal("string", json!("row-1"))],
+        );
         // The predicates, and the ids that pass them.
         type Case = (Vec<Value>, fn(i64) -> bool);
-        let cases: [Case; 5] = [
+        let cases: [Case; 6] = [
             (vec![id("<", 55)], |id| id < 55),
-            (vec![not(id(">=", 55)), label_is_not_null], |id| {
+            (vec![not(id(">=", 55)), label_is_not_null.clone()], |id| {
                 id < 55 && id % 7 != 0
             }),
             (vec![function("OR", vec![id(">", 990), k])], |id| {
@@ -734,6 +896,9 @@ mod tests {
             }),
             (vec![in_list], |id| id == 5 || id == 512),
             (vec![id(">", 300), id("<", 305)], |id| id > 300 && id < 305),
+            (vec![label_is_not_null.clone(), label_starts], |id| {
+                id % 7 != 0 && format!("row-{id}").starts_with("row-1")
+            }),
         ];
         for batch_size in ["8192", "7"] {
             let source = source(&directory.0, &[("batchsize", batch_size)]);
@@ -743,13 +908,13 @@ mod tests {
                 let expected: Vec<i64> = (0..1000).filter(|&id| passes(id)).collect();
                 assert_eq!(read.ids(), expected, "{predicates:?}");
                 for batch in read.batches() {
-                    let labels = batch
-                        .column(0)
-                        .as_any()
-                        .downcast_ref::<StringArray>()
-                        .unwrap();
+                    let labels = batch.column(0).as_string_view();
                     for (row, id) in ids(batch).into_iter().enumerate() {
-                        assert_eq!(labels.is_valid(row), id % 7 != 0);
+                        let label = (id % 7 != 0).then(|| format!("row-{id}"));
+                        assert_eq!(
+                            labels.is_valid(row).then(|| labels.value(row)),
+                            label.as_deref()
+                        );
                     }
                 }
             }
@@ -778,12 +943,88 @@ mod tests {
         let directory = TempDirectory::new();
         write(&directory.join("a.parquet"), &[rows(0, 1000)], 100);
         write(&directory.join("b.parquet"), &[rows(1000, 2000)], 100);
-        let source = source(&directory.0, &[]);
-        let read = read(&source, Some(&["id"]), &[], Some(5)).unwrap();
-        assert_eq!(read.partitions.len(), 2);
-        for batches in &read.partitions {
+        // Each file is a task of its own when opening it costs maxPartitionBytes.
+        let source = source(
+            &directory.0,
+            &[("batchsize", "8"), ("opencostinbytes", "134217728")],
+        );
+        let limited = read(&source, Some(&["id"]), &[], Some(5)).unwrap();
+        assert_eq!(limited.partitions.len(), 2);
+        for batches in &limited.partitions {
             assert_eq!(batches.iter().map(RecordBatch::num_rows).sum::<usize>(), 5);
         }
+        // With predicates, the limit counts the rows that pass them, over batches.
+        let k = function("=", vec![column("k"), literal("int", json!(3))]);
+        let filtered = read(&source, Some(&["id"]), &[k], Some(12)).unwrap();
+        let mut tasks: Vec<Vec<i64>> = filtered
+            .partitions
+            .iter()
+            .map(|batches| batches.iter().flat_map(ids).collect())
+            .collect();
+        tasks.sort_unstable();
+        for (ids, first) in tasks.iter().zip([0, 1000]) {
+            let expected: Vec<i64> = (first..).step_by(10).map(|id| id + 3).take(12).collect();
+            assert_eq!(ids, &expected);
+        }
+        // The limit counts the rows of all the files of a task.
+        let packed = self::source(&directory.0, &[]);
+        let limited = read(&packed, Some(&["id"]), &[], Some(1500)).unwrap();
+        assert_eq!(limited.partitions.len(), 1);
+        assert_eq!(
+            limited.batches().map(RecordBatch::num_rows).sum::<usize>(),
+            1500
+        );
+    }
+
+    #[test]
+    fn packs_the_ranges_of_files_into_tasks_as_spark_does() {
+        let directory = TempDirectory::new();
+        for (index, rows_of_file) in [(0, 3000), (1, 1000), (2, 2000), (3, 500)] {
+            let first = index * 10_000;
+            let path = directory.join(&format!("{index}.parquet"));
+            write(&path, &[rows(first, first + rows_of_file)], 100);
+        }
+        let sizes: Vec<u64> = (0..4)
+            .map(|index| {
+                fs::metadata(directory.join(&format!("{index}.parquet")))
+                    .unwrap()
+                    .len()
+            })
+            .collect();
+        // Tasks of the two largest files, and then of the two smallest, with their costs to open.
+        let max = sizes[0] + sizes[2] + 2;
+        let options = [
+            ("maxpartitionbytes", max.to_string()),
+            ("opencostinbytes", "1".to_string()),
+        ];
+        let options: Vec<(&str, &str)> = options.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        let source = source(&directory.0, &options);
+        let plan = source
+            .new_scan(ScanInfo::new(source.schema().unwrap()))
+            .unwrap()
+            .plan()
+            .unwrap();
+        let files: Vec<Vec<String>> = plan
+            .partitions
+            .iter()
+            .map(|partition| {
+                let names = partition.ranges.iter().map(|range| range.path.file_name());
+                names
+                    .map(|name| name.unwrap().to_string_lossy().into_owned())
+                    .collect()
+            })
+            .collect();
+        assert_eq!(
+            files,
+            [["0.parquet", "2.parquet"], ["1.parquet", "3.parquet"]]
+        );
+        let read = read(&source, Some(&["id"]), &[], None).unwrap();
+        let mut expected: Vec<i64> = [(0, 3000), (10_000, 1000), (20_000, 2000), (30_000, 500)]
+            .iter()
+            .flat_map(|&(first, rows)| first..first + rows)
+            .collect();
+        expected.sort_unstable();
+        assert_eq!(read.ids(), expected);
     }
 
     /// The INT96 of a timestamp: the nanoseconds of its day and its Julian day.

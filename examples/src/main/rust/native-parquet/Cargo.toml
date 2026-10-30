@@ -32,7 +32,9 @@ arrow-arith = "58"
 arrow-array.workspace = true
 arrow-ord = "58"
 arrow-schema.workspace = true
+arrow-select = "58"
 arrow-string = "58"
+mimalloc = { version = "0.1", default-features = false, features = ["local_dynamic_tls"] }
 parquet = { version = "58", default-features = false, features = [
     "arrow",
     "flate2-rust_backened",

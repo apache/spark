@@ -29,7 +29,7 @@ from pyspark.sql import SparkSession
 
 # The columns cover the types that Spark writes by default, including INT96 timestamps, decimals
 # stored as INT32, INT64 and fixed-length binary, nulls, and floats that Spark compares
-# differently from Arrow: NaN, -0.0, and 0.0.
+# differently from Arrow, which the source compares as Spark does: NaN, -0.0, and 0.0.
 COLUMNS = [
     "id",
     "cast(id % 10 as int) as k",
@@ -38,6 +38,8 @@ COLUMNS = [
     "if(id % 11 = 0, null, id * 1.5) as score",
     "case id % 4 when 0 then double('NaN') when 1 then -0.0D when 2 then 0.0D else id end as odd",
     "cast(id as float) / 3 as ratio",
+    "case id % 4 when 0 then float('NaN') when 1 then cast(-0.0D as float) "
+    "when 2 then cast(0.0D as float) else cast(id as float) end as single",
     "if(id % 7 = 0, null, concat('row-', id)) as label",
     "id % 3 = 0 as flag",
     "cast((id - 10000) / 100 as decimal(7, 2)) as price",
@@ -83,6 +85,13 @@ QUERIES = [
     "SELECT id FROM t WHERE score > 100",
     "SELECT id FROM t WHERE odd = 0.0",
     "SELECT id FROM t WHERE odd > 1e300",
+    "SELECT id FROM t WHERE odd < 0",
+    "SELECT id FROM t WHERE odd <=> -0.0D",
+    "SELECT id FROM t WHERE NOT (odd <= 2 OR odd IN (1e300, 3))",
+    "SELECT id, single FROM t WHERE single = 0.0",
+    "SELECT id FROM t WHERE single > 3.5 AND single < 100",
+    "SELECT id FROM t WHERE single >= float('NaN')",
+    "SELECT id FROM t WHERE single IN (cast(-0.0D as float), 7)",
     "SELECT id FROM t WHERE point.x = 5",
     "SELECT id FROM t WHERE array_contains(numbers, 5)",
     "SELECT id FROM t WHERE attrs['b'] IS NULL",
@@ -111,11 +120,11 @@ def check_reads(spark, path, read):
         read(options).createOrReplaceTempView("t")
         for query in QUERIES:
             assert rows(spark.sql(query)) == expected[query], (options, query)
-        pushed = pushed_predicates(spark.sql("SELECT id FROM t WHERE k = 3"))
+        pushed = pushed_predicates(spark.sql("SELECT id FROM t WHERE k = 3 AND odd < 0"))
         if options:
             assert pushed == "[]", pushed
         else:
-            assert "k = 3" in pushed, pushed
+            assert "k = 3" in pushed and "odd < 0" in pushed, pushed
     limited = spark.sql("SELECT id FROM t LIMIT 10").collect()
     assert len(limited) == 10, limited
 

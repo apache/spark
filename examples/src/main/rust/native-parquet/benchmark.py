@@ -44,11 +44,63 @@ COLUMNS = ["id", "cast(id % 100 as int) as k", "repeat(md5(cast(id as string)), 
 QUERIES = {
     "one column": "SELECT sum(id) FROM {table}",
     "all columns": "SELECT sum(id), sum(k), max(length(payload)) FROM {table}",
+    # Spark does little for each row, so that the scan takes most of the time.
+    "count payload": "SELECT count(payload) FROM {table}",
     "10% of the rows": "SELECT sum(id), max(length(payload)) FROM {table} WHERE k < 10",
     "1% of the rows": "SELECT sum(id), max(length(payload)) FROM {table} WHERE k = 7",
-    # Spark's reader skips the row groups whose statistics exclude the rows, and this source does
-    # not, so this query shows what the row filter does not replace.
+    # `id` grows within each file, so that both readers skip the row groups and pages whose
+    # statistics exclude the rows.
     "1% by id": "SELECT sum(id), max(length(payload)) FROM {table} WHERE id < {rows} DIV 100",
+}
+
+# A table with the columns of TPC-H lineitem, in the order of l_orderkey, whose values Spark
+# computes from the row number: decimals that Spark stores as INT64, dates, dictionary-encoded
+# strings, and comments of 10 to 43 characters. The values of the other columns are scattered over
+# the pages, so that statistics skip none of them.
+LINEITEM_COLUMNS = [
+    "id as l_orderkey",
+    "cast(id % 200000 + 1 as bigint) as l_partkey",
+    "cast(id % 10000 + 1 as bigint) as l_suppkey",
+    "cast(id % 7 + 1 as int) as l_linenumber",
+    "cast((id * 7919) % 50 + 1 as decimal(15, 2)) as l_quantity",
+    "cast(((id * 104729) % 10000000) / 100.0 + 900 as decimal(15, 2)) as l_extendedprice",
+    "cast(((id * 31) % 11) / 100.0 as decimal(15, 2)) as l_discount",
+    "cast(((id * 17) % 9) / 100.0 as decimal(15, 2)) as l_tax",
+    "element_at(array('A', 'N', 'R'), cast(id % 3 + 1 as int)) as l_returnflag",
+    "element_at(array('F', 'O'), cast(id % 2 + 1 as int)) as l_linestatus",
+    "date_add(date'1992-01-01', cast((id * 13) % 2526 as int)) as l_shipdate",
+    "date_add(date'1992-01-01', cast((id * 13) % 2526 + 30 as int)) as l_commitdate",
+    "date_add(date'1992-01-01', cast((id * 13) % 2526 + 15 as int)) as l_receiptdate",
+    "element_at(array('DELIVER IN PERSON', 'COLLECT COD', 'NONE', 'TAKE BACK RETURN'), "
+    "cast(id % 4 + 1 as int)) as l_shipinstruct",
+    "element_at(array('REG AIR', 'AIR', 'RAIL', 'SHIP', 'TRUCK', 'MAIL', 'FOB'), "
+    "cast(id % 7 + 1 as int)) as l_shipmode",
+    "substr(concat(md5(cast(id as string)), md5(cast(id + 1 as string))), 1, "
+    "cast(10 + id % 34 as int)) as l_comment",
+]
+
+LINEITEM_QUERIES = {
+    "TPC-H Q1": "SELECT l_returnflag, l_linestatus, sum(l_quantity), sum(l_extendedprice), "
+    "sum(l_extendedprice * (1 - l_discount)), "
+    "sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)), avg(l_quantity), "
+    "avg(l_extendedprice), avg(l_discount), count(*) FROM {table} "
+    "WHERE l_shipdate <= date'1998-09-02' GROUP BY l_returnflag, l_linestatus "
+    "ORDER BY l_returnflag, l_linestatus",
+    "TPC-H Q6": "SELECT sum(l_extendedprice * l_discount) FROM {table} "
+    "WHERE l_shipdate >= date'1994-01-01' AND l_shipdate < date'1995-01-01' "
+    "AND l_discount BETWEEN 0.05 AND 0.07 AND l_quantity < 24",
+    "shipmode = AIR": "SELECT count(*), sum(l_quantity) FROM {table} WHERE l_shipmode = 'AIR'",
+    "comment LIKE": "SELECT count(*) FROM {table} WHERE l_comment LIKE 'ab%'",
+    # Both readers skip the row groups and pages whose statistics exclude the rows.
+    "order range": "SELECT sum(l_extendedprice) FROM {table} "
+    "WHERE l_orderkey BETWEEN 1000000 AND 1100000",
+    "scan 4 columns": "SELECT sum(l_partkey), sum(l_suppkey), max(l_receiptdate), "
+    "count(l_comment) FROM {table}",
+}
+
+DATASETS = {
+    "payload": (COLUMNS, QUERIES),
+    "lineitem": (LINEITEM_COLUMNS, LINEITEM_QUERIES),
 }
 
 TABLES = ["spark_reader", "rust_row_filter", "rust_no_filter"]
@@ -93,15 +145,22 @@ def main():
     parser.add_argument("--rows", type=int, default=20_000_000)
     parser.add_argument("--runs", type=int, default=10)
     parser.add_argument("--warmups", type=int, default=3)
-    parser.add_argument("--queries", nargs="*", choices=list(QUERIES), default=list(QUERIES))
+    parser.add_argument("--dataset", choices=list(DATASETS), default="payload")
+    parser.add_argument(
+        "--queries", nargs="*", choices=list(QUERIES) + list(LINEITEM_QUERIES), default=[]
+    )
     args = parser.parse_args()
+    columns, queries = DATASETS[args.dataset]
+    unknown = [name for name in args.queries if name not in queries]
+    if unknown:
+        parser.error(f"The {args.dataset} dataset has no queries {unknown}")
 
     spark = SparkSession.builder.appName("Rust native Parquet source benchmark").getOrCreate()
     try:
         spark.addArtifact(str(args.package.resolve(strict=True)))
         data = str(args.data.resolve())
         if not args.data.exists():
-            spark.range(args.rows).selectExpr(*COLUMNS).write.parquet(data)
+            spark.range(args.rows).selectExpr(*columns).write.parquet(data)
         rows = spark.read.parquet(data).count()
         spark.read.parquet(data).createOrReplaceTempView("spark_reader")
         native = spark.read.format("rust_sdk_parquet")
@@ -123,8 +182,8 @@ def main():
             return result, wall, *task_metrics(spark, group)
 
         header = "median s     min     max  cpu s   gc s  vs Spark"
-        for name in args.queries:
-            query = QUERIES[name]
+        for name in args.queries or list(queries):
+            query = queries[name]
             results = set()
             # The first rounds warm up the JIT compiler and the page cache.
             for _ in range(args.warmups):

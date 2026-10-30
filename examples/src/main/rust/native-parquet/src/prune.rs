@@ -19,20 +19,21 @@
 //! The statistics of a row group or page bound its values and count its nulls. For each filter
 //! and each range of rows, pruning finds whether the filter may be true for some row of the range,
 //! and whether it may be false, so that it can also prune under NOT; a row for which a filter is
-//! null is neither. Unknown statistics may be anything. The row filter still evaluates every row
-//! that the reader reads, so pruning changes what the reader decodes, but not what it returns.
+//! null is neither. Unknown statistics may be anything. The reader still evaluates the filters on
+//! every row that it reads, so pruning changes what the reader decodes, but not what it returns.
 
 use std::collections::HashMap;
 use std::ops::Range;
 
+use arrow_array::cast::AsArray;
 use arrow_array::{Array, ArrayRef, BooleanArray, Scalar, UInt64Array};
 use arrow_ord::cmp;
-use arrow_schema::ArrowError;
+use arrow_schema::{ArrowError, DataType};
 use parquet::arrow::arrow_reader::statistics::StatisticsConverter;
 use parquet::arrow::arrow_reader::{ArrowReaderMetadata, RowSelection};
 use parquet::basic::{ColumnOrder, Type as PhysicalType};
 
-use crate::filter::{Comparison, Filter};
+use crate::filter::{Comparison, Filter, TextMatch};
 
 /// The row groups that may have rows that pass all the filters, and the rows of these row groups
 /// to read, if the column indexes of their pages exclude some.
@@ -152,8 +153,9 @@ pub(crate) fn prune(
 }
 
 /// The converter of the statistics of a top-level column, or `None` if they do not bound its
-/// values as Spark orders them. INT96 values have no defined order, and arrow-rs reads the
-/// deprecated bounds of old files, which order bytes as signed, when a file defines no order.
+/// values as Spark orders them. INT96 values have no defined order, writers leave NaN, which Spark
+/// orders above all numbers, out of the bounds of floats, and arrow-rs reads the deprecated bounds
+/// of old files, which order bytes as signed, when a file defines no order.
 fn converter<'a>(
     column: &str,
     metadata: &'a ArrowReaderMetadata,
@@ -165,7 +167,7 @@ fn converter<'a>(
     let index = converter.parquet_column_index()?;
     let order = metadata.metadata().file_metadata().column_order(index);
     match metadata.parquet_schema().column(index).physical_type() {
-        PhysicalType::INT96 => None,
+        PhysicalType::INT96 | PhysicalType::FLOAT | PhysicalType::DOUBLE => None,
         PhysicalType::BYTE_ARRAY | PhysicalType::FIXED_LEN_BYTE_ARRAY
             if !matches!(order, ColumnOrder::TYPE_DEFINED_ORDER(_)) =>
         {
@@ -306,6 +308,14 @@ fn outcomes(
             }
             None => unknown(),
         },
+        Filter::Text {
+            column,
+            op: TextMatch::StartsWith,
+            pattern,
+        } => match (stats.get(column.as_str()), bytes(pattern, 0)) {
+            (Some(stats), Some(prefix)) => starts_with(stats, prefix),
+            _ => unknown(),
+        },
         Filter::Text { .. } => unknown(),
         Filter::And(left, right) => {
             outcomes(left, ranges, stats)?.and(outcomes(right, ranges, stats)?)
@@ -326,6 +336,55 @@ fn is_null(stats: &Stats) -> Outcomes {
             .map(|&entry| stats.some_null[entry])
             .collect(),
         can_be_false: all_null.map(|all_null| !all_null).collect(),
+    }
+}
+
+/// The outcomes of STARTS_WITH. The strings that start with a prefix are those from the prefix to
+/// its successor, the prefix without its trailing 0xFF bytes and with its last byte incremented:
+/// a range of rows may have such strings if its bounds meet these, and others unless its bounds
+/// are within them. Without a successor, every string from the prefix on starts with it.
+fn starts_with(stats: &Stats, prefix: &[u8]) -> Outcomes {
+    let mut successor = prefix.to_vec();
+    while successor.last() == Some(&0xff) {
+        successor.pop();
+    }
+    let successor = match successor.last_mut() {
+        Some(last) => {
+            *last += 1;
+            Some(successor)
+        }
+        None => None,
+    };
+    let below_successor = |value: &[u8]| successor.as_deref().is_none_or(|end| value < end);
+    let (can_be_true, can_be_false) = stats
+        .entries
+        .iter()
+        .map(|&entry| {
+            if stats.all_null[entry] {
+                return (false, false);
+            }
+            let (min, max) = (bytes(&stats.min, entry), bytes(&stats.max, entry));
+            let can_be_true =
+                max.is_none_or(|max| max >= prefix) && min.is_none_or(below_successor);
+            let within = min.is_some_and(|min| min >= prefix) && max.is_some_and(below_successor);
+            (can_be_true, !within)
+        })
+        .unzip();
+    Outcomes {
+        can_be_true,
+        can_be_false,
+    }
+}
+
+/// The bytes of a string, or `None` if it is null.
+fn bytes(array: &ArrayRef, index: usize) -> Option<&[u8]> {
+    if array.is_null(index) {
+        return None;
+    }
+    match array.data_type() {
+        DataType::Utf8 => Some(array.as_string::<i32>().value(index).as_bytes()),
+        DataType::Utf8View => Some(array.as_string_view().value(index).as_bytes()),
+        _ => None,
     }
 }
 
@@ -538,13 +597,45 @@ mod tests {
         let null = function("<", vec![column("id"), literal("bigint", Value::Null)]);
         assert!(read(&metadata, std::slice::from_ref(&null)).is_empty());
         assert!(read(&metadata, &[not(null)]).is_empty());
-        // The row filter evaluates STARTS_WITH, which pruning does not bound.
-        let starts = label("STARTS_WITH", "row-09");
+        // The reader evaluates ENDS_WITH and CONTAINS on each row, but pruning does not bound them.
+        let ends = label("ENDS_WITH", "9");
         assert_eq!(
-            read(&metadata, std::slice::from_ref(&starts)),
+            read(&metadata, std::slice::from_ref(&ends)),
             rows(&[(0, 1000)])
         );
-        assert_eq!(read(&metadata, &[starts, id("<", 50)]), rows(&[(0, 60)]));
+        assert_eq!(read(&metadata, &[ends, id("<", 50)]), rows(&[(0, 60)]));
+    }
+
+    #[test]
+    fn skips_the_pages_whose_bounds_exclude_a_prefix() {
+        let metadata = metadata();
+        let not = |child| function("NOT", vec![child]);
+        // The pages of 20 rows from 940 to 999.
+        assert_eq!(
+            read(&metadata, &[label("STARTS_WITH", "row-09")]),
+            rows(&[(900, 1000)])
+        );
+        assert_eq!(
+            read(&metadata, &[label("STARTS_WITH", "row-095")]),
+            rows(&[(940, 960)])
+        );
+        assert_eq!(
+            read(&metadata, &[label("STARTS_WITH", "row-00")]),
+            rows(&[(0, 100)])
+        );
+        assert!(read(&metadata, &[label("STARTS_WITH", "row-1")]).is_empty());
+        assert!(read(&metadata, &[label("STARTS_WITH", "rox")]).is_empty());
+        // Every label starts with "row-", so that no page passes the negation, except none: the
+        // row group of nulls passes neither.
+        assert!(read(&metadata, &[not(label("STARTS_WITH", "row-"))]).is_empty());
+        assert_eq!(
+            read(&metadata, &[label("STARTS_WITH", "")]),
+            rows(&[(0, 400), (600, 1000)])
+        );
+        assert_eq!(
+            read(&metadata, &[not(label("STARTS_WITH", "row-09"))]),
+            rows(&[(0, 400), (600, 900)])
+        );
     }
 
     #[test]

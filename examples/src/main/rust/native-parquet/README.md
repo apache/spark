@@ -27,44 +27,61 @@ or later on the driver and executors. The standalone Rust tests do not need Spar
 ## How it reads
 
 The driver lists the files of the path and splits each one into byte ranges of at most
-`maxPartitionBytes`, as Spark splits the files of its own sources. A task reads the footer of its
-file, and the row groups whose middle falls in its range, so that each row group belongs to exactly
-one task. The reader decodes only the columns that Spark reads, and returns them in the order of
-`ReaderContext::schema`.
+`maxPartitionBytes`, which it packs into tasks as Spark packs the files of its own sources: by
+decreasing size, a task takes ranges while their bytes, with `openCostInBytes` for each, fit in
+`maxPartitionBytes`, so that small files share tasks. For each of its ranges, a task reads the
+footer of the file, and the row groups whose middle falls in the range, so that each row group
+belongs to exactly one task. The reader decodes only the columns that Spark reads, and returns
+them in the order of `ReaderContext::schema`.
 
-The pushed predicates that the reader can evaluate as Spark does become an arrow-rs
-[`RowFilter`][row-filter]. For the row groups of a task, the reader decodes the columns of the first
-predicate and evaluates it, then decodes the columns of the next predicate only for the rows that
-passed, and the other columns only for the rows that pass every predicate. Spark's own vectorized
-reader decodes every row of the pages that it reads, and filters afterwards. Spark evaluates the
-pushed predicates again on the rows that the source returns.
+The reader evaluates the pushed predicates that it can evaluate as Spark does on each batch that it
+decodes, and returns only the rows that pass, which the [`BatchCoalescer`][coalescer] of arrow-rs
+gathers into batches of `batchSize` rows. Spark evaluates the pushed predicates again on the rows
+that the source returns, so that it also reads the columns of the predicates. An arrow-rs
+[`RowFilter`][row-filter], which decodes the columns of the predicates first, and the other columns
+only for the rows that pass, would decode these columns twice, and when the rows that pass are
+scattered over the pages, the selections of rows that it builds cost more than decoding every row.
+Spark's own vectorized reader also decodes every row of the pages that it reads, and filters
+afterwards.
+
+The reader returns strings and binary values as Arrow views, which refer to the values in the pages
+that arrow-rs decompresses, or in their dictionaries, rather than copying each value into a buffer
+of its batch; short values are in the views themselves. The coalescer copies the values of the rows
+that pass when their pages hold mostly the values of other rows, so that a batch does not keep the
+pages of the rows that the predicates dropped. The library allocates with [mimalloc][mimalloc],
+which reuses the memory of each thread whatever the malloc settings of the JVM's process: with a
+fixed mmap threshold, as `MALLOC_TRIM_THRESHOLD_` and other settings make it, glibc maps the buffer
+of each page and batch, and unmaps it when it is freed.
 
 Before it decodes, the reader skips the row groups and pages in which, by their statistics, no row
 passes the predicates, as Spark's reader does with the statistics of row groups and the column
 indexes of pages. For each predicate and range of rows, it finds whether the predicate may be true
 and whether it may be false, so that it also skips under `NOT`, and it skips a range of nulls for a
-comparison and its negation alike. It uses the bounds of comparisons and `IN` lists and the null
-counts of `IS_NULL` and `IS_NOT_NULL`, but not the bounds of INT96 columns, which have no defined
-order, nor of string, binary, and decimal columns in files that define no column order, whose
+comparison and its negation alike. It uses the bounds of comparisons, `IN` lists, and the prefixes
+of `STARTS_WITH`, and the null counts of `IS_NULL` and `IS_NOT_NULL`, but not the bounds of INT96
+columns, which have no defined order, nor of floating-point columns, whose bounds writers compute
+without NaN, nor of string, binary, and decimal columns in files that define no column order, whose
 bounds old writers ordered by signed bytes. The page indexes select ranges of rows, which arrow-rs
 reads only from the pages that hold them, also in the other columns.
 
 The reader evaluates these predicates on top-level columns, with literals of the type of their
 column:
 
-- `=`, `<>`, `<=>`, `<`, `<=`, `>`, `>=`, and `IN`, on boolean, integer, string, binary, date,
-  timestamp, and decimal columns, the latter with literals of the same scale;
+- `=`, `<>`, `<=>`, `<`, `<=`, `>`, `>=`, and `IN`, on boolean, integer, floating-point, string,
+  binary, date, timestamp, and decimal columns, the latter with literals of the same scale;
 - `STARTS_WITH`, `ENDS_WITH`, and `CONTAINS`, on string columns, which Spark pushes for some
   `LIKE` patterns;
 - `IS_NULL` and `IS_NOT_NULL`, on any column;
 - `AND`, `OR`, and `NOT` of these.
 
 They evaluate to what Spark computes, including null in three-valued logic, so the reader drops
-exactly the rows that Spark drops. Other predicates remain for Spark, in particular comparisons of
-floating-point columns: Arrow orders floats by the IEEE 754 total order, in which -0.0 is less than
-0.0 and some NaNs are less than all numbers, while Spark equates the zeros and orders NaN above all
-numbers. Spark pushes a limit only to a scan without predicates; each task then stops after the
-limit, which the scan as a whole may exceed, so the source does not report the limit as pushed.
+exactly the rows that Spark drops. Floats compare as Spark compares them: Arrow orders floats by the
+IEEE 754 total order, in which -0.0 is less than 0.0 and the NaNs differ by their bits, some being
+less than all numbers, while Spark equates the zeros and the NaNs, and orders NaN above all numbers.
+The reader changes -0.0 to 0.0 and every NaN to the same positive NaN, in the values and in the
+literals, before Arrow compares them. Other predicates remain for Spark. Spark pushes a limit only
+to a scan without predicates; each task then stops after the limit, which the scan as a whole may
+exceed, so the source does not report the limit as pushed.
 
 ## Supported data and options
 
@@ -81,7 +98,8 @@ which Spark converts or rejects.
 | --- | --- | --- |
 | `path` | Required | Absolute path of a Parquet file, or of a directory of Parquet files |
 | `batchSize` | `8192` | Maximum number of rows of a batch |
-| `maxPartitionBytes` | `134217728` | Maximum number of bytes of a file that one task reads |
+| `maxPartitionBytes` | `134217728` | Maximum number of bytes of files that one task reads |
+| `openCostInBytes` | `4194304` | Cost of opening a file, in bytes, when packing files into tasks |
 | `rowFilter` | `true` | Whether to evaluate the pushed predicates, by statistics and per row |
 
 In a directory, the source skips the files whose names start with `_` or `.`, such as `_SUCCESS` and
@@ -130,22 +148,25 @@ filter, on data that it writes if the given path does not exist:
   --data /tmp/rust-sdk-parquet-benchmark
 ```
 
-Package a release build for the benchmark: a debug build is many times slower.
+With `--dataset lineitem`, it writes a table with the columns of TPC-H lineitem, whose decimals,
+dates, and dictionary-encoded strings Spark computes from the row number, and runs TPC-H Q1 and Q6,
+and other queries on it. Package a release build for the benchmark: a debug build is many times
+slower.
 
 ## Limits of this example
 
 The files must be on a local POSIX filesystem, or on a shared filesystem at the same absolute path
 on all hosts. Object-store URLs are unsupported. The source does not discover partition directories,
 merge schemas, or rebase dates and timestamps that Spark wrote in the legacy hybrid calendar. It
-skips no pages by the prefixes of `STARTS_WITH` or by bloom filters, which Spark's reader can. It
-matches the names of columns by case, and requires valid UTF-8 in string columns, which arrow-rs
-checks and Spark does not. It reports no statistics to Spark, so Spark does not plan to broadcast
-its tables in joins without a hint. The reader evaluates the row filter with the synchronous reader
-of arrow-rs, which decodes the columns of the predicates again, for the rows that pass, when Spark
-also reads them; the predicate cache of arrow-rs serves only its asynchronous reader. Native memory
-is not reserved through Spark's memory manager.
+skips no pages by bloom filters, which Spark's reader can. It matches the names of columns by case,
+and requires valid UTF-8 in string columns, which arrow-rs checks and Spark does not. It reports no
+statistics to Spark, so Spark does not plan to broadcast its tables in joins without a hint. The
+reader decodes the columns of a batch also for the rows that the predicates drop, except in the
+pages that statistics skip. Native memory is not reserved through Spark's memory manager.
 
 [sdk]: ../../../../../sql/native/rust/README.md
 [native-source-pr]: https://github.com/apache/spark/pull/59424
 [arrow-rs]: https://github.com/apache/arrow-rs
 [row-filter]: https://docs.rs/parquet/58.4.0/parquet/arrow/arrow_reader/struct.RowFilter.html
+[coalescer]: https://docs.rs/arrow-select/58.4.0/arrow_select/coalesce/struct.BatchCoalescer.html
+[mimalloc]: https://github.com/microsoft/mimalloc
