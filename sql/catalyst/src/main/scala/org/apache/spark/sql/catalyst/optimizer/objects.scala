@@ -232,12 +232,12 @@ object ObjectSerializerPruning extends Rule[LogicalPlan] {
         }
 
         // Builds new projection.
-        val projectionOverSchema = ProjectionOverSchema(prunedSchema, AttributeSet(s.output))
+        val serialized = SerializeFromObject(nestedPrunedSerializer, s.child)
+        val projectionOverSchema = ProjectionOverSchema(serialized.schema, AttributeSet(s.output))
         val newProjects = p.projectList.map(_.transformDown {
           case projectionOverSchema(expr) => expr
         }).map { case expr: NamedExpression => expr }
-        p.copy(projectList = newProjects,
-          child = SerializeFromObject(nestedPrunedSerializer, s.child))
+        p.copy(projectList = newProjects, child = serialized)
       } else {
         p.copy(child = SerializeFromObject(prunedSerializer, s.child))
       }

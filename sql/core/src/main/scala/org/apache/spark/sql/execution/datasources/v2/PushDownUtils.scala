@@ -34,6 +34,7 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{HasPartitionKey, InputPartition, SampleMethod => SampleMethodV2, Scan, ScanBuilder, SupportsPushDownFilters, SupportsPushDownLimit, SupportsPushDownOffset, SupportsPushDownRequiredColumns, SupportsPushDownTableSample, SupportsPushDownTopN, SupportsPushDownV2Filters, SupportsRuntimeV2Filtering}
 import org.apache.spark.sql.execution.{InSubqueryExec, ScalarSubquery => ExecScalarSubquery}
 import org.apache.spark.sql.execution.datasources.{DataSourceStrategy, DataSourceUtils}
+import org.apache.spark.sql.execution.datasources.v2.orc.OrcScanBuilder
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.connector.{PartitionPredicateField, PartitionPredicateImpl, SupportsPushDownCatalystFilters, SupportsRuntimeCatalystFiltering}
 import org.apache.spark.sql.sources
@@ -690,7 +691,8 @@ object PushDownUtils extends Logging {
 
     scanBuilder match {
       case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
-        val rootFields = SchemaPruning.identifyRootFields(projects, filters)
+        val rootFields = SchemaPruning.identifyRootFields(projects, filters,
+          pruneDynamicSelectors = !scanBuilder.isInstanceOf[OrcScanBuilder])
         val prunedSchema = if (rootFields.nonEmpty) {
           SchemaPruning.pruneSchema(relation.schema, rootFields)
         } else {

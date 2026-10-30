@@ -39,10 +39,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
     expr match {
       case a: AttributeReference if fieldNames.contains(a.name) && output.contains(a) =>
         Some(a.copy(dataType = schema(a.name).dataType)(a.exprId, a.qualifier))
-      case GetArrayItem(child, arrayItemOrdinal, failOnError) =>
-        getProjection(child).map {
-          projection => GetArrayItem(projection, arrayItemOrdinal, failOnError)
-        }
+      case item: GetArrayItem =>
+        getProjection(item.left).map(p => item.withNewChildren(Seq(p, item.right)))
       case a: GetArrayStructFields =>
         getProjection(a.child).map(p => (p, p.dataType)).map {
           case (projection, ArrayType(projSchema @ StructType(_), _)) =>
@@ -110,8 +108,8 @@ case class ProjectionOverSchema(schema: StructType, output: AttributeSet) {
               s"unmatched child schema for GetStructField: ${projSchema.toString}"
             )
         }
-      case ElementAt(left, right, defaultValueOutOfBound, failOnError) =>
-        getProjection(left).map(p => ElementAt(p, right, defaultValueOutOfBound, failOnError))
+      case item: ElementAt =>
+        getProjection(item.left).map(p => item.withNewChildren(Seq(p, item.right)))
       case _ =>
         None
     }

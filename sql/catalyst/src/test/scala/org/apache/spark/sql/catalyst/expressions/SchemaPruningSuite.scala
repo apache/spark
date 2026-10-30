@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicReference
 import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.types._
@@ -188,6 +189,51 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("map lookups under null checks retain the full stored key for comparison") {
+    val keyType = StructType.fromDDL("a int, b int")
+    val valueType = StructType.fromDDL("unused string, small int")
+    val inputType = StructType(Seq(
+      StructField("unused", IntegerType),
+      StructField("m", MapType(keyType, valueType))))
+    val input = AttributeReference("input", inputType)()
+    val key = AttributeReference("key", keyType)()
+    val map = GetStructField(input, 1, Some("m"))
+    val firstKey = GetArrayItem(MapKeys(map), Literal(0))
+    val project = Alias(GetStructField(firstKey, 0, Some("a")), "a")()
+    val source = StructType(Seq(StructField("input", inputType), StructField("key", keyType)))
+    val fullMap = StructType.fromDDL(
+      "m map<struct<a:int,b:int>,struct<unused:string,small:int>>")
+    val narrowMap = StructType.fromDDL("m map<struct<a:int,b:int>,struct<small:int>>")
+
+    for {
+      selector <- Seq(key, Literal.create(InternalRow(1, 2), keyType))
+      lookup <- Seq(GetMapValue(map, selector), ElementAt(map, selector))
+      predicate <- Seq(IsNull(lookup), IsNotNull(lookup))
+    } {
+      val roots = SchemaPruning.identifyRootFields(Seq(project), Seq(predicate))
+      assert(SchemaPruning.pruneSchema(source, roots)("input").dataType === fullMap)
+      val valueProject = Alias(GetStructField(lookup, 1, Some("small")), "small")()
+      val valueRoots = SchemaPruning.identifyRootFields(Seq(valueProject), Seq(predicate))
+      assert(SchemaPruning.pruneSchema(source, valueRoots)("input").dataType === narrowMap)
+    }
+  }
+
+  test("collect a nested dynamic selector once when an array filter needs the whole element") {
+    val elementType = StructType.fromDDL("p int, q int")
+    val outerType = StructType.fromDDL("unused int, nested array<struct<p:int,q:int>>")
+    val items = AttributeReference("items", ArrayType(outerType))()
+    val index = AttributeReference("index", IntegerType)()
+    val selector = (1 to 8).foldLeft[Expression](index) { (indexExpr, _) =>
+      val nested = GetStructField(GetArrayItem(items, indexExpr), 1, Some("nested"))
+      val element = NamedLambdaVariable("x", elementType, nullable = true)
+      val predicate = EqualTo(element, Literal.create(InternalRow(1, 2), elementType))
+      Size(ArrayFilter(nested, LambdaFunction(predicate, Seq(element))))
+    }
+
+    val roots = SchemaPruning.getRootFields(selector)
+    assert(roots.count(_.field.name == index.name) == 1)
+  }
+
   test("dynamic array projection preserves nulls and index errors") {
     val valueType = StructType.fromDDL("payload string, id int")
     val items = AttributeReference("items", ArrayType(valueType))()
@@ -201,10 +247,12 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
       failOnError <- Seq(false, true)
       elementAt <- Seq(false, true)
     } {
-      val access = if (elementAt) {
-        ElementAt(items, index, failOnError = failOnError)
-      } else {
-        GetArrayItem(items, index, failOnError)
+      val lookup = if (elementAt) "element_at(items, index)" else "items[index]"
+      val origin = Origin(startIndex = Some(0), stopIndex = Some(lookup.length - 1),
+        sqlText = Some(s"$lookup.id"))
+      val access = CurrentOrigin.withOrigin(origin) {
+        if (elementAt) ElementAt(items, index, failOnError = failOnError)
+        else GetArrayItem(items, index, failOnError)
       }
       val id = GetStructField(access, 1, Some("id"))
       val projected = id.transformDown { case projection(expression) => expression }
@@ -219,6 +267,7 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
         }
         assert(error.getCondition ==
           (if (elementAt) "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" else "INVALID_ARRAY_INDEX"))
+        assert(error.getQueryContext.head.fragment() == lookup)
       } else {
         assert(bound.eval(InternalRow(values, 3)) == null)
       }

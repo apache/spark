@@ -98,17 +98,21 @@ object SchemaPruning extends SQLConfHelper {
    */
   def identifyRootFields(
       projects: Seq[NamedExpression],
-      filters: Seq[Expression]): Seq[RootField] = {
-    val projectionRootFields = projects.flatMap(getRootFields)
-    val filterRootFields = filters.flatMap(getRootFields)
+      filters: Seq[Expression],
+      pruneDynamicSelectors: Boolean = true): Seq[RootField] = {
+    val expressions = projects ++ filters
+    // ORC can match struct fields by position. Keep a dynamically indexed collection's full
+    // element type so that dropping a preceding sibling does not shift the requested field.
+    val collectionInputs = if (pruneDynamicSelectors) Nil else expressions.flatMap(dynamicInputs)
+    val requestedFields = (expressions ++ collectionInputs).flatMap(getRootFields)
 
     // Kind of expressions don't need to access any fields of a root fields, e.g., `IsNotNull`.
     // For them, if there are any nested fields accessed in the query, we don't need to add root
     // field access of above expressions.
     // For example, for a query `SELECT name.first FROM contacts WHERE name IS NOT NULL`,
     // we don't need to read nested fields of `name` struct other than `first` field.
-    val (rootFields, optRootFields) = (projectionRootFields ++ filterRootFields)
-      .distinct.partition(!_.prunedIfAnyChildAccessed)
+    val (rootFields, optRootFields) =
+      requestedFields.distinct.partition(!_.prunedIfAnyChildAccessed)
 
     optRootFields.filter { opt =>
       !rootFields.exists { root =>
@@ -127,10 +131,47 @@ object SchemaPruning extends SQLConfHelper {
           val rootFieldType = StructType(Array(root.field))
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
-          DataTypeUtils.sameType(merged, optFieldType)
+          DataTypeUtils.sameType(merged, optFieldType) &&
+            (!opt.requiresMapKeys || retainsMapKeys(opt.field.dataType, root.field.dataType))
         }
       }
     } ++ rootFields
+  }
+
+  // The projected type is a subset of the optional type. Map values can be narrower, but a
+  // lookup still compares the complete stored key, even when its result is only tested for null.
+  private def retainsMapKeys(original: DataType, projected: DataType): Boolean =
+    (original, projected) match {
+      case (originalStruct: StructType, projectedStruct: StructType) =>
+        projectedStruct.forall { field =>
+          retainsMapKeys(originalStruct(field.name).dataType, field.dataType)
+        }
+      case (ArrayType(elementType, _), ArrayType(projectedElement, _)) =>
+        retainsMapKeys(elementType, projectedElement)
+      case (MapType(keyType, valueType, _), MapType(projectedKey, projectedValue, _)) =>
+        DataTypeUtils.sameType(keyType, projectedKey) && retainsMapKeys(valueType, projectedValue)
+      case _ => true
+    }
+
+  private def dynamicInputs(expr: Expression): Seq[Expression] = {
+    def childInputs = expr.children.flatMap(dynamicInputs)
+    expr match {
+      // getRootFields already keeps the outer references. Join conditions can refer to inner data.
+      case _: SubqueryExpression => Nil
+      // For a[i][j], retaining a already preserves the entire result of a[i].
+      case DynamicLookup(DynamicLookup(_)) => childInputs
+      case DynamicLookup(input) => input +: childInputs
+      case _ => childInputs
+    }
+  }
+
+  private object DynamicLookup {
+    def unapply(expr: Expression): Option[Expression] = expr match {
+      case GetArrayItem(input, index, _) if !index.foldable => Some(input)
+      case GetMapValue(input, key) if !key.foldable => Some(input)
+      case ElementAt(input, selector, _, _) if !selector.foldable => Some(input)
+      case _ => None
+    }
   }
 
   /**
@@ -156,11 +197,9 @@ object SchemaPruning extends SQLConfHelper {
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.
       case IsNotNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
-          getAdditionalRootFields(expr)
+        getRootFieldsForNullCheck(expr, field)
       case IsNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
-          getAdditionalRootFields(expr)
+        getRootFieldsForNullCheck(expr, field)
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
       case s: SubqueryExpression =>
@@ -170,6 +209,23 @@ object SchemaPruning extends SQLConfHelper {
       case _ =>
         expr.children.flatMap(getRootFields)
     }
+  }
+
+  private def getRootFieldsForNullCheck(expr: Expression, field: StructField): Seq[RootField] = {
+    // A map lookup compares the entire stored key. A projection of one field from map_keys
+    // cannot satisfy the lookup, even when we only test its result for null. Follow the
+    // collection input as SelectedField does. Selector and lambda reads are collected separately.
+    @scala.annotation.tailrec
+    def comparesStructKey(current: Expression): Boolean = current match {
+      case GetMapValue(_, key) if key.dataType.existsRecursively(_.isInstanceOf[StructType]) =>
+        true
+      case ElementAt(_, key, _, _) if key.dataType.existsRecursively(_.isInstanceOf[StructType]) =>
+        true
+      case _ if current.children.nonEmpty => comparesStructKey(current.children.head)
+      case _ => false
+    }
+    RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true,
+      requiresMapKeys = comparesStructKey(expr)) +: getAdditionalRootFields(expr)
   }
 
   private def getArrayHigherOrderFunctionRootFields(
@@ -241,7 +297,9 @@ object SchemaPruning extends SQLConfHelper {
       argument: Expression,
       lambda: LambdaFunction,
       numElementVariables: Int): Seq[RootField] = {
-    val nestedRootFields = argument.dataType match {
+    // Collect selector dependencies separately only when we project the argument. When the
+    // whole argument is required, getRootFields already collects them.
+    val argumentRootFields = argument.dataType match {
       case ArrayType(_: StructType, containsNull) =>
         val elementVariables = lambda.arguments.take(numElementVariables).collect {
           case elementVar: NamedLambdaVariable => elementVar
@@ -255,22 +313,21 @@ object SchemaPruning extends SQLConfHelper {
               .reduceLeft(_ merge _)
             SelectedField.withDataType(
               argument,
-              ArrayType(mergedElementSchema, containsNull)).toSeq match {
-              case Seq() => getRootFields(argument).map(_.field)
-              case fields => fields
+              ArrayType(mergedElementSchema, containsNull)) match {
+              case Some(field) =>
+                RootField(field, derivedFromAtt = false) +: getAdditionalRootFields(argument)
+              case None => getRootFields(argument)
             }
           } else {
-            Seq.empty
+            getAdditionalRootFields(argument)
           }
         } else {
-          getRootFields(argument).map(_.field)
+          getRootFields(argument)
         }
       case _ =>
-        getRootFields(argument).map(_.field)
+        getRootFields(argument)
     }
-    nestedRootFields.map(field => RootField(field, derivedFromAtt = false)) ++
-      getRootFields(lambda.function) ++
-      getAdditionalRootFields(argument)
+    argumentRootFields ++ getRootFields(lambda.function)
   }
 
   /**
@@ -339,8 +396,9 @@ object SchemaPruning extends SQLConfHelper {
    * This represents a "root" schema field (aka top-level, no-parent). `field` is the
    * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it
    * was derived from an attribute or had a proper child. `prunedIfAnyChildAccessed` means
-   * whether this root field can be pruned if any of child field is used in the query.
+   * whether this root field can be pruned if any child field is used in the query.
+   * `requiresMapKeys` additionally requires that the child's projection keep complete map keys.
    */
   case class RootField(field: StructField, derivedFromAtt: Boolean,
-    prunedIfAnyChildAccessed: Boolean = false)
+    prunedIfAnyChildAccessed: Boolean = false, requiresMapKeys: Boolean = false)
 }

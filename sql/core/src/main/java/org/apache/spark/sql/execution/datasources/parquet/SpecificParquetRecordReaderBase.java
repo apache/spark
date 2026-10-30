@@ -143,7 +143,8 @@ public abstract class SpecificParquetRecordReaderBase<T> extends RecordReader<Vo
     String sparkRequestedSchemaString =
         configuration.get(ParquetReadSupport$.MODULE$.SPARK_ROW_REQUESTED_SCHEMA());
     this.sparkRequestedSchema = StructType$.MODULE$.fromString(sparkRequestedSchemaString);
-    ParquetToSparkSchemaConverter converter = new ParquetToSparkSchemaConverter(configuration);
+    ParquetToSparkSchemaConverter converter =
+      new ParquetReadSchemaConverter(configuration, requestedSchema, fileSchema);
     this.parquetColumn = converter.convertParquetColumn(requestedSchema,
       Option.apply(this.sparkRequestedSchema));
     this.sparkSchema = (StructType) parquetColumn.sparkType();

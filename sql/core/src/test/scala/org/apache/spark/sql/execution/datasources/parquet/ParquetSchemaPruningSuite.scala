@@ -17,6 +17,11 @@
 
 package org.apache.spark.sql.execution.datasources.parquet
 
+import org.apache.hadoop.fs.Path
+import org.apache.parquet.example.data.simple.SimpleGroupFactory
+import org.apache.parquet.hadoop.example.ExampleParquetWriter
+import org.apache.parquet.schema.MessageTypeParser
+
 import org.apache.spark.SparkConf
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
@@ -35,6 +40,53 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
     SQLConf.PARQUET_VECTORIZED_READER_ENABLED.key
   override protected val vectorizedReaderNestedEnabledKey: String =
     SQLConf.PARQUET_VECTORIZED_READER_NESTED_COLUMN_ENABLED.key
+
+  test("dynamic array selection preserves two-level Parquet LIST elements after pruning") {
+    withTempPath { file =>
+      // After clipping legacy to just wanted, both LISTs have identical repeated groups.
+      val fileSchema = MessageTypeParser.parseMessageType(
+        """message m {
+          |  optional group legacy (LIST) {
+          |    repeated group entries { optional int32 sibling; optional int32 wanted = 17; }
+          |  }
+          |  optional group standard (LIST) {
+          |    repeated group entries { optional int32 wanted = 17; }
+          |  }
+          |  optional int32 idx;
+          |}""".stripMargin)
+      val writer = ExampleParquetWriter.builder(new Path(file.toURI))
+        .withConf(spark.sessionState.newHadoopConf()).withType(fileSchema).build()
+      try {
+        val row = new SimpleGroupFactory(fileSchema).newGroup().append("idx", 1)
+        val legacy = row.addGroup("legacy")
+        legacy.addGroup("entries").append("sibling", 10).append("wanted", 11)
+        legacy.addGroup("entries").append("sibling", 20).append("wanted", 22)
+        val standard = row.addGroup("standard")
+        standard.addGroup("entries").append("wanted", 30)
+        standard.addGroup("entries").append("wanted", 33)
+        writer.write(row)
+      } finally {
+        writer.close()
+      }
+      val fieldId = new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 17).build()
+      val element = new StructType().add("sibling", IntegerType)
+        .add("renamed", IntegerType, nullable = true, metadata = fieldId)
+      val readSchema = new StructType().add("legacy", ArrayType(element))
+        .add("standard", ArrayType(IntegerType)).add("idx", IntegerType)
+      Seq("true", "false").foreach { vectorized =>
+        withSQLConf(
+          vectorizedReaderEnabledKey -> vectorized,
+          SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true",
+          SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
+          val query = spark.read.schema(readSchema).parquet(file.getCanonicalPath)
+            .selectExpr("legacy[idx].renamed", "standard[idx]")
+          checkScanSchemata(query,
+            "struct<legacy:array<struct<renamed:int>>,standard:array<int>,idx:int>")
+          checkAnswer(query, Row(22, 33))
+        }
+      }
+    }
+  }
 
   test("dynamic array selection preserves root and nested Parquet field IDs") {
     withSQLConf(

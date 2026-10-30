@@ -132,6 +132,13 @@ class DatasetOptimizationSuite extends SharedSparkSession {
     }
   }
 
+  test("dynamic map lookup uses the fields emitted by the serializer") {
+    val ds = spark.range(1).map { _ =>
+      ((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")), "k")
+    }
+    checkAnswer(ds.selectExpr("_1._1[_2]._2", "_1._2._1"), Row("map-b", "other-a"))
+  }
+
   test("Pruned nested serializers: map of complex key") {
     withSQLConf(SQLConf.SERIALIZER_NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
       val mapData = Seq((Map((("1", 1), "a_1")), 1), (Map((("2", 2), "b_1")), 2),

@@ -67,7 +67,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val normalizedProjects = normalizeAttributeRefNames(attrNameMap, projects)
       .asInstanceOf[Seq[NamedExpression]]
     val normalizedFilters = normalizeAttributeRefNames(attrNameMap, filters)
-    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters)
+    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters,
+      pruneDynamicSelectors = !hadoopFsRelation.fileFormat.isInstanceOf[OrcFileFormat])
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op
