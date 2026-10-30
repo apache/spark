@@ -4687,8 +4687,12 @@ object SQLConf {
       .doc("The number of rows between periodic compaction-ratio evaluations by adaptive partial " +
         s"aggregation (see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The ratio is also " +
         "evaluated when the aggregation map is about to spill, but only once the current map " +
-        "has processed at least this many rows. Setting this to 0 disables the periodic " +
-        "evaluation, leaving only the evaluation when the map is about to spill.")
+        "has processed at least this many rows, and over the rows since the periodic " +
+        "evaluation before last, so this also sets how many recent rows that evaluation " +
+        "measures: at least this many and fewer than twice that, or the whole map epoch when " +
+        "the map fills before its second periodic evaluation. Setting this to 0 disables the " +
+        "periodic evaluation, leaving only the evaluation when the map is about to spill, " +
+        "which then measures all rows and keys of the current map epoch.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .longConf
@@ -4700,15 +4704,41 @@ object SQLConf {
       .doc("The minimum compaction ratio required to keep the pre-shuffle partial aggregation " +
         s"(see '${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). The compaction ratio is the " +
         "number of processed rows divided by the number of keys held in the aggregation maps, " +
-        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When an " +
-        "evaluation finds the ratio below this value, the partial aggregation is bypassed for " +
-        "the rest of the input. A larger value bypasses more aggressively.")
+        "so a ratio of 10 means the partial aggregation collapses ten rows into one. When the " +
+        "periodic evaluation finds the ratio below this value, the partial aggregation is " +
+        "bypassed for the rest of the input. A larger value bypasses more aggressively. The " +
+        "evaluation when the map is about to spill demands at least this value too, see " +
+        "'spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill'.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .doubleConf
       .checkValue(v => v >= 1.0 && v.isFinite,
         "The minimum compaction ratio must be a finite value of at least 1.0.")
       .createWithDefault(1.05)
+
+  val ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL =
+    buildConf("spark.sql.execution.aggregate.adaptivePartialAggregation.minCompactionToSpill")
+      .doc("The minimum compaction ratio required to keep the pre-shuffle partial aggregation " +
+        "when its map is about to spill (see " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_ENABLED.key}'). Keeping the aggregation then means " +
+        "aggregating the rest of the input through spills, which pays off only if that input " +
+        "keeps repeating keys, so this evaluation measures the recent rows: those processed " +
+        "since the periodic evaluation before last, against the keys they added, or the whole " +
+        "map epoch before the map's second periodic evaluation. When keys repeat across the " +
+        "input, that ratio climbs as the map fills; with keys spread evenly over the task it " +
+        "reflects how much of the task's distinct keys the map holds rather than how often " +
+        "each key repeats, so at the default the aggregation is kept only when the map holds " +
+        "about half of them or more. When the ratio is below the larger of this value and " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION.key}', the map is not spilled and the " +
+        "rest of the input is passed through. Like the periodic evaluation, it only runs once " +
+        "the current map has processed " +
+        s"'${ADAPTIVE_PARTIAL_AGGREGATION_MIN_ROWS.key}' rows.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doubleConf
+      .checkValue(v => v >= 1.0 && v.isFinite,
+        "The minimum compaction ratio must be a finite value of at least 1.0.")
+      .createWithDefault(2.0)
 
   val JSON_GENERATOR_IGNORE_NULL_FIELDS =
     buildConf("spark.sql.jsonGenerator.ignoreNullFields")
@@ -9925,6 +9955,9 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def adaptivePartialAggregationMinCompaction: Double =
     getConf(ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION)
+
+  def adaptivePartialAggregationMinCompactionToSpill: Double =
+    getConf(ADAPTIVE_PARTIAL_AGGREGATION_MIN_COMPACTION_TO_SPILL)
 
   def objectAggSortBasedFallbackThreshold: Int = getConf(OBJECT_AGG_SORT_BASED_FALLBACK_THRESHOLD)
 
