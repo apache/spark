@@ -352,6 +352,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       metadata.putBoolean("isSigned", isSigned)
       metadata.putBoolean("isTimestampNTZ", options.preferTimestampNTZ)
       metadata.putBoolean("preferTimestampNanos", options.preferTimestampNanos)
+      metadata.putBoolean(
+        JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ, options.zonelessTimestampAsNTZ)
       metadata.putLong("scale", fieldScale)
       metadata.putString("jdbcClientType", typeName)
       dialect.updateExtraColumnMeta(conn, rsmd, i + 1, metadata)
@@ -359,6 +361,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
       val columnType =
         dialect.getCatalystType(dataType, typeName, fieldSize, metadata).getOrElse(
           getCatalystType(dataType, typeName, fieldSize, fieldScale, isSigned, options))
+      // Only an input to the dialect's type mapping, so keep it out of the schema.
+      metadata.remove(JDBCOptions.JDBC_ZONELESS_TIMESTAMP_AS_NTZ)
       fields(i) = StructField(columnName, columnType, nullable, metadata.build())
       i = i + 1
     }
