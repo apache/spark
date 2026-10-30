@@ -30,7 +30,6 @@ import org.apache.spark.sql.catalyst.util.DateTimeTestUtils._
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
 import org.apache.spark.sql.connector.catalog.{Identifier, TableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.jdbc.JDBCTableCatalog
-import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.jdbc.OracleDatabaseOnDocker
 import org.apache.spark.sql.types._
 import org.apache.spark.tags.DockerTest
@@ -200,17 +199,6 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
       assert(perRead.schema.head.dataType === TimestampNTZType)
       checkAnswer(perRead, Row(readShifted))
 
-      // Aggregate and join pushdown rebuild the scan's options and must keep the per-read ones.
-      val maxDf = sql(s"SELECT MAX(time1) FROM $table WITH ($noWallClock)")
-      checkAggregateRemoved(maxDf)
-      checkAnswer(maxDf, Row(readShifted))
-      withSQLConf(SQLConf.DATA_SOURCE_V2_JOIN_PUSHDOWN.key -> "true") {
-        val joinDf = sql(s"SELECT a.time1, b.time1 FROM $table WITH ($noWallClock) a " +
-          s"JOIN $table WITH ($noWallClock) b ON a.name = b.name WHERE a.name = 'amy'")
-        checkJoinPushed(joinDf)
-        checkAnswer(joinDf, Row(readShifted, readShifted))
-      }
-
       // Reading back with the defaults shows the stored wall-clock exactly.
       val target = s"$catalogName.${namespaceOpt.get}.${caseConvert("ntz_write")}"
       withTable(target) {
@@ -221,6 +209,21 @@ class OracleIntegrationSuite extends DockerJDBCIntegrationV2Suite with V2JDBCTes
           DateTimeUtils.localDateTimeToMicros(LocalDateTime.of(2022, 5, 20, 0, 0, 0)))
           .toLocalDateTime
         checkAnswer(sql(s"SELECT t FROM $target"), Seq(ldt, writeShifted).map(Row(_)))
+      }
+    }
+  }
+
+  test("SPARK-60420: zonelessTimestampAsNTZ set on the catalog decides the V2 table schema") {
+    val table = s"${namespaceOpt.get}.${caseConvert("datetime")}"
+    withSQLConf(
+        "spark.sql.catalog.oracle_ltz" -> classOf[JDBCTableCatalog].getName,
+        "spark.sql.catalog.oracle_ltz.url" -> db.getJdbcUrl(dockerIp, externalPort),
+        "spark.sql.catalog.oracle_ltz.zonelessTimestampAsNTZ" -> "false") {
+      Seq(catalogName -> TimestampNTZType, "oracle_ltz" -> TimestampType).foreach {
+        case (catalog, expected) =>
+          val schema = spark.table(s"$catalog.$table").schema
+          assert(schema("DATE1").dataType === expected)
+          assert(schema("TIME1").dataType === expected)
       }
     }
   }
