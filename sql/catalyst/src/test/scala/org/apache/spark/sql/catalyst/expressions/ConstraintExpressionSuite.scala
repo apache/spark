@@ -18,6 +18,7 @@ package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.{SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.expressions.codegen.CodegenContext
 import org.apache.spark.sql.types.IntegerType
 
 class ConstraintExpressionSuite extends SparkFunSuite with ExpressionEvalHelper {
@@ -41,5 +42,31 @@ class ConstraintExpressionSuite extends SparkFunSuite with ExpressionEvalHelper 
   test("CheckInvariant: throws exception if column 'a' <= 0") {
     checkExceptionInExpression[SparkRuntimeException](
       expr, InternalRow(-1), expectedMessage("-1"))
+  }
+
+  test("SPARK-60764: CheckInvariant: the texts are not embedded in the generated code") {
+    val ctx = new CodegenContext
+    val code = CheckInvariant(
+      GreaterThan(boundRef, Literal(0)),
+      Seq(("column_text", boundRef)),
+      "name_text",
+      "predicate_text").genCode(ctx).code.toString
+    Seq("column_text", "name_text", "predicate_text").foreach { text =>
+      assert(!code.contains(text))
+      assert(ctx.references.contains(text))
+    }
+  }
+
+  test("SPARK-60764: CheckInvariant: double quote, newline and backslash in the texts") {
+    Seq("a\"b", "a\nb", "a\\b", "a\\qb").foreach { text =>
+      val invariant =
+        CheckInvariant(GreaterThan(boundRef, Literal(0)), Seq((text, boundRef)), text, text)
+      checkEvaluation(invariant, true, InternalRow(1))
+      checkExceptionInExpression[SparkRuntimeException](
+        invariant,
+        InternalRow(-1),
+        s"[CHECK_CONSTRAINT_VIOLATION] CHECK constraint $text $text violated by row with values:" +
+          s"\n - $text : -1\n SQLSTATE: 23001")
+    }
   }
 }
