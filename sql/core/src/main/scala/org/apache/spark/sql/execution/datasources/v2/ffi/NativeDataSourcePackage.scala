@@ -142,9 +142,9 @@ object NativeDataSourcePackage extends Logging {
    * before, and accepting a package without a library for this platform would fail every query
    * on its data sources, so Spark rejects both. The library is not loaded, so a library that
    * fails to load fails the queries that use it, and neither is it checked that the driver can
-   * run native data sources at all (Java 22 or later, and the C data interface of Arrow Java):
-   * there, every query fails. The file is not the artifact itself, so the result is not cached,
-   * and errors call it `path`.
+   * run native data sources at all (Java 22 or later, and a platform where the C data interface
+   * of Arrow Java loads): there, every query on its data sources fails. The file is not the
+   * artifact itself, so the result is not cached, and errors call it `path`.
    */
   def checkAdded(file: File, path: String): Unit = {
     val manifest = readManifest(file, path).fold(invalid => throw invalid.error, identity)
