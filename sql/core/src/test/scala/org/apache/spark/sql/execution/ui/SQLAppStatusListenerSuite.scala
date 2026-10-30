@@ -599,6 +599,42 @@ abstract class SQLAppStatusListenerSuite extends SharedSparkSession with JsonTes
     assert(metrics(driverMetric2.id) === expectedValue2)
   }
 
+  test("SPARK-60759: aggregateMetrics merges repeated driver updates of the same accumulator") {
+    val statusStore = spark.sharedState.statusStore
+    val oldCount = statusStore.executionsList().size
+
+    val values = Seq(10L, 20L)
+    val physicalPlan = MyPlanWithRepeatedDriverAccumUpdates(sqlContext.sparkContext, values)
+    val dummyQueryExecution = new QueryExecution(spark, LocalRelation()) {
+      override lazy val sparkPlan = physicalPlan
+      override lazy val executedPlan = physicalPlan
+    }
+
+    SQLExecution.withNewExecutionId(dummyQueryExecution) {
+      physicalPlan.execute().collect()
+    }
+
+    while (statusStore.executionsCount() < oldCount) {
+      Thread.sleep(100)
+    }
+
+    while (statusStore.executionsList().isEmpty ||
+        statusStore.executionsList().last.metricValues == null) {
+      Thread.sleep(100)
+    }
+
+    val execId = statusStore.executionsList().last.executionId
+    val metrics = statusStore.executionMetrics(execId)
+    val driverMetric = physicalPlan.metrics("dummy")
+    // The accumulator is cumulative, so each post reports the running total.
+    val postedValues = values.scanLeft(0L)(_ + _).tail
+    val expectedValue = MetricUtils.stringValue(
+      driverMetric.metricType, postedValues.toArray, Array.empty[Long])
+
+    assert(metrics.contains(driverMetric.id))
+    assert(metrics(driverMetric.id) === expectedValue)
+  }
+
   test("roundtripping SparkListenerDriverAccumUpdates through JsonProtocol (SPARK-18462)") {
     val event = SparkListenerDriverAccumUpdates(1L, Seq((2L, 3L)))
     val json = JsonProtocol.sparkEventToJsonString(event)
@@ -1041,6 +1077,31 @@ private case class MyPlan(sc: SparkContext, expectedValue: Long, expectedValue2:
       sc,
       sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
       Seq(metrics("dummy2")))
+    sc.emptyRDD
+  }
+}
+
+/**
+ * A dummy [[org.apache.spark.sql.execution.SparkPlan]] that posts several driver accumulator
+ * updates for the same accumulator id, one per value.
+ */
+private case class MyPlanWithRepeatedDriverAccumUpdates(sc: SparkContext, values: Seq[Long])
+  extends LeafExecNode {
+
+  override def sparkContext: SparkContext = sc
+  override def output: Seq[Attribute] = Seq()
+
+  override val metrics: Map[String, SQLMetric] = Map(
+    "dummy" -> SQLMetrics.createMetric(sc, "dummy"))
+
+  override def doExecute(): RDD[InternalRow] = {
+    values.foreach { value =>
+      longMetric("dummy") += value
+      SQLMetrics.postDriverMetricUpdates(
+        sc,
+        sc.getLocalProperty(SQLExecution.EXECUTION_ID_KEY),
+        Seq(metrics("dummy")))
+    }
     sc.emptyRDD
   }
 }
