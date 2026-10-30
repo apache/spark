@@ -699,8 +699,7 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // A user CAST still detaches FORMAT JSON, so the element stays quoted (the routed splice check
     // sees through an analyzer collation Cast, but not a user `CAST(... AS STRING)`).
     checkAnswer(sql("SELECT builtin.json_array(CAST(json_array(1) AS STRING))"), Row("""["[1]"]"""))
-    // A user cast that changes the collation is told apart from an analyzer collation Cast only by
-    // its USER_SPECIFIED_CAST tag, and must still detach.
+    // Only the user-cast mark tells this cast apart from an analyzer collation cast; it must quote.
     checkAnswer(
       sql("SELECT builtin.json_array(CAST(json_array(1) AS STRING COLLATE UTF8_LCASE))"),
       Row("""["[1]"]"""))
@@ -816,7 +815,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-59243: nested constructors splice in subqueries, grouping, and INSERT VALUES") {
-    // The finalization rule runs over every operator, not just a top-level Project.
+    // ResolveFunctions routes or finalizes wrappers in every operator, not just a top-level
+    // Project.
     checkAnswer(sql("SELECT (SELECT builtin.json_array(json_array(1)))"), Row("[[1]]"))
     checkAnswer(
       sql("SELECT 1 WHERE '[[1]]' IN (SELECT json_array(builtin.json_array(1)))"),
@@ -1086,6 +1086,33 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59243: a built-in-owned nested call checks the PATH no more than a flat call") {
+    // A lambda body takes several iterations to resolve; the owner must be looked up only once.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      "spark.sql.catalog.lookup_cnt_cat" -> classOf[LookupCountingFunctionCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("lookup_cnt_cat")
+        .asInstanceOf[LookupCountingFunctionCatalog]
+      def lookups(query: String): Int = {
+        catalog.lookups.set(0)
+        sql(query).queryExecution.assertAnalyzed()
+        catalog.lookups.get
+      }
+      try {
+        sql("SET PATH = lookup_cnt_cat.fns, system.builtin")
+        val flat = lookups("SELECT transform(array(1, 2), x -> json_array(x))")
+        val nested = lookups("SELECT transform(array(1, 2), x -> json_array(json_array(x)))")
+        assert(nested <= flat, s"nested=$nested flat=$flat")
+        checkAnswer(
+          sql("SELECT transform(array(1, 2), x -> json_array(json_array(x)))"),
+          Row(Seq("[[1]]", "[[2]]")))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
   test("nested JSON_ARRAY with star can be shadowed by a V2 function in PATH") {
     withSQLConf(
       SQLConf.PATH_ENABLED.key -> "true",
@@ -1284,11 +1311,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-59243: routed/qualified nested JSON_ARRAY splices under a default collation") {
-    // Both columns resolve through the built-in builder (not the direct grammar path): col a via
-    // the qualified outer call, col b via the qualified nested call. `ApplyDefaultCollation` wraps
-    // the nested producer in a collation Cast; the builder must still see through it (an analyzer
-    // Cast, not a user one) and splice, so the result matches the UTF8_BINARY case rather than
-    // quoting.
+    // Each nested producer gets a default-collation cast before the splice decision, which must
+    // see through it. Cols a, b and d decide in the builder (b is a flat call: the parser cannot
+    // see a qualified inner call), col c in the routed wrapper; c and d add a user COLLATE.
     withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       withTable("t") {
         sql(
@@ -1350,6 +1375,33 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
           sql("SET PATH = DEFAULT_PATH")
           sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
         }
+      }
+    }
+  }
+
+  test("SPARK-59243: a routed nested JSON_ARRAY keeps the ABSENT ON NULL default") {
+    // The routed wrapper supplies the clause-free default itself (dual-run covers both analyzers).
+    checkAnswer(sql("SELECT json_array(json_array(1), NULL)"), Row("[[1]]"))
+    checkAnswer(sql("SELECT json_array(json_array(1), CAST(NULL AS INT), 2)"), Row("[[1],2]"))
+  }
+
+  test("SPARK-59243: a user cast stays quoted when a sibling defers the splice decision") {
+    // The subquery sibling delays the splice decision until after the default-collation rule has
+    // rebuilt the user cast. It must still count as a user cast, so the value stays quoted.
+    val cast = "CAST(json_array(json_array(1)) AS STRING)"
+    val select =
+      s"""SELECT builtin.json_array($cast, (SELECT 1)) AS q,
+         |       json_array($cast, (SELECT 1)) AS u,
+         |       json_array($cast, (SELECT 1) NULL ON NULL) AS c""".stripMargin
+    val expected = Row.fromSeq(Seq.fill(3)("""["[[1]]",1]"""))
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS $select")
+        checkAnswer(spark.table("t"), expected)
+      }
+      withView("v") {
+        sql(s"CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS $select")
+        checkAnswer(spark.table("v"), expected)
       }
     }
   }
@@ -1530,9 +1582,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-59243: ordinary functions between JSON constructor levels resolve in one pass") {
-    // The wrapper materializes in the same bottom-up pass as the calls around it, so alternating
-    // a function and a stock-owned constructor does not add an iteration per level. `length`
-    // keeps every level's value fixed: `[3]` and `{"k":7}`.
+    // A function between constructor levels must not cost an iteration per level. `length` keeps
+    // each level's value fixed: `[3]` and `{"k":7}`.
     val depth = 40
     withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> "20") {
       val array = "JSON_ARRAY(length(" * depth + "JSON_ARRAY(1 RETURNING STRING)" +
@@ -1545,9 +1596,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("SPARK-59243: a late-resolving child adds no analyzer iteration to a JSON constructor") {
-    // `date_format` resolves only once ResolveTimeZone runs, late in an iteration. The constructor
-    // must then materialize before aliases are assigned, so it costs no more Resolution iterations
-    // than an ordinary function over the same child.
+    // `date_format` resolves late in an iteration. The constructor must still need no more
+    // iterations than an ordinary function over the same child.
     def resolveAliasesInvocations(selectExpr: String): Long = {
       val df = sql(s"SELECT $selectExpr FROM VALUES (TIMESTAMP'2024-01-01 00:00:00') AS t(ts)")
       df.queryExecution.analyzed
@@ -1565,6 +1615,24 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+}
+
+/** A [[org.apache.spark.sql.connector.catalog.FunctionCatalog]] that counts function lookups. */
+class LookupCountingFunctionCatalog extends InMemoryCatalog {
+  val lookups = new java.util.concurrent.atomic.AtomicInteger(0)
+  override def functionExists(ident: Identifier): Boolean = {
+    lookups.incrementAndGet()
+    try {
+      super.loadFunction(ident)
+      true
+    } catch {
+      case _: NoSuchFunctionException => false
+    }
+  }
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    lookups.incrementAndGet()
+    super.loadFunction(ident)
+  }
 }
 
 /**

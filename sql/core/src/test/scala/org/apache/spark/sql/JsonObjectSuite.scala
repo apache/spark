@@ -871,6 +871,36 @@ world'))"""))
     }
   }
 
+  test("SPARK-59243: a routed nested JSON_OBJECT keeps the NULL ON NULL default") {
+    // The routed wrapper supplies the clause-free default itself (dual-run covers both analyzers).
+    val expected = Row("""{"a":{"b":1},"c":null}""")
+    checkAnswer(sql("SELECT json_object('a' VALUE json_object('b' VALUE 1), 'c' VALUE NULL)"),
+      expected)
+    checkAnswer(sql("SELECT json_object('a', json_object('b', 1), 'c', NULL)"), expected)
+  }
+
+  test("SPARK-59243: a user cast stays quoted when a sibling defers the splice decision") {
+    // The subquery sibling delays the splice decision until after the default-collation rule has
+    // rebuilt the user cast. It must still count as a user cast, so the value stays quoted.
+    val cast = "CAST(json_object('b', json_object('c', 1)) AS STRING)"
+    val select =
+      s"""SELECT builtin.json_object('a', $cast, 'd', (SELECT 1)) AS q,
+         |       json_object('a', $cast, 'd', (SELECT 1)) AS u,
+         |       json_object('a' VALUE $cast, 'd' VALUE (SELECT 1) NULL ON NULL) AS c
+         |""".stripMargin
+    val expected = Row.fromSeq(Seq.fill(3)("""{"a":"{\"b\":{\"c\":1}}","d":1}"""))
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS $select")
+        checkAnswer(spark.table("t"), expected)
+      }
+      withView("v") {
+        sql(s"CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS $select")
+        checkAnswer(spark.table("v"), expected)
+      }
+    }
+  }
+
   test("view default collation preserves an explicit collated RETURNING") {
     // Exercises the CREATE VIEW resolution path (in addition to the CTAS path above): the explicit
     // RETURNING collation must survive the view's default collation. Runs under dual-run (the
@@ -1640,7 +1670,7 @@ world'))"""))
             "FROM VALUES ('id', 7) AS t(a, b)"
         ).foreach { query =>
           checkAnswer(sql(query), Row("shadowed-5"))
-          // Strict single-pass expands the nested star and routes to the shadow owner too, but the
+          // Strict single-pass expands the direct star and routes to the shadow owner too, but the
           // owner is a SQL function the single-pass analyzer does not yet resolve: reaching it
           // (past star expansion and routing) then aborts with ExplicitlyUnsupportedResolverFeature
           // on the SQL function body. Guard-gated modes fall back to the fixed-point result above.
