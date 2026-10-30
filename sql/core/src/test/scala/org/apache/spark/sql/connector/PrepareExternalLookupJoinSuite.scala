@@ -19,12 +19,13 @@ package org.apache.spark.sql.connector
 
 import org.apache.spark.SparkException
 import org.apache.spark.sql.AnalysisException
-import org.apache.spark.sql.QueryTest
-import org.apache.spark.sql.catalyst.analysis.ResolveExternalLookupJoin
-import org.apache.spark.sql.catalyst.expressions.{And, AttributeReference, EqualTo, Literal}
-import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, LeftOuter}
-import org.apache.spark.sql.catalyst.plans.logical.{Join, JoinHint, LocalRelation,
-  PreparedExternalLookupJoin, Project}
+import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
+import org.apache.spark.sql.catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Expression, Literal}
+import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
+import org.apache.spark.sql.catalyst.plans.{FullOuter, Inner, JoinType, LeftOuter, PlanTest}
+import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
+  LocalRelation, LogicalPlan, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.EXTERNAL_LOOKUP
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -32,84 +33,174 @@ import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.connector.read.{ExternalLookup, ExternalLookupReaderFactory, Scan,
   ScanBuilder, SupportsExternalLookup}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
-  PrepareExternalLookupJoin}
-import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{IntegerType, StructType}
+  ExternalLookupRelation, PrepareExternalLookupJoin}
+import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 
-class PrepareExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
+class PrepareExternalLookupJoinSuite extends PlanTest {
+  private val stream = LocalRelation(Seq($"id".int, $"label".string), isStreaming = true)
+  private val tableName = "`PlanningExternalLookupTable`"
 
-  test("a lookup-only relation that no lookup join reads is rejected") {
-    val left = LocalRelation(Seq(AttributeReference("id", IntegerType)()), isStreaming = true)
-    val relation = DataSourceV2Relation.create(
-      PlanningExternalLookupTable, None, None, CaseInsensitiveStringMap.empty)
-    val lookupJoin = ResolveExternalLookupJoin(Join(
-      left, relation, Inner, Some(EqualTo(left.output.head, relation.output.head)), JoinHint.NONE))
+  private def lookupRelation(table: PlanningExternalLookupTable): ExternalLookupRelation =
+    ExternalLookupRelation(
+      DataSourceV2Relation.create(table, None, None, CaseInsensitiveStringMap.empty))
 
-    assert(PrepareExternalLookupJoin(lookupJoin).isInstanceOf[PreparedExternalLookupJoin])
-    checkError(
-      exception = intercept[AnalysisException] {
-        PrepareExternalLookupJoin(Project(relation.output, relation))
-      },
-      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
-      parameters = Map(
-        "tableName" -> "`PlanningExternalLookupTable`",
-        "operation" -> "batch scan"))
-  }
+  private def lookupJoin(
+      lookup: LogicalPlan,
+      condition: Expression,
+      joinType: JoinType = Inner,
+      left: LogicalPlan = stream): LogicalPlan =
+    FormExternalLookupJoin(Join(left, lookup, joinType, Some(condition), JoinHint.NONE))
 
-  test("PrepareExternalLookupJoin binds the selected predicates and keeps the rest as residual") {
-    val left = LocalRelation(Seq(AttributeReference("id", IntegerType)()), isStreaming = true)
-    val relation = DataSourceV2Relation.create(
-      PlanningExternalLookupTable, None, None, CaseInsensitiveStringMap.empty)
-    val Seq(id, value) = relation.output
-    // Offered to the connector as `value = ?`, but not selected.
-    val unselected = EqualTo(value, Literal("a"))
-    val join = Join(left, relation, LeftOuter, Some(And(EqualTo(left.output.head, id), unselected)),
-      JoinHint.NONE)
+  private def idJoin(lookup: LogicalPlan): LogicalPlan =
+    lookupJoin(lookup, stream.output.head === lookup.output.head)
 
-    val prepared = PrepareExternalLookupJoin(ResolveExternalLookupJoin(join))
-    prepared match {
-      case lookup: PreparedExternalLookupJoin =>
-        assert(lookup.lookupParameters === left.output)
-        assert(lookup.residualCondition === Some(unselected))
-        assert(lookup.output === join.output)
-        checkError(
-          exception = intercept[SparkException] { lookup.copy(joinType = FullOuter).output },
-          condition = "INTERNAL_ERROR",
-          parameters = Map("message" -> "Unexpected external lookup join type FullOuter"))
+  private def prepare(plan: LogicalPlan): PreparedExternalLookupJoin =
+    PrepareExternalLookupJoin(plan) match {
+      case lookup: PreparedExternalLookupJoin => lookup
       case other => fail(s"Expected a prepared external lookup join: $other")
     }
-    assert(PrepareExternalLookupJoin(prepared) === prepared)
+
+  private def prepareError(plan: LogicalPlan): AnalysisException =
+    intercept[AnalysisException] { PrepareExternalLookupJoin(plan) }
+
+  test("a lookup-only relation that no lookup join reads is rejected") {
+    val lookup = lookupRelation(PlanningExternalLookupTable())
+    prepare(idJoin(lookup))
+    checkError(
+      exception = prepareError(Project(lookup.output, lookup)),
+      condition = "UNSUPPORTED_FEATURE.TABLE_OPERATION",
+      parameters = Map("tableName" -> tableName, "operation" -> "batch scan"))
   }
 
-  test("a join without a condition over a lookup-only table fails on the final plan") {
-    val left = LocalRelation(Seq(AttributeReference("id", IntegerType)()), isStreaming = true)
-    val relation = DataSourceV2Relation.create(
-      PlanningExternalLookupTable, None, None, CaseInsensitiveStringMap.empty)
-    // Analysis keeps such a join, because the Dataset API analyzes a USING join first as one.
+  test("selected predicates bind in the connector's order, and the residual in written order") {
+    val Seq(streamId, streamLabel) = stream.output
+    def prepared(select: Array[Predicate] => Array[Predicate])
+        : (PreparedExternalLookupJoin, Seq[Attribute], Seq[Expression]) = {
+      val lookup = lookupRelation(
+        PlanningExternalLookupTable("id INT, label STRING, value STRING", select = select))
+      val Seq(id, label, value) = lookup.output
+      // `value = 'a'` is offered as well; `streamId > 0` is not.
+      val conjuncts =
+        Seq(id === streamId, streamLabel === label, streamId > 0, value === Literal("a"))
+      val join = lookupJoin(lookup, conjuncts.reduce(_ && _), LeftOuter)
+      (prepare(join), join.output, conjuncts)
+    }
+
+    val (reversed, joinOutput, conjuncts) =
+      prepared(candidates => Array(candidates(1), candidates(0)))
+    assert(reversed.lookupParameters === Seq(streamLabel, streamId))
+    assert(reversed.nullSafeParameters === Seq(false, false))
+    assert(reversed.residualCondition === Some(conjuncts(2) && conjuncts(3)))
+    assert(reversed.output === joinOutput)
+    assert(PrepareExternalLookupJoin(reversed) === reversed)
     checkError(
-      exception = intercept[AnalysisException] {
-        PrepareExternalLookupJoin(ResolveExternalLookupJoin(
-          Join(left, relation, Inner, None, JoinHint.NONE)))
-      },
-      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.MISSING_JOIN_CONDITION",
-      parameters = Map.empty)
+      exception = intercept[SparkException] { reversed.copy(joinType = FullOuter).output },
+      condition = "INTERNAL_ERROR",
+      parameters = Map("message" -> "Unexpected external lookup join type FullOuter"))
+
+    // An unselected equality stays ahead of the conjuncts written after it.
+    val (idOnly, _, idOnlyConjuncts) = prepared(candidates => Array(candidates(0)))
+    assert(idOnly.lookupParameters === Seq(streamId))
+    assert(idOnly.residualCondition === Some(idOnlyConjuncts.drop(1).reduce(_ && _)))
+  }
+
+  test("the read schema binds to the analyzed lookup attributes by exact name") {
+    val lookup = lookupRelation(PlanningExternalLookupTable(
+      "id INT NOT NULL, value VARCHAR(8) NOT NULL, s STRUCT<a: INT NOT NULL>",
+      readSchemaDDL = Some("s STRUCT<a: INT>, value VARCHAR(8), id INT NOT NULL")))
+    val join = idJoin(lookup)
+    val prepared = prepare(join)
+    assert(prepared.lookupOutput === lookup.output)
+    assert(prepared.output === join.output)
+    // The value-row attributes follow the read schema, with its types and nullability.
+    val relationAttrs = lookup.output.map(attr => attr.name -> attr).toMap
+    assert(prepared.lookupInput.map(_.name) === Seq("s", "value", "id"))
+    assert(prepared.lookupInput.map(_.nullable) === Seq(true, true, false))
+    assert(prepared.lookupInput.head.dataType === StructType.fromDDL("a INT"))
+    prepared.lookupInput.foreach { attr =>
+      assert(attr.exprId === relationAttrs(attr.name).exprId)
+      assert(attr.metadata === relationAttrs(attr.name).metadata)
+    }
+
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val caseVariant = lookupRelation(PlanningExternalLookupTable(
+        "id INT, a INT, A INT", readSchemaDDL = Some("A INT, id INT, a INT")))
+      val Seq(id, a, upperA) = caseVariant.output
+      val prepared = prepare(idJoin(caseVariant))
+      assert(prepared.lookupInput.map(_.exprId) === Seq(upperA, id, a).map(_.exprId))
+    }
+  }
+
+  test("the read schema must cover every lookup column with its data type") {
+    Seq(
+      ("id INT", "MISSING_SCAN_FIELD"),
+      ("id INT, value INT", "UNKNOWN_SCAN_FIELD")).foreach { case (readSchema, subClass) =>
+      val lookup = lookupRelation(PlanningExternalLookupTable(readSchemaDDL = Some(readSchema)))
+      checkError(
+        exception = prepareError(idJoin(lookup)),
+        condition = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$subClass",
+        parameters = Map("table" -> tableName, "field" -> "`value`"))
+    }
+  }
+
+  test("a failed predicate selection blames Spark or the connector, whichever caused it") {
+    // A wider stream key casts the lookup column, so Spark has no candidate to offer.
+    val longStream = LocalRelation(Seq($"id".long), isStreaming = true)
+    val unreachable = lookupRelation(PlanningExternalLookupTable(
+      select = _ => fail("Spark must not ask the connector to select from no candidates")))
+    checkError(
+      exception = prepareError(lookupJoin(unreachable,
+        longStream.output.head === unreachable.output.head.cast(LongType), left = longStream)),
+      condition = "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_CANDIDATE",
+      parameters = Map("table" -> tableName))
+
+    Seq[(Array[Predicate] => Array[Predicate], String)](
+      (_ => Array.empty, "EXTERNAL_LOOKUP_JOIN_UNSUPPORTED.NO_LOOKUP_PREDICATE"),
+      (_ => null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_PREDICATE_SELECTION"),
+      (_ :+ null, "DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.NULL_PREDICATE_SELECTION")).foreach {
+      case (select, condition) =>
+        checkError(
+          exception = prepareError(idJoin(
+            lookupRelation(PlanningExternalLookupTable(select = select)))),
+          condition = condition,
+          parameters = Map("table" -> tableName))
+    }
+  }
+
+  test("column pruning never projects the lookup relation under a lookup join") {
+    val lookup = lookupRelation(PlanningExternalLookupTable())
+    val pruned = ColumnPruning(Project(Seq(stream.output.head), idJoin(lookup)))
+    val (lookupLeft, lookupRight) =
+      pruned.collectFirst { case join: ExternalLookupJoin => (join.left, join.right) }.get
+    assert(lookupLeft.output === Seq(stream.output.head))
+    assert(lookupRight === lookup)
+    assert(PrepareExternalLookupJoin(pruned).exists(_.isInstanceOf[PreparedExternalLookupJoin]))
   }
 }
 
-/** A lookup-only table that the planning rules can prepare. It is never read. */
-object PlanningExternalLookupTable extends Table with SupportsRead {
+/**
+ * A lookup-only table that the planning rules can prepare. It is never read. By default its
+ * connector selects every `id = ?` candidate and returns the table schema as the read schema.
+ */
+case class PlanningExternalLookupTable(
+    schemaDDL: String = "id INT, value STRING NOT NULL",
+    readSchemaDDL: Option[String] = None,
+    select: Array[Predicate] => Array[Predicate] = PlanningExternalLookupTable.selectId)
+  extends Table with SupportsRead {
   override def name(): String = "PlanningExternalLookupTable"
-  override def schema(): StructType = StructType.fromDDL("id INT, value STRING NOT NULL")
+  override def schema(): StructType = StructType.fromDDL(schemaDDL)
   override def capabilities(): java.util.Set[TableCapability] =
     java.util.EnumSet.of(EXTERNAL_LOOKUP)
 
   override def newScanBuilder(options: CaseInsensitiveStringMap): ScanBuilder =
     new SupportsExternalLookup {
       override def selectLookupPredicates(candidates: Array[Predicate]): Array[Predicate] =
-        candidates.filter(p => p.name() == "=" && p.children()(0) == FieldReference.column("id"))
+        select(candidates)
       override def build(): Scan = new Scan {
-        override def readSchema(): StructType = schema()
+        override def readSchema(): StructType =
+          readSchemaDDL.map(StructType.fromDDL).getOrElse(schema())
         override def toExternalLookup(): ExternalLookup = new ExternalLookup {
           override def maxParameterRowsPerRequest(): Int = 1
           override def createReaderFactory(): ExternalLookupReaderFactory =
@@ -117,4 +208,9 @@ object PlanningExternalLookupTable extends Table with SupportsRead {
         }
       }
     }
+}
+
+object PlanningExternalLookupTable {
+  private val selectId: Array[Predicate] => Array[Predicate] =
+    _.filter(p => p.name() == "=" && p.children()(0) == FieldReference.column("id"))
 }
