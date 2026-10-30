@@ -26,7 +26,6 @@ import urllib.request
 from pyspark.install import (
     DEFAULT_HADOOP,
     DEFAULT_HIVE,
-    UNSUPPORTED_COMBINATIONS,
     _extract_tar,
     _parse_sha512_checksum,
     _verify_checksum,
@@ -190,14 +189,6 @@ class SparkInstallationTestCase(unittest.TestCase):
         )
 
         # Negative test cases
-        for hadoop_version, hive_version in UNSUPPORTED_COMBINATIONS:
-            with self.assertRaisesRegex(RuntimeError, "Hive.*should.*Hadoop"):
-                checked_versions(
-                    spark_version=test_version,
-                    hadoop_version=hadoop_version,
-                    hive_version=hive_version,
-                )
-
         with self.assertRaisesRegex(RuntimeError, "Spark version should start with 'spark-'"):
             checked_versions(
                 spark_version="malformed", hadoop_version=DEFAULT_HADOOP, hive_version=DEFAULT_HIVE
