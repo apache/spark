@@ -1118,7 +1118,8 @@ object DateTimeUtils extends SparkDateTimeUtils {
    * error message. A negative value is rejected here for a better error message: `Math.floorDiv`
    * gets the next lower integer for it, so the full seconds would not match the value given.
    * The message is the one that `LocalTime.of` and `LocalDateTime.of` throw for invalid seconds,
-   * with the seconds given, truncated towards zero. Any other value, such as 61 seconds, is
+   * with the seconds given, truncated towards zero, or in full for a value between -1 and 0,
+   * which the truncation would show as the valid 0. Any other value, such as 61 seconds, is
    * left to them, which check their fields in order, so an invalid date or hour is reported
    * before such seconds, while a negative value or one above `Int.MaxValue` is reported first.
    */
@@ -1126,8 +1127,13 @@ object DateTimeUtils extends SparkDateTimeUtils {
     val unscaledSecFrac = secsAndMicros.toUnscaledLong
     val fullSecs = Math.floorDiv(unscaledSecFrac, MICROS_PER_SECOND)
     if (fullSecs > Int.MaxValue || fullSecs < 0) {
+      val shown = if (fullSecs == -1 && secsAndMicros.toLong == 0) {
+        secsAndMicros.toJavaBigDecimal.stripTrailingZeros.toPlainString
+      } else {
+        secsAndMicros.toLong.toString
+      }
       throw new DateTimeException(
-        s"Invalid value for SecondOfMinute (valid values 0 - 59): ${secsAndMicros.toLong}")
+        s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown")
     }
     val nanos = Math.floorMod(unscaledSecFrac, MICROS_PER_SECOND) * NANOS_PER_MICROS
     SecondsAndNanos(fullSecs.toInt, nanos.toInt)

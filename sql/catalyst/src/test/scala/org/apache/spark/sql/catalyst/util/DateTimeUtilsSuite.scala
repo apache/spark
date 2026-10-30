@@ -1787,6 +1787,14 @@ class DateTimeUtilsSuite extends SparkFunSuite with Matchers with SQLHelper {
         parameters = Map("rangeMessage" ->
           s"Invalid value for SecondOfMinute (valid values 0 - 59): ${invalidSecond.toLong}"))
     }
+    // A value between -1 and 0 is shown in full, not truncated to the valid 0.
+    checkError(
+      exception = intercept[SparkDateTimeException] {
+        makeTime(hour, min, Decimal(-0.5, 16, 6))
+      },
+      condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+      parameters = Map("rangeMessage" ->
+        "Invalid value for SecondOfMinute (valid values 0 - 59): -0.5"))
   }
 
   test("SPARK-51415: makeTimestamp with days, nanos, and zoneId") {
