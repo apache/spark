@@ -24,14 +24,15 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkException, TaskContextImpl}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{Table, TableCapability, TableProvider}
 import org.apache.spark.sql.connector.expressions.Transform
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader}
 import org.apache.spark.sql.connector.read.streaming.{ReadLimit, SupportsAdmissionControl}
 import org.apache.spark.sql.connector.write.{DataWriter, PhysicalWriteInfoImpl, WriterCommitMessage}
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2ScanRelation
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, DataWritingSparkTask}
 import org.apache.spark.sql.execution.streaming.runtime.MemoryStream
 import org.apache.spark.sql.execution.vectorized.OnHeapColumnVector
 import org.apache.spark.sql.internal.SQLConf
@@ -204,6 +205,16 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     val e = intercept[SparkException](builder.pruneColumns(StructType.fromDDL("name STRING")))
     assert(e.getMessage.contains("pruned again"))
     assert(dataSource.prunes.get() == 1)
+
+    // A failure is kept too, so the planner is not asked again, and Spark gets the same error.
+    val failing = new TestRangeDataSource(options("end" -> "4", "failPruning" -> "true"))
+    val failingBuilder = new ColumnarScanBuilder(format, failing.schema(), () => failing)
+    failingBuilder.pruneColumns(StructType.fromDDL("id BIGINT"))
+    val failingScan = failingBuilder.build()
+    val failure = intercept[IllegalStateException](failingScan.readSchema())
+    assert(failure.getMessage == "injected pruning failure")
+    assert(intercept[IllegalStateException](failingScan.toBatch) eq failure)
+    assert(failing.prunes.get() == 1)
   }
 
   test("do not abort a write whose commit succeeded") {
@@ -234,6 +245,35 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession {
     failedStreamingWrite.createStreamingWriterFactory(PhysicalWriteInfoImpl(1))
     failedStreamingWrite.abort(1, Array.empty)
     assert(TestColumnarSink.aborted.contains("abort_after_commit"))
+  }
+
+  test("abort a data writer whose commit the coordinator denies, without committing it") {
+    val calls = ArrayBuffer.empty[String]
+    val writer = new ColumnarWriter {
+      override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] =
+        new DataWriter[ColumnarBatch] {
+          override def write(batch: ColumnarBatch): Unit = calls += "write"
+          override def commit(): WriterCommitMessage = {
+            calls += "commit"
+            null
+          }
+          override def abort(): Unit = calls += "abort"
+          override def close(): Unit = calls += "close"
+        }
+      override def commit(messages: Array[WriterCommitMessage]): Unit = {}
+      override def abort(messages: Array[WriterCommitMessage]): Unit = {}
+    }
+    val batchWrite = new ColumnarBatchWrite(() => writer, StructType.fromDDL("id BIGINT"))
+    val factory = batchWrite.createBatchWriterFactory(PhysicalWriteInfoImpl(1))
+    // The coordinator denies the commits of a stage that it does not know, as it denies those of
+    // the other attempts of a partition whose commit it authorized.
+    val context = new TaskContextImpl(Int.MaxValue, 0, 0, 0L, 0, 1, null, new util.Properties, null)
+    val e = intercept[SparkException] {
+      DataWritingSparkTask.run(factory, context, Iterator(InternalRow(1L)),
+        batchWrite.useCommitCoordinator(), Map.empty)
+    }
+    assert(e.getCondition == "_LEGACY_ERROR_TEMP_2071")
+    assert(calls == Seq("abort", "close"))
   }
 
   test("a streaming scan reads only the columns that the query needs") {
@@ -388,7 +428,8 @@ class TestRangeDataSource(options: CaseInsensitiveStringMap) extends ColumnarDat
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     batchPlanners.incrementAndGet()
-    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans, prunes)
+    new TestRangePlanner(end, schema, options.getBoolean("failPlanning", false), plans, prunes,
+      options.getBoolean("failPruning", false))
   }
 
   override def streamReader(
@@ -420,7 +461,8 @@ class TestRangePlanner(
     schema: StructType,
     fail: Boolean,
     plans: AtomicInteger,
-    prunes: AtomicInteger)
+    prunes: AtomicInteger,
+    failPruning: Boolean)
   extends ColumnarBatchPlanner {
   private var limit = Long.MaxValue
   private var readSchema = schema
@@ -432,6 +474,9 @@ class TestRangePlanner(
 
   override def pruneColumns(requiredSchema: StructType): Boolean = {
     prunes.incrementAndGet()
+    if (failPruning) {
+      throw new IllegalStateException("injected pruning failure")
+    }
     readSchema = requiredSchema
     true
   }

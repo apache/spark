@@ -131,7 +131,7 @@
  *   most once each for a writer, and commit_data_writer and abort_data_writer at most once each
  *   for a data writer, with all the calls to write before them. The data writers of the task
  *   attempts that Spark kills, such as speculative ones, may still be written to, aborted and
- *   closed after their writer is committed or aborted, and closed.
+ *   closed after Spark committed or aborted their writer and closed it.
  * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
  *   names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
@@ -280,7 +280,7 @@ typedef void (*SparkDsSink)(void* sink, const uint8_t* data, int64_t length);
  * What Spark passes to the library
  * --------------------------------------------------------------------------------------------- */
 
-/* The levels of the messages that a library logs with SparkDsHost.log. */
+/* The levels of the messages of SparkDsHost.log and SparkDsHost.is_log_enabled. */
 #define SPARK_DS_LOG_ERROR 1
 #define SPARK_DS_LOG_WARN 2
 #define SPARK_DS_LOG_INFO 3

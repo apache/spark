@@ -176,8 +176,12 @@ class ColumnarScan(
 
   private lazy val planner = pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema))
 
-  // The columns that the batch reads: the required ones if the planner prunes the others.
-  private lazy val batchSchema = requiredSchema.filter(planner.pruneColumns).getOrElse(fullSchema)
+  // The columns that the batch reads: the required ones if the planner prunes the others. A
+  // failure is kept too, so that the planner is asked at most once, as the header promises.
+  private lazy val prunedBatchSchema: Try[StructType] =
+    Try(requiredSchema.filter(planner.pruneColumns).getOrElse(fullSchema))
+
+  private def batchSchema: StructType = prunedBatchSchema.get
 
   // The columns that the stream reads.
   private def streamSchema: StructType = requiredSchema.getOrElse(fullSchema)
