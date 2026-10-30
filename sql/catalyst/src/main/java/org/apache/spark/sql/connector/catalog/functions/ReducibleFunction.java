@@ -71,8 +71,9 @@ public interface ReducibleFunction<I, O> {
    * internal representation (e.g. {@code UTF8String} for strings, {@code Decimal} for decimals);
    * use {@link Literal#dataType()} to interpret it rather than assuming a JVM type. Spark does not
    * call this method for a pair where either side has a null literal, a literal of array, map,
-   * struct or UDT type, or one of a type other than the function declares; the join shuffles
-   * instead.
+   * struct or UDT type, or one of a type other than the function declares at its position in
+   * {@code inputTypes()}; the join shuffles instead. A literal past the declared arity has no
+   * declared type, so it is passed as it is.
    * <p>
    * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
    * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.

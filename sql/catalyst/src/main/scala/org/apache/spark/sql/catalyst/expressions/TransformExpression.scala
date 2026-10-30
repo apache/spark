@@ -212,9 +212,9 @@ case class TransformExpression(
 
   /**
    * Extract all literal parameters of this transform as V2 [[V2Literal]]s, preserving each value's
-   * internal representation and its `DataType`. Only consulted once a reducer path has confirmed
-   * the literal params already match the declared input types (see
-   * [[literalParamsMatchInputTypes]]), so no type coercion happens here. Memoized.
+   * internal representation and its `DataType`, with no coercion. The generalized reducer is asked
+   * only when they match the declared input types ([[literalParamsMatchInputTypes]]); the
+   * deprecated one reads a single `IntegerType` parameter as an `Int`. Memoized.
    *
    * Examples:
    *   bucket(4, col)        => [Literal(4, IntegerType)]
