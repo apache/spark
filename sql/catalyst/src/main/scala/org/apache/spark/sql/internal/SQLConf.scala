@@ -6200,6 +6200,7 @@ object SQLConf {
         "pruning only reads the top-level columns that the streaming query needs, as for batch " +
         "scans. When false, it reads all the columns of the source.")
       .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(true)
 
