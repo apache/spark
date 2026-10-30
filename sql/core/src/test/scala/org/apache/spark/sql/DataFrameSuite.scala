@@ -36,6 +36,7 @@ import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference,
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.util.RandomUUIDGenerator
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -109,6 +110,24 @@ class DataFrameSuite extends SharedSparkSession
       df.explode("words", "word") { word: String => word.split(" ").toSeq }.select($"word"),
       Row("a") :: Row("b") :: Row("c") :: Row("d") ::Row("e") :: Nil
     )
+  }
+
+  for (seed <- Seq(0L, 42L, Long.MinValue); codegen <- Seq(true, false)) {
+    test(s"SPARK-60634: Dataset.explode initializes UUID arguments ($seed, $codegen)") {
+      withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
+        val result = spark.range(0, 6, 1, 2).explode(
+          expr(s"uuid($seed)"), lit(null).cast(StringType), struct(lit(7))) { row: Row =>
+          Seq((row.getString(0), row.isNullAt(1), row.getStruct(2).getInt(0)))
+        }
+        val expected = (0 until 2).flatMap { partition =>
+          val generator = RandomUUIDGenerator(seed + partition)
+          (0 until 3).map { offset =>
+            Row(partition * 3L + offset, generator.getNextUUID().toString, true, 7)
+          }
+        }
+        checkAnswer(result.select("id", "_1", "_2", "_3"), expected)
+      }
+    }
   }
 
   test("explode") {
