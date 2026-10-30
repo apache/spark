@@ -2085,12 +2085,12 @@ class SessionCatalog(
     val clazz = loadFunctionClass(func)
     val name = func.identifier.unquotedString
     if (isV2FunctionClass(clazz)) {
-      // A DataSource V2 function: bind it to the arguments at each call site. An aggregate
-      // function is returned as a bare `V2Aggregator`, which the caller wraps into an
-      // `AggregateExpression` carrying DISTINCT / FILTER. This check goes first so that a class
-      // also implementing a Hive UDF interface, for other engines sharing the metastore, runs as
-      // a V2 function in Spark. The alias makes errors and column names use the function name,
-      // like the Hive UDF wrappers do.
+      // A V2 function: bind it to the arguments at each call site. An aggregate function is
+      // returned as a bare `V2Aggregator`, which the caller wraps into an `AggregateExpression`
+      // carrying DISTINCT / FILTER. This check goes first so that a class also implementing a
+      // Hive UDF interface, for other engines sharing the metastore, runs as a V2 function in
+      // Spark. The alias makes errors and column names use the function name, like the Hive UDF
+      // wrappers do.
       val unbound = newV2FunctionInstance(clazz, func.identifier)
       val builder = (input: Seq[Expression]) => {
         val expr = V2ExpressionUtils.bindFunction(
@@ -2236,11 +2236,11 @@ class SessionCatalog(
 
   /**
    * Builds the [[ExpressionInfo]] of a class-based function (`CREATE FUNCTION ... AS 'class'`).
-   * A DataSource V2 function reports its own description, which requires instantiating it.
-   * Otherwise, or if the class cannot be loaded or instantiated, use the class-name-only info, so
-   * that like a Hive UDF, a broken function only fails when invoked. The class of a function with
-   * `USING` resources is not touched, as initializing it may require those resources, which are
-   * only loaded on first invocation.
+   * A V2 function reports its own description, which requires instantiating it. Otherwise, or if
+   * the class cannot be loaded or instantiated, use the class-name-only info, so that like a Hive
+   * UDF, a broken function only fails when invoked. The class of a function with `USING`
+   * resources is not touched, as initializing it may require those resources, which are only
+   * loaded on first invocation.
    */
   private def makeExprInfoForClassFunction(func: CatalogFunction): ExpressionInfo = {
     if (func.resources.nonEmpty) {
