@@ -2779,8 +2779,10 @@ object SQLConf {
       .doc("Whether to forcibly enable some optimization rules that can change the output " +
         "partitioning of a cached query when executing it for caching. If it is set to true, " +
         "queries may need an extra shuffle to read the cached data. This configuration is " +
-        "disabled by default. The optimization rule enabled by this configuration " +
-        s"is ${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key}.")
+        "disabled by default. When false, " +
+        s"${ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS.key} and " +
+        "spark.sql.optimizer.pushDownShuffleThroughUnion.enabled are disabled for cached " +
+        "queries. When true, their configured enablement is retained.")
       .version("3.2.0")
       .booleanConf
       .createWithDefault(false)
@@ -8558,8 +8560,9 @@ object SQLConf {
         "operators between the shuffle and the union: a project, a local sort, a filter, a " +
         "partial aggregate and a partial window group limit. A filter, a partial aggregate and " +
         "a partial window group limit reduce the data on their way, so the child is then " +
-        "shuffled before the reduction, which can send more data than the single shuffle it " +
-        "replaces. Requires " +
+        "shuffled before the reduction, which can send substantially more data than the single " +
+        "shuffle it replaces. The reducing operator remains above the union; target ranking " +
+        "does not estimate the reduction lost by moved branches. Requires " +
         s"${PUSH_DOWN_SHUFFLE_THROUGH_UNION_ENABLED.key} to be enabled.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
@@ -8647,8 +8650,11 @@ object SQLConf {
     buildConf("spark.sql.optimizer.pushDownShuffleThroughUnion.keepJoinBranches.enabled")
       .internal()
       .doc("When true, union children may offer layouts produced by shuffled joins above their " +
-        "shuffle boundaries. Depending on those layouts can prevent skew optimization or local " +
-        "shuffle reads; forced skew optimization may add another shuffle above the union.")
+        "shuffle boundaries, or by broadcast-hash-join probes backed by requirement shuffles, " +
+        "including their query stages and adaptive reads. Depending on those layouts can " +
+        "prevent skew optimization or local shuffle reads. Forced skew optimization may " +
+        "restore a shuffle above the union after moved branches have already shuffled, " +
+        "shuffling those branches a second time. This opt-in does not prevent that trade-off.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.SESSION)
       .booleanConf

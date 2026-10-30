@@ -39,9 +39,10 @@ object AQEUtils {
   }
 
   /**
-   * Whether this node carries the mark of a union rebuilt after removing its input exchange.
-   * The default cost evaluator counts a marked, non-plain union in place of added branch
-   * shuffles. The mark survives plan copies and does not imply its inputs are still unstaged.
+   * Whether this union carries the cost mark for a direct requirement or retargeted column shuffle.
+   * Preparation restores it on re-planned unions after moved branches become stages.
+   * The default cost evaluator counts a marked, non-plain union in place of added branch shuffles.
+   * The mark survives plan copies and does not imply its inputs are still unstaged.
    */
   def isPushedThroughUnion(plan: SparkPlan): Boolean = {
     plan.getTagValue(PUSHED_THROUGH_UNION).contains(true)

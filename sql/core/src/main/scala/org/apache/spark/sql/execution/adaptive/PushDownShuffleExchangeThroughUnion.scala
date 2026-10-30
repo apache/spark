@@ -79,7 +79,8 @@ import org.apache.spark.sql.internal.SQLConf
  * another shuffle when skew optimization is forced. Join inputs and join branches are opt-in.
  * Allowing targets via
  * `spark.sql.optimizer.pushDownShuffleThroughUnion.keepNonCoalescibleBranches.enabled`
- * can prevent coalescing of the consumer's compatible shuffle group.
+ * can prevent coalescing of the consumer's compatible shuffle group. Forced skew optimization
+ * can restore a union exchange after moved branches have shuffled, shuffling them a second time.
  *
  * The rule runs only in AQE preparation, after `EnsureRequirements` and before
  * `StampUnionDecisions`. It preserves the root distribution and all user repartition layouts
@@ -153,7 +154,7 @@ case class PushDownShuffleExchangeThroughUnion(
           }
         }
     }
-    if (pushed.fastEquals(plan)) {
+    val accepted = if (pushed.fastEquals(plan)) {
       plan
     } else {
       // Local checks do not cover ancestors or elided repartitions below the root. Reject the
@@ -173,6 +174,17 @@ case class PushDownShuffleExchangeThroughUnion(
       } else {
         plan
       }
+    }
+    // Re-planning creates fresh unions without the cost mark. Once a moved branch is a stage,
+    // all children may already share the target, so EnsureRequirements adds no union exchange
+    // and this pass has nothing to push down. Check every accepted union, including partially
+    // staged ones, for direct requirement or retargeted column shuffles. Restoring the mark keeps
+    // an equivalent re-plan from costing one shuffle less and masking a new shuffle elsewhere.
+    // Mark only after validation so rejected candidates cannot affect subsequent cost comparisons.
+    accepted.transform {
+      case union: UnionExec if union.children.exists(hasPushedShuffle) && !union.isPlainUnion =>
+        union.setTagValue(AQEUtils.PUSHED_THROUGH_UNION, true)
+        union
     }
   }
 
@@ -221,6 +233,22 @@ case class PushDownShuffleExchangeThroughUnion(
         findPushableShuffle(operator.child, lookThrough, found)
       case _ => None
     }
+  }
+
+  /**
+   * Recognizes the two direct shuffle shapes produced for moved union branches: a requirement
+   * shuffle, or a column repartition retargeted away from the effective default partition count.
+   * Column retargeting preserves keys in order, so only its count distinguishes it here. Query
+   * stages retain these origins and counts. No intermediate operators are followed: adaptive reads
+   * are added after preparation. Update this check if push-down changes these shapes or origins.
+   */
+  private def hasPushedShuffle(plan: SparkPlan): Boolean = plan match {
+    case shuffle: ShuffleExchangeLike =>
+      shuffle.shuffleOrigin == ENSURE_REQUIREMENTS ||
+        (shuffle.shuffleOrigin == REPARTITION_BY_COL &&
+          shuffle.outputPartitioning.numPartitions != conf.numShufflePartitions)
+    case stage: ShuffleQueryStageExec => hasPushedShuffle(stage.shuffle)
+    case _ => false
   }
 
   /**
@@ -301,7 +329,8 @@ case class PushDownShuffleExchangeThroughUnion(
         case union: UnionExec => rebuildUnion(union, layouts, target, sharedExchanges)
         case operator: UnaryExecNode =>
           rebuild(operator.child, target).map { child =>
-            operator.withNewChildren(Seq(child))
+            // A zero-move union can be structurally equal but must remain isolated for origin tags.
+            operator.mapChildrenWithReferenceEquality(_ => child)
           }
         case other =>
           throw SparkException.internalError(
@@ -398,8 +427,8 @@ case class PushDownShuffleExchangeThroughUnion(
 
   /**
    * Whether a union child may retain its layout as a target. Check every input path, stopping at
-   * shuffle boundaries: column repartitions are eligible, fixed-count shuffles and non-shuffle
-   * leaves require the non-coalescible allowance, and other shuffle origins are rejected.
+   * shuffle boundaries: requirement and column repartitions are eligible. Fixed-count shuffles
+   * and non-shuffle leaves require the non-coalescible allowance; other origins are rejected.
    * Shuffled joins require the join-branch opt-in; exploding joins require the non-coalescible
    * allowance. Broadcast joins inspect only their streamed side. `fromBroadcastHashJoinExec`
    * follows that probe through wrappers and stages so requirement shuffles also require the
@@ -435,10 +464,9 @@ case class PushDownShuffleExchangeThroughUnion(
    * `union` rebuilt on `target`: eligible children are kept, unshared movable exchanges are
    * retargeted, and other children get an exchange. `None` if the union does not report `target`,
    * which is stricter than satisfying the consumer's distribution. Retargeting is limited to
-   * direct, unshared requirement or column-repartition exchanges; if their recorded user layout
-   * would change, keep the original exchange and add one above it. Tag newly added exchanges
-   * for cost accounting; retargeting an existing exchange does not add to the shuffle count.
-   * Always build a fresh union so rejected zero-move candidates cannot tag the input plan.
+   * direct, unshared requirement or column-repartition exchanges. Column repartitions retain their
+   * keys in order; a key change or recorded-layout violation keeps the exchange and adds one above.
+   * Tag newly added exchanges for cost accounting; retargeting adds no shuffle.
    */
   private def rebuildUnion(
       union: UnionExec,
@@ -458,7 +486,8 @@ case class PushDownShuffleExchangeThroughUnion(
         child match {
           case shuffle: ShuffleExchangeExec
               if (shuffle.shuffleOrigin == ENSURE_REQUIREMENTS ||
-                  shuffle.shuffleOrigin == REPARTITION_BY_COL) &&
+                  (shuffle.shuffleOrigin == REPARTITION_BY_COL &&
+                    samePartitionKeys(shuffle.outputPartitioning, partitioning))) &&
                 (sharedExchanges.isEmpty || !sharedExchanges.contains(shuffle.canonicalized)) =>
             val retargeted = shuffle.copy(outputPartitioning = partitioning)
             retargeted.copyTagsFrom(shuffle)
@@ -471,13 +500,19 @@ case class PushDownShuffleExchangeThroughUnion(
         }
       }
     }
-    // withNewChildren returns the input when no child moves. Copy before tagging so rejected
-    // candidates leave it untouched, and carry existing tags because case-class copy does not.
+    // Origin inheritance can tag a zero-move candidate, so it must not reuse the input union.
     val rebuilt = union.copy(children = newChildren)
     rebuilt.copyTagsFrom(union)
-    rebuilt.setTagValue(AQEUtils.PUSHED_THROUGH_UNION, true)
     Option.when(
       PartitioningCollection.flatten(rebuilt.outputPartitioning).contains(target))(rebuilt)
+  }
+
+  private def samePartitionKeys(original: Partitioning, target: Partitioning): Boolean = {
+    (original, target) match {
+      case (from: HashPartitioning, to: HashPartitioning) =>
+        from.expressions.corresponds(to.expressions)(_.semanticEquals(_))
+      case _ => false
+    }
   }
 
   /**
@@ -508,7 +543,8 @@ case class PushDownShuffleExchangeThroughUnion(
    *
    * The operators in between are all behind `lookThrough`, and the reducing ones are why: the
    * rewrite shuffles a child before the reduction, which can be more data than the shuffle it
-   * replaces.
+   * replaces. These reducers stay above the union; target ranking does not estimate the lost
+   * reduction on moved branches.
    *   - A project drops no row.
    *   - A partial aggregate holds one buffer per group per input partition, and the aggregate
    *     above the shuffle merges them, whichever way the rows arrived.
