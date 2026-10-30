@@ -77,7 +77,7 @@ private[sql] class BoundedZstdCompressionCodec(compressionLevel: Int)
       compressionLevel)
     if (Zstd.isError(bytesWritten)) {
       compressedBuffer.close()
-      throw new RuntimeException("Error compressing: " + Zstd.getErrorName(bytesWritten))
+      throw SparkException.internalError("Error compressing: " + Zstd.getErrorName(bytesWritten))
     }
     compressedBuffer.writerIndex(CompressionUtil.SIZE_OF_UNCOMPRESSED_LENGTH + bytesWritten)
     compressedBuffer

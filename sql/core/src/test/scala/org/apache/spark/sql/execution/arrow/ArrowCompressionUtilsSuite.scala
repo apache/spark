@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution.arrow
 
 import java.io.ByteArrayOutputStream
+import java.nio.ByteOrder
 import java.nio.channels.Channels
 
 import scala.util.Random
@@ -35,17 +36,6 @@ import org.apache.spark.sql.util.ArrowUtils
 import org.apache.spark.util.Utils
 
 class ArrowCompressionUtilsSuite extends SparkFunSuite {
-
-  // Expose the protected `doCompress` so that a test can look at the raw output buffer.
-  private class RawBoundedZstdCompressionCodec extends BoundedZstdCompressionCodec(3) {
-    def compressRaw(allocator: BufferAllocator, in: ArrowBuf): ArrowBuf = doCompress(allocator, in)
-  }
-
-  // Arrow's own codec, which up to arrow-java 19.0 gives zstd a destination capacity that is 8
-  // bytes too large.
-  private class RawStockZstdCompressionCodec extends ZstdCompressionCodec(3) {
-    def compressRaw(allocator: BufferAllocator, in: ArrowBuf): ArrowBuf = doCompress(allocator, in)
-  }
 
   // Serializes one Arrow record batch compressed at the given zstd level and returns its size.
   private def compressedSize(level: Int): Int = {
@@ -102,6 +92,17 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
     assert(e.getMessage.contains("Unsupported Arrow compression codec: snappy"))
   }
 
+  // Expose the protected `doCompress` so that a test can look at the raw output buffer.
+  private class RawBoundedZstdCompressionCodec extends BoundedZstdCompressionCodec(3) {
+    def compressRaw(allocator: BufferAllocator, in: ArrowBuf): ArrowBuf = doCompress(allocator, in)
+  }
+
+  // Arrow's own codec, which up to arrow-java 19.0 gives zstd a destination capacity that is 8
+  // bytes too large.
+  private class RawStockZstdCompressionCodec extends ZstdCompressionCodec(3) {
+    def compressRaw(allocator: BufferAllocator, in: ArrowBuf): ArrowBuf = doCompress(allocator, in)
+  }
+
   // Random bytes with about 2% of them zeroed. Pure random bytes only make zstd fill its whole
   // destination when one byte value happens to be frequent enough (more than about n / 128 + 4
   // occurrences) for zstd to try Huffman-coding the literals and give up. Zeroing some bytes
@@ -130,7 +131,7 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
     }
     val inputAllocator =
       ArrowUtils.rootAllocator.newChildAllocator(this.getClass.getSimpleName, 0, Long.MaxValue)
-    try {
+    Utils.tryWithSafeFinally {
       val input = inputAllocator.buffer(data.length)
       val out = try {
         input.setBytes(0, data)
@@ -146,9 +147,8 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
       } finally {
         out.close()
       }
-    } finally {
-      guardedAllocator.close()
-      inputAllocator.close()
+    } {
+      Utils.tryWithSafeFinally(guardedAllocator.close())(inputAllocator.close())
     }
   }
 
@@ -156,21 +156,26 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
     val bounded = new RawBoundedZstdCompressionCodec
     val stock = new RawStockZstdCompressionCodec
     val random = new Random(0)
-    Seq(1, 7, 100, 280, 1000, 4096, 65536, 262144).foreach { n =>
+    // Of these inputs, only those of roughly 280 to 1000 bytes make zstd fill its whole
+    // destination; smaller and larger ones stop short of the end. The sizes in that range are
+    // checked with many inputs each, and the other sizes only as smoke checks.
+    Seq(280, 500, 700).foreach { n =>
+      val inputs = Seq.fill(100)(noisyBytes(random, n))
+      inputs.foreach { data =>
+        assert(!writesPastEnd(bounded.compressRaw, data),
+          s"zstd wrote past the end of its output buffer (input size $n)")
+      }
+      // Control: these inputs do trigger the overrun in Arrow's own codec, so the checks above
+      // can fail. This depends on how zstd compresses literals. If it starts failing after an
+      // Arrow upgrade, Arrow has fixed the codec and BoundedZstdCompressionCodec can be removed;
+      // if it starts failing after a zstd-jni upgrade, pick inputs that still overrun instead.
+      assert(inputs.exists(writesPastEnd(stock.compressRaw, _)),
+        s"no input of size $n made Arrow's ZstdCompressionCodec write past its output buffer")
+    }
+    Seq(1, 7, 100, 4096, 65536, 262144).foreach { n =>
       assert(!writesPastEnd(bounded.compressRaw, noisyBytes(random, n)),
         s"zstd wrote past the end of its output buffer (input size $n)")
     }
-    // At 500 bytes a large share of these inputs make Arrow's own codec overrun the buffer.
-    val inputs = Seq.fill(100)(noisyBytes(random, 500))
-    inputs.foreach { data =>
-      assert(!writesPastEnd(bounded.compressRaw, data),
-        "zstd wrote past the end of its output buffer (input size 500)")
-    }
-    // Control: the inputs above do trigger the overrun in Arrow's own codec, so the checks above
-    // can fail. If this starts failing, Arrow has fixed the codec and BoundedZstdCompressionCodec
-    // can be removed.
-    assert(inputs.exists(writesPastEnd(stock.compressRaw, _)),
-      "none of the inputs made Arrow's ZstdCompressionCodec write past its output buffer")
   }
 
   test("SPARK-60707: zstd codec round-trips compressible and incompressible buffers") {
@@ -192,7 +197,8 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
           // The buffer starts with the uncompressed length, or -1 if Arrow kept the input as is
           // because zstd did not make it smaller. Check which path each case takes.
           val expectZstdFrame = (expected eq compressible) && n >= 100
-          assert(compressed.getLong(0) === (if (expectZstdFrame) n.toLong else -1L))
+          val prefix = compressed.nioBuffer(0, 8).order(ByteOrder.LITTLE_ENDIAN).getLong(0)
+          assert(prefix === (if (expectZstdFrame) n.toLong else -1L))
           val decompressed = codec.decompress(allocator, compressed)
           try {
             val actual = new Array[Byte](n)
