@@ -137,6 +137,27 @@ class ComplexTypeSuite extends SparkFunSuite with ExpressionEvalHelper {
     assert(GetArrayItem(stArray4, Literal(1)).nullable)
   }
 
+  test("SPARK-60755: GetArrayItem on CreateArray generates code when the result is not nullable") {
+    val a = BoundReference(0, StringType, nullable = false)
+    val b = BoundReference(1, StringType, nullable = true)
+    val input = create_row("x", null)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // The array can contain NULL, but the selected element cannot.
+        checkEvaluation(GetArrayItem(CreateArray(Seq(a, b)), Literal(0)), "x", input)
+        // No element can be NULL.
+        checkEvaluation(GetArrayItem(CreateArray(Seq(a)), Literal(0)), "x", input)
+        // The index is invalid in every row.
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            GetArrayItem(CreateArray(Seq(b)), Literal(5)), input, "out of bounds")
+        } else {
+          checkEvaluation(GetArrayItem(CreateArray(Seq(b)), Literal(5)), null, input)
+        }
+      }
+    }
+  }
+
   Seq((Int.MaxValue, "Linear Lookup"), (0, "Hash Lookup")).foreach { case (threshold, name) =>
     test(s"GetMapValue - $name") {
       withSQLConf(SQLConf.MAP_LOOKUP_HASH_THRESHOLD.key -> threshold.toString) {

@@ -23,7 +23,7 @@ import java.sql.{Date, Timestamp}
 import scala.reflect.runtime.universe.runtimeMirror
 import scala.util.Random
 
-import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkException, SparkRuntimeException}
+import org.apache.spark.{QueryContextType, SPARK_DOC_ROOT, SparkArrayIndexOutOfBoundsException, SparkException, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.{ExtendedAnalysisException, InternalRow}
 import org.apache.spark.sql.catalyst.analysis.FunctionRegistry
 import org.apache.spark.sql.catalyst.expressions.{ArrayExists, Expression, Literal, UnaryExpression}
@@ -2544,6 +2544,37 @@ class DataFrameFunctionsSuite extends SharedSparkSession {
         sql("SELECT coalesce(element_at(array('a', 'b'), CAST(nullif(id, 0) AS INT)), 'z'), " +
           "coalesce(array('a', 'b')[CAST(nullif(id, 0) AS INT) - 1], 'z') FROM range(2)"),
         Seq(Row("z", "z"), Row("a", "a")))
+    }
+  }
+
+  test("SPARK-60755: element_at and array index compile when the result is not nullable") {
+    // The first element cannot be NULL, but the array can contain NULL.
+    val df = spark.range(2).selectExpr("id", "if(id = 0, 'a', NULL) AS s")
+    val notNullable = "element_at(array(coalesce(s, 'z'), s), 1)"
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        checkAnswer(df.selectExpr(notNullable), Seq(Row("a"), Row("z")))
+        checkAnswer(df.where(s"$notNullable = 'z'").select("id"), Seq(Row(1)))
+        // The ordering of `TakeOrderedAndProjectExec` has no interpreted fallback.
+        checkAnswer(df.orderBy(expr(notNullable).desc).limit(1).select("id"), Seq(Row(1)))
+      }
+    }
+    // Under ANSI, an out-of-bounds index raises an error, so the result is not nullable.
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> "true") {
+      checkError(
+        exception = intercept[SparkArrayIndexOutOfBoundsException] {
+          df.where("NOT (element_at(array(s), 5) = 'x' OR id < 0)").collect()
+        },
+        condition = "INVALID_ARRAY_INDEX_IN_ELEMENT_AT",
+        parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
+        context = ExpectedContext(fragment = "element_at(array(s), 5)", start = 5, stop = 27))
+      checkError(
+        exception = intercept[SparkArrayIndexOutOfBoundsException] {
+          df.selectExpr("array(s)[5]").collect()
+        },
+        condition = "INVALID_ARRAY_INDEX",
+        parameters = Map("indexValue" -> "5", "arraySize" -> "1"),
+        context = ExpectedContext(fragment = "array(s)[5]", start = 0, stop = 10))
     }
   }
 

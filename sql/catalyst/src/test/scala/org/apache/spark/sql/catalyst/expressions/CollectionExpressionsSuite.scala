@@ -2528,6 +2528,36 @@ class CollectionExpressionsSuite
     }
   }
 
+  test("SPARK-60755: ElementAt on CreateArray generates code when the result is not nullable") {
+    val a = BoundReference(0, StringType, nullable = false)
+    val b = BoundReference(1, StringType, nullable = true)
+    val input = create_row("x", null)
+    val field = StructField("f", StringType, nullable = false)
+    val c = BoundReference(0, StructType(Seq(field)), nullable = false)
+    val d = BoundReference(1, StructType(Seq(field)), nullable = true)
+    val inputWithStruct = create_row(create_row("x"), null)
+    Seq(true, false).foreach { ansiEnabled =>
+      withSQLConf(SQLConf.ANSI_ENABLED.key -> ansiEnabled.toString) {
+        // The array can contain NULL, but the selected element cannot.
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(1)), "x", input)
+        checkEvaluation(ElementAt(CreateArray(Seq(a, b)), Literal(-2)), "x", input)
+        val fields = GetArrayStructFields(CreateArray(Seq(c, d)), field, 0, 1, containsNull = true)
+        checkEvaluation(ElementAt(fields, Literal(1)), "x", inputWithStruct)
+        // No element can be NULL.
+        checkEvaluation(ElementAt(CreateArray(Seq(a)), Literal(1)), "x", input)
+        // The index is invalid in every row.
+        checkExceptionInExpression[Exception](
+          ElementAt(CreateArray(Seq(b)), Literal(0)), input, "The index 0 is invalid")
+        if (ansiEnabled) {
+          checkExceptionInExpression[Exception](
+            ElementAt(CreateArray(Seq(b)), Literal(5)), input, "out of bounds")
+        } else {
+          checkEvaluation(ElementAt(CreateArray(Seq(b)), Literal(5)), null, input)
+        }
+      }
+    }
+  }
+
   test("Concat") {
     // Primitive-type elements
     val ai0 = Literal.create(Seq(1, 2, 3), ArrayType(IntegerType, containsNull = false))
