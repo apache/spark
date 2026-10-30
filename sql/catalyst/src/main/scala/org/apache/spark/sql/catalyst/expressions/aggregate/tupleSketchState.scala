@@ -30,11 +30,20 @@ sealed trait TupleSketchState[S <: Summary] {
 
 case class UpdatableTupleSketchBuffer[U, S <: UpdatableSummary[U]](sketch: UpdatableSketch[U, S])
     extends TupleSketchState[S] {
-  override def serialize(): Array[Byte] = sketch.compact.toByteArray
-  override def eval(): Array[Byte] = sketch.compact.toByteArray
+  override def serialize(): Array[Byte] = trimmedSketch.toByteArray
+  override def eval(): Array[Byte] = trimmedSketch.toByteArray
 
   /** Returns compact form of the sketch, needed for merge operations that require Sketch type. */
   def compactSketch: Sketch[S] = sketch.compact
+
+  /**
+   * Returns the compact form trimmed to the nominal number of entries, as `Union.getResult` does,
+   * so that the result does not depend on the plan or on the order of the input rows.
+   */
+  private def trimmedSketch: Sketch[S] = {
+    sketch.trim()
+    sketch.compact
+  }
 }
 
 case class UnionTupleAggregationBuffer[S <: Summary](union: Union[S])
