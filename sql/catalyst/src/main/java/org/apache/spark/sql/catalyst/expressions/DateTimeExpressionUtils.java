@@ -22,6 +22,7 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoField;
 
 import org.apache.spark.SparkDateTimeException;
 import org.apache.spark.sql.catalyst.util.DateTimeConstants;
@@ -96,12 +97,11 @@ public final class DateTimeExpressionUtils {
       Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
     assert secAndMicros.scale() == 6 :
       "Seconds fraction must have 6 digits for microseconds but got " + secAndMicros.scale();
-    // 8 digits cannot overflow Int.
-    int totalMicros = (int) secAndMicros.toUnscaledLong();
-    int microsPerSecond = (int) DateTimeConstants.MICROS_PER_SECOND;
-    int nanosPerMicros = (int) DateTimeConstants.NANOS_PER_MICROS;
-    int seconds = Math.floorDiv(totalMicros, microsPerSecond);
-    int nanos = Math.floorMod(totalMicros, microsPerSecond) * nanosPerMicros;
+    // The seconds are DecimalType(16, 6), so the unscaled micros need a long.
+    long totalMicros = secAndMicros.toUnscaledLong();
+    long seconds = Math.floorDiv(totalMicros, DateTimeConstants.MICROS_PER_SECOND);
+    int nanos = (int) (Math.floorMod(totalMicros, DateTimeConstants.MICROS_PER_SECOND) *
+      DateTimeConstants.NANOS_PER_MICROS);
     LocalDateTime ldt;
     if (seconds == 60) {
       if (nanos == 0) {
@@ -111,7 +111,12 @@ public final class DateTimeExpressionUtils {
         throw QueryExecutionErrors.invalidFractionOfSecondError(secAndMicros.toDouble());
       }
     } else {
-      ldt = LocalDateTime.of(year, month, day, hour, min, seconds, nanos);
+      // Seconds beyond the int range are invalid; reject them before narrowing so they cannot
+      // wrap into a valid value. LocalDateTime.of checks the rest, as it does for 61 seconds.
+      if (seconds != (int) seconds) {
+        ChronoField.SECOND_OF_MINUTE.checkValidValue(seconds);
+      }
+      ldt = LocalDateTime.of(year, month, day, hour, min, (int) seconds, nanos);
     }
     if (timestampNTZ) {
       return DateTimeUtils.localDateTimeToMicros(ldt);

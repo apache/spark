@@ -1599,6 +1599,45 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
     }
   }
 
+  test("SPARK-60743: make_timestamp rejects seconds whose micros do not fit an int") {
+    // The seconds input is DecimalType(16, 6), so its unscaled micros can exceed an int.
+    // Each value below must fail like 61 seconds does instead of wrapping modulo 2^32.
+    val outOfRangeSeconds = Seq(
+      // (year, month, day, hour, min, sec, the seconds shown in the error)
+      // 4324967296 - 2^32 = 30000000 micros, which would read as 30 seconds.
+      (2020, 1, 1, 0, 0, "4324.967296", "4324"),
+      // 4354967296 - 2^32 = 60000000 micros, which would roll over to the next minute.
+      (2019, 6, 30, 23, 59, "4354.967296", "4354"),
+      // 3000000000 micros would wrap to a negative int.
+      (2020, 1, 1, 0, 0, "3000", "3000"),
+      // A negative value whose micros would wrap to 30 seconds.
+      (2020, 1, 1, 0, 0, "-4264.967296", "-4265"),
+      // The largest DecimalType(16, 6) value: even its whole seconds do not fit an int.
+      (2020, 1, 1, 0, 0, "9999999999.999999", "9999999999"),
+      // A small out-of-range value, for comparison.
+      (2020, 1, 1, 0, 0, "61", "61"))
+    for {
+      dataType <- Seq(TimestampType, TimestampNTZType)
+      ansi <- Seq(true, false)
+      (year, month, day, hour, min, sec, shown) <- outOfRangeSeconds
+    } {
+      val expr = MakeTimestamp(Literal(year), Literal(month), Literal(day), Literal(hour),
+        Literal(min), Literal(Decimal(BigDecimal(sec), 16, 6)), timeZoneId = Some("UTC"),
+        failOnError = ansi, dataType = dataType)
+      withClue(s"$dataType, ansi = $ansi, sec = $sec: ") {
+        if (ansi) {
+          checkErrorInExpression[SparkDateTimeException](
+            expr,
+            condition = "DATETIME_FIELD_OUT_OF_BOUNDS.WITHOUT_SUGGESTION",
+            parameters = Map(
+              "rangeMessage" -> s"Invalid value for SecondOfMinute (valid values 0 - 59): $shown"))
+        } else {
+          checkEvaluation(expr, null)
+        }
+      }
+    }
+  }
+
   test("ISO 8601 week-numbering year") {
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(1))), 2005)
     checkEvaluation(YearOfWeek(MakeDate(Literal(2006), Literal(1), Literal(2))), 2006)
