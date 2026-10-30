@@ -1495,6 +1495,7 @@ class SparkConnectClient(object):
         ExecutePlanResponseReattachableIterator.shutdown_threadpool_if_idle()
         self._channel.close()
         self._closed = True
+        atexit.unregister(self._on_exit)
 
     @property
     def is_closed(self) -> bool:
@@ -2203,7 +2204,9 @@ class SparkConnectClient(object):
                         timeout=self._rpc_deadlines.release_session,
                     )
                     self._verify_response_integrity(resp)
-                    self._session_released = True
+                    # The server returns no server-side session ID if it had no session to close.
+                    if resp.server_side_session_id:
+                        self._session_released = True
                     return
             raise SparkConnectException("Invalid state during retry exception handling.")
         except Exception as error:
@@ -2606,7 +2609,8 @@ class SparkConnectClient(object):
             return []
 
     def _on_exit(self) -> None:
-        # Skip cleanup RPCs if the session is already closed or released.
+        # Skip all exit cleanup if the client is closed or its session was released: the RPCs
+        # would be wasted work and can block process exit if the server is unreachable.
         if self._closed or self._session_released:
             return
 
