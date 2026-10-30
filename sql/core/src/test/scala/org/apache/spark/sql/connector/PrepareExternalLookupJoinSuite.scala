@@ -23,11 +23,12 @@ import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.dsl.expressions._
 import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeReference,
-  AttributeSet, BindReferences, Coalesce, Expression, Literal, Predicate => CatalystPredicate}
+  AttributeSet, BindReferences, Coalesce, Expression, ExternalUserDefinedFunction, Literal,
+  Predicate => CatalystPredicate}
 import org.apache.spark.sql.catalyst.optimizer.ColumnPruning
 import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter, PlanTest}
-import org.apache.spark.sql.catalyst.plans.logical.{ExternalLookupJoin, Join, JoinHint,
-  LocalRelation, LogicalPlan, PreparedExternalLookupJoin, Project}
+import org.apache.spark.sql.catalyst.plans.logical.{ExecuteExternalUDF, ExternalLookupJoin,
+  Filter, Join, JoinHint, LocalRelation, LogicalPlan, PreparedExternalLookupJoin, Project}
 import org.apache.spark.sql.connector.catalog.{SupportsRead, Table, TableCapability}
 import org.apache.spark.sql.connector.catalog.TableCapability.EXTERNAL_LOOKUP
 import org.apache.spark.sql.connector.expressions.FieldReference
@@ -36,9 +37,11 @@ import org.apache.spark.sql.connector.read.{ExternalLookup, ExternalLookupReader
   ExternalLookupReaderFactory, Scan, ScanBuilder, SupportsExternalLookup}
 import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation,
   ExternalLookupRelation, PrepareExternalLookupJoin}
-import org.apache.spark.sql.internal.SQLConf
-import org.apache.spark.sql.types.{IntegerType, LongType, StructType}
+import org.apache.spark.sql.execution.externalUDF.PlanExternalUDFs
+import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
+import org.apache.spark.sql.types.{BooleanType, IntegerType, LongType, StructType}
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
+import org.apache.spark.udf.worker.UDFWorkerSpecification
 import org.apache.spark.unsafe.types.UTF8String
 
 class PrepareExternalLookupJoinSuite extends PlanTest {
@@ -452,6 +455,47 @@ class PrepareExternalLookupJoinSuite extends PlanTest {
     val keepsCode = prepared.copy(lookupOutput = Seq(lookupCode))
     assert(keepsId.sameResult(keepsCode) === false)
     assert(keepsId.sameResult(prepared.copy(lookupOutput = Seq(lookupId))))
+  }
+
+  test("an external UDF over lookup columns in the join condition") {
+    val lookup = lookupRelation(PlanningExternalLookupTable())
+    val lookupId = lookup.output.head
+    val udf = ExternalUserDefinedFunction(
+      name = Some("lookup_udf"),
+      workerSpec = UDFWorkerSpecification.getDefaultInstance,
+      payload = Array.emptyByteArray,
+      dataType = BooleanType,
+      children = Seq(lookupId),
+      udfDeterministic = true,
+      udfNullable = false)
+    val condition = stream.output.head === lookupId && udf
+
+    // An inner join evaluates it above the lookup join, where PlanExternalUDFs extracts it.
+    val prepared = PrepareExternalLookupJoin(lookupJoin(lookup, condition))
+    prepared match {
+      case Filter(filterCondition, join: PreparedExternalLookupJoin) =>
+        assert(filterCondition == udf)
+        assert(join.residualCondition.isEmpty)
+      case other => fail(s"Expected a filter above a prepared external lookup join: $other")
+    }
+    val conf = SQLConf.get
+    val unifiedUDFExecution = conf.getConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED)
+    conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, true)
+    try {
+      val planned = PlanExternalUDFs(prepared)
+      assert(planned.exists(_.isInstanceOf[ExecuteExternalUDF]))
+      assert(!planned.exists {
+        case _: ExecuteExternalUDF => false
+        case node => node.expressions.exists(_.exists(_.isInstanceOf[ExternalUserDefinedFunction]))
+      })
+    } finally {
+      conf.setConf(StaticSQLConf.UNIFIED_UDF_EXECUTION_ENABLED, unifiedUDFExecution)
+    }
+    // A left outer join cannot.
+    checkError(
+      exception = prepareError(lookupJoin(lookup, condition, LeftOuter)),
+      condition = "UNSUPPORTED_FEATURE.EXTERNAL_UDF_IN_ON_CLAUSE",
+      parameters = Map("joinType" -> "LEFT OUTER"))
   }
 
   test("column pruning never projects the lookup relation under a lookup join") {
