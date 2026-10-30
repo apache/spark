@@ -3156,6 +3156,52 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60393: an aggregate FILTER is checked before the common subexpressions of the " +
+    "update expressions") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `avg` and `sum` must not evaluate `y + 1` on rows their FILTER rejects.
+      // `count(1)` still uses the shared common subexpressions.
+      val aggs = "avg(y + 1) FILTER (WHERE s = '1'), sum(y + 1) FILTER (WHERE s = '1'), count(1)"
+      val noKeys = s"SELECT $aggs FROM t"
+      val withKeys = s"SELECT b, $aggs FROM t GROUP BY b"
+      // Different FILTER clauses still keep `y + 1` local to each aggregate.
+      val filteredAggs =
+        "avg(y + 1) FILTER (WHERE s = '1'), sum(y + 1) FILTER (WHERE x = 1)"
+      val filteredNoKeys = s"SELECT $filteredAggs FROM t"
+      val filteredWithKeys = s"SELECT b, $filteredAggs FROM t GROUP BY b"
+      val hashMapConfs = Seq(
+        // Regular hash map.
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "false"),
+        // Row-based fast hash map.
+        Seq(SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true"),
+        // Vectorized fast hash map.
+        Seq(
+          SQLConf.ENABLE_TWOLEVEL_AGG_MAP.key -> "true",
+          SQLConf.ENABLE_VECTORIZED_HASH_MAP.key -> "true"),
+        // Sort aggregate.
+        Seq(
+          SQLConf.USE_HASH_AGG.key -> "false",
+          SQLConf.USE_OBJECT_HASH_AGG.key -> "false"))
+      for (codegen <- Seq(true, false); split <- Seq(true, false); confs <- hashMapConfs) {
+        // A small threshold splits both the aggregate code and the CSE code.
+        val splitConfs = if (split) Seq(SQLConf.CODEGEN_METHOD_SPLIT_THRESHOLD.key -> "1") else Nil
+        withSQLConf(confs ++ splitConfs ++ Seq(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString): _*) {
+          withClue(s"wholeStage=$codegen, split=$split, confs=$confs: ") {
+            val df = sql(noKeys)
+            assert(df.queryExecution.executedPlan.exists(_.isInstanceOf[WholeStageCodegenExec]) ==
+              codegen)
+            checkAnswer(df, Row(1.0, 1L, 2L))
+            checkAnswer(sql(withKeys), Row(1, 1.0, 1L, 2L))
+            checkAnswer(sql(filteredNoKeys), Row(1.0, 1L))
+            checkAnswer(sql(filteredWithKeys), Row(1, 1.0, 1L))
+          }
+        }
+      }
+    }
+  }
+
   test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
     // A full outer join outputs its rows through a function of its own, and generates the code of
     // the operators above it, for the body of that function, before adding the function: here a
