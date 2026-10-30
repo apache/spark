@@ -81,7 +81,9 @@ private[window] abstract class DistinctWindowFunctionFrame(
   override final def prepare(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
     closeEventResources()
     nextEventIndex = Int.MaxValue
-    processor.initialize(rows.length)
+    // The window driver rejects partitions larger than Int.MaxValue rows before preparing frames.
+    // Use an exact conversion as a defensive check if that guard is bypassed.
+    processor.initialize(Math.toIntExact(rows.length))
     val partitionIndex = Option(TaskContext.get()).map(_.partitionId()).getOrElse(0)
     boundFilter.foreach(_.initialize(partitionIndex))
 
@@ -429,7 +431,7 @@ private[window] final class UnboundedDistinctWindowFunctionFrame(
   }
 
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    partitionSize = rows.length
+    partitionSize = Math.toIntExact(rows.length)
     processor.evaluate(target)
   }
 
@@ -524,7 +526,7 @@ private[window] final class UnboundedPrecedingDistinctWindowFunctionFrame(
   }
 
   override protected def prepareFrame(rows: ExternalAppendOnlyUnsafeRowArray): Unit = {
-    partitionSize = rows.length
+    partitionSize = Math.toIntExact(rows.length)
     boundaryInputIndex = 0
     currentOutput = null
     currentOutputIndex = 0
