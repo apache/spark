@@ -546,6 +546,44 @@ abstract class UpdateTableSuiteBase extends RowLevelOperationSuiteBase {
     checkUpdateMetrics(numUpdatedRows = 1, numCopiedRows = 0)
   }
 
+  test("SPARK-60721: update with assignments to metadata columns") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    Seq(
+      s"UPDATE $tableNameAsString SET index = 5 WHERE pk = 1" -> "index",
+      s"UPDATE $tableNameAsString t SET t.id = -1, t._partition = 'x' WHERE t.pk = 1" ->
+        "_partition",
+      // the implicit cast in the condition resolves the command in a later analyzer iteration
+      s"UPDATE $tableNameAsString SET index = 5 WHERE id < 1.5" -> "index"
+    ).foreach { case (updateStmt, metadataCol) =>
+      val e = intercept[AnalysisException](sql(updateStmt))
+      assert(e.getCondition == "DATATYPE_MISMATCH.INVALID_ROW_LEVEL_OPERATION_ASSIGNMENTS")
+      assert(e.getMessage.contains(s"Cannot assign to metadata column '$metadataCol'"))
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, 1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
+  test("SPARK-60721: update ignores assignments to metadata columns in legacy mode") {
+    createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
+      """{ "pk": 1, "id": 1, "dep": "hr" }
+        |{ "pk": 2, "id": 2, "dep": "software" }
+        |""".stripMargin)
+
+    withSQLConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS.key -> "true") {
+      sql(s"UPDATE $tableNameAsString SET id = -1, index = 5 WHERE pk = 1")
+    }
+
+    checkAnswer(
+      sql(s"SELECT * FROM $tableNameAsString"),
+      Row(1, -1, "hr") :: Row(2, 2, "software") :: Nil)
+  }
+
   test("update with IN subqueries") {
     withTempView("updated_id", "updated_dep") {
       createAndInitTable("pk INT NOT NULL, id INT, dep STRING",
