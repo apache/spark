@@ -34,8 +34,8 @@ import org.apache.spark.sql.types.{DataType, IntegerType, StringType, StructType
 import org.apache.spark.util.{SparkTestUtils, Utils}
 
 /**
- * Tests `CREATE [TEMPORARY] FUNCTION name AS 'class'` where the class is a DataSource V2
- * function, i.e. it implements [[UnboundFunction]].
+ * Tests `CREATE [TEMPORARY] FUNCTION name AS 'class'` where the class is a V2 function, i.e. it
+ * implements [[UnboundFunction]].
  */
 class CreateV2FunctionSuite extends QueryTest with SharedSparkSession {
 
