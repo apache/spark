@@ -465,7 +465,8 @@ class NativeDataSourceWriter(
 
 /**
  * Writes to a native data source for a streaming write. Its handle is closed when the streaming
- * query creates its next stream writer, see [[NativeStreamWriters]].
+ * query creates its next stream writer, or, for the last stream writer of the query, once the
+ * handle becomes unreachable, see [[NativeStreamWriters]].
  */
 class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
@@ -773,6 +774,8 @@ class NativePartitionReader(
    *    array to what its parent refers to.
    *  - An array without a validity buffer has a null_count of 0, as the C data interface requires:
    *    Arrow Java fails to import it otherwise.
+   *  - An array that has buffers has a pointer to them, as the C data interface requires: Spark
+   *    reads the offsets of a list or a map through it, to check the lengths of its elements.
    *  - The batch itself has no null rows. Arrow Java ignores the validity of the struct of the
    *    batch, so it would read a null row as a row of the values of its columns. As in Arrow C++,
    *    which also rejects them, the nulls are counted when the library did not count them.
@@ -798,8 +801,16 @@ class NativePartitionReader(
         ArrowArray.wrap(child).snapshot()
       }
     }
-    // The last offset of a list or a map, in its second buffer. Arrow Java rejects the array if
-    // the buffer is missing.
+    // The C data interface requires the pointer to the buffers of an array that has buffers, even
+    // if a buffer itself is NULL. Arrow Java reads the buffers through it, as `lastOffset` does.
+    def checkBuffers(array: ArrowArray.Snapshot, owner: String): Unit = {
+      if (array.n_buffers > 0 && array.buffers == 0) {
+        throw error(name, "read", s"$owner has ${array.n_buffers} buffers, but a NULL pointer " +
+          "to them.")
+      }
+    }
+    // The last offset of a list or a map, in its second buffer, of an array whose buffers were
+    // checked. Arrow Java rejects the array if the buffer itself is missing.
     def lastOffset(array: ArrowArray.Snapshot): Long = {
       val offsets = if (array.length > 0 && array.n_buffers >= 2) {
         Platform.getLong(null, array.buffers + 8L)
@@ -833,6 +844,7 @@ class NativePartitionReader(
         throw error(name, "read", s"The column $column has an offset of ${array.offset}, but " +
           "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
       }
+      checkBuffers(array, s"The column $column")
       checkValidity(array, s"The column $column")
       val length = referenced(array, field.getType)
       val fields = field.getChildren.size
@@ -849,6 +861,7 @@ class NativePartitionReader(
       throw error(name, "read", s"The batch has an offset of ${batch.offset}, but Spark only " +
         "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
     }
+    checkBuffers(batch, "The batch")
     checkValidity(batch, "The batch")
     val nullRows = batch.null_count match {
       // The library did not count the nulls, so they are counted from the validity buffer, which

@@ -367,6 +367,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         "msg" -> "The data has the schema id BIGINT, but the expected schema is id INT."))
   }
 
+  nativeTest("export the schemas of a scan with the time zone of the session that planned it") {
+    val session = newSession(defaultPackage)
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "Asia/Tokyo")
+    val df = range(session, "end" -> "4").select("id", "ts")
+    // The reader gets the column ts as a timestamp of this time zone. The query then runs with
+    // another one, which the executors get too: read fails unless the schema to read that they
+    // export has the time zone that the reader got.
+    df.queryExecution.executedPlan
+    session.conf.set(SQLConf.SESSION_LOCAL_TIMEZONE.key, "UTC")
+    checkRows(df, (0L until 4L).map(id => Row(id, Timestamp.from(Instant.ofEpochSecond(id)))))
+  }
+
   nativeTest("prune columns") {
     val df = range(newSession(defaultPackage), "end" -> "10").select("name", "id")
     checkRows(df, (0L until 10L).map(id => Row(if (id % 5 == 0) null else s"n$id", id)))
@@ -552,6 +564,9 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       check("The column m contains an array with a length of 1, but its parent refers to 2 " +
         "values.", "extra" -> "map", "short" -> array)
     }
+    // Spark reads the last offset of a map through the pointer to its buffers.
+    check("The column m has 2 buffers, but a NULL pointer to them.", "extra" -> "map",
+      "short" -> "buffers")
     check("The column dec contains the Arrow type Decimal(10, 2, 256), which is not supported.",
       "extra" -> "decimal256")
     // Arrow Java would also extend the elements of a list view with nulls, and Spark does not
@@ -1045,11 +1060,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   }
 
   nativeTest("reject offsets that are not JSON on a single line") {
-    // Spark writes each offset as a line of the offset log of the checkpoint.
-    def check(badOffset: String, msg: String): Unit = {
+    // Spark writes each offset as a line of the offset log of the checkpoint, and the initial
+    // offset in the checkpoint of the source.
+    def check(option: String, badOffset: String, msg: String): Unit = {
       val e = intercept[Exception] {
         val query = newSession(defaultPackage).readStream.format("native_counter")
-          .option("bad_offset", badOffset).load()
+          .option(option, badOffset).load()
           .writeStream
           .format("noop")
           .option("checkpointLocation", Utils.createTempDir().getPath)
@@ -1061,10 +1077,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         condition = "NATIVE_DATA_SOURCE_ERROR",
         parameters = Map("action" -> "plan a scan of", "name" -> "native_counter", "msg" -> msg))
     }
-    check("none", "latest_offset returned no offset.")
-    check("multiline", "latest_offset returned an offset with a line break, but an " +
-      "offset must be JSON on a single line.")
-    check("invalid", "latest_offset returned an offset that is not valid JSON: offset 10")
+    Seq(("bad_offset", "latest_offset", 10), ("bad_initial_offset", "initial_offset", 0)).foreach {
+      case (option, function, offset) =>
+        check(option, "none", s"$function returned no offset.")
+        check(option, "multiline", s"$function returned an offset with a line break, but an " +
+          "offset must be JSON on a single line.")
+        check(option, "invalid",
+          s"$function returned an offset that is not valid JSON: offset $offset")
+    }
   }
 
   nativeTest("pass the ID of a streaming query to its stream writers") {

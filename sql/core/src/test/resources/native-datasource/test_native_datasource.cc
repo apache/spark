@@ -29,9 +29,10 @@
 //                   "short", an array of the batches has one value fewer than its parent refers to,
 //                   although its buffers hold them all: "id" shortens the column id, "entries" the
 //                   entries of the map and their fields, and "values" the values of the entries.
-//                   "children" exports the batches without their columns, with n_children = 0. With
-//                   the option "null_rows", the struct of a batch has a validity buffer that marks
-//                   its first row as null, and a null_count of 1 for "count" or -1 for "unknown";
+//                   "children" exports the batches without their columns, with n_children = 0, and
+//                   "buffers" exports the map with a NULL pointer to its buffers. With the option
+//                   "null_rows", the struct of a batch has a validity buffer that marks its first
+//                   row as null, and a null_count of 1 for "count" or -1 for "unknown";
 //                   "unknown_valid" has one without nulls and a null_count of -1, and "no_buffer" a
 //                   null_count of -1 without a validity buffer. "column" gives the first column,
 //                   which has no validity buffer, a null_count of -1 instead. With the option
@@ -44,18 +45,19 @@
 //                   it in _created_data_writers and _closed_data_writers.
 //   native_counter  Streams the rows [0, max_offset) with a single column "id", making "step"
 //                   more rows available after the start of each micro-batch. With the
-//                   option "bad_offset", the latest offset is "none", "multiline" JSON or
-//                   "invalid" JSON. With the option "closed_path", closing the stream reader
-//                   creates that file. With the option "checkpoint_path", creating the stream
-//                   reader writes its checkpoint location to that file, and with "starts_path",
-//                   each call to latest_offset appends its start offset to that file, as a line.
-//                   With the option "max_rows_per_trigger", it declares the capability
-//                   SPARK_DS_ADMISSION_CONTROL, and its default read limit is that many rows, or
-//                   with "bad_read_limit", an unknown "kind" of limit or a maximum of 0 "rows".
-//                   With "initial_offsets_path", each call to initial_offset appends a line to
-//                   that file, and returns the number of calls before it as the offset, as an
-//                   initial offset that depends on when it is asked does. With "columns_path",
-//                   creating the stream reader writes the columns to read to that file.
+//                   option "bad_offset", the latest offset is "none", "multiline" JSON or "invalid"
+//                   JSON, and with "bad_initial_offset", the initial offset is. With the option
+//                   "closed_path", closing the stream reader creates that file. With the option
+//                   "checkpoint_path", creating the stream reader writes its checkpoint location to
+//                   that file, and with "starts_path", each call to latest_offset appends its start
+//                   offset to that file, as a line. With the option "max_rows_per_trigger", it
+//                   declares the capability SPARK_DS_ADMISSION_CONTROL, and its default read limit
+//                   is that many rows, or with "bad_read_limit", an unknown "kind" of limit or a
+//                   maximum of 0 "rows". With "initial_offsets_path", each call to initial_offset
+//                   appends a line to that file, and returns the number of calls before it as the
+//                   offset, as an initial offset that depends on when it is asked does. With
+//                   "columns_path", creating the stream reader writes the columns to read to that
+//                   file.
 //
 // native_range supports batch reads, native_counter micro-batch streaming reads and native_sink
 // batch and streaming writes, which may replace the existing data. With the option
@@ -71,9 +73,9 @@
 // functions that return a state pass it that many times.
 //
 // read fails unless it gets the kind of read of its reader and the schema to read, the columns
-// that the reader returns. create_data_writer fails unless it gets the schema that create_writer
-// got, with the same names and formats, and write fails unless its batches have the columns of
-// that schema.
+// that the reader returns, with the names and the formats that the reader got them with.
+// create_data_writer fails unless it gets the schema that create_writer got, with the same names
+// and formats, and write fails unless its batches have the columns of that schema.
 //
 // The suite compiles it with these macros to get several distinct libraries:
 //
@@ -255,6 +257,25 @@ void exportSchema(const std::vector<std::string>& columns, ArrowSchema* out) {
       column->dictionary = data->dictionary.get();
     }
   }
+}
+
+std::string describeFields(const ArrowSchema* schema);
+
+// The name and the format of a field, and those of its fields, such as "ts:tsu:UTC".
+std::string describeField(const ArrowSchema* field) {
+  std::string description = std::string(field->name ? field->name : "") + ":" + field->format;
+  if (field->n_children > 0) description += "(" + describeFields(field) + ")";
+  return description;
+}
+
+// The names and the formats of the fields of a schema, at every level, such as "id:l,ts:tsu:UTC".
+std::string describeFields(const ArrowSchema* schema) {
+  std::string description;
+  for (int64_t i = 0; i < schema->n_children; i++) {
+    if (i > 0) description += ",";
+    description += describeField(schema->children[i]);
+  }
+  return description;
 }
 
 // Reads the column names of a struct schema exported by Spark, and releases it.
@@ -454,6 +475,9 @@ void exportBatch(const std::vector<std::string>& columns, int64_t lo, int64_t hi
       for (int64_t i = 0; i < entries->n_children; i++) entries->children[i]->length--;
     } else if (short_array == "values" && name == "m") {
       column->children[0]->children[1]->length--;
+    } else if (short_array == "buffers" && name == "m") {
+      // Its buffers are still released with it, through its private data.
+      column->buffers = nullptr;
     }
   }
   // The columns are still released with the batch.
@@ -774,6 +798,25 @@ struct Reader {
   Options state;  // Serialized to the executors.
 };
 
+// The name and the format of each column of the schema that a reader got, for its state.
+Options fieldsOf(const ArrowSchema* schema) {
+  Options fields;
+  for (int64_t i = 0; i < schema->n_children; i++) {
+    fields["field." + std::string(schema->children[i]->name)] = describeField(schema->children[i]);
+  }
+  return fields;
+}
+
+// The names and the formats of the columns that a reader returns, as the reader got them, which
+// the schema to read of read must have.
+std::string readerFields(const Options& state) {
+  std::vector<std::string> fields;
+  for (const auto& column : split(get(state, "columns", ""))) {
+    fields.push_back(get(state, "field." + column, ""));
+  }
+  return join(fields);
+}
+
 // Reads the ids [lo, hi) of the columns in the state, in batches.
 struct Stream {
   std::vector<std::string> columns;
@@ -983,10 +1026,12 @@ int createReader(void* handle, struct ArrowSchema* schema, const SparkDsReaderIn
     if (source->name != name("native_range")) {
       throw std::runtime_error(source->name + " does not support batch reads");
     }
+    Options fields = fieldsOf(schema);
     auto columns = importColumns(schema);
     for (const auto& column : columns) findColumn(column);
     if (returnsZero(source->options, "create_reader")) return;
     auto* reader = new Reader();
+    reader->state = fields;
     reader->state["kind"] = std::to_string(SPARK_DS_READ_BATCH);
     reader->state["columns"] = join(columns);
     reader->state["lo"] = "0";
@@ -1022,6 +1067,7 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     if (source->name != name("native_counter")) {
       throw std::runtime_error(source->name + " does not support streaming reads");
     }
+    Options fields = fieldsOf(schema);
     auto columns = join(importColumns(schema));
     if (info->checkpoint_location == nullptr) throw std::runtime_error("no checkpoint location");
     std::string checkpoint_path = get(source->options, "checkpoint_path", "");
@@ -1030,14 +1076,15 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     if (!columns_path.empty()) writeFile(columns_path, columns);
     if (returnsZero(source->options, "create_stream_reader")) return;
     auto* reader = new Reader();
+    reader->state = fields;
     reader->state["kind"] = std::to_string(SPARK_DS_READ_MICRO_BATCH);
     reader->state["columns"] = columns;
     reader->state["max_offset"] = get(source->options, "max_offset", "10");
     reader->state["step"] = get(source->options, "step", reader->state["max_offset"]);
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
-         {"commit_path", "bad_offset", "closed_path", "starts_path", "initial_offsets_path",
-          "states", "max_rows_per_trigger", "bad_read_limit"}) {
+         {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
+          "initial_offsets_path", "states", "max_rows_per_trigger", "bad_read_limit"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1092,12 +1139,29 @@ void closeReader(void* handle) { delete fromHandle<Reader>(handle); }
 
 #ifndef READ_ONLY
 
+// Sends the offset, or, with the option `bad_option`, no offset for "none", a pretty-printed one
+// for "multiline", or one that is not JSON for "invalid".
+void sendOffset(const Options& state, const std::string& bad_option, SparkDsSink set_offset,
+                void* sink, int64_t offset) {
+  std::string bad_offset = get(state, bad_option, "");
+  if (bad_offset == "none") return;
+  if (bad_offset == "multiline") {
+    // Pretty-printed JSON, as serde_json::to_string_pretty writes it.
+    sendBytes(set_offset, sink, "{\n  \"offset\": " + std::to_string(offset) + "\n}");
+  } else if (bad_offset == "invalid") {
+    sendBytes(set_offset, sink, "offset " + std::to_string(offset));
+  } else {
+    sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(offset) + "}");
+  }
+}
+
 int initialOffset(void* handle, const SparkDsInitialOffsetInfo* info, SparkDsSink set_offset,
                   void* sink) {
   return guarded([&] {
     checkSize("SparkDsInitialOffsetInfo", info->size, sizeof(SparkDsInitialOffsetInfo));
+    const Options& state = fromHandle<Reader>(handle)->state;
     int64_t offset = 0;
-    std::string path = get(fromHandle<Reader>(handle)->state, "initial_offsets_path", "");
+    std::string path = get(state, "initial_offsets_path", "");
     if (!path.empty()) {
       FILE* file = std::fopen(path.c_str(), "a+");
       if (file == nullptr) throw std::runtime_error("cannot write " + path);
@@ -1105,7 +1169,7 @@ int initialOffset(void* handle, const SparkDsInitialOffsetInfo* info, SparkDsSin
       std::fputs("initial_offset\n", file);
       std::fclose(file);
     }
-    sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(offset) + "}");
+    sendOffset(state, "bad_initial_offset", set_offset, sink, offset);
   });
 }
 
@@ -1138,16 +1202,7 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
       latest = std::min(
           latest, static_cast<int64_t>(JsonParser(info->run_end).parse()["offset"].number));
     }
-    std::string bad_offset = get(state, "bad_offset", "");
-    if (bad_offset == "none") return;
-    if (bad_offset == "multiline") {
-      // Pretty-printed JSON, as serde_json::to_string_pretty writes it.
-      sendBytes(set_offset, sink, "{\n  \"offset\": " + std::to_string(latest) + "\n}");
-    } else if (bad_offset == "invalid") {
-      sendBytes(set_offset, sink, "offset " + std::to_string(latest));
-    } else {
-      sendBytes(set_offset, sink, "{\"offset\":" + std::to_string(latest) + "}");
-    }
+    sendOffset(state, "bad_offset", set_offset, sink, latest);
   });
 }
 
@@ -1186,7 +1241,8 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
   return guarded([&] {
     checkSize("SparkDsReadInfo", info->size, sizeof(SparkDsReadInfo));
     // Releases the schema, so Spark does not release it after the call.
-    std::string columns = join(importColumns(info->schema));
+    std::string fields = describeFields(info->schema);
+    info->schema->release(info->schema);
     Options state = deserialize(toBytes(info->reader_state, info->reader_state_length));
     maybeFail(state, "open");
     // Returns success without initializing the stream, which Spark must reject.
@@ -1195,9 +1251,9 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
       throw std::runtime_error("read got the kind " + std::to_string(info->kind) +
                                " for a reader of the kind " + get(state, "kind", ""));
     }
-    if (columns != get(state, "columns", "")) {
-      throw std::runtime_error("read got the schema to read (" + columns +
-                               "), but the reader returns (" + get(state, "columns", "") + ")");
+    if (fields != readerFields(state)) {
+      throw std::runtime_error("read got the schema to read (" + fields +
+                               "), but the reader returns (" + readerFields(state) + ")");
     }
     auto bounds = split(toBytes(info->partition, info->partition_length));
     if (bounds.size() != 2) throw std::runtime_error("invalid partition");
@@ -1216,18 +1272,6 @@ int readPartition(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
 }
 
 #ifndef READ_ONLY
-
-// The names and the formats of the fields of a schema, at every level, such as "id:l,ts:tsu:UTC".
-std::string describeFields(const ArrowSchema* schema) {
-  std::string description;
-  for (int64_t i = 0; i < schema->n_children; i++) {
-    const ArrowSchema* child = schema->children[i];
-    if (i > 0) description += ",";
-    description += std::string(child->name ? child->name : "") + ":" + child->format;
-    if (child->n_children > 0) description += "(" + describeFields(child) + ")";
-  }
-  return description;
-}
 
 int createWriter(void* handle, struct ArrowSchema* schema, const SparkDsWriteInfo* info,
                  SparkDsSink set_state, void* sink, void** out) {
@@ -1330,12 +1374,14 @@ void closeWriter(void* handle) {
   });
 }
 
-// Whether Spark uses a data writer that it closed, which the header forbids.
+// Whether Spark uses a data writer that it closed, which the header forbids. Its callers call it
+// before guarded, since the handle must not be used then, so it throws no exception: a use after
+// the directory of the write was removed is not recorded.
 bool usedAfterClose(void* handle) {
   std::lock_guard<std::mutex> guard(closed_data_writers_lock);
   auto closed = closed_data_writers.find(handle);
   if (closed == closed_data_writers.end()) return false;
-  writeFile(closed->second + "/_DATA_WRITER_USED_AFTER_CLOSE", "");
+  guarded([&] { writeFile(closed->second + "/_DATA_WRITER_USED_AFTER_CLOSE", ""); });
   return true;
 }
 
