@@ -731,7 +731,7 @@ class PipelinedChannelShuffleSuite extends SparkFunSuite {
     }
   }
 
-  test("cached producer input survives eviction between pipelined actions") {
+  test("pipelined actions recompute an evicted producer-input cache") {
     withPipelinedSparkContext(cores = 4) { sc =>
       val input = sc.parallelize(0 until 1000, 2).map(i => (i, i)).cache()
       assert(input.count() === 1000)

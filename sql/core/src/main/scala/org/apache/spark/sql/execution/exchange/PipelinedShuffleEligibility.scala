@@ -46,7 +46,10 @@ private[sql] object PipelinedShuffleEligibility extends Logging {
   // every query planned in the session.
   private val mismatchWarned = new AtomicBoolean(false)
 
-  /** Operators whose consumers cannot safely drain a bounded, single-reader channel. */
+  /**
+   * Operators that cannot safely consume a bounded, single-reader channel, including those
+   * that can persist a channel reader.
+   */
   def isUnsupportedConsumer(plan: SparkPlan): Boolean = plan match {
     case _: CoalesceExec | _: CartesianProductExec | _: DeserializeToObjectExec |
         _: CollectLimitExec | _: CollectTailExec | _: TakeOrderedAndProjectExec => true

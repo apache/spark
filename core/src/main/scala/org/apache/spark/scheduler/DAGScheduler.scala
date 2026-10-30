@@ -1521,7 +1521,7 @@ private[spark] class DAGScheduler(
 
   /** Reject persistence that could bypass a native pipelined shuffle reader. */
   private def checkPipelinedCacheSupported(finalRDD: RDD[_]): Unit = {
-    val persisted = new HashSet[RDD[_]]
+    val persisted = new ListBuffer[RDD[_]]
     traverseRDDGraph(finalRDD) { (rdd, enqueue) =>
       if (rdd.getStorageLevel != StorageLevel.NONE || rdd.isLocallyCheckpointed) {
         persisted += rdd

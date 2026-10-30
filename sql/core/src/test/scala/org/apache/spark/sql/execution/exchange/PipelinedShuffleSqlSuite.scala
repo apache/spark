@@ -22,13 +22,11 @@ import java.util.concurrent.{Callable, CountDownLatch, Executors, TimeUnit}
 import org.apache.spark.{PipelinedShuffleDependency, SparkEnv, SparkFunSuite}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.shuffle.local.pipelined.ChannelShuffleRendezvous
-import org.apache.spark.sql.{DataFrame, SparkSession}
-import org.apache.spark.sql.catalyst.expressions.AttributeReference
-import org.apache.spark.sql.catalyst.plans.logical.AttachDistributedSequence
-import org.apache.spark.sql.classic
+import org.apache.spark.sql.{Column, DataFrame, SparkSession}
+import org.apache.spark.sql.catalyst.plans.physical.SinglePartition
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.python.AttachDistributedSequenceExec
-import org.apache.spark.sql.types.LongType
+import org.apache.spark.sql.functions.{col, lit}
 import org.apache.spark.storage.{RDDBlockId, StorageLevel}
 
 /**
@@ -218,14 +216,8 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     }
   }
 
-  private def distributedSequence(
-      spark: SparkSession,
-      input: DataFrame,
-      cache: Boolean): DataFrame = {
-    classic.Dataset.ofRows(spark.asInstanceOf[classic.SparkSession],
-      AttachDistributedSequence(AttributeReference("index", LongType)(),
-        input.queryExecution.analyzed, cache))
-  }
+  private def distributedSequence(input: DataFrame, cache: Boolean): DataFrame =
+    input.select(Column.internalFn("distributed_sequence_id", lit(cache)).as("index"), col("*"))
 
   private def assertDistributedSequenceResult(df: DataFrame): Unit = {
     val rows = df.collect()
@@ -247,9 +239,10 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
             case Some(level) => spark.conf.set(cacheKey, "\"" + level + "\"")
             case None => spark.conf.unset(cacheKey)
           }
-          val indexed = distributedSequence(spark,
+          val indexed = distributedSequence(
             spark.range(0, 4000, 1, 2).repartition(4).toDF(), cache = true)
-          val df = if (upperShuffle) indexed.repartition(3) else indexed
+          // SinglePartition lets AQE inspect the cached operator below the upper exchange.
+          val df = if (upperShuffle) indexed.repartition(1) else indexed
           val plan = df.queryExecution.executedPlan
           val attach = collect(plan) { case a: AttachDistributedSequenceExec => a }
           assert(attach.size === 1)
@@ -257,8 +250,10 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
           assert(attach.head.child.outputPartitioning.numPartitions === 4)
           val exchanges = collect(plan) { case s: ShuffleExchangeExec => s }
           assert(exchanges.size === (if (upperShuffle) 2 else 1))
+          if (upperShuffle) {
+            assert(exchanges.exists(_.outputPartitioning == SinglePartition))
+          }
           // Check before execute() constructs the persisted RDD and zipWithIndex counting job.
-          // The upper-shuffle variant also covers AQE planning an intermediate query stage.
           assert(exchanges.forall(!_.pipelined), s"cache=$storage; plan:\n$plan")
           assertDistributedSequenceResult(df)
           assert(collect(df.queryExecution.executedPlan) {
@@ -271,7 +266,7 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     test(s"distributed sequence without caching retains pipelined shuffles with AQE=$aqe") {
       withPipelinedSession("pipelined-distributed-sequence-uncached", aqe,
           channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
-        val df = distributedSequence(spark,
+        val df = distributedSequence(
           spark.range(0, 4000, 1, 2).repartition(4).toDF(), cache = false)
         val plan = df.queryExecution.executedPlan
         val attach = collect(plan) { case a: AttachDistributedSequenceExec => a }
@@ -287,7 +282,7 @@ class PipelinedShuffleSqlSuite extends SparkFunSuite
     test(s"distributed sequence caches shuffle-free producers with AQE=$aqe") {
       withPipelinedSession("pipelined-distributed-sequence-producer", aqe,
           channelBatchSize = 8, channelQueueCapacity = 1) { spark =>
-        val df = distributedSequence(spark,
+        val df = distributedSequence(
           spark.range(0, 4000, 1, 2).toDF(), cache = true).repartition(4)
         val plan = df.queryExecution.executedPlan
         val attach = collect(plan) { case a: AttachDistributedSequenceExec => a }

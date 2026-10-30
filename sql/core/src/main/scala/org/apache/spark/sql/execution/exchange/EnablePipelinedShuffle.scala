@@ -49,10 +49,11 @@ import org.apache.spark.sql.execution.SparkPlan
  *   - reuse: a pipelined producer with more than one consumer (fan-out) is rejected, so if any
  *     exchange in the plan is reused the rule bails out.
  *   - an UNSUPPORTED CONSUMER reading a shuffle (see [[readsShuffleThroughUnsupportedConsumer]]):
- *     an operator that would drain a shuffle in a way the channel transport cannot serve, or that
- *     builds its own hidden regular shuffle. If such an operator sits above any shuffle the rule
- *     leaves the WHOLE plan regular (leaving only that one exchange regular would put a pipelined
- *     exchange below a regular boundary, which the scheduler rejects -- so it is all-or-nothing).
+ *     an operator that drains a shuffle in a way the channel transport cannot serve, builds its
+ *     own hidden regular shuffle, or can persist a channel reader. If such an operator sits above
+ *     any shuffle the rule leaves the WHOLE plan regular (leaving only that exchange regular would
+ *     put a pipelined exchange below a regular boundary, which the scheduler rejects -- so it is
+ *     all-or-nothing).
  *     The query runs correctly, just not pipelined. The unsupported consumers are:
  *       - `CoalesceExec` (user `.coalesce(n)`): its `CoalescedRDD` makes ONE reduce task drain
  *         SEVERAL reduce partitions sequentially. The single-threaded writer parks on a full
@@ -108,9 +109,9 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
       return plan
     }
 
-    // An operator that would read a shuffle in a way the channel transport cannot serve, or that
-    // builds its own hidden regular shuffle, forces the whole plan regular (see class doc). Like
-    // the reuse fallback this is a normal, expected outcome, so log at DEBUG rather than WARN.
+    // An operator that drains a shuffle in a way the channel transport cannot serve, builds its
+    // own hidden regular shuffle, or can persist a channel reader forces the whole plan regular
+    // (see class doc). Like the reuse fallback this is an expected outcome, so log at DEBUG.
     if (readsShuffleThroughUnsupportedConsumer(plan)) {
       logDebug("EnablePipelinedShuffle: a shuffle is read through an operator the channel " +
         "transport cannot serve (coalesce / cartesian product / a limit operator that builds a " +
@@ -135,22 +136,15 @@ object EnablePipelinedShuffle extends Rule[SparkPlan] {
    * A shuffle above an unsupported operator with shuffle-free input does not disqualify the plan.
    */
   private[exchange] def readsShuffleThroughUnsupportedConsumer(plan: SparkPlan): Boolean = {
-    var foundUnsupported = false
-    // Carry shuffle reachability up once to avoid rescanning nested consumers' subtrees.
-    def containsShuffle(p: SparkPlan): Boolean = {
-      var childHasShuffle = false
-      val children = p.children.iterator
-      while (children.hasNext && !foundUnsupported) {
-        if (containsShuffle(children.next())) {
-          childHasShuffle = true
-        }
+    def visit(p: SparkPlan, unsupportedAncestor: Boolean): Boolean = {
+      if (unsupportedAncestor && p.isInstanceOf[ShuffleExchangeExec]) {
+        true
+      } else {
+        val unsupported = unsupportedAncestor ||
+          PipelinedShuffleEligibility.isUnsupportedConsumer(p)
+        p.children.exists(visit(_, unsupported))
       }
-      if (childHasShuffle && PipelinedShuffleEligibility.isUnsupportedConsumer(p)) {
-        foundUnsupported = true
-      }
-      childHasShuffle || p.isInstanceOf[ShuffleExchangeExec]
     }
-    containsShuffle(plan)
-    foundUnsupported
+    visit(plan, unsupportedAncestor = false)
   }
 }

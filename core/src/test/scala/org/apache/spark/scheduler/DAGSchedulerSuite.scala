@@ -9574,7 +9574,6 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     conf.set(config.PIPELINED_GROUP_SLOT_CHECK_ENABLED, false)
     val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
     val consumer = new MyRDD(sc, 2, List(dependency)).persist(StorageLevel.MEMORY_AND_DISK)
-    cacheLocations(consumer.id -> 0) = Seq(makeBlockManagerId("hostA"))
 
     assertPersistedPipelinedConsumerRejected(consumer, consumer, Seq(dependency.shuffleId))
   }
@@ -9598,6 +9597,26 @@ class DAGSchedulerSuite extends SparkFunSuite with TempLocalSparkContext with Ti
     assertPersistedPipelinedConsumerRejected(consumer, consumer, Seq(dependency.shuffleId))
     assert(input.getStorageLevel === StorageLevel.MEMORY_ONLY)
     assert(producer.getStorageLevel === StorageLevel.MEMORY_ONLY)
+  }
+
+  for ((consumerHash, descendantHash) <- Seq(0 -> 1, 1 -> 0)) {
+    test(s"pipelined cache preflight: name the first persisted offender in traversal order " +
+        s"(hashes=$consumerHash,$descendantHash)") {
+      val dependency = new PipelinedShuffleDependency(new MyRDD(sc, 2, Nil), new HashPartitioner(2))
+      // Exercise both hash orders without depending on object identity hashes.
+      val consumer = new MyRDD(sc, 2, List(dependency)) {
+        override def equals(other: Any): Boolean = super.equals(other)
+        override def hashCode(): Int = consumerHash
+      }.cache()
+      val descendant = new MyRDD(sc, 2, List(new OneToOneDependency(consumer))) {
+        override def equals(other: Any): Boolean = super.equals(other)
+        override def hashCode(): Int = descendantHash
+      }.cache()
+
+      assertPersistedPipelinedConsumerRejected(descendant, descendant, Seq(dependency.shuffleId))
+      descendant.unpersist(blocking = true)
+      assertPersistedPipelinedConsumerRejected(descendant, consumer, Seq(dependency.shuffleId))
+    }
   }
 
   test("pipelined cache preflight: reject a persisted stage that consumes and produces shuffles") {
