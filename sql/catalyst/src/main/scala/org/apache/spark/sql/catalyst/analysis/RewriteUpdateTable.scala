@@ -268,7 +268,8 @@ object RewriteUpdateTable extends RewriteRowLevelCommand {
    * Returns the output of the write relation, which is the layout of the data rows the connector
    * receives. If the operation opts into column updates, this is the connector's
    * `requiredDataAttributes()`. An empty declaration yields the full relation output, as does any
-   * other operation. Either way, the declaration must cover every updated column.
+   * operation without the mix-in. A mixed-in operation's declaration must cover every updated
+   * column, even an empty one.
    */
   private def resolveWriteAttrs(
       relation: DataSourceV2Relation,

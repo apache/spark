@@ -318,7 +318,7 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     checkDeleteFallsBackToFullWidthRows(Row(2, 200, "hr"))
   }
 
-  // deletes the row with pk = 1 from a table with columns (pk, salary, dep)
+  // deletes the rows with pk < 2 from a table with columns (pk, salary, dep)
   protected def checkDeleteFallsBackToFullWidthRows(remainingRows: Row*): Unit = {
     sql(s"DELETE FROM $tableNameAsString WHERE pk < 2")
 

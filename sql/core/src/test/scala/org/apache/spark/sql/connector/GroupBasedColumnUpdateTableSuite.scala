@@ -300,9 +300,21 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
     }
   }
 
-  test("column-update ReplaceData: UPDATE without column updates, DELETE and MERGE read every " +
-    "column") {
-    val fullScanSchema = "pk INT, salary INT, bonus INT, dep STRING, _partition STRING, index INT"
+  private val fullScanSchema =
+    "pk INT, salary INT, bonus INT, dep STRING, _partition STRING, index INT"
+
+  test("column-update ReplaceData: an UPDATE without the mix-in reads every column") {
+    createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
+      """{ "pk": 1, "salary": 100, "bonus": 10, "dep": "hr" }
+        |""".stripMargin,
+      fullWidthTableProps)
+
+    executeAndCheckScan(s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1", fullScanSchema)
+
+    checkAnswer(sql(s"SELECT * FROM $tableNameAsString"), Row(1, -1, 10, "hr") :: Nil)
+  }
+
+  test("column-update ReplaceData: DELETE and MERGE read every column") {
     Seq(fullWidthTableProps, extraTableProps).foreach { props =>
       withTable(tableNameAsString) {
         createAndInitTable("pk INT NOT NULL, salary INT, bonus INT, dep STRING",
@@ -311,10 +323,6 @@ class GroupBasedColumnUpdateTableSuite extends UpdateTableSuiteBase
             |""".stripMargin,
           props)
 
-        if (props == fullWidthTableProps) {
-          executeAndCheckScan(
-            s"UPDATE $tableNameAsString SET salary = -1 WHERE pk = 1", fullScanSchema)
-        }
         executeAndCheckScan(s"DELETE FROM $tableNameAsString WHERE pk > 1", fullScanSchema)
         withTempView("source") {
           import testImplicits._
