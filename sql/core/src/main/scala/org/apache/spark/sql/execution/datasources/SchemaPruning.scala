@@ -23,7 +23,7 @@ import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LogicalPla
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
 import org.apache.spark.sql.execution.datasources.orc.OrcFileFormat
-import org.apache.spark.sql.execution.datasources.parquet.ParquetFileFormat
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFileFormat, ParquetReadSupport}
 import org.apache.spark.sql.types.{ArrayType, DataType, MapType, StructType}
 import org.apache.spark.sql.util.SchemaUtils._
 
@@ -67,8 +67,17 @@ object SchemaPruning extends Rule[LogicalPlan] {
     val normalizedProjects = normalizeAttributeRefNames(attrNameMap, projects)
       .asInstanceOf[Seq[NamedExpression]]
     val normalizedFilters = normalizeAttributeRefNames(attrNameMap, filters)
-    val requestedRootFields = identifyRootFields(normalizedProjects, normalizedFilters,
-      pruneDynamicSelectors = !hadoopFsRelation.fileFormat.isInstanceOf[OrcFileFormat])
+    val pruneDynamicSelectors = hadoopFsRelation.fileFormat match {
+      case _: OrcFileFormat => false
+      case _: ParquetFileFormat
+          if (projects.iterator ++ filters.iterator).exists(hasDynamicLookup) =>
+        val hadoopConf = hadoopFsRelation.sparkSession.sessionState
+          .newHadoopConfWithOptions(hadoopFsRelation.options)
+        !ParquetReadSupport.returnNullStructIfAllFieldsMissing(hadoopConf)
+      case _ => true
+    }
+    val requestedRootFields =
+      identifyRootFields(normalizedProjects, normalizedFilters, pruneDynamicSelectors)
 
     // If requestedRootFields includes a nested field, continue. Otherwise,
     // return op

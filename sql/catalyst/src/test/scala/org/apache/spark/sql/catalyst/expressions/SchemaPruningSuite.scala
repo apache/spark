@@ -218,6 +218,55 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     }
   }
 
+  test("a map lookup null check preserves only the keys it compares") {
+    val keyType = StructType.fromDDL("a int, b int")
+    val valueType = StructType.fromDDL("payload string, inner map<struct<id:int,blob:string>,int>")
+    val mapType = MapType(keyType, valueType)
+    val inputType = StructType(Seq(StructField("m", mapType)))
+    val input = AttributeReference("s", inputType)()
+    val map = GetStructField(input, 0)
+    val lookup = AttributeReference("k", keyType)()
+    val firstValue = GetArrayItem(MapValues(map), Literal(0))
+    val inner = GetStructField(firstValue, 1)
+    val firstInnerKey = GetArrayItem(MapKeys(inner), Literal(0))
+    val id = Alias(GetStructField(firstInnerKey, 0), "id")()
+    val source = StructType(Seq(StructField("s", inputType)))
+
+    for (outerLookup <- Seq(GetMapValue(map, lookup), ElementAt(map, lookup))) {
+      val outerRoots = SchemaPruning.identifyRootFields(Seq(id), Seq(IsNotNull(outerLookup)))
+      val narrow = StructType.fromDDL(
+        "m map<struct<a:int,b:int>,struct<inner:map<struct<id:int>,int>>>")
+      assert(SchemaPruning.pruneSchema(source, outerRoots)("s").dataType === narrow)
+
+      val innerKey = AttributeReference("ik", inner.dataType.asInstanceOf[MapType].keyType)()
+      val innerLookup = GetMapValue(GetStructField(outerLookup, 1), innerKey)
+      val bothRoots = SchemaPruning.identifyRootFields(Seq(id), Seq(IsNull(innerLookup)))
+      val completeKeys = StructType.fromDDL(
+        "m map<struct<a:int,b:int>,struct<inner:map<struct<id:int,blob:string>,int>>>")
+      assert(SchemaPruning.pruneSchema(source, bothRoots)("s").dataType === completeKeys)
+    }
+  }
+
+  test("each lookup in a chain keeps its complete array-of-struct key") {
+    val keyType = ArrayType(StructType.fromDDL("a int, b int"))
+    val maps = MapType(keyType, MapType(keyType, IntegerType))
+    val inputType = StructType(Seq(StructField("maps", maps)))
+    val input = AttributeReference("s", inputType)()
+    val lookup = AttributeReference("k", keyType)()
+    val outer = GetStructField(input, 0)
+    val inner = GetArrayItem(MapValues(outer), Literal(0))
+    val predicate = IsNull(ElementAt(GetMapValue(outer, lookup), lookup))
+    val source = StructType(Seq(StructField("s", inputType)))
+
+    // In either projection one key is complete and the other is missing b.
+    for (map <- Seq(outer, inner)) {
+      val firstKey = GetArrayItem(MapKeys(map), Literal(0))
+      val field = GetStructField(GetArrayItem(firstKey, Literal(0)), 0)
+      val roots = SchemaPruning.identifyRootFields(Seq(Alias(field, "a")()), Seq(predicate))
+      assert(SchemaPruning.pruneSchema(source, roots) === source)
+    }
+  }
+
   test("collect a nested dynamic selector once when an array filter needs the whole element") {
     val elementType = StructType.fromDDL("p int, q int")
     val outerType = StructType.fromDDL("unused int, nested array<struct<p:int,q:int>>")

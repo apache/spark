@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.plans.logical.SerializeFromObject
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.StructType
+import org.apache.spark.sql.types.{MetadataBuilder, StructType}
 
 class DatasetOptimizationSuite extends SharedSparkSession {
   import testImplicits._
@@ -137,6 +137,22 @@ class DatasetOptimizationSuite extends SharedSparkSession {
       ((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")), "k")
     }
     checkAnswer(ds.selectExpr("_1._1[_2]._2", "_1._2._1"), Row("map-b", "other-a"))
+  }
+
+  test("dynamic array lookups use serializer field names under case-insensitive analysis") {
+    withSQLConf(SQLConf.CASE_SENSITIVE.key -> "false") {
+      val input = Seq((Seq(("unused", "first", "second")), 0)).toDF("Items", "Idx")
+      val ds = input.map(row => row)(ExpressionEncoder(input.schema))
+      val metadata = new MetadataBuilder().putString("source", "items").build()
+      val query = ds.select(
+        expr("items[idx]._2").as("First", metadata),
+        expr("element_at(ITEMS, Idx + 1)._3").as("Second"),
+        $"iDx")
+      checkAnswer(query, Row("first", "second", 0))
+      val output = query.queryExecution.optimizedPlan.output
+      assert(output.map(_.name) == Seq("First", "Second", "iDx"))
+      assert(output.head.metadata == metadata)
+    }
   }
 
   test("Pruned nested serializers: map of complex key") {

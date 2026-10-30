@@ -101,8 +101,7 @@ object SchemaPruning extends SQLConfHelper {
       filters: Seq[Expression],
       pruneDynamicSelectors: Boolean = true): Seq[RootField] = {
     val expressions = projects ++ filters
-    // ORC can match struct fields by position. Keep a dynamically indexed collection's full
-    // element type so that dropping a preceding sibling does not shift the requested field.
+    // Some readers need the full input to preserve collection shape or field positions.
     val collectionInputs = if (pruneDynamicSelectors) Nil else expressions.flatMap(dynamicInputs)
     val requestedFields = (expressions ++ collectionInputs).flatMap(getRootFields)
 
@@ -132,26 +131,14 @@ object SchemaPruning extends SQLConfHelper {
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
           DataTypeUtils.sameType(merged, optFieldType) &&
-            (!opt.requiresMapKeys || retainsMapKeys(opt.field.dataType, root.field.dataType))
+            opt.mapKeys.forall(_.retainedBy(rootFieldType))
         }
       }
     } ++ rootFields
   }
 
-  // The projected type is a subset of the optional type. Map values can be narrower, but a
-  // lookup still compares the complete stored key, even when its result is only tested for null.
-  private def retainsMapKeys(original: DataType, projected: DataType): Boolean =
-    (original, projected) match {
-      case (originalStruct: StructType, projectedStruct: StructType) =>
-        projectedStruct.forall { field =>
-          retainsMapKeys(originalStruct(field.name).dataType, field.dataType)
-        }
-      case (ArrayType(elementType, _), ArrayType(projectedElement, _)) =>
-        retainsMapKeys(elementType, projectedElement)
-      case (MapType(keyType, valueType, _), MapType(projectedKey, projectedValue, _)) =>
-        DataTypeUtils.sameType(keyType, projectedKey) && retainsMapKeys(valueType, projectedValue)
-      case _ => true
-    }
+  private[sql] def hasDynamicLookup(expr: Expression): Boolean =
+    expr.exists(DynamicLookup.unapply(_).isDefined)
 
   private def dynamicInputs(expr: Expression): Seq[Expression] = {
     def childInputs = expr.children.flatMap(dynamicInputs)
@@ -212,20 +199,31 @@ object SchemaPruning extends SQLConfHelper {
   }
 
   private def getRootFieldsForNullCheck(expr: Expression, field: StructField): Seq[RootField] = {
-    // A map lookup compares the entire stored key. A projection of one field from map_keys
-    // cannot satisfy the lookup, even when we only test its result for null. Follow the
-    // collection input as SelectedField does. Selector and lambda reads are collected separately.
+    // A null check compares the complete key of each map it looks up. Follow only the
+    // collection input, as SelectedField does. Selector and lambda reads are collected separately.
     @scala.annotation.tailrec
-    def comparesStructKey(current: Expression): Boolean = current match {
-      case GetMapValue(_, key) if key.dataType.existsRecursively(_.isInstanceOf[StructType]) =>
-        true
-      case ElementAt(_, key, _, _) if key.dataType.existsRecursively(_.isInstanceOf[StructType]) =>
-        true
-      case _ if current.children.nonEmpty => comparesStructKey(current.children.head)
-      case _ => false
-    }
+    def comparedKeys(current: Expression, keys: List[MapKeyRequirement]): List[MapKeyRequirement] =
+      current match {
+        case GetMapValue(input, _) => comparedKeys(input, mapKeyRequirement(input).toList ::: keys)
+        case ElementAt(input, _, _, _) =>
+          comparedKeys(input, mapKeyRequirement(input).toList ::: keys)
+        case _ if current.children.nonEmpty => comparedKeys(current.children.head, keys)
+        case _ => keys
+      }
     RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true,
-      requiresMapKeys = comparesStructKey(expr)) +: getAdditionalRootFields(expr)
+      mapKeys = comparedKeys(expr, Nil)) +: getAdditionalRootFields(expr)
+  }
+
+  private def mapKeyRequirement(input: Expression): Option[MapKeyRequirement] = {
+    input.dataType match {
+      case map: MapType if map.keyType.existsRecursively(_.isInstanceOf[StructType]) =>
+        val emptyKey = map.keyType.transformRecursively { case _: StructType => StructType(Nil) }
+        for {
+          full <- SelectedField.withDataType(input, map)
+          withoutKey <- SelectedField.withDataType(input, map.copy(keyType = emptyKey))
+        } yield MapKeyRequirement(StructType(Seq(full)), StructType(Seq(withoutKey)))
+      case _ => None
+    }
   }
 
   private def getArrayHigherOrderFunctionRootFields(
@@ -397,8 +395,16 @@ object SchemaPruning extends SQLConfHelper {
    * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it
    * was derived from an attribute or had a proper child. `prunedIfAnyChildAccessed` means
    * whether this root field can be pruned if any child field is used in the query.
-   * `requiresMapKeys` additionally requires that the child's projection keep complete map keys.
+   * `mapKeys` records the stored keys a lookup must compare before testing its result for null.
    */
   case class RootField(field: StructField, derivedFromAtt: Boolean,
-    prunedIfAnyChildAccessed: Boolean = false, requiresMapKeys: Boolean = false)
+    prunedIfAnyChildAccessed: Boolean = false, mapKeys: Seq[MapKeyRequirement] = Nil)
+
+  // These schemas differ only at the key of one lookup. Merging a candidate (already known to
+  // be a subset of the optional field) into withoutKey restores full exactly when the candidate
+  // contains that key. Other maps in the value can retain any subset of their fields.
+  case class MapKeyRequirement(full: StructType, withoutKey: StructType) {
+    def retainedBy(projected: StructType): Boolean =
+      DataTypeUtils.sameType(withoutKey.merge(projected), full)
+  }
 }

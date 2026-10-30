@@ -222,8 +222,9 @@ private[parquet] class ParquetRowConverter(
     }
 
     // (SPARK-38094) parquet field ids, if exist, should be prioritized for matching
+    val useFieldId = schemaConverter.useFieldId
     val catalystFieldIdxByFieldId =
-      if (SQLConf.get.parquetFieldIdReadEnabled && ParquetUtils.hasFieldIds(catalystType)) {
+      if (useFieldId && ParquetUtils.hasFieldIds(catalystType)) {
         catalystType.fields
           .zipWithIndex
           .filter { case (f, _) => ParquetUtils.hasFieldId(f) }
@@ -254,8 +255,10 @@ private[parquet] class ParquetRowConverter(
         // field has id, try to match by id first before falling back to match by name
         catalystFieldIdxByFieldId.get(fieldId.intValue())
       }.orElse {
-        // field doesn't have id, just match by name
-        catalystFieldIdxByName.get(parquetField.getName)
+        // A field read only for struct nullness can share a name with a missing field ID.
+        catalystFieldIdxByName.get(parquetField.getName).filterNot { index =>
+          useFieldId && ParquetUtils.hasFieldId(catalystType(index))
+        }
       }.map { catalystFieldIndex =>
         val catalystField = catalystType(catalystFieldIndex)
         // Create a RowUpdater instance for converting Parquet objects to Catalyst rows.
@@ -263,10 +266,9 @@ private[parquet] class ParquetRowConverter(
         // Converted field value should be set to the `fieldIndex`-th cell of `currentRow`
         newConverter(parquetField, catalystField.dataType, rowUpdater)
       }.getOrElse {
-        // This should only happen if we are reading an arbitrary field from a struct for its levels
-        // that is not otherwise requested.
-        val catalystType = SparkShreddingUtils.parquetTypeToSparkType(parquetField)
-        newConverter(parquetField, catalystType, NoopUpdater)
+        // Only the enclosing struct's levels matter. Its clipped child may no longer carry
+        // enough information to infer its logical type (for example, a two-level LIST).
+        ParquetRowConverter.discardConverter(parquetField)
       }
     }.toArray
   }
@@ -1113,6 +1115,21 @@ private[parquet] class ParquetRowConverter(
 }
 
 private[parquet] object ParquetRowConverter {
+  private def discardConverter(field: Type): Converter with HasParentContainerUpdater = {
+    if (field.isPrimitive) {
+      new ParquetPrimitiveConverter(NoopUpdater) {
+        override def addBinary(value: Binary): Unit = ()
+      }
+    } else {
+      new ParquetGroupConverter(NoopUpdater) {
+        private val children = field.asGroupType().getFields.asScala.map(discardConverter).toArray
+        override def getConverter(index: Int): Converter = children(index)
+        override def start(): Unit = ()
+        override def end(): Unit = ()
+      }
+    }
+  }
+
   def binaryToUnscaledLong(binary: Binary): Long = {
     // The underlying `ByteBuffer` implementation is guaranteed to be `HeapByteBuffer`, so here
     // we are using `Binary.toByteBuffer.array()` to steal the underlying byte array without

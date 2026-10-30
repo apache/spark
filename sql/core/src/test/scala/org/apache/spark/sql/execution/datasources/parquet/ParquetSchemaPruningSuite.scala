@@ -22,7 +22,7 @@ import org.apache.parquet.example.data.simple.SimpleGroupFactory
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.schema.MessageTypeParser
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkConf}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -47,7 +47,7 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
       val fileSchema = MessageTypeParser.parseMessageType(
         """message m {
           |  optional group legacy (LIST) {
-          |    repeated group entries { optional int32 sibling; optional int32 wanted = 17; }
+          |    repeated group entries { optional int32 sibling = 18; optional int32 wanted = 17; }
           |  }
           |  optional group standard (LIST) {
           |    repeated group entries { optional int32 wanted = 17; }
@@ -69,7 +69,9 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
         writer.close()
       }
       val fieldId = new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 17).build()
-      val element = new StructType().add("sibling", IntegerType)
+      val missingId = new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 19).build()
+      val element = new StructType()
+        .add("sibling", IntegerType, nullable = true, metadata = missingId)
         .add("renamed", IntegerType, nullable = true, metadata = fieldId)
       val readSchema = new StructType().add("legacy", ArrayType(element))
         .add("standard", ArrayType(IntegerType)).add("idx", IntegerType)
@@ -78,11 +80,47 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
           vectorizedReaderEnabledKey -> vectorized,
           SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true",
           SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true") {
-          val query = spark.read.schema(readSchema).parquet(file.getCanonicalPath)
-            .selectExpr("legacy[idx].renamed", "standard[idx]")
+          val data = spark.read.schema(readSchema).parquet(file.getCanonicalPath)
+          val query = data.selectExpr("legacy[idx].renamed", "standard[idx]")
           checkScanSchemata(query,
             "struct<legacy:array<struct<renamed:int>>,standard:array<int>,idx:int>")
           checkAnswer(query, Row(22, 33))
+
+          // Only the missing ID is requested. The first physical field is read for levels
+          // and shares its name, but has a different ID.
+          checkAnswer(data.selectExpr("legacy[idx].sibling"), Row(null))
+        }
+      }
+    }
+  }
+
+  test("a two-level Parquet LIST preserves enclosing struct nullness after pruning") {
+    withTempPath { file =>
+      val fileSchema = MessageTypeParser.parseMessageType(
+        """message m {
+          |  optional group record {
+          |    optional group items (LIST) {
+          |      repeated group entries { optional int32 x; optional int32 y; }
+          |    }
+          |  }
+          |}""".stripMargin)
+      val writer = ExampleParquetWriter.builder(new Path(file.toURI))
+        .withConf(spark.sessionState.newHadoopConf()).withType(fileSchema).build()
+      val factory = new SimpleGroupFactory(fileSchema)
+      try {
+        val row = factory.newGroup()
+        row.addGroup("record").addGroup("items").addGroup("entries").append("x", 1).append("y", 2)
+        writer.write(row)
+        writer.write(factory.newGroup())
+      } finally {
+        writer.close()
+      }
+      Seq("true", "false").foreach { vectorized =>
+        withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+          // The only physical child available for the record's levels is the clipped LIST.
+          val data = spark.read.schema("record STRUCT<missing: INT>").parquet(file.getCanonicalPath)
+          checkAnswer(data.selectExpr("record.missing", "record IS NULL"),
+            Seq(Row(null, false), Row(null, true)))
         }
       }
     }
@@ -126,6 +164,26 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
     }
   }
 
+  test("dynamic array selection preserves bounds in legacy missing-field mode") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("SELECT array(named_struct('present', 1)) AS items, 1 AS idx").write.parquet(path)
+      val legacy = SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key
+      for (vectorized <- Seq("true", "false")) {
+        withSQLConf(legacy -> "true", SQLConf.ANSI_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> vectorized) {
+          val query = spark.read
+            .schema("items ARRAY<STRUCT<present: INT, missing: INT>>, idx INT")
+            .parquet(path).selectExpr("items[idx].missing")
+          checkError(
+            exception = intercept[SparkArrayIndexOutOfBoundsException](query.collect()),
+            condition = "INVALID_ARRAY_INDEX",
+            parameters = Map("indexValue" -> "1", "arraySize" -> "1"),
+            context = ExpectedContext(fragment = "items[idx]", start = 0, stop = 9))
+        }
+      }
+    }
+  }
 }
 
 @ExtendedSQLTest
@@ -160,6 +218,23 @@ class ParquetV2SchemaPruningSuite extends ParquetSchemaPruningSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("row reader uses the scan's field ID setting") {
+    withTempPath { dir =>
+      def fieldId(id: Long): Metadata =
+        new MetadataBuilder().putLong(ParquetUtils.FIELD_ID_METADATA_KEY, id).build()
+      val path = dir.getCanonicalPath
+      spark.range(1).select(col("id").as("x", fieldId(1))).write.parquet(path)
+      val schema = new StructType().add("x", LongType, nullable = true, metadata = fieldId(2))
+      val key = SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key
+      for (useIds <- Seq(true, false)) {
+        withSQLConf(vectorizedReaderEnabledKey -> "false", key -> (!useIds).toString) {
+          val data = spark.read.option(key, useIds).schema(schema).parquet(path)
+          checkAnswer(data, if (useIds) Row(null) else Row(0L))
+        }
+      }
+    }
+  }
 
   override def checkScanSchemata(df: DataFrame, expectedSchemaCatalogStrings: String*): Unit = {
     val fileSourceScanSchemata =
