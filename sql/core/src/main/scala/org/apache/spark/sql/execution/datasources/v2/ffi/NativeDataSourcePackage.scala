@@ -135,15 +135,16 @@ object NativeDataSourcePackage extends Logging {
   /**
    * Checks a package that a session adds with `spark.addArtifact`, in the given file, before the
    * session gets it: fails if the file is not a valid package, if Spark does not support its
-   * version of the interface, or if it has no library for the platform of the driver, which loads the library to
-   * plan a query. The package that a session added last takes precedence, and a session cannot
-   * remove an artifact, so Spark rejects such a package rather than ignore it, as it ignores the
-   * configured ones, which would keep the session on the package or library that it used before,
-   * or add a package that fails every query on its data sources. The library is not loaded, so a
-   * library that fails to load fails the queries that use it, and neither is it checked that the
-   * driver can run native data sources at all (Java 22 or later, and the C data interface of
-   * Arrow Java): there, every query fails. The file is not the artifact itself, so the result is
-   * not cached, and errors call it `path`.
+   * version of the interface, or if it has no library for the platform of the driver, which loads
+   * the library to plan a query. The package that a session added last takes precedence, and a
+   * session cannot remove an artifact. Ignoring such a package, as Spark ignores an unusable
+   * configured one, would silently keep the session on the package or library that it used
+   * before, and accepting a package without a library for this platform would fail every query
+   * on its data sources, so Spark rejects both. The library is not loaded, so a library that
+   * fails to load fails the queries that use it, and neither is it checked that the driver can
+   * run native data sources at all (Java 22 or later, and the C data interface of Arrow Java):
+   * there, every query fails. The file is not the artifact itself, so the result is not cached,
+   * and errors call it `path`.
    */
   def checkAdded(file: File, path: String): Unit = {
     val manifest = readManifest(file, path).fold(invalid => throw invalid.error, identity)
