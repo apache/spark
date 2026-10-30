@@ -141,10 +141,11 @@ private[spark] class TaskContextImpl(
   override def addTaskCompletionListener(listener: TaskCompletionListener): this.type = {
     val needToCallListener = synchronized {
       // If there is already a thread invoking listeners, the call to
-      // `invokeTaskCompletionListeners()` below will be a no-op. If that thread runs the completion
-      // listeners in `markTaskCompleted()`, or hands the invocation over to a thread waiting to do
-      // so, the new listener runs there. Otherwise it is not run until a listener is added while no
-      // thread is invoking listeners (see `invokeListeners()`).
+      // `invokeTaskCompletionListeners()` below will be a no-op. If that thread runs completion
+      // listeners (in `markTaskCompleted()`, or since it added one after completion), or hands the
+      // invocation over to a thread waiting to do so, the new listener runs there. Otherwise it is
+      // not run until a completion listener is added while no thread is invoking listeners (see
+      // `invokeListeners()`).
       //
       // If there is no such thread, the call to `invokeTaskCompletionListeners()` below will
       // execute all listeners, including the new listener.
@@ -253,7 +254,8 @@ private[spark] class TaskContextImpl(
     // when done. Failure listeners that another thread leaves to this invocation run before the
     // next completion listener (see `invokeListeners()`). A completion listener added after this
     // method has run the others runs on the thread adding it, unless another thread is invoking
-    // listeners at that moment: that thread does not run it (see `invokeListeners()`).
+    // listeners at that moment: that thread runs it only if it is running completion listeners
+    // (see `invokeListeners()`).
     //
     // The wait for the other thread has no time bound: if its listeners block, so does this task.
     // It logs a warning periodically, the first one with that thread's stack trace. The task waits
@@ -305,16 +307,20 @@ private[spark] class TaskContextImpl(
         try {
           invokeTaskCompletionListeners(error, mode)
         } catch {
-          // The failure to warn came first, so it is the one thrown.
+          // The failure to warn came after the pre-completion listeners' failures, but before
+          // those of the completion listeners.
           case e: Throwable if warningFailure.exists(_ ne e) => warningFailure.get.addSuppressed(e)
         }
         warningFailure.foreach(throw _)
       } catch {
+        // Merge the completion listeners' own failures, not the exception that wraps them, and
+        // any other non-fatal failure, e.g. of the `getMessage` of a listener's exception or of
+        // the warning, so that the pre-completion listeners' failures are reported first. A fatal
+        // error (e.g. an OutOfMemoryError) propagates, so that the executor still sees it.
         case e: TaskCompletionListenerException if preCompletionExceptions.nonEmpty =>
-          // Merge the completion listeners' own failures, not the exception that wraps them. Any
-          // other error comes from invokeListeners itself (e.g. an OutOfMemoryError) and is left
-          // to propagate, so that the executor still sees a fatal one.
           preCompletionExceptions ++= e.getSuppressed.toSeq
+        case NonFatal(e) if preCompletionExceptions.nonEmpty =>
+          preCompletionExceptions += e
       }
     } finally {
       if (registered) synchronized {
@@ -352,10 +358,10 @@ private[spark] class TaskContextImpl(
         try {
           markTaskFailed(e)
         } catch {
-          // Failures of the failure listeners. Any other error comes from the invocation itself
-          // (e.g. an OutOfMemoryError) and propagates, so that the executor still sees a fatal
-          // one.
-          case t: TaskCompletionListenerException => e.addSuppressed(t)
+          // Failures of the failure listeners, or e.g. of the `getMessage` of one of their
+          // exceptions, which is listener code too. A fatal error (e.g. an OutOfMemoryError)
+          // propagates, so that the executor still sees it.
+          case NonFatal(t) => e.addSuppressed(t)
         }
         listenerExceptions += e
         // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
@@ -419,13 +425,16 @@ private[spark] class TaskContextImpl(
         // Outside the lock: walking the stack of another thread stops it at a safepoint, and
         // logging may block, which would otherwise hold up every thread using this TaskContext.
         // The holder does not change during the wait, since it hands the invocation to this
-        // thread, so its stack trace is attached to the first warning only.
+        // thread, so its stack trace is taken for the first warning only, even if that fails.
         holder match {
           case Some(holder) =>
+            val withStackTrace = !warned
+            warned = true
             try {
-              warnStillWaiting(holder, startNs, withStackTrace = !warned)
-              warned = true
+              warnStillWaiting(holder, startNs, withStackTrace)
             } catch {
+              // E.g. from an appender that blocks interruptibly: an interrupt like any other.
+              case _: InterruptedException => interrupted = true
               case t: Throwable => failure = failure.orElse(Some(t))
             }
           case None =>
@@ -532,18 +541,21 @@ private[spark] class TaskContextImpl(
    * Invokes and removes the listeners in `listeners`, in reverse order of registration.
    *
    * Other threads cannot invoke listeners while this thread does, so they leave the listeners
-   * they add, or whose invocation they start, meanwhile. If this is the completion listener
-   * invocation of `markTaskCompleted()`, the failure listeners left to it (the task has failed)
-   * run before the next completion listener, e.g. so that a failure listener that aborts a state
-   * store update runs before the completion listener that releases the state store. Any other
-   * invocation does not run the listeners left to it, since its thread may be one on which they
-   * must not run, e.g. a kill thread, or the task thread once `Task.run` has unset its
-   * `TaskContext` and the executor has released the task's block locks and memory. Unless `mode`
-   * is `Nested`, this thread releases the invocation when it is done, or hands it over to a thread
-   * waiting for it in `markTaskCompleted()`.
+   * they add, or whose invocation they start, meanwhile. Those in `listeners` run here like the
+   * others. If this is the completion listener invocation of `markTaskCompleted()`, the failure
+   * listeners left to it (the task has failed) run before the completion listeners that have
+   * not run yet, e.g. so that a failure listener that aborts a state store update runs before
+   * the completion listener that releases the state store, if that one has not run yet. This is
+   * the order of a failure listener invocation that a failing completion listener starts, and,
+   * likewise, the failures of these failure listeners are reported with those of the completion
+   * listeners. Any other invocation does not run the listeners of another kind left to it, since
+   * its thread may be one on which they must not run, e.g. a kill thread, or the task thread once
+   * `Task.run` has unset its `TaskContext` and the executor has released the task's block locks
+   * and memory. Unless `mode` is `Nested`, this thread releases the invocation when it is done, or
+   * hands it over to a thread waiting for it in `markTaskCompleted()`.
    *
-   * Exceptions of the failure listeners run before the next completion listener are reported to
-   * the caller of this method, together with those of `listeners`.
+   * Exceptions of the failure listeners left to this invocation are reported to the caller of
+   * this method, together with those of `listeners`.
    */
   private def invokeListeners[T](
       listeners: Stack[T],
@@ -626,9 +638,10 @@ private[spark] class TaskContextImpl(
           try {
             markTaskFailed(e, Nested)
           } catch {
-            // Failures of the failure listeners. Any other error comes from the nested invocation
-            // itself (e.g. an OutOfMemoryError) and propagates, through the release below.
-            case t: TaskCompletionListenerException => e.addSuppressed(t)
+            // Failures of the failure listeners, or e.g. of the `getMessage` of one of their
+            // exceptions, which is listener code too. A fatal error (e.g. an OutOfMemoryError)
+            // propagates, through the release below.
+            case NonFatal(t) => e.addSuppressed(t)
           }
           listenerExceptions += e
           // Best effort: a failure to log, e.g. from an appender that does not ignore exceptions,
@@ -647,9 +660,10 @@ private[spark] class TaskContextImpl(
         invokeTaskFailureListeners(cause, Nested)
       } catch {
         // Merge the listeners' own failures, which the nested invocation has logged, not the
-        // exception that wraps them. Any other error comes from that invocation itself (e.g. an
-        // OutOfMemoryError) and propagates, through the release below.
+        // exception that wraps them. A fatal error (e.g. an OutOfMemoryError) propagates, through
+        // the release below.
         case e: TaskCompletionListenerException => listenerExceptions ++= e.getSuppressed.toSeq
+        case NonFatal(t) => listenerExceptions += t
       }
     }
 

@@ -1214,7 +1214,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   private def joinThread(thread: DaemonThread): Unit = {
     thread.join(TimeUnit.MINUTES.toMillis(1))
     assert(!thread.isAlive, s"${thread.getName} is still running")
-    assert(thread.error == null, s"${thread.getName} failed: ${thread.error}")
+    Option(thread.error).foreach(e => fail(s"${thread.getName} failed", e))
   }
 
   /**
@@ -1245,9 +1245,12 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
   private class FailingAppender(trigger: String, failure: RuntimeException)
     extends AbstractAppender("failingAppender", null, null, false, Property.EMPTY_ARRAY) {
     val failures = new AtomicInteger()
+    // Of these, the failures of events that carry a throwable.
+    val failuresWithThrown = new AtomicInteger()
     override def append(event: LogEvent): Unit = {
       if (event.getMessage.getFormattedMessage.contains(trigger)) {
         failures.incrementAndGet()
+        if (event.getThrown != null) failuresWithThrown.incrementAndGet()
         throw failure
       }
     }
@@ -1255,6 +1258,16 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
 
   private def isCausedBy(error: Throwable, cause: Throwable): Boolean =
     Iterator.iterate(error)(_.getCause).takeWhile(_ != null).exists(_ eq cause)
+
+  /** An exception whose `getMessage`, which is listener code too, throws `failure`. */
+  private class MessageFailingException(failure: Throwable) extends Exception {
+    override def getMessage: String = throw failure
+  }
+
+  private def addFailureListenerThrowing(context: TaskContext)(failure: => Throwable): Unit =
+    context.addTaskFailureListener(new TaskFailureListener {
+      override def onTaskFailure(context: TaskContext, error: Throwable): Unit = throw failure
+    })
 
   /** Waits until `thread` waits in `markTaskCompleted()` for the listener invocation. */
   private def awaitHandoverWait(thread: Thread): Unit = {
@@ -1442,6 +1455,94 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
       Seq(("first", completion), ("failure", completion), ("second", completion)))
   }
 
+  test("SPARK-60222: an exception whose getMessage throws does not end the listener loops") {
+    val messageFailure = new IllegalStateException("no message")
+    val current = Thread.currentThread()
+    // The failure listener invocation that a failing pre-completion or completion listener
+    // starts throws the failure of `getMessage`, while building its exception.
+    Seq(true, false).foreach { preCompletion =>
+      val context = TaskContext.empty()
+      val invocations = new ConcurrentLinkedQueue[(String, Thread)]()
+      addFailureListenerThrowing(context)(new MessageFailingException(messageFailure))
+      context.addTaskCompletionListener(loggingListener(invocations, "next"))
+      val failing = new TaskCompletionListener {
+        override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("listener")
+      }
+      if (preCompletion) {
+        context.addTaskPreCompletionListener(failing)
+      } else {
+        context.addTaskCompletionListener(failing)
+      }
+      val error = intercept[TaskCompletionListenerException] {
+        context.markTaskCompleted(None)
+      }
+      assert(invocations.asScala.toSeq === Seq(("next", current)), s"preCompletion=$preCompletion")
+      assert(context.isCompleted())
+      val listenerFailure = error.getSuppressed.toSeq.head
+      assert(listenerFailure.getMessage === "listener")
+      assert(listenerFailure.getSuppressed.exists(_ eq messageFailure))
+    }
+
+    // Likewise for the failure listeners left to the completing thread.
+    val context = TaskContext.empty()
+    val invocations = new ConcurrentLinkedQueue[(String, Thread)]()
+    addFailureListenerThrowing(context)(new MessageFailingException(messageFailure))
+    context.addTaskCompletionListener(loggingListener(invocations, "second"))
+    context.addTaskCompletionListener[Unit] { _ =>
+      joinThread(startDaemonThread("failer") {
+        context.markTaskFailed(new Exception("failed elsewhere"))
+      })
+    }
+    val error = intercept[TaskCompletionListenerException] {
+      context.markTaskCompleted(None)
+    }
+    assert(invocations.asScala.toSeq === Seq(("second", current)))
+    assert(error.getSuppressed.toSeq === Seq(messageFailure))
+  }
+
+  test("SPARK-60222: an error that escapes the listener loop still releases the invocation") {
+    val context = TaskContext.empty()
+    context.markTaskCompleted(None)
+    val fatal = new LinkageError("no message")
+    addFailureListenerThrowing(context)(new MessageFailingException(fatal))
+    val error = intercept[LinkageError] {
+      // Runs right away on this thread and fails, and the failure listener invocation that this
+      // starts throws `fatal` while building its exception.
+      context.addTaskCompletionListener[Unit] { _ => throw new Exception("listener") }
+    }
+    assert(error eq fatal)
+    // Released: a listener added now runs right away on this thread.
+    val laterListenerThread = new AtomicReference[Thread]()
+    context.addTaskCompletionListener[Unit] { _ =>
+      laterListenerThread.set(Thread.currentThread())
+    }
+    assert(laterListenerThread.get eq Thread.currentThread())
+  }
+
+  test("SPARK-60222: a fatal error of a failure listener invocation is not hidden by the failure " +
+      "of the listener that started it") {
+    val fatal = new LinkageError("no message")
+    // Both for a failing completion listener and for a failing pre-completion listener.
+    Seq(true, false).foreach { preCompletion =>
+      val context = TaskContext.empty()
+      addFailureListenerThrowing(context)(new MessageFailingException(fatal))
+      val failing = new TaskCompletionListener {
+        override def onTaskCompletion(context: TaskContext): Unit = throw new Exception("listener")
+      }
+      if (preCompletion) {
+        context.addTaskPreCompletionListener(failing)
+      } else {
+        context.addTaskCompletionListener(failing)
+      }
+      // It propagates, so that the executor sees it, instead of being a suppressed exception of
+      // the listener's failure.
+      val error = intercept[LinkageError] {
+        context.markTaskCompleted(None)
+      }
+      assert(error eq fatal, s"preCompletion=$preCompletion")
+    }
+  }
+
   test("SPARK-60222: an interrupt does not stop the handover wait and is kept") {
     val context = TaskContext.empty()
     val listenerThreads = new ConcurrentLinkedQueue[(String, Thread)]()
@@ -1540,12 +1641,53 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     // the first failure.
     assert(listenerThreads.asScala.toSeq === Seq(("pending", completion)))
     assert(isCausedBy(completionError.get, logFailure))
+    // Only the first attempt to warn took the holder's stack trace, although it failed.
+    assert(appender.failuresWithThrown.get === 1)
     // And it has released the invocation: a listener added now runs right away on this thread.
     val laterListenerThread = new AtomicReference[Thread]()
     context.addTaskCompletionListener[Unit] { _ =>
       laterListenerThread.set(Thread.currentThread())
     }
     assert(laterListenerThread.get eq Thread.currentThread())
+  }
+
+  test("SPARK-60222: a failing handover warning is reported with the failures of the " +
+      "pre-completion listeners") {
+    val context = TaskContext.empty()
+    context.listenerHandoverWarnIntervalMs = 50
+    val preCompletionFailure = new Exception("pre-completion listener")
+    context.addTaskPreCompletionListener(new TaskCompletionListener {
+      override def onTaskCompletion(context: TaskContext): Unit = throw preCompletionFailure
+    })
+    val (release, holder) = holdListenerInvocation(context)()
+    val logFailure = new IllegalStateException("cannot log")
+    val appender = new FailingAppender("has been waiting", logFailure)
+    val completionError = new AtomicReference[Throwable]()
+    var completion: DaemonThread = null
+    try {
+      withLogAppender(appender, Seq(classOf[TaskContextImpl].getName), Some(Level.WARN)) {
+        completion = startDaemonThread("completion") {
+          try {
+            context.markTaskCompleted(None)
+          } catch {
+            case t: Throwable => completionError.set(t)
+          }
+        }
+        eventually(timeout(1.minute)) {
+          assert(!completion.isAlive || appender.failures.get >= 1)
+        }
+      }
+    } finally {
+      release.countDown()
+    }
+    joinThread(completion)
+    joinThread(holder)
+    val error = completionError.get
+    assert(error.isInstanceOf[TaskCompletionListenerException], error)
+    val reported = error.getSuppressed.toSeq
+    // The failure of the pre-completion listener, which came first, then the failure to warn.
+    assert(reported.head eq preCompletionFailure)
+    assert(reported.tail.exists(isCausedBy(_, logFailure)))
   }
 
   test("SPARK-60222: the handover wait does not warn about a holder that has handed over") {
@@ -1578,7 +1720,7 @@ class TaskContextSuite extends SparkFunSuite with BeforeAndAfter with LocalSpark
     assert(!logAppender.loggingEvents.exists(_.getLevel == Level.WARN))
   }
 
-  test("SPARK-60222: listeners added after completion are not run by another thread invoking " +
+  test("SPARK-60222: listeners added after completion are not run by a thread invoking other " +
       "listeners") {
     val context = TaskContext.empty()
     val error = new Exception("failed")

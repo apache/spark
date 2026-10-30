@@ -1404,9 +1404,14 @@ class StreamingShuffleSuite
 
     // Background thread calls markTaskFailed -> runs the failure listeners -> holds the listener
     // invocation while it blocks in the failure listener above.
+    @volatile var bgThreadError: Throwable = null
     val bgThread = new Thread(() => {
       TaskContext.setTaskContext(readerContext)
-      readerContext.markTaskFailed(error)
+      try {
+        readerContext.markTaskFailed(error)
+      } catch {
+        case t: Throwable => bgThreadError = t
+      }
     })
     bgThread.setDaemon(true)
     bgThread.start()
@@ -1445,6 +1450,7 @@ class StreamingShuffleSuite
 
     // The completion listener ran on the thread that called markTaskCompleted.
     assert(taskThreadError == null)
+    assert(bgThreadError == null)
     assert(completionListenerThread eq taskThread)
   }
 
