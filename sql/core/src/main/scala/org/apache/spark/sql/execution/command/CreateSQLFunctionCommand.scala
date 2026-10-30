@@ -356,7 +356,7 @@ case class CreateSQLFunctionCommand(
             case e: UnresolvedFunction
               if catalog.isTemporaryFunction(e.nameParts.asFunctionIdentifier) =>
               Seq(e.nameParts.asFunctionIdentifier.funcName)
-            // A routed nested SQL/JSON constructor is still a call a temp function may own.
+            // A routed JSON constructor is a call a temporary function may own.
             case j: UnresolvedJsonConstructor
               if j.routeThroughResolution &&
                 catalog.isTemporaryFunction(FunctionIdentifier(j.prettyName)) =>
@@ -432,7 +432,7 @@ case class CreateSQLFunctionCommand(
       expression.foreach {
         case s: SubqueryExpression => checkPlan(s.plan, path)
         case u: UnresolvedFunction => checkFunction(u, path)
-        // A routed nested SQL/JSON constructor is a call a SQL function may own, like a flat call.
+        // A routed JSON constructor is a call a SQL function may own.
         case j: UnresolvedJsonConstructor if j.routeThroughResolution =>
           checkFunction(j.toUnresolvedFunction, path)
         case _ =>

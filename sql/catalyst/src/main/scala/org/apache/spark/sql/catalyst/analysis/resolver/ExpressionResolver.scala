@@ -800,8 +800,8 @@ class ExpressionResolver(
    * but it is not allowed to have them.
    */
   private def validateStarsInsideExpression(expression: Expression): Unit = expression match {
-    // JSON constructor wrappers defer their own star handling: shadows/replacements expand direct
-    // stars as ordinary functions, while stock-owned direct wrappers reject them.
+    // A JSON constructor handles its own direct stars: a routine owner expands them, the built-in
+    // rejects them.
     case _: UnresolvedFunction | _: UnresolvedJsonConstructor | _: In =>
     case createNamedStruct: CreateNamedStruct if allowStarInCreateNamedStruct(createNamedStruct) =>
     case _ if containsStar(expression.children) =>

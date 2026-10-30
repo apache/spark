@@ -941,11 +941,10 @@ object FunctionRegistry {
     expression[StructsToCsv]("to_csv")
   )
 
-  // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes the
-  // eligible flat clause-free calls here so a same-named routine can shadow them. A clause-free
-  // call with a lexically nested constructor routes too, via `UnresolvedJsonConstructor` (so a
-  // routine can shadow it while the built-in still splices). Clause-bearing forms, and
-  // `json_object` forms with explicit FORMAT JSON, are finalized from the direct grammar path.
+  // Built-in forms of the SQL:2016 JSON constructor and path functions. `AstBuilder` routes
+  // clause-free calls here so a same-named routine can shadow them; a nested-constructor call
+  // routes as a `RoutedJsonConstructor`. Calls with a clause or explicit FORMAT JSON, and calls
+  // written directly as another constructor's value, always mean the built-in.
   private val routedSqlJsonFunctionEntries: Seq[FunctionRegistryEntry] = Seq(
     expressionBuilder("json_value", JsonValueExpressionBuilder),
     expressionBuilder("json_query", JsonQueryExpressionBuilder),

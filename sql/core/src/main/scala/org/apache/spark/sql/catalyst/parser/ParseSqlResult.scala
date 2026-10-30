@@ -352,7 +352,7 @@ object ParseSqlResult {
 
     def visitExpr(e: Expression): Unit = e.foreach {
       case f: UnresolvedFunction => addFunction(f.nameParts)
-      // A routed nested SQL/JSON constructor is a function call too (a routine may shadow it).
+      // A routed JSON constructor is a function call too (a routine may own it).
       case j: UnresolvedJsonConstructor if j.routeThroughResolution =>
         addFunction(Seq(j.prettyName))
       case n: NamedParameter => namedParams += n.name

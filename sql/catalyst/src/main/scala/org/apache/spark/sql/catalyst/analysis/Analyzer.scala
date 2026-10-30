@@ -2260,9 +2260,8 @@ class Analyzer(
               }
           }
         case j: UnresolvedJsonConstructor if containsStar(j.arguments) =>
-          // Same once-only routed SQL/JSON owner decision as `UnresolvedFunction`: the stock
-          // built-in (and any non-routable direct grammar form) rejects a direct star; a
-          // shadow/injected replacement receives the expanded arguments as an ordinary call.
+          // Decide the owner as for `UnresolvedFunction`: the built-in rejects a direct star, while
+          // a routine owning the call receives the expanded arguments.
           def rejectStar(): Nothing = throw QueryCompilationErrors.invalidStarUsageError(
             s"expression `${j.prettyName}`", extractStar(j.arguments))
           def routed: UnresolvedFunction =
@@ -2627,11 +2626,11 @@ class Analyzer(
               if functionResolution.hasLambdaAndResolvedArguments(arguments) =>
             resolveHigherOrderFunction(u)
 
-          // Decide a SQL/JSON constructor's owner in this same bottom-up pass, so an enclosing call
-          // and its alias see the result without an extra iteration per nesting level.
+          // Handle JSON constructors in this same bottom-up pass, so nesting them inside other
+          // calls does not cost extra analyzer iterations.
           case j: UnresolvedJsonConstructor
               if functionResolution.routesJsonConstructorToFunction(j) =>
-            // A shadow/replacement owns the name: resolve exactly like the flat call.
+            // A routine owns the name: resolve like the equivalent flat call.
             val u = j.toUnresolvedFunction
             if (functionResolution.hasLambdaAndResolvedArguments(u.arguments)) {
               resolveHigherOrderFunction(u)
@@ -2646,13 +2645,18 @@ class Analyzer(
             if (directStars.nonEmpty) {
               throw QueryCompilationErrors.invalidStarUsageError(
                 s"expression `${j.prettyName}`", directStars)
-            } else if (!j.childrenResolved) {
-              // Wait for children that can later become JSON producers, e.g. qualified
-              // constructors inside a lambda whose variables bind later in this batch.
-              j
+            }
+            // The built-in owns it. Switch to the built-in form so the owner is checked only once.
+            val stock = j match {
+              case r: RoutedJsonConstructor => r.toStock
+              case s: StockJsonConstructor => s
+            }
+            if (!stock.childrenResolved) {
+              // A child may still become a JSON producer (e.g. inside a lambda), so wait.
+              stock
             } else {
-              // Set the time zone now so the constructor is resolved before its parent.
-              j.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
+              // Set the time zone now, so the parent sees a resolved child in this pass.
+              stock.toBuiltin.withTimeZone(conf.sessionLocalTimeZone)
             }
 
           case u if !u.childrenResolved => u // Skip until children are resolved.

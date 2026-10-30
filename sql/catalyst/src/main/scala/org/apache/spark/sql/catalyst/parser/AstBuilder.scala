@@ -4391,29 +4391,25 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitJsonArray(ctx: JsonArrayContext): Expression = withOrigin(ctx) {
     val arrayValues = ctx.values.asScala.map(v => expression(v.value)).toSeq
-    // A clause-free call (no RETURNING, no ON NULL, not a direct JSON constructor argument, and no
-    // explicit FORMAT JSON on any value) routes through routine resolution so a routine can shadow
-    // it. The cheap clause/nesting checks come first so the recursive per-value implicit-JSON scan
-    // runs only when routing is still possible.
+    // A clause-free call (no RETURNING, no ON NULL, no explicit FORMAT JSON, and not written
+    // directly as another constructor's value) routes through function resolution, so a routine
+    // can shadow it.
     val clauseFree =
       ctx.returning == null && ctx.nullBehavior == null && !isDirectJsonConstructorArgument(ctx) &&
         !ctx.values.asScala.exists(_.FORMAT() != null)
     if (clauseFree && !arrayValues.exists(ImplicitlyFormattedAsJson.isImplicitlyJson)) {
       UnresolvedFunction("json_array", arrayValues, isDistinct = false)
     } else if (clauseFree) {
-      // Nested clause-free call: route so a routine can shadow it, but carry the per-value splice
-      // decision, frozen now from the lexical argument, through resolution (see
-      // [[UnresolvedRoutedJsonArray]]).
+      // A nested constructor argument: still routed, but the wrapper keeps the splice flags for
+      // the built-in.
       UnresolvedRoutedJsonArray(
         arrayValues, arrayValues.map(ImplicitlyFormattedAsJson.isImplicitlyJson))
     } else {
-      // Decide each element's FORMAT JSON flags now, from the lexical argument, so a later
-      // rewrite that wraps or swaps the child cannot change them (see [[JsonArray]]):
-      //  - `formatJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON` clause,
-      //    or a lexically nested JSON constructor (via
-      //    `ImplicitlyFormattedAsJson.isImplicitlyJson`).
-      //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only
-      //    an explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
+      // The parser's FORMAT JSON flags; analysis can still add a splice for a resolved
+      // qualified or routed constructor (see [[StockJsonConstructor]]):
+      //  - `formatJson`: splice the value -- an explicit `FORMAT JSON` or a nested constructor.
+      //  - `needsValidation`: validate the text at eval -- an explicit `FORMAT JSON` on a value
+      //    that is not a constructor.
       val formatArgs = ctx.values.asScala.zip(arrayValues).map { case (v, expr) =>
         val explicit = v.FORMAT() != null
         val implicitlyJson = ImplicitlyFormattedAsJson.isImplicitlyJson(expr)
@@ -4475,13 +4471,10 @@ class AstBuilder extends DataTypeAstBuilder
     }
     val rawJson = formatArgs.map(_._1)
     val needsValidation = formatArgs.map(_._2)
-    // Route clause-free calls without explicit FORMAT JSON through routine resolution so a
-    // same-named routine can shadow them, mirroring JSON_ARRAY. This includes VALUE / colon forms
-    // with lexically nested JSON producers: argument shape alone must not remove routine
-    // candidates. The unshadowed built-in still splices them raw via the wrapper's flags; a flat
-    // call has no flag to carry, so it is a plain function call. Explicit FORMAT JSON keeps the
-    // direct path because arbitrary user text must carry a frozen validation flag that ordinary
-    // routine arguments cannot represent.
+    // As in JSON_ARRAY, a clause-free call routes so a routine can shadow it, in every spelling
+    // (comma, VALUE, colon). A call with a nested producer keeps its splice flags in a wrapper.
+    // Explicit FORMAT JSON stays with the built-in, since its validation flag cannot be passed as
+    // an ordinary argument.
     val hasExplicitFormatJson = taggedMembers.exists(_._3)
     val routeThroughResolution =
       body.returning == null && body.nullBehavior == null &&

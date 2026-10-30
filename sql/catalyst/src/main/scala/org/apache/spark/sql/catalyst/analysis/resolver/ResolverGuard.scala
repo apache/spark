@@ -207,7 +207,7 @@ class ResolverGuard(
         checkCreateNamedStruct(createNamedStruct)
       case unresolvedFunction: UnresolvedFunction =>
         checkUnresolvedFunction(unresolvedFunction)
-      // A routine may own a routed constructor, so it gets the same decision as the flat call.
+      // A routine may own a routed constructor, so check it like the flat call.
       case routedJsonConstructor: RoutedJsonConstructor =>
         checkUnresolvedFunction(routedJsonConstructor.toUnresolvedFunction)
       case getViewColumnByNameAndOrdinal: GetViewColumnByNameAndOrdinal =>

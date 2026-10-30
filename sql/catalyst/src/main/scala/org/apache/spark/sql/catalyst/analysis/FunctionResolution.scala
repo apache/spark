@@ -473,10 +473,8 @@ class FunctionResolution(
   }
 
   /**
-   * Returns true when a function reference resolves to the stock built-in implementation. This is
-   * stricter than [[functionNameResolvesToBuiltin]]: an `injectFunction` replacement keeps the
-   * built-in name but must behave like an ordinary routable function, not Spark's stock parser-only
-   * JSON syntax.
+   * Like [[functionNameResolvesToBuiltin]], but false for an `injectFunction` replacement: it keeps
+   * the built-in name, yet must be called like an ordinary function.
    */
   def functionNameResolvesToStockBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
     functionNameResolvesToBuiltin(nameParts, expectedName) &&
@@ -484,8 +482,8 @@ class FunctionResolution(
   }
 
   /**
-   * Whether a routable SQL/JSON constructor resolves as an ordinary call (a shadowing routine or an
-   * `injectFunction` replacement owns the name) rather than finalizing as the stock built-in.
+   * Whether a routine or an `injectFunction` replacement, not the built-in, owns a routed JSON
+   * constructor call.
    */
   def routesJsonConstructorToFunction(j: UnresolvedJsonConstructor): Boolean = {
     j.routeThroughResolution &&
