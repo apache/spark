@@ -665,32 +665,63 @@ class ExternalLookupJoinSuite extends QueryTest with SharedSparkSession {
     }
   }
 
-  test("external lookup opens no reader and sends no request once its task completed") {
+  test("external lookup makes no connector call once its task completed") {
     val lookup = spark.read.format(classOf[SimpleExternalLookupDataSource].getName).load()
     val left = streamOf(Seq(1).toDF("id"))
     val lookupJoin = runStream(left.join(lookup, left("id") === lookup("id"))).lookupJoin
-    SimpleExternalLookupDataSource.resetCounters()
-    // Computes the join over a local input, in a task that completes before or while the join
-    // is consumed, as when a thread other than the task's drives it.
+    // Computes the join over a local input, in a task that completes before the join is
+    // consumed, before its first request, while its reader is created, while the request is in
+    // progress, or between the two result rows of the request. Another thread consumes the join,
+    // as when a thread other than the task's drives it.
     val rdd = lookupJoin
       .copy(child = LocalTableScanExec(lookupJoin.child.output, Seq(InternalRow(1)), None))
       .execute()
-    Seq(true, false).foreach { completeFirst =>
+    val completions = Seq(
+      "beforeEval", "beforeRequest", "duringReaderCreation", "duringRequest", "betweenResultRows")
+    completions.foreach { completion =>
+      SimpleExternalLookupDataSource.resetCounters()
       val context = TaskContext.empty()
       TaskContext.setTaskContext(context)
       try {
-        if (completeFirst) context.markTaskCompleted(None)
+        if (completion == "beforeEval") context.markTaskCompleted(None)
         val rows = rdd.iterator(rdd.partitions.head, context)
-        if (!completeFirst) context.markTaskCompleted(None)
+        if (completion == "betweenResultRows") rows.next()
+        val completeTask = () => context.markTaskCompleted(None)
+        completion match {
+          case "duringReaderCreation" =>
+            SimpleExternalLookupDataSource.beforeReaderReturns.set(completeTask)
+          case "duringRequest" =>
+            SimpleExternalLookupDataSource.beforeLookupReturns.set(completeTask)
+          case _ => completeTask()
+        }
+        val resultRowsRead = SimpleExternalLookupDataSource.resultRowsRead.get()
+
+        val failure = new AtomicReference[Throwable]()
+        val consumer = new Thread(() => {
+          try rows.hasNext catch { case error: Throwable => failure.set(error) }
+        })
+        consumer.start()
+        consumer.join()
+        // No new reader, request or cursor advance after the close, and every reader and cursor
+        // is closed.
+        val (readers, requests) = completion match {
+          case "beforeEval" | "beforeRequest" => (0, 0)
+          case "duringReaderCreation" => (1, 0)
+          case _ => (1, 1)
+        }
+        assert(SimpleExternalLookupDataSource.readerCount.get() === readers)
+        assert(SimpleExternalLookupDataSource.requestCount.get() === requests)
+        assert(SimpleExternalLookupDataSource.resultRowsRead.get() === resultRowsRead)
+        assert(SimpleExternalLookupDataSource.closeEvents.asScala.toSeq.sorted ===
+          Seq.fill(requests)("cursor") ++ Seq.fill(readers)("reader"))
         checkError(
-          exception = intercept[SparkException](rows.hasNext),
+          exception = failure.get().asInstanceOf[SparkException],
           condition = "INTERNAL_ERROR",
           parameters = Map("message" -> "External lookup reader used after it was closed"))
       } finally {
         TaskContext.unset()
       }
     }
-    assert(SimpleExternalLookupDataSource.readerCount.get() === 0)
   }
 
   test("external lookup caps each inner-join request at the engine batch size") {
@@ -880,6 +911,8 @@ object SimpleExternalLookupDataSource {
   val resultRowsRead = new AtomicInteger(0)
   val metricSamples = new AtomicInteger(0)
   val closeEvents = new ConcurrentLinkedQueue[String]()
+  val beforeReaderReturns = new AtomicReference[() => Unit](() => ())
+  val beforeLookupReturns = new AtomicReference[() => Unit](() => ())
   val lookupCandidates =
     new AtomicReference(Seq.empty[(String, String, DataType)])
   val lookupCandidateDescriptions = new AtomicReference(Seq.empty[String])
@@ -905,6 +938,8 @@ object SimpleExternalLookupDataSource {
     resultRowsRead.set(0)
     metricSamples.set(0)
     closeEvents.clear()
+    beforeReaderReturns.set(() => ())
+    beforeLookupReturns.set(() => ())
     lookupCandidates.set(Seq.empty)
     lookupCandidateDescriptions.set(Seq.empty)
     values.set(InitialValues)
@@ -1074,6 +1109,7 @@ case class SimpleExternalLookupReaderFactory(
     selectedLookupPredicates: Seq[String]) extends ExternalLookupReaderFactory {
   override def createReader(): ExternalLookupReader = new ExternalLookupReader {
     SimpleExternalLookupDataSource.readerCount.incrementAndGet()
+    SimpleExternalLookupDataSource.beforeReaderReturns.get()()
 
     override def lookupBatch(keys: Array[InternalRow]): ExternalLookupResultCursor = {
       SimpleExternalLookupDataSource.requestStarted.get().countDown()
@@ -1120,6 +1156,7 @@ case class SimpleExternalLookupReaderFactory(
           current.updated(2, Seq("sales-v2"))
         }
       }
+      SimpleExternalLookupDataSource.beforeLookupReturns.get()()
       new TestExternalLookupResultCursor(
         if (failAt == "cursor") {
           Iterator.continually(

@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.joins
 
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import scala.collection.mutable
 
@@ -183,7 +183,7 @@ class ExternalLookupJoinEvaluatorFactory(
     /** Reads more only when nothing is buffered; safe to call repeatedly. */
     private def tryFillPending(): Unit = {
       try {
-        while (pending.isEmpty && cursor.next()) {
+        while (pending.isEmpty && advanceCursor()) {
           reader.resultRowRead()
           val key = requestedKey(cursor.inputOrdinal())
           // The connector may reuse its row, and several stream rows can join it.
@@ -196,6 +196,12 @@ class ExternalLookupJoinEvaluatorFactory(
             finishCursor()
           }
       }
+    }
+
+    /** Advances the connector's cursor, unless the reader was closed meanwhile. */
+    private def advanceCursor(): Boolean = (cursor ne EmptyLookupCursor) && {
+      reader.ensureOpen()
+      cursor.next()
     }
 
     private def requestedKey(ordinal: Int): UnsafeRow = {
@@ -312,38 +318,53 @@ class ExternalLookupJoinEvaluatorFactory(
 
   /**
    * The connector reader of one partition and its active cursor. The reader is opened by the
-   * first request, and closed once, after the last batch or when the task completes. Once closed,
-   * it sends no more requests and opens no new reader, even if a thread other than the task's
-   * still drives the join.
+   * first request, and closed once, after the last batch or when the task completes. A thread
+   * other than the task's may still drive the join then: closing may overlap the one connector
+   * call in progress, but no request, cursor advance or new reader follows it. Nothing is locked,
+   * so closing never waits for a slow connector call.
    */
   private class LookupReader {
     private val taskReaders = readerMetrics.forCurrentTask()
     private val closed = new AtomicBoolean(false)
-    private var reader: ExternalLookupReader = null
-    private var activeCursor: ExternalLookupResultCursor = null
+    // Each is taken by exactly one of the join and close(), so it is closed once.
+    private val openReader = new AtomicReference[ExternalLookupReader]()
+    private val activeCursor = new AtomicReference[ExternalLookupResultCursor]()
     private var resultRowsSinceMetricsUpdate = 0
     Option(TaskContext.get()).foreach(_.addTaskCompletionListener[Unit](_ => close()))
 
     /** Sends one request and returns the cursor over its result rows. */
     def lookup(requestRows: Array[UnsafeRow]): ExternalLookupResultCursor = {
-      if (closed.get()) {
-        throw SparkException.internalError("External lookup reader used after it was closed")
-      }
+      ensureOpen()
       metrics.requests += 1
       metrics.parameterRows += requestRows.length
-      if (reader == null) {
-        reader = Option(readerFactory.createReader()).getOrElse {
-          throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
-            tableName, "NULL_LOOKUP_READER")
-        }
-        taskReaders.opened(reader)
-      }
-      activeCursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
+      val reader = Option(openReader.get()).getOrElse(createReader())
+      val cursor = Option(reader.lookupBatch(requestRows.asInstanceOf[Array[InternalRow]]))
         .getOrElse {
           throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
             tableName, "NULL_RESULT_CURSOR")
         }
-      activeCursor
+      activeCursor.set(cursor)
+      cursor
+    }
+
+    private def createReader(): ExternalLookupReader = {
+      val reader = Option(readerFactory.createReader()).getOrElse {
+        throw QueryExecutionErrors.invalidDataSourceExternalLookupError(
+          tableName, "NULL_LOOKUP_READER")
+      }
+      taskReaders.opened(reader)
+      openReader.set(reader)
+      // A close() while the reader was created did not find it, so it is closed here.
+      if (closed.get() && openReader.compareAndSet(reader, null)) {
+        ExternalLookupJoinExec.closeResources((), taskReaders.closing(reader), reader.close())
+      }
+      ensureOpen()
+      reader
+    }
+
+    /** Fails once the reader is closed, before any further connector call. */
+    def ensureOpen(): Unit = if (closed.get()) {
+      throw SparkException.internalError("External lookup reader used after it was closed")
     }
 
     /** Samples the connector metrics every [[CustomMetrics.NUM_ROWS_PER_UPDATE]] result rows. */
@@ -353,17 +374,14 @@ class ExternalLookupJoinEvaluatorFactory(
     }
 
     def updateMetrics(): Unit = {
-      if (reader != null) taskReaders.report()
+      if (openReader.get() != null) taskReaders.report()
       resultRowsSinceMetricsUpdate = 0
     }
 
-    def closeCursor(): Unit = if (activeCursor != null) {
-      val cursor = activeCursor
-      activeCursor = null
-      cursor.close()
-    }
+    def closeCursor(): Unit = Option(activeCursor.getAndSet(null)).foreach(_.close())
 
     def close(): Unit = if (closed.compareAndSet(false, true)) {
+      val reader = openReader.getAndSet(null)
       ExternalLookupJoinExec.closeResources(
         closeCursor(),
         if (reader != null) taskReaders.closing(reader),
