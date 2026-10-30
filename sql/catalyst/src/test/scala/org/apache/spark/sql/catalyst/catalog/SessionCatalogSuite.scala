@@ -820,20 +820,30 @@ abstract class SessionCatalogSuite extends AnalysisTest with Eventually {
 
   test("get tables by name when tables belong to different databases") {
     withBasicCatalog { catalog =>
-      intercept[AnalysisException](catalog.getTablesByName(
-        Seq(
-          TableIdentifier("tbl1", Some("db1")),
-          TableIdentifier("tbl2", Some("db2"))
-        )
-      ))
+      checkError(
+        exception = intercept[AnalysisException](catalog.getTablesByName(
+          Seq(
+            TableIdentifier("tbl1", Some("db1")),
+            TableIdentifier("tbl2", Some("db2"))
+          )
+        )),
+        condition = "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE",
+        parameters = Map(
+          "qualifiedTableNames" ->
+            "List(spark_catalog.db1.tbl1, spark_catalog.db2.tbl2)"))
       // Get table without explicitly specifying database
       catalog.setCurrentDatabase("db2")
-      intercept[AnalysisException](catalog.getTablesByName(
-        Seq(
-          TableIdentifier("tbl1", Some("db1")),
-          TableIdentifier("tbl2")
-        )
-      ))
+      checkError(
+        exception = intercept[AnalysisException](catalog.getTablesByName(
+          Seq(
+            TableIdentifier("tbl1", Some("db1")),
+            TableIdentifier("tbl2")
+          )
+        )),
+        condition = "TABLES_OR_VIEWS_NOT_IN_SAME_DATABASE",
+        parameters = Map(
+          "qualifiedTableNames" ->
+            "List(spark_catalog.db1.tbl1, spark_catalog.db2.tbl2)"))
     }
   }
 
