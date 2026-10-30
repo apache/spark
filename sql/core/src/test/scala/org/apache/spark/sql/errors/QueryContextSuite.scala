@@ -36,7 +36,7 @@ class QueryContextSuite extends SharedSparkSession {
       assert(e.getQueryContext.head.summary() ==
         """== DataFrame ==
           |"div" was called from
-          |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:32)
+          |org.apache.spark.sql.errors.QueryContextSuite.$anonfun$new$3(QueryContextSuite.scala:34)
           |org.scalatest.Assertions.intercept(Assertions.scala:749)
           |""".stripMargin)
     }
