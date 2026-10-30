@@ -22,7 +22,7 @@ import java.time.temporal.ChronoUnit
 
 import scala.language.implicitConversions
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArithmeticException, SparkFunSuite}
 import org.apache.spark.sql.catalyst.analysis.TypeCoercion
 import org.apache.spark.sql.catalyst.util.{DateTimeTestUtils, IntervalUtils}
 import org.apache.spark.sql.catalyst.util.DateTimeConstants._
@@ -473,6 +473,18 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
           (interval: Expression, num: Expression) => DivideDTInterval(interval, num),
           it, numType)
       }
+    }
+  }
+
+  test("SPARK-60746: the min interval divided by -1 raises the same error in every mode") {
+    val expectedErrMsg = "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION]"
+    Seq(-1.toByte, -1.toShort, -1, -1L).foreach { num =>
+      checkExceptionInExpression[SparkArithmeticException](
+        DivideYMInterval(Literal(Period.ofMonths(Int.MinValue)), Literal(num)),
+        expectedErrMsg)
+      checkExceptionInExpression[SparkArithmeticException](
+        DivideDTInterval(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)), Literal(num)),
+        expectedErrMsg)
     }
   }
 

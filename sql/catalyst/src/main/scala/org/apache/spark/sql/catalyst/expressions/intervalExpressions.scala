@@ -815,7 +815,8 @@ case class DivideYMInterval(
           val checkIntegralDivideOverflow =
             s"""
                |if ($m == ${Int.MinValue} && $n == -1)
-               |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+               |  throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+               |    "try_divide", $errorContext);
                |""".stripMargin
           // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
           // to `Int`. Casting to `Int` is safe here.
@@ -890,7 +891,8 @@ case class DivideDTInterval(
           val checkIntegralDivideOverflow =
             s"""
                |if ($m == ${Long.MinValue}L && $n == -1L)
-               |  throw QueryExecutionErrors.overflowInIntegralDivideError($errorContext);
+               |  throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+               |    "try_divide", $errorContext);
                |""".stripMargin
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
