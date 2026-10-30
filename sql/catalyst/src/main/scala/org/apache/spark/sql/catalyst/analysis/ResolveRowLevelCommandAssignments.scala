@@ -88,24 +88,21 @@ object ResolveRowLevelCommandAssignments extends Rule[LogicalPlan] {
 
   // The values of metadata columns are produced by the data source and cannot be written, so
   // assignments to metadata columns are rejected unless the legacy behavior is enabled. The keys
-  // are checked as soon as they are resolved, before schema evolution changes the target table
-  // and before AddMetadataColumns adds the metadata columns to the target output, which can make
-  // the assignments look aligned. Aligned assignments are skipped, because aligning them with a
-  // target output that has metadata columns assigns the metadata columns to themselves.
+  // are checked as soon as they are resolved, so that the command fails before schema evolution
+  // changes the target table.
   private object MetadataColumnAssignments {
     def unapply(plan: LogicalPlan): Option[(Seq[Assignment], Seq[String])] = {
       val assignmentsToCheck = plan match {
         case _ if conf.getConf(SQLConf.LEGACY_IGNORE_METADATA_COLUMN_ASSIGNMENTS) =>
           Nil
         case u: UpdateTable if !u.skipSchemaResolution && u.rewritable =>
-          if (u.assignments.forall(_.resolved) && u.aligned) Nil else Seq(u.assignments)
+          Seq(u.assignments)
         case m: MergeIntoTable if !m.skipSchemaResolution && m.rewritable =>
           val actions = m.matchedActions ++ m.notMatchedActions ++ m.notMatchedBySourceActions
-          val assignments = actions.collect {
+          actions.collect {
             case UpdateAction(_, assignments, _) => assignments
             case InsertAction(_, assignments) => assignments
           }
-          if (assignments.flatten.forall(_.resolved) && m.aligned) Nil else assignments
         case _ =>
           Nil
       }

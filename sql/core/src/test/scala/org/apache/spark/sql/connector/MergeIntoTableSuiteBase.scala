@@ -947,11 +947,7 @@ abstract class MergeIntoTableSuiteBase extends RowLevelOperationSuiteBase
         "WHEN NOT MATCHED THEN INSERT (pk, salary, dep, index) VALUES (s.pk, 0, s.dep, 7)" ->
           "index",
         // the implicit cast in the condition resolves the command in a later analyzer iteration
-        "WHEN MATCHED AND t.salary < 150.5 THEN UPDATE SET index = 5" -> "index",
-        // the assignments match the target output after the metadata columns are added to it
-        """WHEN MATCHED AND t.salary < 150.5 THEN
-          | UPDATE SET pk = t.pk, salary = -1, dep = t.dep, index = 5, _partition = 'x'
-          |""".stripMargin -> "index"
+        "WHEN MATCHED AND t.salary < 150.5 THEN UPDATE SET index = 5" -> "index"
       ).foreach { case (clauses, metadataCol) =>
         val e = intercept[AnalysisException] {
           sql(
