@@ -18,7 +18,7 @@
 package org.apache.spark.sql.execution.streaming.runtime
 
 import org.apache.spark.sql.catalyst.expressions.{AttributeReference, AttributeSet, NamedExpression}
-import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, Distinct, LogicalPlan, SetOperation, Union}
+import org.apache.spark.sql.catalyst.plans.logical.{CTERelationDef, Distinct, LogicalPlan, SetOperation, UnionBase}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.SupportsRead
 import org.apache.spark.sql.connector.read.{Scan, SupportsPushDownRequiredColumns}
@@ -38,14 +38,14 @@ private[sql] object StreamingV2ColumnPruning {
    * Returns the attributes of its sources that a query needs: those in its output, those that its
    * operators reference, and every column of the children of the operators that need all of them,
    * such as a distinct, or that map the columns of a child to their output by position rather
-   * than by attribute, such as a union or the definition of a common table expression.
+   * than by attribute, such as a union of any kind or the definition of a common table expression.
    */
   def requiredAttributes(plan: LogicalPlan): AttributeSet = {
     var required = plan.outputSet
     plan.foreach { node =>
       required ++= node.references
       val needsAllColumns = node match {
-        case _: Union | _: SetOperation | _: Distinct | _: CTERelationDef => true
+        case _: UnionBase | _: SetOperation | _: Distinct | _: CTERelationDef => true
         case _ => mapsColumnsByPosition(node)
       }
       if (needsAllColumns) {
@@ -68,9 +68,10 @@ private[sql] object StreamingV2ColumnPruning {
   /**
    * Builds the scan of a streaming source that reads the columns of `output` in `required`, when
    * its scan builder supports column pruning, and creates its stream with `createStream`.
-   * Returns the scan, its stream and its output, the columns of `output` that it reads, in the
-   * order of its read schema. A scan that does not read the required columns, as named in
-   * `output`, is replaced by one of all the columns, as without pruning.
+   * Returns the scan, its stream and its output: the columns of `output` that it reads, in the
+   * order of its read schema when the scan prunes them, and otherwise `output` as it is. A scan
+   * that does not read the required columns, as named in `output`, is replaced by one of all the
+   * columns, as without pruning.
    *
    * The read schema of the scan is asked once its stream is created, since a scan may only know
    * then what it reads for a stream.

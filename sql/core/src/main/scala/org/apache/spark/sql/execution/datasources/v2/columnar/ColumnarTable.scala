@@ -124,8 +124,8 @@ class ColumnarScanBuilder(
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // Only top-level columns are pruned by the data source. Spark prunes the nested fields of the
-    // columns it reads. The scan asks the reader to prune them, since a streaming scan, which
-    // Spark also prunes, has no batch planner.
+    // columns it reads. A batch scan asks its planner to prune them when it is planned, while a
+    // streaming scan, which Spark also prunes, has no batch planner and reads all the columns.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
     if (required.length < schema.length) {

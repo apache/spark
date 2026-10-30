@@ -98,6 +98,7 @@ class ContinuousExecution(
           logInfo(log"Reading table [${MDC(STREAMING_TABLE, table)}] " +
             log"from DataSourceV2 named '${MDC(STREAMING_DATA_SOURCE_NAME, sourceName)}' " +
             log"${MDC(STREAMING_DATA_SOURCE_DESCRIPTION, dsStr)}")
+          // TODO: operator pushdown.
           // The output includes the metadata columns that the query reads, so that connectors
           // implementing SupportsMetadataColumns include them in readSchema().
           val (scan, stream, scanOutput) = StreamingV2ColumnPruning.buildScan(

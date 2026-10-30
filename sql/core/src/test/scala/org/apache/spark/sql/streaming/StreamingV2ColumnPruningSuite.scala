@@ -20,7 +20,7 @@ package org.apache.spark.sql.streaming
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.sql.Row
-import org.apache.spark.sql.connector.catalog.{InMemoryBaseTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryBaseTable, InMemoryTableCatalog}
 import org.apache.spark.sql.execution.datasources.v2.StreamingDataSourceV2ScanRelation
 import org.apache.spark.sql.internal.SQLConf
 
@@ -144,6 +144,82 @@ class StreamingV2ColumnPruningSuite extends StreamTest with BeforeAndAfter {
           assert(rows.map(_.getString(0)).sorted === Seq("a", "b"))
           assert(rows.forall(!_.isNullAt(1)))
         }, lastOnly = false))
+    }
+  }
+
+  test("read all the columns when a scan does not read the required ones") {
+    withSourceTable(
+        s"TBLPROPERTIES ('${InMemoryBaseTable.SIMULATE_INCOMPLETE_COLUMN_PRUNING}' = 'true')") {
+      val table = spark.sessionState.catalogManager.catalog("testcat")
+        .asInstanceOf[InMemoryTableCatalog].liveTable(Identifier.of(Array.empty, "t"))
+        .asInstanceOf[InMemoryBaseTable]
+      val df = spark.readStream.table(tbl).select("data")
+      testStream(df)(
+        ProcessAllAvailable(),
+        // The scan that does not read "data" is replaced by one of all the columns, and the
+        // stream of the replaced scan is stopped.
+        assertReadSchema("id", "data", "extra"),
+        AssertOnQuery(_ => table.stoppedMicroBatchStreams.get() == 1),
+        CheckAnswer(Row("a"), Row("b")))
+    }
+  }
+
+  test("read the event-time column of a watermark that the query does not output") {
+    withTable(tbl) {
+      sql(s"CREATE TABLE $tbl (id bigint, data string, ts timestamp)")
+      sql(s"INSERT INTO $tbl VALUES " +
+        "(1, 'a', timestamp_seconds(0)), (2, 'b', timestamp_seconds(10))")
+      val df = spark.readStream.table(tbl).withWatermark("ts", "5 seconds").select("data")
+      testStream(df)(
+        ProcessAllAvailable(),
+        assertReadSchema("data", "ts"),
+        CheckAnswer(Row("a"), Row("b")),
+        // The watermark gets the event times of the rows.
+        AssertOnQuery { query =>
+          query.recentProgress.filter(_.numInputRows > 0).map(_.eventTime.get("max")).toSeq ==
+            Seq("1970-01-01T00:00:10.000Z")
+        })
+    }
+  }
+
+  test("read only the columns of a stream-static join") {
+    withSourceTable() {
+      val static = spark.range(2, 4).toDF("sid")
+      val source = spark.readStream.table(tbl)
+      val df = source.join(static, source("id") === static("sid")).select("data")
+      testStream(df)(
+        ProcessAllAvailable(),
+        assertReadSchema("id", "data"),
+        CheckAnswer(Row("b")),
+        insert("(3, 'c', 30), (4, 'd', 40)"),
+        ProcessAllAvailable(),
+        CheckAnswer(Row("b"), Row("c")))
+    }
+  }
+
+  test("read only the columns of each side of a stream-stream join, also after a restart") {
+    withSourceTable() {
+      val left = spark.readStream.table(tbl).select("id", "data")
+      val right = spark.readStream.table(tbl).selectExpr("id AS rid", "extra")
+      val df = left.join(right, left("id") === right("rid")).select("data", "extra")
+      val readSchemas = AssertOnQuery { query =>
+        val schemas = query.logicalPlan.collect {
+          case relation: StreamingDataSourceV2ScanRelation =>
+            relation.scan.readSchema().fieldNames.toSeq
+        }
+        assert(schemas.sortBy(_.mkString(",")) === Seq(Seq("id", "data"), Seq("id", "extra")))
+        true
+      }
+      testStream(df)(
+        ProcessAllAvailable(),
+        readSchemas,
+        CheckAnswer(Row("a", 10), Row("b", 20)),
+        StopStream,
+        insert("(3, 'c', 30)"),
+        StartStream(),
+        ProcessAllAvailable(),
+        readSchemas,
+        CheckAnswer(Row("a", 10), Row("b", 20), Row("c", 30)))
     }
   }
 
