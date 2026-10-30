@@ -18,12 +18,13 @@ import io
 import json
 import os
 import signal
+import socket
 import sys
 import tempfile
 import threading
 import time
 import unittest
-from typing import Any, Optional
+from typing import Any, BinaryIO, Optional
 from unittest.mock import patch
 
 has_resource_module = True
@@ -54,6 +55,7 @@ from pyspark.worker_metrics import WorkerMetrics
 
 with patch.dict(os.environ, {"SPARK_PYTHON_RUNTIME": "PYTHON_WORKER"}):
     from pyspark.worker import main as worker_main
+    from pyspark.worker import report_init_response
 
 
 class WorkerMetricsTests(unittest.TestCase):
@@ -272,7 +274,7 @@ class WorkerInitResponseTests(unittest.TestCase):
         outfile.seek(0)
         return outfile
 
-    def _read_init_response(self, outfile: io.BytesIO) -> dict:
+    def _read_init_response(self, outfile: BinaryIO) -> dict:
         self.assertEqual(read_int(outfile), SpecialLengths.START_OF_INIT_RESPONSE)
         return json.loads(outfile.read(read_int(outfile)).decode("utf-8"))
 
@@ -283,6 +285,46 @@ class WorkerInitResponseTests(unittest.TestCase):
         ser = CPickleSerializer()
         self.assertEqual([ser._read_with_length(outfile) for _ in range(2)], [2, 4])
         self.assertEqual(read_int(outfile), SpecialLengths.METRICS_DATA)
+        metrics = json.loads(outfile.read(read_int(outfile)))
+        self.assertIn("bootTimestampMs", metrics)
+        self.assertIn("finishTimestampMs", metrics)
+        self.assertIn("initTimestampMs", metrics)
+        self.assertNotIn("pythonInitializationDurationMs", metrics)
+
+    def test_init_response_is_flushed_before_processing(self):
+        sender, receiver = socket.socketpair()
+        with sender, receiver, sender.makefile("wb", buffering=65536) as outfile:
+            receiver.settimeout(5)
+            report_init_response(outfile)
+            with receiver.makefile("rb") as infile:
+                self.assertEqual(self._read_init_response(infile), {})
+
+    def test_finish_timestamp_precedes_completion_handshake(self):
+        worker_input = self._worker_input(self._command(lambda _, items: items), [1])
+        outfile = io.BytesIO()
+        observed_metrics = []
+
+        def before_finish_signal():
+            report = io.BytesIO(outfile.getvalue())
+            self.assertEqual(self._read_init_response(report), {})
+            self.assertEqual(CPickleSerializer()._read_with_length(report), 1)
+            self.assertEqual(read_int(report), SpecialLengths.METRICS_DATA)
+            observed_metrics.append(json.loads(report.read(read_int(report))))
+            self.assertEqual(read_int(report), SpecialLengths.END_OF_DATA_SECTION)
+            self.assertEqual(read_int(report), 0)  # No accumulator updates.
+            self.assertEqual(report.read(), b"")
+
+        class FinishSignalStream(io.BytesIO):
+            def read(self, size=-1):
+                if self.tell() == len(worker_input) - 4:
+                    before_finish_signal()
+                return super().read(size)
+
+        worker_main(FinishSignalStream(worker_input), outfile)
+        self.assertEqual(len(observed_metrics), 1)
+        self.assertIn("finishTimestampMs", observed_metrics[0])
+        outfile.seek(-4, io.SEEK_END)
+        self.assertEqual(read_int(outfile), SpecialLengths.END_OF_STREAM)
 
     def test_payload_error_is_reported_in_init_response(self):
         worker_input = self._worker_input(self._framed(b"not a pickle"), [1])

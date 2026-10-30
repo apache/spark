@@ -111,6 +111,8 @@ def report_init_response(
     payload = json.dumps(response, separators=(",", ":")).encode("utf-8")
     write_int(SpecialLengths.START_OF_INIT_RESPONSE, outfile)
     write_with_length(payload, outfile)
+    # The JVM timestamps this response to measure initialization.
+    outfile.flush()
 
 
 def invoke_udf(message_receiver: SparkMessageReceiver, outfile: BinaryIO):

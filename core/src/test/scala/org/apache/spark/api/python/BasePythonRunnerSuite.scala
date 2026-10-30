@@ -24,7 +24,7 @@ import java.nio.channels.{Channels, ClosedByInterruptException, ServerSocketChan
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 import java.util.concurrent.{CountDownLatch, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration._
@@ -35,7 +35,7 @@ import org.apache.logging.log4j.Level
 import org.scalatest.concurrent.Eventually.{eventually, timeout}
 
 import org.apache.spark.{SharedSparkContext, SparkEnv, SparkException, SparkFunSuite, TaskContext}
-import org.apache.spark.util.TaskCompletionListener
+import org.apache.spark.util.{AccumulatorV2, TaskCompletionListener}
 
 class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
 
@@ -838,6 +838,85 @@ class BasePythonRunnerSuite extends SparkFunSuite with SharedSparkContext {
   private val initErrorJson =
     "{\"error\":{\"message\":\"bad\",\"traceback\":\"Traceback ...\\nValueError: bad\"," +
       "\"errorClass\":\"ValueError\",\"isPayloadError\":true}}"
+
+  private class TimingAccumulator extends AccumulatorV2[Long, Long] {
+    private var total = 0L
+    override def isZero: Boolean = total == 0L
+    override def value: Long = total
+    override def add(v: Long): Unit = total += v
+    override def reset(): Unit = total = 0L
+    override def merge(other: AccumulatorV2[Long, Long]): Unit = add(other.value)
+    override def copy(): TimingAccumulator = {
+      val result = new TimingAccumulator
+      result.add(total)
+      result
+    }
+  }
+
+  private class InitTimingPythonRunner extends PythonRunner(Seq(ChainedPythonFunctions(Seq(
+      SimplePythonFunction(Seq.empty, Collections.emptyMap(), Collections.emptyList(),
+        "python3", "3", Collections.emptyList(), null)))), None) {
+    val recordedMetrics: Map[String, TimingAccumulator] = Seq(
+      "pythonBootTime", "pythonInitTime", "pythonTotalTime", "pythonProcessingTime")
+      .map(_ -> new TimingAccumulator).toMap
+    override protected val metrics: Map[String, AccumulatorV2[Long, Long]] = recordedMetrics
+
+    def reader(
+        stream: DataInputStream,
+        startTime: Long,
+        context: TaskContext): Iterator[Array[Byte]] = {
+      val writer = newWriter(SparkEnv.get, null, Iterator.empty, 0, context)
+      newReaderIterator(stream, writer, startTime,
+        SparkEnv.get, null, None, new AtomicBoolean(true), context)
+    }
+  }
+
+  private def initTimingStream(bootTime: Long, finishTime: Long): DataInputStream = {
+    val buffer = new ByteArrayOutputStream()
+    val output = new DataOutputStream(buffer)
+    output.writeInt(SpecialLengths.START_OF_INIT_RESPONSE)
+    PythonWorkerUtils.writeUTF("{}", output)
+    output.writeInt(0) // An empty result lets the consumer pause before the metrics report.
+    output.writeInt(SpecialLengths.METRICS_DATA)
+    val report = metricsReport.replace("\"bootTimestampMs\":1250",
+      "\"bootTimestampMs\":" + bootTime)
+      .replace("\"initTimestampMs\":2500", "\"initTimestampMs\":" + (finishTime - 20L))
+      .replace("\"finishTimestampMs\":3750", "\"finishTimestampMs\":" + finishTime)
+    PythonWorkerUtils.writeUTF(report, output)
+    output.writeInt(SpecialLengths.END_OF_DATA_SECTION)
+    output.writeInt(0) // No accumulator updates.
+    output.writeInt(SpecialLengths.END_OF_STREAM)
+    new DataInputStream(new ByteArrayInputStream(buffer.toByteArray))
+  }
+
+  gridTest("init response timing excludes later output delay")(Seq(20L, -500L)) { bootOffset =>
+    val runner = new InitTimingPythonRunner
+    val context = TaskContext.empty()
+    val startTime = System.currentTimeMillis() - 1000L
+    val initializationStartTime = startTime + math.max(0L, bootOffset)
+    val stream = initTimingStream(startTime + bootOffset, startTime + 50L)
+    val reader = runner.reader(stream, startTime, context)
+    val beforeInitResponse = System.currentTimeMillis()
+    assert(reader.next().isEmpty)
+    val afterInitResponse = System.currentTimeMillis()
+    Thread.sleep(100L)
+    val logAppender = new LogAppender("Python worker lifecycle timings")
+    withLogAppender(logAppender, level = Some(Level.INFO)) {
+      assert(!reader.hasNext)
+    }
+    assert(logAppender.loggingEvents.exists { event =>
+      event.getMessage.getFormattedMessage.contains("finish = 20 - ")
+    })
+
+    val init = runner.recordedMetrics("pythonInitTime").value
+    assert(init >= beforeInitResponse - initializationStartTime)
+    assert(init <= afterInitResponse - initializationStartTime)
+    assert(runner.recordedMetrics("pythonBootTime").value == math.max(0L, bootOffset))
+    assert(runner.recordedMetrics("pythonTotalTime").value == 50L)
+    assert(runner.recordedMetrics("pythonProcessingTime").value == 42L)
+    assert(context.taskMetrics.memoryBytesSpilled == 7L)
+    assert(context.taskMetrics.diskBytesSpilled == 9L)
+  }
 
   test("SPARK-60613: read an init response and leave the following sections aligned") {
     Seq("{}", "{\"futureField\":1}").foreach { json =>
