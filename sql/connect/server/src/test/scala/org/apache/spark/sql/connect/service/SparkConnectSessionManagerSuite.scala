@@ -23,6 +23,7 @@ import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkSQLException
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.connector.catalog.CloseableCatalog
 import org.apache.spark.sql.pipelines.graph.{DataflowGraph, PipelineUpdateContextImpl}
 import org.apache.spark.sql.pipelines.logging.PipelineEvent
 import org.apache.spark.sql.test.SharedSparkSession
@@ -175,6 +176,20 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(
       sessionHolder.getPipelineExecution(graphId).isEmpty,
       "pipeline execution was not removed")
+  }
+
+  test("Catalogs loaded by the session are closed when the session holder is closed") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    sessionHolder.session.conf.set("spark.sql.catalog.closeable", classOf[CloseableCatalog].getName)
+    // Catalogs are loaded with the active session's conf.
+    val catalog = sessionHolder.withSession {
+      _.sessionState.catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+    }
+    assert(!catalog.closed)
+
+    SparkConnectService.sessionManager.closeSession(sessionHolder.key)
+    assert(catalog.closed)
   }
 
   test("baseSession allows creating sessions after default session is cleared") {

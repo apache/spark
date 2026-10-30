@@ -39,6 +39,12 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * {@code spark.sql.catalog.catalog-name.(key)=(value)} will be passed in the case insensitive
  * string map of options in initialization with the prefix removed.
  * {@code name}, is also passed and is the catalog's name; in this case, "catalog-name".
+ * <p>
+ * Catalog instances are loaded per session. Implementations that hold resources such as clients,
+ * connections or thread pools can also implement {@link java.io.Closeable} (or
+ * {@link AutoCloseable}). Spark calls {@code close()} when it releases the session that loaded
+ * the catalog, which currently happens when a Spark Connect session is closed. Other sessions may
+ * never be released, so implementations must not depend on {@code close()} being called.
  *
  * @since 3.0.0
  */

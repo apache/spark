@@ -408,10 +408,6 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // intended use is that the client session will get closed when it's really not used anymore,
     // or that it expires due to inactivity, in which case there should be no races.
 
-    // Clean up all artifacts.
-    // Note: there can be concurrent AddArtifact calls still adding something.
-    artifactManager.close()
-
     // Clean up running streaming queries.
     // Note: there can be concurrent streaming queries being started.
     SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = true)
@@ -438,6 +434,15 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
 
     // Clean up ML cache (only if ML models were created)
     mlCache.close()
+
+    // Close the catalogs loaded by this session, then clean up all artifacts. Catalogs are closed
+    // first because they may have been loaded by the session classloader, which is closed with
+    // the artifacts. Otherwise resources held by the catalogs (e.g. thread pools) keep the
+    // session classloader alive. Cloned sessions own their catalogs and artifacts, so this does
+    // not affect them.
+    // Note: interrupted executions may still be running; they fail if they try to load a catalog
+    // after this point. There can also be concurrent AddArtifact calls still adding something.
+    session.sessionState.close()
 
     session.cleanupPythonWorkerLogs()
 

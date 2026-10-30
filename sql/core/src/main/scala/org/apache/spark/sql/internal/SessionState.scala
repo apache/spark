@@ -133,6 +133,21 @@ private[sql] class SessionState(
    */
   def clone(newSparkSession: SparkSession): SessionState = createClone(newSparkSession, this)
 
+  /**
+   * Release the resources owned by this `SessionState`: the catalogs loaded by its
+   * [[CatalogManager]], then the session artifacts. Catalogs are closed first since they may have
+   * been loaded by the session classloader, which is closed with the artifacts. Clones have their
+   * own catalogs and artifacts, so closing a `SessionState` does not affect its clones. No catalog
+   * can be loaded afterwards.
+   */
+  def close(): Unit = {
+    try {
+      catalogManager.close()
+    } finally {
+      artifactManager.close()
+    }
+  }
+
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
   // ------------------------------------------------------
