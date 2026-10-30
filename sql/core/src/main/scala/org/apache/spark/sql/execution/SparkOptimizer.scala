@@ -18,13 +18,14 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.connector.catalog.CatalogManager
 import org.apache.spark.sql.execution.datasources.{MarkSingleTaskExecution, PruneFileSourcePartitions, PullOutVariantExtractions, PushVariantIntoScan, SchemaPruning, V1Writes}
-import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
+import org.apache.spark.sql.execution.datasources.v2.{GroupBasedRowLevelOperationScanPlanning, OptimizeMetadataOnlyDeleteFromTable, PrepareExternalLookupJoin, V2ScanPartitioningAndOrdering, V2ScanRelationPushDown, V2Writes}
 import org.apache.spark.sql.execution.dynamicpruning.{CleanupDynamicPruningFilters, PartitionPruning, RowLevelOperationRuntimeGroupFiltering}
 import org.apache.spark.sql.execution.externalUDF.{ExtractExternalUDFFromWindow, PlanExternalUDFs}
 import org.apache.spark.sql.execution.planmerging.MergeSubplans
@@ -46,6 +47,12 @@ class SparkOptimizer(
       SchemaPruning,
       GroupBasedRowLevelOperationScanPlanning,
       V1Writes,
+      // Must run after operator optimization, which simplifies the join condition and the lookup
+      // side before they are negotiated with the connector: a condition that folds to false, or
+      // an empty lookup side, needs no lookup. Must run before V2ScanRelationPushDown, which
+      // would turn the lookup side into a batch scan that no lookup join can read. It does not
+      // depend on the rules before it in this batch.
+      PrepareExternalLookupJoin,
       V2ScanRelationPushDown,
       // V2 applies this fallback before building its scan. For V1, apply it here and rerun
       // nested pruning because the original grouping expressions may have kept extra fields.
@@ -63,6 +70,10 @@ class SparkOptimizer(
     Seq(OptimizeMetadataOnlyDeleteFromTable)
 
   override def defaultBatches: Seq[Batch] = flattenBatches(Seq(
+    // Must run before Finish Analysis and operator optimization, which eliminate hints, push
+    // predicates into joins and prune columns: it converts joins in the shapes that analysis
+    // validated.
+    Batch("Form External Lookup Join", Once, FormExternalLookupJoin),
     preOptimizationBatches,
     super.defaultBatches,
     Batch("Optimize Metadata Only Query", Once, OptimizeMetadataOnlyQuery(catalog)),
@@ -135,6 +146,10 @@ class SparkOptimizer(
       PlanExternalUDFs.ruleName,
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
+      // A join over a lookup-only table can only run once these rules have formed and prepared
+      // its external lookup join.
+      FormExternalLookupJoin.ruleName,
+      PrepareExternalLookupJoin.ruleName,
       V2ScanRelationPushDown.ruleName,
       V2ScanPartitioningAndOrdering.ruleName,
       V2Writes.ruleName,

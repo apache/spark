@@ -3775,4 +3775,13 @@ private[sql] object QueryExecutionErrors extends QueryErrorsBase with ExecutionE
       context = Array.empty,
       summary = "")
   }
+
+  def invalidDataSourceExternalLookupError(
+      table: String,
+      errorSubClass: String,
+      messageParameters: Map[String, String] = Map.empty): Throwable = {
+    new SparkRuntimeException(
+      errorClass = s"DATA_SOURCE_INVALID_EXTERNAL_LOOKUP.$errorSubClass",
+      messageParameters = Map("table" -> toSQLId(table)) ++ messageParameters)
+  }
 }

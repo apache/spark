@@ -25,7 +25,8 @@ import org.apache.spark.sql.catalyst.catalog.HiveTableRelation
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.util.CharVarcharUtils
-import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.errors.QueryCompilationErrors
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2Relation, ExternalLookupRelation}
 import org.apache.spark.sql.internal.SQLConf
 
 /**
@@ -68,6 +69,17 @@ object ApplyCharTypePadding extends Rule[LogicalPlan] {
         case r: DataSourceV2Relation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () =>
             r.copy(output = r.output.map(CharVarcharUtils.cleanAttrMetadata)))
+        // A lookup-only table is read only through an external lookup join, which cannot apply
+        // the read-side CHAR padding or VARCHAR check. It is rejected rather than read without it.
+        case r: ExternalLookupRelation =>
+          r.output.find(attr => CharVarcharUtils.addPaddingForScan(attr) != attr).foreach { attr =>
+            throw QueryCompilationErrors.unsupportedExternalLookupJoinError(
+              "CHAR_VARCHAR_COLUMN",
+              Map(
+                "relation" -> QueryCompilationErrors.toSQLId(r.table.name()),
+                "column" -> QueryCompilationErrors.toSQLId(attr.name)))
+          }
+          r -> Nil
         case r: HiveTableRelation =>
           ApplyCharTypePaddingHelper.readSidePadding(r, () => {
             val cleanedDataCols = r.dataCols.map(CharVarcharUtils.cleanAttrMetadata)
