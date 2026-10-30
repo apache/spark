@@ -651,10 +651,10 @@ It never overrides the byte limit when all sizes are available.
 Packing discards the scan's keyed partitioning and ordering claims. Required local sorts remain
 in the plan. It can reduce useful parallelism and limit AQE skew-join splitting because AQE cannot
 subdivide one map-to-reducer block. The default is off; connectors that already size their inputs
-can retain their existing policy. A standalone scan packed when creating a checkpoint or cache
-also loses these physical properties. Future queries may then need shuffles or sorts that they
-previously avoided. Leave packing disabled when planning such materialization if its keyed
-partitioning or ordering is needed by later queries.
+can retain their existing policy. Spark does not pack scans when it plans a cached plan or a
+checkpoint, because later queries plan against their partitioning and ordering. Setting
+`spark.sql.optimizer.canChangeCachedPlanOutputPartitioning` to `true` lets packing apply to
+cached plans as well.
 
 <table class="spark-config">
   <thead><tr><th>Property Name</th><th>Default</th><th>Meaning</th><th>Since Version</th></tr></thead>

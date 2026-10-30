@@ -189,7 +189,7 @@ case class BatchScanExec(
         storageFilterRequest, Option.when(appendsCheckedColumn)(output.length))
       partitionPacking match {
         case Some(snapshot) =>
-          val groups = snapshot.options.pack(inputs)
+          val groups = snapshot.options.pack(inputs.flatten)
           if (groups.size < inputs.size && groups.nonEmpty) {
             source.coalesce(groups.size, shuffle = false,
               partitionCoalescer = Some(new V2ScanPartitionCoalescer(groups)))

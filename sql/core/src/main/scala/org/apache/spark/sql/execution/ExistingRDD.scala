@@ -185,7 +185,8 @@ object LogicalRDD extends Logging {
       rdd: RDD[InternalRow],
       originDataset: Dataset[_],
       isStreaming: Boolean,
-      fromCheckpoint: Boolean = false): LogicalRDD = {
+      fromCheckpoint: Boolean = false,
+      executedPlan: Option[SparkPlan] = None): LogicalRDD = {
     // Takes the first leaf partitioning whenever we see a `PartitioningCollection`. Otherwise the
     // size of `PartitioningCollection` may grow exponentially for queries involving deep inner
     // joins.
@@ -199,15 +200,16 @@ object LogicalRDD extends Logging {
 
     val logicalPlan = originDataset.logicalPlan
     val optimizedPlan = originDataset.queryExecution.optimizedPlan
-    val executedPlan = originDataset.queryExecution.executedPlan
+    // The partitioning and ordering reported for `rdd` must describe the plan that produced it.
+    val layoutPlan = executedPlan.getOrElse(originDataset.queryExecution.executedPlan)
 
     val (stats, constraints) = rewriteStatsAndConstraints(logicalPlan, optimizedPlan)
 
     LogicalRDD(
       originDataset.logicalPlan.output,
       rdd,
-      firstLeafPartitioning(executedPlan.outputPartitioning),
-      executedPlan.outputOrdering,
+      firstLeafPartitioning(layoutPlan.outputPartitioning),
+      layoutPlan.outputOrdering,
       isStreaming,
       None
     )(originDataset.sparkSession, stats, constraints, fromCheckpoint)

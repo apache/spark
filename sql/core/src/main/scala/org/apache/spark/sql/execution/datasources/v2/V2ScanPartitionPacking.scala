@@ -34,13 +34,11 @@ case class V2ScanPartitionPacking(
    * Group adjacent inputs by estimated size, keeping an oversized input on its own. Missing,
    * negative or mixed statistics use the explicit count cap, or leave inputs unchanged.
    * The cap is only a fallback: it never overrides the size limit for inputs reporting bytes.
-   * Empty runtime-pruned slots are retained and contribute no bytes or opening cost.
    */
-  def pack(partitions: Seq[Option[InputPartition]]): Seq[Seq[Int]] = {
+  def pack(partitions: Seq[InputPartition]): Seq[Seq[Int]] = {
     if (partitions.isEmpty) return Seq.empty
     val costs = partitions.map {
-      case None => Some(0L)
-      case Some(p: HasPartitionStatistics) =>
+      case p: HasPartitionStatistics =>
         val bytes = p.sizeInBytes()
         Option.when(bytes.isPresent && bytes.getAsLong >= 0)(
           add(bytes.getAsLong, openCostInBytes))

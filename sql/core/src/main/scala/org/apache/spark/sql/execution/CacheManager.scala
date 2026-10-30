@@ -705,8 +705,9 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   }
 
   /**
-   * If `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with disabled
-   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS`.
+   * Unless `CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING` is enabled, return the session with
+   * `ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS` and
+   * `V2_SCAN_PARTITION_PACKING_ENABLED` disabled.
    * `AUTO_BUCKETED_SCAN_ENABLED` is always disabled.
    */
   private def getOrCloneSessionWithConfigsOff(session: SparkSession): SparkSession = {
@@ -718,9 +719,11 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       SQLConf.AUTO_BUCKETED_SCAN_ENABLED, SQLConf.LOCAL_PIPELINED_SHUFFLE_ENABLED)
     if (!session.sessionState.conf.getConf(SQLConf.CAN_CHANGE_CACHED_PLAN_OUTPUT_PARTITIONING)) {
       // Allowing changing cached plan output partitioning might lead to regression as it introduces
-      // extra shuffle
+      // extra shuffle. A cached plan's root has no consumer yet, so scan packing would withdraw a
+      // keyed partitioning that later queries plan against.
       disableConfigs =
-        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS
+        disableConfigs :+ SQLConf.ADAPTIVE_EXECUTION_APPLY_FINAL_STAGE_SHUFFLE_OPTIMIZATIONS :+
+          SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED
     }
     SparkSession.getOrCloneSessionWithConfigsOff(session, disableConfigs)
   }

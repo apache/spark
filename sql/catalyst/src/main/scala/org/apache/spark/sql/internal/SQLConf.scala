@@ -9448,6 +9448,20 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
 
   def filesMaxPartitionNum: Option[Int] = getConf(FILES_MAX_PARTITION_NUM)
 
+  def v2ScanPartitionPackingEnabled: Boolean = getConf(V2_SCAN_PARTITION_PACKING_ENABLED)
+
+  def v2ScanPartitionPackingMaxPartitionBytes: Long =
+    getConf(V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES)
+
+  def v2ScanPartitionPackingOpenCostInBytes: Long =
+    getConf(V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES)
+
+  def v2ScanPartitionPackingMinPartitionNum: Option[Int] =
+    getConf(V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM)
+
+  def v2ScanPartitionPackingMaxPartitionNum: Option[Int] =
+    getConf(V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM)
+
   def ignoreCorruptFiles: Boolean = getConf(IGNORE_CORRUPT_FILES)
 
   def ignoreMissingFiles: Boolean = getConf(IGNORE_MISSING_FILES)

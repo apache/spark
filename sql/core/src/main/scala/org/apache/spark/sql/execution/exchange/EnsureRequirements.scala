@@ -1444,7 +1444,7 @@ case class EnsureRequirements(
         reordered.withNewChildren(newChildren)
     }
 
-    val finalPlan = if (requiredDistribution.isDefined) {
+    if (requiredDistribution.isDefined) {
       val shuffleOrigin = if (requiredDistribution.get.requiredNumPartitions.isDefined) {
         REPARTITION_BY_NUM
       } else {
@@ -1461,6 +1461,5 @@ case class EnsureRequirements(
     } else {
       newPlan
     }
-    PackV2ScanPartitions(finalPlan, requiredDistribution)
   }
 }

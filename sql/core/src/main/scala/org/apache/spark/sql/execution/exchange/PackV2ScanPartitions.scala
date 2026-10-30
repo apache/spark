@@ -37,27 +37,31 @@ import org.apache.spark.sql.internal.SQLConf
  *
  * Packing happens inside BatchScanExec, before partial aggregation and UnsafeRow conversion.
  * No keyed or ordered output is claimed, and scans used by GroupPartitionsExec stay unchanged.
+ *
+ * Like `DisableUnnecessaryBucketedScan`, this is a separate rule that runs after
+ * `EnsureRequirements` has planned every exchange. Under AQE, `requiredDistribution` is the
+ * distribution the final plan must satisfy, the same one `EnsureRequirements` is given.
  */
-object PackV2ScanPartitions extends Rule[SparkPlan] {
-  override def apply(plan: SparkPlan): SparkPlan = apply(plan, None)
+case class PackV2ScanPartitions(
+    requiredDistribution: Option[Distribution] = None) extends Rule[SparkPlan] {
 
-  def apply(plan: SparkPlan, requiredDistribution: Option[Distribution]): SparkPlan = {
-    if (!conf.getConf(SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED)) {
+  override def apply(plan: SparkPlan): SparkPlan = {
+    if (!conf.v2ScanPartitionPackingEnabled) {
       return plan
     }
     lazy val options = V2ScanPartitionPacking(
-      conf.getConf(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_BYTES),
-      conf.getConf(SQLConf.V2_SCAN_PARTITION_PACKING_OPEN_COST_IN_BYTES),
-      conf.getConf(SQLConf.V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM).getOrElse(
+      conf.v2ScanPartitionPackingMaxPartitionBytes,
+      conf.v2ScanPartitionPackingOpenCostInBytes,
+      conf.v2ScanPartitionPackingMinPartitionNum.getOrElse(
         conf.getConf(SQLConf.LEAF_NODE_DEFAULT_PARALLELISM).getOrElse(
           SparkSession.active.sparkContext.defaultParallelism)),
-      conf.getConf(SQLConf.V2_SCAN_PARTITION_PACKING_MAX_PARTITION_NUM))
+      conf.v2ScanPartitionPackingMaxPartitionNum)
 
     def rewrite(node: SparkPlan, needsPartitioning: Boolean, needsOrdering: Boolean): SparkPlan = {
       node match {
         case scan: BatchScanExec if !needsPartitioning && !needsOrdering &&
             scan.partitionPacking.isEmpty &&
-            options.pack(scan.inputPartitions.map(Some(_))).size < scan.inputPartitions.size =>
+            options.pack(scan.inputPartitions).size < scan.inputPartitions.size =>
           scan.withPartitionPacking(options)
         case _: BatchScanExec => node
         case _: ShuffleExchangeLike | _: BroadcastExchangeLike =>

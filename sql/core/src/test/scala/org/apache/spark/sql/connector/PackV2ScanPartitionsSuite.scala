@@ -31,6 +31,7 @@ import org.apache.spark.sql.execution.aggregate.BaseAggregateExec
 import org.apache.spark.sql.execution.datasources.v2.V2ScanPartitionPacking
 import org.apache.spark.sql.execution.exchange.{EnsureRequirements, PackV2ScanPartitions, ShuffleExchangeExec, ValidateRequirements}
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.tags.ExtendedSQLTest
 
 class V2ScanPartitionPackingSuite extends org.apache.spark.SparkFunSuite {
   private case class Sized(bytes: Option[Long]) extends HasPartitionStatistics {
@@ -39,8 +40,8 @@ class V2ScanPartitionPackingSuite extends org.apache.spark.SparkFunSuite {
     override def numRows(): OptionalLong = OptionalLong.empty()
     override def filesCount(): OptionalLong = OptionalLong.empty()
   }
-  private def inputs(sizes: Long*): Seq[Option[InputPartition]] =
-    sizes.map(size => Some(Sized(Some(size))))
+  private def inputs(sizes: Long*): Seq[InputPartition] =
+    sizes.map(size => Sized(Some(size)))
 
   test("pack actual input sizes, keeping oversized splits separate and covering each input once") {
     val policy = V2ScanPartitionPacking(100, 0, 1, Some(1))
@@ -62,8 +63,8 @@ class V2ScanPartitionPackingSuite extends org.apache.spark.SparkFunSuite {
   }
 
   test("missing, mixed and negative sizes require an explicit count fallback") {
-    val unknown = Some(new InputPartition {})
-    Seq(unknown, Some(Sized(None)), Some(Sized(Some(-1)))).foreach { p =>
+    val unknown = new InputPartition {}
+    Seq(unknown, Sized(None), Sized(Some(-1))).foreach { p =>
       val parts = inputs(30, 40) :+ p
       assert(V2ScanPartitionPacking(100, 0, 1, None).pack(parts).size === 3)
       assert(V2ScanPartitionPacking(100, 0, 1, Some(2)).pack(parts) ===
@@ -72,14 +73,11 @@ class V2ScanPartitionPackingSuite extends org.apache.spark.SparkFunSuite {
     }
   }
 
-  test("overflow, exact limits and runtime-pruned empty slots") {
+  test("overflow and exact limits") {
     val policy = V2ScanPartitionPacking(Long.MaxValue, 10, 1, None)
     assert(policy.pack(inputs(Long.MaxValue, 1)) === Seq(Seq(0), Seq(1)))
     assert(V2ScanPartitionPacking(100, 0, 1, None).pack(inputs(100, 1)) ===
       Seq(Seq(0), Seq(1)))
-    assert(V2ScanPartitionPacking(100, 0, 1, None).pack(
-      Seq(None, Some(Sized(Some(30))), None, Some(Sized(Some(40))))) ===
-      Seq(Seq(0, 1, 2, 3)))
   }
 }
 
@@ -172,9 +170,10 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
     createSplits(splits = 3)
     withSQLConf(enabled -> "true", SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
       val df = sql(s"SELECT name, count(*) FROM testcat.ns.$items GROUP BY name")
-      val once = EnsureRequirements()(df.queryExecution.sparkPlan)
-      val twice = EnsureRequirements()(once)
-      assert(PackV2ScanPartitions(twice) === twice)
+      // Packing is its own rule after EnsureRequirements; re-running both must not repack.
+      val once = PackV2ScanPartitions()(EnsureRequirements()(df.queryExecution.sparkPlan))
+      val twice = PackV2ScanPartitions()(EnsureRequirements()(once))
+      assert(PackV2ScanPartitions()(twice) === twice)
       assert(collectScans(twice).head.partitionPacking.isDefined)
       assert(ValidateRequirements.validate(twice))
       checkAnswer(df, (1 to 3).map(i => Row(s"split$i", 2L)))
@@ -199,18 +198,21 @@ class PackV2ScanPartitionsSuite extends KeyGroupedPartitioningSuiteBase {
 }
 
 /** Re-run existing SPJ, ordering and reuse regressions with scan packing enabled. */
+@ExtendedSQLTest
 class KeyGroupedPartitioningPackScanPartitionsSuite extends KeyGroupedPartitioningSuite {
   override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED, true)
     .set(SQLConf.V2_SCAN_PARTITION_PACKING_MIN_PARTITION_NUM, 1)
 }
 
+@ExtendedSQLTest
 class KeyGroupedPartitioningPackRuntimeFilterSuite
   extends KeyGroupedPartitioningRuntimeFilterSuite with PackV2ScanPartitionsRuntimeFilterTests {
   override def sparkConf: SparkConf = super.sparkConf
     .set(SQLConf.V2_SCAN_PARTITION_PACKING_ENABLED, true)
 }
 
+@ExtendedSQLTest
 class KeyGroupedPartitioningPackCatalystRuntimeFilterSuite
   extends KeyGroupedPartitioningCatalystRuntimeFilterSuite
   with PackV2ScanPartitionsRuntimeFilterTests {

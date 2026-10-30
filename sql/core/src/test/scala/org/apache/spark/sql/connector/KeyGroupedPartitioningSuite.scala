@@ -5649,18 +5649,11 @@ class KeyGroupedPartitioningSuite
       checkAnswer(df.sort("res"), Seq(Row(10.0), Row(15.5), Row(41.0)))
 
       val shuffles = collectAllShuffles(df.queryExecution.executedPlan)
+      assert(shuffles.isEmpty,
+        "should not contain shuffle when not grouping by partition values")
       val groupPartitions = collectAllGroupPartitions(df.queryExecution.executedPlan)
-      if (conf.getConf(V2_SCAN_PARTITION_PACKING_ENABLED)) {
-        // Packing the standalone checkpoint read discards its keyed metadata. A future
-        // consumer was not present when it was planned, so it needs a shuffle to recover it.
-        assert(shuffles.size === 1)
-        assert(groupPartitions.isEmpty)
-      } else {
-        assert(shuffles.isEmpty,
-          "should not contain shuffle when not grouping by partition values")
-        assert(groupPartitions.size === 1)
-        assert(groupPartitions.head.outputPartitioning.numPartitions == 3)
-      }
+      assert(groupPartitions.size === 1)
+      assert(groupPartitions.head.outputPartitioning.numPartitions == 3)
     }
   }
 
@@ -5703,7 +5696,7 @@ class KeyGroupedPartitioningSuite
             df,
             Seq(Row(1, "aa", 41.0, 40.0), Row(3, "cc", 15.5, 25.5))
           )
-          if (pushdownValues && !conf.getConf(V2_SCAN_PARTITION_PACKING_ENABLED)) {
+          if (pushdownValues) {
             // 1 shuffle for SORT and 2 group partitions for JOIN are expected.
             assert(collectAllShuffles(df.queryExecution.executedPlan).length === 1)
             assert(collectAllGroupPartitions(df.queryExecution.executedPlan).length === 2)
@@ -5750,8 +5743,7 @@ class KeyGroupedPartitioningSuite
             Seq(Row(1, "aa", 41.0, 40.0), Row(3, "cc", 15.5, 25.5))
           )
           // 1 shuffle for SORT and 1 shuffle for JOIN are expected.
-          val expected = if (conf.getConf(V2_SCAN_PARTITION_PACKING_ENABLED)) 3 else 2
-          assert(collectAllShuffles(df.queryExecution.executedPlan).length === expected)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).length === 2)
           // 0 group partitions are expected because both sides of the join are clustered from scans
           assert(collectAllGroupPartitions(df.queryExecution.executedPlan).length === 0)
         }

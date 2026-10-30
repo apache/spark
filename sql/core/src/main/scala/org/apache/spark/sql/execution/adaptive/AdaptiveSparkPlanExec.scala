@@ -153,6 +153,9 @@ case class AdaptiveSparkPlanExec(
       // every rule below and the execution itself read the answer the exchanges above it were
       // planned against.
       new StampUnionDecisions(unionConf),
+      // Must run after `EnsureRequirements`, which plans the exchanges that decide whether a V2
+      // scan's partitioning and ordering are used, and before the rules below read scan ordering.
+      PackV2ScanPartitions(requiredDistribution),
       // This rule must be run after `EnsureRequirements`.
       InsertSortForLimitAndOffset,
       AdjustShuffleExchangePosition,
