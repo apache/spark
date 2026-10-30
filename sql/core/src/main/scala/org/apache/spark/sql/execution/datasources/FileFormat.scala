@@ -175,12 +175,13 @@ trait FileFormat {
    * Applying them is optional, since the planner also leaves each in the post-scan `Filter`. A
    * storage filter is evaluated without the conjuncts that precede it in the plan, so it can raise
    * an error on a row a plain scan never evaluates it on. A reader must not fail the query for
-   * that. It gives the filter up there and lets the `Filter` decide.
+   * a non-fatal one. It gives the filter up there and lets the `Filter` decide.
    *
    * The `Filter` can skip them on the rows the reader says it has checked. The planner asks for
    * that only where the scan returns columnar batches. `requiredSchema` then ends with a nullable
    * boolean column named [[FileFormat.STORAGE_FILTER_CHECKED_COLUMN_NAME]], which is not a column
-   * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`.
+   * of the relation, and the `Filter` evaluates each storage filter as `IF(checked, true, filter)`,
+   * except an `IsNotNull`, which it keeps bare.
    *  - True says every storage filter was evaluated on the row and kept it.
    *  - False or null says the row was not checked. So a reader that does not know the column, and
    *    reads it as missing from the file, is still right.
@@ -193,9 +194,13 @@ trait FileFormat {
    * A format that does not apply storage filters returns `None`, the default, and the caller then
    * builds an ordinary reader. It is an `Option` rather than a call to that builder, so the two
    * builders cannot call each other. `storageFilters` arrive with their scalar subqueries
-   * materialized, bound to `requiredSchema`, while [[supportsStorageFilter]] is asked about the
-   * unbound expression. `storageFilterMetrics` are the ones this format's [[storageFilterMetrics]]
-   * created, which the scan shows in the SQL UI.
+   * materialized, bound to `requiredSchema`, while [[supportsStorageFilter]] and
+   * [[supportsStorageFilterOnKeys]] are asked about the unbound expression. The ones
+   * [[supportsStorageFilter]] accepted come first, then the ones [[supportsStorageFilterOnKeys]]
+   * accepted, and none is in both. The planner does not mark where the first group ends, so a
+   * format that takes the second must accept a shape in the first that tells them apart, as
+   * Parquet accepts only a bare `BloomFilterMightContain` there. `storageFilterMetrics` are the
+   * ones this format's [[storageFilterMetrics]] created, which the scan shows in the SQL UI.
    */
   def buildReaderWithStorageFilters(
       sparkSession: SparkSession,
@@ -228,6 +233,14 @@ trait FileFormat {
    * it, not that it will.
    */
   def supportsStorageFilter(expr: Expression): Boolean = false
+
+  /**
+   * Whether this format's reader can evaluate `expr` along with the storage filters
+   * [[supportsStorageFilter]] accepted, in this session. The planner asks only about a conjunct
+   * that references nothing but their key columns, only where the scan marks the rows the reader
+   * checked, and offers it after them. A reader should evaluate it only on the rows they keep.
+   */
+  def supportsStorageFilterOnKeys(sparkSession: SparkSession, expr: Expression): Boolean = false
 
   /**
    * Create a file metadata struct column containing fields supported by the given file format.
