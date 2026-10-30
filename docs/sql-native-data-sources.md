@@ -123,20 +123,22 @@ Spark calls the functions of the table as follows:
   in the checkpoint of the source under the names that start with `_spark`, which the library must
   not use. A data source with the capability
   `SPARK_DS_ADMISSION_CONTROL` limits the data of each micro-batch, for example with an option for
-  a maximum number of rows: Spark asks for the limit once with `default_read_limit`, and passes it
-  to the `latest_offset` that ends each micro-batch, in the `limit` of its
-  `SparkDsLatestOffsetInfo`, which then returns the end of the data of the next micro-batch within
-  the limit. When there is data after the start, the latest offset must be after the start, even
-  if the next unit of data, such as a file, is larger than the limit: Spark sees no new data
-  otherwise. With `Trigger.AvailableNow`, the latest offset without a limit that Spark asks for
-  first is the end of the run: Spark passes it as the `run_end` that the limited latest offsets
+  a maximum number of rows: Spark asks for the limit once with `default_read_limit`, which sets a
+  `SparkDsReadLimit`, and passes it to the `latest_offset` that ends each micro-batch, in the
+  `limit` of its `SparkDsLatestOffsetInfo`, which then returns the end of the data of the next
+  micro-batch within the limit. When there is data after the start, the latest offset must be after
+  the start, even if the next unit of data, such as a file, is larger than the limit: Spark sees no
+  new data otherwise. With `Trigger.AvailableNow`, the latest offset without a limit that Spark asks
+  for first is the end of the run: Spark passes it as the `run_end` that the limited latest offsets
   must not go beyond, so that the run reads the data that was available when it started in
-  micro-batches within the limit. A query that restarts starts a new run, with a new end. So with
-  a limit, Spark calls `latest_offset` twice for some micro-batches: with `Trigger.AvailableNow`,
-  for the first one, first without a limit for the end of the run, and with the other triggers,
-  for each one, first with `SPARK_DS_READ_ALL_AVAILABLE` only for the progress of the query. So a
-  library must not count the calls as micro-batches. `Trigger.Once` ignores the limit, and so does
-  `Trigger.AvailableNow` when another source of the query does not support it and
+  micro-batches within the limit. A query that restarts starts a new run, with a new end. So with a
+  limit, Spark calls `latest_offset` twice for some micro-batches: with `Trigger.AvailableNow`, for
+  the first one, first without a limit for the end of the run, and with the other triggers, for each
+  one, first with `SPARK_DS_READ_ALL_AVAILABLE` only for the progress of the query. Spark does not
+  ask again with the limit when the latest offset without a limit is the same as the start, such as
+  while a query waits for new data: there is no data to limit then. So a library must not count the
+  calls as micro-batches. `Trigger.Once` ignores the limit, and so does `Trigger.AvailableNow` when
+  another source of the query does not support it and
   `spark.sql.streaming.triggerAvailableNowWrapper.enabled` is false, as by default, where Spark
   reads all the available data in a single micro-batch. Spark still asks for the limit then, and
   fails the query if it is not valid.
@@ -207,8 +209,8 @@ regularly and use timeouts. The task reaper, `spark.task.reaper.enabled` and
 ### Compatibility
 
 The function table, `SparkDsLibrary`, and the structs that Spark passes to the library,
-`SparkDsHost`, `SparkDsTaskContext` and those whose names end with `Info`, such as
-`SparkDsCreateInfo`, start with their size, so that they can grow. The version of the interface,
+`SparkDsHost`, `SparkDsTaskContext`, `SparkDsReadLimit` and those whose names end with `Info`, such
+as `SparkDsCreateInfo`, start with their size, so that they can grow. The version of the interface,
 1, is `SPARK_DS_ABI_VERSION`, which the table and the manifest of a package declare. Within a
 version:
 
@@ -217,7 +219,9 @@ version:
 - Spark only reads the functions that fit in the size of the table of a library, so a library built
   against an earlier header keeps working with later releases of Spark, with the functions that it
   does not know as `NULL`. A library must only read the fields that fit in the size of a struct
-  that Spark passes, so that it also runs on earlier releases of Spark that support its version;
+  that Spark passes, and only set those of a struct that it fills, such as the `SparkDsReadLimit`
+  of `default_read_limit`, so that it also runs on earlier releases of Spark that support its
+  version;
 - Spark only uses a new capability, write mode or kind of read with a data source that declares
   it.
 

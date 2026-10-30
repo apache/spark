@@ -75,7 +75,9 @@
  *   micro-batches. So with a limit, Spark calls latest_offset twice for some micro-batches: with
  *   Trigger.AvailableNow, for the first one, first without a limit for the end of the run, and
  *   with the other triggers, for each one, first with SPARK_DS_READ_ALL_AVAILABLE only for the
- *   progress of the query. So a library must not count the calls of latest_offset as
+ *   progress of the query. Spark does not ask again with the limit when the latest offset without
+ *   a limit is the same as the start, such as while a query waits for new data: there is no data
+ *   to limit then. So a library must not count the calls of latest_offset as
  *   micro-batches, or reserve data in them. Offsets are defined by the library, as compact JSON on
  *   a single line: Spark stores each offset as a line of the offset log of the checkpoint, so it
  *   rejects an offset that is not valid JSON or contains a line break. Spark finds new data by
@@ -194,7 +196,9 @@
  *   never change, nor do the semantics of the existing functions;
  * - Spark only reads the functions that fit in the size of the table of a library, so a library
  *   built against an earlier header keeps working, with the functions that it does not know as
- *   NULL. A library must only read the fields that fit in the size of a struct that Spark passes;
+ *   NULL. A library must only read the fields that fit in the size of a struct that Spark passes,
+ *   and only set those of a struct that it fills, such as the SparkDsReadLimit of
+ *   default_read_limit;
  * - Spark only uses a new capability, write mode or kind of read with a data source that declares
  *   it.
  * An incompatible change uses a new SPARK_DS_ABI_VERSION: spark_ds_init gets the newest version
@@ -401,9 +405,10 @@ typedef struct SparkDsLatestOffsetInfo {
    */
   const SparkDsReadLimit* limit;
   /*
-   * With Trigger.AvailableNow and a limit, the end of the run: the offset that the run reads up
-   * to, which the latest offset must not go beyond, so that the run reads the data that was
-   * available when it started; NULL otherwise. It is not the end of the next micro-batch. A query
+   * With Trigger.AvailableNow and a limit of the kind SPARK_DS_READ_MAX_ROWS, the end of the run:
+   * the offset that the run reads up to, which the latest offset must not go beyond, so that the
+   * run reads the data that was available when it started; NULL otherwise, as in the call without
+   * a limit that asks for the end of the run. It is not the end of the next micro-batch. A query
    * that restarts starts a new run, with a new end: Spark first runs again the micro-batch that it
    * planned but did not commit, if any, up to the end in its offset log, without asking.
    */

@@ -237,8 +237,16 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
   // The latest offset without a limit that the reader returned last, which the progress of the
   // query reports.
   @volatile private var lastLatestOffset: Offset = _
-  // The limit on the data of each micro-batch, asked once.
-  private lazy val readLimit = reader.defaultReadLimit()
+  // The limit on the data of each micro-batch, asked once, when the query starts. Spark asks for
+  // it before it records the streams to stop when the query stops, so a stream whose limit fails
+  // stops its reader itself.
+  private lazy val readLimit = try {
+    reader.defaultReadLimit()
+  } catch {
+    case e: Throwable =>
+      try reader.stop() catch { case stopError: Throwable => e.addSuppressed(stopError) }
+      throw e
+  }
   // Whether the trigger is Trigger.AvailableNow.
   @volatile private var availableNow = false
   // The end of the run with Trigger.AvailableNow: the first latest offset without a limit asked.
@@ -279,7 +287,13 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation:
       availableNowEnd
     }
     lastLatestOffset = latest
-    if (limit == ReadLimit.allAvailable()) latest else ask(limit, Option(availableNowEnd))
+    // When the latest offset without a limit is the start, as Spark compares offsets, there is no
+    // data after the start to limit, so the reader is not asked again with the limit.
+    if (limit == ReadLimit.allAvailable() || latest.json() == start.json()) {
+      latest
+    } else {
+      ask(limit, Option(availableNowEnd))
+    }
   }
 
   override def prepareForTriggerAvailableNow(): Unit = {

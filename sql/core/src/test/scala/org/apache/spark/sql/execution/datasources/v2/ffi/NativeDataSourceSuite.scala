@@ -907,9 +907,14 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   nativeTest("limit the rows of each micro-batch with admission control") {
     val session = newSession(defaultPackage)
     // Runs the query with a trigger until it read the rows [0, 12), and returns the number of rows
-    // of each micro-batch and the latest offset that the first one reported.
-    def run(trigger: Option[Trigger], options: (String, String)*): (Seq[Long], String) = {
+    // of each micro-batch, the latest offset that the first one reported, and the start, the limit
+    // and the end of the run of each call of latest_offset, as "limits_path" records them.
+    def run(
+        trigger: Option[Trigger],
+        options: (String, String)*): (Seq[Long], String, Seq[String]) = {
+      val limitsPath = new File(Utils.createTempDir(), "limits")
       val writer = session.readStream.format("native_counter").option("max_offset", "12")
+        .option("limits_path", limitsPath.getPath)
         .options(options.toMap).load()
         .writeStream
         .format("noop")
@@ -917,27 +922,38 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       val query = trigger.map(writer.trigger).getOrElse(writer).start()
       try {
         if (trigger.isDefined) query.awaitTermination() else query.processAllAvailable()
-        val batches = query.recentProgress.filter(_.numInputRows > 0).toSeq
-        (batches.map(_.numInputRows), batches.head.sources.head.latestOffset)
       } finally {
         query.stop()
       }
+      val batches = query.recentProgress.filter(_.numInputRows > 0).toSeq
+      (batches.map(_.numInputRows), batches.head.sources.head.latestOffset,
+        Files.readAllLines(limitsPath.toPath).asScala.toSeq)
     }
     // Each micro-batch reads at most 5 rows, all available from the start, while the progress
-    // reports the latest offset without the limit.
-    assert(run(None, "max_rows_per_trigger" -> "5") == ((Seq(5L, 5L, 2L), """{"offset":12}""")))
-    // A run of Trigger.AvailableNow reads the rows available when it starts, within the limit.
-    assert(run(Some(Trigger.AvailableNow()), "max_rows_per_trigger" -> "5")._1 ==
-      Seq(5L, 5L, 2L))
+    // reports the latest offset without the limit, which Spark asks for first. Spark only asks
+    // with the limit while there is data after the start.
+    val (rows, latest, calls) = run(None, "max_rows_per_trigger" -> "5")
+    assert((rows, latest) == ((Seq(5L, 5L, 2L), """{"offset":12}""")))
+    assert(calls.take(6) == Seq("0 all -", "0 5 -", "5 all -", "5 5 -", "10 all -", "10 5 -"))
+    assert(calls.drop(6).nonEmpty && calls.drop(6).forall(_ == "12 all -"), calls)
+    // A run of Trigger.AvailableNow reads the rows available when it starts, within the limit:
+    // Spark asks for the end of the run once, without a limit, and passes it with the limit.
+    assert(run(Some(Trigger.AvailableNow()), "max_rows_per_trigger" -> "5") ==
+      ((Seq(5L, 5L, 2L), """{"offset":12}""", Seq("0 all -", "0 5 12", "5 5 12", "10 5 12"))))
     // Only the rows [0, 6) are available when the run starts, and native_counter makes 6 more
-    // rows available after each start: the run stops at the end that it got when it started.
-    assert(run(Some(Trigger.AvailableNow()), "max_rows_per_trigger" -> "5", "step" -> "6")._1 ==
-      Seq(5L, 1L))
+    // rows available after each start: the run stops at the end that it got when it started,
+    // without asking again once it reached it.
+    assert(run(Some(Trigger.AvailableNow()), "max_rows_per_trigger" -> "5", "step" -> "6") ==
+      ((Seq(5L, 1L), """{"offset":6}""", Seq("0 all -", "0 5 6", "5 5 6"))))
     // Trigger.Once ignores the limit, and reads all the available rows in one micro-batch.
-    assert(run(Some(Trigger.Once()), "max_rows_per_trigger" -> "5")._1 == Seq(12L))
-    // Without the capability, Spark asks for all the available rows.
-    assert(run(None, "max_rows_per_trigger" -> "5",
-      "capabilities" -> NativeLibrary.MICRO_BATCH_READ.toString)._1 == Seq(12L))
+    assert(run(Some(Trigger.Once()), "max_rows_per_trigger" -> "5") ==
+      ((Seq(12L), """{"offset":12}""", Seq("0 all -"))))
+    // Without the capability, Spark asks for all the available rows, once for each micro-batch.
+    val (unlimitedRows, _, unlimitedCalls) = run(None, "max_rows_per_trigger" -> "5",
+      "capabilities" -> NativeLibrary.MICRO_BATCH_READ.toString)
+    assert(unlimitedRows == Seq(12L))
+    assert(unlimitedCalls.head == "0 all -" && unlimitedCalls.tail.forall(_ == "12 all -"),
+      unlimitedCalls)
     // So it does with the capability, when the default read limit is all the available rows.
     val limited = NativeLibrary.MICRO_BATCH_READ | NativeLibrary.ADMISSION_CONTROL
     assert(run(None, "capabilities" -> limited.toString)._1 == Seq(12L))
@@ -946,9 +962,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
   nativeTest("start a new run of Trigger.AvailableNow with a limit when the query restarts") {
     val session = newSession(defaultPackage)
     val checkpoint = Utils.createTempDir()
+    val dir = Utils.createTempDir()
     // The rows of each micro-batch that succeeded, with its ID.
     val batches = ArrayBuffer.empty[(Long, Seq[Long])]
-    def run(failingBatch: Long): Unit = {
+    // Runs the query, which records the start, the limit and the end of the run of each call of
+    // latest_offset in the file `limits`.
+    def run(failingBatch: Long, limits: String): Unit = {
       val writeBatch: (Dataset[Row], Long) => Unit = { (df, id) =>
         if (id == failingBatch) throw new IllegalStateException(s"micro-batch $id fails")
         batches += id -> df.collect().map(_.getLong(0)).toSeq.sorted
@@ -956,6 +975,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       // A run from 0 ends at 6, since native_counter makes 6 more rows available after each start.
       val query = session.readStream.format("native_counter")
         .option("max_offset", "12").option("step", "6").option("max_rows_per_trigger", "5")
+        .option("limits_path", new File(dir, limits).getPath)
         .load()
         .writeStream
         .trigger(Trigger.AvailableNow())
@@ -964,27 +984,35 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         .start()
       try query.awaitTermination() finally query.stop()
     }
+    def calls(limits: String): Seq[String] =
+      Files.readAllLines(new File(dir, limits).toPath).asScala.toSeq
     // The second micro-batch, [5, 6), fails, so it is planned but not committed.
-    val e = intercept[Exception](run(failingBatch = 1))
+    val e = intercept[Exception](run(failingBatch = 1, "first"))
     assert(Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
       .exists(_.getMessage == "micro-batch 1 fails"))
     assert(batches.toSeq == Seq(0L -> (0L until 5L)))
-    // The new run first runs that micro-batch again, up to its end in the offset log, then asks for
-    // a new end, 12, and reads up to it within the limit.
-    run(failingBatch = -1)
+    assert(calls("first") == Seq("0 all -", "0 5 6", "5 5 6"))
+    // The new run first runs that micro-batch again, up to its end in the offset log, without
+    // asking for a latest offset, then asks for a new end, 12, and reads up to it within the limit.
+    run(failingBatch = -1, "second")
     assert(batches.toSeq ==
       Seq(0L -> (0L until 5L), 1L -> Seq(5L), 2L -> (6L until 11L), 3L -> Seq(11L)))
+    assert(calls("second") == Seq("6 all -", "6 5 12", "11 5 12"))
   }
 
   nativeTest("reject the read limits that a micro-batch cannot have") {
-    def check(format: String, options: Map[String, String], msg: String): Unit = {
+    // Checks the error of a query, and returns whether its stream reader was closed then.
+    def check(format: String, options: Map[String, String], msg: String): Boolean = {
       val packages = if (format.startsWith("nrl_")) {
         createPackage(noReadLimitLibrary, dataSources("nrl_"))
       } else {
         defaultPackage
       }
+      val closedPath = new File(Utils.createTempDir(), "closed")
       val e = intercept[Exception] {
-        val query = newSession(packages).readStream.format(format).options(options).load()
+        val query = newSession(packages).readStream.format(format).options(options)
+          .option("closed_path", closedPath.getPath)
+          .load()
           .writeStream
           .format("noop")
           .option("checkpointLocation", Utils.createTempDir().getPath)
@@ -995,14 +1023,18 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         exception = findError(e, "NATIVE_DATA_SOURCE_ERROR"),
         condition = "NATIVE_DATA_SOURCE_ERROR",
         parameters = Map("action" -> "plan a scan of", "name" -> format, "msg" -> msg))
+      closedPath.isFile
     }
-    check("native_counter", Map("bad_read_limit" -> "kind"),
-      "default_read_limit returned the unknown kind of read limit 7.")
-    check("native_counter", Map("bad_read_limit" -> "rows"),
-      "default_read_limit returned a maximum of 0 rows, but a micro-batch reads at least 1 row.")
-    // A data source must not declare a capability whose functions are NULL.
-    check("nrl_native_counter", Map("max_rows_per_trigger" -> "5"),
-      "The library does not implement default_read_limit.")
+    // Spark asks for the limit before it records the streams to stop when the query stops, so the
+    // stream closes its reader itself when the limit fails.
+    assert(check("native_counter", Map("bad_read_limit" -> "kind"),
+      "default_read_limit returned the unknown kind of read limit 7."))
+    assert(check("native_counter", Map("bad_read_limit" -> "rows"),
+      "default_read_limit returned a maximum of 0 rows, but a micro-batch reads at least 1 row."))
+    // A data source must not declare a capability whose functions are NULL. Spark checks them
+    // before it creates the stream reader.
+    assert(!check("nrl_native_counter", Map("max_rows_per_trigger" -> "5"),
+      "The library does not implement default_read_limit."))
   }
 
   nativeTest("ask for the initial offset once, and keep it in the checkpoint") {

@@ -134,7 +134,8 @@ trait ColumnarStreamReader extends Serializable {
    * @param start the offset that the next micro-batch starts after: the end of the last
    *              micro-batch, or the initial offset before the first one
    * @param limit `ReadLimit.allAvailable()`, or the default read limit: the latest offset is then
-   *              the end of the data of the next micro-batch
+   *              the end of the data of the next micro-batch. Spark only passes the default read
+   *              limit when the latest offset without a limit is not `start`
    * @param runEnd with `Trigger.AvailableNow` and a limit, the offset that the run reads up to,
    *               which the latest offset does not go beyond
    */

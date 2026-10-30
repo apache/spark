@@ -53,7 +53,10 @@
 //                   offset to that file, as a line. With the option "max_rows_per_trigger", it
 //                   declares the capability SPARK_DS_ADMISSION_CONTROL, and its default read limit
 //                   is that many rows, or with "bad_read_limit", an unknown "kind" of limit or a
-//                   maximum of 0 "rows". With "initial_offsets_path", each call to initial_offset
+//                   maximum of 0 "rows". With "limits_path", each call to latest_offset appends
+//                   its start, its limit, "all" or the maximum number of rows, and its end of the
+//                   run or "-" to that file, as a line, such as "0 5 12". With
+//                   "initial_offsets_path", each call to initial_offset
 //                   appends a line to that file, and returns the number of calls before it as the
 //                   offset, as an initial offset that depends on when it is asked does. With
 //                   "columns_path", creating the stream reader writes the columns to read to that
@@ -773,6 +776,13 @@ void writeFile(const std::string& path, const std::string& content) {
   std::fclose(file);
 }
 
+void appendLine(const std::string& path, const std::string& line) {
+  FILE* file = std::fopen(path.c_str(), "a");
+  if (file == nullptr) throw std::runtime_error("cannot write " + path);
+  std::fputs((line + "\n").c_str(), file);
+  std::fclose(file);
+}
+
 void makeDirs(const std::string& path) {
   for (size_t pos = path.find('/', 1); pos != std::string::npos; pos = path.find('/', pos + 1)) {
     mkdir(path.substr(0, pos).c_str(), 0755);
@@ -1084,7 +1094,8 @@ int createStreamReader(void* handle, struct ArrowSchema* schema,
     reader->state["batch_size"] = get(source->options, "batch_size", "1000");
     for (const char* option :
          {"commit_path", "bad_offset", "bad_initial_offset", "closed_path", "starts_path",
-          "initial_offsets_path", "states", "max_rows_per_trigger", "bad_read_limit"}) {
+          "initial_offsets_path", "states", "max_rows_per_trigger", "bad_read_limit",
+          "limits_path"}) {
       reader->state[option] = get(source->options, option, "");
     }
     *out = reader;
@@ -1181,26 +1192,29 @@ int latestOffset(void* handle, const SparkDsLatestOffsetInfo* info, SparkDsSink 
     checkSize("SparkDsLatestOffsetInfo", info->size, sizeof(SparkDsLatestOffsetInfo));
     if (info->start == nullptr) throw std::runtime_error("no start offset");
     std::string starts_path = get(state, "starts_path", "");
-    if (!starts_path.empty()) {
-      FILE* file = std::fopen(starts_path.c_str(), "a");
-      if (file == nullptr) throw std::runtime_error("cannot write " + starts_path);
-      std::fputs((std::string(info->start) + "\n").c_str(), file);
-      std::fclose(file);
-    }
+    if (!starts_path.empty()) appendLine(starts_path, info->start);
     auto start = static_cast<int64_t>(JsonParser(info->start).parse()["offset"].number);
     int64_t latest =
         std::min(getLong(state, "max_offset", 10), start + getLong(state, "step", 10));
     // Within the limit, and up to the end of a run of Trigger.AvailableNow.
     if (info->limit == nullptr) throw std::runtime_error("no read limit");
     checkSize("SparkDsReadLimit", info->limit->size, sizeof(SparkDsReadLimit));
+    std::string limit = "all";
     if (info->limit->kind == SPARK_DS_READ_MAX_ROWS) {
       latest = std::min(latest, start + info->limit->max_rows);
+      limit = std::to_string(info->limit->max_rows);
     } else if (info->limit->kind != SPARK_DS_READ_ALL_AVAILABLE) {
       throw std::runtime_error("unknown kind of read limit " + std::to_string(info->limit->kind));
     }
+    std::string run_end = "-";
     if (info->run_end != nullptr) {
-      latest = std::min(
-          latest, static_cast<int64_t>(JsonParser(info->run_end).parse()["offset"].number));
+      auto end = static_cast<int64_t>(JsonParser(info->run_end).parse()["offset"].number);
+      latest = std::min(latest, end);
+      run_end = std::to_string(end);
+    }
+    std::string limits_path = get(state, "limits_path", "");
+    if (!limits_path.empty()) {
+      appendLine(limits_path, std::to_string(start) + " " + limit + " " + run_end);
     }
     sendOffset(state, "bad_offset", set_offset, sink, latest);
   });
