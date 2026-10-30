@@ -34,7 +34,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SPARK_VERSION, SparkClassNotFoundException, SparkFiles, SparkRuntimeException, SparkThrowable, SparkUnsupportedOperationException}
 import org.apache.spark.api.python.{PythonBroadcast, SimplePythonFunction}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.sql.{AnalysisException, IntegratedUDFTestUtils, QueryTest, Row}
+import org.apache.spark.sql.{AnalysisException, Dataset, IntegratedUDFTestUtils, QueryTest, Row}
 import org.apache.spark.sql.catalyst.streaming.StreamingRelationV2
 import org.apache.spark.sql.classic.{DataFrame, SparkSession}
 import org.apache.spark.sql.connector.catalog.SupportsRead
@@ -923,6 +923,42 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     // Without the capability, Spark asks for all the available rows.
     assert(run(None, "max_rows_per_trigger" -> "5",
       "capabilities" -> NativeLibrary.MICRO_BATCH_READ.toString)._1 == Seq(12L))
+    // So it does with the capability, when the default read limit is all the available rows.
+    val limited = NativeLibrary.MICRO_BATCH_READ | NativeLibrary.ADMISSION_CONTROL
+    assert(run(None, "capabilities" -> limited.toString)._1 == Seq(12L))
+  }
+
+  nativeTest("start a new run of Trigger.AvailableNow with a limit when the query restarts") {
+    val session = newSession(defaultPackage)
+    val checkpoint = Utils.createTempDir()
+    // The rows of each micro-batch that succeeded, with its ID.
+    val batches = ArrayBuffer.empty[(Long, Seq[Long])]
+    def run(failingBatch: Long): Unit = {
+      val writeBatch: (Dataset[Row], Long) => Unit = { (df, id) =>
+        if (id == failingBatch) throw new IllegalStateException(s"micro-batch $id fails")
+        batches += id -> df.collect().map(_.getLong(0)).toSeq.sorted
+      }
+      // A run from 0 ends at 6, since native_counter makes 6 more rows available after each start.
+      val query = session.readStream.format("native_counter")
+        .option("max_offset", "12").option("step", "6").option("max_rows_per_trigger", "5")
+        .load()
+        .writeStream
+        .trigger(Trigger.AvailableNow())
+        .option("checkpointLocation", checkpoint.getPath)
+        .foreachBatch(writeBatch)
+        .start()
+      try query.awaitTermination() finally query.stop()
+    }
+    // The second micro-batch, [5, 6), fails, so it is planned but not committed.
+    val e = intercept[Exception](run(failingBatch = 1))
+    assert(Iterator.iterate[Throwable](e)(_.getCause).takeWhile(_ != null)
+      .exists(_.getMessage == "micro-batch 1 fails"))
+    assert(batches.toSeq == Seq(0L -> (0L until 5L)))
+    // The new run first runs that micro-batch again, up to its end in the offset log, then asks for
+    // a new end, 12, and reads up to it within the limit.
+    run(failingBatch = -1)
+    assert(batches.toSeq ==
+      Seq(0L -> (0L until 5L), 1L -> Seq(5L), 2L -> (6L until 11L), 3L -> Seq(11L)))
   }
 
   nativeTest("reject the read limits that a micro-batch cannot have") {
