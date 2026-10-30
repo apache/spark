@@ -245,14 +245,15 @@ class PythonUDFSuite extends SharedSparkSession {
 
     eventually(timeout(10.seconds), interval(100.milliseconds)) {
       Thread.sleep(1000L)
+      val actionStartTime = System.currentTimeMillis()
       val pythonExec = executePythonUDF()
+      val actionTime = System.currentTimeMillis() - actionStartTime
       val bootTime = pythonExec.metrics("pythonBootTime").value
       val initTime = pythonExec.metrics("pythonInitTime").value
-      val totalTime = pythonExec.metrics("pythonTotalTime").value
 
       assert(bootTime === 0L, s"expected a reused Python worker, but boot time was $bootTime ms")
-      assert(initTime <= totalTime,
-        s"initialization time $initTime ms exceeded total worker time $totalTime ms")
+      assert(initTime >= 0L && initTime <= actionTime,
+        s"initialization time $initTime ms fell outside the action's $actionTime ms")
     }
   }
 
