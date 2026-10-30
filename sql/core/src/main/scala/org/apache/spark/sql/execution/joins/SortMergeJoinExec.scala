@@ -197,11 +197,21 @@ case class SortMergeJoinExec(
     bindReferences(keys, input).map(_.genCode(ctx))
   }
 
-  private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
-    vars.zipWithIndex.map { case (ev, i) =>
-      ctx.addBufferedState(leftKeys(i).dataType, "value", ev.value)
-    }
-  }
+private def copyKeys(ctx: CodegenContext, vars: Seq[ExprCode]): Seq[ExprCode] = {
+  vars.zipWithIndex.map { case (ev, i) =>
+    val javaType = CodeGenerator.javaType(leftKeys(i).dataType)
+    val valueName = ctx.addMutableState(javaType, "smj_value")
+    val isNullName = ctx.addMutableState(CodeGenerator.JAVA_BOOLEAN, "smj_isNull")
+    
+    val code = code"""
+      |${ev.code}
+      |$isNullName = ${ev.isNull};
+      |$valueName = ${ev.value};
+     """.stripMargin
+    
+    ExprCode(code, JavaCode.variable(isNullName, BooleanType), JavaCode.variable(valueName, leftKeys(i).dataType))
+   }
+ }
 
   private def genComparison(ctx: CodegenContext, a: Seq[ExprCode], b: Seq[ExprCode]): String = {
     // The first key compare always runs, so emit it unguarded. Each subsequent key compare runs
@@ -243,7 +253,8 @@ case class SortMergeJoinExec(
     val nullableStreamedIsNulls = streamedKeyVars.map(_.isNull).filter(_ != FalseLiteral)
     val streamedKeysNullable = nullableStreamedIsNulls.nonEmpty
     val streamedAnyNull = nullableStreamedIsNulls.mkString(" || ")
-    val bufferedKeyTmpVars = createJoinKey(ctx, bufferedRow, bufferedKeys, bufferedOutput)
+    val bufferedKeyVars = copyKeys(ctx, bufferedKeyTmpVars)
+    val matchedKeyVars = copyKeys(ctx, streamedKeyVars)
     val nullableBufferedIsNulls = bufferedKeyTmpVars.map(_.isNull).filter(_ != FalseLiteral)
     val bufferedKeysNullable = nullableBufferedIsNulls.nonEmpty
     val bufferedAnyNull = nullableBufferedIsNulls.mkString(" || ")
