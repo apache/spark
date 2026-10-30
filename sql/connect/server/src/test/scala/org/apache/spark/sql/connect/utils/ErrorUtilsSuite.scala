@@ -16,12 +16,14 @@
  */
 package org.apache.spark.sql.connect.utils
 
+import java.sql.SQLException
 import java.util.UUID
 
-import com.google.rpc.Code
+import com.google.rpc.{Code, ErrorInfo}
 import io.grpc.{Status, StatusRuntimeException}
 import io.grpc.stub.StreamObserver
 
+import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.test.SharedSparkSession
 
 class ErrorUtilsSuite extends SharedSparkSession {
@@ -69,5 +71,41 @@ class ErrorUtilsSuite extends SharedSparkSession {
 
     assert(status.getCode == Code.INTERNAL_VALUE)
     assert(status.getMessage == "boom")
+  }
+
+  test("JDBC write errors remain reconstructable by older Connect clients") {
+    val cause = new SQLException("batch rejected", "23000")
+    val error = new SparkRuntimeException(
+      "FAILED_JDBC.WRITE",
+      Map("url" -> "jdbc:redacted", "tableName" -> "t"),
+      cause)
+
+    Seq(
+      ("spark/4.0.1", "FAILED_JDBC.UNCLASSIFIED"),
+      ("unknown", "FAILED_JDBC.UNCLASSIFIED"),
+      ("spark/5.0.0", "FAILED_JDBC.WRITE")).foreach { case (clientType, expectedClass) =>
+      val status = ErrorUtils.buildStatusFromThrowable(error, None, clientType)
+      val info = status.getDetails(0).unpack(classOf[ErrorInfo])
+      assert(info.getMetadataOrDefault("errorClass", "") == expectedClass)
+      assert(info.getMetadataOrDefault("sqlState", "") == "HV000")
+      val statusParameters = info.getMetadataOrDefault("messageParameters", "")
+      assert(statusParameters.contains("jdbc:redacted"))
+
+      val response = ErrorUtils.throwableToFetchErrorDetailsResponse(
+        error,
+        clientType = clientType)
+      val root = response.getErrors(0)
+      val projected = root.getSparkThrowable
+      assert(projected.getErrorClass == expectedClass)
+      assert(projected.getSqlState == "HV000")
+      assert(projected.getMessageParametersMap.get("url") == "jdbc:redacted")
+      assert(root.getCauseIdx == 1)
+      assert(response.getErrors(1).getMessage == cause.getMessage)
+      if (expectedClass == "FAILED_JDBC.UNCLASSIFIED") {
+        assert(projected.getMessageParametersMap.get("message") == "Write rows to the table t.")
+      } else {
+        assert(projected.getMessageParametersMap.get("tableName") == "t")
+      }
+    }
   }
 }

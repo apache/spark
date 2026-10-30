@@ -571,7 +571,7 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
 
   test("SPARK-19726: INSERT null to a NOT NULL column") {
     val e = intercept[SparkRuntimeException] {
-      sql("INSERT INTO PEOPLE1 values (null, null)")
+      sql("INSERT INTO PEOPLE1 values (null, 1)")
     }
     checkError(
       exception = e,
@@ -581,7 +581,9 @@ class JDBCWriteSuite extends SharedSparkSession with BeforeAndAfter {
         "url" -> JDBCOptions.redactUrl(url1, SQLConf.get.stringRedactionPattern),
         "tableName" -> "TEST.PEOPLE1"))
     assert(e.getCause.isInstanceOf[SQLException])
-    assert(e.getCause.asInstanceOf[SQLException].getSQLState == "23502")
+    val cause = e.getCause.asInstanceOf[SQLException]
+    assert(cause.getSQLState == "23502")
+    assert(cause.getMessage.contains("NULL not allowed for column \"NAME\""))
   }
 
   ignore("SPARK-23856 Spark jdbc setQueryTimeout option") {

@@ -26,7 +26,7 @@ import scala.util.control.NonFatal
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 
-import org.apache.spark.{SparkRuntimeException, TaskContext}
+import org.apache.spark.{SparkRuntimeException, SparkSQLException, TaskContext}
 import org.apache.spark.sql.{AnalysisException, Row}
 import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
 import org.apache.spark.sql.jdbc.{JdbcDialect, JdbcDialects, NoLegacyJDBCError}
@@ -55,6 +55,76 @@ class JdbcTaskInterruptSuite extends SharedSparkSession {
   private def registerDialect(dialect: JdbcDialect): Unit = {
     JdbcDialects.unregisterDialect(dialect)
     JdbcDialects.registerDialect(dialect)
+  }
+
+  private def savePartitionWithSourceError(iterator: Iterator[Row]): SQLException = {
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+
+    val dialect = new JdbcDialect with NoLegacyJDBCError {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+    }
+    registerDialect(dialect)
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      intercept[SQLException] {
+        JdbcUtils.savePartition(
+          "t",
+          iterator,
+          StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)",
+          batchSize = 1,
+          dialect,
+          Connection.TRANSACTION_NONE,
+          newWriteOptions())
+      }
+    } finally {
+      TaskContext.unset()
+      JdbcDialects.unregisterDialect(dialect)
+    }
+  }
+
+  test("savePartition does not classify a later source hasNext failure as a JDBC write") {
+    val sourceFailure = new SQLException("source read failed", "08006")
+    val iterator = new Iterator[Row] {
+      private var readFirstRow = false
+      override def hasNext: Boolean = {
+        if (readFirstRow) throw sourceFailure
+        true
+      }
+      override def next(): Row = {
+        readFirstRow = true
+        Row(1)
+      }
+    }
+
+    assert(savePartitionWithSourceError(iterator) eq sourceFailure)
+    assert(sourceFailure.getSQLState == "08006")
+  }
+
+  test("savePartition preserves a classified later source next failure") {
+    val sourceFailure = new SparkSQLException(
+      "FAILED_JDBC.CONNECTION",
+      Map("url" -> "jdbc:source"),
+      Some("08001"))
+    val iterator = new Iterator[Row] {
+      private var rowsRead = 0
+      override def hasNext: Boolean = rowsRead < 2
+      override def next(): Row = {
+        rowsRead += 1
+        if (rowsRead == 1) Row(1) else throw sourceFailure
+      }
+    }
+
+    val error = savePartitionWithSourceError(iterator)
+    assert(error eq sourceFailure)
+    checkError(
+      exception = sourceFailure,
+      condition = "FAILED_JDBC.CONNECTION",
+      sqlState = Some("08001"),
+      parameters = Map("url" -> "jdbc:source"))
   }
 
   test("savePartition classifies JDBC batch write failures") {

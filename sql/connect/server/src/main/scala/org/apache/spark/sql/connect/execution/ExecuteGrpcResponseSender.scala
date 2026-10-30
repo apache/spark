@@ -107,7 +107,8 @@ private[connect] class ExecuteGrpcResponseSender[T <: Message](
                 "async-grpc-response-sender",
                 observer = grpcObserver,
                 userId = executeHolder.request.getUserContext.getUserId,
-                sessionId = executeHolder.request.getSessionId)
+                sessionId = executeHolder.request.getSessionId,
+                clientType = executeHolder.request.getClientType)
             } finally {
               executeHolder.removeGrpcResponseSender(self)
             }

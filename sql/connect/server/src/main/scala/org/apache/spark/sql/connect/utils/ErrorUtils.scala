@@ -46,6 +46,31 @@ import org.apache.spark.util.Utils
 
 private[connect] object ErrorUtils extends Logging {
 
+  private def supportsJdbcWriteCondition(clientType: String): Boolean = {
+    // Spark clients include their version in client_type (for example, spark/5.0.0).
+    // Older clients do not have FAILED_JDBC.WRITE in their local error catalog.
+    clientType.split("\\s+").find(_.startsWith("spark/")).exists { version =>
+      version.stripPrefix("spark/").takeWhile(_ != '.').toIntOption.exists(_ >= 5)
+    }
+  }
+
+  private def compatibleErrorClass(
+      error: SparkThrowable,
+      clientType: String): (String, Map[String, String]) = {
+    val parameters = Option(error.getMessageParameters)
+      .map(_.asScala.toMap)
+      .getOrElse(Map.empty[String, String])
+    if (error.getCondition == "FAILED_JDBC.WRITE" &&
+        !supportsJdbcWriteCondition(clientType)) {
+      // Keep the URL supplied by the WRITE error; it has already been redacted by JDBCOptions.
+      ("FAILED_JDBC.UNCLASSIFIED", Map(
+        "url" -> parameters.getOrElse("url", "jdbc:"),
+        "message" -> s"Write rows to the table ${parameters.getOrElse("tableName", "")}."))
+    } else {
+      (error.getCondition, parameters)
+    }
+  }
+
   private def allClasses(cl: Class[_]): Seq[Class[_]] = {
     val classes = ArrayBuffer.empty[Class[_]]
     if (cl != null && !cl.equals(classOf[java.lang.Object])) {
@@ -77,7 +102,8 @@ private[connect] object ErrorUtils extends Logging {
    */
   private[connect] def throwableToProtoErrors(
       st: Throwable,
-      serverStackTraceEnabled: Boolean = false): (Int, Seq[FetchErrorDetailsResponse.Error]) = {
+      serverStackTraceEnabled: Boolean = false,
+      clientType: String = ""): (Int, Seq[FetchErrorDetailsResponse.Error]) = {
 
     var currentError = st
     val buffer = mutable.Buffer.empty[FetchErrorDetailsResponse.Error]
@@ -113,8 +139,9 @@ private[connect] object ErrorUtils extends Logging {
         case sparkThrowable: SparkThrowable =>
           val sparkThrowableBuilder = FetchErrorDetailsResponse.SparkThrowable
             .newBuilder()
-          if (sparkThrowable.getCondition != null) {
-            sparkThrowableBuilder.setErrorClass(sparkThrowable.getCondition)
+          val (errorClass, parameters) = compatibleErrorClass(sparkThrowable, clientType)
+          if (errorClass != null) {
+            sparkThrowableBuilder.setErrorClass(errorClass)
           }
           for (queryCtx <- sparkThrowable.getQueryContext) {
             val builder = FetchErrorDetailsResponse.QueryContext
@@ -166,7 +193,7 @@ private[connect] object ErrorUtils extends Logging {
           // FetchErrorDetails RPC doesn't crash with a NullPointerException.
           val messageParameters = sparkThrowable.getMessageParameters
           if (messageParameters != null) {
-            sparkThrowableBuilder.putAllMessageParameters(messageParameters)
+            sparkThrowableBuilder.putAllMessageParameters(parameters.asJava)
           }
           builder.setSparkThrowable(sparkThrowableBuilder.build())
         case _ =>
@@ -197,9 +224,10 @@ private[connect] object ErrorUtils extends Logging {
    */
   private[connect] def throwableToFetchErrorDetailsResponse(
       st: Throwable,
-      serverStackTraceEnabled: Boolean = false): FetchErrorDetailsResponse = {
+      serverStackTraceEnabled: Boolean = false,
+      clientType: String = ""): FetchErrorDetailsResponse = {
 
-    val (rootErrorIdx, errors) = throwableToProtoErrors(st, serverStackTraceEnabled)
+    val (rootErrorIdx, errors) = throwableToProtoErrors(st, serverStackTraceEnabled, clientType)
 
     FetchErrorDetailsResponse
       .newBuilder()
@@ -218,7 +246,8 @@ private[connect] object ErrorUtils extends Logging {
    */
   private[connect] def buildStatusFromThrowable(
       st: Throwable,
-      sessionHolderOpt: Option[SessionHolder]): RPCStatus = {
+      sessionHolderOpt: Option[SessionHolder],
+      clientType: String = ""): RPCStatus = {
     val errorInfo = ErrorInfo
       .newBuilder()
       .setReason(st.getClass.getName)
@@ -237,10 +266,11 @@ private[connect] object ErrorUtils extends Logging {
         }
         val errorClass = e.getCondition
         if (errorClass != null && errorClass.nonEmpty) {
+          val (compatibleClass, compatibleParameters) = compatibleErrorClass(e, clientType)
           val messageParameters = JsonMethods.compact(
-            JsonMethods.render(map2jvalue(e.getMessageParameters.asScala.toMap)))
+            JsonMethods.render(map2jvalue(compatibleParameters)))
           if (messageParameters.length <= maxMetadataSize) {
-            errorInfo.putMetadata("errorClass", errorClass)
+            errorInfo.putMetadata("errorClass", compatibleClass)
             errorInfo.putMetadata("messageParameters", messageParameters)
           }
         }
@@ -331,7 +361,8 @@ private[connect] object ErrorUtils extends Logging {
       st: Throwable,
       events: Option[ExecuteEventsManager] = None,
       isInterrupted: Boolean = false,
-      callback: Option[() => Unit] = None): (Throwable, StatusRuntimeException) = {
+      callback: Option[() => Unit] = None,
+      clientType: String = ""): (Throwable, StatusRuntimeException) = {
 
     // SessionHolder may not be present, e.g. if the session was already closed.
     // When SessionHolder is not present error details will not be available for FetchErrorDetails.
@@ -350,10 +381,11 @@ private[connect] object ErrorUtils extends Logging {
     val wrapped: StatusRuntimeException = st match {
       case se: SparkException if isPythonExecutionException(se) =>
         StatusProto.toStatusRuntimeException(
-          buildStatusFromThrowable(se.getCause, sessionHolderOpt))
+          buildStatusFromThrowable(se.getCause, sessionHolderOpt, clientType))
 
       case e: Throwable if e.isInstanceOf[SparkThrowable] || NonFatal.apply(e) =>
-        StatusProto.toStatusRuntimeException(buildStatusFromThrowable(e, sessionHolderOpt))
+        StatusProto.toStatusRuntimeException(
+          buildStatusFromThrowable(e, sessionHolderOpt, clientType))
 
       case e: Throwable =>
         Status.UNKNOWN
@@ -422,10 +454,12 @@ private[connect] object ErrorUtils extends Logging {
       sessionId: String,
       events: Option[ExecuteEventsManager] = None,
       isInterrupted: Boolean = false,
-      callback: Option[() => Unit] = None): PartialFunction[Throwable, Unit] = {
+      callback: Option[() => Unit] = None,
+      clientType: String = ""): PartialFunction[Throwable, Unit] = {
     { case st: Throwable =>
       val (_, wrapped) =
-        processErrorCommon(opType, userId, sessionId, st, events, isInterrupted, callback)
+        processErrorCommon(
+          opType, userId, sessionId, st, events, isInterrupted, callback, clientType)
       observer.onError(wrapped)
     }
   }
