@@ -25,7 +25,6 @@ import scala.collection.mutable
 import org.apache.spark.{SparkException, SparkUnsupportedOperationException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions._
-import org.apache.spark.sql.catalyst.plans.QueryPlan
 import org.apache.spark.sql.catalyst.util.InternalRowComparableWrapper
 import org.apache.spark.sql.connector.catalog.functions.Reducer
 import org.apache.spark.sql.internal.SQLConf
@@ -2426,17 +2425,18 @@ case class KeyedShuffleSpec(
   }
 
   /**
-   * The arguments of a transform other than its literal parameters, with their one column replaced
-   * by a placeholder of its type, or
-   * `None` when they reference other than one column or are not deterministic, or `expression` is
-   * not a transform. Two transforms with the same function and shape are the same function of
-   * their columns, so a join that pairs the columns up pairs the keys up too.
+   * The arguments of a transform other than its literal parameters, each with its column replaced
+   * by a placeholder (`TransformExpression.expressionShape`, the normalization identity uses too),
+   * or `None` when they reference other than one column between them, one has no shape, or
+   * `expression` is not a transform. Two transforms with the same function and shape are the same
+   * function of their columns, so a join that pairs the columns up pairs the keys up too.
    */
-  private def argumentShape(expression: Expression): Option[Seq[Expression]] = expression match {
-    case t: TransformExpression if t.references.size == 1 && t.deterministic =>
-      Some(t.columnSlots.map(QueryPlan.normalizeExpressions(_, t.references.toSeq)))
-    case _ => None
-  }
+   private def argumentShape(expression: Expression): Option[Seq[Expression]] = expression match {
+     case t: TransformExpression if t.references.size == 1 =>
+       val shapes = t.columnSlots.map(TransformExpression.expressionShape)
+       if (shapes.forall(_.isDefined)) Some(shapes.flatten) else None
+     case _ => None
+   }
 
   /**
    * Whether a join may reduce one or both sides' partition keys onto a common key space, which is
