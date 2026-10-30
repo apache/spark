@@ -163,8 +163,9 @@ trait ColumnarWriter extends Serializable {
   def abort(messages: Array[WriterCommitMessage]): Unit
 
   /**
-   * The time zone of the timestamps of the Arrow batches that the data writers get, read on the
-   * driver: by default, the session time zone when the data writers are planned.
+   * The time zone of the timestamps that Spark converts for the data writers, read on the driver:
+   * by default, the session time zone when the data writers are planned. The timestamps that Spark
+   * copies from the Arrow batches of a scan keep the time zone of the scan.
    */
   def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }

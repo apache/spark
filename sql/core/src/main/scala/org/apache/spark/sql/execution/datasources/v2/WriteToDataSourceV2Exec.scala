@@ -628,9 +628,9 @@ trait V2TableWriteExec
   /**
    * Whether the write takes the columnar batches of the query: when the data writers take them,
    * and the query only supports columnar output. A query that supports rows too, such as a scan
-   * of a cached DataFrame, is written as rows. The query then gets no transition to rows (see
-   * `ApplyColumnarRulesAndInsertTransitions`), and its batches are written with
-   * `WritingSparkTask.runColumnar` of `writingTask`.
+   * of a cached DataFrame, is written as rows. When the write takes the batches, the query gets no
+   * transition to rows (see `ApplyColumnarRulesAndInsertTransitions`), and its batches are written
+   * with `WritingSparkTask.runColumnar` of `writingTask`.
    */
   def writesColumnar: Boolean =
     supportsColumnarInput && query.supportsColumnar && !query.supportsRowBased
@@ -750,7 +750,7 @@ trait WritingSparkTask[W <: DataWriter[InternalRow]] extends Logging with Serial
 
   /**
    * Writes the columnar batches of a query, for a write whose data writers take them (see
-   * [[SupportsColumnarInput]]). Only the task that writes the rows as they are does.
+   * [[SupportsColumnarInput]]). Only `DataWritingSparkTask` implements it.
    */
   def runColumnar(
       writerFactory: DataWriterFactory,

@@ -26,10 +26,10 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
-import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.UnsafeProjection
@@ -276,7 +276,7 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         }
         val writer = new ArrowBatchingDataWriter(dataWriter, ArrowBatchingOptions(
           schema, "America/Los_Angeles", maxRecordsPerBatch, maxBytesPerBatch))
-        try {
+        val result = try {
           writer.writeBatch(batch)
           writer.commit()
           overwrite()
@@ -289,6 +289,9 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         } finally {
           writer.close()
         }
+        // Once closed, the writer holds nothing, which a leak would still hold.
+        assert(writer.allocator.getAllocatedMemory == 0)
+        result
       }
 
       // Runs `f` with a batch of Arrow vectors with the time zone UTC, and a function that
@@ -400,39 +403,91 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
       onHeap.close()
       arrow.close()
     }
+    assert(writer.allocator.getAllocatedMemory == 0)
   }
 
   test("a copied batch ends at the byte limit as a batch of rows does") {
     val schema = StructType.fromDDL("id BIGINT, name STRING")
-    def batchSizes(batch: ColumnarBatch, maxBytesPerBatch: Long): Seq[Int] = {
+    def write(batch: ColumnarBatch, maxBytesPerBatch: Long): TestCommitMessage = {
       val writer = new ArrowBatchingDataWriter(new TestDataWriter(fail = false),
         ArrowBatchingOptions(schema, "UTC", 5, maxBytesPerBatch))
-      try {
+      val message = try {
         writer.writeBatch(batch)
-        writer.commit().asInstanceOf[TestCommitMessage].batchSizes
+        writer.commit().asInstanceOf[TestCommitMessage]
       } finally {
         writer.close()
       }
+      assert(writer.allocator.getAllocatedMemory == 0)
+      message
     }
     val onHeap = new TestBatchReader(0, 20, schema)
     val arrow = new TestArrowBatchReader(0, 20, schema, 20)
+    // The names are large strings, which are converted, while the ids are copied.
+    val largeNames = new TestArrowBatchReader(0, 20, schema, 20, largeVarTypes = true)
     try {
-      assert(onHeap.next() && arrow.next())
+      assert(onHeap.next() && arrow.next() && largeNames.next())
       val vectors = (0 until 2).map {
         arrow.get().column(_).asInstanceOf[ArrowColumnVector].getValueVector
       }
       // The size of the first 2 rows. The names of the ids from 10 are 1 byte longer.
       val twoRows = vectors.map(ArrowBatchingDataWriter.rangeSize(_, 0, 2)).sum
       Seq(twoRows - 1, twoRows, twoRows + 1, 3 * twoRows).foreach { limit =>
-        val rowSizes = batchSizes(onHeap.get(), limit)
-        assert(rowSizes.sum == 20)
-        assert(batchSizes(arrow.get(), limit) == rowSizes, s"limit $limit")
+        val rows = write(onHeap.get(), limit)
+        assert(rows.batchSizes.sum == 20)
+        // Below 3 times the size of 2 rows, a window of 5 rows ends with a batch that does not hold
+        // the limit, so the next window starts at that batch, and converts its names again.
+        Seq(arrow, largeNames).foreach { reader =>
+          assert(write(reader.get(), limit) == rows, s"limit $limit")
+        }
       }
       // The limit ends the batches every 2 rows, also across the windows of 5 rows.
-      assert(batchSizes(arrow.get(), twoRows) == Seq.fill(10)(2))
+      assert(write(arrow.get(), twoRows).batchSizes == Seq.fill(10)(2))
     } finally {
       onHeap.close()
       arrow.close()
+      largeNames.close()
+    }
+  }
+
+  test("a window does not convert the rows of a batch that ends at the byte limit with it") {
+    val schema = StructType.fromDDL("id BIGINT, name STRING")
+    val arrow = new TestArrowBatchReader(0, 10, schema, 10)
+    val largeNames = new TestArrowBatchReader(0, 10, schema, 10, largeVarTypes = true)
+    try {
+      assert(arrow.next() && largeNames.next())
+      def vectors(reader: TestArrowBatchReader): Seq[ValueVector] = (0 until 2).map {
+        reader.get().column(_).asInstanceOf[ArrowColumnVector].getValueVector
+      }
+      // The size of 3 rows, which have the same size, since the names have the same length.
+      val threeRows = vectors(arrow).map(ArrowBatchingDataWriter.rangeSize(_, 0, 3)).sum
+      // The ids are copied, and the large strings of the names are converted, one by one.
+      var conversions = 0
+      val Seq(ids, names) = vectors(largeNames)
+      val batch = new ColumnarBatch(Array[ColumnVector](
+        new ArrowColumnVector(ids),
+        new ArrowColumnVector(names) {
+          override def getUTF8String(rowId: Int): UTF8String = {
+            conversions += 1
+            super.getUTF8String(rowId)
+          }
+        }), 10)
+      val writer = new ArrowBatchingDataWriter(new TestDataWriter(fail = false),
+        ArrowBatchingOptions(schema, "UTC", 6, threeRows))
+      val message = try {
+        writer.writeBatch(batch)
+        writer.commit().asInstanceOf[TestCommitMessage]
+      } finally {
+        writer.close()
+      }
+      assert(writer.allocator.getAllocatedMemory == 0)
+      // The second batch holds the limit at the end of the window of 6 rows, as a batch of rows
+      // would, so the next window starts after it, and each row is converted once.
+      assert(message.batchSizes == Seq(3, 3, 3, 1))
+      assert(message.rows == (0L until 10L).map(id => (id, s"name$id")))
+      assert(conversions == 10)
+    } finally {
+      arrow.close()
+      largeNames.close()
     }
   }
 
@@ -455,6 +510,7 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
       empty.close()
       second.close()
     }
+    assert(writer.allocator.getAllocatedMemory == 0)
   }
 
   test("release the converted columns when a later column fails to convert") {
@@ -475,15 +531,16 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
       root.setRowCount(1)
       val batch = new ColumnarBatch(
         root.getFieldVectors.asScala.map(new ArrowColumnVector(_): ColumnVector).toArray, 1)
-      val allocated = ArrowUtils.rootAllocator.getAllocatedMemory
       val writer = new ArrowBatchingDataWriter(
         new TestDataWriter(fail = false), ArrowBatchingOptions(schema, "UTC", 10, Int.MaxValue))
       try {
-        intercept[Exception](writer.writeBatch(batch))
+        val e = intercept[SparkArithmeticException](writer.writeBatch(batch))
+        assert(e.getCondition == "NUMERIC_VALUE_OUT_OF_RANGE.WITHOUT_SUGGESTION")
+        // The vector of a, which was converted, is released with the failure.
+        assert(writer.allocator.getAllocatedMemory == 0)
       } finally {
         writer.close()
       }
-      assert(ArrowUtils.rootAllocator.getAllocatedMemory == allocated)
     } finally {
       root.close()
       allocator.close()
@@ -843,13 +900,19 @@ class TestBatchReader(lo: Long, hi: Long, schema: StructType)
  * Returns the ids [lo, hi) and their names in Arrow batches of at most `batchSize` rows. It writes
  * each batch to the same Arrow vectors, over the previous one.
  */
-class TestArrowBatchReader(lo: Long, hi: Long, schema: StructType, batchSize: Int)
+/** @param largeVarTypes whether the strings are `large_utf8`, which the writers convert */
+class TestArrowBatchReader(
+    lo: Long,
+    hi: Long,
+    schema: StructType,
+    batchSize: Int,
+    largeVarTypes: Boolean = false)
   extends PartitionReader[ColumnarBatch] {
   private val allocator =
     ArrowUtils.rootAllocator.newChildAllocator("test arrow batch reader", 0, Long.MaxValue)
   private val root = VectorSchemaRoot.create(
     ArrowUtils.toArrowSchema(
-      schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = false),
+      schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = largeVarTypes),
     allocator)
   private val arrowWriter = ArrowWriter.create(root)
   // The vectors are reused, so a consumer does not release them.
