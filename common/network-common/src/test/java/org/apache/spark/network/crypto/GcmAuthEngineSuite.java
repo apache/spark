@@ -33,6 +33,8 @@ import javax.crypto.AEADBadTagException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
+import java.security.GeneralSecurityException;
+import java.time.Duration;
 import java.util.Arrays;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -573,8 +575,39 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
     }
   }
 
-  @Test
-  public void testCiphertextLengthLargerThanMaxInt() throws Exception {
+  /**
+   * Writes {@code numSegments} full plaintext segments into {@code out}, encrypted with the
+   * given {@code encrypter} so that the segments are bound to the length AAD it was created
+   * with. The plaintext bytes are all 'p'.
+   */
+  private static void writeEncryptedSegments(
+      AesGcmHkdfStreaming streaming,
+      StreamSegmentEncrypter encrypter,
+      int numSegments,
+      ByteBuf out) throws GeneralSecurityException {
+    int plaintextSegmentSize = streaming.getPlaintextSegmentSize();
+    byte[] fill = new byte[plaintextSegmentSize];
+    Arrays.fill(fill, (byte) 'p');
+    ByteBuffer plaintext = ByteBuffer.allocate(plaintextSegmentSize);
+    ByteBuffer ciphertext = ByteBuffer.allocate(streaming.getCiphertextSegmentSize());
+    for (int i = 0; i < numSegments; i++) {
+      plaintext.clear();
+      plaintext.put(fill);
+      plaintext.flip();
+      ciphertext.clear();
+      encrypter.encryptSegment(plaintext, false, ciphertext);
+      ciphertext.flip();
+      out.writeBytes(ciphertext);
+    }
+  }
+
+  /**
+   * Feeds a message that declares {@code remainingCiphertext} bytes after the length prefix
+   * and the Tink header, and verifies that the first real segments decrypt and flush
+   * normally. The declared length is never reached, which is what a receiver observes while
+   * a large message is still in flight.
+   */
+  private void assertDeclaredLengthDecrypts(long remainingCiphertext) throws Exception {
     TransportConf gcmConf = getConf(2, false);
     try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
          AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
@@ -585,24 +618,49 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
       AesGcmHkdfStreaming streaming = cipher.getAesGcmHkdfStreaming();
 
-      // remaining ciphertext length is Integer.MAX_VALUE + 1,
-      // which becomes Integer.MIN_VALUE when cast to int.
-      long expectedLength = (long) GcmTransportCipher.LENGTH_HEADER_BYTES +
-              streaming.getHeaderLength() + Integer.MAX_VALUE + 1L;
+      long expectedLength = GcmTransportCipher.LENGTH_HEADER_BYTES +
+              streaming.getHeaderLength() + remainingCiphertext;
       StreamSegmentEncrypter encrypter = streaming.newStreamSegmentEncrypter(
               Longs.toByteArray(expectedLength));
       ByteBuffer header = encrypter.getHeader();
+      // Enough segments to cross MAX_PLAINTEXT_BATCH_BYTES so the mid-message flush runs too.
+      int numSegments = GcmTransportCipher.MAX_PLAINTEXT_BATCH_BYTES /
+              streaming.getPlaintextSegmentSize() + 1;
       ByteBuf ciphertext = Unpooled.buffer(GcmTransportCipher.LENGTH_HEADER_BYTES +
-              header.remaining() + 1)
+              header.remaining() + numSegments * streaming.getCiphertextSegmentSize())
               .writeLong(expectedLength)
-              .writeBytes(header)
-              .writeByte(0);
+              .writeBytes(header);
+      writeEncryptedSegments(streaming, encrypter, numSegments, ciphertext);
+
       ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
-
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
       decryptionHandler.channelRead(ctx, ciphertext);
-
-      verify(ctx, never()).fireChannelRead(any());
+      verify(ctx).fireChannelRead(plaintextCaptor.capture());
+      ByteBuf plaintext = plaintextCaptor.getValue();
+      int expectedPlaintext = numSegments * streaming.getPlaintextSegmentSize();
+      assertEquals(expectedPlaintext, plaintext.readableBytes());
+      assertEquals((byte) 'p', plaintext.getByte(0));
+      assertEquals((byte) 'p', plaintext.getByte(expectedPlaintext - 1));
     }
+  }
+
+  @Test
+  public void testCiphertextLengthLargerThanMaxInt() throws Exception {
+    // The remaining ciphertext is Integer.MAX_VALUE + 1, which the old (int) cast turned
+    // into Integer.MIN_VALUE and made ciphertextBuffer.limit() throw.
+    assertTimeoutPreemptively(Duration.ofSeconds(10),
+            () -> assertDeclaredLengthDecrypts((long) Integer.MAX_VALUE + 1));
+  }
+
+  @Test
+  public void testCiphertextLengthAtFourGiB() throws Exception {
+    // At exactly 2^32 remaining, the old (int) cast produced 0, so channelRead() consumed
+    // nothing and spun forever on the EventLoop. Between 2^32 and 2^32 + 2^31 the cast was
+    // positive, so the handler read until exactly 2^32 remained and then spun the same way.
+    assertTimeoutPreemptively(Duration.ofSeconds(10),
+            () -> assertDeclaredLengthDecrypts(1L << 32));
+    assertTimeoutPreemptively(Duration.ofSeconds(10),
+            () -> assertDeclaredLengthDecrypts((1L << 32) + 1));
   }
 
   @Test
@@ -614,16 +672,218 @@ public class GcmAuthEngineSuite extends AuthEngineSuite {
       AuthMessage serverResponse = server.response(clientChallenge);
       client.deriveSessionCipher(clientChallenge, serverResponse);
       GcmTransportCipher cipher = (GcmTransportCipher) server.sessionCipher();
+      long minimumLength = GcmTransportCipher.LENGTH_HEADER_BYTES +
+              cipher.getAesGcmHkdfStreaming().getHeaderLength();
+      long[] invalidLengths = {
+          Long.MIN_VALUE,
+          -1,
+          0,
+          minimumLength - 1,
+          minimumLength + 1,
+          minimumLength + GcmTransportCipher.TAG_SIZE_BYTES - 1
+      };
+      for (long invalidLength : invalidLengths) {
+        GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
+        ByteBuf ciphertext = Unpooled.buffer(GcmTransportCipher.LENGTH_HEADER_BYTES)
+                .writeLong(invalidLength);
+
+        IllegalStateException error = assertThrows(
+                IllegalStateException.class,
+                () -> decryptionHandler.channelRead(mock(ChannelHandlerContext.class), ciphertext),
+                "length " + invalidLength);
+
+        assertEquals("Invalid expected ciphertext length: " + invalidLength, error.getMessage());
+      }
+    }
+  }
+
+  @Test
+  public void testRejectedExpectedLengthIsNotRetained() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      GcmTransportCipher cipher = (GcmTransportCipher) server.sessionCipher();
       GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
-      long invalidLength = (long) GcmTransportCipher.LENGTH_HEADER_BYTES +
-              cipher.getAesGcmHkdfStreaming().getHeaderLength() - 1;
-      ByteBuf ciphertext = Unpooled.buffer(8).writeLong(invalidLength);
+      int headerLength = cipher.getAesGcmHkdfStreaming().getHeaderLength();
+      long rejectedLength = GcmTransportCipher.LENGTH_HEADER_BYTES + headerLength - 1;
+      ByteBuf first = Unpooled.buffer(GcmTransportCipher.LENGTH_HEADER_BYTES)
+              .writeLong(rejectedLength);
 
-      IllegalStateException error = assertThrows(
-              IllegalStateException.class,
-              () -> decryptionHandler.channelRead(mock(ChannelHandlerContext.class), ciphertext));
+      assertThrows(IllegalStateException.class,
+              () -> decryptionHandler.channelRead(mock(ChannelHandlerContext.class), first));
 
-      assertEquals("Invalid expected ciphertext length: " + invalidLength, error.getMessage());
+      // The rejected value must not clear the "length not read yet" sentinel: the handler
+      // must keep rejecting it instead of treating the next read as a new frame.
+      ByteBuf second = Unpooled.buffer(GcmTransportCipher.LENGTH_HEADER_BYTES + headerLength)
+              .writeLong(GcmTransportCipher.LENGTH_HEADER_BYTES + headerLength)
+              .writeZero(headerLength);
+      IllegalStateException error = assertThrows(IllegalStateException.class,
+              () -> decryptionHandler.channelRead(mock(ChannelHandlerContext.class), second));
+
+      assertEquals("Invalid expected ciphertext length: " + rejectedLength, error.getMessage());
+    }
+  }
+
+  /**
+   * The accepted minimum length is an empty message: the 8-byte length prefix plus the Tink
+   * header, with no segments. Changing the lower bound check from {@code <} to {@code <=}
+   * would make such a message close the connection.
+   */
+  @Test
+  public void testEmptyMessage() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      GcmTransportCipher cipher = (GcmTransportCipher) server.sessionCipher();
+      GcmTransportCipher.EncryptionHandler encryptionHandler = cipher.getEncryptionHandler();
+      GcmTransportCipher.DecryptionHandler decryptionHandler = cipher.getDecryptionHandler();
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> emptyCaptor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(new byte[0]), promise);
+      verify(ctx).write(emptyCaptor.capture(), eq(promise));
+      ByteBuffer emptyCiphertext = ByteBuffer.allocate((int) emptyCaptor.getValue().count());
+      emptyCaptor.getValue().transferTo(new ByteBufferWriteableChannel(emptyCiphertext), 0);
+      emptyCiphertext.flip();
+
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(emptyCiphertext));
+      verify(ctx, never()).fireChannelRead(any());
+
+      // The empty message must not close the connection: the next message on the same
+      // channel still decodes.
+      reset(ctx);
+      byte[] data = new byte[1024];
+      Arrays.fill(data, (byte) 'E');
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, Unpooled.wrappedBuffer(data), promise);
+      verify(ctx).write(captor.capture(), eq(promise));
+      ByteBuffer ciphertextBuffer = ByteBuffer.allocate((int) captor.getValue().count());
+      captor.getValue().transferTo(new ByteBufferWriteableChannel(ciphertextBuffer), 0);
+      ciphertextBuffer.flip();
+
+      ArgumentCaptor<ByteBuf> plaintextCaptor = ArgumentCaptor.forClass(ByteBuf.class);
+      decryptionHandler.channelRead(ctx, Unpooled.wrappedBuffer(ciphertextBuffer));
+      verify(ctx).fireChannelRead(plaintextCaptor.capture());
+      ByteBuf plaintext = plaintextCaptor.getValue();
+      assertEquals(data.length, plaintext.readableBytes());
+      byte[] decrypted = new byte[data.length];
+      plaintext.readBytes(decrypted);
+      assertArrayEquals(data, decrypted);
+    }
+  }
+
+  /**
+   * A FileRegion that produces {@code count} bytes from a small, reused buffer, so that a
+   * region larger than 2 GiB does not need a 2 GiB allocation.
+   */
+  private static final class RepeatingRegion extends AbstractFileRegion {
+    private final long count;
+    private final ByteBuffer pattern;
+    private long transferred;
+
+    RepeatingRegion(long count) {
+      this.count = count;
+      this.pattern = ByteBuffer.allocate(4096);
+    }
+
+    @Override
+    public long position() {
+      return 0;
+    }
+
+    @Override
+    public long transferred() {
+      return transferred;
+    }
+
+    @Override
+    public long count() {
+      return count;
+    }
+
+    @Override
+    public long transferTo(WritableByteChannel target, long position) throws IOException {
+      long remaining = count - transferred;
+      if (remaining <= 0) {
+        return 0;
+      }
+      // Fill the target until it stops accepting bytes, so a full plaintext segment is
+      // always delivered and the caller keeps encrypting in the same transferTo() call.
+      long written = 0;
+      while (written < remaining) {
+        pattern.clear();
+        pattern.limit((int) Math.min(pattern.capacity(), remaining - written));
+        int n = target.write(pattern);
+        if (n == 0) {
+          break;
+        }
+        written += n;
+      }
+      transferred += written;
+      return written;
+    }
+
+    @Override
+    protected void deallocate() {
+    }
+  }
+
+  private static final WritableByteChannel DISCARDING_CHANNEL = new WritableByteChannel() {
+    @Override
+    public int write(ByteBuffer src) {
+      int remaining = src.remaining();
+      src.position(src.limit());
+      return remaining;
+    }
+
+    @Override
+    public boolean isOpen() {
+      return true;
+    }
+
+    @Override
+    public void close() {
+    }
+  };
+
+  @Test
+  public void testTransferToReturnsLargeByteCount() throws Exception {
+    TransportConf gcmConf = getConf(2, false);
+    try (AuthEngine client = new AuthEngine("appId", "secret", gcmConf);
+         AuthEngine server = new AuthEngine("appId", "secret", gcmConf)) {
+      AuthMessage clientChallenge = client.challenge();
+      AuthMessage serverResponse = server.response(clientChallenge);
+      client.deriveSessionCipher(clientChallenge, serverResponse);
+      GcmTransportCipher cipher = (GcmTransportCipher) server.sessionCipher();
+      GcmTransportCipher.EncryptionHandler encryptionHandler = cipher.getEncryptionHandler();
+      ChannelHandlerContext ctx = mock(ChannelHandlerContext.class);
+      ChannelPromise promise = mock(ChannelPromise.class);
+
+      // More than 2^31 plaintext bytes, so the ciphertext count exceeds Integer.MAX_VALUE.
+      ArgumentCaptor<GcmTransportCipher.GcmEncryptedMessage> captor =
+              ArgumentCaptor.forClass(GcmTransportCipher.GcmEncryptedMessage.class);
+      encryptionHandler.write(ctx, new RepeatingRegion((long) Integer.MAX_VALUE + 1), promise);
+      verify(ctx).write(captor.capture(), eq(promise));
+      GcmTransportCipher.GcmEncryptedMessage encrypted = captor.getValue();
+      assertTrue(encrypted.count() > Integer.MAX_VALUE);
+
+      // With an int counter this returned a negative value, which Netty treats as a full
+      // send buffer and silently drops the rest of the message.
+      long transferred = assertTimeoutPreemptively(Duration.ofMinutes(2),
+              () -> encrypted.transferTo(DISCARDING_CHANNEL, 0));
+
+      assertTrue(transferred > Integer.MAX_VALUE, "transferTo returned " + transferred);
+      assertEquals(encrypted.transferred(), transferred);
+      assertEquals(encrypted.count(), transferred);
     }
   }
 
