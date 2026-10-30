@@ -223,12 +223,16 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
         return true
       }
-      throw new SparkRuntimeException(
-        "ARTIFACT_ALREADY_EXISTS",
-        Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
-      )
+      throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
     }
     false
+  }
+
+  private def artifactAlreadyExistsError(normalizedRemoteRelativePath: Path): Throwable = {
+    new SparkRuntimeException(
+      "ARTIFACT_ALREADY_EXISTS",
+      Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
+    )
   }
 
   /**
@@ -256,6 +260,10 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       // before the transfer, but its error is reported after that check.
       val rejection = Try(NativeDataSourcePackage.checkAdded(
         staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString))).failed
+      // A directory has no content to compare with the artifact, which it is not.
+      if (Files.isDirectory(staged) && Files.exists(target)) {
+        throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
+      }
       if (artifactExists(normalizedRemoteRelativePath, staged, target)) {
         false
       } else {
@@ -264,7 +272,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
         true
       }
     } {
-      copyDir.foreach(dir => Utils.deleteRecursively(dir.toFile))
+      // The package is at `target` already, so failing to delete the copy fails nothing.
+      copyDir.foreach(dir => Utils.tryLogNonFatalError(Utils.deleteRecursively(dir.toFile)))
     }
   }
 
@@ -430,7 +439,9 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               addArtifact(artifact.path, tempFile, fragment = None)
             }(finallyBlock = {
               // addArtifact moves the file only when it adds the artifact, so delete what is left.
-              Utils.tryWithSafeFinally(outStream.close())(Utils.deleteRecursively(tempDir.toFile))
+              Utils.tryWithSafeFinally(outStream.close()) {
+                Utils.tryLogNonFatalError(Utils.deleteRecursively(tempDir.toFile))
+              }
             })
           case _ =>
             throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
@@ -680,15 +691,6 @@ object ArtifactManager extends Logging {
 
   val forwardToFSPrefix = "forward_to_fs"
 
-  /**
-   * Whether an error of adding an artifact only rejects that artifact, so that the call that adds
-   * several artifacts adds the others, and then reports all such errors.
-   */
-  private[sql] def isRejectedArtifact(e: SparkRuntimeException): Boolean = {
-    e.getCondition == "ARTIFACT_ALREADY_EXISTS" ||
-      Option(e.getCondition).exists(_.startsWith("INVALID_NATIVE_DATA_SOURCE_PACKAGE."))
-  }
-
   val ARTIFACT_DIRECTORY_PREFIX = "artifacts"
 
   private[artifact] lazy val artifactRootDirectory =
@@ -697,6 +699,15 @@ object ArtifactManager extends Logging {
   private[artifact] object SparkContextResourceType extends Enumeration {
     type ResourceType = Value
     val JAR, FILE, ARCHIVE = Value
+  }
+
+  /**
+   * Whether an error of adding an artifact only rejects that artifact, so that the call that adds
+   * several artifacts adds the others, and then reports all such errors.
+   */
+  private[sql] def isRejectedArtifact(e: SparkRuntimeException): Boolean = {
+    e.getCondition == "ARTIFACT_ALREADY_EXISTS" ||
+      Option(e.getCondition).exists(_.startsWith("INVALID_NATIVE_DATA_SOURCE_PACKAGE."))
   }
 
   private class StateCleanupRunner(cleanupState: ArtifactStateForCleanup) extends Runnable {

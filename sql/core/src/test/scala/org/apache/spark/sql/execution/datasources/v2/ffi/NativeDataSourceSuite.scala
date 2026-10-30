@@ -1628,6 +1628,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     Files.copy(notAZip.toPath, sameName.toPath)
     val existing = intercept[SparkRuntimeException](session.addArtifact(sameName.getPath))
     assert(existing.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    val sameNameDirectory = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    assert(sameNameDirectory.mkdir())
+    val existingDirectory =
+      intercept[SparkRuntimeException](session.addArtifact(sameNameDirectory.getPath))
+    assert(existingDirectory.getCondition == "ARTIFACT_ALREADY_EXISTS")
 
     // A call that adds several artifacts adds the others, and reports all the rejected ones.
     val valid = createPackage(library, dataSources(""), dir = dir, fileName = "range-3.0.sparkpkg")
@@ -1651,6 +1656,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   test("add any file with the extension when native data sources are disabled") {
     val session = spark.newSession()
+    sessions += session
     // A static configuration, which a session cannot set otherwise.
     session.sessionState.conf.setConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED, false)
     val file = new File(Utils.createTempDir(), "not_a_package.sparkpkg")
