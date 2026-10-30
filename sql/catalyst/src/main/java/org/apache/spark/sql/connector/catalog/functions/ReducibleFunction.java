@@ -77,8 +77,8 @@ public interface ReducibleFunction<I, O> {
    * <p>
    * {@code thisParams} and {@code otherParams} hold each side's own literal parameters and may have
    * different lengths -- for example a zero-parameter transform reducing onto a one-parameter one.
-   * Implementations must check each array's length before indexing into it, and must not modify
-   * the arrays or their values.
+   * Implementations must check each array's length before indexing into it. Each call gets its own
+   * arrays, but the literal values may be shared, so implementations must not modify them.
    * Spark only asks when the two transforms' arguments line up position by position, so
    * {@code days(ts)} may be offered {@code truncate(ts, 3)} but never {@code bucket(4, ts)}.
    * <p>

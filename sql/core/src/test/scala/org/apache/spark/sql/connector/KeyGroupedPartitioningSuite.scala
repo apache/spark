@@ -7673,6 +7673,15 @@ class KeyGroupedPartitioningSuite
     assert(r.reduce(2) == 0, s"Expected reduce(2) == 0, got ${r.reduce(2)}")
   }
 
+  test("SPARK-50593: a connector that modifies the parameter arrays does not change later " +
+      "answers") {
+    val id = attr("id")
+    val b8 = TransformExpression(ArrayMutatingBucketFunction, Seq(Literal(8), id))
+    val b4 = TransformExpression(ArrayMutatingBucketFunction, Seq(Literal(4), id))
+    assert(b8.reducers(b4) == Some(BucketReducer(4)))
+    assert(b8.reducers(b4) == Some(BucketReducer(4)), "asked again, the answer is the same")
+  }
+
   test("SPARK-50593: the deprecated int reducer is offered only the bucket(n, col) layout") {
     // A width-last truncate whose deprecated overload has bucket logic would otherwise get a gcd
     // reducer for its own pair, and apply it to keys from a different key space.

@@ -22,7 +22,7 @@ import java.time.temporal.ChronoUnit
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.GenericInternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
-import org.apache.spark.sql.connector.expressions.Literal
+import org.apache.spark.sql.connector.expressions.{Literal, LiteralValue}
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -408,6 +408,30 @@ object BucketLogicTruncateFunction extends ScalarFunction[Int] with ReducibleFun
       thisNumBuckets: Int,
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
+    val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
+    if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
+  }
+}
+
+/**
+ * A bucket whose generalized reducer overwrites the parameter arrays it is handed, then reduces by
+ * gcd. A later call must still see the transform's own parameters.
+ */
+object ArrayMutatingBucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "array_mutating_bucket"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): Int = 0
+
+  override def reducer(
+      thisParams: Array[Literal[_]],
+      otherFunc: ReducibleFunction[_, _],
+      otherParams: Array[Literal[_]]): Reducer[Int, Int] = {
+    val thisNumBuckets = thisParams(0).value().asInstanceOf[Int]
+    val otherNumBuckets = otherParams(0).value().asInstanceOf[Int]
+    thisParams(0) = LiteralValue(1, IntegerType)
+    otherParams(0) = LiteralValue(1, IntegerType)
     val gcd = BigInt(thisNumBuckets).gcd(BigInt(otherNumBuckets)).toInt
     if (gcd > 1 && gcd != thisNumBuckets) BucketReducer(gcd) else null
   }

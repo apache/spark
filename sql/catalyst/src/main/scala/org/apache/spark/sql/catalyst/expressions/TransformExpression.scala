@@ -356,8 +356,12 @@ case class TransformExpression(
     // overload only if the generalized one is not implemented; any other outcome is final.
     val typesMatch = literalParamsMatchInputTypes && other.literalParamsMatchInputTypes
     val outcome =
-      (if (typesMatch) probe(thisFunction.reducer(thisParams, otherFunction, otherParams))
-       else Unimplemented) match {
+      // Each call gets its own copies of the memoized arrays, so a connector cannot change them.
+      (if (typesMatch) {
+        probe(thisFunction.reducer(thisParams.clone(), otherFunction, otherParams.clone()))
+      } else {
+        Unimplemented
+      }) match {
         // A parameterless pair falls back to the parameterless overload.
         case Unimplemented if thisParams.isEmpty && otherParams.isEmpty =>
           probe(thisFunction.reducer(otherFunction))
