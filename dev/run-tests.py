@@ -518,7 +518,7 @@ def main():
                 )
             elif is_github_prev_sha:
                 changed_files = identify_changed_files_from_git_commits(
-                    os.environ["GITHUB_SHA"], target_ref=os.environ["GITHUB_PREV_SHA"]
+                    "HEAD", target_ref=os.environ["GITHUB_PREV_SHA"]
                 )
 
             dangling_python_tests = determine_dangling_python_tests(changed_files)
