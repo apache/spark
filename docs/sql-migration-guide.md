@@ -107,6 +107,7 @@ license: |
 
 ## Upgrading from Spark SQL 4.1 to 4.2
 
+- Since Spark 4.2, V2 scans no longer group input splits that share a reported partition key into one task unless an operator needs that grouping, such as a storage-partitioned join (SPARK-55092). Scans below a shuffle, or with no consumer that uses their partitioning, now run one task per split, which can add task overhead for connectors that report many small splits per key. Before 4.2, grouping multiple splits into one task also dropped their reported ordering.
 - Since Spark 4.2, Spark enables order-independent checksums for shuffle outputs by default to detect data inconsistencies during indeterminate shuffle stage retries. If a checksum mismatch is detected, Spark rolls back and re-executes all succeeding stages that depend on the shuffle output. If rolling back is not possible for some succeeding stages, the job will fail. To restore the previous behavior, set `spark.sql.shuffle.orderIndependentChecksum.enabled` and `spark.sql.shuffle.orderIndependentChecksum.enableFullRetryOnMismatch` to `false`.
 - Since Spark 4.2, support for Derby JDBC datasource is deprecated.
 - Since Spark 4.2, a new default method `mergeWith` has been added to the `CustomTaskMetric` interface. The default implementation sums the two metric values, which is correct for count-type metrics. Data source connector implementations that report non-additive metrics (e.g., maximum, average, compression ratio, or gauge values) must override `mergeWith` to provide correct merge semantics.
