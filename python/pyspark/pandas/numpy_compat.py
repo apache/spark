@@ -44,7 +44,7 @@ from pyspark.sql.types import (
 # sqrt, convert a FloatType input to DoubleType, so a float32 pandas-on-Spark Series can return
 # float64. This explains only output-type differences. Casting an operand before evaluation can
 # still change values and must be reviewed separately.
-unary_np_spark_mappings = {
+unary_np_spark_mappings: Dict[str, Callable[[Column], Column]] = {
     "abs": F.abs,
     "absolute": F.abs,
     "arccos": F.acos,
@@ -131,7 +131,7 @@ unary_np_spark_mappings = {
     .otherwise(False),
     "sin": F.sin,
     "sinh": F.sinh,
-    "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),  # type: ignore[call-overload]
+    "spacing": pandas_udf(lambda s: np.spacing(s), DoubleType()),
     "sqrt": F.sqrt,
     "square": lambda c: c.cast("double") * c,
     "tan": F.tan,
@@ -251,7 +251,7 @@ binary_np_spark_mappings = {
     "fmax": _fmax_func,
     "fmin": _fmin_func,
     "fmod": _fmod_func,
-    "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "gcd": pandas_udf(lambda s1, s2: np.gcd(s1, s2), DoubleType()),
     "heaviside": lambda c1, c2: F.when(
         c1.isNull() | F.isnan(c1.cast("double")),
         c1.cast("double"),
@@ -260,7 +260,7 @@ binary_np_spark_mappings = {
     .when(c1 == 0, c2.cast("double"))
     .otherwise(F.lit(1.0)),
     "hypot": F.hypot,
-    "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),  # type: ignore[call-overload]
+    "lcm": pandas_udf(lambda s1, s2: np.lcm(s1, s2), DoubleType()),
     "ldexp": lambda c1, c2: F.when(
         c1.cast("double").isin(0.0, float("-inf"), float("inf")),
         c1.cast("double"),
@@ -281,9 +281,7 @@ binary_np_spark_mappings = {
     ),
     "maximum": F.greatest,
     "minimum": F.least,
-    "nextafter": pandas_udf(  # type: ignore[call-overload]
-        lambda s1, s2: np.nextafter(s1, s2), DoubleType()
-    ),
+    "nextafter": pandas_udf(lambda s1, s2: np.nextafter(s1, s2), DoubleType()),
     # F.shiftright accepts literal counts only; call_function also accepts a column.
     # NumPy sign-extends counts outside an int64's bit width, unlike JVM shifts.
     "right_shift": lambda c1, c2: F.when(
