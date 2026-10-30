@@ -8140,6 +8140,38 @@ class KeyGroupedPartitioningSuite
     }
   }
 
+  test("SPARK-50593: argument types are compared ignoring nullability") {
+    // An equi-join pairs keys whose types differ only in nullability, so the identity side's column
+    // can be `array<int>` without nulls while the function declares `array<int>` with them.
+    // Evaluating the transform on it is fine, so the identity reduce must not refuse it, just as
+    // the one-side shuffle, which checks the template's own column, does not.
+    val withNulls = ArrayType(IntegerType, containsNull = true)
+    val noNulls = ArrayType(IntegerType, containsNull = false)
+    val fn = new ScalarFunction[Int] {
+      override def inputTypes(): Array[DataType] = Array(withNulls)
+      override def resultType(): DataType = IntegerType
+      override def name(): String = "array_size_bucket"
+      override def canonicalName(): String = name()
+      override def produceResult(input: InternalRow): Int = input.getArray(0).numElements()
+    }
+    val idCol = AttributeReference("a", noNulls)()
+    val trCol = AttributeReference("b", withNulls)()
+    def spec(
+        e: org.apache.spark.sql.catalyst.expressions.Expression,
+        col: AttributeReference): physical.KeyedShuffleSpec =
+      physical.KeyedShuffleSpec(physical.KeyedPartitioning(Seq(e), Seq.empty),
+        physical.ClusteredDistribution(Seq(col)))
+    val idSpec = spec(idCol, idCol)
+    val trSpec = spec(TransformExpression(fn, Seq(trCol)), trCol)
+    withSQLConf(
+        SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+        SQLConf.V2_BUCKETING_PARTIALLY_CLUSTERED_DISTRIBUTION_ENABLED.key -> "false",
+        SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+      assert(idSpec.reducersBothWays(trSpec)._1.isDefined,
+        "a column differing from the declared type only in containsNull is reducible")
+    }
+  }
+
   test("SPARK-50593: a template whose arguments do not have the declared types is not a layout " +
       "to shuffle onto") {
     // The one-side shuffle rebuilds the template over the other child's key and evaluates it per

@@ -26,6 +26,7 @@ import org.apache.spark.internal.LogKeys.FUNCTION_NAME
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
 import org.apache.spark.sql.catalyst.plans.QueryPlan
+import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.connector.expressions.{Literal => V2Literal, LiteralValue}
 import org.apache.spark.sql.errors.QueryExecutionErrors
@@ -226,9 +227,11 @@ case class TransformExpression(
   /**
    * Whether the `select`ed children match the bound function's declared input type at their
    * positions. A child beyond the declared arity has no declared type to compare against (e.g. an
-   * arity-flexible function), so it is left to the connector reducer / other guards. The DataType
-   * match is exact by design: any mismatch (including cosmetic ones like Array `containsNull` or
-   * Decimal precision/scale) fails safe to a shuffle. See the two predicates below for the callers.
+   * arity-flexible function), so it is left to the connector reducer / other guards. The match
+   * ignores nullability (`containsNull`, `nullable`, `valueContainsNull`), which an equi-join
+   * also lets differ between its keys and which does not change how a value evaluates; any other
+   * mismatch, such as Decimal precision/scale, fails safe to a shuffle. See the two predicates
+   * below for the callers.
    *
    * Reading `dataType` can throw rather than answer, e.g. for a `GetStructField` over a non-struct
    * column. Both callers are gates that must answer "not reducible" rather than fail the query, so
@@ -239,7 +242,7 @@ case class TransformExpression(
     children.zipWithIndex.forall {
       case (c, i) =>
         !select(c) || i >= declaredTypes.length ||
-          Try(c.dataType).toOption.contains(declaredTypes(i))
+          Try(c.dataType).toOption.exists(DataTypeUtils.sameType(_, declaredTypes(i)))
     }
   }
 
