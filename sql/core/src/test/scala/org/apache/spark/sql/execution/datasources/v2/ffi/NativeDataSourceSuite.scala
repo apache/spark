@@ -1591,7 +1591,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     check(notAZip, "INVALID_MANIFEST", Map.empty)
     val directory = new File(dir, "range-2.3.sparkpkg")
     assert(directory.mkdir())
-    check(directory, "INVALID_MANIFEST", Map.empty)
+    check(directory, "INVALID_MANIFEST", Map("reason" -> "The package is a directory."))
     // The driver loads the library to plan a query.
     check(createPackage(library, dataSources(""), dir = dir, fileName = "range-2.4.sparkpkg",
         platform = "other-platform"),
@@ -1601,10 +1601,11 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     intercept[NoSuchFileException](session.addArtifact(new File(dir, "missing.sparkpkg").getPath))
     val unreadable = createPackage(library, dataSources(""), dir = dir,
       fileName = "range-2.5.sparkpkg")
-    assert(unreadable.setReadable(false))
     try {
-      assume(!Files.isReadable(unreadable.toPath), "The user can read any file.")
-      intercept[AccessDeniedException](session.addArtifact(unreadable.getPath))
+      // Not when the user can read any file, as root.
+      if (unreadable.setReadable(false) && !Files.isReadable(unreadable.toPath)) {
+        intercept[AccessDeniedException](session.addArtifact(unreadable.getPath))
+      }
     } finally {
       unreadable.setReadable(true)
     }
@@ -1646,6 +1647,16 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       Paths.get("pyfiles", pyFile.getName), pyFile.toPath, None, deleteStagedFile = false)
     assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
       Seq("range-2.0.sparkpkg", "range-3.0.sparkpkg"))
+  }
+
+  test("add any file with the extension when native data sources are disabled") {
+    val session = spark.newSession()
+    // A static configuration, which a session cannot set otherwise.
+    session.sessionState.conf.setConf(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED, false)
+    val file = new File(Utils.createTempDir(), "not_a_package.sparkpkg")
+    Files.writeString(file.toPath, "not a zip")
+    session.addArtifact(file.getPath)
+    assert(session.artifactManager.hasFileArtifact(file.getName))
   }
 
   nativeTest("Java data sources take precedence") {

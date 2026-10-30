@@ -255,6 +255,10 @@ object NativeDataSourcePackage extends Logging {
     def invalid(reason: String, dataSources: Seq[String] = Nil, cause: Throwable = null) = {
       Left(InvalidNativeDataSourcePackage(invalidManifestError(path, reason, cause), dataSources))
     }
+    if (file.isDirectory) {
+      // The error of ZipFile would name the file, which can be a copy of the one at `path`.
+      return invalid("The package is a directory.")
+    }
     try {
       Utils.tryWithResource(new ZipFile(file)) { zip =>
         Option(zip.getEntry(MANIFEST_NAME)) match {

@@ -429,9 +429,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               d.stream.transferTo(outStream)
               addArtifact(artifact.path, tempFile, fragment = None)
             }(finallyBlock = {
-              outStream.close()
-              // The file is left if the artifact was not added.
-              Utils.deleteRecursively(tempDir.toFile)
+              // addArtifact moves the file only when it adds the artifact, so delete what is left.
+              Utils.tryWithSafeFinally(outStream.close())(Utils.deleteRecursively(tempDir.toFile))
             })
           case _ =>
             throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
