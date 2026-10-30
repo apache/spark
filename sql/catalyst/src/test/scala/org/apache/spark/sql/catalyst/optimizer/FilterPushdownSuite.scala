@@ -804,6 +804,32 @@ class FilterPushdownSuite extends PlanTest {
     assertTopFilterConjuncts(optimized, Seq(nonDeterministic, throwable))
   }
 
+  test("SPARK-60633: a throwable condition is not pushed through a generate that can drop " +
+    "rows") {
+    val throwable = $"a" > 5 || IsNull(RaiseError(Literal("boom")))
+    // The generate outputs no row for an empty array, so below it the throwable condition would
+    // see rows it never sees above it, even though nothing is written before it.
+    val originalQuery = testRelationWithArrayType
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(throwable && $"b" > 1)
+      .analyze
+    val correctAnswer = testRelationWithArrayType.where($"b" > 1)
+      .generate(Explode($"c_arr"), alias = Some("arr"))
+      .where(throwable)
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // An outer generate outputs a row for every input row, so the condition is still pushed.
+    val outerQuery = testRelationWithArrayType
+      .generate(Explode($"c_arr"), outer = true, alias = Some("arr"))
+      .where(throwable && $"b" > 1)
+      .analyze
+    val outerAnswer = testRelationWithArrayType.where(throwable && $"b" > 1)
+      .generate(Explode($"c_arr"), outer = true, alias = Some("arr"))
+      .analyze
+    comparePlans(Optimize.execute(outerQuery), outerAnswer)
+  }
+
   test("SPARK-60633: a throwable condition is not pushed through an aggregate ahead of the " +
     "conditions before it") {
     val originalQuery = testRelation.groupBy($"a")($"a", count($"b") as "c")
@@ -825,6 +851,20 @@ class FilterPushdownSuite extends PlanTest {
     comparePlans(Optimize.execute(throwableFirst), throwableFirstAnswer)
   }
 
+  test("SPARK-60633: a condition over a throwable alias is not pushed through an aggregate " +
+    "ahead of the conditions before it") {
+    val originalQuery = testRelation
+      .groupBy($"a")($"a", count($"b") as "c", throwableOnA as "x")
+      .where($"c" > 1 && $"x" && $"a" > 1)
+      .analyze
+    // `x` is not throwable itself, but pushing `x` evaluates the throwable expression behind it.
+    val correctAnswer = testRelation.where($"a" > 1)
+      .groupBy($"a")($"a", count($"b") as "c", throwableOnA as "x")
+      .where($"c" > 1 && $"x")
+      .analyze
+    comparePlans(Optimize.execute(originalQuery), correctAnswer)
+  }
+
   test("SPARK-60633: a throwable condition is not pushed through a window ahead of the " +
     "conditions before it") {
     val winExpr = windowExpr(count($"b"),
@@ -838,6 +878,15 @@ class FilterPushdownSuite extends PlanTest {
       .where($"window" > 1 && throwableOnA)
       .analyze
     comparePlans(Optimize.execute(originalQuery), correctAnswer)
+
+    // The conditions left above keep their written order.
+    val withRand = testRelation
+      .window(winExpr.as("window") :: Nil, $"a" :: Nil, $"b".asc :: Nil)
+      .where(Rand(10) > 0.5 && $"window" > 1 && $"a" > 1)
+      .analyze
+    val Seq(nonDeterministic, stayUp, _) = splitConjunctivePredicates(
+      withRand.asInstanceOf[Filter].condition)
+    assertTopFilterConjuncts(Optimize.execute(withRand), Seq(nonDeterministic, stayUp))
   }
 
   test("SPARK-60633: a throwable condition is not pushed through a union ahead of a " +

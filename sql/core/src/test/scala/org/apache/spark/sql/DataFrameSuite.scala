@@ -2951,24 +2951,42 @@ class DataFrameSuite extends SharedSparkSession
 
   test("SPARK-60633: a throwable filter condition is not pushed through an operator ahead of " +
     "its order") {
-    val df = spark.range(0, 10, 1, 1).toDF()
+    def df: DataFrame = spark.range(0, 10, 1, 1).toDF()
     // `assert_true(id > 5)` only holds for the rows the conjunct before it keeps, and that
-    // conjunct cannot be pushed through the operator below the filter.
-    val generateQuery = df.select($"id", explode(array($"id")) as "x")
+    // conjunct cannot be pushed through the operator below the filter. Each query is built
+    // inside the config loop, so it is planned under that config.
+    def generateQuery(): DataFrame = df.select($"id", explode(array($"id")) as "x")
       .where($"x" > 5 && assert_true($"id" > 5).isNull)
-    val aggregateQuery = df.groupBy($"id").agg(max($"id") as "m")
+    def aggregateQuery(): DataFrame = df.groupBy($"id").agg(max($"id") as "m")
       .where($"m" > 5 && assert_true($"id" > 5).isNull)
-    val windowQuery = df.select($"id", max($"id").over(Window.partitionBy($"id")) as "m")
-      .where($"m" > 5 && assert_true($"id" > 5).isNull)
+    def windowQuery(): DataFrame =
+      df.select($"id", max($"id").over(Window.partitionBy($"id")) as "m")
+        .where($"m" > 5 && assert_true($"id" > 5).isNull)
     // `rand(0) < 0` keeps no row, so `assert_true` never runs.
-    val unionQuery = df.union(df).where(rand(0) < 0 && assert_true($"id" > 100).isNull)
+    def unionQuery(): DataFrame =
+      df.union(df).where(rand(0) < 0 && assert_true($"id" > 100).isNull)
+    // The generate only outputs the rows with `id > 5`, so the filter above it never raises,
+    // although its only condition is written first.
+    def droppingGenerateQuery(): DataFrame =
+      df.select($"id", explode(filter(array($"id"), x => x > 5)) as "x")
+        .where(assert_true($"id" > 5).isNull)
+    // The throwable part is an aggregate result column, which the filter only reads.
+    def aggregateAliasQuery(): DataFrame =
+      df.groupBy($"id").agg(max($"id") as "m", assert_true($"id" > 5) as "x")
+        .where($"m" > 5 && $"x".isNull)
     val expected = (6L until 10L).map(i => Row(i, i))
     Seq(true, false).foreach { codegen =>
       withSQLConf(SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString) {
-        checkAnswer(generateQuery, expected)
-        checkAnswer(aggregateQuery, expected)
-        checkAnswer(windowQuery, expected)
-        checkAnswer(unionQuery, Nil)
+        checkAnswer(generateQuery(), expected)
+        checkAnswer(aggregateQuery(), expected)
+        checkAnswer(windowQuery(), expected)
+        checkAnswer(unionQuery(), Nil)
+        checkAnswer(droppingGenerateQuery(), expected)
+        // An interpreted aggregate computes every result column for every group, so the
+        // throwable alias only waits for the filter when codegen defers it past the filter.
+        if (codegen) {
+          checkAnswer(aggregateAliasQuery(), (6L until 10L).map(i => Row(i, i, null)))
+        }
       }
     }
   }

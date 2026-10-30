@@ -2632,13 +2632,10 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
         // first expensive one are all pushed. After it, a throwable component (e.g.
         // `raise_error`, possibly inside a projected alias) stays above with the expensive ones,
         // so it is not evaluated on rows the components before it would have filtered out.
-        val (leading, rest) = originalAndRewrittenConditionsWithUsedAlias.span {
-          case (_, used, _) => isCheap(used)
-        }
-        val (cheapRest, expensiveWithUsed) = rest.partition {
-          case (_, used, replaced) => isCheap(used) && !replaced.throwable
-        }
-        val cheapWithUsed = leading ++ cheapRest
+        val (cheapWithUsed, expensiveWithUsed) = splitPushable(
+          originalAndRewrittenConditionsWithUsedAlias)(
+          canPush = { case (_, used, _) => isCheap(used) },
+          throwable = { case (_, _, replaced) => replaced.throwable })
         // Cheap filters (cases 1 & 2) pushed below the projection.
         val baseChild: LogicalPlan = if (cheapWithUsed.nonEmpty) {
           val combinedCheapFilter = cheapWithUsed.map(_._3).reduce(And)
@@ -2691,7 +2688,8 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // If we can push down a filter through Aggregate, it means the filter only references the
     // grouping keys or constants. The Aggregate operator can't reduce distinct values of grouping
     // keys so the filter won't see any new data after push down. A throwable predicate written
-    // after one that stays up is not pushed, though (see `splitPushableConjuncts`).
+    // after one that stays up is not pushed, though (see `splitPushable`). This includes a
+    // predicate over a throwable alias of the aggregate.
     case filter @ Filter(condition, aggregate: Aggregate)
       if aggregate.aggregateExpressions.forall(_.deterministic)
         && aggregate.groupingExpressions.nonEmpty =>
@@ -2699,19 +2697,20 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
       // For each filter, expand the alias and check if the filter can be evaluated using
       // attributes produced by the aggregate operator's child operator.
-      val (pushDown, stayUp) = splitPushableConjuncts(condition) { cond =>
-        val replaced = replaceAlias(cond, aliasMap)
-        cond.deterministic && cond.references.nonEmpty &&
-          replaced.references.subsetOf(aggregate.child.outputSet)
-      }
+      val (pushDown, stayUp) = splitPushable(
+        splitConjunctivePredicates(condition).map(cond => (cond, replaceAlias(cond, aliasMap))))(
+        canPush = { case (cond, replaced) =>
+          cond.deterministic && cond.references.nonEmpty &&
+            replaced.references.subsetOf(aggregate.child.outputSet)
+        },
+        throwable = { case (_, replaced) => replaced.throwable })
 
       if (pushDown.nonEmpty) {
-        val pushDownPredicate = pushDown.reduce(And)
-        val replaced = replaceAlias(pushDownPredicate, aliasMap)
+        val replaced = pushDown.map(_._2).reduce(And)
         val newAggregate = aggregate.copy(child = Filter(replaced, aggregate.child))
         // If there is no more filter to stay up, just eliminate the filter.
         // Otherwise, create "Filter(stayUp) <- Aggregate <- Filter(pushDownPredicate)".
-        if (stayUp.isEmpty) newAggregate else Filter(stayUp.reduce(And), newAggregate)
+        if (stayUp.isEmpty) newAggregate else Filter(stayUp.map(_._1).reduce(And), newAggregate)
       } else {
         filter
       }
@@ -2720,7 +2719,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     // pushed beneath must satisfy the following conditions:
     // 1. All the expressions are part of window partitioning key. The expressions can be compound.
     // 2. Deterministic.
-    // 3. Placed before any non-deterministic predicates.
+    // 3. Not throwable, if a predicate written before it stays up (see `splitPushable`).
     case filter @ Filter(condition, w: Window)
       if w.partitionSpec.forall(_.isInstanceOf[AttributeReference]) =>
       val partitionAttrs = AttributeSet(w.partitionSpec.flatMap(_.references))
@@ -2785,7 +2784,7 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
 
     case filter @ Filter(_, u: UnaryNode)
         if canPushThrough(u) && u.expressions.forall(_.deterministic) =>
-      pushDownPredicate(filter, u.child) { predicate =>
+      pushDownPredicate(filter, u.child, keepThrowableUp = canDropRows(u)) { predicate =>
         u.withNewChildren(Seq(Filter(predicate, u.child)))
       }
   }
@@ -2810,15 +2809,29 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
     case _ => false
   }
 
+  /**
+   * Whether an operator of [[canPushThrough]] can output no row for an input row. Below such an
+   * operator, a pushed condition sees the input rows it drops, which the condition above it
+   * would never see.
+   */
+  private def canDropRows(p: UnaryNode): Boolean = p match {
+    case g: Generate => !g.outer
+    case _: ScriptTransformation => true
+    case _ => false
+  }
+
   private def pushDownPredicate(
       filter: Filter,
-      grandchild: LogicalPlan)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
+      grandchild: LogicalPlan,
+      keepThrowableUp: Boolean)(insertFilter: Expression => LogicalPlan): LogicalPlan = {
     // Only push down the predicates that is deterministic and all the referenced attributes
-    // come from grandchild.
+    // come from grandchild. With `keepThrowableUp`, a throwable predicate is not pushed even when
+    // it is written first, as the operator in between can drop rows it would then see.
     // TODO: non-deterministic predicates could be pushed through some operators that do not change
     // the rows.
     val (pushDown, stayUp) = splitPushableConjuncts(filter.condition) { cond =>
-      cond.deterministic && cond.references.subsetOf(grandchild.outputSet)
+      cond.deterministic && !(keepThrowableUp && cond.throwable) &&
+        cond.references.subsetOf(grandchild.outputSet)
     }
 
     if (pushDown.nonEmpty) {
@@ -2834,20 +2847,27 @@ object PushPredicateThroughNonJoin extends Rule[LogicalPlan] with PredicateHelpe
   }
 
   /**
-   * Splits `condition` into the conjuncts to push below an operator and the conjuncts to keep
-   * above it, where `canPush` tells whether the operator lets a conjunct through. Every conjunct
+   * Splits `conds`, the conjuncts of a filter in their written order, into the ones to push below
+   * an operator and the ones to keep above it. `canPush` tells whether the operator lets a
+   * conjunct through, and `throwable` whether it may throw (e.g. `raise_error`). Every conjunct
    * written before the first one that cannot be pushed is pushed. After it, only the conjuncts
-   * that are not throwable (e.g. `raise_error`) are pushed, so a throwable conjunct is not
-   * evaluated on rows the conjuncts before it would have filtered out. Moving a non-throwable
-   * conjunct below a throwable one is fine, as it can only reduce the rows the throwable one
-   * sees. The conjuncts to keep above are returned in the order they were written.
+   * that are not throwable are pushed, so a throwable conjunct is not evaluated on rows the
+   * conjuncts before it would have filtered out. Moving a non-throwable conjunct below a
+   * throwable one is fine, as it can only reduce the rows the throwable one sees. The conjuncts
+   * to keep above are returned in the order they were written.
    */
-  private def splitPushableConjuncts(condition: Expression)(
-      canPush: Expression => Boolean): (Seq[Expression], Seq[Expression]) = {
-    val (leading, rest) = splitConjunctivePredicates(condition).span(canPush)
-    val (pushedRest, stayUp) = rest.partition(cond => canPush(cond) && !cond.throwable)
-    (leading ++ pushedRest, stayUp)
+  private def splitPushable[T](conds: Seq[T])(
+      canPush: T => Boolean, throwable: T => Boolean): (Seq[T], Seq[T]) = {
+    val (leading, rest) = conds.span(canPush)
+    // The head of `rest`, if any, is the first conjunct that cannot be pushed.
+    val (pushedRest, stayUp) = rest.drop(1).partition(c => canPush(c) && !throwable(c))
+    (leading ++ pushedRest, rest.take(1) ++ stayUp)
   }
+
+  /** [[splitPushable]] over the conjuncts of `condition`, checking each for `throwable`. */
+  private def splitPushableConjuncts(condition: Expression)(
+      canPush: Expression => Boolean): (Seq[Expression], Seq[Expression]) =
+    splitPushable(splitConjunctivePredicates(condition))(canPush, _.throwable)
 
   /**
    * Splits `project` into a stack of [[Project]]s with the expensive conditions in
