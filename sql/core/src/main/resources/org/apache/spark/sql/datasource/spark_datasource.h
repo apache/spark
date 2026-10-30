@@ -48,11 +48,11 @@
  * Spark loads a library once in each JVM, and calls spark_ds_init before any other function. It
  * creates a data source with create on the driver for each schema inference, scan and write, and
  * closes it right after. create also returns the capabilities of the data source: Spark reports
- * the operations that a data source does not declare as unsupported, without calling the library.
- * Spark also creates a data source while it analyzes a query, to reject a batch write that the
- * data source does not support before it computes the data to write. That data source has the
- * options of the table, those of CREATE TABLE for a table in a catalog, which the options of a
- * write can override, so Spark checks the capabilities of each operation again.
+ * the operations that a data source does not declare as unsupported, without calling their
+ * functions. Spark also creates a data source while it analyzes a query, to reject a batch write
+ * that the data source does not support before it computes the data to write. That data source
+ * has the options of the table, those of CREATE TABLE for a table in a catalog, which the options
+ * of a write can override, so Spark checks the capabilities of each operation again.
  *
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
  *   by calling, each at most once and in this order, push_limit and prune_columns, plans the
