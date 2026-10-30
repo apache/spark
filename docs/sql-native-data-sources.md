@@ -41,8 +41,9 @@ the data that a library returns without copying it. When a write gets the batche
 they are, as in a plain copy from one native data source to another, Spark writes them without
 converting them to rows: it copies the buffers of their columns, since a library may keep the data
 that it writes until it closes its data writer, and converts value by value the columns of other
-Arrow types than those of the schema, such as `utf8_view` strings. The copied values are written as
-the scan returned them, without the checks of a conversion, such as the precision of a decimal.
+Arrow types than those of the schema, such as `utf8_view` strings, and those that Arrow Java cannot
+slice, such as a column of a fixed width with 2 GiB of values or more. The copied values are written
+as the scan returned them, without the checks of a conversion, such as the precision of a decimal.
 The batches that Spark copies end with the batches of the scan, so a library may get smaller
 batches than `spark.sql.execution.arrow.maxRecordsPerBatch` rows then. The data of a query in which
 Spark also filters, projects or shuffles the rows is still converted to rows, and with adaptive

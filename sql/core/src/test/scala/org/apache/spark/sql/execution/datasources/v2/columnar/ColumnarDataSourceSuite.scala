@@ -26,8 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.jdk.CollectionConverters._
 
 import org.apache.arrow.c.{ArrowArray, ArrowSchema, Data}
-import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, ValueVector, VectorSchemaRoot}
-import org.apache.arrow.vector.types.pojo.{ArrowType, Field, Schema}
+import org.apache.arrow.vector.{BigIntVector, DecimalVector, FieldVector, FixedSizeBinaryVector, LargeVarCharVector, VectorSchemaRoot}
+import org.apache.arrow.vector.complex.ListVector
+import org.apache.arrow.vector.types.pojo.{ArrowType, Field, FieldType, Schema}
 
 import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
@@ -434,13 +435,12 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
       Seq(twoRows - 1, twoRows, twoRows + 1, 3 * twoRows).foreach { limit =>
         val rows = write(onHeap.get(), limit)
         assert(rows.batchSizes.sum == 20)
-        // Below 3 times the size of 2 rows, a window of 5 rows ends with a batch that does not hold
-        // the limit, so the next window starts at that batch, and converts its names again.
+        // The batches end at the same rows when the names are copied, or converted row by row.
         Seq(arrow, largeNames).foreach { reader =>
           assert(write(reader.get(), limit) == rows, s"limit $limit")
         }
       }
-      // The limit ends the batches every 2 rows, also across the windows of 5 rows.
+      // The limit ends the batches every 2 rows, also when 5 rows do not divide by them.
       assert(write(arrow.get(), twoRows).batchSizes == Seq.fill(10)(2))
     } finally {
       onHeap.close()
@@ -449,20 +449,25 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
     }
   }
 
-  test("a window does not convert the rows of a batch that ends at the byte limit with it") {
+  test("convert the columns of a batch that are not copied up to the end of each batch") {
     val schema = StructType.fromDDL("id BIGINT, name STRING")
-    val arrow = new TestArrowBatchReader(0, 10, schema, 10)
-    val largeNames = new TestArrowBatchReader(0, 10, schema, 10, largeVarTypes = true)
+    val size = 1 << 20
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    // The ids are copied, and the names, large strings of 1 MiB, are converted.
+    val root = VectorSchemaRoot.create(
+      ArrowUtils.toArrowSchema(
+        schema, "UTC", errorOnDuplicatedFieldNames = true, largeVarTypes = true),
+      allocator)
     try {
-      assert(arrow.next() && largeNames.next())
-      def vectors(reader: TestArrowBatchReader): Seq[ValueVector] = (0 until 2).map {
-        reader.get().column(_).asInstanceOf[ArrowColumnVector].getValueVector
+      root.allocateNew()
+      val ids = root.getVector("id").asInstanceOf[BigIntVector]
+      val names = root.getVector("name").asInstanceOf[LargeVarCharVector]
+      (0 until 20).foreach { i =>
+        ids.setSafe(i, i)
+        names.setSafe(i, Array.fill(size)(('a' + i).toByte))
       }
-      // The size of 3 rows, which have the same size, since the names have the same length.
-      val threeRows = vectors(arrow).map(ArrowBatchingDataWriter.rangeSize(_, 0, 3)).sum
-      // The ids are copied, and the large strings of the names are converted, one by one.
+      root.setRowCount(20)
       var conversions = 0
-      val Seq(ids, names) = vectors(largeNames)
       val batch = new ColumnarBatch(Array[ColumnVector](
         new ArrowColumnVector(ids),
         new ArrowColumnVector(names) {
@@ -470,9 +475,10 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
             conversions += 1
             super.getUTF8String(rowId)
           }
-        }), 10)
+        }), 20)
+      // The batches hold 2 MiB from their second row, before their maximum of 10 rows.
       val writer = new ArrowBatchingDataWriter(new TestDataWriter(fail = false),
-        ArrowBatchingOptions(schema, "UTC", 6, threeRows))
+        ArrowBatchingOptions(schema, "UTC", 10, 2L * size))
       val message = try {
         writer.writeBatch(batch)
         writer.commit().asInstanceOf[TestCommitMessage]
@@ -480,14 +486,48 @@ class ColumnarDataSourceSuite extends QueryTest with SharedSparkSession
         writer.close()
       }
       assert(writer.allocator.getAllocatedMemory == 0)
-      // The second batch holds the limit at the end of the window of 6 rows, as a batch of rows
-      // would, so the next window starts after it, and each row is converted once.
-      assert(message.batchSizes == Seq(3, 3, 3, 1))
-      assert(message.rows == (0L until 10L).map(id => (id, s"name$id")))
-      assert(conversions == 10)
+      assert(message.batchSizes == Seq.fill(10)(2))
+      assert(message.rows.map { case (id, name) => (id, name.length, name.distinct) } ==
+        (0 until 20).map(i => (i.toLong, size, ('a' + i).toChar.toString)))
+      // Each row is converted once, and only up to the row at which its batch ends, so the
+      // converted names never hold more than those of a batch, rather than those of 10 rows.
+      assert(conversions == 20)
+      assert(writer.allocator.getPeakMemoryAllocation < 5L * size)
     } finally {
-      arrow.close()
-      largeNames.close()
+      root.close()
+      allocator.close()
+    }
+  }
+
+  test("copy only the Arrow columns that Arrow can slice") {
+    val allocator = ArrowUtils.rootAllocator.newChildAllocator("test", 0, Long.MaxValue)
+    val idField = ArrowUtils.toArrowSchema(StructType.fromDDL("id BIGINT"), "UTC",
+      errorOnDuplicatedFieldNames = true, largeVarTypes = false).getFields.get(0)
+    val ids = new BigIntVector(idField, allocator)
+    // A vector that reports more values than it holds, which Arrow cannot slice, since it computes
+    // the byte positions of a slice of a fixed-width vector of 2 GiB or more in int (see
+    // `BaseSliceArrowOutputProcessor.canSlice`), and a list vector with such a child.
+    def binaries(): FixedSizeBinaryVector = new FixedSizeBinaryVector("binaries", allocator, 8) {
+      override def getValueCount: Int = Int.MaxValue / 8 + 1
+    }
+    val unsliceable = Seq(
+      binaries(),
+      new ListVector("lists", allocator, FieldType.nullable(ArrowType.List.INSTANCE), null) {
+        replaceDataVector(binaries())
+      })
+    try {
+      ids.allocateNew(3)
+      ids.setValueCount(3)
+      assert(ArrowBatchingDataWriter.canCopy(ids, idField, 3))
+      // A vector without a value for each row of its batch is converted too.
+      assert(!ArrowBatchingDataWriter.canCopy(ids, idField, 2))
+      unsliceable.foreach { vector =>
+        assert(!ArrowBatchingDataWriter.canCopy(vector, vector.getField, vector.getValueCount),
+          vector.getField)
+      }
+    } finally {
+      (ids +: unsliceable).foreach(_.close())
+      allocator.close()
     }
   }
 
