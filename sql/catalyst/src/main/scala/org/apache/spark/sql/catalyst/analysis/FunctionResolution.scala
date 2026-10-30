@@ -54,11 +54,7 @@ object FunctionType {
   case object NotFound extends FunctionType
 }
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.{
-  AggregateFunction => V2AggregateFunction,
-  ScalarFunction,
-  UnboundFunction
-}
+import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.errors.{DataTypeErrorsBase, QueryCompilationErrors}
 import org.apache.spark.sql.internal.connector.V1Function
 import org.apache.spark.sql.types._
@@ -686,7 +682,7 @@ class FunctionResolution(
         // clauses (DISTINCT / FILTER / ORDER BY / IGNORE NULLS). They have dedicated physical
         // operators that do not honor them, so reject rather than silently drop the clause.
         if (agg.isInstanceOf[PythonUDAF] || agg.isInstanceOf[PythonAggregate]) {
-          checkUnsupportedAggregateClause(agg, unresolvedFunc)
+          checkUnsupportedAggregateClause(agg.prettyName, unresolvedFunc)
         }
         // After parse, the functions not set the ordering within group yet.
         val newAgg = agg match {
@@ -718,7 +714,7 @@ class FunctionResolution(
         aggFunc.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
       // This function is not an aggregate function, just return the resolved one.
       case other =>
-        checkUnsupportedAggregateClause(other, unresolvedFunc)
+        checkUnsupportedAggregateClause(other.prettyName, unresolvedFunc)
         if (other.isInstanceOf[String2TrimExpression] && numArgs == 2) {
           if (trimWarningEnabled.get) {
             log.warn(
@@ -734,21 +730,21 @@ class FunctionResolution(
   }
 
   private def checkUnsupportedAggregateClause(
-      func: Expression,
+      funcName: String,
       unresolvedFunc: UnresolvedFunction): Unit = {
     if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(func.prettyName, "DISTINCT")
+      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(funcName, "DISTINCT")
     }
     if (unresolvedFunc.filter.isDefined) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        func.prettyName,
+        funcName,
         "FILTER clause"
       )
     }
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        func.prettyName,
+        funcName,
         "IGNORE NULLS"
       )
     }
@@ -796,78 +792,26 @@ class FunctionResolution(
       unbound: UnboundFunction,
       arguments: Seq[Expression],
       unresolvedFunc: UnresolvedFunction): Expression = {
-    val inputType = StructType(arguments.zipWithIndex.map {
-      case (exp, pos) => StructField(s"_$pos", exp.dataType, exp.nullable)
-    })
-    val bound = try {
-      unbound.bind(inputType)
-    } catch {
-      case unsupported: UnsupportedOperationException =>
-        throw QueryCompilationErrors.functionCannotProcessInputError(
-          unbound,
-          arguments,
-          unsupported
-        )
-    }
-
-    if (bound.inputTypes().length != arguments.length) {
-      throw QueryCompilationErrors.v2FunctionInvalidInputTypeLengthError(bound, arguments)
-    }
-
-    bound match {
-      case scalarFunc: ScalarFunction[_] =>
-        processV2ScalarFunction(scalarFunc, arguments, unresolvedFunc)
-      case aggFunc: V2AggregateFunction[_, _] =>
-        processV2AggregateFunction(aggFunc, arguments, unresolvedFunc)
-      case _ =>
-        failAnalysis(
-          errorClass = "INVALID_UDF_IMPLEMENTATION",
-          messageParameters = Map("funcName" -> toSQLId(bound.name()))
-        )
-    }
-  }
-
-  private def processV2ScalarFunction(
-      scalarFunc: ScalarFunction[_],
-      arguments: Seq[Expression],
-      unresolvedFunc: UnresolvedFunction): Expression = {
-    if (unresolvedFunc.isDistinct) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(scalarFunc.name(), "DISTINCT")
-    } else if (unresolvedFunc.filter.isDefined) {
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        scalarFunc.name(),
-        "FILTER clause"
-      )
-    } else if (unresolvedFunc.ignoreNulls.contains(true)) {
-      // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
-      throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        scalarFunc.name(),
-        "IGNORE NULLS"
-      )
-    } else {
-      V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments)
+    V2ExpressionUtils.bindFunction(unbound, arguments) match {
+      case aggregator: V2Aggregator[_, _] =>
+        processV2AggregateFunction(aggregator, unresolvedFunc)
+      case scalarExpr =>
+        checkUnsupportedAggregateClause(unbound.name(), unresolvedFunc)
+        scalarExpr
     }
   }
 
   private def processV2AggregateFunction(
-      aggFunc: V2AggregateFunction[_, _],
-      arguments: Seq[Expression],
+      aggregator: V2Aggregator[_, _],
       unresolvedFunc: UnresolvedFunction): Expression = {
     // Only fail for IGNORE NULLS; RESPECT NULLS is the default behavior
     if (unresolvedFunc.ignoreNulls.contains(true)) {
       throw QueryCompilationErrors.functionWithUnsupportedSyntaxError(
-        aggFunc.name(),
+        aggregator.aggrFunc.name(),
         "IGNORE NULLS"
       )
     }
-    val aggregator = V2Aggregator(aggFunc, arguments)
     aggregator.toAggregateExpression(unresolvedFunc.isDistinct, unresolvedFunc.filter)
-  }
-
-  private def failAnalysis(errorClass: String, messageParameters: Map[String, String]): Nothing = {
-    throw new AnalysisException(
-      errorClass = errorClass,
-      messageParameters = messageParameters)
   }
 
   /**

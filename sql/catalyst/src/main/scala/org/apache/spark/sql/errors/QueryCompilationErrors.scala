@@ -35,7 +35,6 @@ import org.apache.spark.sql.catalyst.trees.{Origin, TreeNode}
 import org.apache.spark.sql.catalyst.util.{quoteIdentifier, ParseMode}
 import org.apache.spark.sql.connector.catalog._
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
-import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, UnboundFunction}
 import org.apache.spark.sql.connector.expressions.filter.Predicate
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.SQLConf.LEGACY_CTE_PRECEDENCE_POLICY
@@ -1448,6 +1447,17 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
     new FunctionAlreadyExistsException(func.nameParts)
   }
 
+  def cannotInstantiateFunctionClassError(
+      className: String, func: FunctionIdentifier, cause: Throwable): Throwable = {
+    new AnalysisException(
+      errorClass = "CANNOT_INSTANTIATE_FUNCTION_CLASS",
+      messageParameters = Map(
+        "className" -> className,
+        "functionName" -> toSQLId(func.toString),
+        "msg" -> Option(cause.getMessage).getOrElse(cause.getClass.getName)),
+      cause = Some(cause))
+  }
+
   def cannotLoadClassWhenRegisteringFunctionError(
       className: String, func: FunctionIdentifier): Throwable = {
     new AnalysisException(
@@ -2794,27 +2804,28 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
   }
 
   def functionCannotProcessInputError(
-      unbound: UnboundFunction,
+      functionName: String,
       arguments: Seq[Expression],
       unsupported: UnsupportedOperationException): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1198",
       messageParameters = Map(
-        "unbound" -> unbound.name,
+        "unbound" -> functionName,
         "arguments" -> arguments.map(_.dataType.simpleString).mkString(", "),
         "unsupported" -> unsupported.getMessage),
       cause = Some(unsupported))
   }
 
   def v2FunctionInvalidInputTypeLengthError(
-      bound: BoundFunction,
-      args: Seq[Expression]): Throwable = {
+      functionName: String,
+      argsLength: Int,
+      inputTypesLength: Int): Throwable = {
     new AnalysisException(
       errorClass = "_LEGACY_ERROR_TEMP_1199",
       messageParameters = Map(
-        "bound" -> bound.name(),
-        "argsLen" -> args.length.toString,
-        "inputTypesLen" -> bound.inputTypes().length.toString))
+        "bound" -> functionName,
+        "argsLen" -> argsLength.toString,
+        "inputTypesLen" -> inputTypesLength.toString))
   }
 
   def cannotResolveColumnNameAmongAttributesError(
