@@ -75,6 +75,36 @@ public final class UnsafeKVExternalSorter {
       int numElementsForSpillThreshold,
       long sizeInBytesForSpillThreshold,
       @Nullable BytesToBytesMap map) throws IOException {
+    this(keySchema, valueSchema, blockManager, serializerManager, pageSizeBytes,
+      numElementsForSpillThreshold, sizeInBytesForSpillThreshold, map, true);
+  }
+
+  /**
+   * Creates a sorter whose caller owns its lifecycle and guarantees that
+   * {@link #cleanupResources()} is invoked.
+   */
+  public static UnsafeKVExternalSorter createWithCallerOwnedLifecycle(
+      StructType keySchema,
+      StructType valueSchema,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      long pageSizeBytes,
+      int numElementsForSpillThreshold,
+      long sizeInBytesForSpillThreshold) throws IOException {
+    return new UnsafeKVExternalSorter(keySchema, valueSchema, blockManager, serializerManager,
+      pageSizeBytes, numElementsForSpillThreshold, sizeInBytesForSpillThreshold, null, false);
+  }
+
+  private UnsafeKVExternalSorter(
+      StructType keySchema,
+      StructType valueSchema,
+      BlockManager blockManager,
+      SerializerManager serializerManager,
+      long pageSizeBytes,
+      int numElementsForSpillThreshold,
+      long sizeInBytesForSpillThreshold,
+      @Nullable BytesToBytesMap map,
+      boolean registerTaskCompletionListener) throws IOException {
     this.keySchema = keySchema;
     this.valueSchema = valueSchema;
     final TaskContext taskContext = TaskContext.get();
@@ -90,20 +120,41 @@ public final class UnsafeKVExternalSorter {
     TaskMemoryManager taskMemoryManager = taskContext.taskMemoryManager();
 
     if (map == null) {
-      sorter = UnsafeExternalSorter.create(
-        taskMemoryManager,
-        blockManager,
-        serializerManager,
-        taskContext,
-        comparatorSupplier,
-        prefixComparator,
-        (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE()),
-        pageSizeBytes,
-        numElementsForSpillThreshold,
-        sizeInBytesForSpillThreshold,
-        (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR()),
-        canUseRadixSort);
+      final int initialSize =
+        (int) (long) SparkEnv.get().conf().get(package$.MODULE$.SHUFFLE_SORT_INIT_BUFFER_SIZE());
+      final int spillMergeFactor =
+        (int) SparkEnv.get().conf().get(package$.MODULE$.UNSAFE_SORTER_SPILL_MERGE_FACTOR());
+      if (registerTaskCompletionListener) {
+        sorter = UnsafeExternalSorter.create(
+          taskMemoryManager,
+          blockManager,
+          serializerManager,
+          taskContext,
+          comparatorSupplier,
+          prefixComparator,
+          initialSize,
+          pageSizeBytes,
+          numElementsForSpillThreshold,
+          sizeInBytesForSpillThreshold,
+          spillMergeFactor,
+          canUseRadixSort);
+      } else {
+        sorter = UnsafeExternalSorter.createWithCallerOwnedLifecycle(
+          taskMemoryManager,
+          blockManager,
+          serializerManager,
+          taskContext,
+          comparatorSupplier,
+          prefixComparator,
+          initialSize,
+          pageSizeBytes,
+          numElementsForSpillThreshold,
+          sizeInBytesForSpillThreshold,
+          spillMergeFactor,
+          canUseRadixSort);
+      }
     } else {
+      assert registerTaskCompletionListener;
       // During spilling, the pointer array in `BytesToBytesMap` will not be used, so we can borrow
       // that and use it as the pointer array for `UnsafeInMemorySorter`.
       LongArray pointerArray = map.getArray();
