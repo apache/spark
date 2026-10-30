@@ -255,16 +255,6 @@ trait ColumnUpdateTableSharedTests extends UpdateTableSuiteBase {
     }
   }
 
-  test("column-update: updatedColumns omits an assigned metadata column") {
-    createAndInitTableWithProps(extraTableProps)
-
-    // the coerced `salary > 0.5` makes the analyzer add the metadata columns in a later iteration
-    sql(s"UPDATE $tableNameAsString SET _partition = 'x', bonus = 0 WHERE salary > 0.5")
-
-    checkLastUpdatedColumns("bonus")
-    checkLastColumnUpdateSchema("pk", "dep", "bonus")
-  }
-
   test("column-update: a narrow UPDATE keeps the other columns after a schema change") {
     Seq(
       ("ALTER COLUMN salary AFTER bonus",

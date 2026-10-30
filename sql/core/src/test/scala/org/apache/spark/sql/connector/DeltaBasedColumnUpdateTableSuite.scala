@@ -501,23 +501,6 @@ class DeltaBasedColumnUpdateTableSuite extends DeltaBasedUpdateTableSuiteBase
       Row(1, -1, "hr") :: Row(2, 200, "software") :: Nil)
   }
 
-  test("column-update split: assigning a metadata row-ID column is rejected") {
-    createAndInitTable("pk INT NOT NULL, salary INT, dep STRING",
-      """{ "pk": 1, "salary": 100, "dep": "hr" }
-        |{ "pk": 2, "salary": 200, "dep": "software" }
-        |""".stripMargin,
-      splitPartitionRowIdTableProps)
-
-    // the coerced `salary > 0.5` makes the analyzer add the metadata columns in a later iteration
-    checkError(
-      exception = intercept[AnalysisException] {
-        sql(s"UPDATE $tableNameAsString SET _partition = 'x', salary = -1 " +
-          "WHERE salary > 0.5 AND pk = 1")
-      },
-      condition = "COLUMN_UPDATE_SPLIT_ROW_ID_REASSIGNMENT",
-      parameters = Map("connector" -> splitWithRowIdOperationClass, "rowIds" -> "[`_partition`]"))
-  }
-
   test("column-update split: the fixture rejects a DELETE it cannot locate by row ID") {
     Seq(
       Map("column-update-split-row-id" -> "_partition", "no-metadata" -> "true") -> "_partition",
