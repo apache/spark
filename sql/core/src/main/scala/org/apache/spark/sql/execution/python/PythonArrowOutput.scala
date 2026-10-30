@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 import scala.jdk.CollectionConverters._
 
-import org.apache.arrow.vector.{BaseFixedWidthVector, BaseVariableWidthViewVector, FieldVector, VectorSchemaRoot}
+import org.apache.arrow.vector.{BaseFixedWidthVector, BaseLargeVariableWidthVector, BaseVariableWidthVector, BaseVariableWidthViewVector, BitVectorHelper, FieldVector, ValueVector, VectorSchemaRoot}
 import org.apache.arrow.vector.complex.{BaseRepeatedValueVector, ListVector}
 import org.apache.arrow.vector.ipc.ArrowStreamReader
 
@@ -208,7 +208,7 @@ abstract class BaseSliceArrowOutputProcessor(
   protected var prevRoot: VectorSchemaRoot = root
 
   override def loadBatch(): Boolean = {
-    if (rowCount > 0 && currentRowIdx < rowCount) {
+    if (currentRowIdx < rowCount) {
       true
     } else {
       val loaded = super.loadBatch()
@@ -284,47 +284,115 @@ class SliceBytesArrowOutputProcessorImpl(
     arrowMaxBytesPerOutputBatch: Int)
   extends BaseSliceArrowOutputProcessor(reader, pythonMetrics) {
 
+  // The number of rows from which the search for the next slice of the current batch starts.
+  private var sliceRowCount = 0
+  // Whether the last output batch is one row larger than the limit.
+  private var lastRowTooLarge = false
+
   protected override def getRoot: VectorSchemaRoot = {
-    // Output the whole root only if no row of this batch has been output yet.
-    if (currentRowIdx == 0 && getBatchBytes(root) < arrowMaxBytesPerOutputBatch) {
-      currentRowIdx = rowCount
-      root
-    } else {
-      // We iteratively slice the batch by 90% until we reach a batch with required byte size.
-      // If we cannot have it even with one single row, we will output a batch with one row.
-      var rootSlice = root
-      val stepRatio = 0.9
-      var sliceBatchCount = rowCount - currentRowIdx
-
-      while (sliceBatchCount > 0) {
-        rootSlice = root.slice(currentRowIdx, sliceBatchCount)
-        val batchBytes = getBatchBytes(rootSlice)
-        if (batchBytes < arrowMaxBytesPerOutputBatch) {
-          currentRowIdx = currentRowIdx + rootSlice.getRowCount
-
-          return rootSlice
-        } else {
-          rootSlice.close()
-          sliceBatchCount = (sliceBatchCount * stepRatio).toInt
-        }
+    if (currentRowIdx == 0) {
+      lastRowTooLarge = false
+      // Output the whole root if it fits, which happens only if no row of it has been output yet,
+      // or if Arrow cannot slice it.
+      val rootBytes = batchBytes(root)
+      if (rootBytes <= arrowMaxBytesPerOutputBatch || !canSlice(root)) {
+        currentRowIdx = rowCount
+        return root
       }
-      // If the batch size is still too large, we need to slice it down to a single row.
-      // Normally, this should not happen, but it is possible if the data is very large.
-      if (sliceBatchCount == 0) {
-        sliceBatchCount = 1
-      }
-      rootSlice = root.slice(currentRowIdx, sliceBatchCount)
-      currentRowIdx = currentRowIdx + rootSlice.getRowCount
-      rootSlice
+      // The first search starts from the rows that would fit at the bytes per row of the root.
+      val estimate = math.max(rowCount.toLong * arrowMaxBytesPerOutputBatch / rootBytes, 1L)
+      sliceRowCount = math.min(
+        estimate, (rowCount * SliceBytesArrowOutputProcessorImpl.stepRatio).toLong).toInt
     }
+    if (lastRowTooLarge) {
+      // Probe the row after a row larger than the limit alone, and output it if it is larger than
+      // the limit too, so that a run of such rows does not search from `sliceRowCount` every row.
+      val rootSlice = root.slice(currentRowIdx, 1)
+      if (batchBytes(rootSlice) > arrowMaxBytesPerOutputBatch) {
+        currentRowIdx += 1
+        return rootSlice
+      }
+      rootSlice.close()
+      lastRowTooLarge = false
+    }
+    // We iteratively shrink the slice by 10% until it fits. Each later search starts from the
+    // number of rows that would fit at the bytes per row of the last slice that fit, or of the
+    // root while none has, rather than from all the remaining rows, since a slice usually copies
+    // its offset buffers, and restarting from all the remaining rows would copy them again and
+    // again.
+    var numRows = math.min(sliceRowCount, rowCount - currentRowIdx)
+    while (numRows > 0) {
+      val rootSlice = root.slice(currentRowIdx, numRows)
+      val bytes = batchBytes(rootSlice)
+      if (bytes <= arrowMaxBytesPerOutputBatch) {
+        // Never below `numRows`, so the next slice can grow again after a run of large rows.
+        val estimate = numRows.toLong * arrowMaxBytesPerOutputBatch / math.max(bytes, 1L)
+        sliceRowCount = math.min(estimate, Int.MaxValue).toInt
+        currentRowIdx += numRows
+        return rootSlice
+      }
+      if (numRows == 1) {
+        // Even a single row is larger than the limit, so we output a batch with that one row.
+        // Normally, this should not happen, but it is possible if the data is very large. The
+        // next search starts from where this one did, since the next rows may be much smaller.
+        lastRowTooLarge = true
+        currentRowIdx += 1
+        return rootSlice
+      }
+      rootSlice.close()
+      numRows = (numRows * SliceBytesArrowOutputProcessorImpl.stepRatio).toInt
+    }
+    // A batch of one row that is larger than the limit, where the search does not run.
+    val rootSlice = root.slice(currentRowIdx, 1)
+    currentRowIdx += 1
+    rootSlice
   }
 
-  private def getBatchBytes(root: VectorSchemaRoot): Long = {
-    var batchBytes = 0L
-    root.getFieldVectors.asScala.foreach { vector =>
-      batchBytes += vector.getBufferSize
-    }
-    batchBytes
+  private[python] def batchBytes(root: VectorSchemaRoot): Long =
+    SliceBytesArrowOutputProcessorImpl.batchBytes(root)
+}
+
+object SliceBytesArrowOutputProcessorImpl {
+  private val stepRatio = 0.9
+
+  /** Returns the size in bytes of the buffers of `root`, as the sum of [[bufferSize]]. */
+  private[python] def batchBytes(root: VectorSchemaRoot): Long =
+    root.getFieldVectors.asScala.map(bufferSize).sum
+
+  /**
+   * Returns the size in bytes of the buffers of `vector`, like `ValueVector.getBufferSize` but as
+   * a Long. `getBufferSize` computes the size in int, so it wraps around for a vector over 2 GiB,
+   * e.g. a struct vector, which adds up the sizes of its children, such as the one top-level
+   * struct vector that holds the output of mapInArrow, mapInPandas and applyInPandas. A large
+   * variable-width vector computes it in Long but caps it at Int.MaxValue instead.
+   *
+   * Fixed-width and (large) variable-width vectors are measured in Long. A nested vector adds up
+   * its children in Long, but its own buffers come from its int `getBufferSize`, so they are
+   * still wrong when they alone reach 2 GiB, e.g. the offsets of a list vector with 2^29 - 1 rows
+   * or more. Other vectors, e.g. the view vectors, fall back to `getBufferSize`.
+   */
+  private[python] def bufferSize(vector: ValueVector): Long = vector match {
+    case v: BaseFixedWidthVector if v.getTypeWidth > 0 && v.getValueCount > 0 =>
+      BitVectorHelper.getValidityBufferSize(v.getValueCount) +
+        v.getValueCount.toLong * v.getTypeWidth
+    case v: BaseVariableWidthVector if v.getValueCount > 0 =>
+      val offsetWidth = BaseVariableWidthVector.OFFSET_WIDTH
+      BitVectorHelper.getValidityBufferSize(v.getValueCount) +
+        (v.getValueCount + 1L) * offsetWidth +
+        v.getOffsetBuffer.getInt(v.getValueCount.toLong * offsetWidth)
+    case v: BaseLargeVariableWidthVector if v.getValueCount > 0 =>
+      val offsetWidth = BaseLargeVariableWidthVector.OFFSET_WIDTH
+      BitVectorHelper.getValidityBufferSize(v.getValueCount) +
+        (v.getValueCount + 1L) * offsetWidth +
+        v.getOffsetBuffer.getLong(v.getValueCount.toLong * offsetWidth)
+    case v: FieldVector if !v.getChildrenFromFields.isEmpty =>
+      val children = v.getChildrenFromFields.asScala.toSeq
+      // The size of the buffers of the nested vector itself, e.g. the validity and offsets. Its
+      // `getBufferSize` adds them to the sizes of its children in int, so subtracting the sizes
+      // of the children in int cancels out any wrap-around of the sum.
+      val ownBytes = v.getBufferSize - children.map(_.getBufferSize).sum
+      ownBytes + children.map(bufferSize).sum
+    case v => v.getBufferSize
   }
 }
 
