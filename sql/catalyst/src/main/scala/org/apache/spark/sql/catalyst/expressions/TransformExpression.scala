@@ -293,10 +293,11 @@ case class TransformExpression(
    * literal parameters rule a reducer out, or when the connector reports it is not reducible.
    * Handles both parameterized (bucket, truncate) and non-parameterized (days, hours) functions.
    *
-   * This answers one direction only. To decide a pair, use [[pairReducers]], which also refuses
-   * the pair when the other direction's reducer threw.
+   * This answers one direction only, so it must not decide a pair: a direction that threw would
+   * look merely not reducible, and the other direction like a one-side reduce. Use
+   * [[pairReducers]].
    */
-  def reducers(other: TransformExpression): Option[Reducer[_, _]] =
+   private[sql] def reducers(other: TransformExpression): Option[Reducer[_, _]] =
     TransformExpression.reducerOf(reducerOutcome(other))
 
   /**
