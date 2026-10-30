@@ -2371,6 +2371,11 @@
           "`selectLookupPredicates()` returned the predicate <predicate> more than once."
         ]
       },
+      "MISSING_SCAN_FIELD" : {
+        "message" : [
+          "The lookup scan did not return the table column <field>, which the join requires."
+        ]
+      },
       "NON_POSITIVE_MAX_PARAMETER_ROWS" : {
         "message" : [
           "`maxParameterRowsPerRequest()` returned <value>, but it must be positive."
@@ -2383,7 +2388,7 @@
       },
       "UNKNOWN_SCAN_FIELD" : {
         "message" : [
-          "The lookup scan returned the field <field>, which is not in the table output."
+          "The lookup scan returned the field <field>, which matches no table column by name and data type."
         ]
       },
       "UNOFFERED_SELECTED_PREDICATE" : {
@@ -2868,7 +2873,7 @@
     "subClass" : {
       "CONFLICTING_JOIN_STRATEGY" : {
         "message" : [
-          "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint, or the `EXTERNAL_LOOKUP` hint if the table also supports batch reads."
+          "The join strategy hint <strategy> cannot be honored by an external lookup join over <relation>. Remove the <strategy> hint."
         ]
       },
       "JOIN_TYPE" : {
@@ -2878,7 +2883,7 @@
       },
       "LOOKUP_PLAN" : {
         "message" : [
-          "The lookup side must be a DSv2 table, optionally followed by projections and filters."
+          "The lookup side must be a DSv2 table, with no other operator between the table and the join."
         ]
       },
       "LOOKUP_TABLE_ON_LEFT" : {
@@ -2888,12 +2893,17 @@
       },
       "MISSING_JOIN_CONDITION" : {
         "message" : [
-          "The join has no join condition."
+          "The join has no join condition. Write the lookup condition in the join itself, such as in its `ON` clause or the condition argument of `join()`, rather than in a later `WHERE` clause or filter."
+        ]
+      },
+      "NO_LOOKUP_CANDIDATE" : {
+        "message" : [
+          "The join condition has no lookup predicate that Spark can offer to table <table>. Spark offers only an equality `=` between a lookup column, with no cast or other expression applied to it, and an expression over the streaming side. If the lookup column is cast to match the streaming side, cast the streaming-side expression to the lookup column's type instead."
         ]
       },
       "NO_LOOKUP_PREDICATE" : {
         "message" : [
-          "The data source of table <table> did not select any lookup predicate from the join condition."
+          "The data source of table <table> did not select any of the lookup predicates that Spark offered from the join condition."
         ]
       },
       "SCAN_BUILDER" : {
