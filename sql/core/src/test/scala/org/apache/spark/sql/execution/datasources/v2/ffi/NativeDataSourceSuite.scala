@@ -1586,6 +1586,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
         NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
           dataSources(""), Map(NativePlatform.current -> "lib.so")).getBytes(UTF_8)),
       "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib.so."))
+    // ZipFile.getEntry("lib") also finds the directory entry "lib/".
+    check(createZip(dir, "range-2.7.sparkpkg",
+        NativeDataSourcePackage.MANIFEST_NAME -> manifestJson(
+          dataSources(""), Map(NativePlatform.current -> "lib")).getBytes(UTF_8),
+        "lib/" -> Array.emptyByteArray, "lib/x" -> "x".getBytes(UTF_8)),
+      "INVALID_MANIFEST", Map("reason" -> "The package does not contain the library lib."))
     val notAZip = new File(dir, "range-2.2.sparkpkg")
     Files.writeString(notAZip.toPath, "not a zip")
     check(notAZip, "INVALID_MANIFEST", Map.empty)
@@ -1620,8 +1626,15 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
 
     // A valid package with the same file name as a rejected one can be added then.
-    session.addArtifact(createPackage(renamedNegatingLibrary, dataSources(""),
-      fileName = "range-2.0.sparkpkg").getPath)
+    val added = createPackage(renamedNegatingLibrary, dataSources(""),
+      fileName = "range-2.0.sparkpkg")
+    session.addArtifact(added.getPath)
+    checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
+    // Adding it again, from the file or from the same bytes, does nothing.
+    session.addArtifact(added.getPath)
+    session.addArtifact(Files.readAllBytes(added.toPath), added.getName)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.map(_.getName) ==
+      Seq("range-2.0.sparkpkg"))
     checkRows(ids(), Seq(Row(0L), Row(-1L), Row(-2L)))
     // Another file with the name of an artifact fails as such, also if it is not a package.
     val sameName = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
@@ -1633,6 +1646,24 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val existingDirectory =
       intercept[SparkRuntimeException](session.addArtifact(sameNameDirectory.getPath))
     assert(existingDirectory.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    val missing = new File(Utils.createTempDir(), "range-2.0.sparkpkg")
+    val existingMissing = intercept[SparkRuntimeException](session.addArtifact(missing.getPath))
+    assert(existingMissing.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    // Also for a package that Spark staged, which it checks before, but reports after.
+    val existingStaged = intercept[SparkRuntimeException] {
+      session.addArtifact("not a zip".getBytes(UTF_8), "range-2.0.sparkpkg")
+    }
+    assert(existingStaged.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    // And for an artifact that is a directory, as files/range-5.0.sparkpkg is after this.
+    val inner = new File(Utils.createTempDir(), "inner.txt")
+    Files.writeString(inner.toPath, "inner")
+    session.artifactManager.addArtifact(Paths.get("files", "range-5.0.sparkpkg", inner.getName),
+      inner.toPath, None, deleteStagedFile = false)
+    val existingTarget = intercept[SparkRuntimeException] {
+      session.addArtifact(createPackage(library, dataSources(""),
+        fileName = "range-5.0.sparkpkg").getPath)
+    }
+    assert(existingTarget.getCondition == "ARTIFACT_ALREADY_EXISTS")
 
     // A call that adds several artifacts adds the others, and reports all the rejected ones.
     val valid = createPackage(library, dataSources(""), dir = dir, fileName = "range-3.0.sparkpkg")

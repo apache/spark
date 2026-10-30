@@ -328,17 +328,20 @@ session added last over its other packages, also the configured ones: a session 
 artifact, or add another file with the name of one that it added, so it upgrades a package by adding
 the new version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are
 also needed because the sessions that are not isolated share the files they add. A query fails if
-more than one configured package provides its data source. `spark.addArtifact` fails for a package
-that Spark cannot read, whose version it does not support, or that has no library for the platform
-of the driver, which loads the library to plan a query, instead of adding a package that the session
-could not use: the session would ignore it and silently keep using the package or library that it
-used before, or fail every query on its data sources. After the failure, the session keeps the
-packages that it had, and a call that adds several artifacts still adds the others, except in Python
-without Spark Connect, where `spark.addArtifacts` adds the packages first, one at a time, so a
-rejected package stops the rest of the call. Spark does not load the library then, so a library that
-fails to load fails the queries that use it. Spark ignores, and logs, a configured package that it
-cannot read or whose version it does not support, unless its manifest lists the data source that a
-query uses and no other package or installed library provides it.
+more than one configured package provides its data source. `spark.addArtifact` fails for a file that
+is not a valid package, or for a package whose version Spark does not support, or that has no
+library for the platform of the driver, which loads the library to plan a query, instead of adding a
+package that the session could not use: the session would ignore it and silently keep using the
+package or library that it used before, or fail every query on its data sources. After the failure,
+the session keeps the packages that it had, and a call that adds several artifacts still adds the
+others, except in Python without Spark Connect, where `spark.addArtifacts` adds the packages first,
+one at a time, so a rejected package stops the rest of the call. A file that does not exist or
+cannot be read fails the call as for the other artifacts, which does not add the artifacts after it.
+Spark does not load the library then, so a library that fails to load fails the queries that use it.
+Nor does it check that the driver can run native data sources, which requires Java 22 or later: on
+an earlier version, the add succeeds, and the queries fail. Spark ignores, and logs, a configured
+package that it cannot read or whose version it does not support, unless its manifest lists the data
+source that a query uses and no other package or installed library provides it.
 
 ## Example in Rust
 

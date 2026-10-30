@@ -41,7 +41,7 @@ import org.apache.spark.sql.execution.datasources.v2.ffi.NativeDataSourcePackage
 import org.apache.spark.sql.internal.{SQLConf, StaticSQLConf}
 import org.apache.spark.sql.util.ArtifactUtils
 import org.apache.spark.storage.{BlockManager, CacheId, StorageLevel}
-import org.apache.spark.util.{ChildFirstURLClassLoader, RuntimeDependencyResolver, StubClassLoader, Utils}
+import org.apache.spark.util.{ChildFirstURLClassLoader, RuntimeDependencyResolver, ShutdownHookManager, StubClassLoader, Utils}
 import org.apache.spark.util.RuntimeDependencyResolver.{AllowRequestedRepositories, RepositoryPolicy}
 
 /**
@@ -239,7 +239,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
    * Transfers a native data source package to `target` if Spark can use it, see
    * [[NativeDataSourcePackage.checkAdded]], so that it never is at the path of an artifact
    * otherwise. Returns false if the session has the same file already. A file of the user is
-   * first copied to a temporary directory, outside of the artifacts, which the file server serves
+   * compared with the artifact first, so that adding the same file again does not copy it. It is
+   * then copied to a temporary directory, outside of the artifacts, which the file server serves
    * and a clone of the session copies, and the copy is checked and then moved, so that the session
    * gets the bytes that are checked. Errors name the file of the user, or the artifact if Spark
    * staged the file for it, such as for a Spark Connect client.
@@ -250,32 +251,52 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       target: Path,
       deleteStagedFile: Boolean,
       sourceName: Option[String]): Boolean = {
-    val copyDir = if (deleteStagedFile) None else Some(Utils.createTempDir().toPath)
+    def exists(source: Path): Boolean = {
+      // Utils.contentEquals fails for a directory, which cannot be the same as a package anyway,
+      // so a directory with the name of an artifact, or an artifact that is a directory, such
+      // as files/x.sparkpkg after files/x.sparkpkg/y was added, fails as an existing artifact.
+      if (Files.exists(target) && (Files.isDirectory(source) || Files.isDirectory(target))) {
+        throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
+      }
+      artifactExists(normalizedRemoteRelativePath, source, target)
+    }
+    if (!deleteStagedFile && exists(serverLocalStagingPath)) {
+      return false
+    }
+    val copyDir = if (deleteStagedFile) None else Some(Utils.createTempDir())
     Utils.tryWithSafeFinally {
       val staged = copyDir.map { dir =>
         // Fails as for the other artifacts if the file does not exist or cannot be read.
-        Files.copy(serverLocalStagingPath, dir.resolve(normalizedRemoteRelativePath.getFileName))
+        val copy = dir.toPath.resolve(normalizedRemoteRelativePath.getFileName)
+        Files.copy(serverLocalStagingPath, copy)
       }.getOrElse(serverLocalStagingPath)
       // The package is checked before the check for an existing artifact, which then runs right
       // before the transfer, but its error is reported after that check.
-      val rejection = Try(NativeDataSourcePackage.checkAdded(
-        staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString))).failed
-      // Utils.contentEquals fails for a directory, which cannot be the same as the artifact
-      // anyway, so a directory with the name of an artifact fails as one.
-      if (Files.isDirectory(staged) && Files.exists(target)) {
-        throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
-      }
-      if (artifactExists(normalizedRemoteRelativePath, staged, target)) {
+      val check = Try(NativeDataSourcePackage.checkAdded(
+        staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString)))
+      if (exists(staged)) {
         false
       } else {
-        rejection.foreach(e => throw e)
+        check.get
         transferFile(staged, target, deleteSource = true)
         true
       }
     } {
-      // Only deletes the temporary copy, so failing to delete it must not replace the result or
-      // the error of the add. Utils.createTempDir deletes it at shutdown anyway.
-      copyDir.foreach(dir => Utils.tryLogNonFatalError(Utils.deleteRecursively(dir.toFile)))
+      copyDir.foreach(deleteTemporaryDirectory)
+    }
+  }
+
+  /**
+   * Deletes a temporary directory of an add without throwing, so that neither a failure nor an
+   * interrupt, which Utils.deleteRecursively rethrows, replaces the result or the error of the
+   * add: the artifact may already be at its path. The interrupt status is kept.
+   */
+  private def deleteTemporaryDirectory(dir: File): Unit = {
+    Utils.deleteQuietly(dir)
+    if (dir.exists()) {
+      logWarning(log"Failed to delete the temporary directory ${MDC(LogKeys.PATH, dir)}.")
+    } else {
+      ShutdownHookManager.removeShutdownDeleteDir(dir)
     }
   }
 
@@ -441,9 +462,7 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               addArtifact(artifact.path, tempFile, fragment = None)
             }(finallyBlock = {
               // addArtifact moves the file only when it adds the artifact, so delete what is left.
-              Utils.tryWithSafeFinally(outStream.close()) {
-                Utils.tryLogNonFatalError(Utils.deleteRecursively(tempDir.toFile))
-              }
+              Utils.tryWithSafeFinally(outStream.close())(deleteTemporaryDirectory(tempDir.toFile))
             })
           case _ =>
             throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")

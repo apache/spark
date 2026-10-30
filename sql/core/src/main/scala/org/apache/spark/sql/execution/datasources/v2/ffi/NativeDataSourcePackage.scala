@@ -140,8 +140,10 @@ object NativeDataSourcePackage extends Logging {
    * remove an artifact, so Spark rejects such a package rather than ignore it, as it ignores the
    * configured ones, which would keep the session on the package or library that it used before,
    * or add a package that fails every query on its data sources. The library is not loaded, so a
-   * library that fails to load fails the queries that use it. The file is not the artifact
-   * itself, so the result is not cached, and errors call it `path`.
+   * library that fails to load fails the queries that use it, and neither is it checked that the
+   * driver can run native data sources at all (Java 22 or later, and the C data interface of
+   * Arrow Java): there, every query fails. The file is not the artifact itself, so the result is
+   * not cached, and errors call it `path`.
    */
   def checkAdded(file: File, path: String): Unit = {
     val manifest = readManifest(file, path).fold(invalid => throw invalid.error, identity)
@@ -198,7 +200,7 @@ object NativeDataSourcePackage extends Logging {
     }
     Option(packages.getIfPresent(version)).getOrElse {
       val canonical = new File(version.path)
-      val result = parse(canonical, canonical.getPath)
+      val result = parse(canonical)
       result match {
         case Left(invalid) =>
           logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
@@ -233,14 +235,15 @@ object NativeDataSourcePackage extends Logging {
       path, "INVALID_MANIFEST", Map("reason" -> reason), cause)
   }
 
-  /** Reads the package in the given file, which errors call `path`. */
-  private def parse(file: File, path: String): ReadResult = {
-    readManifest(file, path).flatMap { manifest =>
+  /** Reads the package in the given file. */
+  private def parse(file: File): ReadResult = {
+    readManifest(file, file.getPath).flatMap { manifest =>
       try {
-        Right(NativeDataSourcePackage(path, sha256(file), manifest))
+        Right(NativeDataSourcePackage(file.getPath, sha256(file), manifest))
       } catch {
         case e: IOException => Left(InvalidNativeDataSourcePackage(
-          invalidManifestError(path, s"The package cannot be read: $e", e), manifest.dataSources))
+          invalidManifestError(file.getPath, s"The package cannot be read: $e", e),
+          manifest.dataSources))
       }
     }
   }
@@ -271,7 +274,10 @@ object NativeDataSourcePackage extends Logging {
             parseManifest(json) match {
               case Left(reason) => invalid(reason)
               case Right(manifest) =>
-                manifest.libraries.values.find(zip.getEntry(_) == null) match {
+                // getEntry also finds the directory entry `<path>/`, which is not a library.
+                manifest.libraries.values.find { library =>
+                  Option(zip.getEntry(library)).forall(_.isDirectory)
+                } match {
                   case Some(library) => invalid(
                     s"The package does not contain the library $library.", manifest.dataSources)
                   case None => Right(manifest)
