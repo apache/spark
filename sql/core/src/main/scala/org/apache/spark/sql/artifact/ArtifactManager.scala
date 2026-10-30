@@ -260,7 +260,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       // before the transfer, but its error is reported after that check.
       val rejection = Try(NativeDataSourcePackage.checkAdded(
         staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString))).failed
-      // A directory has no content to compare with the artifact, which it is not.
+      // Utils.contentEquals fails for a directory, which cannot be the same as the artifact
+      // anyway, so a directory with the name of an artifact fails as one.
       if (Files.isDirectory(staged) && Files.exists(target)) {
         throw artifactAlreadyExistsError(normalizedRemoteRelativePath)
       }

@@ -138,9 +138,10 @@ object NativeDataSourcePackage extends Logging {
    * interface, or if it has no library for the platform of the driver, which loads the library to
    * plan a query. The package that a session added last takes precedence, and a session cannot
    * remove an artifact, so Spark rejects such a package rather than ignore it, as it ignores the
-   * configured ones, which would keep the session on the package that it added before. The
-   * library is not loaded, so a library that fails to load fails the queries that use it. The
-   * file is not the artifact itself, so the result is not cached, and errors call it `path`.
+   * configured ones, which would keep the session on the package or library that it used before,
+   * or add a package that fails every query on its data sources. The library is not loaded, so a
+   * library that fails to load fails the queries that use it. The file is not the artifact
+   * itself, so the result is not cached, and errors call it `path`.
    */
   def checkAdded(file: File, path: String): Unit = {
     val manifest = readManifest(file, path).fold(invalid => throw invalid.error, identity)

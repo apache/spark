@@ -2277,7 +2277,8 @@ class SparkSession(SparkConversionMixin):
             Artifact's URIs to add. A native data source package (a ``.sparkpkg`` file) makes
             the native data sources it contains available to the session. It fails for a
             package that Spark cannot read, whose version Spark does not support, or that has
-            no library for the platform of the driver, which the session then does not get.
+            no library for the platform of the driver; the session then does not get the
+            package.
             Without Spark Connect, the packages are added first, one at a time, so a package
             that is rejected also stops the rest of the call.
         pyfile : bool

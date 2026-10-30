@@ -1561,7 +1561,7 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
 
   nativeTest("reject a package that a session adds when Spark cannot use it") {
     // The package that a session added last takes precedence, so Spark rejects a package that it
-    // cannot use when the session adds it, rather than keep using the package added before.
+    // cannot use when the session adds it, rather than keep using what the session used before.
     val session = newSession(defaultPackage)
     def ids(): DataFrame = range(session, "end" -> "3").select("id")
     val dir = Utils.createTempDir()
