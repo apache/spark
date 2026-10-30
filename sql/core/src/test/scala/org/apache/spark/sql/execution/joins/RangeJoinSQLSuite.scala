@@ -24,6 +24,7 @@ import org.apache.spark.sql.catalyst.planning.{IntervalOverlapJoin, LessPartialR
 import org.apache.spark.sql.catalyst.plans.{Inner, LeftAnti, LeftOuter, LeftSemi}
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
+import org.apache.spark.sql.execution.exchange.ShuffleExchangeExec
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
 import org.apache.spark.sql.types.DoubleType
@@ -839,6 +840,113 @@ class RangeJoinSQLSuite extends QueryTest with SharedSparkSession with AdaptiveS
           s"range() must still run under its own whole-stage codegen region: " +
             s"$query\n${plan.treeString}")
         checkAnswer(df, expected)
+      }
+    }
+  }
+
+  test("range join preserves the streamed side's partitioning for every supported " +
+    "(join type, build side) pair") {
+    withTable("rj_bucketed", "rj_small") {
+      spark.range(15).toDF("k").write.bucketBy(4, "k").saveAsTable("rj_bucketed")
+      spark.range(6).toDF("k").write.saveAsTable("rj_small")
+
+      // One query per (joinType, buildSide) pair BroadcastRangeJoinExec.supports admits,
+      // selecting the streamed side's bucketed `k`. An extra shuffle before the aggregation
+      // below would mean outputPartitioning stopped following the streamed side.
+      val queries = Seq(
+        "SELECT /*+ BROADCAST(s) */ b.k AS k FROM rj_bucketed b " +
+          "JOIN rj_small s ON b.k < s.k + 100", // Inner, BuildRight
+        "SELECT /*+ BROADCAST(s) */ b.k AS k FROM rj_bucketed b " +
+          "LEFT JOIN rj_small s ON b.k < s.k + 100", // LeftOuter, BuildRight
+        "SELECT /*+ BROADCAST(s) */ b.k AS k FROM rj_bucketed b " +
+          "LEFT SEMI JOIN rj_small s ON b.k < s.k + 100", // LeftSemi, BuildRight
+        "SELECT /*+ BROADCAST(s) */ b.k AS k FROM rj_bucketed b " +
+          "LEFT ANTI JOIN rj_small s ON b.k < s.k + 100", // LeftAnti, BuildRight
+        "SELECT /*+ BROADCAST(s) */ b.k AS k FROM rj_small s " +
+          "JOIN rj_bucketed b ON s.k < b.k + 100", // Inner, BuildLeft
+        "SELECT /*+ BROADCAST(s) */ b.k AS k FROM rj_small s " +
+          "RIGHT JOIN rj_bucketed b ON s.k < b.k + 100") // RightOuter, BuildLeft
+
+      withRangeJoin(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false") {
+        queries.foreach { query =>
+          val plan =
+            sql(s"SELECT k, COUNT(*) FROM ($query) GROUP BY k").queryExecution.executedPlan
+          assert(findRangeJoin(plan).size == 1, query)
+          assert(collect(plan) { case e: ShuffleExchangeExec => e }.isEmpty,
+            s"unexpected shuffle before the aggregation:\n$query\n${plan.treeString}")
+        }
+      }
+    }
+  }
+
+  test("range join preserves the streamed side's ordering for every supported " +
+    "(join type, build side) pair") {
+    withTable("rj_t1", "rj_t2", "rj_t3", "rj_t4", "rj_merge") {
+      spark.range(15).toDF("k").write.saveAsTable("rj_t1")
+      spark.range(6).toDF("k").write.saveAsTable("rj_t2")
+      spark.range(9).toDF("k").write.saveAsTable("rj_t3")
+      spark.range(11).toDF("k").write.saveAsTable("rj_t4")
+      spark.range(8).toDF("k").write.saveAsTable("rj_merge")
+
+      // left_t and right_t are each the output of a sort-merge join, so each already comes
+      // out sorted on its own key regardless of the range join below. One query per
+      // (joinType, buildSide) pair BroadcastRangeJoinExec.supports admits, selecting the
+      // streamed side's key as k0: if outputOrdering stopped following the streamed side,
+      // the outer sort-merge join against rj_merge would need to re-sort that side.
+      def query(joinType: String, selectExpr: String): String =
+        s"""
+           |SELECT /*+ MERGE(rj_merge) */ k0, rj_merge.k
+           |FROM (
+           |  SELECT $selectExpr
+           |  FROM (SELECT /*+ MERGE(rj_t3) */ rj_t1.k AS k1 FROM rj_t1 JOIN rj_t3
+           |    ON rj_t1.k = rj_t3.k) left_t
+           |  $joinType JOIN
+           |  (SELECT /*+ MERGE(rj_t4) */ rj_t2.k AS k2 FROM rj_t2 JOIN rj_t4
+           |    ON rj_t2.k = rj_t4.k) right_t
+           |  ON k1 < k2 + 100
+           |) t
+           |JOIN rj_merge ON k0 = rj_merge.k
+         """.stripMargin
+
+      val queries = Seq(
+        query("INNER", "/*+ BROADCAST(right_t) */ k1 AS k0"), // Inner, BuildRight
+        query("LEFT", "/*+ BROADCAST(right_t) */ k1 AS k0"), // LeftOuter, BuildRight
+        query("LEFT SEMI", "/*+ BROADCAST(right_t) */ k1 AS k0"), // LeftSemi, BuildRight
+        query("LEFT ANTI", "/*+ BROADCAST(right_t) */ k1 AS k0"), // LeftAnti, BuildRight
+        query("INNER", "/*+ BROADCAST(left_t) */ k2 AS k0"), // Inner, BuildLeft
+        query("RIGHT", "/*+ BROADCAST(left_t) */ k2 AS k0")) // RightOuter, BuildLeft
+
+      // Excludes left semi/anti push-down: otherwise a LEFT SEMI/ANTI range join is
+      // pushed below left_t's own sort-merge join, moving it off of left_t's sorted
+      // output entirely and defeating the ordering this test means to pin.
+      withRangeJoin(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.OPTIMIZER_EXCLUDED_RULES.key ->
+          "org.apache.spark.sql.catalyst.optimizer.PushDownLeftSemiAntiJoin") {
+        queries.foreach { q =>
+          val plan = sql(q).queryExecution.executedPlan
+          assert(findRangeJoin(plan).size == 1, q)
+          def hasRangeJoin(node: SparkPlan): Boolean = exists(node) {
+            case _: BroadcastRangeJoinExec => true
+            case _ => false
+          }
+          // CollapseCodegenStages wraps a codegen-supporting node (Sort included) in its
+          // own WholeStageCodegenExec, so the direct child here is never a bare SortExec.
+          def unwrapCodegen(node: SparkPlan): SparkPlan = node match {
+            case w: WholeStageCodegenExec => unwrapCodegen(w.child)
+            case i: InputAdapter => unwrapCodegen(i.child)
+            case other => other
+          }
+          val outerJoins = collect(plan) {
+            case j: SortMergeJoinExec if hasRangeJoin(j) => j
+          }
+          assert(outerJoins.size == 1, s"$q\n${plan.treeString}")
+          val rangeSide = Seq(outerJoins.head.left, outerJoins.head.right)
+            .find(hasRangeJoin).get
+          assert(!unwrapCodegen(rangeSide).isInstanceOf[SortExec],
+            s"range join side should already be sorted, no extra Sort needed:\n$q\n" +
+              plan.treeString)
+        }
       }
     }
   }
