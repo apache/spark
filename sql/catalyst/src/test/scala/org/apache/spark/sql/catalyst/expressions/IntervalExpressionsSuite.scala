@@ -477,14 +477,22 @@ class IntervalExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
   }
 
   test("SPARK-60746: the min interval divided by -1 raises the same error in every mode") {
-    val expectedErrMsg = "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION]"
-    Seq(-1.toByte, -1.toShort, -1, -1L).foreach { num =>
-      checkExceptionInExpression[SparkArithmeticException](
-        DivideYMInterval(Literal(Period.ofMonths(Int.MinValue)), Literal(num)),
-        expectedErrMsg)
-      checkExceptionInExpression[SparkArithmeticException](
-        DivideDTInterval(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)), Literal(num)),
-        expectedErrMsg)
+    // An integral divisor is checked before the division, a decimal or a fractional one when the
+    // rounded quotient does not fit the interval type. The error carries an empty query context,
+    // which `checkErrorInExpression` cannot match, so the whole message is checked instead,
+    // including the suggested function.
+    val expectedErrMsg = "[INTERVAL_ARITHMETIC_OVERFLOW.WITH_SUGGESTION] Integer overflow " +
+      "while operating with intervals. Use `try_divide` to tolerate overflow and return NULL " +
+      "instead."
+    Seq(-1.toByte, -1.toShort, -1, -1L, Decimal(-1), -1.0f, -1.0d).foreach { num =>
+      withClue(s"divisor $num: ") {
+        checkExceptionInExpression[SparkArithmeticException](
+          DivideYMInterval(Literal(Period.ofMonths(Int.MinValue)), Literal(num)),
+          expectedErrMsg)
+        checkExceptionInExpression[SparkArithmeticException](
+          DivideDTInterval(Literal(Duration.of(Long.MinValue, ChronoUnit.MICROS)), Literal(num)),
+          expectedErrMsg)
+      }
     }
   }
 

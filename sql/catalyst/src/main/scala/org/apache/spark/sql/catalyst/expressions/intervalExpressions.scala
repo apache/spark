@@ -744,6 +744,54 @@ trait IntervalDivide {
     }
   }
 
+  /**
+   * The codegen counterpart of `checkDivideOverflow`: the check that an integral divisor does
+   * not overflow the interval type, which only the minimum value divided by -1 does.
+   */
+  def checkDivideOverflowCodegen(
+      value: String,
+      minValueLiteral: String,
+      num: String,
+      errorContextReference: String): String = {
+    s"""
+       |if ($value == $minValueLiteral && $num == -1)
+       |  throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+       |    "try_divide", $errorContextReference);
+       |""".stripMargin
+  }
+
+  /**
+   * Rounds the quotient of the interval by a decimal or a fractional divisor in `round`, and
+   * raises the interval overflow error when the rounded quotient does not fit the interval
+   * type: the rounding raises an `ArithmeticException` then. A fractional quotient that is not
+   * `finite`, e.g. with a NaN divisor, is left to the rounding, which raises for it as before.
+   */
+  def checkRoundingOverflow[T](context: QueryContext, finite: Boolean = true)(round: => T): T = {
+    try {
+      round
+    } catch {
+      case _: ArithmeticException if finite =>
+        throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+          "try_divide", context)
+    }
+  }
+
+  /** The codegen counterpart of `checkRoundingOverflow`, `finite` being a Java expression. */
+  def checkRoundingOverflowCodegen(
+      code: String,
+      errorContextReference: String,
+      finite: String = "true"): String = {
+    s"""
+       |try {
+       |  $code
+       |} catch (ArithmeticException e) {
+       |  if (!($finite)) throw e;
+       |  throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
+       |    "try_divide", $errorContextReference);
+       |}
+       |""".stripMargin
+  }
+
   def divideByZeroCheck(
       dataType: DataType,
       num: Any,
@@ -788,11 +836,15 @@ case class DivideYMInterval(
       LongMath.divide(months, num.asInstanceOf[Long], RoundingMode.HALF_UP).toInt
     case _: IntegralType => (months: Int, num) =>
       IntMath.divide(months, num.asInstanceOf[Number].intValue(), RoundingMode.HALF_UP)
-    case _: DecimalType => (months: Int, num) =>
+    case _: DecimalType => (months: Int, num) => checkRoundingOverflow(origin.context) {
       val decimalRes = ((new Decimal).set(months) / num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).intValueExact()
+    }
     case _: FractionalType => (months: Int, num) =>
-      DoubleMath.roundToInt(months / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+      val quotient = months / num.asInstanceOf[Number].doubleValue()
+      checkRoundingOverflow(origin.context, java.lang.Double.isFinite(quotient)) {
+        DoubleMath.roundToInt(quotient, RoundingMode.HALF_UP)
+      }
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
@@ -812,17 +864,11 @@ case class DivideYMInterval(
         }
         val javaType = CodeGenerator.javaType(dataType)
         nullSafeCodeGen(ctx, ev, (m, n) => {
-          val checkIntegralDivideOverflow =
-            s"""
-               |if ($m == ${Int.MinValue} && $n == -1)
-               |  throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
-               |    "try_divide", $errorContext);
-               |""".stripMargin
           // Similarly to non-codegen code. The result of `divide(Int, Long, ...)` must fit
           // to `Int`. Casting to `Int` is safe here.
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
-             |$checkIntegralDivideOverflow
+             |${checkDivideOverflowCodegen(m, Int.MinValue.toString, n, errorContext)}
              |${ev.value} = ($javaType)$math.divide($m, $n, java.math.RoundingMode.HALF_UP);
           """.stripMargin
         })
@@ -830,15 +876,22 @@ case class DivideYMInterval(
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
-             |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
-             |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
+             |${checkRoundingOverflowCodegen(
+                  s"""
+                     |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
+                     |  .setScale(0, java.math.RoundingMode.HALF_UP).intValueExact();
+                   """.stripMargin, errorContext)}
           """.stripMargin)
       case _: FractionalType =>
         val math = classOf[DoubleMath].getName
+        val quotient = ctx.freshName("quotient")
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
-             |${ev.value} = $math.roundToInt($m / (double)$n, java.math.RoundingMode.HALF_UP);
+             |double $quotient = $m / (double)$n;
+             |${checkRoundingOverflowCodegen(
+                  s"${ev.value} = $math.roundToInt($quotient, java.math.RoundingMode.HALF_UP);",
+                  errorContext, s"Double.isFinite($quotient)")}
           """.stripMargin)
     }
   }
@@ -868,11 +921,15 @@ case class DivideDTInterval(
   private lazy val evalFunc: (Long, Any) => Any = right.dataType match {
     case _: IntegralType => (micros: Long, num) =>
       LongMath.divide(micros, num.asInstanceOf[Number].longValue(), RoundingMode.HALF_UP)
-    case _: DecimalType => (micros: Long, num) =>
+    case _: DecimalType => (micros: Long, num) => checkRoundingOverflow(origin.context) {
       val decimalRes = ((new Decimal).set(micros) / num.asInstanceOf[Decimal]).toJavaBigDecimal
       decimalRes.setScale(0, java.math.RoundingMode.HALF_UP).longValueExact()
+    }
     case _: FractionalType => (micros: Long, num) =>
-      DoubleMath.roundToLong(micros / num.asInstanceOf[Number].doubleValue(), RoundingMode.HALF_UP)
+      val quotient = micros / num.asInstanceOf[Number].doubleValue()
+      checkRoundingOverflow(origin.context, java.lang.Double.isFinite(quotient)) {
+        DoubleMath.roundToLong(quotient, RoundingMode.HALF_UP)
+      }
   }
 
   override def nullSafeEval(interval: Any, num: Any): Any = {
@@ -888,15 +945,9 @@ case class DivideDTInterval(
       case _: IntegralType =>
         val math = classOf[LongMath].getName
         nullSafeCodeGen(ctx, ev, (m, n) => {
-          val checkIntegralDivideOverflow =
-            s"""
-               |if ($m == ${Long.MinValue}L && $n == -1L)
-               |  throw QueryExecutionErrors.withSuggestionIntervalArithmeticOverflowError(
-               |    "try_divide", $errorContext);
-               |""".stripMargin
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
-             |$checkIntegralDivideOverflow
+             |${checkDivideOverflowCodegen(m, s"${Long.MinValue}L", n, errorContext)}
              |${ev.value} = $math.divide($m, $n, java.math.RoundingMode.HALF_UP);
           """.stripMargin
         })
@@ -904,15 +955,22 @@ case class DivideDTInterval(
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
-             |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
-             |  .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
+             |${checkRoundingOverflowCodegen(
+                  s"""
+                     |${ev.value} = ((new Decimal()).set($m).$$div($n)).toJavaBigDecimal()
+                     |  .setScale(0, java.math.RoundingMode.HALF_UP).longValueExact();
+                   """.stripMargin, errorContext)}
           """.stripMargin)
       case _: FractionalType =>
         val math = classOf[DoubleMath].getName
+        val quotient = ctx.freshName("quotient")
         nullSafeCodeGen(ctx, ev, (m, n) =>
           s"""
              |${divideByZeroCheckCodegen(right.dataType, n, errorContext)}
-             |${ev.value} = $math.roundToLong($m / (double)$n, java.math.RoundingMode.HALF_UP);
+             |double $quotient = $m / (double)$n;
+             |${checkRoundingOverflowCodegen(
+                  s"${ev.value} = $math.roundToLong($quotient, java.math.RoundingMode.HALF_UP);",
+                  errorContext, s"Double.isFinite($quotient)")}
           """.stripMargin)
     }
   }
