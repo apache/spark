@@ -17,12 +17,16 @@
 
 package org.apache.spark.sql.execution.datasources.v2
 
+import java.util
+
 import org.apache.spark.{SparkFunSuite, SparkNumberFormatException}
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Cast, EqualTo, EvalMode, Literal}
+import org.apache.spark.sql.catalyst.expressions.{Alias, Cast, EqualTo, EvalMode, GetStructField, IsNotNull, Literal}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
+import org.apache.spark.sql.connector.catalog.{Column, Table, TableCapability}
+import org.apache.spark.sql.connector.read.{Scan, ScanBuilder, SupportsPushDownRequiredColumns}
 import org.apache.spark.sql.internal.connector.PartitionPredicateField
-import org.apache.spark.sql.types.{IntegerType, StringType, StructField}
+import org.apache.spark.sql.types.{IntegerType, StringType, StructField, StructType}
 import org.apache.spark.unsafe.types.UTF8String
 
 class PushDownUtilsSuite extends SparkFunSuite {
@@ -43,5 +47,48 @@ class PushDownUtilsSuite extends SparkFunSuite {
     val (pushed, _) = PushDownUtils.createPartitionPredicates(Seq(filter), fields)
     assert(pushed.size === 1)
     intercept[SparkNumberFormatException](pushed.head.eval(failing))
+  }
+
+  test("SPARK-60768: prune nested columns only when a nested field is requested") {
+    val structType = new StructType().add("a", IntegerType).add("b", IntegerType)
+    val relation = DataSourceV2Relation.create(
+      new TestTable(Array(Column.create("id", IntegerType), Column.create("s", structType))),
+      None,
+      None)
+    val Seq(id, s) = relation.output
+
+    // Only top-level columns are requested, so they are pushed as a whole.
+    val topLevelBuilder = new RecordingScanBuilder
+    PushDownUtils.pruneColumns(topLevelBuilder, relation, Seq(id, s), Seq(IsNotNull(s)))
+    assert(topLevelBuilder.requiredSchema === relation.schema)
+
+    // A nested field is requested, so the struct column is pruned to that field.
+    val nestedBuilder = new RecordingScanBuilder
+    val selectA = Alias(GetStructField(s, 0, Some("a")), "a")()
+    PushDownUtils.pruneColumns(nestedBuilder, relation, Seq(selectA), Seq(IsNotNull(id)))
+    assert(nestedBuilder.requiredSchema ===
+      new StructType().add("id", IntegerType).add("s", new StructType().add("a", IntegerType)))
+  }
+
+  /** A minimal table with the given columns. */
+  private class TestTable(cols: Array[Column]) extends Table {
+    override def name(): String = "test_table"
+
+    override def columns(): Array[Column] = cols
+
+    override def capabilities(): util.Set[TableCapability] = util.Set.of(TableCapability.BATCH_READ)
+  }
+
+  /** A scan builder that records the required schema of the last column pruning. */
+  private class RecordingScanBuilder extends ScanBuilder with SupportsPushDownRequiredColumns {
+    var requiredSchema: StructType = _
+
+    override def pruneColumns(requiredSchema: StructType): Unit = {
+      this.requiredSchema = requiredSchema
+    }
+
+    override def build(): Scan = new Scan {
+      override def readSchema(): StructType = requiredSchema
+    }
   }
 }
