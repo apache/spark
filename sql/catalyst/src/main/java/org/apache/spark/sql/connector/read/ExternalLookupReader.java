@@ -27,7 +27,12 @@ import org.apache.spark.sql.connector.metric.CustomTaskMetric;
 /**
  * A task-local client that executes lookup requests.
  * <ul>
- *   <li>Calls to a reader and its cursors are sequential, but may come from different threads.</li>
+ *   <li>Calls to a reader and its cursors are sequential, but may come from different threads.
+ *   The one exception is the end of the task: if another thread is still consuming the join,
+ *   Spark may call {@link #close()} on the reader, and {@code close()} on its open cursor, while
+ *   one call from that thread is in progress. Spark starts no new call after the close, so
+ *   implementations must tolerate {@code close()} during an in-progress call, for example by
+ *   cancelling or failing that call.</li>
  *   <li>Requests are not snapshot boundaries: results may mix source versions.</li>
  *   <li>Retried or speculative tasks may repeat a request; duplicates must be tolerated.</li>
  *   <li>Implementations should respond to thread interruption if their client supports it.</li>
