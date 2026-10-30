@@ -1601,9 +1601,13 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
 
   test("SPARK-60743: make_timestamp rejects seconds whose micros do not fit an int") {
     // The seconds input is DecimalType(16, 6), so its unscaled micros can exceed an int.
-    // Each value below must fail like 61 seconds does instead of wrapping modulo 2^32.
+    // Each value below must fail like 61 seconds does instead of wrapping modulo 2^32. The
+    // error shows the seconds given, truncated towards zero, as make_time reports them.
     val outOfRangeSeconds = Seq(
       // (year, month, day, hour, min, sec, the seconds shown in the error)
+      // The largest micros that fit an int, and the first that do not.
+      (2020, 1, 1, 0, 0, "2147.483647", "2147"),
+      (2020, 1, 1, 0, 0, "2147.483648", "2147"),
       // 4324967296 - 2^32 = 30000000 micros, which would read as 30 seconds.
       (2020, 1, 1, 0, 0, "4324.967296", "4324"),
       // 4354967296 - 2^32 = 60000000 micros, which would roll over to the next minute.
@@ -1611,9 +1615,11 @@ class DateExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       // 3000000000 micros would wrap to a negative int.
       (2020, 1, 1, 0, 0, "3000", "3000"),
       // A negative value whose micros would wrap to 30 seconds.
-      (2020, 1, 1, 0, 0, "-4264.967296", "-4265"),
-      // The largest DecimalType(16, 6) value: even its whole seconds do not fit an int.
+      (2020, 1, 1, 0, 0, "-4264.967296", "-4264"),
+      // The largest and the smallest DecimalType(16, 6) values: even their whole seconds do
+      // not fit an int.
       (2020, 1, 1, 0, 0, "9999999999.999999", "9999999999"),
+      (2020, 1, 1, 0, 0, "-9999999999.999999", "-9999999999"),
       // A small out-of-range value, for comparison.
       (2020, 1, 1, 0, 0, "61", "61"))
     for {

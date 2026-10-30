@@ -22,10 +22,8 @@ import java.time.DateTimeException;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.temporal.ChronoField;
 
 import org.apache.spark.SparkDateTimeException;
-import org.apache.spark.sql.catalyst.util.DateTimeConstants;
 import org.apache.spark.sql.catalyst.util.DateTimeUtils;
 import org.apache.spark.sql.catalyst.util.IntervalUtils;
 import org.apache.spark.sql.catalyst.util.TimestampFormatter;
@@ -97,11 +95,12 @@ public final class DateTimeExpressionUtils {
       Decimal secAndMicros, ZoneId zoneId, boolean timestampNTZ) {
     assert secAndMicros.scale() == 6 :
       "Seconds fraction must have 6 digits for microseconds but got " + secAndMicros.scale();
-    // The seconds are DecimalType(16, 6), so the unscaled micros need a long.
-    long totalMicros = secAndMicros.toUnscaledLong();
-    long seconds = Math.floorDiv(totalMicros, DateTimeConstants.MICROS_PER_SECOND);
-    int nanos = (int) (Math.floorMod(totalMicros, DateTimeConstants.MICROS_PER_SECOND) *
-      DateTimeConstants.NANOS_PER_MICROS);
+    // The seconds are DecimalType(16, 6), so their whole seconds can exceed an int. The split
+    // rejects such seconds, and negative ones, before narrowing, as make_time does; see
+    // DateTimeUtils.splitSecsAndMicros for the error message and the order of the checks.
+    DateTimeUtils.SecondsAndNanos secs = DateTimeUtils.splitSecsAndMicros(secAndMicros);
+    int seconds = secs.seconds();
+    int nanos = secs.nanos();
     LocalDateTime ldt;
     if (seconds == 60) {
       if (nanos == 0) {
@@ -111,12 +110,7 @@ public final class DateTimeExpressionUtils {
         throw QueryExecutionErrors.invalidFractionOfSecondError(secAndMicros.toDouble());
       }
     } else {
-      // Seconds beyond the int range are invalid; reject them before narrowing so they cannot
-      // wrap into a valid value. LocalDateTime.of checks the rest, as it does for 61 seconds.
-      if (seconds != (int) seconds) {
-        ChronoField.SECOND_OF_MINUTE.checkValidValue(seconds);
-      }
-      ldt = LocalDateTime.of(year, month, day, hour, min, (int) seconds, nanos);
+      ldt = LocalDateTime.of(year, month, day, hour, min, seconds, nanos);
     }
     if (timestampNTZ) {
       return DateTimeUtils.localDateTimeToMicros(ldt);
