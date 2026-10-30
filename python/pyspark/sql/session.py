@@ -2279,8 +2279,9 @@ class SparkSession(SparkConversionMixin):
             file that is not a valid package, for a package whose version Spark does not
             support, or that has no library for the platform of the driver; the session then
             does not get the package. A package that is rejected also stops the rest of the
-            call: without Spark Connect, the packages are added first, one at a time, and with
-            Spark Connect, the paths are added one at a time, so the paths before it are added.
+            call: without Spark Connect, the packages are added first, one at a time, so only
+            the packages before it are added; with Spark Connect, the paths are added one at a
+            time, so the paths before it are added.
         pyfile : bool
             Whether to add them as Python dependencies such as .py, .egg, .zip or .jar files.
             The pyfiles are directly inserted into the path when executing Python functions

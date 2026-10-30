@@ -335,14 +335,14 @@ package that the session could not use: the session would ignore it and silently
 package or library that it used before, or fail every query on its data sources. After the failure,
 the session keeps the packages that it had, and a call that adds several artifacts in Scala or Java
 still adds the others. In Python, a rejected package stops the rest of the call: without Spark
-Connect, `spark.addArtifacts` adds the packages first, one at a time, and with Spark Connect, it
-adds the paths one at a time, so the paths before the package are added. Spark does not load the
-library when it checks a package, so a library that fails to load fails the queries that use it. Nor
-does it check that the driver can run native data sources at all, which requires Java 22 or later
-and a platform where the C data interface of Arrow Java loads: there, the add succeeds, and the
-queries fail with `NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION` or
-`NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`. A file that does not exist or cannot be read fails the
-call as for the other artifacts. Spark ignores, and logs, a configured package that it cannot read
+Connect, `spark.addArtifacts` adds the packages first, one at a time, so only the packages before it
+are added; with Spark Connect, it adds the paths one at a time, so the paths before the package are
+added. Spark does not load the library when it checks a package, so a library that fails to load
+fails the queries that use it. Nor does it check that the driver can run native data sources at all,
+which requires Java 22 or later and a platform where the C data interface of Arrow Java loads:
+there, the add succeeds, and the queries fail with `NATIVE_DATA_SOURCE_UNSUPPORTED_JAVA_VERSION` or
+`NATIVE_DATA_SOURCE_UNSUPPORTED_PLATFORM`. A file that does not exist or cannot be read stops the
+call, as for the other artifacts. Spark ignores, and logs, a configured package that it cannot read
 or whose version it does not support, unless its manifest lists the data source that a query uses
 and no other package or installed library provides it.
 
