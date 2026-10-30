@@ -32,10 +32,10 @@ import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -2964,8 +2964,8 @@ class DataFrameSuite extends SharedSparkSession
     def udfQuery(): DataFrame = spark.range(0, 10, 1, 1)
       .select($"id", f($"id") as "f")
       .where($"f" > 5 && h($"id") > 0)
-    // With three expensive aliases, so the projection split is involved too. It splits `f` and
-    // `h` off first, as written, and leaves the division over `g` behind them.
+    // With three expensive aliases, so the projection split is involved too. The division over
+    // `g` can fail, so the projection is not split and the filter stays as written.
     val k = udf((i: Long) => i)
     def splitQuery(): DataFrame = spark.range(0, 10, 1, 1)
       .select($"id", f($"id") as "f", k($"id") as "h", g($"id") as "g")
@@ -2977,12 +2977,26 @@ class DataFrameSuite extends SharedSparkSession
       .select($"id", f($"id") as "f", q($"id") as "q")
       .where($"f" + 1 > 5 && $"q" > 0)
     // `r` only works for the ids the second conjunct keeps, so the split must not put the third
-    // conjunct below the second, which can fail. Without the split, an interpreted projection
-    // computes `q` and `r` for every row it gets.
+    // conjunct below the second, which can fail; the projection is then not split, and an
+    // interpreted projection computes `r` for every row it gets.
     val r = udf((i: Long) => { require(i > 5, s"r called with $i"); i })
     def laterQuery(): DataFrame = spark.range(0, 10, 1, 1)
       .select($"id", f($"id") as "f", g($"id") as "g", r($"id") as "r")
       .where($"f" >= 0 && $"g" + 1 > 6 && $"r" > 0)
+    // The non-deterministic conjunct drops every row, so the division after it is never
+    // evaluated; a later pass must not merge the division below it.
+    def afterRandQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g")
+      .where($"f" >= 0 && rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0 && $"g" > 0)
+    // With nullable UDFs, `InferFiltersFromConstraints` adds `IS NOT NULL` conditions in front,
+    // which must not let the split compute `nr` ahead of `ng + 1 > 6`.
+    val nf = udf((i: Long) => java.lang.Long.valueOf(i))
+    val ng = udf((i: Long) => java.lang.Long.valueOf(i))
+    val nr = udf((i: Long) => { require(i > 5, s"nr called with $i"); java.lang.Long.valueOf(i) })
+    val ns = udf((i: Long) => java.lang.Long.valueOf(i))
+    def inferredQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", nf($"id") as "f", ng($"id") as "g", nr($"id") as "r", ns($"id") as "s")
+      .where($"f" > rand(10) && $"g" + 1 > 6 && $"r" > 0 && $"s" > 0)
     // A non-deterministic conjunct sees the same rows as with the whole filter pushed.
     def randQuery(): DataFrame = spark.range(0, 100, 1, 1)
       .select($"id", f($"id") as "f")
@@ -3001,9 +3015,14 @@ class DataFrameSuite extends SharedSparkSession
         checkAnswer(udfQuery(), (6L until 10L).map(i => Row(i, i)))
         checkAnswer(splitQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
         checkAnswer(randQuery(), randExpected)
+        checkAnswer(afterRandQuery(), Seq.empty)
+        // Without the split, an interpreted projection computes `q` for every row it gets.
         if (codegen || split || !avoid) {
           checkAnswer(firstQuery(), (5L until 10L).map(i => Row(i, i, i)))
+        }
+        if (codegen || !avoid) {
           checkAnswer(laterQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
+          checkAnswer(inferredQuery(), (6L until 10L).map(i => Row(i, i, i, i, i)))
         }
       }
     }
@@ -3027,14 +3046,17 @@ class DataFrameSuite extends SharedSparkSession
     val expected = (6L until 10L).map(i => Row(i, i))
     // A plain comparison can not fail, so it is still pushed.
     checkAnswer(query($"id" > 5), expected)
-    // An addition is not a plain comparison, so it now stays behind `p > 0`, as in Spark 4.1,
-    // even with ANSI mode off, where it can not fail.
-    withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
-      val e = intercept[SparkException](query($"id" + 1 > 6).collect())
-      assert(e.getCondition === "FAILED_EXECUTE_UDF")
-      withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
-        checkAnswer(query($"id" + 1 > 6), expected)
-      }
+    // An addition is not a plain comparison, so it now stays behind `p > 0` in the top filter,
+    // as in Spark 4.1.
+    val plan = query($"id" + 1 > 6).queryExecution.optimizedPlan
+    val heldBehind = plan.collectFirst {
+      case Filter(And(first, second), _: Project) =>
+        !first.exists(_.isInstanceOf[Add]) && second.exists(_.isInstanceOf[Add])
+    }
+    assert(heldBehind === Some(true), plan)
+    // The legacy config pushes it below the projection again, ahead of `p > 0`.
+    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      checkAnswer(query($"id" + 1 > 6), expected)
     }
   }
 

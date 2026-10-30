@@ -679,12 +679,14 @@ object SQLConf {
         "after an expensive one is pushed, and so evaluated ahead of it, unless it is " +
         "throwable (e.g. raise_error). When false, it is pushed only when it is a plain " +
         "deterministic condition over columns and literals, such as a comparison, IN or IS " +
-        "NULL, where a column the projection defines with an expression counts as that " +
+        "NULL, where a column the projection defines with a cheap expression counts as that " +
         "expression; otherwise it stays above in its written order, so it is only evaluated " +
         "where none of the conditions before it is false, and an error it would raise on other " +
         "rows (e.g. a division by zero or an invalid cast in ANSI mode, or an exception in a " +
-        "UDF) is not raised. The projection split does not place such a condition, with the " +
-        "expensive elements read as columns, ahead of the conditions written before it either.")
+        "UDF) is not raised. The projection is not split then either. This covers the " +
+        "expensive elements evaluated in the projection, such as Scala UDFs, but not Python " +
+        "UDFs, which are evaluated below it. Otherwise, the projection split may still compute " +
+        "the expensive element a later condition reads ahead of the conditions before it.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf

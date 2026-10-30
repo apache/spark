@@ -31,7 +31,7 @@ import org.apache.spark.sql.catalyst.util.{ArrayBasedMapData, CharVarcharUtils}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.internal.types.{AbstractMapType, StringTypeWithCollation}
-import org.apache.spark.sql.types.{DataType, FileType, MapType, StringType, StructType, VariantType}
+import org.apache.spark.sql.types.{DataType, FileType, MapType, NumericType, StringType, StructType, VariantType}
 import org.apache.spark.unsafe.types.UTF8String
 
 object ExprUtils extends EvalHelper with QueryErrorsBase {
@@ -253,8 +253,11 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
    *     Note that GetArrayItem/ElementAt are NOT included: they throw on invalid ordinals
    *     when ANSI mode is on;
    *   - logic/predicates: And, Or, Not, comparisons, IsNull, IsNotNull, IsNaN, NullIf,
-   *     Coalesce, In and InSet are total boolean functions.
-   * Anything else (arithmetic, casts, string functions, UDFs, nested IF/CASE WHEN, ...)
+   *     Coalesce, In and InSet are total boolean functions;
+   *   - Size, which returns -1 or NULL for a NULL input rather than raising;
+   *   - a cast that widens a numeric type to another one (`Cast.canUpCast`), such as the INT
+   *     to BIGINT cast that type coercion adds to a comparison.
+   * Anything else (arithmetic, other casts, string functions, UDFs, nested IF/CASE WHEN, ...)
    * conservatively returns false. On top of the whitelist, the expression must be
    * deterministic and must not contain subqueries.
    *
@@ -266,13 +269,22 @@ object ExprUtils extends EvalHelper with QueryErrorsBase {
     e.deterministic && !e.containsPattern(PLAN_EXPRESSION) &&
       canEvaluateUnconditionallyInternal(e)
 
+  // Only the numeric pairs are taken from `Cast.canUpCast`, which also covers e.g. LONG to
+  // TIMESTAMP and casts to STRING or between complex types: widening a number never fails.
+  private def isNumericUpCast(from: DataType, to: DataType): Boolean = (from, to) match {
+    case (_: NumericType, _: NumericType) => Cast.canUpCast(from, to)
+    case _ => false
+  }
+
   private def canEvaluateUnconditionallyInternal(e: Expression): Boolean = e match {
     case _: AttributeReference | _: Literal => true
     case _: GetStructField | _: GetArrayStructFields | _: GetMapValue =>
       e.children.forall(canEvaluateUnconditionallyInternal)
     case _: And | _: Or | _: Not | _: BinaryComparison | _: IsNull | _: IsNotNull |
-         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet =>
+         _: IsNaN | _: NullIf | _: Coalesce | _: In | _: InSet | _: Size =>
       e.children.forall(canEvaluateUnconditionallyInternal)
+    case c: Cast if isNumericUpCast(c.child.dataType, c.dataType) =>
+      canEvaluateUnconditionallyInternal(c.child)
     case _ => false
   }
 }

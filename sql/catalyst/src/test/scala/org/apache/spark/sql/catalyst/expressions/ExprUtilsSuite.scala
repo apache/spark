@@ -18,7 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions
 
 import org.apache.spark.SparkFunSuite
-import org.apache.spark.sql.types.{ArrayType, IntegerType, LongType, StringType, StructField, StructType}
+import org.apache.spark.sql.types.{ArrayType, DecimalType, DoubleType, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 
 class ExprUtilsSuite extends SparkFunSuite {
 
@@ -50,6 +50,23 @@ class ExprUtilsSuite extends SparkFunSuite {
     assert(!ExprUtils.canEvaluateUnconditionally(GetArrayItem(arr, Literal(0))))
     // A whitelisted predicate over a non-whitelisted child is still excluded.
     assert(!ExprUtils.canEvaluateUnconditionally(IsNotNull(Add(a, Literal(1L)))))
+  }
+
+  test("SPARK-60730: canEvaluateUnconditionally: size and numeric up-casts are included") {
+    val arr = AttributeReference("arr", ArrayType(IntegerType))()
+    val i = AttributeReference("i", IntegerType)()
+    assert(ExprUtils.canEvaluateUnconditionally(GreaterThan(Size(arr), Literal(0))))
+    assert(ExprUtils.canEvaluateUnconditionally(EqualTo(Cast(i, LongType), a)))
+    assert(ExprUtils.canEvaluateUnconditionally(Cast(i, DoubleType)))
+    assert(ExprUtils.canEvaluateUnconditionally(Cast(i, DecimalType(20, 0))))
+    // Narrowing casts can fail in ANSI mode. LONG to TIMESTAMP is an up-cast too, but only the
+    // numeric ones are taken.
+    assert(!ExprUtils.canEvaluateUnconditionally(Cast(a, IntegerType)))
+    assert(Cast.canUpCast(LongType, TimestampType))
+    assert(!ExprUtils.canEvaluateUnconditionally(Cast(a, TimestampType)))
+    // A size over an expression that can fail is still excluded.
+    assert(!ExprUtils.canEvaluateUnconditionally(Size(ElementAt(
+      AttributeReference("nested", ArrayType(ArrayType(IntegerType)))(), Literal(1)))))
   }
 
   test("canEvaluateUnconditionally: non-deterministic expressions are excluded") {
