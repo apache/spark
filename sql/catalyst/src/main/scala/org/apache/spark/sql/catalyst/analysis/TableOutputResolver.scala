@@ -29,7 +29,7 @@ import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, Project}
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
-import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns.getDefaultValueExprOrNullLit
 import org.apache.spark.sql.catalyst.util.TypeUtils.toSQLId
 import org.apache.spark.sql.connector.catalog.CatalogV2Implicits._
@@ -426,7 +426,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
             // stored columns after this loop (see below), so the generated value is computed from
             // the values as they will be written. References to other generated columns are not
             // allowed.
-            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
+            val genExpr = StoredExpressionText.parse(CatalystSqlParser, genExprSql)
             Some(applyColumnMetadata(genExpr, expectedCol))
           case None =>
             val useNullAsDefault = useNullAsDefaultForMissingColumn(expectedCols, conf)
@@ -600,7 +600,7 @@ object TableOutputResolver extends SQLConfHelper with Logging {
         GeneratedColumn.getGenerationExpression(expectedCol.metadata) match {
           case Some(genExprSql) =>
             autoFilledGenCols += expectedCol.name
-            val genExpr = CatalystSqlParser.parseExpression(genExprSql)
+            val genExpr = StoredExpressionText.parse(CatalystSqlParser, genExprSql)
             // For by-position, manually resolve references against matched columns
             // since the query may use different column names than the table. References to
             // other generated columns are not allowed.

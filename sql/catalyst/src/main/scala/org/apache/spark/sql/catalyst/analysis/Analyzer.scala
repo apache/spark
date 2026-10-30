@@ -48,7 +48,7 @@ import org.apache.spark.sql.catalyst.trees.AlwaysProcess
 import org.apache.spark.sql.catalyst.trees.CurrentOrigin.withOrigin
 import org.apache.spark.sql.catalyst.trees.TreePattern._
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn}
+import org.apache.spark.sql.catalyst.util.{toPrettySQL, trimTempResolvedColumn, CharVarcharUtils, GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.catalyst.util.ResolveDefaultColumns._
 // `View` is aliased to `V2View` to avoid clashing with the logical-plan `View` imported via
 // `org.apache.spark.sql.catalyst.plans.logical._`.
@@ -4122,10 +4122,34 @@ class Analyzer(
               cleanedRelation
             case other => other
           }
-          v2Write.withNewQuery(projection).withNewTable(cleanedTable)
+          v2Write
+            .withNewQuery(analyzeAutoFilledGeneratedColumns(projection, autoFilledGenCols))
+            .withNewTable(cleanedTable)
         } else {
           v2Write
         }
+    }
+
+    /**
+     * Analyzes the auto-filled generated columns of a write under the settings their stored text
+     * is read under, so that the implicit casts and the functions of a generation expression do
+     * not follow the session that writes.
+     */
+    private def analyzeAutoFilledGeneratedColumns(
+        projection: LogicalPlan,
+        autoFilled: Set[String]): LogicalPlan = projection match {
+      case p @ Project(projectList, child) if autoFilled.nonEmpty =>
+        val filled = projectList.filter(c => autoFilled.contains(c.name))
+        SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
+          execute(Project(filled, LocalRelation(child.output)))
+        } match {
+          case Project(analyzedCols, _: LocalRelation) =>
+            val byName = analyzedCols.map(c => c.name -> c).toMap
+            p.copy(projectList = projectList.map(c => byName.getOrElse(c.name, c)))
+          // A catalog can store a text that is not scalar. The write analyzes it as is.
+          case _ => p
+        }
+      case other => other
     }
   }
 

@@ -22,7 +22,7 @@ import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNull
 import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
-import org.apache.spark.sql.catalyst.util.GeneratedColumn
+import org.apache.spark.sql.catalyst.util.{GeneratedColumn, StoredExpressionText}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpression}
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
@@ -123,7 +123,7 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
   private def buildGenerationCatalystExpression(genExpr: GenerationExpression): Expression = {
     Option(genExpr.getExpression)
       .flatMap(V2ExpressionUtils.toCatalyst)
-      .getOrElse(catalogManager.v1SessionCatalog.parser.parseExpression(genExpr.getSql))
+      .getOrElse(StoredExpressionText.parse(catalogManager.v1SessionCatalog.parser, genExpr.getSql))
   }
 
   private def buildColumnExtractors(
