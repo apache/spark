@@ -140,10 +140,11 @@ Spark calls the functions of the table as follows:
   for a streaming write, before `close_writer`. A streaming write commits each micro-batch with its
   epoch ID, and the ID of the query stays the same when the query restarts from its checkpoint:
   together, they identify the output of a micro-batch, so that a library can skip an epoch that it
-  already committed. A micro-batch streaming query creates a new stream writer for each micro-batch,
-  and Spark closes the previous one when it creates the next one. Because Spark is not told when a
-  streaming query stops, the last stream writer of a query is closed once it is no longer
-  referenced, or when the query is restarted.
+  already committed. A restarted query may also abort such an epoch, so an abort only removes what
+  the data writers of its own writer wrote. A micro-batch streaming query creates a new stream
+  writer for each micro-batch, and Spark closes the previous one when it creates the next one.
+  Because Spark is not told when a streaming query stops, the last stream writer of a query is
+  closed once it is no longer referenced, or when the query is restarted.
 
 The library defines the format of the partitions, of the state of its readers and writers, and of
 the commit messages, which Spark sends to the executors and back as byte arrays. The library
@@ -154,8 +155,10 @@ must not cross the interface. Each handle that a `create` function returns is re
 once, by the `close` function of its kind. The close functions cannot fail, and they can run after
 the query, so do the work that can fail, such as flushing data, in `commit`. After a function on
 a handle fails, Spark only closes the handle, except that it aborts a writer whose commit failed
-and a data writer whose write or commit failed, and it never aborts one whose commit succeeded:
-the header lists the order of the calls that a library can rely on. Strings are UTF-8.
+and a data writer whose write or commit failed, and it never aborts one whose commit succeeded.
+Spark may read a partition more than once, also at the same time, in several attempts of its task,
+such as after a failure or with speculative execution. The header lists the order of the calls
+that a library can rely on. Strings are UTF-8.
 
 A library only sets the functions of the operations it supports, and leaves the others `NULL`. A
 data source must not declare a capability whose functions are `NULL`:

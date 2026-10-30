@@ -1175,6 +1175,8 @@ int pushLimit(void* handle, int32_t limit, bool* applied) {
   auto* reader = fromHandle<Reader>(handle);
   if (reader->failed) orderViolation("push_limit after a failed call");
   if (reader->limited) orderViolation("push_limit called twice");
+  // Spark pushes the limit before it prunes the columns.
+  if (reader->pruned) orderViolation("push_limit after prune_columns");
   reader->limited = true;
   return tracked(&reader->failed, [&] {
     maybeFail(reader->state, "push_limit");
