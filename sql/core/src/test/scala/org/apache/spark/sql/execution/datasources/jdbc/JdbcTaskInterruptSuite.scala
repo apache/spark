@@ -88,6 +88,8 @@ class JdbcTaskInterruptSuite extends SharedSparkSession {
 
   test("savePartition does not classify a later source hasNext failure as a JDBC write") {
     val sourceFailure = new SQLException("source read failed", "08006")
+    val nextFailure = new SQLException("source connection detail", "08001")
+    sourceFailure.setNextException(nextFailure)
     val iterator = new Iterator[Row] {
       private var readFirstRow = false
       override def hasNext: Boolean = {
@@ -102,6 +104,8 @@ class JdbcTaskInterruptSuite extends SharedSparkSession {
 
     assert(savePartitionWithSourceError(iterator) eq sourceFailure)
     assert(sourceFailure.getSQLState == "08006")
+    assert(sourceFailure.getNextException eq nextFailure)
+    assert(sourceFailure.getCause eq nextFailure)
   }
 
   test("savePartition preserves a classified later source next failure") {
@@ -125,6 +129,45 @@ class JdbcTaskInterruptSuite extends SharedSparkSession {
       condition = "FAILED_JDBC.CONNECTION",
       sqlState = Some("08001"),
       parameters = Map("url" -> "jdbc:source"))
+  }
+
+  test("savePartition classifies JDBC row binding failures") {
+    val conn = mock(classOf[Connection])
+    val stmt = mock(classOf[PreparedStatement])
+    when(conn.prepareStatement(anyString())).thenReturn(stmt)
+    val bindingFailure = new SQLException("binding rejected", "22001")
+    doThrow(bindingFailure).when(stmt).setInt(anyInt(), anyInt())
+
+    val dialect = new JdbcDialect with NoLegacyJDBCError {
+      override def canHandle(url: String): Boolean = url == testJdbcUrl
+      override def createConnectionFactory(options: JDBCOptions): Int => Connection = _ => conn
+    }
+    registerDialect(dialect)
+    TaskContext.setTaskContext(TaskContext.empty())
+    try {
+      val options = newWriteOptions()
+      val error = intercept[SparkRuntimeException] {
+        JdbcUtils.savePartition(
+          "t",
+          Iterator(Row(1)),
+          StructType(Seq(StructField("a", IntegerType))),
+          "INSERT INTO t (a) VALUES (?)",
+          batchSize = 1,
+          dialect,
+          Connection.TRANSACTION_NONE,
+          options)
+      }
+      checkError(
+        exception = error,
+        condition = "FAILED_JDBC.WRITE",
+        sqlState = Some("HV000"),
+        parameters = Map("url" -> options.getRedactUrl(), "tableName" -> "t"))
+      assert(error.getCause eq bindingFailure)
+      verify(stmt, never()).executeBatch()
+    } finally {
+      TaskContext.unset()
+      JdbcDialects.unregisterDialect(dialect)
+    }
   }
 
   test("savePartition classifies JDBC batch write failures") {

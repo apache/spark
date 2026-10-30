@@ -718,7 +718,7 @@ object JdbcUtils extends Logging with SQLConfHelper {
     }
     val supportsTransactions = finalIsolationLevel != Connection.TRANSACTION_NONE
     var totalRowCount = 0L
-    def classifyWriteException(e: SQLException): Nothing = {
+    def linkNextException(e: SQLException): Unit = {
       val cause = e.getNextException
       if (cause != null && e.getCause != cause) {
         // If there is no cause already, set 'next exception' as cause. If cause is null,
@@ -736,6 +736,30 @@ object JdbcUtils extends Logging with SQLConfHelper {
           e.addSuppressed(cause)
         }
       }
+    }
+
+    def sourceHasNext: Boolean = {
+      try {
+        iterator.hasNext
+      } catch {
+        case e: SQLException =>
+          linkNextException(e)
+          throw e
+      }
+    }
+
+    def sourceNext(): Row = {
+      try {
+        iterator.next()
+      } catch {
+        case e: SQLException =>
+          linkNextException(e)
+          throw e
+      }
+    }
+
+    def classifyWriteException(e: SQLException): Nothing = {
+      linkNextException(e)
       // Closing the connection on task cancellation can cause a SQLException. Do not
       // report that cancellation side effect as a JDBC write failure.
       if (TaskContext.get().isInterrupted() || e.isInstanceOf[SparkThrowable]) {
@@ -778,8 +802,8 @@ object JdbcUtils extends Logging with SQLConfHelper {
 
         withWriteException { stmt.setQueryTimeout(options.queryTimeout) }
 
-        while (iterator.hasNext) {
-          val row = iterator.next()
+        while (sourceHasNext) {
+          val row = sourceNext()
           try {
             var i = 0
             while (i < numFields) {
