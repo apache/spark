@@ -343,8 +343,9 @@ DROP TABLE t1;
 -- so it can never be a grouping key: it is rejected in an explicit GROUP BY, when GROUP BY ALL
 -- promotes the SELECT window to a grouping key, and when a GROUP BY ordinal points at it. A
 -- generator is rejected as an explicit grouping key, but a generator in the SELECT list is
--- extracted to a Generate operator, so GROUP BY ALL / a GROUP BY ordinal that points at it groups
--- by the generated output and stays valid.
+-- extracted to a Generate operator evaluated after aggregation, so GROUP BY ALL / a GROUP BY
+-- ordinal that points at it groups by the generator's input and stays valid. Repeated generated
+-- values are therefore not collapsed.
 SELECT c1, ROW_NUMBER() OVER (ORDER BY c1) AS rn FROM VALUES (1), (2) AS t(c1)
 GROUP BY ALL ORDER BY c1;
 
@@ -355,6 +356,8 @@ SELECT count(*) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY explode(a
 SELECT explode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY ALL;
 
 SELECT explode(a) FROM VALUES (array(1, 2)), (array(3)) AS t(a) GROUP BY 1;
+
+SELECT explode(a) FROM VALUES (array(1, 1)) AS t(a) GROUP BY ALL;
 
 -- Multiple unsupported grouping keys are reported together, in grouping-list order, and an
 -- unsupported expression nested inside a larger grouping key is reported on its own.

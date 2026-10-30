@@ -1408,6 +1408,16 @@ Project [col#x]
 
 
 -- !query
+SELECT explode(a) FROM VALUES (array(1, 1)) AS t(a) GROUP BY ALL
+-- !query analysis
+Project [col#x]
++- Generate explode(_gen_input_0#x), false, [col#x]
+   +- Aggregate [a#x], [a#x AS _gen_input_0#x]
+      +- SubqueryAlias t
+         +- LocalRelation [a#x]
+
+
+-- !query
 SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
 GROUP BY ROW_NUMBER() OVER (ORDER BY c1), explode(a)
 -- !query analysis

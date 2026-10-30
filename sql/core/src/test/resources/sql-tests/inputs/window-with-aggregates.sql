@@ -239,9 +239,8 @@ QUALIFY row_number() OVER (ORDER BY col1) = 1
 ORDER BY col1;
 
 -- GROUPING SETS + window + ORDER BY: GROUPING_ID() aliased by user.
--- The GroupingAnalyticsTransformer creates a double alias
--- Alias(Alias(spark_grouping_id, "grouping_id()"), "gid") which must be split
--- so the Aggregate keeps the internal "grouping_id()" name and the Window uses "gid".
+-- The aliased GROUPING_ID() becomes the Aggregate output "gid", the window aggregate reads only
+-- the per-group count, and "gid" passes through the Window to the ORDER BY.
 SELECT col1, COUNT(*) AS cnt,
   (COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS pct,
   GROUPING_ID() AS gid

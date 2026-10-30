@@ -883,7 +883,8 @@ WITH RECURSIVE r(level, data) AS (
 SELECT * FROM r;
 
 -- Recursive CTE self-reference under outer joins with USING and NATURAL: allowed only on the
--- preserved side of a left outer join.
+-- preserved side of a left or right outer join, rejected on the null-supplying side and in a
+-- full outer join.
 WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL
@@ -907,6 +908,15 @@ WITH RECURSIVE r(level, data) AS (
   UNION ALL
   SELECT level + 1, data
   FROM (VALUES (0)) AS t(data) LEFT OUTER JOIN r USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r;
+
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
+  FROM (VALUES (0)) AS t(data) RIGHT OUTER JOIN r USING (data)
   WHERE level < 2
 )
 SELECT * FROM r;

@@ -2498,6 +2498,37 @@ WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL
   SELECT level + 1, data
+  FROM (VALUES (0)) AS t(data) RIGHT OUTER JOIN r USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r
+-- !query analysis
+WithCTE
+:- CTERelationDef xxxx, false
+:  +- SubqueryAlias r
+:     +- Project [col1#x AS level#x, col2#x AS data#x]
+:        +- UnionLoop xxxx
+:           :- LocalRelation [col1#x, col2#x]
+:           +- Project [(level#x + 1) AS (level + 1)#x, data#x]
+:              +- Filter (level#x < 2)
+:                 +- Project [data#x, level#x]
+:                    +- Join RightOuter, (data#x = data#x)
+:                       :- SubqueryAlias t
+:                       :  +- Project [col1#x AS data#x]
+:                       :     +- LocalRelation [col1#x]
+:                       +- SubqueryAlias r
+:                          +- Project [col1#x AS level#x, col2#x AS data#x]
+:                             +- UnionLoopRef xxxx, [col1#x, col2#x], false
++- Project [level#x, data#x]
+   +- SubqueryAlias r
+      +- CTERelationRef xxxx, true, [level#x, data#x], false, false
+
+
+-- !query
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
   FROM r FULL OUTER JOIN (VALUES (0)) AS t(data) USING (data)
   WHERE level < 2
 )

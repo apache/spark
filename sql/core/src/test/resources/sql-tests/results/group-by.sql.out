@@ -1362,6 +1362,15 @@ struct<col:int>
 
 
 -- !query
+SELECT explode(a) FROM VALUES (array(1, 1)) AS t(a) GROUP BY ALL
+-- !query schema
+struct<col:int>
+-- !query output
+1
+1
+
+
+-- !query
 SELECT count(*) FROM VALUES (1, array(1, 2)), (2, array(3)) AS t(c1, a)
 GROUP BY ROW_NUMBER() OVER (ORDER BY c1), explode(a)
 -- !query schema

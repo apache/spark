@@ -2398,6 +2398,23 @@ WITH RECURSIVE r(level, data) AS (
   VALUES (0, 0)
   UNION ALL
   SELECT level + 1, data
+  FROM (VALUES (0)) AS t(data) RIGHT OUTER JOIN r USING (data)
+  WHERE level < 2
+)
+SELECT * FROM r
+-- !query schema
+struct<level:int,data:int>
+-- !query output
+0	0
+1	0
+2	0
+
+
+-- !query
+WITH RECURSIVE r(level, data) AS (
+  VALUES (0, 0)
+  UNION ALL
+  SELECT level + 1, data
   FROM r FULL OUTER JOIN (VALUES (0)) AS t(data) USING (data)
   WHERE level < 2
 )
