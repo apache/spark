@@ -144,8 +144,8 @@ class ResolveCatalogs(val catalogManager: CatalogManager)
       rejectTimeTravelOptionsForWrite(resolvedIdentifier, writeOptions)
       r.copy(name = resolvedIdentifier)
 
-    case UnresolvedIdentifier(nameParts, allowTemp) =>
-      resolveIdentifier(nameParts, allowTemp, Nil)
+    case unresolvedIdentifier: UnresolvedIdentifier =>
+      catalogIdentifierResolution.resolveUnresolvedIdentifier(unresolvedIdentifier)
 
     case CurrentNamespace =>
       ResolvedNamespace(currentCatalog, catalogManager.currentNamespace.toImmutableArraySeq)

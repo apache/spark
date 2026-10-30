@@ -17,10 +17,10 @@
 
 package org.apache.spark.sql.catalyst.analysis
 
-import org.apache.spark.sql.catalyst.plans.logical.{DropView, LogicalPlan}
+import org.apache.spark.sql.catalyst.plans.logical.{CreateView, DropView, LogicalPlan}
 import org.apache.spark.sql.connector.catalog.ViewCatalog
 import org.apache.spark.sql.errors.QueryCompilationErrors
-import org.apache.spark.sql.execution.command.{DropTableCommand, DropTempViewCommand}
+import org.apache.spark.sql.execution.command.{CreateViewCommand, DropTableCommand, DropTempViewCommand}
 
 /**
  * Rewrites resolved view commands to their session-catalog commands in [[ResolveSessionCatalog]].
@@ -61,6 +61,34 @@ object ViewCommandHelper {
       dropView
   }
 
+  /**
+   * Lowers a session-catalog [[CreateView]] to [[CreateViewCommand]], leaving other targets intact.
+   * Analysis-only state is not transferred: HandleSpecialCommand marks the new command analyzed.
+   */
+  def rewriteCreateView(createView: CreateView): LogicalPlan = createView match {
+    case CreateView(CreateViewInSessionCatalog(ident), userSpecifiedColumns, comment,
+        collation, properties, originalText, query, allowExisting, replace, viewSchemaMode,
+        _, _, _) =>
+      CreateViewCommand(
+        name = ident,
+        userSpecifiedColumns = userSpecifiedColumns,
+        comment = comment,
+        collation = collation,
+        properties = properties,
+        originalText = originalText,
+        plan = query,
+        allowExisting = allowExisting,
+        replace = replace,
+        viewType = PersistedView,
+        viewSchemaMode = viewSchemaMode)
+
+    case _ =>
+      createView
+  }
+
   private object DropViewInSessionCatalog
     extends ResolvedIdentifierInSessionCatalog("DROP", "VIEW")
+
+  private object CreateViewInSessionCatalog
+    extends ResolvedIdentifierInSessionCatalog("CREATE", "VIEW")
 }

@@ -20,7 +20,8 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.SparkException
-import org.apache.spark.sql.catalyst.expressions.{Expression, SubqueryExpression, VariableReference}
+import org.apache.spark.sql.catalyst.analysis.IdentifierResolution.{collectTemporaryVariablesInExpressionTree, collectTemporaryVariablesInLogicalPlan}
+import org.apache.spark.sql.catalyst.expressions.Expression
 import org.apache.spark.sql.catalyst.plans.logical.{AlterViewAs, CacheTableAsSelect, Command, CreateView, LogicalPlan, V2WriteCommand}
 import org.apache.spark.sql.catalyst.rules.{Rule, RuleExecutor}
 import org.apache.spark.sql.catalyst.trees.TreePattern._
@@ -166,24 +167,5 @@ class ResolveIdentifierClause(earlyBatches: Seq[RuleExecutor[LogicalPlan]#Batch]
   private def recordTemporaryVariablesUnderIdentifier(identifierExpr: Expression): Unit = {
     AnalysisContext.get.referredTempVariableNamesUnderIdentifier ++=
       collectTemporaryVariablesInExpressionTree(identifierExpr)
-  }
-
-  private def collectTemporaryVariablesInLogicalPlan(child: LogicalPlan): Seq[Seq[String]] = {
-    def collectTempVars(child: LogicalPlan): Seq[Seq[String]] = {
-      child.flatMap { plan =>
-        plan.expressions.flatMap { e => collectTemporaryVariablesInExpressionTree(e) }
-      }.distinct
-    }
-    collectTempVars(child)
-  }
-
-  // Visits `child` itself as well as its descendants, so that an identifier expression which is
-  // just a variable reference is collected too.
-  private def collectTemporaryVariablesInExpressionTree(child: Expression): Seq[Seq[String]] = {
-    child.flatMap {
-      case e: SubqueryExpression => collectTemporaryVariablesInLogicalPlan(e.plan)
-      case r: VariableReference => Seq(r.originalNameParts)
-      case _ => Seq.empty
-    }.distinct
   }
 }
