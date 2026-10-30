@@ -134,29 +134,52 @@ object NativeDataSourcePackage extends Logging {
 
   /**
    * Checks a package that a session adds with `spark.addArtifact`, in the given file, before the
-   * session gets it: fails if Spark cannot read the package, or does not support its version of
-   * the interface. The package that a session added last takes precedence, and a session cannot
+   * session gets it: fails if Spark cannot read the package, does not support its version of the
+   * interface, or if it has no library for the platform of the driver, which loads the library to
+   * plan a query. The package that a session added last takes precedence, and a session cannot
    * remove an artifact, so Spark rejects such a package rather than ignore it, as it ignores the
-   * configured ones, which would keep the session on the package that it added before. The file
-   * is not the artifact itself, so the result is not cached, and errors call it `path`.
+   * configured ones, which would keep the session on the package that it added before. The
+   * library is not loaded, so a library that fails to load fails the queries that use it. The
+   * file is not the artifact itself, so the result is not cached, and errors call it `path`.
    */
   def checkAdded(file: File, path: String): Unit = {
-    parse(file, path) match {
-      case Left(invalid) => throw invalid.error
-      case Right(pkg) if pkg.manifest.abiVersion > NativeLibrary.ABI_VERSION =>
-        throw unsupportedAbiVersionError(pkg)
-      case _ =>
+    val manifest = readManifest(file, path).fold(invalid => throw invalid.error, identity)
+    if (!isSupported(manifest)) {
+      throw unsupportedAbiVersionError(path, manifest)
+    }
+    if (!manifest.libraries.contains(NativePlatform.current)) {
+      throw unsupportedPlatformError(path, manifest)
     }
   }
 
+  /** Whether Spark supports the version of the interface of a package. */
+  private[ffi] def isSupported(manifest: NativeDataSourceManifest): Boolean = {
+    // The version of a package is the oldest that its library implements.
+    manifest.abiVersion <= NativeLibrary.ABI_VERSION
+  }
+
   /** The error for a package whose version of the interface Spark does not support. */
-  private[ffi] def unsupportedAbiVersionError(pkg: NativeDataSourcePackage): Throwable = {
+  private[ffi] def unsupportedAbiVersionError(
+      path: String,
+      manifest: NativeDataSourceManifest): Throwable = {
     QueryExecutionErrors.invalidNativeDataSourcePackageError(
-      pkg.path,
+      path,
       "UNSUPPORTED_ABI_VERSION",
       Map(
-        "version" -> pkg.manifest.abiVersion.toString,
+        "version" -> manifest.abiVersion.toString,
         "supported" -> NativeLibrary.ABI_VERSION.toString))
+  }
+
+  /** The error for a package without a library for the platform of this JVM. */
+  private[ffi] def unsupportedPlatformError(
+      path: String,
+      manifest: NativeDataSourceManifest): Throwable = {
+    QueryExecutionErrors.invalidNativeDataSourcePackageError(
+      path,
+      "UNSUPPORTED_PLATFORM",
+      Map(
+        "platform" -> NativePlatform.current,
+        "platforms" -> manifest.libraries.keys.toSeq.sorted.mkString(", ")))
   }
 
   /**
@@ -179,7 +202,7 @@ object NativeDataSourcePackage extends Logging {
         case Left(invalid) =>
           logWarning(log"Invalid native data source package ${MDC(PATH, canonical)}.",
             invalid.error)
-        case Right(pkg) if pkg.manifest.abiVersion > NativeLibrary.ABI_VERSION =>
+        case Right(pkg) if !isSupported(pkg.manifest) =>
           logWarning(log"The native data source package ${MDC(PATH, canonical)} implements " +
             log"version ${MDC(VERSION_NUM, pkg.manifest.abiVersion)} of the native data source " +
             log"interface, which this version of Spark does not support, so it is not used.")
@@ -211,11 +234,29 @@ object NativeDataSourcePackage extends Logging {
 
   /** Reads the package in the given file, which errors call `path`. */
   private def parse(file: File, path: String): ReadResult = {
+    readManifest(file, path).flatMap { manifest =>
+      try {
+        Right(NativeDataSourcePackage(path, sha256(file), manifest))
+      } catch {
+        case e: IOException => Left(InvalidNativeDataSourcePackage(
+          invalidManifestError(path, s"The package cannot be read: $e", e), manifest.dataSources))
+      }
+    }
+  }
+
+  /**
+   * Reads the manifest of the package in the given file, which errors call `path`, and checks
+   * that the package contains the libraries that it lists. Only reads the central directory of
+   * the zip file and the manifest.
+   */
+  private def readManifest(
+      file: File,
+      path: String): Either[InvalidNativeDataSourcePackage, NativeDataSourceManifest] = {
     def invalid(reason: String, dataSources: Seq[String] = Nil, cause: Throwable = null) = {
       Left(InvalidNativeDataSourcePackage(invalidManifestError(path, reason, cause), dataSources))
     }
     try {
-      val manifest = Utils.tryWithResource(new ZipFile(file)) { zip =>
+      Utils.tryWithResource(new ZipFile(file)) { zip =>
         Option(zip.getEntry(MANIFEST_NAME)) match {
           case None => invalid(s"The package does not contain the manifest $MANIFEST_NAME.")
           case Some(entry) =>
@@ -233,7 +274,6 @@ object NativeDataSourcePackage extends Logging {
             }
         }
       }
-      manifest.map(NativeDataSourcePackage(path, sha256(file), _))
     } catch {
       case e: IOException => invalid(s"The package is not a valid zip file: $e", cause = e)
     }
@@ -427,12 +467,7 @@ object NativeLibraries extends Logging {
   private def loadPackaged(pkg: NativeDataSourcePackage): Try[NativeLibrary] = {
     val platform = NativePlatform.current
     val libraryPath = pkg.manifest.libraries.getOrElse(platform, {
-      throw QueryExecutionErrors.invalidNativeDataSourcePackageError(
-        pkg.path,
-        "UNSUPPORTED_PLATFORM",
-        Map(
-          "platform" -> platform,
-          "platforms" -> pkg.manifest.libraries.keys.toSeq.sorted.mkString(", ")))
+      throw NativeDataSourcePackage.unsupportedPlatformError(pkg.path, pkg.manifest)
     })
     val packageFile = locate(pkg)
     val libraryFile = new File(new File(extractionDir, pkg.sha256), new File(libraryPath).getName)

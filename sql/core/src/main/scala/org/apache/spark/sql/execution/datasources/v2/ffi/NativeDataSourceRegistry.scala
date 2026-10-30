@@ -65,8 +65,7 @@ object NativeDataSourceRegistry extends Logging {
     // A package of a version of the interface that Spark does not support is unusable too. Spark
     // checks the packages that a session adds when it adds them, so these are configured ones.
     val (unsupported, usable) = valid.partitionMap { pkg =>
-      // The version of a package is the oldest that its library implements.
-      if (pkg.manifest.abiVersion <= NativeLibrary.ABI_VERSION) Right(pkg) else Left(pkg)
+      if (NativeDataSourcePackage.isSupported(pkg.manifest)) Right(pkg) else Left(pkg)
     }
     // The packages are read from their canonical paths, in the order that the session added them.
     val addedPaths = artifacts.map(_.getCanonicalPath).toSet
@@ -79,7 +78,7 @@ object NativeDataSourceRegistry extends Logging {
         // provides the data source: a stale copy does not hide a valid one. An invalid package
         // whose manifest cannot be read is only logged, when it is read.
         unsupported.find(_.manifest.dataSources.exists(_.equalsIgnoreCase(name))).foreach { pkg =>
-          throw NativeDataSourcePackage.unsupportedAbiVersionError(pkg)
+          throw NativeDataSourcePackage.unsupportedAbiVersionError(pkg.path, pkg.manifest)
         }
         invalid.find(_.dataSources.exists(_.equalsIgnoreCase(name))).foreach(p => throw p.error)
         None

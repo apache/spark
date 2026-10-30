@@ -112,15 +112,18 @@ class ArtifactTests(ArtifactTestsMixin, ReusedSQLTestCase):
         # A new session, so that the packages do not affect the other tests.
         spark = self.spark.newSession()
         with tempfile.TemporaryDirectory(prefix="test_add_native_data_source_package") as d:
+            ffi = spark._jvm.org.apache.spark.sql.execution.datasources.v2.ffi
+            platform = ffi.NativePlatform.current()
 
             def new_file(name):
                 file_path = os.path.join(d, name)
                 if name.endswith(".sparkpkg"):
-                    # Spark checks the manifest of a package when a session adds it.
+                    # Spark checks the manifest of a package when a session adds it, which has to
+                    # have a library for the platform of the driver.
                     manifest = {
                         "abiVersion": 1,
                         "dataSources": ["my_source"],
-                        "libraries": {"linux-x86_64": "lib.so"},
+                        "libraries": {platform: "lib.so"},
                     }
                     with zipfile.ZipFile(file_path, "w") as z:
                         z.writestr("spark-native-datasource.json", json.dumps(manifest))

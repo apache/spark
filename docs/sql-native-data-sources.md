@@ -329,11 +329,14 @@ artifact, or add another file with the name of one that it added, so it upgrades
 the new version under another file name, such as `rust_range-1.1.sparkpkg`. Distinct file names are
 also needed because the sessions that are not isolated share the files they add. A query fails if
 more than one configured package provides its data source. `spark.addArtifact` fails for a package
-that Spark cannot read or whose version it does not support, so that a session does not keep using
-the package that it added before. A package without a library for the platform of the driver is
-added, and a query that uses it fails with an error. Spark ignores, and logs, a configured package
-that it cannot read or whose version it does not support, unless its manifest lists the data source
-that a query uses and no other package or installed library provides it.
+that Spark cannot read, whose version it does not support, or that has no library for the platform
+of the driver, which loads the library to plan a query, instead of adding it while the session
+silently keeps using the package that it added before. After the failure, the session keeps the
+packages that it had, and a call that adds several artifacts still adds the others. Spark does not
+load the library then, so a library that fails to load fails the queries that use it. Spark
+ignores, and logs, a configured package that it cannot read or whose version it does not support,
+unless its manifest lists the data source that a query uses and no other package or installed
+library provides it.
 
 ## Example in Rust
 

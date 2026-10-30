@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 import scala.collection.mutable.ListBuffer
 import scala.jdk.CollectionConverters._
 import scala.reflect.ClassTag
+import scala.util.Try
 
 import org.apache.commons.io.FilenameUtils
 import org.apache.hadoop.fs.{LocalFileSystem, Path => FSPath}
@@ -209,6 +210,64 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
     // Convert the normalized string back to a Path object
     Paths.get(normalizedPathString).normalize()
   }
+
+  /**
+   * Returns true if a file artifact with the same content is at `target` already, which makes
+   * adding it idempotent, and fails if another file is there: an artifact is not overwritten.
+   */
+  private def artifactExists(
+      normalizedRemoteRelativePath: Path,
+      serverLocalStagingPath: Path,
+      target: Path): Boolean = {
+    if (Files.exists(target)) {
+      if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+        return true
+      }
+      throw new SparkRuntimeException(
+        "ARTIFACT_ALREADY_EXISTS",
+        Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
+      )
+    }
+    false
+  }
+
+  /**
+   * Transfers a native data source package to `target` if Spark can use it, see
+   * [[NativeDataSourcePackage.checkAdded]], so that it never is at the path of an artifact
+   * otherwise. Returns false if the session has the same file already. A file of the user is
+   * first copied to a temporary directory, outside of the artifacts, which the file server serves
+   * and a clone of the session copies, and the copy is checked and then moved, so that the session
+   * gets the bytes that are checked. Errors name the file of the user, or the artifact if Spark
+   * staged the file for it, such as for a Spark Connect client.
+   */
+  private def addNativeDataSourcePackage(
+      normalizedRemoteRelativePath: Path,
+      serverLocalStagingPath: Path,
+      target: Path,
+      deleteStagedFile: Boolean,
+      sourceName: Option[String]): Boolean = {
+    val copyDir = if (deleteStagedFile) None else Some(Utils.createTempDir().toPath)
+    Utils.tryWithSafeFinally {
+      val staged = copyDir.map { dir =>
+        // Fails as for the other artifacts if the file does not exist or cannot be read.
+        Files.copy(serverLocalStagingPath, dir.resolve(normalizedRemoteRelativePath.getFileName))
+      }.getOrElse(serverLocalStagingPath)
+      // The package is checked before the check for an existing artifact, which then runs right
+      // before the transfer, but its error is reported after that check.
+      val rejection = Try(NativeDataSourcePackage.checkAdded(
+        staged.toFile, sourceName.getOrElse(normalizedRemoteRelativePath.toString))).failed
+      if (artifactExists(normalizedRemoteRelativePath, staged, target)) {
+        false
+      } else {
+        rejection.foreach(e => throw e)
+        transferFile(staged, target, deleteSource = true)
+        true
+      }
+    } {
+      copyDir.foreach(dir => Utils.deleteRecursively(dir.toFile))
+    }
+  }
+
   /**
    * Add and prepare a staged artifact (i.e an artifact that has been rebuilt locally from bytes
    * over the wire) for use.
@@ -223,6 +282,21 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       serverLocalStagingPath: Path,
       fragment: Option[String],
       deleteStagedFile: Boolean = true
+  ): Unit = {
+    addArtifact(remoteRelativePath, serverLocalStagingPath, fragment, deleteStagedFile, None)
+  }
+
+  /**
+   * Adds an artifact, as [[addArtifact]] above. `sourceName` is the name of the file that the
+   * user added, if `serverLocalStagingPath` is that file, which errors then give instead of the
+   * artifact, rather than a file in which Spark staged the artifact.
+   */
+  private def addArtifact(
+      remoteRelativePath: Path,
+      serverLocalStagingPath: Path,
+      fragment: Option[String],
+      deleteStagedFile: Boolean,
+      sourceName: Option[String]
   ): Unit = JobArtifactSet.withActiveJobArtifactState(state) {
     require(!remoteRelativePath.isAbsolute)
     val normalizedRemoteRelativePath = normalizePath(remoteRelativePath)
@@ -278,32 +352,20 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
       cachedClassLoader = None
     } else {
       val target = ArtifactUtils.concatenatePaths(artifactPath, normalizedRemoteRelativePath)
-      // Disallow overwriting with modified version
-      if (Files.exists(target)) {
-        // makes the query idempotent
-        if (Utils.contentEquals(target.toFile, serverLocalStagingPath.toFile)) {
+      val isPackage = isNativeDataSourcePackage(normalizedRemoteRelativePath) &&
+        session.conf.get(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED)
+      if (isPackage) {
+        if (!addNativeDataSourcePackage(normalizedRemoteRelativePath, serverLocalStagingPath,
+            target, deleteStagedFile, sourceName)) {
           return
         }
-
-        throw new SparkRuntimeException(
-          "ARTIFACT_ALREADY_EXISTS",
-          Map("normalizedRemoteRelativePath" -> normalizedRemoteRelativePath.toString)
-        )
-      }
-      // A package is checked before it becomes an artifact of the session: see checkAdded. A
-      // file that does not exist fails to transfer instead. Errors name the file of the user, or
-      // the artifact if the file was staged for it, such as by a Spark Connect client.
-      if (isNativeDataSourcePackage(normalizedRemoteRelativePath) &&
-          session.conf.get(StaticSQLConf.NATIVE_DATA_SOURCE_ENABLED) &&
-          Files.exists(serverLocalStagingPath)) {
-        val path = if (deleteStagedFile) {
-          normalizedRemoteRelativePath.toString
-        } else {
-          serverLocalStagingPath.toString
+      } else {
+        // Disallow overwriting with modified version
+        if (artifactExists(normalizedRemoteRelativePath, serverLocalStagingPath, target)) {
+          return
         }
-        NativeDataSourcePackage.checkAdded(serverLocalStagingPath.toFile, path)
+        transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
       }
-      transferFile(serverLocalStagingPath, target, deleteSource = deleteStagedFile)
 
       // This URI is for Spark file server that starts with "spark://".
       val uri = s"$artifactURI/${Utils.encodeRelativeUnixPathToURIRawPath(
@@ -357,7 +419,8 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               artifact.path,
               d.path,
               fragment = None,
-              deleteStagedFile = false)
+              deleteStagedFile = false,
+              sourceName = Some(d.path.toString))
           case d: Artifact.InMemory =>
             val tempDir = Utils.createTempDir().toPath
             val tempFile = tempDir.resolve(artifact.path.getFileName)
@@ -367,12 +430,14 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
               addArtifact(artifact.path, tempFile, fragment = None)
             }(finallyBlock = {
               outStream.close()
+              // The file is left if the artifact was not added.
+              Utils.deleteRecursively(tempDir.toFile)
             })
           case _ =>
             throw SparkException.internalError(s"Unsupported artifact storage: ${artifact.storage}")
         }
       } catch {
-        case e: SparkRuntimeException if e.getCondition == "ARTIFACT_ALREADY_EXISTS" =>
+        case e: SparkRuntimeException if ArtifactManager.isRejectedArtifact(e) =>
           failedArtifactExceptions += e
       }
     }
@@ -615,6 +680,15 @@ class ArtifactManager(session: SparkSession) extends AutoCloseable with Logging 
 object ArtifactManager extends Logging {
 
   val forwardToFSPrefix = "forward_to_fs"
+
+  /**
+   * Whether an error of adding an artifact only rejects that artifact, so that the call that adds
+   * several artifacts adds the others, and then reports all such errors.
+   */
+  private[sql] def isRejectedArtifact(e: SparkRuntimeException): Boolean = {
+    e.getCondition == "ARTIFACT_ALREADY_EXISTS" ||
+      Option(e.getCondition).exists(_.startsWith("INVALID_NATIVE_DATA_SOURCE_PACKAGE."))
+  }
 
   val ARTIFACT_DIRECTORY_PREFIX = "artifacts"
 

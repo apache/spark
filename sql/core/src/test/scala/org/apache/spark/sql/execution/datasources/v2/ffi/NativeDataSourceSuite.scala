@@ -18,7 +18,7 @@ package org.apache.spark.sql.execution.datasources.v2.ffi
 
 import java.io.File
 import java.nio.charset.StandardCharsets.UTF_8
-import java.nio.file.{Files, NoSuchFileException, Paths}
+import java.nio.file.{AccessDeniedException, Files, NoSuchFileException, Paths}
 import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
@@ -1522,8 +1522,12 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       parameters = Map(
         "name" -> "native_range",
         "packages" -> Seq(first, second).map(_.getCanonicalPath).mkString(", ")))
-    // The same package found twice is not a conflict: here, in the configured paths and in the
-    // artifacts of the session.
+    // The same package found twice is not a conflict: here, listed both as a file and through
+    // its directory.
+    val only = Utils.createTempDir()
+    val pkg = createPackage(library, dataSources(""), dir = only, fileName = "c.sparkpkg")
+    checkRows(range(newSession(pkg, only), "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
+    // A package that a session adds takes precedence over the same one in the configured paths.
     val session = newSession(first)
     session.addArtifact(first.getPath)
     checkRows(range(session, "end" -> "2"), Seq(expectedRow(0L), expectedRow(1L)))
@@ -1588,8 +1592,31 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val directory = new File(dir, "range-2.3.sparkpkg")
     assert(directory.mkdir())
     check(directory, "INVALID_MANIFEST", Map.empty)
-    // A file that does not exist fails as for the other artifacts.
+    // The driver loads the library to plan a query.
+    check(createPackage(library, dataSources(""), dir = dir, fileName = "range-2.4.sparkpkg",
+        platform = "other-platform"),
+      "UNSUPPORTED_PLATFORM", Map("platform" -> NativePlatform.current,
+        "platforms" -> "other-platform"))
+    // A file that does not exist, or that cannot be read, fails as for the other artifacts.
     intercept[NoSuchFileException](session.addArtifact(new File(dir, "missing.sparkpkg").getPath))
+    val unreadable = createPackage(library, dataSources(""), dir = dir,
+      fileName = "range-2.5.sparkpkg")
+    assert(unreadable.setReadable(false))
+    try {
+      assume(!Files.isReadable(unreadable.toPath), "The user can read any file.")
+      intercept[AccessDeniedException](session.addArtifact(unreadable.getPath))
+    } finally {
+      unreadable.setReadable(true)
+    }
+    // A package that Spark staged, such as one added from bytes, is named after the artifact.
+    val staged = intercept[SparkRuntimeException] {
+      session.addArtifact(Files.readAllBytes(createPackage(library, dataSources(""),
+        abiVersion = 2).toPath), "range-2.6.sparkpkg")
+    }
+    assert(staged.getCondition == "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_ABI_VERSION")
+    assert(staged.getMessageParameters.get("path") ==
+      Paths.get("files", "range-2.6.sparkpkg").toString)
+    assert(session.artifactManager.getNativeDataSourcePackages._1.isEmpty)
 
     // A valid package with the same file name as a rejected one can be added then.
     session.addArtifact(createPackage(renamedNegatingLibrary, dataSources(""),
@@ -1601,13 +1628,15 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
     val existing = intercept[SparkRuntimeException](session.addArtifact(sameName.getPath))
     assert(existing.getCondition == "ARTIFACT_ALREADY_EXISTS")
 
-    // A package without a library for the platform of the driver is added, and a query that uses
-    // it fails, which the user sees, unlike a package that the lookup would ignore.
-    val otherPlatform = createPackage(library, dataSources(""), dir = dir,
-      fileName = "range-3.0.sparkpkg", platform = "other-platform")
-    session.addArtifact(otherPlatform.getPath)
-    val e = intercept[SparkRuntimeException](ids().collect())
-    assert(e.getCondition == "INVALID_NATIVE_DATA_SOURCE_PACKAGE.UNSUPPORTED_PLATFORM")
+    // A call that adds several artifacts adds the others, and reports all the rejected ones.
+    val valid = createPackage(library, dataSources(""), dir = dir, fileName = "range-3.0.sparkpkg")
+    val rejected = intercept[SparkRuntimeException] {
+      session.addArtifacts(sameName.toURI, notAZip.toURI, valid.toURI)
+    }
+    assert(rejected.getCondition == "ARTIFACT_ALREADY_EXISTS")
+    assert(rejected.getSuppressed.toSeq.map(_.asInstanceOf[SparkRuntimeException].getCondition) ==
+      Seq("INVALID_NATIVE_DATA_SOURCE_PACKAGE.INVALID_MANIFEST"))
+    checkRows(ids(), Seq(Row(0L), Row(1L), Row(2L)))
 
     // Only the file artifacts (files/) with the extension are packages, which Spark checks, and
     // not other kinds of artifacts with it, which a Spark Connect client can add.
