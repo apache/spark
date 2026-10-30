@@ -3266,6 +3266,26 @@ class SubquerySuite extends SharedSparkSession
     checkAnswer(df, expected)
   }
 
+  /**
+   * Checks the answer of `query`, and that its uncorrelated nested IN or NOT IN sub-queries are
+   * left in place for `InSubqueryExec` rather than rewritten: the executed plan evaluates one, and
+   * holds only the `existenceJoins` existence joins the query needs for its other sub-queries.
+   */
+  private def checkAnswerInPlace(
+      query: String,
+      expected: Seq[Row],
+      existenceJoins: Int = 0): Unit = {
+    val df = sql(query)
+    checkAnswer(df, expected)
+    val plan = df.queryExecution.executedPlan
+    val built = collect(plan) {
+      case j: BaseJoinExec if j.joinType.isInstanceOf[ExistenceJoin] => j
+    }
+    assert(built.length == existenceJoins,
+      s"expected $existenceJoins existence joins in\n$plan")
+    assertContainsInSubqueryExec(df)
+  }
+
   test("SPARK-59351: nested subquery referencing the inner query becomes an existence join") {
     // SPARK-45580 covers the case where the nested subquery references the outer query, in which
     // case its existence join is built on top of the outer plan. Here the nested subquery
@@ -3629,7 +3649,9 @@ class SubquerySuite extends SharedSparkSession
     // the ones the semi/anti join arms build for a top-level predicate subquery. On the routes
     // below the outer EXISTS is itself rewritten into an existence join by
     // rewriteExistentialExprWithAttrs, so the nested IN hoisted into its condition is carried
-    // rather than routed by the first-level classification, and only this router reaches it.
+    // rather than routed by the first-level classification. With the join-condition rewrite
+    // disabled only this router reaches it; under the default configuration that rewrite visits
+    // the existence join as well, and the router makes the answer independent of the setting.
     withTempView("t1", "t2", "t4", "t6") {
       Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
       Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
@@ -3661,6 +3683,28 @@ class SubquerySuite extends SharedSparkSession
           sql(s"SELECT t1.a FROM t1 JOIN t6 ON t1.a = t6.b AND $exists"), Row(1) :: Nil)
       }
     }
+
+    // An uncorrelated carried NOT IN with a nullable comparison is left in the existence-join
+    // condition, as at the merge base, wherever the join-condition rewrite does not reach it:
+    // InSubqueryExec evaluates it three-valued and no null-aware nested-loop join is built. The
+    // NULL in t3n makes it unknown for every c1, so only a = c1 can hold.
+    withTempView("t1", "t2", "t3n") {
+      Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
+      Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
+      Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("t3n")
+      val query =
+        """SELECT * FROM t1 WHERE a > 100 OR EXISTS (
+          |  SELECT 1 FROM t2 WHERE a = c1 OR c1 NOT IN (SELECT col1 FROM t3n))""".stripMargin
+      Seq(
+        SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key,
+        SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key).foreach { key =>
+        withSQLConf(key -> "false") {
+          checkAnswerInPlace(query, Row(1) :: Nil, existenceJoins = 1)
+        }
+      }
+      // Under the default configuration it is routed, null-aware, with the same answer.
+      checkAnswer(sql(query), Row(1) :: Nil)
+    }
   }
 
   test("SPARK-59351: a carried IN shared between a bare and a negated position") {
@@ -3676,8 +3720,37 @@ class SubquerySuite extends SharedSparkSession
         """SELECT s.a FROM (SELECT a, a IN (SELECT col1 FROM s3) AS b FROM s1) s
           |WHERE s.a > 0 OR EXISTS (SELECT 1 FROM s2 WHERE s.a = s2.c1 OR s.b OR NOT s.b)"""
           .stripMargin
-      Seq("true", "false").foreach { conf =>
-        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
+      Seq(
+        Seq.empty,
+        Seq(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false"),
+        Seq(SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key -> "false")
+      ).foreach { confs =>
+        withSQLConf(confs: _*) {
+          checkAnswer(sql(query), Row(1) :: Nil)
+        }
+      }
+    }
+
+    // The NOT IN in a value position is left in place, while the truth-only bare IN is not on
+    // the default configuration, so each must be met at its own position: the bare one's
+    // rewrite must not reach the IN inside the NOT. For a = -1 the IN is unknown, so
+    // (NOT s.b) = s2.f is unknown as well and only a = 1 survives; a positive rewrite of the IN
+    // under the NOT makes it TRUE and keeps -1. Under the default configuration the
+    // join-condition rewrite does exactly that afterwards, which is SPARK-59862, so only the
+    // settings where the merge base answered correctly are asserted.
+    withTempView("s1", "s2", "s3") {
+      Seq(Some(1), Some(-1), None).toDF("a").persist().createOrReplaceTempView("s1")
+      Seq((1, true)).toDF("c1", "f").persist().createOrReplaceTempView("s2")
+      Seq(Some(3), None).toDF("col1").persist().createOrReplaceTempView("s3")
+      val query =
+        """SELECT s.a FROM (SELECT a, a IN (SELECT col1 FROM s3) AS b FROM s1) s
+          |WHERE s.a > 0
+          |OR EXISTS (SELECT 1 FROM s2 WHERE s.a = s2.c1 OR s.b OR (NOT s.b) = s2.f)"""
+          .stripMargin
+      Seq(
+        SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key,
+        SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key).foreach { key =>
+        withSQLConf(key -> "false") {
           checkAnswer(sql(query), Row(1) :: Nil)
         }
       }
@@ -3710,14 +3783,17 @@ class SubquerySuite extends SharedSparkSession
 
   test("SPARK-59351: carried unknown-result rejection is limited to the subquery-plan route") {
     // On the routes that predate this change the carried IN below was answered, and it is not
-    // rejected: its handling there is left to SPARK-59862. The columns are nullable but hold no
-    // NULL, so the two-valued and the three-valued answers agree and a rejection would be the
-    // only difference. The first query takes its compared value from the right input of the
+    // rejected. It is left in the existence-join condition, so with the join-condition rewrite
+    // disabled InSubqueryExec gives the three-valued answer, as at the merge base: the NULL in t3
+    // matches nothing, so the IN is unknown, `<=> false` is FALSE and only a = c1 holds, where a
+    // two-valued rewrite would make it TRUE and return every row. Under the default configuration
+    // that rewrite makes it two-valued, which is SPARK-59862, so only the absence of a rejection
+    // is asserted there. The first query takes its compared value from the right input of the
     // existence join built for the EXISTS, the second from the left one.
     withTempView("t1", "t2", "t3") {
       Seq(Some(1), Some(2), Some(3)).toDF("a").persist().createOrReplaceTempView("t1")
       Seq(Some(1), Some(8), Some(9)).toDF("c1").persist().createOrReplaceTempView("t2")
-      Seq(Some(8)).toDF("col1").persist().createOrReplaceTempView("t3")
+      Seq(Some(8), None).toDF("col1").persist().createOrReplaceTempView("t3")
       val rightInput =
         """SELECT * FROM t1 WHERE a > 100 OR EXISTS (
           |  SELECT 1 FROM t2 WHERE a = c1 OR ((c1 IN (SELECT col1 FROM t3)) <=> false))"""
@@ -3726,12 +3802,15 @@ class SubquerySuite extends SharedSparkSession
         """SELECT * FROM t1 WHERE a > 100 OR EXISTS (
           |  SELECT 1 FROM t2 WHERE a = c1 OR ((a IN (SELECT col1 FROM t3)) <=> false))"""
           .stripMargin
-      Seq("true", "false").foreach { conf =>
-        withSQLConf(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> conf) {
-          Seq(rightInput, leftInput).foreach { query =>
-            checkAnswer(sql(query), Row(1) :: Row(2) :: Row(3) :: Nil)
+      Seq(rightInput, leftInput).foreach { query =>
+        Seq(
+          SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key,
+          SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key).foreach { key =>
+          withSQLConf(key -> "false") {
+            checkAnswerInPlace(query, Row(1) :: Nil, existenceJoins = 1)
           }
         }
+        sql(query).collect()
       }
     }
   }
@@ -3743,11 +3822,12 @@ class SubquerySuite extends SharedSparkSession
     // queries returned the standard SQL answer before SPARK-59351 and must keep doing so.
     //
     // That the anti join is bare only holds while the NOT IN is the last subquery conjunct of its
-    // Filter: a later EXISTS or IN conjunct wraps it as `p` in Project(p.output, Join(p, ...)),
-    // which the top-down pass then reaches in the `case j: Join` arm, where the residual is
-    // rewritten two-valued under the default configuration. That is pre-existing behaviour, built
-    // the same way at the merge base, and not what this test covers.
-    withTempView("t1", "t2", "t3n", "t4n") {
+    // Filter: any later subquery conjunct wraps it, in its own join or, for the generic arm, in a
+    // Filter over it, and the top-down pass then reaches it in the `case j: Join` arm, where a
+    // residual whose unknown is observable is rewritten two-valued under the default
+    // configuration. That is pre-existing behaviour, built the same way at the merge base, and
+    // only its truth-only counterpart is covered at the end of this test.
+    withTempView("t1", "t2", "t3", "t3n", "t4n") {
       Seq(1, 2, 3).toDF("a").persist().createOrReplaceTempView("t1")
       Seq(1, 8, 9).toDF("c1").persist().createOrReplaceTempView("t2")
       // The NULL matches no c1, so c1 IN (SELECT col1 FROM t3n) is unknown for every row of t2.
@@ -3787,12 +3867,39 @@ class SubquerySuite extends SharedSparkSession
           "NESTED_IN_SUBQUERY_WITH_UNKNOWN_RESULT", query)
       }
 
-      // And a truth-only nested IN under an outer NOT IN is still rewritten rather than kept,
-      // which the plan check asserts: an existence join is built for it on the subquery side.
-      checkAnswerAndPlan(
-        """SELECT * FROM t1 WHERE a NOT IN (
-          |  SELECT c1 FROM t2 WHERE a = c1 OR c1 IN (SELECT col1 FROM t3n))""".stripMargin,
-        Row(2) :: Row(3) :: Nil)
+      // A truth-only one is kept as well, as at the merge base, rather than rewritten into an
+      // existence join: for a NOT IN with a nullable comparison that join would be null-aware,
+      // with no equi key, and so a nested-loop join over t2 and the nested list. t3 holds no
+      // NULL, so c1 NOT IN (SELECT col1 FROM t3) holds for every c1 and drops row 1.
+      Seq(Some(3)).toDF("col1").persist().createOrReplaceTempView("t3")
+      Seq(
+        "c1 IN (SELECT col1 FROM t3n)" -> Seq(1, 2, 3),
+        "c1 NOT IN (SELECT col1 FROM t3)" -> Seq(2, 3)
+      ).foreach { case (predicate, expected) =>
+        checkAnswerInPlace(
+          s"SELECT * FROM t1 WHERE a NOT IN (SELECT c1 FROM t2 WHERE c1 > a OR $predicate)",
+          expected.map(Row(_)))
+      }
+
+      // Followed by another subquery conjunct, under the default configuration, the join-condition
+      // rewrite reaches the anti join, and would rewrite the IN under a truth-only NOT IN
+      // positively. That one is therefore still rewritten here, null-aware, and keeps the
+      // standard answer: the NULL in t3n makes the nested NOT IN unknown for every c1, so the
+      // NOT IN list is c1 > a and every row survives, where a positive rewrite would drop row 1.
+      // With the join-condition rewrite disabled it is kept, with the same answer.
+      val followed =
+        """SELECT * FROM t1
+          |WHERE a NOT IN (SELECT c1 FROM t2 WHERE c1 > a OR c1 NOT IN (SELECT col1 FROM t3n))
+          |AND EXISTS (SELECT 1 FROM t2 WHERE c1 >= a)""".stripMargin
+      Seq(
+        Seq.empty,
+        Seq(SQLConf.DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION.key -> "false"),
+        Seq(SQLConf.OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION.key -> "false")
+      ).foreach { confs =>
+        withSQLConf(confs: _*) {
+          checkAnswer(sql(followed), Row(1) :: Row(2) :: Row(3) :: Nil)
+        }
+      }
     }
   }
 

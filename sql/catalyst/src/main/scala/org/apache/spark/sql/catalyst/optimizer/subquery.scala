@@ -156,21 +156,23 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
         case conditions => Filter(conditions.reduce(And), child)
       }
 
-      // Filter the plan by applying left semi and left anti joins.
-      withSubquery.foldLeft(newFilter) {
-        case (p, Exists(sub, _, _, conditions, subHint)) =>
+      // Filter the plan by applying left semi and left anti joins. The position of a conjunct is
+      // tracked for the NOT IN arm, whose anti join is wrapped by every later one.
+      val lastConjunct = withSubquery.length - 1
+      withSubquery.zipWithIndex.foldLeft(newFilter) {
+        case (p, (Exists(sub, _, _, conditions, subHint), _)) =>
           val (joinCond, outerPlan, newSub) =
             rewriteExistentialExprInJoinCondition(conditions, p, sub)
           val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, subHint)
           Project(p.output, join)
-        case (p, Not(Exists(sub, _, _, conditions, subHint))) =>
+        case (p, (Not(Exists(sub, _, _, conditions, subHint)), _)) =>
           val (joinCond, outerPlan, newSub) =
             rewriteExistentialExprInJoinCondition(conditions, p, sub)
           val join = buildJoin(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftAnti, joinCond, subHint)
           Project(p.output, join)
-        case (p, InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))) =>
+        case (p, (InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)), _)) =>
           // Deduplicate conflicting attributes if any.
           val dedupSub = dedupSubqueryOnSelfJoin(p, sub, Some(values))
           val inConditions = values.zip(dedupSub.output).map(EqualTo.tupled)
@@ -179,7 +181,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val join = Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, joinCond),
             LeftSemi, joinCond, JoinHint(None, subHint))
           Project(p.output, join)
-        case (p, Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint)))) =>
+        case (p, (Not(InSubquery(values, ListQuery(sub, _, _, _, conditions, subHint))), i)) =>
           // This is a NULL-aware (left) anti join (NAAJ) e.g. col NOT IN expr
           // Construct the condition. A NULL in one of the conditions is regarded as a positive
           // result; such a row will be filtered out by the Anti-Join operator.
@@ -193,18 +195,28 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           // The hoisted correlated predicates may carry existential sub-queries that only the
           // sub-query plan can evaluate, see rewriteExistentialExprInJoinCondition.
           // This arm returns a bare Join, which this rule does not offer to its own handling of
-          // predicate sub-queries in join conditions, so an uncorrelated sub-query left in the
+          // predicate sub-queries in join conditions, so an uncorrelated IN or NOT IN left in the
           // anti-join condition stays there and `InSubqueryExec` evaluates it with the
-          // three-valued semantics an existence join cannot carry. That is what this arm did
-          // before SPARK-59351, so it is not rejected here. It only holds while this NOT IN is
-          // the last sub-query conjunct of the Filter: the fold over the conjuncts wraps this
-          // anti join as `p` of a later EXISTS or IN arm, in `Project(p.output, Join(p, ...))`,
-          // and the top-down pass then reaches it in the `case j: Join` arm, which under the
-          // default configuration rewrites the residual into a two-valued `exists`. That
-          // outcome is pre-existing and is left to SPARK-59862.
+          // three-valued semantics an existence join cannot carry, as this arm did before
+          // SPARK-59351. That only holds while nothing reaches the anti join later. Any later
+          // sub-query conjunct of the Filter wraps it, as `p` of its own join or of the generic
+          // arm's Filter, and the top-down pass then reaches it in the `case j: Join` arm, which
+          // rewrites an uncorrelated IN two-valued, and positively under a NOT, when
+          // joinConditionRewriteReachesUncorrelatedIn holds.
+          //
+          // So when nothing reaches it, every uncorrelated IN and NOT IN the sub-query plan owns
+          // is kept, which also keeps a truth-only NOT IN off a nested-loop existence join.
+          // Otherwise only one whose unknown result is observable is kept, which that arm then
+          // makes two-valued, as at the merge base and tracked by SPARK-59862, while a truth-only
+          // one is rewritten here, null-aware for a NOT IN, so that the arm does not reach it.
+          val residuals =
+            if (i < lastConjunct && joinConditionRewriteReachesUncorrelatedIn) {
+              UnknownSensitiveResiduals
+            } else {
+              AllUncorrelatedResiduals
+            }
           val (subConditions, newSub) =
-            rewriteExistentialExprInSubqueryPlan(conditions, p, dedupSub,
-              keepsThreeValuedResiduals = true)
+            rewriteExistentialExprInSubqueryPlan(conditions, p, dedupSub, residuals)
           val (joinCond, outerPlan) = rewriteExistentialExpr(inConditions, p)
           // Expand the NOT IN expression with the NULL-aware semantic
           // to its full form. That is from:
@@ -221,7 +233,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
           val finalJoinCond = (nullAwareJoinConds ++ subConditions).reduceLeft(And)
           Join(outerPlan, rewriteDomainJoinsIfPresent(outerPlan, newSub, Some(finalJoinCond)),
             LeftAnti, Option(finalJoinCond), JoinHint(None, subHint))
-        case (p, predicate) =>
+        case (p, (predicate, _)) =>
           val (newCond, inputPlan) = rewriteExistentialExpr(Seq(predicate), p)
           Project(p.output, Filter(newCond.get, inputPlan))
       }
@@ -232,6 +244,8 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       SubqueryExpression.hasInOrCorrelatedExistsSubquery(cond)) &&
       conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) =>
 
+      // The residual and in-place policies for uncorrelated IN sub-queries rely on this gating,
+      // see joinConditionRewriteReachesUncorrelatedIn.
       val optimizeUncorrelatedInSubqueries =
         conf.getConf(OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION)
       val relevantSubqueries = j.condition.get.collect {
@@ -425,21 +439,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    * hoisted into a nested sub-query onto the existence join it builds for that sub-query, and
    * replaces the sub-query atomically without descending into what the condition carries. A
    * correlated existential sub-query carried along references the plan of the sub-query it was
-   * hoisted out of, which is an input of the join just built and of no plan seen before it, so
-   * nothing else reaches it: left there, a correlated IN or NOT IN is planned by `PlanSubqueries`
-   * as an in-subquery filter that drops its own hoisted condition, which returns extra rows, and
-   * a correlated EXISTS reaches execution as an unevaluable `Exists` and fails.
+   * hoisted out of, which is an input of the join just built. With
+   * `spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled` disabled nothing
+   * else reaches it: left there, a correlated IN or NOT IN is planned by `PlanSubqueries` as an
+   * in-subquery filter that drops its own hoisted condition, which returns extra rows, and a
+   * correlated EXISTS reaches execution as an unevaluable `Exists` and fails.
    *
-   * This is what the handling of predicate sub-queries in join conditions does for a join the user
-   * wrote, and doing it here too makes the result independent of
-   * `spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled`, which gates that
-   * handling. The routing recurses, since the joins built here go through it in turn.
-   *
-   * An uncorrelated sub-query is routed as well, rather than left for that handling to rewrite
-   * under its default configuration: it has no hoisted condition to lose, but it is subject to the
-   * same unknown-result guard as one on the sub-query-plan route, and that handling has no such
-   * guard. Consuming it here is what keeps an IN whose result is observably unknown from becoming
-   * a two-valued `exists` attribute.
+   * Under the default configuration the handling of predicate sub-queries in join conditions also
+   * reaches the existence joins this rule builds, since the top-down pass visits them in the
+   * `case j: Join` arm. Routing here makes the result independent of that setting, and applies
+   * the unknown-result guard that handling does not have. The routing recurses, since the joins
+   * built here go through it in turn.
    *
    * The classification mirrors [[rewriteExistentialExprInSubqueryPlan]], with this join's inputs
    * in place of the outer and the sub-query plan: a sub-query referencing exactly one input is
@@ -450,12 +460,17 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
    *
    * The unknown-result rejection applies only when `rejectsUnknownResult` is set, which is the
    * case for the existence joins built on the sub-query-plan route, where the same shapes failed
-   * with an internal error. On the routes that predate this change an uncorrelated IN whose
-   * unknown result is observable is left where it is, as it was, and a correlated one is routed
-   * without the rejection. Their two-valued handling is tracked by SPARK-59862.
+   * with an internal error. On the routes that predate this change an uncorrelated IN or NOT IN
+   * is left in place where the merge base evaluated it: when its unknown result is observable, and
+   * when the join-condition handling would not rewrite it, see
+   * [[joinConditionRewriteReachesUncorrelatedIn]]. `InSubqueryExec` then evaluates it
+   * three-valued in the existence-join condition. A correlated one is routed without the
+   * rejection. The two-valued handling of the observable case under the default configuration is
+   * tracked by SPARK-59862.
    *
-   * A NOT IN is routed before a bare IN, since the substitution of a unit replaces every
-   * occurrence of it, including one inside a `Not` over the same instance.
+   * Each unit is replaced only at the position it was collected from. The same instance can be
+   * carried more than once, e.g. bare and under a `Not` once filter pushdown has substituted an
+   * alias, and a substitution by value would also rewrite a copy that is left in place.
    */
   private def rewriteCarriedExistentialExprs(
       join: Join,
@@ -465,31 +480,35 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     }
     val condition = join.condition.get
     val carried = ArrayBuffer.empty[Expression]
-    collectCarriedExistentialExprs(condition, carried)
+    collectExistentialUnits(condition, carried)
     if (carried.isEmpty) {
       return join
     }
-    // A NOT IN is carried as the Not over the IN, which is the unit the rewrite consumes and the
-    // unit the unknown-result collector reports, so both agree on the node below.
-    def negatedIn(sq: Expression): Expression = sq match {
-      case Not(in: InSubquery) => in
-      case other => other
-    }
     val unknownSensitive = unknownSensitiveInSubqueries(condition, truthOnly = true)
     def observesUnknown(sq: Expression): Boolean = unknownSensitive.exists(_.fastEquals(sq))
-    def referencesInput(sq: Expression, input: LogicalPlan): Boolean =
-      effectiveReferences(sq).exists(input.outputSet.contains)
-    def referencesBothInputs(sq: Expression): Boolean =
-      referencesInput(sq, join.left) && referencesInput(sq, join.right)
-    def referencesOneInput(sq: Expression): Boolean =
-      referencesInput(sq, join.left) != referencesInput(sq, join.right)
+    // Which inputs a unit references is asked of it several times below, so it is derived from a
+    // single pass over its effective references and memoised per unit, as in
+    // rewriteExistentialExprInSubqueryPlan. The memo is keyed by identity for the same reason.
+    val classified = new java.util.IdentityHashMap[Expression, InputReferences]()
+    def inputs(sq: Expression): InputReferences = {
+      var references = classified.get(sq)
+      if (references == null) {
+        val attrs = effectiveReferences(sq)
+        references = InputReferences(
+          left = attrs.exists(join.left.outputSet.contains),
+          right = attrs.exists(join.right.outputSet.contains))
+        classified.put(sq, references)
+      }
+      references
+    }
+    def referencesBothInputs(sq: Expression): Boolean = inputs(sq).left && inputs(sq).right
+    def referencesOneInput(sq: Expression): Boolean = inputs(sq).left != inputs(sq).right
 
     // The two rejections of the sub-query-plan route apply here for the same reasons, against the
     // inputs of this join rather than against the outer and the sub-query plan, and each raises
     // the condition whose message describes it.
     val referencingBothInputs = carried.filter { sq =>
-      referencesBothInputs(sq) &&
-        (hasCorrelatedCondition(sq) || carriesCorrelatedSubquery(negatedIn(sq)))
+      referencesBothInputs(sq) && !isUncorrelatedUnit(sq)
     }
     if (referencingBothInputs.nonEmpty) {
       throw QueryCompilationErrors.nestedSubqueryReferencingOuterAndInnerQueryError(
@@ -498,36 +517,43 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // Only the sub-query-plan route rejects. An existence join built on another route answered
     // such a sub-query before this routing existed, three-valued where it was left in place, and
     // that is left to SPARK-59862: see `rejectsUnknownResult`.
-    def uncorrelated(sq: Expression): Boolean =
-      !hasCorrelatedCondition(sq) && !carriesCorrelatedSubquery(negatedIn(sq))
     if (rejectsUnknownResult) {
       val unknownResult = carried.filter(sq => referencesOneInput(sq) && observesUnknown(sq))
       if (unknownResult.nonEmpty) {
         throw QueryCompilationErrors.nestedInSubqueryWithUnknownResultError(unknownResult.toSeq)
       }
     }
-    // A NOT IN unit goes before a bare IN: the substitution of a unit replaces every occurrence
-    // of it in the condition, so a bare IN routed first would also replace the one inside a
-    // `Not` over the same instance, and the null-aware join built for that `Not` would be left
-    // unreferenced. The sort is stable, so the order within each kind is the order collected.
-    val routed = carried.sortBy {
-      case Not(_: InSubquery) => 0
-      case _ => 1
-    }.filterNot(sq => !rejectsUnknownResult && observesUnknown(sq) && uncorrelated(sq))
-    var newCondition = condition
-    def route(plan: LogicalPlan, isInput: Expression => Boolean): LogicalPlan = {
-      routed.filter(sq => referencesOneInput(sq) && isInput(sq)).foldLeft(plan) {
-        case (p, sq) =>
-          val (rewritten, newInput, _) =
-            rewriteExistentialExprWithAttrs(Seq(sq), p, rejectsUnknownResult = rejectsUnknownResult)
-          newCondition = newCondition.transform {
-            case e if e.fastEquals(sq) => rewritten.get
+    val keepsUncorrelatedIn = !joinConditionRewriteReachesUncorrelatedIn
+    def isRouted(sq: Expression): Boolean = referencesOneInput(sq) && (rejectsUnknownResult ||
+      !(isUncorrelatedInUnit(sq) && (observesUnknown(sq) || keepsUncorrelatedIn)))
+
+    var newLeft: LogicalPlan = join.left
+    var newRight: LogicalPlan = join.right
+    // Matches the units as collectExistentialUnits does, so every unit is met at the position it
+    // was collected from, and a unit left in place is returned whole.
+    def substitute(expr: Expression): Expression = {
+      if (!expr.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
+        return expr
+      }
+      expr match {
+        case sq @ (Not(_: InSubquery) | _: Exists | _: InSubquery) =>
+          if (!isRouted(sq)) {
+            sq
+          } else if (inputs(sq).left) {
+            val (rewritten, newInput, _) = rewriteExistentialExprWithAttrs(
+              Seq(sq), newLeft, rejectsUnknownResult = rejectsUnknownResult)
+            newLeft = newInput
+            rewritten.get
+          } else {
+            val (rewritten, newInput, _) = rewriteExistentialExprWithAttrs(
+              Seq(sq), newRight, rejectsUnknownResult = rejectsUnknownResult)
+            newRight = newInput
+            rewritten.get
           }
-          newInput
+        case other => other.mapChildren(substitute)
       }
     }
-    val newLeft = route(join.left, referencesInput(_, join.left))
-    val newRight = route(join.right, referencesInput(_, join.right))
+    val newCondition = substitute(condition)
     if (newLeft.fastEquals(join.left) && newRight.fastEquals(join.right)) {
       join
     } else {
@@ -539,16 +565,22 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
-   * Collects the existential sub-queries carried by the condition of an existence join, as the
-   * units [[rewriteExistentialExprWithAttrs]] rewrites: a NOT IN is collected as the [[Not]] over
-   * the [[InSubquery]], so the rewrite takes its null-aware arm and the unknown-result collector,
-   * which reports the same node, can be compared against it.
+   * Which inputs of a join a carried sub-query references, as [[rewriteCarriedExistentialExprs]]
+   * classifies it.
+   */
+  private case class InputReferences(left: Boolean, right: Boolean)
+
+  /**
+   * Collects the existential sub-queries in `expr` as the units [[rewriteExistentialExprWithAttrs]]
+   * rewrites: a NOT IN is collected as the [[Not]] over the [[InSubquery]], so the rewrite takes
+   * its null-aware arm and the unknown-result collector, which reports the same node, can be
+   * compared against it.
    *
    * A collected sub-query is not descended into. One nested below it is reached when it is
    * rewritten, since the join built for it goes through the routing in turn, and one below a
    * sub-query left in place is left with it, as everywhere else in this rule.
    */
-  private def collectCarriedExistentialExprs(
+  private def collectExistentialUnits(
       expr: Expression,
       collected: ArrayBuffer[Expression]): Unit = {
     if (!expr.containsAnyPattern(EXISTS_SUBQUERY, IN_SUBQUERY)) {
@@ -558,7 +590,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       case sq @ Not(_: InSubquery) => collected += sq
       case sq: Exists => collected += sq
       case sq: InSubquery => collected += sq
-      case other => other.children.foreach(collectCarriedExistentialExprs(_, collected))
+      case other => other.children.foreach(collectExistentialUnits(_, collected))
     }
   }
 
@@ -823,10 +855,29 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
   }
 
   /**
+   * Which uncorrelated IN and NOT IN sub-queries owned by the sub-query plan
+   * [[rewriteExistentialExprInSubqueryPlan]] leaves in the join condition as residuals, for
+   * `InSubqueryExec` to evaluate three-valued, rather than rewriting or rejecting them. Only a
+   * caller whose join condition nothing else rewrites can keep a residual, which is the NOT IN arm
+   * under the conditions it states.
+   */
+  private sealed trait ThreeValuedResiduals
+
+  /** Keeps none: each one is rewritten, or rejected when its unknown result is observable. */
+  private case object NoResiduals extends ThreeValuedResiduals
+
+  /** Keeps the ones whose unknown result is observable, and rewrites the truth-only ones. */
+  private case object UnknownSensitiveResiduals extends ThreeValuedResiduals
+
+  /** Keeps all of them, as the NOT IN arm did before SPARK-59351. */
+  private case object AllUncorrelatedResiduals extends ThreeValuedResiduals
+
+  /**
    * Rewrites the existential sub-queries in `conditions` that can only be evaluated by the
    * sub-query plan, that is those referencing the sub-query plan but not the outer plan, into
    * existence joins on top of the sub-query plan. See
-   * [[rewriteExistentialExprInJoinCondition]] for details.
+   * [[rewriteExistentialExprInJoinCondition]] for details, and [[ThreeValuedResiduals]] for the
+   * ones `residuals` leaves in place.
    *
    * Returns the rewritten condition along with the updated sub-query plan.
    */
@@ -834,7 +885,7 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       conditions: Seq[Expression],
       outerPlan: LogicalPlan,
       subPlan: LogicalPlan,
-      keepsThreeValuedResiduals: Boolean = false): (Option[Expression], LogicalPlan) = {
+      residuals: ThreeValuedResiduals = NoResiduals): (Option[Expression], LogicalPlan) = {
     // The rejection collector below is a plain `collect`, which visits every node of the hoisted
     // conditions whether or not it can hold a sub-query, so skip the classification entirely when
     // they hold none at all, which is the common case for a correlated EXISTS or IN.
@@ -846,10 +897,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // A sub-query left in the join condition loses its own join condition when it is planned
     // there, so a correlated one would silently return a wrong result: reject it instead. The
     // same holds for a correlated sub-query nested below one that is left there, since the
-    // rewrite leaves a declined sub-query whole, children included, and nothing else will reach
-    // it: see carriesCorrelatedSubquery. Note that this walks the whole expression, including the
-    // join condition of a sub-query the rewrite declines to descend into, which is deliberate for
-    // the same reason.
+    // rewrite leaves a declined sub-query whole, children included, and nothing else rewrites it
+    // against the plan that evaluates it: see carriesCorrelatedSubquery. Note that this walks the
+    // whole expression, including the join condition of a sub-query the rewrite declines to
+    // descend into, which is deliberate for the same reason.
     //
     // Which plan a candidate references is asked of it up to three times below, once for the
     // rejection of a sub-query referencing both plans, once to keep only the unknown-sensitive
@@ -881,12 +932,25 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     // An IN sub-query whose result can be unknown cannot be represented by the `exists` attribute
     // of an existence join once that result is observable, see above. Unless the caller keeps such
     // a sub-query as a residual, in which case no existence join is built for it and there is
-    // nothing to reject: see `keepsThreeValuedResiduals`.
+    // nothing to reject: see `residuals`.
     val unknownSensitive = conditions
       .flatMap(unknownSensitiveInSubqueries(_, truthOnly = true))
       .filter(ownedBySubPlan)
-    val (residual, unknownResult) = unknownSensitive.partition(sq =>
-      keepsThreeValuedResiduals && !hasCorrelatedCondition(sq) && !carriesCorrelatedSubquery(sq))
+    val unknownSensitiveResiduals = unknownSensitive.filter(isUncorrelatedUnit)
+    val residual = residuals match {
+      case NoResiduals => Seq.empty
+      case UnknownSensitiveResiduals => unknownSensitiveResiduals
+      case AllUncorrelatedResiduals =>
+        // The truth-only ones as well, which are found as the units the rewrite would consume.
+        val units = ArrayBuffer.empty[Expression]
+        conditions.foreach(collectExistentialUnits(_, units))
+        units.toSeq.filter(sq => ownedBySubPlan(sq) && isUncorrelatedInUnit(sq)) ++
+          unknownSensitiveResiduals
+    }
+    // One below a residual is kept with it, since a residual is left whole.
+    val unknownResult = unknownSensitive.filterNot { sq =>
+      residual.exists(_.exists(_.fastEquals(sq)))
+    }
     if (unknownResult.nonEmpty) {
       throw QueryCompilationErrors.nestedInSubqueryWithUnknownResultError(unknownResult)
     }
@@ -961,10 +1025,10 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
       }
       elseValue.foreach(collectUnknownSensitiveInSubqueries(_, truthOnly, reported))
     // A NOT directly over an IN sub-query is handled as that IN is, by `collectOrDescend`: it is
-    // reported in a value position, where the unknown its null-aware rewrite preserves would be
-    // observable, and descended into otherwise. The NOT itself is what gets reported, so the
-    // diagnostics name the NOT IN the user wrote. Under any other NOT, unknown is observable and
-    // `truthOnly` does not carry.
+    // reported in a value position, where the FALSE its null-aware rewrite yields in place of
+    // unknown would be observable, and descended into otherwise. The NOT itself is what gets
+    // reported, so the diagnostics name the NOT IN the user wrote. Under any other NOT, unknown
+    // is observable and `truthOnly` does not carry.
     case not @ Not(in: InSubquery) => collectOrDescend(not, in, truthOnly, reported)
     case Not(child) =>
       collectUnknownSensitiveInSubqueries(child, truthOnly = false, reported)
@@ -1060,6 +1124,45 @@ object RewritePredicateSubquery extends Rule[LogicalPlan] with PredicateHelper {
     case InSubquery(_, ListQuery(_, _, _, _, joinCond, _)) => joinCond.nonEmpty
     case _ => false
   }
+
+  /**
+   * A NOT IN is classified by the IN it negates, as the rewrite treats the two as one unit.
+   */
+  private def negatedIn(sq: Expression): Expression = sq match {
+    case Not(in: InSubquery) => in
+    case other => other
+  }
+
+  /**
+   * Returns true if the existential unit `sq`, as [[collectExistentialUnits]] collects it, has no
+   * correlated condition of its own and carries no correlated sub-query below it, so that leaving
+   * it in a join condition loses nothing.
+   */
+  private def isUncorrelatedUnit(sq: Expression): Boolean =
+    !hasCorrelatedCondition(sq) && !carriesCorrelatedSubquery(negatedIn(sq))
+
+  /**
+   * Returns true if `sq` is an IN or NOT IN unit for which [[isUncorrelatedUnit]] holds. These are
+   * the sub-queries `InSubqueryExec` evaluates three-valued where they are left in a join
+   * condition; an EXISTS is never left in place for that reason.
+   */
+  private def isUncorrelatedInUnit(sq: Expression): Boolean = sq match {
+    case Not(_: InSubquery) | _: InSubquery => isUncorrelatedUnit(sq)
+    case _ => false
+  }
+
+  /**
+   * Whether the `case j: Join` arm of this rule rewrites an uncorrelated IN sub-query left in a
+   * join condition, which is what it does for one it reaches when both
+   * `spark.sql.optimizer.decorrelatePredicateSubqueriesInJoinPredicate.enabled` and
+   * `spark.sql.optimizer.optimizeUncorrelatedInSubqueriesInJoinCondition.enabled` are set. It
+   * rewrites it two-valued, and positively under a NOT, so where it does not, an uncorrelated IN or
+   * NOT IN can be left in place for `InSubqueryExec`. This must stay aligned with the gating of
+   * that arm.
+   */
+  private def joinConditionRewriteReachesUncorrelatedIn: Boolean =
+    conf.getConf(DECORRELATE_PREDICATE_SUBQUERIES_IN_JOIN_CONDITION) &&
+      conf.getConf(OPTIMIZE_UNCORRELATED_IN_SUBQUERIES_IN_JOIN_CONDITION)
 }
 
  /**
