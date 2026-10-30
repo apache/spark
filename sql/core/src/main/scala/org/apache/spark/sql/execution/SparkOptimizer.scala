@@ -18,6 +18,7 @@
 package org.apache.spark.sql.execution
 
 import org.apache.spark.sql.ExperimentalMethods
+import org.apache.spark.sql.catalyst.analysis.FormExternalLookupJoin
 import org.apache.spark.sql.catalyst.catalog.SessionCatalog
 import org.apache.spark.sql.catalyst.optimizer._
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
@@ -75,6 +76,10 @@ class SparkOptimizer(
     val finishAnalysis = superBatches.indexWhere(_.name == "Finish Analysis")
     assert(finishAnalysis >= 0, "Finish Analysis batch is missing")
     flattenBatches(Seq(
+      // Must run before Finish Analysis and operator optimization, which eliminate hints, push
+      // predicates into joins and prune columns: it converts joins in the shapes that analysis
+      // validated.
+      Batch("Form External Lookup Join", Once, FormExternalLookupJoin),
       preOptimizationBatches,
       superBatches.take(finishAnalysis + 1),
       Batch("Evaluate parse_sql", Once, EvaluateParseSql),
@@ -153,7 +158,9 @@ class SparkOptimizer(
       PlanExternalUDFs.ruleName,
       ExtractPythonUDFs.ruleName,
       GroupBasedRowLevelOperationScanPlanning.ruleName,
-      // An ExternalLookupJoin has no physical plan until this rule prepares it.
+      // A join over a lookup-only table can only run once these rules have formed and prepared
+      // its external lookup join.
+      FormExternalLookupJoin.ruleName,
       PrepareExternalLookupJoin.ruleName,
       V2ScanRelationPushDown.ruleName,
       V2ScanPartitioningAndOrdering.ruleName,

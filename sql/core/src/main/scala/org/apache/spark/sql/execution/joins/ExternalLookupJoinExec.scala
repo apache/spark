@@ -19,8 +19,9 @@ package org.apache.spark.sql.execution.joins
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.InternalRow
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeSet, Expression}
-import org.apache.spark.sql.catalyst.plans.{Inner, JoinType, LeftOuter}
+import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeMap, AttributeSet,
+  Expression}
+import org.apache.spark.sql.catalyst.plans.{JoinType, LeftOuter}
 import org.apache.spark.sql.connector.metric.CustomTaskMetric
 import org.apache.spark.sql.connector.read.{ExternalLookupReaderFactory, Scan}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryExecNode}
@@ -33,6 +34,7 @@ import org.apache.spark.util.Utils
  * its input rows in batches, through an [[ExternalLookupJoinEvaluatorFactory]].
  */
 case class ExternalLookupJoinExec(
+    tableName: String,
     lookupParameters: Seq[Expression],
     lookupInput: Seq[Attribute],
     lookupOutput: Seq[Attribute],
@@ -44,10 +46,15 @@ case class ExternalLookupJoinExec(
     maxParameterRowsPerRequest: Int,
     child: SparkPlan) extends UnaryExecNode with SupportsCustomDriverMetrics {
 
+  // The connector's value rows follow the read schema, which `lookupInput` describes. The lookup
+  // columns keep their analyzed order, and take the read schema's types and nullability, which can
+  // be wider than the table's.
+  private lazy val inputByLookupOutput = AttributeMap(lookupInput.map(attr => attr -> attr))
+  private lazy val lookupColumns = lookupOutput.map(inputByLookupOutput)
+
   override def output: Seq[Attribute] = joinType match {
-    case Inner => child.output ++ lookupOutput
-    case LeftOuter => child.output ++ lookupOutput.map(_.withNullability(true))
-    case _ => child.output ++ lookupOutput
+    case LeftOuter => child.output ++ lookupColumns.map(_.withNullability(true))
+    case _ => child.output ++ lookupColumns
   }
 
   override def references: AttributeSet =
@@ -80,13 +87,16 @@ case class ExternalLookupJoinExec(
       }
     })
     val evaluatorFactory = new ExternalLookupJoinEvaluatorFactory(
+      tableName,
       lookupParameters,
       nullSafeParameters,
       child.output,
-      lookupOutput,
+      lookupInput,
       output,
       joinType,
-      residualCondition,
+      residualCondition.map(_.transform {
+        case attr: Attribute => inputByLookupOutput.getOrElse(attr, attr)
+      }),
       readerFactory,
       math.min(ExternalLookupJoinExec.MAX_PARAMETER_ROWS_PER_REQUEST, maxParameterRowsPerRequest),
       ExternalLookupJoinMetrics(

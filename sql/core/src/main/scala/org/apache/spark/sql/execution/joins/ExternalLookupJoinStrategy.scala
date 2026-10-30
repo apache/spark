@@ -25,6 +25,7 @@ object ExternalLookupJoinStrategy extends SparkStrategy {
   override def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
     case lookup: PreparedExternalLookupJoin =>
       ExternalLookupJoinExec(
+        lookup.tableName,
         lookup.lookupParameters,
         lookup.lookupInput,
         lookup.lookupOutput,
