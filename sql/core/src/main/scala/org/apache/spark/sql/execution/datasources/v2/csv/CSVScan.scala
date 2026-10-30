@@ -71,14 +71,16 @@ case class CSVScan(
     ExprUtils.verifyColumnNameOfCorruptRecord(dataSchema, parsedOptions.columnNameOfCorruptRecord)
 
     if (readDataSchema.length == 1 &&
-      readDataSchema.head.name == parsedOptions.columnNameOfCorruptRecord) {
+      ExprUtils.isCorruptRecordColumn(
+        readDataSchema.head.name, parsedOptions.columnNameOfCorruptRecord)) {
       throw QueryCompilationErrors.queryFromRawFilesIncludeCorruptRecordColumnError()
     }
 
     // Don't push any filter which refers to the "virtual" column which cannot present in the input.
     // Such filters will be applied later on the upper layer.
     val actualFilters =
-      pushedFilters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
+      pushedFilters.filterNot(_.references.exists(
+        ExprUtils.isCorruptRecordColumn(_, parsedOptions.columnNameOfCorruptRecord)))
 
     val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
     // Hadoop Configurations are case sensitive.
