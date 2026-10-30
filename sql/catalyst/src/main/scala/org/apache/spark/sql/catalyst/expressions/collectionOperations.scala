@@ -19,12 +19,14 @@ package org.apache.spark.sql.catalyst.expressions
 import java.time.{Duration, Period, ZoneId}
 import java.util.Comparator
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 import scala.reflect.ClassTag
 
 import org.apache.spark.{QueryContext, SparkException, SparkIllegalArgumentException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{TypeCheckResult, TypeCoercion, UnresolvedAttribute, UnresolvedSeed}
+import org.apache.spark.sql.catalyst.analysis.TempResolvedColumn
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.KnownNotContainsNull
 import org.apache.spark.sql.catalyst.expressions.codegen._
@@ -325,13 +327,14 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
   def this(children: Seq[Expression]) = {
     this(
       children,
-      children.zipWithIndex.map {
+      children.map(ArraysZip.unwrapForName).zipWithIndex.map {
         case (u: UnresolvedAttribute, _) => Literal(u.nameParts.last)
+        case (a: Alias, _) => Literal(a.name)
         case (e: NamedExpression, _) if e.resolved => Literal(e.name)
         case (e: NamedExpression, _) => NamePlaceholder
         case (g: GetStructField, _) => Literal(g.extractFieldName)
         case (g: GetArrayStructFields, _) => Literal(g.field.name)
-        case (g: GetMapValue, _) => Literal(g.key)
+        case (g: GetMapValue, _) => Literal(ArraysZip.unwrapForName(g.key))
         case (_, idx) => Literal(idx.toString)
       })
   }
@@ -492,6 +495,13 @@ case class ArraysZip(children: Seq[Expression], names: Seq[Expression])
 }
 
 object ArraysZip {
+  // Field names depend on the root shape, not the array's value descendants.
+  @tailrec
+  private def unwrapForName(expression: Expression): Expression = expression match {
+    case t: TempResolvedColumn => unwrapForName(t.child)
+    case other => other
+  }
+
   def apply(children: Seq[Expression]): ArraysZip = {
     new ArraysZip(children)
   }

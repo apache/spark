@@ -2435,7 +2435,7 @@ class Analyzer(
       val externalFunctionNameSet = new mutable.HashSet[Seq[String]]()
 
       plan.resolveExpressionsWithPruning(_.containsAnyPattern(UNRESOLVED_FUNCTION)) {
-        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _) =>
+        case f @ UnresolvedFunction(nameParts, _, _, _, _, _, _, _, _) =>
           // For builtin/temp functions, we can do a quick check without catalog lookup
           val quickCheck = if (nameParts.size == 1 ||
               FunctionResolution.sessionNamespaceKind(nameParts).isDefined) {
@@ -2619,10 +2619,15 @@ class Analyzer(
         }
 
       case q: LogicalPlan =>
+        val sortAggregate = q match {
+          case Sort(_, _, agg: Aggregate, _) => Some(agg)
+          case Sort(_, _, Filter(_, agg: Aggregate), _) => Some(agg)
+          case _ => None
+        }
         q.transformExpressionsUpWithPruning(
           _.containsAnyPattern(UNRESOLVED_FUNCTION, GENERATOR),
           ruleId) {
-          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _)
+          case u @ UnresolvedFunction(nameParts, arguments, _, _, _, _, _, _, _)
               if functionResolution.hasLambdaAndResolvedArguments(arguments) => withPosition(u) {
             functionResolution.resolveFunction(u) match {
               case func: HigherOrderFunction => func
@@ -2645,7 +2650,26 @@ class Analyzer(
             }
           }
 
-          case u: UnresolvedFunction => functionResolution.resolveFunction(u)
+          case u: UnresolvedFunction =>
+            val resolved = functionResolution.resolveFunction(u)
+            u.sortResolutionState match {
+              case UnresolvedFunction.WithOriginalFunction(original)
+                  if resolved.isInstanceOf[AggregateExpression] && sortAggregate.isDefined =>
+                // Function construction identifies aggregate context. Discard the provisional
+                // output-bound invocation, including extractors, casts and catalog binding.
+                // The next iteration resolves the original call using the aggregate input.
+                val inputFunction = original.clone().transformDown {
+                  case f: UnresolvedFunction => withOrigin(f.origin) {
+                    f.copy(sortResolutionState = UnresolvedFunction.AggregateInput)
+                  }
+                }.asInstanceOf[UnresolvedFunction]
+                // Star preprocessing may have selected a function owner after the snapshot.
+                val inputWithOwner = withOrigin(inputFunction.origin) {
+                  inputFunction.copy(boundOwner = u.boundOwner.orElse(inputFunction.boundOwner))
+                }
+                resolveColWithAgg(inputWithOwner, sortAggregate.get)
+              case _ => resolved
+            }
 
           case u: UnresolvedPolymorphicPythonUDTF => withPosition(u) {
             // Check if this is a call to a Python user-defined table function whose polymorphic
@@ -3293,22 +3317,35 @@ class Analyzer(
           Filter(newExprs.head, newChild)
         })
 
-      case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved && s.order.forall(_.resolved) =>
-        resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
-          val newSortOrder = s.order.zip(newExprs).map {
-            case (sortOrder, expr) => sortOrder.copy(child = expr)
-          }
-          s.copy(order = newSortOrder, child = newChild)
-        })
+      case s @ Sort(_, _, agg: Aggregate, _) if agg.resolved =>
+        resolveSortWithAggregate(s, agg, identity)
 
       case s @ Sort(_, _, f @ Filter(cond, agg: Aggregate), _)
-          if agg.resolved && cond.resolved && s.order.forall(_.resolved) =>
-        resolveOperatorWithAggregate(s.order.map(_.child), agg, (newExprs, newChild) => {
-          val newSortOrder = s.order.zip(newExprs).map {
+          if agg.resolved && cond.resolved =>
+        resolveSortWithAggregate(s, agg, newChild => f.copy(child = newChild))
+    }
+
+    private def resolveSortWithAggregate(
+        sort: Sort,
+        agg: Aggregate,
+        buildChild: Aggregate => LogicalPlan): LogicalPlan = {
+      val order = sort.order
+      if (order.forall(_.resolved)) {
+        val resolvedOrder = order.map(_.transformDownWithPruning(
+          _.containsPattern(TEMP_RESOLVED_COLUMN)) {
+          case t: TempResolvedColumn if t.child.references.subsetOf(agg.outputSet) => t.child
+        }.asInstanceOf[SortOrder])
+        resolveOperatorWithAggregate(resolvedOrder.map(_.child), agg, (newExprs, newChild) => {
+          val newSortOrder = order.zip(newExprs).map {
             case (sortOrder, expr) => sortOrder.copy(child = expr)
           }
-          s.copy(order = newSortOrder, child = f.copy(child = newChild))
+          sort.copy(order = newSortOrder, child = buildChild(newChild))
         })
+      } else {
+        // Keep temporary columns until every function resolves, so lateral alias resolution
+        // cannot insert a Project between Sort and Aggregate before aggregate extraction.
+        sort.copy(order = order)
+      }
     }
 
     /**

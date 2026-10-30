@@ -431,16 +431,25 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
    * In the above example, after `a` is resolved to a struct-type column, we may fail to resolve `b`
    * if there is no such nested field named "b". We should not fail and wait for other rules to
    * resolve it if possible.
+   *
+   * `preserveColumnName` retains SQL column names in `TempResolvedColumn` so ORDER BY can
+   * choose aggregate input scope after function resolution. Already resolved attributes retain
+   * their expression IDs.
    */
   def resolveExpressionByPlanOutput(
       expr: Expression,
       plan: LogicalPlan,
       throws: Boolean = false,
-      includeLastResort: Boolean = false): Expression = {
+      includeLastResort: Boolean = false,
+      preserveColumnName: Boolean = false): Expression = {
     resolveExpression(
       tryResolveDataFrameColumns(expr, Seq(plan)),
       resolveColumnByName = nameParts => {
-        plan.resolve(nameParts, conf.resolver)
+        plan.resolve(nameParts, conf.resolver).map {
+          case Alias(child, _) if preserveColumnName => TempResolvedColumn(child, nameParts)
+          case resolved if preserveColumnName => TempResolvedColumn(resolved, nameParts)
+          case resolved => resolved
+        }
       },
       getAttrCandidates = () => plan.output,
       throws = throws,
@@ -554,7 +563,7 @@ trait ColumnResolutionHelper extends Logging with DataTypeErrorsBase {
   //       tiebreaker yields a single winner.
   //    7. if all the resolved attributes are filtered out, return the original expression
   //       as it is.
-  private def tryResolveDataFrameColumns(
+  protected def tryResolveDataFrameColumns(
       e: Expression,
       q: Seq[LogicalPlan]): Expression = e match {
     case u: UnresolvedAttribute =>
