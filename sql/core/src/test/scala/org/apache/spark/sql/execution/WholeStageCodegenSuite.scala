@@ -3156,6 +3156,51 @@ class WholeStageCodegenSuite extends SharedSparkSession
     }
   }
 
+  test("SPARK-60329: a filter checks a column IS NOT NULL before a conjunct that can raise") {
+    withNullConjunctTable(Int.MaxValue) {
+      // `x` is NULL on the first row and `y + 1` overflows on it. With codegen off, the FALSE
+      // `isnotnull(x)` drops the row before the conjunct after it is evaluated. With codegen
+      // on, the check was generated just before the first conjunct that references `x`, or
+      // after all of them, so the overflow was raised. The check on a column is now generated
+      // before a conjunct that can raise, as with the NULL-conjunct flag, whatever the legacy
+      // config, since it is independent of a NULL conjunct.
+      //
+      // The common `b * 2` takes the CSE path of FilterExec.
+      val cseQuery = "SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0 AND " +
+        "b * 2 > 0 AND b * 2 > -1"
+      def multiplyExactCount(filterExecCSE: Boolean): Int = {
+        withSQLConf(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE.toString) {
+          val code = codegenString(sql(cseQuery).queryExecution.executedPlan)
+          "multiplyExact".r.findAllIn(code).length
+        }
+      }
+      assert(multiplyExactCount(filterExecCSE = true) < multiplyExactCount(filterExecCSE = false))
+
+      Seq("true", "false").foreach { filterExecCSE =>
+        withNullConjunctConfs(
+            SQLConf.ANSI_ENABLED.key -> "true",
+            SQLConf.SUBEXPRESSION_ELIMINATION_FILTER_EXEC_ENABLED.key -> filterExecCSE) { _ =>
+          // `isnotnull(x)` is inferred from `x > 0`, and precedes the overflowing conjunct.
+          checkAnswer(sql("SELECT a FROM t WHERE y + 1 > 0 AND x > 0"), Row(0))
+          // A user-written check, with and without a later conjunct that references `x`.
+          checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0 AND x > 0"), Row(0))
+          checkAnswer(sql("SELECT a FROM t WHERE x IS NOT NULL AND y + 1 > 0"), Row(0))
+          // The same with a common subexpression.
+          checkAnswer(sql(cseQuery), Row(0))
+          // A check written after the overflowing conjunct stays after it, so the query raises.
+          checkArithmeticOverflow("SELECT a FROM t WHERE y + 1 > 0 AND x IS NOT NULL")
+        }
+      }
+      // The aggregate FILTER clause goes through the same code generation.
+      withNullConjunctConfs(SQLConf.ANSI_ENABLED.key -> "true") { _ =>
+        checkAnswer(
+          sql("SELECT count(1) FILTER (WHERE x IS NOT NULL AND y + 1 > 0) FROM t"), Row(1))
+      }
+    }
+  }
+
   test("SPARK-60403: full outer joins compile with their functions spilled to nested classes") {
     // A full outer join outputs its rows through a function of its own, and generates the code of
     // the operators above it, for the body of that function, before adding the function: here a
