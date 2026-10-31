@@ -37,13 +37,14 @@ import org.apache.hadoop.io.compress.{CompressionCodecFactory, GzipCodec}
 import org.apache.logging.log4j.Level
 
 import org.apache.spark._
-import org.apache.spark.io.ZStdCompressionCodec
+import org.apache.spark.io.{HadoopCodecStreams, ZStdCompressionCodec}
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.csv.CSVOptions
 import org.apache.spark.sql.catalyst.expressions.ToStringBase
 import org.apache.spark.sql.catalyst.util.{CharsetProvider, DateTimeTestUtils, DateTimeUtils, HadoopCompressionCodec}
 import org.apache.spark.sql.errors.QueryExecutionErrors.toSQLId
 import org.apache.spark.sql.execution.datasources.CommonFileDataSourceSuite
+import org.apache.spark.sql.execution.datasources.v2.{DataSourceV2ScanRelation, FileScan}
 import org.apache.spark.sql.internal.{LegacyBehaviorPolicy, SQLConf}
 import org.apache.spark.sql.internal.SQLConf.BinaryOutputStyle
 import org.apache.spark.sql.test.SharedSparkSession
@@ -3451,7 +3452,7 @@ abstract class CSVSuite
   }
 
   test("validate CSV Options") {
-    assert(CSVOptions.getAllOptions.size == 44)
+    assert(CSVOptions.getAllOptions.size == 45)
     // Please add validation on any new CSV options here
     assert(CSVOptions.isValidOption("header"))
     assert(CSVOptions.isValidOption("inferSchema"))
@@ -3490,6 +3491,7 @@ abstract class CSVSuite
     assert(CSVOptions.isValidOption("encoding"))
     assert(CSVOptions.isValidOption("charset"))
     assert(CSVOptions.isValidOption("compression"))
+    assert(CSVOptions.isValidOption("decompression"))
     assert(CSVOptions.isValidOption("codec"))
     assert(CSVOptions.isValidOption("sep"))
     assert(CSVOptions.isValidOption("extension"))
@@ -4303,6 +4305,194 @@ abstract class CSVSuite
       }
     }
   }
+
+  // Writes `data` to `file` compressed with `codec` (a short name; "" means no compression), using
+  // Spark's built-in Zstandard codec for zstd (which Hadoop may not be compiled with) and Hadoop's
+  // CompressionCodecFactory otherwise. The file name intentionally does NOT carry the codec's
+  // extension, so extension-based detection cannot pick the right codec and the
+  // `decompression` option is what makes the read succeed.
+  private def writeCompressed(file: File, data: String, codec: String): Unit = {
+    val codecFactory = new CompressionCodecFactory(spark.sessionState.newHadoopConf())
+    val os = new FileOutputStream(file)
+    val out = codec match {
+      case "" => os
+      case "zstd" | "zstandard" => new ZStdCompressionCodec(sparkConf).compressedOutputStream(os)
+      case name => codecFactory.getCodecByName(name).createOutputStream(os)
+    }
+    out.write(data.getBytes(StandardCharsets.UTF_8))
+    out.close()
+  }
+
+  test("SPARK-60217 decompression option overrides file name extension") {
+    val numRecord = 100
+    val records = (1 to numRecord).map(i => (i, s"value_$i"))
+    // Every read-supported codec, including zstd/zstandard which the writers do not support.
+    val codecs = HadoopCompressionCodec.values().map(_.lowerCaseName())
+      .filterNot(c => c == HadoopCompressionCodec.NONE.lowerCaseName() ||
+        c == HadoopCompressionCodec.UNCOMPRESSED.lowerCaseName()) ++ Seq("zstd", "zstandard")
+    for (multiLine <- Seq(true, false); codec <- codecs) {
+      withTempDir { dir =>
+        val data = ("id,value" +: records.map { case (id, v) => s"$id,$v" }).mkString("\n")
+        // Misleading `.csv` name (no codec suffix): extension-based detection would read it as
+        // plain text and fail. The `decompression` option forces the correct codec.
+        val file = new File(dir, "data.csv")
+        writeCompressed(file, data, codec)
+
+        val df = spark.read
+          .option("decompression", codec)
+          .option("header", "true")
+          .option("inferSchema", "true")
+          .option("multiLine", multiLine.toString)
+          .csv(file.getCanonicalPath)
+        checkAnswer(df, records.map { case (id, v) => Row(id, v) })
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option decides whether a file is split") {
+    val records = (1 to 2000).map(i => (i, s"value_$i"))
+    val data = records.map { case (id, v) => s"$id,$v" }.mkString("\n")
+    val bzip2 = HadoopCompressionCodec.BZIP2.lowerCaseName()
+    val gzip = HadoopCompressionCodec.GZIP.lowerCaseName()
+    // (codec the file is written with, file name, `decompression`, multiLine, whether it is split)
+    Seq(
+      // bzip2 is splittable even though the `.csv` name says nothing about it.
+      (bzip2, "data.csv", bzip2, false, true),
+      // bzip2 is splittable, but multiLine still reads each file as a single split.
+      (bzip2, "data.csv", bzip2, true, false),
+      // gzip is not splittable, so a forced gzip `.csv` file is read as a single split.
+      (gzip, "data.csv", gzip, false, false),
+      // `none` reads a plain file named `.gz` as-is, so it is split like any plain file.
+      ("", "data.csv.gz", HadoopCompressionCodec.NONE.lowerCaseName(), false, true)
+    ).foreach { case (writeCodec, name, readCodec, multiLine, split) =>
+      withTempDir { dir =>
+        val file = new File(dir, name)
+        writeCompressed(file, data, writeCodec)
+        withSQLConf(SQLConf.FILES_MAX_PARTITION_BYTES.key -> "256") {
+          val df = spark.read
+            .option("decompression", readCodec)
+            .option("multiLine", multiLine.toString)
+            .schema("id INT, value STRING")
+            .csv(file.getCanonicalPath)
+          val numPartitions = df.rdd.getNumPartitions
+          assert(if (split) numPartitions > 1 else numPartitions == 1,
+            s"decompression=$readCodec on $name, multiLine=$multiLine: $numPartitions partitions")
+          checkAnswer(df, records.map { case (id, v) => Row(id, v) })
+        }
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option accepts codec class names and any letter case") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.csv")
+      writeCompressed(file, "1,a\n2,b", HadoopCompressionCodec.GZIP.lowerCaseName())
+      Seq(classOf[GzipCodec].getName, "GZIP", "GZip").foreach { codec =>
+        val df = spark.read
+          .option("decompression", codec)
+          .schema("id INT, value STRING")
+          .csv(file.getCanonicalPath)
+        checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option in table options applies to table reads") {
+    withTempDir { dir =>
+      // A gzip-compressed file whose `.csv` name says nothing about its compression.
+      writeCompressed(
+        new File(dir, "data.csv"), "1,a\n2,b", HadoopCompressionCodec.GZIP.lowerCaseName())
+      withTable("t") {
+        sql(
+          s"""CREATE TABLE t (id INT, value STRING) USING csv
+             |OPTIONS (path '${dir.toURI}', decompression 'gzip')""".stripMargin)
+        checkAnswer(sql("SELECT * FROM t"), Seq(Row(1, "a"), Row(2, "b")))
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option applies to streaming reads") {
+    withTempDir { dir =>
+      // A gzip-compressed file whose `.csv` name says nothing about its compression.
+      writeCompressed(
+        new File(dir, "data.csv"), "1,a\n2,b", HadoopCompressionCodec.GZIP.lowerCaseName())
+      val query = spark.readStream
+        .option("decompression", HadoopCompressionCodec.GZIP.lowerCaseName())
+        .schema("id INT, value STRING")
+        .csv(dir.getCanonicalPath)
+        .writeStream
+        .format("memory")
+        .queryName("decompression_codec_stream")
+        .start()
+      try {
+        query.processAllAvailable()
+        checkAnswer(
+          spark.table("decompression_codec_stream"), Seq(Row(1, "a"), Row(2, "b")))
+      } finally {
+        query.stop()
+      }
+    }
+  }
+
+  test("SPARK-60217 decompression option none reads a file with a codec extension as-is") {
+    withTempDir { dir =>
+      // A plain-text CSV that happens to carry a `.gz` extension. Extension-based detection would
+      // try (and fail) to gunzip it; `decompression` = none must read the raw bytes.
+      val file = new File(dir, "plain.csv.gz")
+      writeCompressed(file, "id,value\n1,a\n2,b", "")
+
+      val df = spark.read
+        .option("decompression", HadoopCompressionCodec.NONE.lowerCaseName())
+        .option("header", "true")
+        .csv(file.getCanonicalPath)
+      checkAnswer(df, Seq(Row("1", "a"), Row("2", "b")))
+    }
+  }
+
+  test("SPARK-60217 decompression option rejects an invalid codec") {
+    checkErrorMatchPVals(
+      exception = intercept[SparkIllegalArgumentException] {
+        spark.read.option("decompression", "illegal").csv(testFile(carsFile)).collect()
+      },
+      condition = "CODEC_NOT_AVAILABLE.WITH_AVAILABLE_CODECS_SUGGESTION",
+      parameters = Map("codecName" -> "illegal", "availableCodecs" -> ".*zstd.*")
+    )
+  }
+
+  test("SPARK-60217 compression option does not force a codec on read") {
+    withTempDir { dir =>
+      // Unlike `decompression`, the write-side `compression` option (which may be persisted
+      // in a table's options) must not force a codec on read: a plain file is still read as-is.
+      val file = new File(dir, "plain.csv")
+      writeCompressed(file, "id,value\n1,a\n2,b", "")
+
+      val df = spark.read
+        .option("compression", HadoopCompressionCodec.GZIP.lowerCaseName())
+        .option("header", "true")
+        .csv(file.getCanonicalPath)
+      checkAnswer(df, Seq(Row("1", "a"), Row("2", "b")))
+    }
+  }
+
+  test("SPARK-60217 an inherited internal decompression codec key is not honored") {
+    withTempDir { dir =>
+      val file = new File(dir, "plain.csv")
+      writeCompressed(file, "id,value\n1,a\n2,b", "")
+      // Session confs are copied into the read's Hadoop conf; the read and the schema inference
+      // must unset the internal key since they did not set `decompression`, so the plain file is
+      // not gunzipped. multiLine inference reads the files through its own code path.
+      withSQLConf(HadoopCodecStreams.DECOMPRESSION_CODEC_CONF -> classOf[GzipCodec].getName) {
+        Seq(false, true).foreach { multiLine =>
+          val df = spark.read
+            .option("header", "true")
+            .option("inferSchema", "true")
+            .option("multiLine", multiLine.toString)
+            .csv(file.getCanonicalPath)
+          checkAnswer(df, Seq(Row(1, "a"), Row(2, "b")))
+        }
+      }
+    }
+  }
 }
 
 class CSVv1Suite extends CSVSuite {
@@ -4341,6 +4531,29 @@ class CSVv2Suite extends CSVSuite {
     super
       .sparkConf
       .set(SQLConf.USE_V1_SOURCE_LIST, "")
+
+  test("SPARK-60217 unsplittable reason reports a forced decompression codec") {
+    withTempDir { dir =>
+      val file = new File(dir, "data.csv")
+      Files.write(file.toPath, "1,a".getBytes(StandardCharsets.UTF_8))
+      def reason(options: Map[String, String]): String = {
+        // A user schema skips inference, so the file is never actually decompressed.
+        val df = spark.read.options(options).schema("id INT, value STRING")
+          .csv(file.getCanonicalPath)
+        val scan = df.queryExecution.optimizedPlan.collectFirst {
+          case r: DataSourceV2ScanRelation => r.scan.asInstanceOf[FileScan]
+        }.get
+        scan.getFileUnSplittableReason(new Path(file.getCanonicalPath))
+      }
+      // The `.csv` name alone is splittable, so the forced codec is what prevents splitting.
+      assert(reason(Map("decompression" -> HadoopCompressionCodec.GZIP.lowerCaseName())) ==
+        "the file is compressed by unsplittable compression codec")
+      // A forced `none` keeps the file splittable, so multiLine is the reason.
+      assert(reason(Map(
+        "decompression" -> HadoopCompressionCodec.NONE.lowerCaseName(),
+        "multiLine" -> "true")) == "the csv datasource is set multiLine mode")
+    }
+  }
 
   test("test for FAILFAST parsing mode on CSV v2") {
     Seq(false, true).foreach { multiLine =>

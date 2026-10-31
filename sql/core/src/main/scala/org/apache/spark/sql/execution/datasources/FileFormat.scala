@@ -25,10 +25,11 @@ import org.apache.hadoop.mapreduce.Job
 import org.apache.spark.SparkContext
 import org.apache.spark.paths.SparkPath
 import org.apache.spark.sql.SparkSession
-import org.apache.spark.sql.catalyst.InternalRow
+import org.apache.spark.sql.catalyst.{FileSourceOptions, InternalRow}
 import org.apache.spark.sql.catalyst.expressions._
 import org.apache.spark.sql.catalyst.expressions.codegen.GenerateUnsafeProjection
 import org.apache.spark.sql.catalyst.types.DataTypeUtils.toAttributes
+import org.apache.spark.sql.catalyst.util.CompressionCodecs
 import org.apache.spark.sql.errors.QueryExecutionErrors
 import org.apache.spark.sql.execution.metric.SQLMetric
 import org.apache.spark.sql.internal.{SessionStateHelper, SQLConf}
@@ -456,14 +457,58 @@ object FileFormat {
 abstract class TextBasedFileFormat extends FileFormat with SessionStateHelper {
   private var codecFactory: CompressionCodecFactory = _
 
+  // The `decompression` splittability resolved for the options of the latest [[isSplitable]]
+  // call. The scan passes the same options map for every file, so this avoids parsing the codec
+  // name and loading its class again per file.
+  @transient @volatile
+  private var decompressionCodecSplittableCache: (Map[String, String], Option[Boolean]) = _
+
+  /**
+   * Forces the `decompression` read option, when set, onto `hadoopConf` before the format's
+   * [[buildReader]] broadcasts it, so the readers decompress every file with that codec instead of
+   * inferring it from the file name extension
+   * (see [[CompressionCodecs.setReadCodecConfiguration]]).
+   */
+  override def buildReaderWithPartitionValues(
+      sparkSession: SparkSession,
+      dataSchema: StructType,
+      partitionSchema: StructType,
+      requiredSchema: StructType,
+      filters: Seq[Filter],
+      options: Map[String, String],
+      hadoopConf: Configuration): PartitionedFile => Iterator[InternalRow] = {
+    CompressionCodecs.setReadCodecConfiguration(
+      hadoopConf, new FileSourceOptions(options).decompressionCodec)
+    super.buildReaderWithPartitionValues(
+      sparkSession, dataSchema, partitionSchema, requiredSchema, filters, options, hadoopConf)
+  }
+
+  /**
+   * Whether the file at `path` can be split by its compression codec. When the `decompression`
+   * read option is set, the splittability of that codec wins over the file name extension, so
+   * the split decision always agrees with how [[buildReaderWithPartitionValues]] decompresses.
+   */
   override def isSplitable(
       sparkSession: SparkSession,
       options: Map[String, String],
       path: Path): Boolean = {
-    if (codecFactory == null) {
-      codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
+    decompressionCodecSplittable(options).getOrElse {
+      if (codecFactory == null) {
+        codecFactory = new CompressionCodecFactory(getHadoopConf(sparkSession, options))
+      }
+      val codec = codecFactory.getCodec(path)
+      codec == null || codec.isInstanceOf[SplittableCompressionCodec]
     }
-    val codec = codecFactory.getCodec(path)
-    codec == null || codec.isInstanceOf[SplittableCompressionCodec]
+  }
+
+  private def decompressionCodecSplittable(options: Map[String, String]): Option[Boolean] = {
+    val cache = decompressionCodecSplittableCache
+    if (cache != null && (cache._1 eq options)) {
+      cache._2
+    } else {
+      val splittable = new FileSourceOptions(options).decompressionCodecSplittable
+      decompressionCodecSplittableCache = (options, splittable)
+      splittable
+    }
   }
 }

@@ -64,6 +64,7 @@ case class TextFileFormat()
       path: Path): Boolean = {
     val textOptions = new TextOptions(options)
     if (textOptions.archiveFormatEnabled && SupportsArchiveFormat.isArchivePath(path)) {
+      SupportsArchiveFormat.checkNoDecompressionCodec(path, textOptions.decompressionCodec)
       // A tar archive is read as one sequential stream (entry by entry), so it is never split.
       return false
     }

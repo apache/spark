@@ -461,6 +461,7 @@ object CSVOptions extends DataSourceOptions {
   val COMPRESSION = "compression"
   val CODEC = "codec"
   newOption(COMPRESSION, CODEC)
+  val DECOMPRESSION = newOption(DataSourceOptions.DECOMPRESSION)
   val SEP = "sep"
   val DELIMITER = "delimiter"
   newOption(SEP, DELIMITER)

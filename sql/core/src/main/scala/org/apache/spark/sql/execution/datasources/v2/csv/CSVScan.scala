@@ -54,12 +54,16 @@ case class CSVScan(
     conf.columnNameOfCorruptRecord)
 
   override def isSplitable(path: Path): Boolean = {
-    CSVDataSource(parsedOptions).isSplitable && super.isSplitable(path)
+    // When `decompression` is set, its splittability wins over the file extension.
+    CSVDataSource(parsedOptions).isSplitable &&
+      parsedOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))
   }
 
   override def getFileUnSplittableReason(path: Path): String = {
     assert(!isSplitable(path))
-    if (!super.isSplitable(path)) {
+    // Report the codec first: a forced `decompression` decides splittability, not the
+    // file name extension.
+    if (!parsedOptions.decompressionCodecSplittable.getOrElse(super.isSplitable(path))) {
       super.getFileUnSplittableReason(path)
     } else {
       "the csv datasource is set multiLine mode"
@@ -80,9 +84,7 @@ case class CSVScan(
     val actualFilters =
       pushedFilters.filterNot(_.references.contains(parsedOptions.columnNameOfCorruptRecord))
 
-    val caseSensitiveMap = options.asCaseSensitiveMap.asScala.toMap
-    // Hadoop Configurations are case sensitive.
-    val hadoopConf = sparkSession.sessionState.newHadoopConfWithOptions(caseSensitiveMap)
+    val hadoopConf = newReadHadoopConf()
     val broadcastedConf =
       SerializableConfiguration.broadcast(sparkSession.sparkContext, hadoopConf)
     // The partition values are already truncated in `FileScan.partitions`.

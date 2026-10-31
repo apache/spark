@@ -44,6 +44,8 @@ trait JSONArchiveReadBase extends ArchiveReadSuiteBase {
 
   override protected def readSchema: String = "id INT, name STRING"
 
+  override protected def supportsDecompressionCodec: Boolean = true
+
   /** Raw JSON bytes, for tests that need precise control over the record layout. */
   protected def jsonBytes(s: String): Array[Byte] = s.getBytes(StandardCharsets.UTF_8)
 
