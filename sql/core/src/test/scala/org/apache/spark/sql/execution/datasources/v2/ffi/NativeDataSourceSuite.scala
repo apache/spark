@@ -23,7 +23,7 @@ import java.nio.file.StandardCopyOption.REPLACE_EXISTING
 import java.sql.{Date, Timestamp}
 import java.time.{Instant, LocalDate}
 import java.util.UUID
-import java.util.concurrent.{Callable, CountDownLatch, ExecutionException, TimeUnit}
+import java.util.concurrent.{Callable, CountDownLatch, ExecutionException, ExecutorService, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable.ArrayBuffer
@@ -1285,6 +1285,48 @@ class NativeDataSourceSuite extends QueryTest with SharedSparkSession {
       pool.awaitTermination(1, TimeUnit.MINUTES)
       Utils.tryLogNonFatalError(reader.close())
     }
+  }
+
+  nativeTest("release a closed reader when the thread that read its batch closes it or ends") {
+    val session = newSession(defaultPackage)
+    def onPool[T](pool: ExecutorService)(f: => T): T = pool.submit(new Callable[T] {
+      override def call(): T = f
+    }).get(1, TimeUnit.MINUTES)
+    // Returns a reader closed while a thread of the pool may still read its batch, and the file
+    // that the library creates when the stream is released.
+    def closedReader(pool: ExecutorService) = {
+      val marker = new File(Utils.createTempDir(), "released")
+      // get_next does not wait: the file .continue exists.
+      new File(marker.getPath + ".continue").createNewFile()
+      val df = range(session, "end" -> "10", "partitions" -> "1", "slow_read" -> marker.getPath)
+      val batch = scan(df.select("id")).toBatch
+      val reader =
+        batch.createReaderFactory().createColumnarReader(batch.planInputPartitions().head)
+      assert(onPool(pool)(reader.next()))
+      reader.close()
+      assert(!marker.isFile, "The stream was released.")
+      (reader, marker)
+    }
+    val pool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    try {
+      // The thread that read the batch closes the reader, without calling next again.
+      val (reader, marker) = closedReader(pool)
+      onPool(pool)(reader.close())
+      assert(marker.isFile && Files.readString(marker.toPath) == "after get_next")
+    } finally {
+      pool.shutdown()
+    }
+    // The thread that read the batch ends, without calling next or close again.
+    val endingPool = ThreadUtils.newDaemonSingleThreadExecutor("native-reader")
+    val marker = try {
+      closedReader(endingPool)._2
+    } finally {
+      endingPool.shutdown()
+    }
+    eventually(timeout(1.minute)) {
+      assert(marker.isFile)
+    }
+    assert(Files.readString(marker.toPath) == "after get_next")
   }
 
   nativeTest("load libraries that export the same functions side by side") {

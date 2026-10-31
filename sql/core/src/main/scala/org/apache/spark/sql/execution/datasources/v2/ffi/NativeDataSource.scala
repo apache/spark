@@ -46,7 +46,7 @@ import org.apache.spark.sql.types._
 import org.apache.spark.sql.util.{ArrowUtils, CaseInsensitiveStringMap}
 import org.apache.spark.sql.vectorized.{ArrowColumnVector, ColumnarBatch, ColumnVector}
 import org.apache.spark.unsafe.Platform
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{ThreadUtils, Utils}
 
 /**
  * A [[ColumnarDataSource]] implemented by a native library, through the C interface in
@@ -481,8 +481,9 @@ object NativeWriterCommitMessage {
  * Such a thread also reads the rows of the batch that [[next]] returned to it after [[next]]
  * returns, and the column vectors read the buffers of the batch at their addresses. So a
  * [[close]] on a thread other than the one that called [[next]] last leaves the release to the
- * next call of that thread to [[next]], unless that thread has ended. A thread that stops reading
- * without calling [[next]] again, and does not end, keeps the resources of the reader allocated.
+ * next call of that thread to [[next]] or [[close]], or, once that thread ends, to a thread that
+ * waits for it. A thread that stops reading without calling either again, and does not end, keeps
+ * the resources of the reader allocated.
  */
 class NativePartitionReader(
     location: NativeLibraryLocation,
@@ -900,7 +901,17 @@ class NativePartitionReader(
       if (!reading && consumerDone) {
         released = true
         closeResources()
+      } else if (!reading) {
+        // That thread may not call next or close again, so the reader is released once it ends.
+        val thread = consumer
+        NativePartitionReader.releaser.execute(() => {
+          thread.join()
+          releaseClosed()
+        })
       }
+    } else if (!reading && consumerDone) {
+      // A close on another thread may have left the release to this thread, which read last.
+      releaseClosed()
     }
   }
 
@@ -924,6 +935,11 @@ class NativePartitionReader(
       Utils.tryLogNonFatalError(allocator.close())
     }
   }
+}
+
+object NativePartitionReader {
+  // Waits for the threads that may still read the batch of a closed reader, and then releases it.
+  private val releaser = ThreadUtils.newDaemonCachedThreadPool("native-partition-reader-release")
 }
 
 /** Writes the batches of a task to the data writer of a native library. */
