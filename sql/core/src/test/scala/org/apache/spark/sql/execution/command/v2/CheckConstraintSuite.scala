@@ -17,15 +17,31 @@
 
 package org.apache.spark.sql.execution.command.v2
 
+import test.org.apache.spark.sql.connector.catalog.functions.JavaAverage
+import test.org.apache.spark.sql.connector.catalog.functions.JavaStrLen.JavaStrLenStaticMagic
+
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.{AnalysisException, QueryTest, Row}
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.logical.Filter
 import org.apache.spark.sql.catalyst.util.AttributeNameParser
 import org.apache.spark.sql.catalyst.util.QuotingUtils.quoteNameParts
-import org.apache.spark.sql.connector.catalog.Table
-import org.apache.spark.sql.connector.catalog.constraints.Check
+import org.apache.spark.sql.connector.{StrLen, StrLenDefault, StrLenMagic}
+import org.apache.spark.sql.connector.catalog.{Identifier, InMemoryCatalog, Table, TableCatalog, TableChange}
+import org.apache.spark.sql.connector.catalog.constraints.{Check, Constraint}
+import org.apache.spark.sql.connector.catalog.functions.{ScalarFunction, UnboundFunction}
 import org.apache.spark.sql.execution.command.DDLCommandTestUtils
 import org.apache.spark.sql.internal.SQLConf
+import org.apache.spark.sql.types.{DataType, StringType}
+import org.apache.spark.unsafe.types.UTF8String
+
+// A V2 function that a test binds to the name of a built-in function to shadow it.
+private object ConstantString extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = Array(StringType)
+  override def resultType(): DataType = StringType
+  override def name(): String = "constant_string"
+  override def produceResult(input: InternalRow): UTF8String = UTF8String.fromString("OK")
+}
 
 class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLCommandTestUtils {
   override protected def command: String = "Check CONSTRAINT"
@@ -167,6 +183,152 @@ class CheckConstraintSuite extends QueryTest with CommandSuiteBase with DDLComma
           "expression" -> "nullif(id + 1, 3) > 0",
           "values" -> " - id : -5"))
       checkAnswer(sql(s"SELECT * FROM $t"), Row(2, "a"))
+    }
+  }
+
+  private def withV2Function(name: String, function: UnboundFunction)(f: => Unit): Unit = {
+    val funCatalog = spark.sessionState.catalogManager.catalog(s"fun_$catalog")
+      .asInstanceOf[InMemoryCatalog]
+    val ident = Identifier.of(Array("ns"), name)
+    withNamespace(s"fun_$catalog.ns") {
+      sql(s"CREATE NAMESPACE fun_$catalog.ns")
+      funCatalog.createFunction(ident, function)
+      try f finally funCatalog.dropFunction(ident)
+    }
+  }
+
+  // CREATE TABLE, REPLACE TABLE and, if `inAlter`, ALTER TABLE fail on the condition.
+  private def checkUserDefinedFunctionRejected(
+      cond: String,
+      functionName: String,
+      inAlter: Boolean = true): Unit = {
+    withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+      sql(s"CREATE TABLE $t (id INT, name STRING) $defaultUsing")
+      val alter = if (inAlter) Seq(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)") else Nil
+      (alter ++ Seq(
+        s"CREATE TABLE ${t}_2 (id INT, name STRING, CONSTRAINT c1 CHECK ($cond)) $defaultUsing",
+        s"REPLACE TABLE $t (id INT, name STRING, CONSTRAINT c1 CHECK ($cond)) $defaultUsing"
+      )).foreach { query =>
+        checkError(
+          exception = intercept[AnalysisException](sql(query)),
+          condition = "USER_DEFINED_FUNCTION_IN_CHECK_CONSTRAINT",
+          sqlState = "42621",
+          parameters = Map("checkCondition" -> cond, "functionName" -> functionName),
+          context = ExpectedContext(fragment = cond))
+      }
+    }
+  }
+
+  test("SPARK-60777: Check constraint cannot call a user-defined function") {
+    val call = s"fun_$catalog.ns.strlen"
+    Seq(
+      (StrLenDefault, s"$call(name) < 10", "`strlen_default`"),
+      // The optimizer folds a call with constant arguments, but the DDL does not.
+      (StrLenDefault, s"id < $call('abc')", "`strlen_default`"),
+      (StrLenMagic, s"$call(name) < 10", "`strlen_magic`"),
+      (new JavaStrLenStaticMagic, s"$call(name) < 10", "`strlen`")
+    ).foreach { case (function, cond, functionName) =>
+      withV2Function("strlen", StrLen(function)) {
+        checkUserDefinedFunctionRejected(cond, functionName)
+      }
+    }
+
+    withUserDefinedFunction("tmp_len" -> true, "tmp_sql_len" -> true, "sql_len" -> false) {
+      spark.udf.register("tmp_len", (s: String) => s.length)
+      checkUserDefinedFunctionRejected("tmp_len(name) < 10", "`tmp_len`")
+      sql("CREATE TEMPORARY FUNCTION tmp_sql_len(x STRING) RETURNS INT RETURN length(x)")
+      checkUserDefinedFunctionRejected("tmp_sql_len(name) < 10", "`tmp_sql_len`")
+      sql("CREATE FUNCTION sql_len(x STRING) RETURNS INT RETURN length(x)")
+      checkUserDefinedFunctionRejected("sql_len(name) < 10", "`spark_catalog`.`default`.`sql_len`")
+    }
+  }
+
+  test("SPARK-60777: Check constraint cannot call a V2 aggregate function") {
+    withV2Function("avg", new JavaAverage) {
+      // ALTER TABLE keeps failing with the error for an aggregate in a filter.
+      checkUserDefinedFunctionRejected(
+        s"fun_$catalog.ns.avg(CAST(id AS DOUBLE)) > 0", "`davg`", inAlter = false)
+    }
+  }
+
+  test("SPARK-60777: Existing check constraint calling a user-defined function still works") {
+    withUserDefinedFunction("tmp_len" -> true) {
+      spark.udf.register("tmp_len", (s: String) => s.length)
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, name STRING) $defaultUsing")
+        val check = Constraint.check("c1").predicateSql("tmp_len(name) < 10").build()
+        spark.sessionState.catalogManager.catalog(nonPartitionCatalog).asInstanceOf[TableCatalog]
+          .alterTable(Identifier.of(Array("ns"), "tbl"), TableChange.addConstraint(check, null))
+        sql(s"INSERT INTO $t VALUES (1, 'abc')")
+        checkError(
+          exception = intercept[SparkRuntimeException] {
+            sql(s"INSERT INTO $t VALUES (2, 'abcdefghijklmnop')")
+          },
+          condition = "CHECK_CONSTRAINT_VIOLATION",
+          sqlState = "23001",
+          parameters = Map(
+            "constraintName" -> "c1",
+            "expression" -> "tmp_len(name) < 10",
+            "values" -> " - name : abcdefghijklmnop"))
+        checkAnswer(spark.table(t).select("id"), Row(1))
+      }
+    }
+  }
+
+  test("SPARK-60777: Check constraint is not shadowed in the session of a write") {
+    def checkEnforced(t: String): Unit = {
+      // The settings of the write do shadow the built-in function outside of the constraint.
+      checkAnswer(sql("SELECT upper('x')"), Row("OK"))
+      checkError(
+        exception = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (1, 'x')")
+        },
+        condition = "CHECK_CONSTRAINT_VIOLATION",
+        sqlState = "23001",
+        parameters = Map(
+          "constraintName" -> "c1",
+          "expression" -> "UPPER(s) <> 'X'",
+          "values" -> " - s : x"))
+      checkAnswer(spark.table(t), Nil)
+    }
+
+    withV2Function("upper", StrLen(ConstantString)) {
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, s STRING) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK (UPPER(s) <> 'X')")
+        withSQLConf(SQLConf.PATH_ENABLED.key -> "true") {
+          sql(s"SET PATH = fun_$catalog.ns, system.builtin")
+          try checkEnforced(t) finally sql("SET PATH = DEFAULT_PATH")
+        }
+        spark.udf.register("upper", (_: String) => "OK")
+        try {
+          withSQLConf(SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "first") {
+            checkEnforced(t)
+          }
+        } finally {
+          sql("DROP TEMPORARY FUNCTION upper")
+        }
+      }
+    }
+  }
+
+  test("SPARK-60777: Check constraint calling built-in functions is enforced") {
+    Seq(
+      "UPPER(s) <> 'X'",
+      "exists(a, x -> upper(CAST(x AS STRING)) = '2')",
+      "struct(id AS x).x > 0",
+      "extract(YEAR FROM d) < 2100"
+    ).foreach { cond =>
+      withNamespaceAndTable("ns", "tbl", nonPartitionCatalog) { t =>
+        sql(s"CREATE TABLE $t (id INT, s STRING, a ARRAY<INT>, d DATE) $defaultUsing")
+        sql(s"ALTER TABLE $t ADD CONSTRAINT c1 CHECK ($cond)")
+        sql(s"INSERT INTO $t VALUES (1, 'a', array(2), DATE'2020-01-01')")
+        val error = intercept[SparkRuntimeException] {
+          sql(s"INSERT INTO $t VALUES (-1, 'x', array(-1), DATE'2999-01-01')")
+        }
+        assert(error.getCondition == "CHECK_CONSTRAINT_VIOLATION", cond)
+        checkAnswer(spark.table(t).select("id"), Row(1))
+      }
     }
   }
 

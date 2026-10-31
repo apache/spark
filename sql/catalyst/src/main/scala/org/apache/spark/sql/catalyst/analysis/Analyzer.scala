@@ -3110,6 +3110,9 @@ class Analyzer(
       // of this rule.
       case f: SQLTableFunction if hasSQLFunctionExpression(f.expressions) => f
 
+      // CheckAnalysis rejects a SQL function in the condition of a check constraint.
+      case a: AddCheckConstraint => a.mapChildren(rewrite)
+
       case o: LogicalPlan if o.resolved && hasSQLFunctionExpression(o.expressions) =>
         o.transformExpressionsWithPruning(_.containsPattern(SQL_FUNCTION_EXPRESSION)) {
           case f: SQLFunctionExpression =>

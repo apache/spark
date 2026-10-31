@@ -95,6 +95,7 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
               messageParameters = Map("checkCondition" -> check.condition)
             )
           }
+          check.failIfCallsUserDefinedFunction()
         case _ =>
       }
 
