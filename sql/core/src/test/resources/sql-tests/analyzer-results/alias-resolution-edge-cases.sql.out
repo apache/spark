@@ -77,6 +77,157 @@ org.apache.spark.sql.catalyst.ExtendedAnalysisException
 
 
 -- !query
+SELECT 1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c
+-- !query analysis
+Project [a#x, (a#x + 1) AS b#x, scalar-subquery#x [] AS c#x]
+:  +- Aggregate [max(rn#x) AS max(rn)#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Project [rn#x]
+:           +- Project [col1#x, rn#x, rn#x]
+:              +- Window [row_number() windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [col1#x ASC NULLS FIRST]
+:                 +- Project [col1#x]
+:                    +- LocalRelation [col1#x]
++- Project [1 AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT 1 AS a,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY col1) AS rn FROM VALUES (1), (2))) AS c,
+  c + a AS d
+-- !query analysis
+Project [a#x, c#x, (c#x + a#x) AS d#x]
++- Project [1 AS a#x, scalar-subquery#x [] AS c#x]
+   :  +- Aggregate [max(rn#x) AS max(rn)#x]
+   :     +- SubqueryAlias __auto_generated_subquery_name
+   :        +- Project [rn#x]
+   :           +- Project [col1#x, rn#x, rn#x]
+   :              +- Window [row_number() windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [col1#x ASC NULLS FIRST]
+   :                 +- Project [col1#x]
+   :                    +- LocalRelation [col1#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT col1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY c) AS rn FROM VALUES (1), (2) AS t(c)))
+    AS c
+FROM VALUES (1), (2) GROUP BY col1
+-- !query analysis
+Project [a#x, (a#x + 1) AS b#x, scalar-subquery#x [] AS c#x]
+:  +- Aggregate [max(rn#x) AS max(rn)#x]
+:     +- SubqueryAlias __auto_generated_subquery_name
+:        +- Project [rn#x]
+:           +- Project [c#x, rn#x, rn#x]
+:              +- Window [row_number() windowspecdefinition(c#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [c#x ASC NULLS FIRST]
+:                 +- Project [c#x]
+:                    +- SubqueryAlias t
+:                       +- LocalRelation [c#x]
++- Project [col1#x, col1#x AS a#x]
+   +- Aggregate [col1#x], [col1#x]
+      +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b, EXISTS (SELECT ROW_NUMBER() OVER (ORDER BY col1) FROM VALUES (1)) AS c
+-- !query analysis
+Project [a#x, (a#x + 1) AS b#x, exists#x [] AS c#x]
+:  +- Project [row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+:     +- Project [col1#x, row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+:        +- Window [row_number() windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [col1#x ASC NULLS FIRST]
+:           +- Project [col1#x]
+:              +- LocalRelation [col1#x]
++- Project [1 AS a#x]
+   +- OneRowRelation
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b,
+  b IN (SELECT ROW_NUMBER() OVER (ORDER BY col1) FROM VALUES (1), (2)) AS c
+-- !query analysis
+Project [a#x, b#x, b#x IN (list#x []) AS c#x]
+:  +- Project [row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+:     +- Project [col1#x, row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x, row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x]
+:        +- Window [row_number() windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS row_number() OVER (ORDER BY col1 ASC NULLS FIRST ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)#x], [col1#x ASC NULLS FIRST]
+:           +- Project [col1#x]
+:              +- LocalRelation [col1#x]
++- Project [a#x, (a#x + 1) AS b#x]
+   +- Project [1 AS a#x]
+      +- OneRowRelation
+
+
+-- !query
+SELECT col1 AS a, a + 1 AS b,
+  (SELECT MAX(rn) FROM (SELECT ROW_NUMBER() OVER (ORDER BY c) AS rn FROM VALUES (1), (2) AS t(c)))
+    AS c,
+  ROW_NUMBER() OVER (ORDER BY col1) AS d
+FROM VALUES (1), (2)
+-- !query analysis
+Project [a#x, b#x, c#x, d#x]
++- Project [a#x, b#x, c#x, col1#x, d#x, d#x]
+   +- Window [row_number() windowspecdefinition(col1#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS d#x], [col1#x ASC NULLS FIRST]
+      +- Project [a#x, (a#x + 1) AS b#x, scalar-subquery#x [] AS c#x, col1#x]
+         :  +- Aggregate [max(rn#x) AS max(rn)#x]
+         :     +- SubqueryAlias __auto_generated_subquery_name
+         :        +- Project [rn#x]
+         :           +- Project [c#x, rn#x, rn#x]
+         :              +- Window [row_number() windowspecdefinition(c#x ASC NULLS FIRST, specifiedwindowframe(RowFrame, unboundedpreceding$(), currentrow$())) AS rn#x], [c#x ASC NULLS FIRST]
+         :                 +- Project [c#x]
+         :                    +- SubqueryAlias t
+         :                       +- LocalRelation [c#x]
+         +- Project [col1#x, col1#x AS a#x]
+            +- LocalRelation [col1#x]
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b, MAX(RANK() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
+
+
+-- !query
+SELECT col1 AS a, a + 1 AS b, SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s
+FROM VALUES (1), (2) GROUP BY col1
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
+
+
+-- !query
+SELECT SUM(ROW_NUMBER() OVER (ORDER BY col1)) AS s FROM VALUES (1), (2)
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
+
+
+-- !query
+SELECT 1 AS a, a + 1 AS b,
+  (SELECT SUM(ROW_NUMBER() OVER (ORDER BY col1)) FROM VALUES (1), (2)) AS c
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "_LEGACY_ERROR_TEMP_1031"
+}
+
+
+-- !query
 DROP TABLE t1
 -- !query analysis
 DropTable false, false

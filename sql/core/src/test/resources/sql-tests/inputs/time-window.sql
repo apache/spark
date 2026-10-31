@@ -776,3 +776,96 @@ QUALIFY session_window(ts, '5 minutes').start IS NOT NULL;
 
 -- session_window_select_star_error
 SELECT * FROM ts_data GROUP BY a, session_window(ts, '5 minutes');
+
+-- window_group_by_select_alias
+-- GROUP BY referencing a SELECT-list alias must resolve even when the SELECT contains a
+-- time-windowing function; the window wrapper exposing the `window` attribute must not drop the
+-- group-by-alias map before GROUP BY is resolved.
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w;
+
+-- window_group_by_select_alias_ordinals
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY 1, 2;
+
+-- window_group_by_select_alias_window_only
+SELECT window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY w;
+
+-- sliding_window_group_by_select_alias
+SELECT grp AS k, window(ts, '10 minutes', '5 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+ORDER BY w;
+
+-- session_window_group_by_select_alias
+SELECT grp AS k, session_window(ts, '5 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w;
+
+-- window_group_by_select_alias_having_order_by
+SELECT grp AS k, window(ts, '10 minutes') AS w, COUNT(*) AS cnt
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY k, w
+HAVING cnt > 1
+ORDER BY k, w;
+
+-- window_with_window_function
+-- A time-windowing function next to a window function, in the SELECT list or only in the window
+-- specification: the `window` attribute must be part of the Window operator's input.
+SELECT grp, window(ts, '10 minutes') AS w,
+  row_number() OVER (PARTITION BY grp ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts);
+
+-- window_in_window_partition_by
+SELECT grp, row_number() OVER (PARTITION BY grp, window(ts, '10 minutes') ORDER BY ts DESC) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts);
+
+-- window_in_window_order_by
+SELECT grp, row_number() OVER (PARTITION BY grp ORDER BY window(ts, '10 minutes'), ts) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts);
+
+-- window_start_in_window_partition_by
+SELECT grp, row_number() OVER (PARTITION BY window(ts, '10 minutes').start ORDER BY ts) AS rn
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts);
+
+-- window_group_by_with_window_function
+SELECT window(ts, '10 minutes') AS w, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total
+FROM VALUES
+  ('g1', TIMESTAMP '2024-01-01 00:00:00'),
+  ('g1', TIMESTAMP '2024-01-01 00:05:00')
+AS t(grp, ts)
+GROUP BY window(ts, '10 minutes');

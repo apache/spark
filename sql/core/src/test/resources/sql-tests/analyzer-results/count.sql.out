@@ -229,3 +229,125 @@ org.apache.spark.sql.AnalysisException
     "tableName" : "`testData`"
   }
 }
+
+
+-- !query
+SELECT count(DISTINCT testData.*) FROM testData
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`testData`"
+  }
+}
+
+
+-- !query
+SELECT count(DISTINCT t.*) FROM testData t
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`t`"
+  }
+}
+
+
+-- !query
+SELECT count(DISTINCT TESTDATA.*) FROM testData
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`TESTDATA`"
+  }
+}
+
+
+-- !query
+SELECT a FROM testData GROUP BY a HAVING count(DISTINCT testData.*) > 0
+-- !query analysis
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_OR_REGEX",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "elem" : "'*'",
+    "prettyName" : "UnresolvedHaving"
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 57,
+    "stopIndex" : 66,
+    "fragment" : "testData.*"
+  } ]
+}
+
+
+-- !query
+SELECT count(testData.*) OVER () FROM testData
+-- !query analysis
+org.apache.spark.sql.AnalysisException
+{
+  "errorClass" : "INVALID_USAGE_OF_STAR_WITH_TABLE_IDENTIFIER_IN_COUNT",
+  "sqlState" : "42000",
+  "messageParameters" : {
+    "tableName" : "`testData`"
+  }
+}
+
+
+-- !query
+SELECT count(DISTINCT testData.*, a) FROM testData
+-- !query analysis
+Aggregate [count(distinct a#x, b#x, a#x) AS count(DISTINCT a, b, a)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=true
+-- !query analysis
+SetCommand (spark.sql.legacy.allowStarWithSingleTableIdentifierInCount,Some(true))
+
+
+-- !query
+SELECT count(DISTINCT testData.*) FROM testData
+-- !query analysis
+Aggregate [count(distinct a#x, b#x) AS count(DISTINCT a, b)#xL]
++- SubqueryAlias testdata
+   +- View (`testData`, [a#x, b#x])
+      +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+         +- Project [a#x, b#x]
+            +- SubqueryAlias testData
+               +- LocalRelation [a#x, b#x]
+
+
+-- !query
+SELECT count(DISTINCT t.*) FROM testData t
+-- !query analysis
+Aggregate [count(distinct a#x, b#x) AS count(DISTINCT a, b)#xL]
++- SubqueryAlias t
+   +- SubqueryAlias testdata
+      +- View (`testData`, [a#x, b#x])
+         +- Project [cast(a#x as int) AS a#x, cast(b#x as int) AS b#x]
+            +- Project [a#x, b#x]
+               +- SubqueryAlias testData
+                  +- LocalRelation [a#x, b#x]
+
+
+-- !query
+set spark.sql.legacy.allowStarWithSingleTableIdentifierInCount=false
+-- !query analysis
+SetCommand (spark.sql.legacy.allowStarWithSingleTableIdentifierInCount,Some(false))

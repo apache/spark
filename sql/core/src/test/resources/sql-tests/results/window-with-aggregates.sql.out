@@ -533,3 +533,239 @@ struct<bucket:double,parity:int,avg_col1:double,rank_in_bucket:int>
 2.0	0	10.0	1
 2.4	0	12.0	1
 3.0	1	15.0	1
+
+
+-- !query
+CREATE OR REPLACE TEMPORARY VIEW wwa_data AS SELECT * FROM VALUES
+(1, 10), (1, 20), (2, 30), (3, 40) AS wwa_data(col1, col2)
+-- !query schema
+struct<>
+-- !query output
+
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+ORDER BY col1
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	0.5000000000000000
+2	0.2500000000000000
+3	0.2500000000000000
+
+
+-- !query
+SELECT col1 AS a, count(*) AS cnt
+FROM wwa_data
+GROUP BY col1
+ORDER BY col1
+-- !query schema
+struct<a:int,cnt:bigint>
+-- !query output
+1	2
+2	1
+3	1
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+HAVING col1 > 0
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	0.5000000000000000
+2	0.2500000000000000
+3	0.2500000000000000
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY col1 > 0
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	0.5000000000000000
+2	0.2500000000000000
+3	0.2500000000000000
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY row_number() OVER (ORDER BY col1) = 1
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	0.5000000000000000
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY col1 > 0
+ORDER BY col1
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	0.5000000000000000
+2	0.2500000000000000
+3	0.2500000000000000
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+QUALIFY row_number() OVER (ORDER BY col1) = 1
+ORDER BY col1
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	0.5000000000000000
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt,
+  (COUNT(*) * 100.0 / SUM(COUNT(*)) OVER ()) AS pct,
+  GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY gid ASC, col1 ASC
+-- !query schema
+struct<col1:int,cnt:bigint,pct:decimal(38,14),gid:bigint>
+-- !query output
+1	2	25.00000000000000	0
+2	1	12.50000000000000	0
+3	1	12.50000000000000	0
+NULL	4	50.00000000000000	1
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt,
+  SUM(COUNT(*)) OVER () AS total,
+  GROUPING(col1) AS grp
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+ORDER BY grp ASC, col1 ASC
+-- !query schema
+struct<col1:int,cnt:bigint,total:bigint,grp:tinyint>
+-- !query output
+1	2	8	0
+2	1	8	0
+3	1	8	0
+NULL	4	8	1
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+ORDER BY a DESC
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+3	0.2500000000000000
+2	0.2500000000000000
+1	0.5000000000000000
+
+
+-- !query
+SELECT col1 AS col2, col2 AS col1, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1, col2
+ORDER BY col1 DESC, col2
+-- !query schema
+struct<col2:int,col1:int,ratio:decimal(38,16)>
+-- !query output
+3	40	0.2500000000000000
+2	30	0.2500000000000000
+1	20	0.2500000000000000
+1	10	0.2500000000000000
+
+
+-- !query
+SELECT col1 AS a, count(*) * 1.0 / sum(count(*)) OVER () AS ratio
+FROM wwa_data
+GROUP BY col1
+HAVING count(*) > 1
+-- !query schema
+struct<a:int,ratio:decimal(38,16)>
+-- !query output
+1	1.0000000000000000
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY ROLLUP(col1)
+ORDER BY gid, col1
+-- !query schema
+struct<col1:int,cnt:bigint,total:bigint,gid:bigint>
+-- !query output
+1	2	8	0
+2	1	8	0
+3	1	8	0
+NULL	4	8	1
+
+
+-- !query
+SELECT col1, col2, COUNT(*) AS cnt,
+  SUM(COUNT(*)) OVER (PARTITION BY GROUPING_ID(col1, col2)) AS s,
+  GROUPING_ID(col1, col2) AS gid
+FROM wwa_data
+GROUP BY CUBE(col1, col2)
+ORDER BY gid, col1, col2
+-- !query schema
+struct<col1:int,col2:int,cnt:bigint,s:bigint,gid:bigint>
+-- !query output
+1	10	1	4	0
+1	20	1	4	0
+2	30	1	4	0
+3	40	1	4	0
+1	NULL	2	4	1
+2	NULL	1	4	1
+3	NULL	1	4	1
+NULL	10	1	4	2
+NULL	20	1	4	2
+NULL	30	1	4	2
+NULL	40	1	4	2
+NULL	NULL	4	4	3
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING_ID() AS gid
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+HAVING GROUPING_ID() = 1
+-- !query schema
+struct<col1:int,cnt:bigint,total:bigint,gid:bigint>
+-- !query output
+NULL	4	4	1
+
+
+-- !query
+SELECT col1, COUNT(*) AS cnt, SUM(COUNT(*)) OVER () AS total, GROUPING(col1) AS grp
+FROM wwa_data
+GROUP BY GROUPING SETS ((col1), ())
+QUALIFY grp = 1
+-- !query schema
+struct<col1:int,cnt:bigint,total:bigint,grp:tinyint>
+-- !query output
+NULL	4	8	1
+
+
+-- !query
+DROP VIEW wwa_data
+-- !query schema
+struct<>
+-- !query output
+

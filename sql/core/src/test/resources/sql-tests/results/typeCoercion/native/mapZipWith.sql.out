@@ -276,3 +276,258 @@ FROM various_maps
 struct<m:map<float,struct<v1:int,v2:int>>>
 -- !query output
 {0.0:{"v1":1,"v2":1}}
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 0), map(CAST(2 AS FLOAT), 0), (k, v1, v2) -> k))
+-- !query schema
+struct<typeof(map_zip_with(map(1, 0), map(CAST(2 AS FLOAT), 0), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<double,double>
+
+
+-- !query
+SELECT map_zip_with(map(true, false), map(1, 0), (k, v1, v2) -> struct(k, v1, v2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"BOOLEAN\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_zip_with(map(true, false), map(1, 0), lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 82,
+    "fragment" : "map_zip_with(map(true, false), map(1, 0), (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
+
+
+-- !query
+SELECT map_zip_with(map(1, 0), map(DATE '2020-01-01', 0), (k, v1, v2) -> struct(k, v1, v2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"INT\"",
+    "rightType" : "\"DATE\"",
+    "sqlExpr" : "\"map_zip_with(map(1, 0), map(DATE '2020-01-01', 0), lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 91,
+    "fragment" : "map_zip_with(map(1, 0), map(DATE '2020-01-01', 0), (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 0), map(2L, 0), (k, v1, v2) -> k))
+-- !query schema
+struct<typeof(map_zip_with(map(1, 0), map(2, 0), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<bigint,bigint>
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 0), map(2.5, 0), (k, v1, v2) -> k))
+-- !query schema
+struct<typeof(map_zip_with(map(1, 0), map(2.5, 0), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<decimal(11,1),decimal(11,1)>
+
+
+-- !query
+SELECT typeof(map_zip_with(map(array(1), 0), map(array(2L), 0), (k, v1, v2) -> k))
+-- !query schema
+struct<typeof(map_zip_with(map(array(1), 0), map(array(2), 0), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<array<bigint>,array<bigint>>
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 'a'), map(2L, 1), (k, v1, v2) -> v1))
+-- !query schema
+struct<typeof(map_zip_with(map(1, a), map(2, 1), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<bigint,string>
+
+
+-- !query
+SELECT map_zip_with(map(1, 0), map(CAST(1 AS FLOAT), 1), (k, v1, v2) -> v1 + v2)
+-- !query schema
+struct<map_zip_with(map(1, 0), map(CAST(1 AS FLOAT), 1), lambdafunction((namedlambdavariable() + namedlambdavariable()), namedlambdavariable(), namedlambdavariable(), namedlambdavariable())):map<double,int>>
+-- !query output
+{1.0:1}
+
+
+-- !query
+SELECT map_zip_with(map(1, 0), map(true, false), (k, v1, v2) -> struct(k, v1, v2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"INT\"",
+    "rightType" : "\"BOOLEAN\"",
+    "sqlExpr" : "\"map_zip_with(map(1, 0), map(true, false), lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 82,
+    "fragment" : "map_zip_with(map(1, 0), map(true, false), (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
+
+
+-- !query
+SELECT map_zip_with(map(true, 0), map(TIMESTAMP '2020-01-01 00:00:00', 0), (k, v1, v2) -> k)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"BOOLEAN\"",
+    "rightType" : "\"TIMESTAMP\"",
+    "sqlExpr" : "\"map_zip_with(map(true, 0), map(TIMESTAMP '2020-01-01 00:00:00', 0), lambdafunction(k, k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 92,
+    "fragment" : "map_zip_with(map(true, 0), map(TIMESTAMP '2020-01-01 00:00:00', 0), (k, v1, v2) -> k)"
+  } ]
+}
+
+
+-- !query
+SELECT map_zip_with(map(array(1), 0), map(1, 0), (k, v1, v2) -> k)
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"ARRAY<INT>\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_zip_with(map(array(1), 0), map(1, 0), lambdafunction(k, k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 66,
+    "fragment" : "map_zip_with(map(array(1), 0), map(1, 0), (k, v1, v2) -> k)"
+  } ]
+}
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 0), map('2', 0), (k, v1, v2) -> k))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"INT\"",
+    "rightType" : "\"STRING\"",
+    "sqlExpr" : "\"map_zip_with(map(1, 0), map(2, 0), lambdafunction(k, k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 15,
+    "stopIndex" : 68,
+    "fragment" : "map_zip_with(map(1, 0), map('2', 0), (k, v1, v2) -> k)"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.ansi.enabled=false
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	false
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 0), map(CAST(2 AS FLOAT), 0), (k, v1, v2) -> k))
+-- !query schema
+struct<typeof(map_zip_with(map(1, 0), map(CAST(2 AS FLOAT), 0), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<float,float>
+
+
+-- !query
+SELECT typeof(map_zip_with(map(1, 0), map('2', 0), (k, v1, v2) -> k))
+-- !query schema
+struct<typeof(map_zip_with(map(1, 0), map(2, 0), lambdafunction(namedlambdavariable(), namedlambdavariable(), namedlambdavariable(), namedlambdavariable()))):string>
+-- !query output
+map<string,string>
+
+
+-- !query
+SELECT map_zip_with(map(true, false), map(1, 0), (k, v1, v2) -> struct(k, v1, v2))
+-- !query schema
+struct<>
+-- !query output
+org.apache.spark.sql.catalyst.ExtendedAnalysisException
+{
+  "errorClass" : "DATATYPE_MISMATCH.MAP_ZIP_WITH_DIFF_TYPES",
+  "sqlState" : "42K09",
+  "messageParameters" : {
+    "functionName" : "`map_zip_with`",
+    "leftType" : "\"BOOLEAN\"",
+    "rightType" : "\"INT\"",
+    "sqlExpr" : "\"map_zip_with(map(true, false), map(1, 0), lambdafunction(struct(k, v1, v2), k, v1, v2))\""
+  },
+  "queryContext" : [ {
+    "objectType" : "",
+    "objectName" : "",
+    "startIndex" : 8,
+    "stopIndex" : 82,
+    "fragment" : "map_zip_with(map(true, false), map(1, 0), (k, v1, v2) -> struct(k, v1, v2))"
+  } ]
+}
+
+
+-- !query
+SET spark.sql.ansi.enabled=true
+-- !query schema
+struct<key:string,value:string>
+-- !query output
+spark.sql.ansi.enabled	true

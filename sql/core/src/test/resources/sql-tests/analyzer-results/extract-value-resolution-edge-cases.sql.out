@@ -34,6 +34,109 @@ Project [a#x]
 
 
 -- !query
+CREATE TABLE t2(col1 ARRAY<INT>, col2 INT)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t2`, false
+
+
+-- !query
+SELECT col1[get(filter(col1,k -> k == col2), col2)] FROM t2
+-- !query analysis
+Project [col1#x[get(filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false)), col2#x)] AS col1[get(filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), col2)]#x]
++- SubqueryAlias spark_catalog.default.t2
+   +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT filter(col1, k -> k == col2)[0] FROM t2
+-- !query analysis
+Project [filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false))[0] AS filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable()))[0]#x]
++- SubqueryAlias spark_catalog.default.t2
+   +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col1[element_at(filter(col1, k -> k > col2), 1)] FROM t2
+-- !query analysis
+Project [col1#x[element_at(filter(col1#x, lambdafunction((lambda k#x > col2#x), lambda k#x, false)), 1, None, true)] AS col1[element_at(filter(col1, lambdafunction((namedlambdavariable() > col2), namedlambdavariable())), 1)]#x]
++- SubqueryAlias spark_catalog.default.t2
+   +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col1[col1[get(filter(col1, k -> k == col2), col2)]] FROM t2
+-- !query analysis
+Project [col1#x[col1#x[get(filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false)), col2#x)]] AS col1[col1[get(filter(col1, lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), col2)]]#x]
++- SubqueryAlias spark_catalog.default.t2
+   +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col2 FROM t2 WHERE col1[get(filter(col1, k -> k == col2), col2)] > 0
+-- !query analysis
+Project [col2#x]
++- Filter (col1#x[get(filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false)), col2#x)] > 0)
+   +- SubqueryAlias spark_catalog.default.t2
+      +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col2 FROM t2 ORDER BY col1[get(filter(col1, k -> k == col2), col2)]
+-- !query analysis
+Project [col2#x]
++- Sort [col1#x[get(filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false)), col2#x)] ASC NULLS FIRST], true
+   +- Project [col2#x, col1#x]
+      +- SubqueryAlias spark_catalog.default.t2
+         +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT col2 FROM t2 GROUP BY col1, col2 HAVING col1[get(filter(col1, k -> k == col2), col2)] > 0
+-- !query analysis
+Project [col2#x]
++- Filter (col1#x[get(filter(col1#x, lambdafunction((lambda k#x = col2#x), lambda k#x, false)), col2#x)] > 0)
+   +- Aggregate [col1#x, col2#x], [col2#x, col1#x]
+      +- SubqueryAlias spark_catalog.default.t2
+         +- Relation spark_catalog.default.t2[col1#x,col2#x] parquet
+
+
+-- !query
+CREATE TABLE t3(col1 MAP<INT, INT>, col2 INT)
+-- !query analysis
+CreateDataSourceTableCommand `spark_catalog`.`default`.`t3`, false
+
+
+-- !query
+SELECT col1[element_at(filter(map_keys(col1), k -> k == col2), 1)] FROM t3
+-- !query analysis
+Project [col1#x[element_at(filter(map_keys(col1#x), lambdafunction((lambda k#x = col2#x), lambda k#x, false)), 1, None, true)] AS col1[element_at(filter(map_keys(col1), lambdafunction((namedlambdavariable() = col2), namedlambdavariable())), 1)]#x]
++- SubqueryAlias spark_catalog.default.t3
+   +- Relation spark_catalog.default.t3[col1#x,col2#x] parquet
+
+
+-- !query
+SELECT transform(map_values(col1), v -> v + col2)[0] FROM t3
+-- !query analysis
+Project [transform(map_values(col1#x), lambdafunction((lambda v#x + col2#x), lambda v#x, false))[0] AS transform(map_values(col1), lambdafunction((namedlambdavariable() + col2), namedlambdavariable()))[0]#x]
++- SubqueryAlias spark_catalog.default.t3
+   +- Relation spark_catalog.default.t3[col1#x,col2#x] parquet
+
+
+-- !query
+DROP TABLE t3
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t3
+
+
+-- !query
+DROP TABLE t2
+-- !query analysis
+DropTable false, false
++- ResolvedIdentifier V2SessionCatalog(spark_catalog), default.t2
+
+
+-- !query
 DROP TABLE t1
 -- !query analysis
 DropTable false, false
