@@ -28,7 +28,7 @@ import io.fabric8.kubernetes.client.dsl.base.PatchContext
 import org.jmock.lib.concurrent.DeterministicScheduler
 import org.mockito.{ArgumentCaptor, Mock, MockitoAnnotations}
 import org.mockito.ArgumentMatchers.{any, anyBoolean, eq => mockitoEq}
-import org.mockito.Mockito.{atLeastOnce, doAnswer, inOrder, mock, never, spy, times, verify, when}
+import org.mockito.Mockito.{atLeastOnce, inOrder, mock, never, spy, times, verify, when}
 import org.scalatest.BeforeAndAfter
 
 import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkException, SparkFunSuite}
@@ -252,28 +252,6 @@ class KubernetesClusterSchedulerBackendSuite extends SparkFunSuite with BeforeAn
         verify(podAllocator, never()).stop(any())
       }
       order.verify(kubernetesClient).close()
-    }
-  }
-
-  test("Interrupted allocation shutdown still cleans resources and restores interruption") {
-    doAnswer((_: org.mockito.invocation.InvocationOnMock) => {
-      Thread.currentThread().interrupt()
-      // Model an interrupted awaitTermination, which clears the flag before throwing.
-      assert(Thread.interrupted())
-      throw new InterruptedException("allocation shutdown interrupted")
-    }).when(podAllocator).stopAllocation()
-    doAnswer((_: org.mockito.invocation.InvocationOnMock) => {
-      assert(!Thread.currentThread().isInterrupted)
-      null
-    }).when(eventQueue).stop()
-    try {
-      schedulerBackendUnderTest.stop()
-      verify(eventQueue).stop()
-      verify(podAllocator).stop(TEST_SPARK_APP_ID)
-      verify(kubernetesClient).close()
-      assert(Thread.currentThread().isInterrupted)
-    } finally {
-      Thread.interrupted()
     }
   }
 

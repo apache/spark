@@ -20,9 +20,8 @@ import java.net.InetSocketAddress
 import java.nio.charset.StandardCharsets.UTF_8
 import java.time.Instant
 import java.time.temporal.ChronoUnit.MILLIS
-import java.util.Collection
-import java.util.concurrent.{Callable, CompletableFuture, CountDownLatch, LinkedBlockingQueue, ThreadPoolExecutor, TimeoutException, TimeUnit}
-import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+import java.util.concurrent.{Callable, CompletableFuture, CountDownLatch, ThreadPoolExecutor, TimeoutException, TimeUnit}
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger, AtomicReference}
 
 import scala.collection.mutable
 import scala.concurrent.duration.Duration
@@ -1117,13 +1116,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
   test("Parallel allocation configuration is opt-in and requires positive concurrency") {
     assert(!conf.get(KUBERNETES_ALLOCATION_PARALLEL_ENABLED))
     assert(conf.get(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY) == 5)
-    assert(conf.get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT) == 20000L)
-    assert(conf.clone.set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "0s")
-      .get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT) == 0L)
-    intercept[IllegalArgumentException] {
-      conf.clone.set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "-1s")
-        .get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT)
-    }
     Seq(0, -1).foreach { concurrency =>
       intercept[IllegalArgumentException] {
         conf.clone.set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, concurrency)
@@ -1136,7 +1128,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     val serialConf = conf.clone
       .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, false)
       .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY.key, "invalid")
-      .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "invalid")
     snapshotsStore = new DeterministicExecutorPodsSnapshotsStore()
     podsAllocatorUnderTest = new ExecutorPodsAllocator(serialConf, secMgr, executorBuilder,
       kubernetesClient, snapshotsStore, waitForExecutorPodsClock)
@@ -1584,8 +1575,8 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         eventually(timeout(Span(10, Seconds))) {
           assert(pool.isShutdown)
         }
-        assert(!stopReturned.await(200, TimeUnit.MILLISECONDS),
-          "Stopping returned while a Pod creation request was still in flight")
+        assert(stopReturned.await(10, TimeUnit.SECONDS), "The stop hook must not block")
+        assert(!allocation.isDone, "The allocation callback must still wait for the response")
         response.complete(podWithAttachedContainerForId(1))
         ThreadUtils.awaitResult(stopping, Duration(10, TimeUnit.SECONDS))
         ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
@@ -1595,7 +1586,7 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         val counter = PrivateMethod[AtomicInteger](Symbol("PVC_COUNTER"))()
         assert(podsAllocatorUnderTest.invokePrivate(counter).get() ==
           (if (waitingForPVC) 1 else 0))
-        assert(pool.isTerminated)
+        assert(pool.awaitTermination(10, TimeUnit.SECONDS))
       } finally {
         response.complete(podWithAttachedContainerForId(1))
         caller.shutdownNow()
@@ -1604,107 +1595,58 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
     }
   }
 
-  test("Stopping wakes a worker whose request finishes during queue draining") {
-    startParallelAllocator(conf.clone
-      .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
-      .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "1s"))
-    val started = new CountDownLatch(1)
-    val response = new CountDownLatch(1)
-    val taking = new CountDownLatch(1)
-    val drained = new CountDownLatch(1)
-    val queue = new LinkedBlockingQueue[Runnable]() {
-      override def take(): Runnable = {
-        // getTask has already observed SHUTDOWN with a nonempty queue. Delay the actual
-        // take until drainTo empties it, so this worker needs another shutdown signal.
-        taking.countDown()
-        assert(drained.await(10, TimeUnit.SECONDS))
-        super.take()
-      }
-
-      override def drainTo(tasks: Collection[_ >: Runnable]): Int = {
-        response.countDown()
-        assert(taking.await(10, TimeUnit.SECONDS))
-        val count = super.drainTo(tasks)
-        drained.countDown()
-        count
-      }
-    }
-    val pool = new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, queue,
-      ThreadUtils.namedThreadFactory("test-draining-pod-creator"))
-    // Install the controlled queue without adding a production hook for this interleaving.
-    val poolField = classOf[ExecutorPodsAllocator].getDeclaredField("podCreationThreadPool")
-    poolField.setAccessible(true)
-    poolField.set(podsAllocatorUnderTest, Some(pool))
-    val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-draining-allocation")
-    mockPodCreation { pod =>
-      started.countDown()
-      assert(response.await(10, TimeUnit.SECONDS))
-      pod
-    }
-    try {
-      val allocation = caller.submit(new Callable[Unit] {
-        override def call(): Unit = {
-          podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 2))
-        }
-      })
-      assert(started.await(10, TimeUnit.SECONDS))
-      eventually(timeout(Span(10, Seconds))) {
-        assert(queue.size() == 1)
-      }
-      podsAllocatorUnderTest.stopAllocation()
-      ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
-      assert(pool.isTerminated, "An idle worker was left blocked after the queue was drained")
-      verify(podResource, times(1)).create()
-      verify(podResource, times(1)).delete()
-    } finally {
-      response.countDown()
-      drained.countDown()
-      pool.shutdownNow()
-      assert(pool.awaitTermination(10, TimeUnit.SECONDS))
-      caller.shutdownNow()
-    }
-  }
-
-  Seq("0s", "1s").foreach { shutdownTimeout =>
-    test(s"Allocation shutdown uses its own timeout and is idempotent: $shutdownTimeout") {
-      startParallelAllocator(conf.clone
-        .set(KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD.key, "30s")
-        .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, shutdownTimeout))
-      val caller = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-grace-period")
-      val stopper = ThreadUtils.newDaemonSingleThreadExecutor("test-allocation-stop-again")
+  Seq(1L, 2L).foreach { gracePeriod =>
+    test(s"Subscriber shutdown bounds creation waiting without interrupting API: $gracePeriod") {
+      val reviewConf = conf.clone
+        .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, true)
+        .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
+        .set(KUBERNETES_EXECUTOR_SNAPSHOTS_SUBSCRIBERS_GRACE_PERIOD, gracePeriod)
+      val subscribers = ThreadUtils.newDaemonSingleThreadScheduledExecutor("test-pod-subscriber")
+      val store = new ExecutorPodsSnapshotsStoreImpl(subscribers, waitForExecutorPodsClock,
+        reviewConf)
       val started = new CountDownLatch(1)
       val response = new CompletableFuture[Pod]()
+      val interrupted = new AtomicBoolean(false)
       mockPodCreation { _ =>
         started.countDown()
-        response.get()
+        try {
+          response.get()
+        } catch {
+          case e: InterruptedException =>
+            interrupted.set(true)
+            throw e
+        }
       }
+      podsAllocatorUnderTest = new ExecutorPodsAllocator(reviewConf, secMgr, executorBuilder,
+        kubernetesClient, store, waitForExecutorPodsClock)
+      podsAllocatorUnderTest.setExecutorPodsLifecycleManager(lifecycleManager)
+      val appender = new LogAppender("allocation shutdown")
       try {
-        val allocation = caller.submit(new Callable[Unit] {
-          override def call(): Unit = {
-            podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 1))
-          }
-        })
+        podsAllocatorUnderTest.start(TEST_SPARK_APP_ID, schedulerBackend)
+        podsAllocatorUnderTest.setTotalExpectedExecutors(Map(defaultProfile -> 4))
         assert(started.await(10, TimeUnit.SECONDS))
-        val firstStop = stopper.submit(new Callable[Unit] {
-          override def call(): Unit = podsAllocatorUnderTest.stopAllocation()
-        })
-        ThreadUtils.awaitResult(firstStop, Duration(5, TimeUnit.SECONDS))
+        withLogAppender(appender) {
+          podsAllocatorUnderTest.stopAllocation()
+          podsAllocatorUnderTest.stopAllocation()
+          store.stop()
+          assert(subscribers.awaitTermination(10, TimeUnit.SECONDS))
+        }
         assert(!response.isDone)
-        ThreadUtils.awaitResult(allocation, Duration(2, TimeUnit.SECONDS))
-        val secondStop = stopper.submit(new Callable[Unit] {
-          override def call(): Unit = podsAllocatorUnderTest.stopAllocation()
-        })
-        ThreadUtils.awaitResult(secondStop, Duration(200, TimeUnit.MILLISECONDS))
+        assert(!interrupted.get(), "Subscriber shutdown interrupted a worker API request")
+        assert(appender.loggingEvents.exists(_.getMessage.getFormattedMessage
+          .contains("late API responses may leave resources behind")))
         response.complete(podWithAttachedContainerForId(1))
         val poolAccessor = PrivateMethod[Option[ThreadPoolExecutor]](
           Symbol("podCreationThreadPool"))()
         assert(podsAllocatorUnderTest.invokePrivate(poolAccessor).get
           .awaitTermination(10, TimeUnit.SECONDS))
+        verify(podResource, times(1)).create()
         verify(podResource, times(1)).delete()
+        verify(lifecycleManager, never()).registerExecutorFailure()
       } finally {
         response.complete(podWithAttachedContainerForId(1))
-        caller.shutdownNow()
-        stopper.shutdownNow()
+        podsAllocatorUnderTest.stopAllocation()
+        subscribers.shutdownNow()
       }
     }
   }
@@ -1774,7 +1716,6 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
           .remove(KUBERNETES_DRIVER_POD_NAME.key)
           .set(KUBERNETES_ALLOCATION_PARALLEL_ENABLED, true)
           .set(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY, 1)
-          .set(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT.key, "10s")
           .set(KUBERNETES_DELETE_EXECUTORS, deleteExecutors)
         when(executorBuilder.buildFromFeatures(any(classOf[KubernetesExecutorConf]),
           meq(client), any(classOf[ResourceProfile]))).thenAnswer(executorPodAnswer())
@@ -1798,12 +1739,13 @@ class ExecutorPodsAllocatorSuite extends SparkFunSuite with BeforeAndAfter {
         eventually(timeout(Span(10, Seconds))) {
           assert(pool.isShutdown)
         }
-        assert(!stopping.isDone)
+        ThreadUtils.awaitResult(stopping, Duration(10, TimeUnit.SECONDS))
+        assert(!allocation.isDone)
         assert(created.get() != null, "The API server has already created the Pod")
         releaseResponse.countDown()
         ThreadUtils.awaitResult(stopping, Duration(10, TimeUnit.SECONDS))
         ThreadUtils.awaitResult(allocation, Duration(10, TimeUnit.SECONDS))
-        assert(pool.isTerminated)
+        assert(pool.awaitTermination(10, TimeUnit.SECONDS))
         assert(creates.get() == 1, "Queued requests must not reach the API server")
         assert(deletes.get() == (if (deleteExecutors) 1 else 0))
         assert((created.get() == null) == deleteExecutors)

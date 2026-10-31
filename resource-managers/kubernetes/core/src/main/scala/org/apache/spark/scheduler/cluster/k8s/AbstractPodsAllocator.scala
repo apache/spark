@@ -88,9 +88,10 @@ abstract class AbstractPodsAllocator {
   def start(applicationId: String, schedulerBackend: KubernetesClusterSchedulerBackend): Unit
 
   /**
-   * Stop allocating executors before application resource cleanup, including when pods are
-   * retained.
-   * Implementations must respect the pod retention setting when handling in-flight requests.
+   * Optional non-blocking hook called before snapshot subscribers and application resources
+   * are stopped, including when pods are retained. The direct allocator uses this hook only
+   * in parallel mode to skip queued creation requests without interrupting active API calls.
+   * The default implementation does nothing.
    *
    * @since 4.4.0
    */

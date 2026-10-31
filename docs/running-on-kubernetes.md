@@ -1029,24 +1029,11 @@ See the [configuration page](configuration.html) for information on Spark config
     size. A value of 1 uses one worker. When parallel allocation is disabled, this setting has no
     effect on pod creation. The allocator waits for all requests in a batch before processing the
     next snapshot batch, so a slow request can still delay further allocation.
-  </td>
-  <td>4.4.0</td>
-</tr>
-<tr>
-  <td><code>spark.kubernetes.allocation.shutdownTimeout</code></td>
-  <td><code>20s</code></td>
-  <td>
-    Only applies when <code>spark.kubernetes.allocation.pods.allocator=direct</code>.
-    Maximum time to wait for active executor pod creation tasks during shutdown when parallel
-    allocation is enabled. Queued tasks are cancelled without interrupting active requests.
-    Zero skips the wait; negative values are not allowed. This setting does not control API
-    request timeouts during normal allocation and is ignored when parallel allocation is disabled.
-    After the timeout, snapshot subscriber shutdown and application cleanup proceed. This wait
-    is separate from the snapshot subscriber shutdown wait; their durations may accumulate and
-    should fit within the overall application shutdown budget.
-    As with serial creation, closing the client cannot cancel requests already accepted by the
-    API server. Owner references allow Kubernetes garbage collection when the owner is deleted;
-    application shutdown alone does not guarantee that all late-created resources are removed.
+    At shutdown, queued requests are skipped without interrupting active API calls. The existing
+    <code>spark.kubernetes.executorSnapshotsSubscribersShutdownGracePeriod</code> bounds the wait
+    for the allocation callback, including its in-flight creation requests. After that grace
+    period, application cleanup proceeds. Late API responses may still require owner-reference
+    garbage collection or external cleanup.
   </td>
   <td>4.4.0</td>
 </tr>

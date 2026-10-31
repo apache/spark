@@ -17,8 +17,7 @@
 package org.apache.spark.scheduler.cluster.k8s
 
 import java.time.Instant
-import java.util.ArrayList
-import java.util.concurrent.{Callable, ConcurrentHashMap, Future, RejectedExecutionException, TimeoutException, TimeUnit}
+import java.util.concurrent.{Callable, ConcurrentHashMap, Future, RejectedExecutionException, TimeUnit}
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicInteger}
 
 import scala.collection.mutable
@@ -74,12 +73,6 @@ class ExecutorPodsAllocator(
   protected val podAllocationParallelEnabled = conf.get(KUBERNETES_ALLOCATION_PARALLEL_ENABLED)
 
   protected lazy val podAllocationConcurrency = conf.get(KUBERNETES_ALLOCATION_BATCH_CONCURRENCY)
-
-  private val podAllocationShutdownTimeout = if (podAllocationParallelEnabled) {
-    conf.get(KUBERNETES_ALLOCATION_SHUTDOWN_TIMEOUT)
-  } else {
-    0L
-  }
 
   // A fixed pool starts threads on demand. Serial allocation does not need a pool.
   private val podCreationThreadPool = if (podAllocationParallelEnabled) {
@@ -720,20 +713,19 @@ class ExecutorPodsAllocator(
 
     var succeeded = 0
     futures.foreach { case (executorId, future) =>
-      if (!stopped) {
-        try {
-          awaitPodCreation(future).foreach { timestamp =>
-            if (!stopped) {
-              newlyCreatedExecutors(executorId) = (resourceProfileId, timestamp)
-              succeeded += 1
-            }
+      try {
+        awaitPodCreation(future).foreach { timestamp =>
+          if (!stopped) {
+            newlyCreatedExecutors(executorId) = (resourceProfileId, timestamp)
+            succeeded += 1
           }
-        } catch {
-          case NonFatal(e) =>
-            val failureCount = registerPodCreationFailure()
-            logError(log"Failed to create executor pod ${MDC(LogKeys.EXECUTOR_ID, executorId)}. " +
-              log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
         }
+      } catch {
+        case NonFatal(e) if !stopped =>
+          val failureCount = registerPodCreationFailure()
+          logError(log"Failed to create executor pod ${MDC(LogKeys.EXECUTOR_ID, executorId)}. " +
+            log"Total failures: ${MDC(LogKeys.TOTAL, failureCount)}", e)
+        case NonFatal(_) => // Ignore failures during shutdown.
       }
     }
     logDebug(log"Parallel pod allocation: submitted=${MDC(LogKeys.COUNT, futures.size)}, " +
@@ -743,17 +735,16 @@ class ExecutorPodsAllocator(
   }
 
   private def awaitPodCreation(future: Future[Option[Long]]): Option[Long] = {
-    // Keep waiting for live requests during normal allocation, so late successes stay tracked.
-    // At shutdown the worker owns cleanup; let the snapshot callback exit even if the API request
-    // outlives the grace period, rather than blocking snapshot-store shutdown for another period.
-    while (!stopped) {
-      try {
-        return ThreadUtils.awaitResult(future, Duration(1, TimeUnit.SECONDS))
-      } catch {
-        case _: TimeoutException =>
-      }
+    try {
+      ThreadUtils.awaitResult(future, Duration.Inf)
+    } catch {
+      case e: InterruptedException =>
+        if (stopped) {
+          logWarning("Interrupted while waiting for executor pod creation during shutdown. " +
+            "Application cleanup will proceed; late API responses may leave resources behind.")
+        }
+        throw e
     }
-    None
   }
 
   protected def replacePVCsIfNeeded(
@@ -810,30 +801,12 @@ class ExecutorPodsAllocator(
     }
   }
 
-  override def stopAllocation(): Unit = synchronized {
-    if (!podAllocationParallelEnabled || stopped) return
+  override def stopAllocation(): Unit = {
+    if (!podAllocationParallelEnabled) return
     stopped = true
-    podCreationThreadPool.foreach { pool =>
-      // Do not interrupt an in-flight create: Fabric8 stops waiting for the response on interrupt,
-      // but the API server may still create the resource. Let workers observe the result and clean
-      // up before the backend deletes PVCs and closes the client. Queued tasks need not run.
-      pool.shutdown()
-      val queuedTasks = new ArrayList[Runnable]()
-      pool.getQueue.drainTo(queuedTasks)
-      queuedTasks.asScala.foreach {
-        case future: Future[_] => future.cancel(false)
-        case _ =>
-      }
-      // A worker may observe a nonempty queue after shutdown, then block in take() after
-      // drainTo empties it. Signal idle workers again without interrupting active API calls.
-      pool.shutdown()
-      val timeout = podAllocationShutdownTimeout
-      if (!pool.awaitTermination(timeout, TimeUnit.MILLISECONDS)) {
-        logWarning(log"Pod creation requests did not finish within " +
-          log"${MDC(LogKeys.TIMEOUT, timeout)} ms of shutdown. Application cleanup will " +
-          log"proceed; late API responses may leave resources behind.")
-      }
-    }
+    // Queued tasks observe stopped and skip the API. Do not interrupt active requests:
+    // the snapshot callback waits for their results within the subscriber shutdown grace period.
+    podCreationThreadPool.foreach(_.shutdown())
   }
 
   override def stop(applicationId: String): Unit = {
