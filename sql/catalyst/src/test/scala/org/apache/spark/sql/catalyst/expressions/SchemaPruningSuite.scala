@@ -19,9 +19,10 @@ package org.apache.spark.sql.catalyst.expressions
 
 import java.util.concurrent.atomic.AtomicReference
 
-import org.apache.spark.SparkFunSuite
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkFunSuite, SparkRuntimeException}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.plans.SQLHelper
+import org.apache.spark.sql.catalyst.trees.{CurrentOrigin, Origin}
 import org.apache.spark.sql.catalyst.util.{ArrayData, GenericArrayData}
 import org.apache.spark.sql.internal.SQLConf.CASE_SENSITIVE
 import org.apache.spark.sql.types._
@@ -146,6 +147,186 @@ class SchemaPruningSuite extends SparkFunSuite with SQLHelper {
     val schema = StructType(Seq(field))
     val prunedSchema = SchemaPruning.pruneSchema(schema, rootFields)
     assert(prunedSchema.head.metadata.getString("foo") == "bar")
+  }
+
+  test("dynamic selector dependencies remain required beneath null checks") {
+    val valueType = StructType.fromDDL("payload string, id int")
+    val inputType = StructType(Seq(
+      StructField("unused", StringType),
+      StructField("key", StringType),
+      StructField("index", IntegerType),
+      StructField("m", MapType(StringType, valueType)),
+      StructField("items", ArrayType(valueType))))
+    val input = AttributeReference("input", inputType)()
+    val key = GetStructField(input, 1, Some("key"))
+    val index = GetStructField(input, 2, Some("index"))
+    val map = GetStructField(input, 3, Some("m"))
+    val items = GetStructField(input, 4, Some("items"))
+    val accesses = Seq(
+      GetMapValue(map, key) -> GetMapValue(map, Literal("key")),
+      ElementAt(map, key) -> ElementAt(map, Literal("key")),
+      GetArrayItem(items, index) -> GetArrayItem(items, Literal(0)),
+      ElementAt(items, index) -> ElementAt(items, Literal(1)))
+
+    for {
+      (access, constantAccess) <- accesses
+      predicate <- Seq(IsNull(access), IsNotNull(access))
+    } {
+      val id = GetStructField(constantAccess, 1, Some("id"))
+      val roots = SchemaPruning.identifyRootFields(Seq(Alias(id, "id")()), Seq(predicate))
+      val schema = SchemaPruning.pruneSchema(
+        StructType(Seq(StructField("input", inputType))), roots)
+      val expected = if (access.left.dataType.isInstanceOf[MapType]) {
+        "input struct<key:string,m:map<string,struct<id:int>>>"
+      } else {
+        "input struct<index:int,items:array<struct<id:int>>>"
+      }
+      assert(schema === StructType.fromDDL(expected))
+      val projection = ProjectionOverSchema(schema, AttributeSet(Seq(input)))
+      val projected = id.transformDown { case projection(expression) => expression }
+      assert(projected.dataType == IntegerType)
+      assert(projected.asInstanceOf[GetStructField].ordinal == 0)
+    }
+  }
+
+  test("map lookups under null checks retain the full stored key for comparison") {
+    val keyType = StructType.fromDDL("a int, b int")
+    val valueType = StructType.fromDDL("unused string, small int")
+    val inputType = StructType(Seq(
+      StructField("unused", IntegerType),
+      StructField("m", MapType(keyType, valueType))))
+    val input = AttributeReference("input", inputType)()
+    val key = AttributeReference("key", keyType)()
+    val map = GetStructField(input, 1, Some("m"))
+    val firstKey = GetArrayItem(MapKeys(map), Literal(0))
+    val project = Alias(GetStructField(firstKey, 0, Some("a")), "a")()
+    val source = StructType(Seq(StructField("input", inputType), StructField("key", keyType)))
+    val fullMap = StructType.fromDDL(
+      "m map<struct<a:int,b:int>,struct<unused:string,small:int>>")
+    val narrowMap = StructType.fromDDL("m map<struct<a:int,b:int>,struct<small:int>>")
+
+    for {
+      selector <- Seq(key, Literal.create(InternalRow(1, 2), keyType))
+      lookup <- Seq(GetMapValue(map, selector), ElementAt(map, selector))
+      predicate <- Seq(IsNull(lookup), IsNotNull(lookup))
+    } {
+      val roots = SchemaPruning.identifyRootFields(Seq(project), Seq(predicate))
+      assert(SchemaPruning.pruneSchema(source, roots)("input").dataType === fullMap)
+      val valueProject = Alias(GetStructField(lookup, 1, Some("small")), "small")()
+      val valueRoots = SchemaPruning.identifyRootFields(Seq(valueProject), Seq(predicate))
+      assert(SchemaPruning.pruneSchema(source, valueRoots)("input").dataType === narrowMap)
+    }
+  }
+
+  test("a map lookup null check preserves only the keys it compares") {
+    val keyType = StructType.fromDDL("a int, b int")
+    val valueType = StructType.fromDDL("payload string, inner map<struct<id:int,blob:string>,int>")
+    val mapType = MapType(keyType, valueType)
+    val inputType = StructType(Seq(StructField("m", mapType)))
+    val input = AttributeReference("s", inputType)()
+    val map = GetStructField(input, 0)
+    val lookup = AttributeReference("k", keyType)()
+    val firstValue = GetArrayItem(MapValues(map), Literal(0))
+    val inner = GetStructField(firstValue, 1)
+    val firstInnerKey = GetArrayItem(MapKeys(inner), Literal(0))
+    val id = Alias(GetStructField(firstInnerKey, 0), "id")()
+    val source = StructType(Seq(StructField("s", inputType)))
+
+    for (outerLookup <- Seq(GetMapValue(map, lookup), ElementAt(map, lookup))) {
+      val outerRoots = SchemaPruning.identifyRootFields(Seq(id), Seq(IsNotNull(outerLookup)))
+      val narrow = StructType.fromDDL(
+        "m map<struct<a:int,b:int>,struct<inner:map<struct<id:int>,int>>>")
+      assert(SchemaPruning.pruneSchema(source, outerRoots)("s").dataType === narrow)
+
+      val innerKey = AttributeReference("ik", inner.dataType.asInstanceOf[MapType].keyType)()
+      val innerLookup = GetMapValue(GetStructField(outerLookup, 1), innerKey)
+      val bothRoots = SchemaPruning.identifyRootFields(Seq(id), Seq(IsNull(innerLookup)))
+      val completeKeys = StructType.fromDDL(
+        "m map<struct<a:int,b:int>,struct<inner:map<struct<id:int,blob:string>,int>>>")
+      assert(SchemaPruning.pruneSchema(source, bothRoots)("s").dataType === completeKeys)
+    }
+  }
+
+  test("each lookup in a chain keeps its complete array-of-struct key") {
+    val keyType = ArrayType(StructType.fromDDL("a int, b int"))
+    val maps = MapType(keyType, MapType(keyType, IntegerType))
+    val inputType = StructType(Seq(StructField("maps", maps)))
+    val input = AttributeReference("s", inputType)()
+    val lookup = AttributeReference("k", keyType)()
+    val outer = GetStructField(input, 0)
+    val inner = GetArrayItem(MapValues(outer), Literal(0))
+    val predicate = IsNull(ElementAt(GetMapValue(outer, lookup), lookup))
+    val source = StructType(Seq(StructField("s", inputType)))
+
+    // In either projection one key is complete and the other is missing b.
+    for (map <- Seq(outer, inner)) {
+      val firstKey = GetArrayItem(MapKeys(map), Literal(0))
+      val field = GetStructField(GetArrayItem(firstKey, Literal(0)), 0)
+      val roots = SchemaPruning.identifyRootFields(Seq(Alias(field, "a")()), Seq(predicate))
+      assert(SchemaPruning.pruneSchema(source, roots) === source)
+    }
+  }
+
+  test("collect a nested dynamic selector once when an array filter needs the whole element") {
+    val elementType = StructType.fromDDL("p int, q int")
+    val outerType = StructType.fromDDL("unused int, nested array<struct<p:int,q:int>>")
+    val items = AttributeReference("items", ArrayType(outerType))()
+    val index = AttributeReference("index", IntegerType)()
+    val selector = (1 to 8).foldLeft[Expression](index) { (indexExpr, _) =>
+      val nested = GetStructField(GetArrayItem(items, indexExpr), 1, Some("nested"))
+      val element = NamedLambdaVariable("x", elementType, nullable = true)
+      val predicate = EqualTo(element, Literal.create(InternalRow(1, 2), elementType))
+      Size(ArrayFilter(nested, LambdaFunction(predicate, Seq(element))))
+    }
+
+    val roots = SchemaPruning.getRootFields(selector)
+    assert(roots.count(_.field.name == index.name) == 1)
+  }
+
+  test("dynamic array projection preserves nulls and index errors") {
+    val valueType = StructType.fromDDL("payload string, id int")
+    val items = AttributeReference("items", ArrayType(valueType))()
+    val index = AttributeReference("index", IntegerType)()
+    val schema = StructType.fromDDL("items array<struct<id:int>>, index int")
+    val projection = ProjectionOverSchema(schema, AttributeSet(Seq(items, index)))
+    val inputAttributes = Seq(items.withDataType(schema("items").dataType), index)
+    val values = new GenericArrayData(Array(InternalRow(7), null))
+
+    for {
+      failOnError <- Seq(false, true)
+      elementAt <- Seq(false, true)
+    } {
+      val lookup = if (elementAt) "element_at(items, index)" else "items[index]"
+      val origin = Origin(startIndex = Some(0), stopIndex = Some(lookup.length - 1),
+        sqlText = Some(s"$lookup.id"))
+      val access = CurrentOrigin.withOrigin(origin) {
+        if (elementAt) ElementAt(items, index, failOnError = failOnError)
+        else GetArrayItem(items, index, failOnError)
+      }
+      val id = GetStructField(access, 1, Some("id"))
+      val projected = id.transformDown { case projection(expression) => expression }
+      val bound = BindReferences.bindReference(projected, inputAttributes)
+      assert(bound.eval(InternalRow(values, if (elementAt) 1 else 0)) == 7)
+      assert(bound.eval(InternalRow(values, if (elementAt) 2 else 1)) == null)
+      assert(bound.eval(InternalRow(null, 1)) == null)
+      assert(bound.eval(InternalRow(values, null)) == null)
+      if (failOnError) {
+        val error = intercept[SparkArrayIndexOutOfBoundsException] {
+          bound.eval(InternalRow(values, 3))
+        }
+        assert(error.getCondition ==
+          (if (elementAt) "INVALID_ARRAY_INDEX_IN_ELEMENT_AT" else "INVALID_ARRAY_INDEX"))
+        assert(error.getQueryContext.head.fragment() == lookup)
+      } else {
+        assert(bound.eval(InternalRow(values, 3)) == null)
+      }
+      if (elementAt) {
+        assert(bound.eval(InternalRow(values, -2)) == 7)
+        assert(intercept[SparkRuntimeException] {
+          bound.eval(InternalRow(values, 0))
+        }.getCondition == "INVALID_INDEX_OF_ZERO")
+      }
+    }
   }
 
   test("collect nested fields used by ArrayTransform lambda") {

@@ -22,7 +22,7 @@ import org.apache.parquet.example.data.simple.SimpleGroupFactory
 import org.apache.parquet.hadoop.example.ExampleParquetWriter
 import org.apache.parquet.schema.MessageTypeParser
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkArrayIndexOutOfBoundsException, SparkConf}
 import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
@@ -52,11 +52,12 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
           |  optional group standard (LIST) {
           |    repeated group entries { optional int32 wanted = 17; }
           |  }
+          |  optional int32 idx;
           |}""".stripMargin)
       val writer = ExampleParquetWriter.builder(new Path(file.toURI))
         .withConf(spark.sessionState.newHadoopConf()).withType(fileSchema).build()
       try {
-        val row = new SimpleGroupFactory(fileSchema).newGroup()
+        val row = new SimpleGroupFactory(fileSchema).newGroup().append("idx", 1)
         val legacy = row.addGroup("legacy")
         legacy.addGroup("entries").append("sibling", 10).append("wanted", 11)
         legacy.addGroup("entries").append("sibling", 20).append("wanted", 22)
@@ -73,7 +74,7 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
         .add("sibling", IntegerType, nullable = true, metadata = missingId)
         .add("renamed", IntegerType, nullable = true, metadata = fieldId)
       val readSchema = new StructType().add("legacy", ArrayType(element))
-        .add("standard", ArrayType(IntegerType))
+        .add("standard", ArrayType(IntegerType)).add("idx", IntegerType)
       Seq("true", "false").foreach { vectorized =>
         withSQLConf(
           vectorizedReaderEnabledKey -> vectorized,
@@ -85,9 +86,15 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
             "struct<legacy:array<struct<renamed:int>>,standard:array<int>>")
           checkAnswer(query, Row(22, 33))
 
+          val dynamic = data.selectExpr("legacy[idx].renamed", "standard[idx]")
+          checkScanSchemata(dynamic,
+            "struct<legacy:array<struct<renamed:int>>,standard:array<int>,idx:int>")
+          checkAnswer(dynamic, Row(22, 33))
+
           // Only the missing ID is requested. The first physical field is read for levels
           // and shares its name, but has a different ID.
           checkAnswer(data.selectExpr("legacy.sibling"), Row(Seq(null, null)))
+          checkAnswer(data.selectExpr("legacy[idx].sibling"), Row(null))
         }
       }
     }
@@ -120,6 +127,126 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
           val data = spark.read.schema("record STRUCT<missing: INT>").parquet(file.getCanonicalPath)
           checkAnswer(data.selectExpr("record.missing", "record IS NULL"),
             Seq(Row(null, false), Row(null, true)))
+        }
+      }
+    }
+  }
+
+  test("dynamic array selection preserves root and nested Parquet field IDs") {
+    withSQLConf(
+      SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "true",
+      SQLConf.PARQUET_FIELD_ID_WRITE_ENABLED.key -> "true",
+      SQLConf.PARQUET_FIELD_ID_READ_ENABLED.key -> "true") {
+      withTempPath { dir =>
+        val rootId = new MetadataBuilder()
+          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 1).build()
+        val leafId = new MetadataBuilder()
+          .putLong(ParquetUtils.FIELD_ID_METADATA_KEY, 17).build()
+        val leafType = new StructType()
+          .add("old_id", IntegerType, nullable = true, metadata = leafId)
+          .add("payload", StringType)
+        def schema(rootName: String, leaf: StructType): StructType = new StructType()
+          .add(rootName, ArrayType(new StructType().add("children", ArrayType(leaf))),
+            nullable = true, metadata = rootId)
+          .add("idx", IntegerType)
+        val writeSchema = schema("old_items", leafType)
+        val readSchema = schema("new_items", StructType(Seq(
+          leafType("old_id").copy(name = "new_id"), leafType("payload"))))
+        val rows = Seq(Row(Seq(Row(Seq(Row(42, "unused")))), 0))
+        val path = dir.getCanonicalPath
+        spark.createDataFrame(spark.sparkContext.parallelize(rows), writeSchema)
+          .write.parquet(path)
+
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+            val query = spark.read.schema(readSchema).parquet(path)
+              .selectExpr("new_items[idx].children.new_id")
+            checkScanSchemata(query,
+              "struct<new_items:array<struct<children:array<struct<new_id:int>>>>,idx:int>")
+            checkAnswer(query, Row(Seq(42)))
+          }
+        }
+      }
+    }
+  }
+
+  test("dynamic lookups preserve complex column defaults and constant lookups still prune") {
+    withTempPath { dir =>
+      withTable("t") {
+        val path = dir.getCanonicalPath
+        sql(
+          s"""CREATE TABLE t (idx INT, k STRING,
+             |  items ARRAY<STRUCT<a: INT, b: INT>> DEFAULT array(),
+             |  byKey MAP<STRING, STRUCT<a: INT, b: INT>> DEFAULT map()
+             |) USING parquet LOCATION '$path'""".stripMargin)
+        sql("INSERT INTO t SELECT 0, 'k', array(named_struct('a', 5, 'b', 6)), " +
+          "map('k', named_struct('a', 7, 'b', 8))")
+        sql(
+          """ALTER TABLE t ADD COLUMNS (
+            |  arr ARRAY<STRUCT<a: INT, b: INT>> DEFAULT array(named_struct('a', 11, 'b', 22)),
+            |  m MAP<STRING, STRUCT<a: INT, b: INT>>
+            |    DEFAULT map('k', named_struct('a', 33, 'b', 44))
+            |)""".stripMargin)
+
+        val data = spark.read.schema(spark.table("t").schema).parquet(path)
+        Seq("true", "false").foreach { vectorized =>
+          withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+            val query = data.selectExpr("arr[idx].b", "m[k].b", "items[0].b", "byKey['k'].b",
+              "filter(items, x -> array(true, false)[idx])[0].b")
+            checkAnswer(query, Row(22, 44, 6, 8, 6))
+            checkScanSchemata(query, "struct<idx:int,k:string,items:array<struct<b:int>>," +
+              "byKey:map<string,struct<b:int>>,arr:array<struct<a:int,b:int>>," +
+              "m:map<string,struct<a:int,b:int>>>")
+          }
+        }
+      }
+    }
+  }
+
+  test("dynamic lookups preserve defaults on nested fields") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql(
+        """SELECT 0 AS i,
+          |  named_struct('arr', array(named_struct('a', 1, 'b', 22))) AS s,
+          |  map(0, named_struct('anchor', 7, 'n', named_struct('a', 3, 'b', 44))) AS m
+          |""".stripMargin).write.parquet(path)
+
+      val pair = StructType.fromDDL("a INT, b INT")
+      val default = "named_struct('a', 5, 'b', 6)"
+      val arr = StructField("arr", ArrayType(pair)).withExistenceDefaultValue(s"array($default)")
+      val n = StructField("n", pair).withExistenceDefaultValue(default)
+      val schema = new StructType()
+        .add("i", IntegerType)
+        .add("s", new StructType().add(arr))
+        .add("m", MapType(IntegerType, new StructType().add("anchor", IntegerType).add(n)))
+
+      for (vectorized <- Seq("true", "false")) {
+        withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+          val data = spark.read.schema(schema).parquet(path)
+          checkAnswer(data.selectExpr("s.arr[i].b", "m[i].n.b"), Row(22, 44))
+          checkAnswer(data.selectExpr("m[i].anchor", "m[0].n.b"), Row(7, 44))
+        }
+      }
+    }
+  }
+
+  test("dynamic array selection preserves bounds in legacy missing-field mode") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql("SELECT array(named_struct('present', 1)) AS items, 1 AS idx").write.parquet(path)
+      val legacy = SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key
+      for (vectorized <- Seq("true", "false")) {
+        withSQLConf(legacy -> "true", SQLConf.ANSI_ENABLED.key -> "true",
+            vectorizedReaderEnabledKey -> vectorized) {
+          val query = spark.read
+            .schema("items ARRAY<STRUCT<present: INT, missing: INT>>, idx INT")
+            .parquet(path).selectExpr("items[idx].missing")
+          checkError(
+            exception = intercept[SparkArrayIndexOutOfBoundsException](query.collect()),
+            condition = "INVALID_ARRAY_INDEX",
+            parameters = Map("indexValue" -> "1", "arraySize" -> "1"),
+            context = ExpectedContext(fragment = "items[idx]", start = 0, stop = 9))
         }
       }
     }

@@ -17,7 +17,7 @@
 package org.apache.spark.sql.execution.datasources.orc
 
 import org.apache.spark.SparkConf
-import org.apache.spark.sql.DataFrame
+import org.apache.spark.sql.{DataFrame, Row}
 import org.apache.spark.sql.catalyst.parser.CatalystSqlParser
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.datasources.SchemaPruningSuite
@@ -52,6 +52,29 @@ class OrcV2SchemaPruningSuite extends SchemaPruningSuite with AdaptiveSparkPlanH
         val expectedScanSchema = CatalystSqlParser.parseDataType(expectedScanSchemaCatalogString)
         implicit val equality = schemaEquality
         assert(scanSchema === expectedScanSchema)
+    }
+  }
+
+  test("dynamic array index preserves the requested ORC field under positional evolution") {
+    Seq(("arr", "idx", "other", true), ("_col0", "_col1", "_col2", false)).foreach {
+      case (arr, idx, other, force) =>
+        withTempPath { dir =>
+          val path = dir.getCanonicalPath
+          sql(s"""
+            |SELECT array(named_struct('sibling', 11, 'wanted', 22)) AS $arr, 0 AS $idx,
+            |  array(named_struct('keep', 33, 'skip', 44)) AS $other
+            |""".stripMargin).write.orc(path)
+          Seq("true", "false").foreach { vectorized =>
+            withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+              val query = spark.read.option("orc.force.positional.evolution", force)
+                .orc(path).selectExpr(s"$arr[$idx].wanted", s"$other[0].keep")
+              checkScanSchemata(query,
+                s"struct<$arr:array<struct<sibling:int,wanted:int>>,$idx:int," +
+                  s"$other:array<struct<keep:int>>>")
+              checkAnswer(query, Row(22, 33))
+            }
+          }
+        }
     }
   }
 }

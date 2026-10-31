@@ -155,6 +155,12 @@ object ParquetReadSupport extends Logging {
 
   def generateFakeColumnName: String = s"_fake_name_${UUID.randomUUID()}"
 
+  // In legacy mode, pruning all physical children can also lose the enclosing array length.
+  def returnNullStructIfAllFieldsMissing(conf: Configuration): Boolean = {
+    val setting = SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING
+    conf.getBoolean(setting.key, setting.defaultValue.get)
+  }
+
   def getRequestedSchema(
       parquetFileSchema: MessageType,
       catalystRequestedSchema: StructType,
@@ -168,9 +174,6 @@ object ParquetReadSupport extends Logging {
       SQLConf.PARQUET_FIELD_ID_READ_ENABLED.defaultValue.get)
     val ignoreMissingIds = conf.getBoolean(SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.key,
       SQLConf.IGNORE_MISSING_PARQUET_FIELD_ID.defaultValue.get)
-    val returnNullStructIfAllFieldsMissing = conf.getBoolean(
-      SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.key,
-      SQLConf.LEGACY_PARQUET_RETURN_NULL_STRUCT_IF_ALL_FIELDS_MISSING.defaultValue.get)
 
     if (!ignoreMissingIds &&
         !containsFieldIds(parquetFileSchema) &&
@@ -189,7 +192,7 @@ object ParquetReadSupport extends Logging {
            |""".stripMargin)
     }
     val parquetClippedSchema = ParquetReadSupport.clipParquetSchema(parquetFileSchema,
-      catalystRequestedSchema, caseSensitive, useFieldId, returnNullStructIfAllFieldsMissing)
+      catalystRequestedSchema, caseSensitive, useFieldId, returnNullStructIfAllFieldsMissing(conf))
 
     // We pass two schema to ParquetRecordMaterializer:
     // - parquetRequestedSchema: the schema of the file data we want to read

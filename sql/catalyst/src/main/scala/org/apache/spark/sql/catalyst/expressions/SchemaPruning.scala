@@ -98,17 +98,20 @@ object SchemaPruning extends SQLConfHelper {
    */
   def identifyRootFields(
       projects: Seq[NamedExpression],
-      filters: Seq[Expression]): Seq[RootField] = {
-    val projectionRootFields = projects.flatMap(getRootFields)
-    val filterRootFields = filters.flatMap(getRootFields)
+      filters: Seq[Expression],
+      pruneDynamicSelectors: Boolean = true): Seq[RootField] = {
+    val expressions = projects ++ filters
+    // Some readers need the full input to preserve collection shape or field positions.
+    val collectionInputs = if (pruneDynamicSelectors) Nil else expressions.flatMap(dynamicInputs)
+    val requestedFields = (expressions ++ collectionInputs).flatMap(getRootFields)
 
     // Kind of expressions don't need to access any fields of a root fields, e.g., `IsNotNull`.
     // For them, if there are any nested fields accessed in the query, we don't need to add root
     // field access of above expressions.
     // For example, for a query `SELECT name.first FROM contacts WHERE name IS NOT NULL`,
     // we don't need to read nested fields of `name` struct other than `first` field.
-    val (rootFields, optRootFields) = (projectionRootFields ++ filterRootFields)
-      .distinct.partition(!_.prunedIfAnyChildAccessed)
+    val (rootFields, optRootFields) =
+      requestedFields.distinct.partition(!_.prunedIfAnyChildAccessed)
 
     optRootFields.filter { opt =>
       !rootFields.exists { root =>
@@ -127,10 +130,35 @@ object SchemaPruning extends SQLConfHelper {
           val rootFieldType = StructType(Array(root.field))
           val optFieldType = StructType(Array(opt.field))
           val merged = optFieldType.merge(rootFieldType)
-          DataTypeUtils.sameType(merged, optFieldType)
+          DataTypeUtils.sameType(merged, optFieldType) &&
+            opt.mapKeys.forall(_.retainedBy(rootFieldType))
         }
       }
     } ++ rootFields
+  }
+
+  private[sql] def hasDynamicLookup(expr: Expression): Boolean =
+    expr.exists(DynamicLookup.unapply(_).isDefined)
+
+  private def dynamicInputs(expr: Expression): Seq[Expression] = {
+    def childInputs = expr.children.flatMap(dynamicInputs)
+    expr match {
+      // getRootFields already keeps the outer references. Join conditions can refer to inner data.
+      case _: SubqueryExpression => Nil
+      // For a[i][j], retaining a already preserves the entire result of a[i].
+      case DynamicLookup(DynamicLookup(_)) => childInputs
+      case DynamicLookup(input) => input +: childInputs
+      case _ => childInputs
+    }
+  }
+
+  private[expressions] object DynamicLookup {
+    def unapply(expr: Expression): Option[Expression] = expr match {
+      case GetArrayItem(input, index, _) if !index.foldable => Some(input)
+      case GetMapValue(input, key) if !key.foldable => Some(input)
+      case ElementAt(input, selector, _, _) if !selector.foldable => Some(input)
+      case _ => None
+    }
   }
 
   /**
@@ -151,16 +179,14 @@ object SchemaPruning extends SQLConfHelper {
           derivedFromAtt = true) :: Nil
       case SelectedField(field) =>
         RootField(field, derivedFromAtt = false) +:
-          getArrayReturningHigherOrderFunctionRootFields(expr)
+          getAdditionalRootFields(expr)
       // Root field accesses by `IsNotNull` and `IsNull` are special cases as the expressions
       // don't actually use any nested fields. These root field accesses might be excluded later
       // if there are any nested fields accesses in the query plan.
       case IsNotNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
-          getArrayReturningHigherOrderFunctionRootFields(expr)
+        getRootFieldsForNullCheck(expr, field)
       case IsNull(SelectedField(field)) =>
-        RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true) +:
-          getArrayReturningHigherOrderFunctionRootFields(expr)
+        getRootFieldsForNullCheck(expr, field)
       case IsNotNull(_: Attribute) | IsNull(_: Attribute) =>
         expr.children.flatMap(getRootFields).map(_.copy(prunedIfAnyChildAccessed = true))
       case s: SubqueryExpression =>
@@ -169,6 +195,34 @@ object SchemaPruning extends SQLConfHelper {
         s.references.toSeq.flatMap(getRootFields)
       case _ =>
         expr.children.flatMap(getRootFields)
+    }
+  }
+
+  private def getRootFieldsForNullCheck(expr: Expression, field: StructField): Seq[RootField] = {
+    // A null check compares the complete key of each map it looks up. Follow only the
+    // collection input, as SelectedField does. Selector and lambda reads are collected separately.
+    @scala.annotation.tailrec
+    def comparedKeys(current: Expression, keys: List[MapKeyRequirement]): List[MapKeyRequirement] =
+      current match {
+        case GetMapValue(input, _) => comparedKeys(input, mapKeyRequirement(input).toList ::: keys)
+        case ElementAt(input, _, _, _) =>
+          comparedKeys(input, mapKeyRequirement(input).toList ::: keys)
+        case _ if current.children.nonEmpty => comparedKeys(current.children.head, keys)
+        case _ => keys
+      }
+    RootField(field, derivedFromAtt = false, prunedIfAnyChildAccessed = true,
+      mapKeys = comparedKeys(expr, Nil)) +: getAdditionalRootFields(expr)
+  }
+
+  private def mapKeyRequirement(input: Expression): Option[MapKeyRequirement] = {
+    input.dataType match {
+      case map: MapType if map.keyType.existsRecursively(_.isInstanceOf[StructType]) =>
+        val emptyKey = map.keyType.transformRecursively { case _: StructType => StructType(Nil) }
+        for {
+          full <- SelectedField.withDataType(input, map)
+          withoutKey <- SelectedField.withDataType(input, map.copy(keyType = emptyKey))
+        } yield MapKeyRequirement(StructType(Seq(full)), StructType(Seq(withoutKey)))
+      case _ => None
     }
   }
 
@@ -185,7 +239,7 @@ object SchemaPruning extends SQLConfHelper {
     }.flatten.toSeq.map(field => RootField(field, derivedFromAtt = false))
     if (nestedRootFields.nonEmpty) {
       nestedRootFields ++ getRootFields(lambda.function) ++
-        getArrayReturningHigherOrderFunctionRootFields(argument)
+        getAdditionalRootFields(argument)
     } else {
       expr.children.flatMap(getRootFields)
     }
@@ -213,8 +267,16 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
-  private def getArrayReturningHigherOrderFunctionRootFields(expr: Expression): Seq[RootField] = {
+  // SelectedField follows the collection input of an extractor. Its selector and any lambda
+  // predicates can read other fields, including fields beneath the same root attribute.
+  private def getAdditionalRootFields(expr: Expression): Seq[RootField] = {
     expr match {
+      case GetMapValue(argument, key) =>
+        getRootFields(key) ++ getAdditionalRootFields(argument)
+      case GetArrayItem(argument, index, _) =>
+        getRootFields(index) ++ getAdditionalRootFields(argument)
+      case ElementAt(argument, index, _, _) =>
+        getRootFields(index) ++ getAdditionalRootFields(argument)
       case ArrayFilter(argument, lambda: LambdaFunction) =>
         getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 1)
       case ArraySort(argument, lambda: LambdaFunction, allowNullComparisonResult)
@@ -225,7 +287,7 @@ object SchemaPruning extends SQLConfHelper {
       case ArraySort(argument, lambda: LambdaFunction, _) =>
         getArrayReturningHigherOrderFunctionRootFields(argument, lambda, numElementVariables = 2)
       case _ =>
-        expr.children.flatMap(getArrayReturningHigherOrderFunctionRootFields)
+        expr.children.flatMap(getAdditionalRootFields)
     }
   }
 
@@ -233,7 +295,9 @@ object SchemaPruning extends SQLConfHelper {
       argument: Expression,
       lambda: LambdaFunction,
       numElementVariables: Int): Seq[RootField] = {
-    val nestedRootFields = argument.dataType match {
+    // Collect selector dependencies separately only when we project the argument. When the
+    // whole argument is required, getRootFields already collects them.
+    val argumentRootFields = argument.dataType match {
       case ArrayType(_: StructType, containsNull) =>
         val elementVariables = lambda.arguments.take(numElementVariables).collect {
           case elementVar: NamedLambdaVariable => elementVar
@@ -247,22 +311,21 @@ object SchemaPruning extends SQLConfHelper {
               .reduceLeft(_ merge _)
             SelectedField.withDataType(
               argument,
-              ArrayType(mergedElementSchema, containsNull)).toSeq match {
-              case Seq() => getRootFields(argument).map(_.field)
-              case fields => fields
+              ArrayType(mergedElementSchema, containsNull)) match {
+              case Some(field) =>
+                RootField(field, derivedFromAtt = false) +: getAdditionalRootFields(argument)
+              case None => getRootFields(argument)
             }
           } else {
-            Seq.empty
+            getAdditionalRootFields(argument)
           }
         } else {
-          getRootFields(argument).map(_.field)
+          getRootFields(argument)
         }
       case _ =>
-        getRootFields(argument).map(_.field)
+        getRootFields(argument)
     }
-    nestedRootFields.map(field => RootField(field, derivedFromAtt = false)) ++
-      getRootFields(lambda.function) ++
-      getArrayReturningHigherOrderFunctionRootFields(argument)
+    argumentRootFields ++ getRootFields(lambda.function)
   }
 
   /**
@@ -331,8 +394,17 @@ object SchemaPruning extends SQLConfHelper {
    * This represents a "root" schema field (aka top-level, no-parent). `field` is the
    * `StructField` for field name and datatype. `derivedFromAtt` indicates whether it
    * was derived from an attribute or had a proper child. `prunedIfAnyChildAccessed` means
-   * whether this root field can be pruned if any of child field is used in the query.
+   * whether this root field can be pruned if any child field is used in the query.
+   * `mapKeys` records the stored keys a lookup must compare before testing its result for null.
    */
   case class RootField(field: StructField, derivedFromAtt: Boolean,
-    prunedIfAnyChildAccessed: Boolean = false)
+    prunedIfAnyChildAccessed: Boolean = false, mapKeys: Seq[MapKeyRequirement] = Nil)
+
+  // These schemas differ only at the key of one lookup. Merging a candidate (already known to
+  // be a subset of the optional field) into withoutKey restores full exactly when the candidate
+  // contains that key. Other maps in the value can retain any subset of their fields.
+  case class MapKeyRequirement(full: StructType, withoutKey: StructType) {
+    def retainedBy(projected: StructType): Boolean =
+      DataTypeUtils.sameType(withoutKey.merge(projected), full)
+  }
 }
