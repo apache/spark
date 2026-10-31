@@ -287,14 +287,16 @@ class ArrowCompressionUtilsSuite extends SparkFunSuite {
       Utils.tryWithSafeFinally {
         val e = intercept[IllegalStateException](unloader.getRecordBatch())
         assert(e.getMessage === "compression failed")
+        // A suppressed exception means that a buffer was released twice. If this fails after an
+        // Arrow upgrade, Arrow releases these buffers itself and ReleasingVectorUnloader must be
+        // removed.
+        assert(e.getSuppressed.isEmpty)
         assert(batch.getBuffers.asScala.forall(_.refCnt() == 1))
       } {
         batch.close()
       }
     } {
-      // Closing the allocator fails if a buffer is left behind. If closing the root fails after an
-      // Arrow upgrade because a reference count went negative, Arrow releases these buffers itself
-      // and ReleasingVectorUnloader must be removed.
+      // Closing the allocator fails if a buffer is left behind.
       root.close()
       allocator.close()
     }
