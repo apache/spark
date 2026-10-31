@@ -38,6 +38,11 @@ Please refer [Migration Guide: SQL, Datasets and DataFrame](../sql-migration-gui
   To recover, write to a new table location with a new checkpoint location, or rewrite the
   committed files with the partition columns of the table.
 
+- Since Spark 4.4, the scan of a Data Source V2 streaming source whose scan builder implements
+  `SupportsPushDownRequiredColumns` only reads the top-level columns that the streaming query
+  needs, as the scans of batch queries do. Before, it read all the columns of the source. To
+  restore the previous behavior, set `spark.sql.streaming.v2ColumnPruning.enabled` to `false`.
+
 ## Upgrading from Structured Streaming 4.2 to 4.3
 
 - Since Spark 4.3, in Spark Connect the DataFrame passed to a Python `foreachBatch` function is bound to the streaming query's own session, a clone of the session that started the query, matching classic `foreachBatch`. This runs the batch under the configuration the streaming engine pins on the clone rather than the root session's. As a result, the batch DataFrame can no longer be combined with the root session inside the function: a temporary view created from it is not visible to the root session, referencing it from `spark.sql` on the root session fails with `DATAFRAME_NOT_FOUND`, and joining it with a DataFrame captured from the root session fails with `SESSION_NOT_SAME`. Run such work through the batch DataFrame's own session (`batch_df.sparkSession`) instead, and pass results out through a table or a global temporary view rather than a session-local temporary view. To restore the previous behavior, set `spark.sql.connect.streaming.foreachBatch.useClonedSession` to `false`.

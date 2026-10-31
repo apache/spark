@@ -211,6 +211,9 @@ abstract class InMemoryBaseTable(
   private val simulatePartialColumnPruning = properties
     .getOrDefault(InMemoryBaseTable.SIMULATE_PARTIAL_COLUMN_PRUNING, "false").toBoolean
 
+  private val simulateIncompleteColumnPruning = properties
+    .getOrDefault(InMemoryBaseTable.SIMULATE_INCOMPLETE_COLUMN_PRUNING, "false").toBoolean
+
   private val acceptAnySchema = properties.getOrDefault("accept-any-schema", "false").toBoolean
   private val autoSchemaEvolution = properties.getOrDefault("auto-schema-evolution", "true")
     .toBoolean
@@ -608,10 +611,14 @@ abstract class InMemoryBaseTable(
         case MetadataStructFieldWithLogicalName(_, name) => metadataColumnNames.contains(name)
         case f => schemaNames.contains(f.name)
       }
+      lazy val dataFields = prunedFields.filterNot(isRequiredMetadataField)
       schema = if (simulatePartialColumnPruning) {
         // Prune the metadata columns as required, but report every data column back from
         // `Scan.readSchema()` regardless of what was required.
         StructType(tableSchema ++ prunedFields.filter(isRequiredMetadataField))
+      } else if (simulateIncompleteColumnPruning && dataFields.length < tableSchema.length) {
+        // Drop the first required data column when only some of them are required.
+        StructType(prunedFields.filterNot(dataFields.headOption.contains))
       } else {
         StructType(prunedFields)
       }
@@ -651,6 +658,9 @@ abstract class InMemoryBaseTable(
     override def json(): String = rowCount.toString
   }
 
+  // The number of the micro-batch streams of the table that were stopped.
+  val stoppedMicroBatchStreams = new AtomicLong()
+
   class InMemoryMicroBatchStream(readSchema: StructType, tableSchema: StructType)
       extends MicroBatchStream {
     override def initialOffset(): Offset = new InMemoryTableOffset(0)
@@ -663,15 +673,23 @@ abstract class InMemoryBaseTable(
     }
     override def createReaderFactory(): PartitionReaderFactory = {
       val metadataColNames = new mutable.ArrayBuffer[String]()
+      val dataColumns = new mutable.ArrayBuffer[StructField]()
       readSchema.foreach {
         case MetadataStructFieldWithLogicalName(_, name) => metadataColNames += name
-        case _ =>
+        case field => dataColumns += field
       }
-      new InMemoryMicroBatchReaderFactory(metadataColNames.toArray)
+      // The data columns that the scan reads, which Spark may prune, by their position in the
+      // rows of the table.
+      val dataOrdinals = dataColumns.map(field => tableSchema.fieldIndex(field.name)).toArray
+      new InMemoryMicroBatchReaderFactory(
+        metadataColNames.toArray, dataOrdinals, dataColumns.map(_.dataType).toArray,
+        dataOrdinals.toSeq == tableSchema.indices)
     }
     override def deserializeOffset(json: String): Offset = new InMemoryTableOffset(json.toLong)
     override def commit(end: Offset): Unit = {}
-    override def stop(): Unit = {}
+    override def stop(): Unit = {
+      stoppedMicroBatchStreams.incrementAndGet()
+    }
   }
 
   abstract class BatchScanBaseClass(
@@ -1110,6 +1128,11 @@ object InMemoryBaseTable {
   // `SupportsMetadataColumns` makes the read schema the only channel that delivers them.
   val SIMULATE_PARTIAL_COLUMN_PRUNING = "simulate-partial-column-pruning"
 
+  // Test table property that simulates a connector whose pruning drops a column that was required,
+  // which `SupportsPushDownRequiredColumns` does not permit: when only some of the data columns
+  // are required, `Scan.readSchema()` does not have the first of them.
+  val SIMULATE_INCOMPLETE_COLUMN_PRUNING = "simulate-incomplete-column-pruning"
+
   /**
    * Assigns fresh IDs to any top-level column or nested struct field that does not already
    * have one. Recurses into struct fields within ArrayType and MapType so that every field
@@ -1216,15 +1239,29 @@ class BufferedRows(val key: Seq[Any], val schema: StructType)
   def clear(): Unit = rows.clear()
 }
 
+/**
+ * @param dataOrdinals the positions in the rows of the table of the data columns to read
+ * @param readsAllColumns whether these are all the columns of the table, in their order
+ */
 private class InMemoryMicroBatchReaderFactory(
-    metaNames: Array[String]) extends PartitionReaderFactory with Serializable {
+    metaNames: Array[String],
+    dataOrdinals: Array[Int],
+    dataTypes: Array[DataType],
+    readsAllColumns: Boolean) extends PartitionReaderFactory with Serializable {
   override def createReader(partition: InputPartition): PartitionReader[InternalRow] = {
     val rows = partition.asInstanceOf[InMemoryMicroBatchPartition].rows
     new PartitionReader[InternalRow] {
       private var idx = -1
       override def next(): Boolean = { idx += 1; idx < rows.size }
       override def get(): InternalRow = {
-        val rawRow = rows(idx)
+        val tableRow = rows(idx)
+        val rawRow = if (readsAllColumns) {
+          tableRow
+        } else {
+          new GenericInternalRow(dataOrdinals.indices.map { i =>
+            tableRow.get(dataOrdinals(i), dataTypes(i))
+          }.toArray[Any])
+        }
         if (metaNames.isEmpty) rawRow
         else {
           val metaRow = new GenericInternalRow(metaNames.map {
