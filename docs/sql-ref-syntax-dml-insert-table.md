@@ -26,10 +26,14 @@ The `INSERT` statement inserts new rows into a table or overwrites the existing 
 ### Syntax
 
 ```sql
-INSERT [ WITH SCHEMA EVOLUTION ] [ INTO | OVERWRITE ] [ TABLE ] table_identifier [ partition_spec ] [ ( column_list ) | [BY NAME] ]
+INSERT [ WITH SCHEMA EVOLUTION ] [ INTO | OVERWRITE ] [ TABLE ] table_identifier
+    [ WITH ( option_key = option_value [ , ... ] ) ] [ partition_spec ]
+    [ ( column_list ) | [BY NAME] ]
     { VALUES ( { value | NULL } [ , ... ] ) [ , ( ... ) ] | query }
 
-INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REPLACE WHERE boolean_expression query
+INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier
+    [ WITH ( option_key = option_value [ , ... ] ) ] [ BY NAME ]
+    REPLACE WHERE boolean_expression query
 ```
 
 ### Parameters
@@ -45,6 +49,11 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REP
     Specifies a table name, which may be optionally qualified with a database name.
 
     **Syntax:** `[ database_name. ] table_name`
+
+* **WITH ( option_key = option_value [ , ... ] )**
+
+    Specifies dynamic table options for this `INSERT` operation. These options are passed to the
+    data source connector when writing to the table. The supported options depend on the connector.
 
 * **partition_spec**
 
@@ -87,6 +96,14 @@ INSERT [ WITH SCHEMA EVOLUTION ] INTO [ TABLE ] table_identifier [ BY NAME ] REP
 ### Examples
 
 #### Insert Into
+
+##### Insert Using Dynamic Table Options
+
+```sql
+-- Option names and values are specific to the table's data source connector.
+INSERT INTO students WITH (`write.split-size` = 10)
+    VALUES ('Amy Smith', '123 Park Ave, San Jose', 111111);
+```
 
 ##### Single Row Insert Using a VALUES Clause
 
