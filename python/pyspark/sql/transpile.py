@@ -105,10 +105,9 @@ which is worth knowing before reaching for a conf to prove a theory. On the
 still raises on its own; only excluding ``BooleanSimplification`` AND disabling
 one of the subexpression-elimination levers returns Python's answer.
 
-A chain duplicates every interior operand by construction, so where it folds to
-``&`` / ``|`` (it does not -- it folds to a CASE WHEN) it would manufacture the
-common subexpressions and common factors these rules need. The ``and`` / ``or``
-form does, so treat them as live there.
+These rules need a common subexpression or common factor inside an ``&`` /
+``|``. A user-written ``and`` / ``or`` that repeats an operand
+(``a < b and b < c``) hands them one, so treat them as live there.
 
 ``len(s)`` lowers to Catalyst ``length`` for a string operand (SPARK-55214).
 Other ``len`` arguments (numbers, lists, ...) stay interpreted Python.
@@ -238,31 +237,20 @@ _MAX_COMPARISON_OPS = 64
 # nested case to well under a second.
 _MAX_LOWERED_COMPARISONS = 128
 
-# Bound on the materialized Catalyst expression size a body's comparisons may
-# emit. Each comparison lowering references its operand Columns more than once --
-# `_lower_value_compare` uses each operand in the NULL guard and the comparison,
-# `_lower_eq` uses each one three times -- and `ColumnNodeToExpressionConverter`
-# recurses into every child with no memoization, so a shared Column DAG expands
-# into a tree. A right-nested body (`(x < 0) < ((x < 0) < ...)`) is charged about
-# `2d + 1` links but materializes on the order of `2^d` nodes (`3^d` with `==`),
-# so the link budget above fires far too late for these shapes: depth 20 is 41
-# links (well under 128) but roughly 4.6e7 materialized nodes, expanded on the
-# UDF's first call, outside `_transpile_func`'s fallback `except`.
-#
-# The weight below counts what the JVM materializes, not how many links Python
-# lowers: a comparison operand's expanded size is charged once per reference, so
-# nesting compounds the weight per level. A flat 64-link chain (all leaf
-# operands) stays near 64 * a small constant, while a depth-20 nest crosses the
-# bound and is refused at UDF construction. The multiplier per operand
-# reference is 2 for the ordering operators and 3 for `==` / `!=` (see
-# `_lower_value_compare` / `_lower_eq`).
-_MAX_LOWERED_COMPARISON_WEIGHT = 1 << 16  # 65536: flat chains pass, depth-20 nests refuse
+# Bound on the Catalyst tree a body materializes (see `_materialized_weight`).
+# Lowerings reference operand Columns more than once and
+# `ColumnNodeToExpressionConverter` does not memoize, so the shared Column DAG
+# expands into a tree on the UDF's first call -- outside `_transpile_func`'s
+# fallback `except`. `(x < 0) < ((x < 0) < ...)` is 2d + 1 links but ~2^d nodes
+# (3^d with `==`), so the link budget alone fires far too late.
+_MAX_MATERIALIZED_WEIGHT = 1 << 16  # 65536: flat 64-link chains pass, depth-20 nests refuse
 
-# Per-link overhead in the materialized-weight budget: the ``when`` / raise_error
-# wrapper, the NULL-guard ``Or``/``IsNull`` nodes and the comparison itself. A
-# rough constant is enough -- the bound is dominated by the per-reference
-# multiplier compounding across nesting depth, not by this leaf overhead.
-_LINK_OVERHEAD = 4
+# Nodes a lowering adds around its operands (`when` / raise_error, NULL guard, ...).
+_NODE_OVERHEAD = 4
+
+# How often a comparison link reads each operand: `_lower_eq` three times, `is`
+# only the subject, `_lower_value_compare` (the default) twice.
+_OPERAND_READS: dict[type, int] = {ast.Eq: 3, ast.NotEq: 3, ast.Is: 1, ast.IsNot: 1}
 
 # The four ordering comparisons: same lowering, differing only in the operator
 # and the symbol used to name it in an error message.
@@ -305,6 +293,43 @@ class AbstractTranspiler(object):
         also the list ``param_categories`` is keyed by.
         """
         pass
+
+
+def _materialized_weight(body: ast.AST) -> int:
+    """Rough size of the Catalyst tree ``_convert_chunk`` emits for ``body``.
+
+    A child is charged once per reference its parent's lowering makes, since the
+    JVM expands every reference. Memoized by node, so this stays linear.
+    """
+    memo: dict[int, int] = {}
+
+    def weight(node: Optional[ast.AST]) -> int:
+        if node is None:
+            return 1
+        cached = memo.get(id(node))
+        if cached is not None:
+            return cached
+        match node:
+            case ast.Compare(left=left, ops=ops, comparators=comps):
+                nodes = [left, *comps]
+                total = 0
+                for op, lhs, rhs in zip(ops, nodes, nodes[1:]):
+                    total += _OPERAND_READS.get(type(op), 2) * (weight(lhs) + weight(rhs))
+                    total += _NODE_OVERHEAD
+            case ast.BinOp(left=left, op=ast.Mod(), right=right):
+                # `sb * pmod(sb * a, abs(b))` with `sb` reading `b` twice.
+                total = weight(left) + 5 * weight(right) + 2 * _NODE_OVERHEAD
+            case ast.Call(func=ast.Name(id="len"), args=[arg], keywords=[]):
+                total = 2 * weight(arg) + _NODE_OVERHEAD
+            case _:
+                # A loop, not `sum(...)`: one frame per level, like `_convert_chunk`.
+                total = 1
+                for child in ast.iter_child_nodes(node):
+                    total += weight(child)
+        memo[id(node)] = total
+        return total
+
+    return weight(body)
 
 
 def _is_definitely_basic_type(node: ast.AST) -> bool:
@@ -438,16 +463,6 @@ class CatalystTranspiler(AbstractTranspiler):
         # refuses part-way through the variant list and silently emits fewer
         # options.
         self._lowered_comparisons: int = 0
-        # Materialized-weight budget (see ``_MAX_LOWERED_COMPARISON_WEIGHT``).
-        # Charged only for top-level comparison links (depth 1); nested comparison
-        # operands contribute through their parent's weight, so charging them
-        # again would double-count. ``_compare_depth`` tracks the recursion.
-        self._lowered_comparison_weight: int = 0
-        self._compare_depth: int = 0
-        # ``_comparison_weight`` recurses into nested comparisons and is called
-        # once per operand reference, so a shared nested Compare would be
-        # recomputed exponentially without this id(node) cache.
-        self._comparison_weight_cache: dict[int, int] = {}
 
     # TODO (SPARK-55218): handle implicit-None return bodies like
     # ``def f(x): x + x`` -- no return statement means return None;
@@ -678,19 +693,9 @@ class CatalystTranspiler(AbstractTranspiler):
         inserts, and under ANSI a failing cast raises. That is what lets the
         chain fold wrap each link in ``NOT link`` with no ``coalesce``.
 
-        Every comparison link routes through here, which is what makes this the
-        place to charge ``_MAX_LOWERED_COMPARISONS`` (link count) and
-        ``_MAX_LOWERED_COMPARISON_WEIGHT`` (materialized size). The link count
-        catches bodies whose comparison count grows with nesting (a chain
-        re-lowers each interior operand once per adjacent pair); the weight
-        catches bodies whose LINK count stays linear but whose materialized
-        size grows exponentially -- a right-nested ``(x < 0) < ((x < 0) < ...)``
-        is ~``2d + 1`` links but ~``2^d`` nodes, because each operand Column is
-        referenced more than once and the JVM converter does not memoize. The
-        weight is charged only at top-level links (``_compare_depth == 1``):
-        a nested comparison's weight is counted through its parent's operand
-        weight (see ``_comparison_weight``), so charging it again here would
-        double-count.
+        Every comparison link routes through here, so this is where
+        ``_MAX_LOWERED_COMPARISONS`` is charged. Materialized size is bounded
+        separately, up front, by ``_MAX_MATERIALIZED_WEIGHT``.
         """
         self._lowered_comparisons += 1
         if self._lowered_comparisons > _MAX_LOWERED_COMPARISONS:
@@ -699,27 +704,6 @@ class CatalystTranspiler(AbstractTranspiler):
                 "comparisons, so the UDF falls back to interpreted Python; "
                 "nested comparisons double the count per level"
             )
-        self._compare_depth += 1
-        if self._compare_depth == 1:
-            self._lowered_comparison_weight += self._link_weight(op, left_node, right_node)
-            if self._lowered_comparison_weight > _MAX_LOWERED_COMPARISON_WEIGHT:
-                raise UnsupportedOperationException(
-                    f"lowering this body materializes more than "
-                    f"{_MAX_LOWERED_COMPARISON_WEIGHT} comparison nodes, so the "
-                    "UDF falls back to interpreted Python; nested comparisons "
-                    "double the materialized size per level"
-                )
-        result = self._lower_compare_pair_dispatch(params, op, left_node, right_node)
-        self._compare_depth -= 1
-        return result
-
-    def _lower_compare_pair_dispatch(
-        self,
-        params: List[str],
-        op: ast.cmpop,
-        left_node: ast.AST,
-        right_node: ast.AST,
-    ) -> Column:
         match op:
             case ast.Is() | ast.IsNot():
                 # Only lower `x is None` / `None is x` (and their
@@ -754,56 +738,6 @@ class CatalystTranspiler(AbstractTranspiler):
                 raise UnsupportedOperationException(
                     f"comparison operator {type(op).__name__} is not supported by the transpiler"
                 )
-
-    def _link_weight(self, op: ast.cmpop, left_node: ast.AST, right_node: ast.AST) -> int:
-        """Materialized Catalyst weight of ONE comparison link.
-
-        Counts what the JVM materializes, not how many links Python lowers: each
-        operand's expanded size is charged once per reference. The ordering
-        operators reference each operand twice (NULL guard + comparison) and
-        ``==`` / ``!=`` three times (see ``_lower_value_compare`` / ``_lower_eq``);
-        ``is`` / ``is not`` reference the subject once. A leaf operand (param,
-        constant, arithmetic) has weight 1; a nested comparison's weight is
-        ``_comparison_weight``, so nesting compounds the weight per level.
-        """
-        if isinstance(op, (ast.Eq, ast.NotEq)):
-            mult = 3
-        elif isinstance(op, (ast.Is, ast.IsNot)):
-            mult = 1
-        else:
-            mult = 2
-        return (
-            mult
-            * (
-                self._comparison_operand_weight(left_node)
-                + self._comparison_operand_weight(right_node)
-            )
-            + _LINK_OVERHEAD
-        )
-
-    def _comparison_operand_weight(self, node: ast.AST) -> int:
-        """Materialized weight of a comparison operand: 1 for a leaf, recurses
-        for a nested ``ast.Compare`` (whose own links compound the weight)."""
-        if isinstance(node, ast.Compare):
-            return self._comparison_weight(node)
-        return 1
-
-    def _comparison_weight(self, node: ast.Compare) -> int:
-        """Materialized weight of an ``ast.Compare`` -- the sum of its link
-        weights (the chain fold adds a ``NOT``/literal branch per non-final link,
-        folded into ``_LINK_OVERHEAD``). Memoized by node identity: a shared
-        nested Compare is an operand of multiple links, so without caching the
-        recursion would be exponential."""
-        key = id(node)
-        cached = self._comparison_weight_cache.get(key)
-        if cached is not None:
-            return cached
-        nodes = [node.left, *node.comparators]
-        total = 0
-        for op, left_node, right_node in zip(node.ops, nodes, nodes[1:]):
-            total += self._link_weight(op, left_node, right_node)
-        self._comparison_weight_cache[key] = total
-        return total
 
     def _category(self, params: List[str], node: ast.AST) -> str:
         """Infer ``"numeric"`` or ``"string"`` for ``node`` under the current
@@ -1038,40 +972,17 @@ class CatalystTranspiler(AbstractTranspiler):
                         f"transpiler lowers at most {_MAX_COMPARISON_OPS}, so the "
                         "UDF falls back to interpreted Python"
                     )
-                # Python evaluates `a OP1 b OP2 c` as `(a OP1 b) and (b OP2 c)`
-                # with `b` evaluated once, so the fold below re-lowers each
-                # interior operand once per adjacent pair. Safe for the operand
-                # grammar we accept, all of it deterministic and side-effect free.
-                # It does mean the body READS a parameter once per adjacent pair,
-                # which SPARK-58626 is what makes safe: `_udf_param_N` is a
-                # reference, and `ConvertToCatalyst` gives an argument read more
-                # than once one column per row -- or declines to lower the call
-                # where no column fits -- so a non-deterministic argument is drawn
-                # once and every read agrees. While each read still carried its own
-                # copy of the argument, `50 < x < 60` over `rand(7) * 100` was ~30%
-                # true where Python is ~10%.
+                # `a OP1 b OP2 c` is `(a OP1 b) and (b OP2 c)` with `b` evaluated
+                # once; re-lowering `b` per pair is safe because SPARK-58626 gives a
+                # repeated argument one column per row (before it, `50 < x < 60`
+                # over `rand(7) * 100` was ~30% true where Python is ~10%).
                 #
-                # The chain folds into a sequential CASE WHEN
-                # (`CASE WHEN NOT link1 THEN false ... WHEN NOT link(n-1) THEN
-                # false ELSE linkN END`), NOT an `&`. Each later link sits in a
-                # branch that runs only after every earlier link is true, so a
-                # NULL guard in a later link cannot fire on rows Python
-                # short-circuits past -- the same short-circuit `&` gives at
-                # evaluation time. The difference is what the optimizer can do
-                # afterwards: `splitConjunctivePredicates` matches only `And`,
-                # `BooleanSimplification`'s patterns match `And`/`Or`, and
-                # subexpression elimination recurses only into a CASE WHEN's first
-                # condition, so no rule can move a later guard ahead of the links
-                # that gate it. A chain predicate therefore moves only as a whole
-                # when pushdown applies, on the same key values Python sees. That
-                # costs the per-link pushdown `&` would give -- but chains had no
-                # lowering before this PR, so there is no pushdown to lose, and the
-                # `and` / `or` fold keeps `&` / `|` for the UDFs that did.
-                #
-                # Every link is total (never NULL; see `_lower_compare_pair`), so
-                # `NOT link` is never NULL and the CASE WHEN mirrors Python's
-                # short-circuit exactly. See the module docstring for the
-                # short-circuit and NULL-guard semantics this fold relies on.
+                # Folds to `CASE WHEN NOT link1 THEN false ... ELSE linkN END`, not
+                # `&`: a later link runs only once every earlier one is true, and no
+                # optimizer rule can split it (see the module docstring). The cost:
+                # no per-link pushdown, and over nullable operands the guards make
+                # it throwable, so it stays above a join the interpreted UDF went
+                # below. Every link is total, so `NOT link` is never NULL.
                 nodes = [left, *comps]
                 links = [
                     self._lower_compare_pair(params, op, left_node, right_node)
@@ -1219,14 +1130,18 @@ class CatalystTranspiler(AbstractTranspiler):
         # the budget bounds one body's lowering, and each variant lowers the body
         # again from scratch.
         self._lowered_comparisons = 0
-        self._lowered_comparison_weight = 0
-        self._compare_depth = 0
-        self._comparison_weight_cache = {}
         function_body = function_ast.body
         if len(function_body) != 1:
             raise UnsupportedOperationException(
                 "functions with more than one top-level statement are not "
                 "supported by the transpiler"
+            )
+        weight = _materialized_weight(function_body[0])
+        if weight > _MAX_MATERIALIZED_WEIGHT:
+            raise UnsupportedOperationException(
+                f"lowering this body materializes about {weight} expression nodes, "
+                f"more than {_MAX_MATERIALIZED_WEIGHT}, so the UDF falls back to "
+                "interpreted Python; nesting multiplies the size per level"
             )
         # Refuse variants whose body category does not MATCH the declared
         # return type's category. Two distinct failure modes hide here:

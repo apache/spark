@@ -509,16 +509,16 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
     def test_udf_transpile_chain_short_circuits(self):
         # THE test for the chained lowering. Python's chain short-circuits: when
         # ``a < b`` is false, ``b < c`` is never evaluated, so a NULL ``c`` cannot
-        # raise. `&` short-circuits at evaluation time too, so the fold matches.
-        # Nullable *columns* are required: a literal `None` has no column
-        # category, so `1 < 0 < None` just falls back.
+        # raise. The chain's CASE WHEN only reaches a later link once every earlier
+        # one is true, so the fold matches. Nullable *columns* are required: a
+        # literal `None` has no column category, so `1 < 0 < None` just falls back.
         #
-        # Both of `And`'s two laziness implementations are exercised: `doGenCode`
+        # Both of `CaseWhen`'s laziness implementations are exercised: `doGenCode`
         # under the default FALLBACK factory mode, and `eval` under NO_CODEGEN.
         # `spark.sql.codegen.wholeStage=false` is NOT enough for the latter -- it
         # disables whole-stage fusion, but expressions are still compiled through
         # the codegen factory, so `doGenCode` runs either way. Survival through the
-        # OPTIMIZER is separate; see test_udf_transpile_boolop_short_circuits.
+        # OPTIMIZER is separate; see test_udf_transpile_chain_survives_optimizer.
         def chained(a, b, c):
             return a < b < c
 
@@ -545,18 +545,19 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
     def test_udf_transpile_chain_survives_optimizer(self):
         # A chain folds to a sequential CASE WHEN, which is atomic to
-        # `splitConjunctivePredicates` and `BooleanSimplification`. Before this
-        # fix the chain folded to `&`, which those rules could split or reorder,
-        # moving a later link's NULL guard ahead of the links that gate it and
-        # diverging from Python. Each repro below is an optimizer shape that broke
-        # the `&` fold; all must return Python's answer (or raise like Python)
-        # with the chain fully lowered (no EvalPython in the plan).
+        # `splitConjunctivePredicates` and `BooleanSimplification`. An `&` fold
+        # would let those rules split or reorder it, moving a later link's NULL
+        # guard ahead of the links that gate it -- as they still do for the
+        # equivalent user-written `and` (see the module docstring). Each repro
+        # below is such a shape; all must return Python's answer (or raise like
+        # Python) with the chain fully lowered (no EvalPython in the plan).
 
-        # PushDownPredicates / Aggregate: a later link over only grouping keys
-        # used to be pushed below the Aggregate, where it ran on groups Python
-        # short-circuits past. `sa < b < c` over groupBy(b,c).agg(sum(a)): the
-        # group (b=1, c=NULL, sa=5) has `sa < b` false, so Python returns False
-        # without touching `b < c` (which would raise on the NULL c).
+        # PushDownPredicates / Aggregate: an `&` fold's later link over only
+        # grouping keys would be pushed below the Aggregate, where it runs on
+        # groups Python short-circuits past. `sa < b < c` over
+        # groupBy(b,c).agg(sum(a)): the group (b=1, c=NULL, sa=6) has `sa < b`
+        # false, so Python returns False without touching `b < c` (which would
+        # raise on the NULL c).
         from pyspark.sql.functions import sum as sum_
 
         def chain_over_agg(sa, b, c):
@@ -573,15 +574,15 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
                 .agg(sum_("a").alias("sa"))
             )
             filtered = agg.filter(udf("sa", "b", "c"))
-            # Python: row (sa=5, b=1, c=None) -> 5 < 1 is False -> False (no raise).
+            # Python: row (sa=6, b=1, c=None) -> 6 < 1 is False -> False (no raise).
             # row (sa=2, b=2, c=3) -> 2 < 2 is False -> False.
             # No row passes, and crucially no raise leaks out of the NULL c.
             self.assertEqual([], filtered.select("b", "c").collect())
             self.assertEqual(0, self._eval_python_count(filtered), "chain must stay lowered")
 
         # BooleanSimplification common-factor: `(a < b < c) or (d < b < c)` on
-        # (5, 1, None, 7). The `&` fold let common-factor elimination hoist the
-        # shared `b < c` guard to the front, where the NULL c raised where Python
+        # (5, 1, None, 7). Over an `&` fold, common-factor elimination hoists the
+        # shared `b < c` guard to the front, where the NULL c raises where Python
         # returns False. The CASE WHEN fold is atomic, so the shared link cannot
         # be hoisted out of either chain.
         def or_shared_chain(a, b, c, d):
@@ -598,7 +599,7 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual(0, self._eval_python_count(projected), "or of chains stays lowered")
 
         # BooleanSimplification absorption: `(a < b < c) or (b < c)` on
-        # (None, 0, 1). The `&` fold's absorption (`(a && b) || b => b`) dropped
+        # (None, 0, 1). Over an `&` fold, absorption (`(a && b) || b => b`) drops
         # the first link's guard, returning True where Python raises TypeError on
         # `None < 0`. The CASE WHEN fold keeps both links, so the first chain
         # reaches its NULL guard and raises like Python.
@@ -635,18 +636,26 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
         def either_positive(a, c):
             return a > 0 or c > 0
 
-        with self.sql_conf(_TRANSPILE_ON):
-            and_udf = UserDefinedFunction(both_positive, BooleanType())
-            or_udf = UserDefinedFunction(either_positive, BooleanType())
-            self.assertTrue(and_udf.transpiled, "and over compares should transpile")
-            self.assertTrue(or_udf.transpiled, "or over compares should transpile")
-
-            # Plain select: the second operand is NULL but the first already
-            # decided the result, so Python's answer must come back unraised.
-            df = self.spark.createDataFrame([(-5, None)], "a long, c long")
-            self.assertEqual([False], [r[0] for r in df.select(and_udf("a", "c")).collect()])
-            df = self.spark.createDataFrame([(5, None)], "a long, c long")
-            self.assertEqual([True], [r[0] for r in df.select(or_udf("a", "c")).collect()])
+        # Plain select: the second operand is NULL but the first already decided
+        # the result, so Python's answer must come back unraised. Under both
+        # factory modes, so `And` / `Or`'s `doGenCode` and `eval` laziness are
+        # both covered (see test_udf_transpile_chain_short_circuits).
+        for factory_mode in ("FALLBACK", "NO_CODEGEN"):
+            conf = dict(_TRANSPILE_ON)
+            conf["spark.sql.codegen.factoryMode"] = factory_mode
+            with self.subTest(factory_mode=factory_mode), self.sql_conf(conf):
+                and_udf = UserDefinedFunction(both_positive, BooleanType())
+                or_udf = UserDefinedFunction(either_positive, BooleanType())
+                self.assertTrue(and_udf.transpiled, "and over compares should transpile")
+                self.assertTrue(or_udf.transpiled, "or over compares should transpile")
+                df = self.spark.createDataFrame([(-5, None)], "a long, c long")
+                projected = df.select(and_udf("a", "c"))
+                self.assertEqual([False], [r[0] for r in projected.collect()])
+                self.assertEqual(0, self._eval_python_count(projected), "and select lowered")
+                df = self.spark.createDataFrame([(5, None)], "a long, c long")
+                projected = df.select(or_udf("a", "c"))
+                self.assertEqual([True], [r[0] for r in projected.collect()])
+                self.assertEqual(0, self._eval_python_count(projected), "or select lowered")
 
         # Same thing across a join, where the NULL operand lives entirely on the
         # right side. Deterministic plan: no AQE, no broadcast, so the pushed-down
@@ -849,40 +858,41 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
             self.assertEqual([True], [r[0] for r in df.select(pudf("c", "x", "y")).collect()])
 
     def test_udf_transpile_lowering_caps(self):
-        # Both bounds on comparison lowering. Exercised directly rather than
-        # through a UDF so a refusal cannot be confused with a fallback for some
-        # other reason. No `sql_conf` here on purpose: nothing on this path reads
-        # SQLConf (only `_get_transpilers` does), so wrapping it would imply the
-        # caps are conf-gated when they are module constants.
+        # Every bound on comparison lowering. Exercised through
+        # `_transpile_from_ast` rather than a UDF so a refusal cannot be confused
+        # with a fallback for some other reason, while still going through its
+        # per-variant resets. No `sql_conf` here on purpose: nothing on this path
+        # reads SQLConf (only `_get_transpilers` does), so wrapping it would imply
+        # the caps are conf-gated when they are module constants.
         import ast as _ast
 
         from pyspark.errors import UnsupportedOperationException
         from pyspark.sql.transpile import (
             _MAX_COMPARISON_OPS,
-            _MAX_LOWERED_COMPARISON_WEIGHT,
             _MAX_LOWERED_COMPARISONS,
+            _MAX_MATERIALIZED_WEIGHT,
             CatalystTranspiler,
+            _materialized_weight,
         )
 
         transpiler = CatalystTranspiler()
-        transpiler._param_categories = {0: "numeric"}
 
         def compare_node(src):
             return _ast.parse(src, mode="eval").body
 
-        def lower(src):
-            # `_transpile_from_ast` is what normally zeroes the per-lowering state;
-            # reset it here so each case is charged on its own. The category cache
-            # has to go too: it keys on `id(node)`, and CPython reuses the id of a
-            # collected node for one of a different type, so a cache kept across
-            # separately parsed sources hands back a stale category. The weight
-            # cache keys on `id(node)` for the same reason.
-            transpiler._lowered_comparisons = 0
-            transpiler._lowered_comparison_weight = 0
-            transpiler._compare_depth = 0
-            transpiler._category_cache = {}
-            transpiler._comparison_weight_cache = {}
-            return transpiler._convert_chunk(["x"], compare_node(src))
+        def lower(src, category="numeric"):
+            fdef = _ast.parse(f"def f(x):\n    return {src}").body[0]
+            return transpiler._transpile_from_ast(
+                src, fdef, fdef, ["x"], BooleanType(), {0: category}
+            )
+
+        def refused(src):
+            with self.assertRaises(UnsupportedOperationException) as ctx:
+                lower(src)
+            return str(ctx.exception)
+
+        link_msg = f"more than {_MAX_LOWERED_COMPARISONS} comparisons"
+        weight_msg = f"more than {_MAX_MATERIALIZED_WEIGHT}"
 
         def chain_src(n):
             # n operators over n + 1 operands: x < 0 < 1 < ... < n - 1
@@ -890,94 +900,97 @@ class UDFTranspileUnitTests(ReusedSQLTestCase):
 
         # ---- Per-chain operator cap ----
         lower(chain_src(_MAX_COMPARISON_OPS))  # at the cap, succeeds
-        with self.assertRaises(UnsupportedOperationException) as ctx:
-            lower(chain_src(_MAX_COMPARISON_OPS + 1))
-        self.assertIn("operators", str(ctx.exception))
+        self.assertIn("operators", refused(chain_src(_MAX_COMPARISON_OPS + 1)))
 
-        # ---- Whole-body budget ----
+        # ---- Link budget, at N and N + 1 ----
+        def or_src(n):
+            return " or ".join(["(x == %d)" % i for i in range(n)])
+
+        lower(or_src(_MAX_LOWERED_COMPARISONS))
+        self.assertIn(link_msg, refused(or_src(_MAX_LOWERED_COMPARISONS + 1)))
+
+        # The budget resets per input-type variant: 2 x 100 links both lower.
+        hundred = " or ".join(["(x == x)"] * 100)
+        for category in ("numeric", "string"):
+            self.assertIsNotNone(lower(hundred, category), category)
+
         # A comparison may be an operand of another comparison (both category
         # "bool"), and a chain re-lowers each interior operand once per adjacent
-        # pair, so nesting doubles the link count per level while every node stays
-        # far under the per-chain cap. Before the budget existed this reached hours
-        # of driver-side py4j work from a few hundred characters of source.
+        # pair, so nesting doubles the link count per level. Before the budget
+        # existed this reached hours of driver-side py4j work from a few hundred
+        # characters of source.
         def nested_src(depth):
             src = "(x < 0)"
             for _ in range(depth):
                 src = "((x < 0) < %s < (x < 0))" % src
             return src
 
-        # Shallow nesting stays inside the budget and still lowers.
         lower(nested_src(2))
+        # Depth 5 is 156 links but under the weight bound: only the link budget
+        # stops it.
+        self.assertLess(_materialized_weight(compare_node(nested_src(5))), _MAX_MATERIALIZED_WEIGHT)
+        self.assertIn(link_msg, refused(nested_src(5)))
+        # ... and the refusal part-way through left no stale count behind.
+        lower(chain_src(_MAX_COMPARISON_OPS))
 
-        # Deep nesting is refused by the budget, not by the per-chain cap: every
-        # `ast.Compare` in here has exactly two operators.
+        # ---- Materialized-weight budget ----
+        # Every `ast.Compare` here is under the per-chain cap, and the weight is
+        # checked before the first link is lowered, so the weight is what fires.
         deep = nested_src(10)
-        node = compare_node(deep)
         self.assertTrue(
             all(
                 len(n.ops) <= _MAX_COMPARISON_OPS
-                for n in _ast.walk(node)
+                for n in _ast.walk(compare_node(deep))
+                if isinstance(n, _ast.Compare)
+            )
+        )
+        self.assertIn(weight_msg, refused(deep))
+
+        # Right-nested: ONE operand of a single comparison per level, so 2d + 1
+        # links (41 at depth 20, under the link budget) but ~2^d materialized
+        # nodes, since each operand Column is referenced twice (3x for `==`) and
+        # the JVM converter does not memoize.
+        def right_nested_src(depth, leaf="(x < 0)", op="<"):
+            src = leaf
+            for _ in range(depth):
+                src = "%s %s (%s)" % (leaf, op, src)
+            return src
+
+        lower(right_nested_src(2))
+        deep_right = right_nested_src(20)
+        self.assertLess(
+            sum(
+                len(n.ops)
+                for n in _ast.walk(compare_node(deep_right))
                 if isinstance(n, _ast.Compare)
             ),
-            "every node must be under the per-chain cap, so the budget is what fires",
-        )
-        with self.assertRaises(UnsupportedOperationException) as ctx:
-            lower(deep)
-        # This shape's LINK count also grows with nesting (a chain re-lowers each
-        # interior operand once per adjacent pair), so it can trip the link budget
-        # too; either budget refusing is correct. Assert the materialized-weight
-        # bound fires, since that is the bound this shape is now judged by.
-        self.assertIn(str(_MAX_LOWERED_COMPARISON_WEIGHT), str(ctx.exception))
-
-        # ---- Right-nested body: linear links, exponential materialized size ----
-        # `(x < 0) < ((x < 0) < (...))` nests in ONE operand of a SINGLE
-        # comparison per level, so the link count grows linearly (~d + 1) while
-        # the materialized size doubles per level (each operand Column is
-        # referenced twice and the JVM converter does not memoize). The link
-        # budget above does NOT fire here -- depth 20 is 21 links, well under
-        # `_MAX_LOWERED_COMPARISONS` -- so the materialized-weight budget is what
-        # has to refuse it.
-        def right_nested_src(depth):
-            src = "(x < 0)"
-            for _ in range(depth):
-                src = "(x < 0) < (%s)" % src
-            return src
-
-        # Shallow right-nesting stays inside the weight budget and still lowers.
-        lower(right_nested_src(2))
-
-        deep_right = right_nested_src(20)
-        right_node = compare_node(deep_right)
-        # The link count is linear and well under the link budget, proving the
-        # weight budget -- not the link budget -- is what refuses this shape.
-        self.assertLess(
-            sum(len(n.ops) for n in _ast.walk(right_node) if isinstance(n, _ast.Compare)),
             _MAX_LOWERED_COMPARISONS,
-            "right-nest link count must stay under the link budget, so the weight "
-            "budget is what fires",
         )
-        with self.assertRaises(UnsupportedOperationException) as ctx:
-            lower(deep_right)
-        self.assertIn(str(_MAX_LOWERED_COMPARISON_WEIGHT), str(ctx.exception))
+        self.assertIn(weight_msg, refused(deep_right))
+        self.assertIn(weight_msg, refused(right_nested_src(20, "(x == 1)", "==")))
 
-        # `==` references each operand three times (vs twice for `<`), so an
-        # equality right-nest compounds faster; the same depth already refuses.
-        def eq_right_nested_src(depth):
-            src = "(x == 1)"
-            for _ in range(depth):
-                src = "(x == 1) == (%s)" % src
-            return src
-
-        with self.assertRaises(UnsupportedOperationException) as ctx:
-            lower(eq_right_nested_src(20))
-        self.assertIn(str(_MAX_LOWERED_COMPARISON_WEIGHT), str(ctx.exception))
+        # The same nest routed through a ternary, in each of its three positions:
+        # the ternary's Column is referenced as often as any other operand.
+        ternary_shapes = {
+            "test": "(x < 0) {op} (True if ({inner}) else False)",
+            "body": "(x < 0) {op} (({inner}) if x > 0 else (x < 0))",
+            "else": "(x < 0) {op} ((x < 0) if x > 0 else ({inner}))",
+        }
+        for position, shape in ternary_shapes.items():
+            for op in ("<", "=="):
+                with self.subTest(position=position, op=op):
+                    src = "(x < 0)"
+                    for _ in range(20):
+                        src = shape.format(op=op, inner=src)
+                    self.assertIn(weight_msg, refused(src))
+        # One level over a ternary still lowers.
+        lower("(x < 0) < ((x < 1) if x > 0 else (x < 2))")
+        # `is None` reads only its subject, so an identity nest stays linear.
+        lower("(" * 20 + "x < 0" + ") is None" * 20)
 
         # `in` / `not in` are refused outright; membership needs its own NULL
-        # analysis and is deferred to its own ticket (SPARK-56925 is the
-        # unrelated bare-`if` truthiness work).
-        with self.assertRaises(UnsupportedOperationException) as ctx:
-            lower("x in (1, 2)")
-        self.assertIn("`in` / `not in`", str(ctx.exception))
+        # analysis and is deferred to its own ticket.
+        self.assertIn("`in` / `not in`", refused("x in (1, 2)"))
 
     def test_udf_transpile_multi_row(self):
         # Every other transpile test uses a 1-row DataFrame; this one runs
