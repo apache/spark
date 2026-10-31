@@ -173,7 +173,7 @@ def _parallelFitTasks(
             "An active SparkSession is required for running cross validator fit tasks."
         )
 
-    def get_single_task(index: int, param_map: Any) -> Callable[[], Tuple[int, float]]:
+    def get_single_task(index: int, param_map: "ParamMap") -> Callable[[], Tuple[int, float]]:
         def single_task() -> Tuple[int, float]:
             if not is_remote():
                 # Active session is thread-local variable, in background thread the active session
@@ -183,9 +183,7 @@ def _parallelFitTasks(
                 )
 
             model = estimator.fit(train, param_map)
-            metric = evaluator.evaluate(
-                model.transform(validation, param_map)  # type: ignore[union-attr]
-            )
+            metric = evaluator.evaluate(model.transform(validation, param_map))
             return index, metric
 
         return single_task

@@ -34,14 +34,16 @@ import org.apache.spark.internal.Logging
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.CatalystTypeConverters
 import org.apache.spark.sql.catalyst.plans.logical.SampleMethod
-import org.apache.spark.sql.catalyst.util.{DateFormatter, DateTimeUtils, TimestampFormatter}
+import org.apache.spark.sql.catalyst.util.{
+  CharVarcharUtils, DateFormatter, DateTimeUtils, TimestampFormatter}
 import org.apache.spark.sql.catalyst.util.DateTimeUtils.{localDateTimeToMicros, toJavaTimestampNoRebase}
 import org.apache.spark.sql.catalyst.util.IntervalUtils.{fromDayTimeString, fromYearMonthString, getDuration}
 import org.apache.spark.sql.connector.catalog.{Identifier, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange._
 import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
 import org.apache.spark.sql.connector.catalog.index.TableIndex
-import org.apache.spark.sql.connector.expressions.{Expression, Literal, NamedReference}
+import org.apache.spark.sql.connector.expressions.{Expression, GeneralScalarExpression, Literal,
+  NamedReference}
 import org.apache.spark.sql.connector.expressions.aggregate.AggregateFunc
 import org.apache.spark.sql.connector.expressions.filter.{AlwaysFalse, AlwaysTrue, Predicate}
 import org.apache.spark.sql.connector.util.V2ExpressionSQLBuilder
@@ -216,6 +218,13 @@ abstract class JdbcDialect extends Serializable with Logging {
     val micros = localDateTimeToMicros(ldt)
     toJavaTimestampNoRebase(micros)
   }
+
+  /**
+   * Whether TimestampNTZType values are read and written as zoneless `LocalDateTime` rather than
+   * through `java.sql.Timestamp`. Snapshotted into `JDBCOptions` when the options are built.
+   */
+  @Since("4.4.0")
+  def timestampNTZAsWallClock: Boolean = false
 
   /**
    * Returns a factory for creating connections to the given JDBC URL.
@@ -410,6 +419,16 @@ abstract class JdbcDialect extends Serializable with Logging {
     override def build(expr: Expression): String = expr match {
       case _: AlwaysTrue => "(1 = 1)"
       case _: AlwaysFalse => "(1 = 0)"
+      case e: GeneralScalarExpression
+          if e.name() == CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING =>
+        if (!isSupportedFunction(CharVarcharUtils.V2_CHAR_READ_SIDE_PADDING)) {
+          throw new SparkUnsupportedOperationException(
+            errorClass = "_LEGACY_ERROR_TEMP_3177",
+            messageParameters = Map(
+              "class" -> this.getClass.getSimpleName,
+              "funcName" -> e.name()))
+        }
+        inputToSQL(e.children()(0))
       case _ => super.build(expr)
     }
 
@@ -527,6 +546,16 @@ abstract class JdbcDialect extends Serializable with Logging {
 
   /**
    * Returns whether the database supports function.
+   *
+   * For most names this means the remote can execute that SQL function.
+   * CHAR_READ_SIDE_PADDING is different: Spark only emits it as a CHAR scan
+   * column in equality, null-safe equality, inequality, or IN against a
+   * literal already padded to the CHAR width. Returning true for that name
+   * means JDBC may compile it as the raw column, so the remote must compare
+   * that column with a blank-padded (PAD SPACE) CHAR literal the same way
+   * Spark compares the padded value. Dialects that strip trailing spaces or
+   * use a NO PAD collation must not opt in.
+   *
    * @param funcName Upper-cased function name
    * @return True if the database supports function.
    */
@@ -953,15 +982,6 @@ abstract class JdbcDialect extends Serializable with Logging {
       rsmd: ResultSetMetaData,
       columnIdx: Int,
       metadata: MetadataBuilder): Unit = {}
-
-  /**
-   * Set extra column metadata for the given column on the write path.
-   *
-   * @param dt The Catalyst type of the column being written.
-   * @param metadata The metadata builder to store the extra column information.
-   */
-  @Since("4.4.0")
-  def updateExtraColumnMetaForWrite(dt: DataType, metadata: MetadataBuilder): Unit = {}
 }
 
 /**

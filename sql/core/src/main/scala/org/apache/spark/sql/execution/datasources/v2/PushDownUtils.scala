@@ -506,7 +506,7 @@ object PushDownUtils extends Logging {
         None
       case DynamicPruningExpression(e) => Some(e)
       case _: DynamicPruning => None
-      case f => Some(f.transform { case s: ExecScalarSubquery => s.toLiteral })
+      case f => Some(ExecScalarSubquery.replaceWithLiterals(f))
     }
 
   /**
@@ -717,9 +717,22 @@ object PushDownUtils extends Logging {
       relation: DataSourceV2Relation): Seq[AttributeReference] = {
     val nameToAttr = Utils.toMap(relation.output.map(_.name), relation.output)
     val cleaned = CharVarcharUtils.replaceCharVarcharWithStringInSchema(schema)
-    toAttributes(cleaned).map {
-      // we have to keep the attribute id during transformation
-      a => a.withExprId(nameToAttr(a.name).exprId)
+    toAttributes(cleaned).map { a =>
+      val orig = nameToAttr(a.name)
+      // Keep exprId. Drop __CHAR_VARCHAR_TYPE_STRING only when the relation
+      // attribute already has none; keep it otherwise. This runs in the
+      // optimizer with no second padding pass, so re-stamping a cleaned
+      // attribute would look unpadded when a V2 scan readSchema() still
+      // surfaces CHAR/VARCHAR. File sources usually already substituted
+      // STRING, so the stamp was latent. AnalyzedSchemaProjection keeps
+      // cleaned metadata across versioned-table refresh, so a padded
+      // relation still arrives unstamped. Do not key off the session conf.
+      val metadata = if (CharVarcharUtils.getRawTypeString(orig.metadata).isEmpty) {
+        CharVarcharUtils.cleanMetadata(a.metadata)
+      } else {
+        a.metadata
+      }
+      a.withExprId(orig.exprId).withMetadata(metadata)
     }
   }
 }

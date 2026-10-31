@@ -158,7 +158,7 @@ object StaticSQLConf {
         "server refuses to start when hive.server2.enable.doAs=true and " +
         "hive.server2.authentication verifies user identities (any recognized type other " +
         "than NONE/NOSASL), unless this option is set to true to acknowledge the limitation.")
-      .version("5.0.0")
+      .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -373,7 +373,7 @@ object StaticSQLConf {
         "framework. Execution requires a supported external UDF physical operator. When false, " +
         "external UDF expressions are rejected. This config must be set before the SparkSession " +
         "is created. Experimental.")
-      .version("4.2.0")
+      .version("4.3.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
       .createWithDefault(false)
@@ -463,6 +463,22 @@ object StaticSQLConf {
       .bytesConf(ByteUnit.BYTE)
       .checkValue(_ >= 0, "The maximum total size must not be negative.")
       .createWithDefault(128 * 1024) // 128 KiB
+
+  val NATIVE_DATA_SOURCE_ENABLED =
+    buildStaticConf("spark.sql.dataSource.native.enabled")
+      .doc("When true, Spark finds and loads native data sources: data sources implemented in " +
+        "native code such as Rust or C++. The library of a data source, such as my_source, is " +
+        "found when it is installed in the native library path as spark_datasource_my_source, " +
+        "for example libspark_datasource_my_source.so in /usr/local/lib on Linux. The native " +
+        "library path consists of the directories of java.library.path, and the lib directory " +
+        "of each installation prefix in PATH. Libraries can also be distributed in native data " +
+        "source packages (.sparkpkg files), added with spark.addArtifact or under " +
+        "spark.sql.dataSource.native.paths. Loading a native data source runs its native code " +
+        "in the driver and executor processes.")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .booleanConf
+      .createWithDefault(true)
 
   val KAFKA_DISALLOWED_OPTIONS =
     buildStaticConf("spark.sql.kafka.disallowedOptions")

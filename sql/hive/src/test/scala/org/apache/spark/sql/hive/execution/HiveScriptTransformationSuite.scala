@@ -31,6 +31,7 @@ import org.apache.spark.sql.catalyst.util.DateTimeConstants
 import org.apache.spark.sql.execution._
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.hive.test.TestHiveSingleton
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.types.DayTimeIntervalType._
 import org.apache.spark.sql.types.YearMonthIntervalType._
@@ -59,7 +60,7 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
     )
   }
 
-  private val hiveIOSchema: ScriptTransformationIOSchema = {
+  private def hiveIOSchema: ScriptTransformationIOSchema = {
     defaultIOSchema.copy(
       inputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName),
       outputSerdeClass = Some(classOf[LazySimpleSerDe].getCanonicalName)
@@ -369,6 +370,95 @@ class HiveScriptTransformationSuite extends BaseScriptTransformationSuite with T
           |FROM v
         """.stripMargin)
       checkAnswer(query, identity, df.select($"c", $"d", $"e").collect().toImmutableArraySeq)
+    }
+  }
+
+  test("SPARK-60090: TRANSFORM CHAR/VARCHAR with Hive SerDe uses Project assignment") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      // Hive sessions default to LazySimpleSerDe; script I/O stays STRING-shaped and
+      // Project applies pad / EXCEED_LIMIT_LENGTH for the declared AS types.
+      val query = sql(
+        """
+          |SELECT TRANSFORM(
+          |  array(CAST('ab' AS CHAR(4) COLLATE UTF8_LCASE)),
+          |  named_struct('value', CAST('xyz' AS VARCHAR(6))))
+          |USING 'cat'
+          |AS (
+          |  chars ARRAY<CHAR(4) COLLATE UTF8_LCASE>,
+          |  nested STRUCT<value: VARCHAR(6) COLLATE UNICODE_CI>)
+          |FROM VALUES (1) input(dummy)
+          |""".stripMargin)
+      assert(query.schema.map(_.dataType) === Seq(
+        ArrayType(CharType(4, "UTF8_LCASE")),
+        StructType(Seq(StructField("value", VarcharType(6, "UNICODE_CI"))))))
+      checkAnswer(query, Row(Seq("ab  "), Row("xyz")))
+
+      checkExceedLimitLength(
+        intercept[Exception] {
+          sql(
+            """
+              |SELECT TRANSFORM('abcdef')
+              |USING 'cat'
+              |AS (c CHAR(4))
+              |FROM VALUES (1) input(dummy)
+              |""".stripMargin).collect()
+        },
+        "4")
+      checkExceedLimitLength(
+        intercept[Exception] {
+          sql(
+            """
+              |SELECT TRANSFORM('abcdefgh')
+              |USING 'cat'
+              |AS (v VARCHAR(5))
+              |FROM VALUES (1) input(dummy)
+              |""".stripMargin).collect()
+        },
+        "5")
+      Seq(
+        """
+          |SELECT TRANSFORM(array('abcdef'))
+          |USING 'cat'
+          |AS (value ARRAY<CHAR(4)>)
+          |FROM VALUES (1) input(dummy)
+          |""".stripMargin,
+        """
+          |SELECT TRANSFORM(named_struct('value', 'abcdef'))
+          |USING 'cat'
+          |AS (value STRUCT<value: VARCHAR(4)>)
+          |FROM VALUES (1) input(dummy)
+          |""".stripMargin).foreach { q =>
+        checkExceedLimitLength(intercept[Exception](sql(q).collect()), "4")
+      }
+    }
+  }
+
+  test("SPARK-60090: Hive TRANSFORM view keeps CHAR/VARCHAR Project assignment") {
+    assume(TestUtils.testCommandAvailable("/bin/bash"))
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withView("v") {
+        sql(
+          """CREATE VIEW v AS
+            |SELECT TRANSFORM('ab') USING 'cat' AS (c CHAR(4))
+            |FROM VALUES (1) input(dummy)""".stripMargin)
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          checkAnswer(sql("SELECT * FROM v"), Row("ab  "))
+        }
+      }
+    }
+    withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "true") {
+      withView("v_overflow") {
+        sql(
+          """CREATE VIEW v_overflow AS
+            |SELECT TRANSFORM('abcdef') USING 'cat' AS (c CHAR(4))
+            |FROM VALUES (1) input(dummy)""".stripMargin)
+        withSQLConf(SQLConf.CHAR_VARCHAR_STANDARD_SEMANTICS.key -> "false") {
+          checkExceedLimitLength(
+            intercept[Exception](sql("SELECT * FROM v_overflow").collect()),
+            "4")
+        }
+      }
     }
   }
 

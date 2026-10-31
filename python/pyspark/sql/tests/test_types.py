@@ -76,6 +76,7 @@ from pyspark.sql.types import (
     _array_signed_int_typecode_ctype_mappings,
     _array_type_mappings,
     _array_unsigned_int_typecode_ctype_mappings,
+    _check_no_char_varchar,
     _create_row,
     _infer_type,
     _make_type_verifier,
@@ -658,6 +659,50 @@ class TypesTestsMixin:
         self.assertEqual(StringType("UTF8_BINARY").simpleString(), "string")
         self.assertEqual(StringType("UTF8_LCASE").simpleString(), "string collate UTF8_LCASE")
         self.assertEqual(StringType("UNICODE").simpleString(), "string collate UNICODE")
+
+    def test_check_no_char_varchar(self):
+        from pyspark.testing.objects import ExamplePointUDT
+
+        _check_no_char_varchar(StringType(), "Python UDF return types")
+        _check_no_char_varchar(ArrayType(StringType()), "Python UDF return types")
+
+        cases = [
+            CharType(3),
+            VarcharType(8),
+            ArrayType(CharType(5)),
+            MapType(VarcharType(4), StringType()),
+            MapType(StringType(), VarcharType(4)),
+            MapType(StringType(), ArrayType(CharType(3))),
+            StructType([StructField("c", CharType(3))]),
+        ]
+        for dt in cases:
+            with self.subTest(dt=dt.simpleString()):
+                with self.assertRaises(PySparkNotImplementedError) as pe:
+                    _check_no_char_varchar(dt, "Python UDF return types")
+                self.check_error(
+                    exception=pe.exception,
+                    errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+                    messageParameters={
+                        "feature": "Python UDF return types",
+                        "data_type": dt.simpleString(),
+                    },
+                )
+
+        class CharStorageUDT(ExamplePointUDT):
+            @classmethod
+            def sqlType(cls):
+                return StructType([StructField("x", CharType(3))])
+
+        with self.assertRaises(PySparkNotImplementedError) as pe:
+            _check_no_char_varchar(CharStorageUDT(), "Python UDF return types")
+        self.check_error(
+            exception=pe.exception,
+            errorClass="CHAR_VARCHAR_NOT_SUPPORTED_IN_PYTHON",
+            messageParameters={
+                "feature": "Python UDF return types",
+                "data_type": CharStorageUDT().simpleString(),
+            },
+        )
 
     def test_char_varchar_type_collations(self):
         from pyspark.sql.types import _parse_datatype_json_string
@@ -2855,6 +2900,48 @@ class TypesTestsMixin:
                 self.assertTrue(row.sa.startswith("2020-01-02 03:04:05.1234567"), row.sa)
                 self.assertTrue(row.mv.startswith("2020-01-02 03:04:05.1234567"), row.mv)
 
+    def test_timestamp_nanos_type_arrow_conversion_floors_to_precision(self):
+        # Arrow timestamp[ns] carries nine fractional digits; a lower declared precision must floor
+        # them, or values equal at that precision compare and group as different.
+        import pandas as pd
+        import pyarrow as pa
+
+        cases = [
+            (
+                TimestampNTZNanosType(7),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456712"],
+                "2020-01-02 03:04:05.1234567",
+            ),
+            (
+                TimestampLTZNanosType(8),
+                ["2020-01-02 03:04:05.123456789", "2020-01-02 03:04:05.123456781"],
+                "2020-01-02 03:04:05.12345678",
+            ),
+            # Pre-epoch values floor toward -inf, not toward zero.
+            (
+                TimestampNTZNanosType(7),
+                ["1969-12-31 23:59:59.999999999", "1969-12-31 23:59:59.999999901"],
+                "1969-12-31 23:59:59.9999999",
+            ),
+        ]
+        with self.sql_conf(
+            {
+                "spark.sql.timestampNanosTypes.enabled": True,
+                "spark.sql.session.timeZone": "UTC",
+                "spark.sql.execution.arrow.pyspark.enabled": True,
+            }
+        ):
+            for nanos_type, values, floored in cases:
+                pdf = pd.DataFrame({"ts": pd.to_datetime(pd.Series(values))})
+                table = pa.table({"ts": pa.array(pdf["ts"], type=pa.timestamp("ns"))})
+                schema = StructType([StructField("ts", nanos_type)])
+                floored_literal = f"CAST('{floored}' AS {nanos_type.simpleString()})"
+                for data in (pdf, table):
+                    df = self.spark.createDataFrame(data, schema)
+                    self.assertEqual(1, df.distinct().count())
+                    self.assertEqual(2, df.where(f"ts = {floored_literal}").count())
+                    self.assertEqual([pd.Timestamp(floored)] * 2, list(df.toPandas()["ts"]))
+
     def test_timestamp_nanos_type_arrow_udf(self):
         # SPARK-57462 follow-up: with the eager Arrow-conversion reject removed, an Arrow-optimized
         # Python UDF (useArrow=True) can take and return the nanosecond timestamp types through the
@@ -3886,6 +3973,19 @@ class DataTypeTests(unittest.TestCase, PySparkErrorTestUtils):
         self.assertEqual(r[2], 3)
         self.assertEqual(list(r), [1, 2, 3])
         self.assertEqual([v for v in r], [1, 2, 3])
+
+    def test_variant_builder_size_limit(self):
+        from pyspark.sql.variant_utils import VariantBuilder
+
+        for json_str in ['"%s"' % ("a" * 100), '{"%s": 1}' % ("k" * 100)]:
+            with self.assertRaises(PySparkValueError) as pe:
+                VariantBuilder(size_limit=64).build(json_str)
+
+            self.check_error(
+                exception=pe.exception,
+                errorClass="VARIANT_SIZE_LIMIT",
+                messageParameters={"sizeLimit": "64"},
+            )
 
 
 class DataTypeVerificationTests(unittest.TestCase, PySparkErrorTestUtils):
