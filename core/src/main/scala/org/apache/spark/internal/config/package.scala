@@ -3075,7 +3075,9 @@ package object config {
       .doc("Path to specify the Ivy user directory, used for the local Ivy cache and " +
         "package files from spark.jars.packages. " +
         "This will override the Ivy property ivy.default.ivy.user.dir " +
-        "which defaults to ~/.ivy2.5.2")
+        "which defaults to ~/.ivy2.5.2. " +
+        "SparkSession.addArtifact reads the local repository search path from the session " +
+        "configuration and keeps its runtime cache and downloaded jars session-local.")
       .version("1.3.0")
       .stringConf
       .createWithDefault("~/.ivy2.5.2")
@@ -3085,6 +3087,7 @@ package object config {
       .doc("Path to an Ivy settings file to customize resolution of jars specified " +
         "using spark.jars.packages or ivy:// URIs passed to SparkSession.addArtifact instead " +
         "of the built-in defaults, such as maven central. " +
+        "SparkSession.addArtifact reads this setting from the session configuration. " +
         "For spark.jars.packages, additional repositories from spark.jars.repositories will " +
         "also be included. " +
         "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
@@ -3100,7 +3103,7 @@ package object config {
     ConfigBuilder("spark.jars.ivyConnectTimeout")
       .doc("Connection timeout for Ivy repository requests made by " +
         "SparkSession.addArtifact. Client-resolved Spark Connect Ivy URIs do not use this " +
-        "setting. This must be set before the SparkContext starts.")
+        "setting. The session configuration value is captured on first use of the artifact APIs.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
@@ -3113,7 +3116,7 @@ package object config {
     ConfigBuilder("spark.jars.ivyReadTimeout")
       .doc("Read timeout for Ivy repository requests made by SparkSession.addArtifact. " +
         "Client-resolved Spark Connect Ivy URIs do not use this setting. " +
-        "This must be set before the SparkContext starts.")
+        "The session configuration value is captured on first use of the artifact APIs.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .timeConf(TimeUnit.MILLISECONDS)
