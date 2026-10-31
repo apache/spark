@@ -235,6 +235,8 @@ message Read {
 
     // Options for the named table. The map key is case insensitive.
     map<string, string> options = 2;
+
+    optional string source_name = 3;
   }
 
   message DataSource {
