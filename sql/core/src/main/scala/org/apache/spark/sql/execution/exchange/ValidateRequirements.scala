@@ -97,7 +97,7 @@ object ValidateRequirements extends Logging {
    * (`hasSameReducedKeys`). The coverage of every operation key
    * (`KeyedPartitioning.meetsCoPartitionKeyRequirement`) is a skew heuristic and part of neither.
    */
-  private def satisfiesForPairing(
+  private[execution] def satisfiesForPairing(
       children: Seq[SparkPlan],
       distributions: Seq[Distribution]): Boolean = {
     val specs = children.zip(distributions).map { case (child, distribution) =>

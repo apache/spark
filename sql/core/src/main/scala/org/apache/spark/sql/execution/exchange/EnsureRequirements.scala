@@ -1428,6 +1428,7 @@ case class EnsureRequirements(
           }
         }
         if (hasSemanticEqualPartitioning(child.outputPartitioning)) {
+          PartitioningOrigin.record(child, upper, shuffleOrigin)
           child
         } else {
           operator

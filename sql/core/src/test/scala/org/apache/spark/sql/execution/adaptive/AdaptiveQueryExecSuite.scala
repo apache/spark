@@ -3878,7 +3878,8 @@ class AdaptiveQueryExecSuite
     def localSort(child: SparkPlan): SparkPlan =
       SortExec(SortOrder(child.output.head, Ascending) :: Nil, global = false, child)
 
-    val evaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = false, countLocalSort = true)
+    val evaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = false, countLocalSort = true, pushDownShuffleThroughUnion = false)
     def cost(plan: SparkPlan): Cost = evaluator.evaluateCost(plan)
 
     // Same number of shuffles: fewer local sorts is cheaper.
@@ -3894,7 +3895,7 @@ class AdaptiveQueryExecSuite
 
     // When countLocalSort is disabled, local sorts do not affect the cost.
     val noSortEvaluator = SimpleCostEvaluator(
-      forceOptimizeSkewedJoin = false, countLocalSort = false)
+      forceOptimizeSkewedJoin = false, countLocalSort = false, pushDownShuffleThroughUnion = false)
     assert(noSortEvaluator.evaluateCost(oneShuffleTwoSorts)
       .compare(noSortEvaluator.evaluateCost(oneShuffleNoSort)) === 0)
 
@@ -3903,7 +3904,8 @@ class AdaptiveQueryExecSuite
     // local sorts.
     def join(l: SparkPlan, r: SparkPlan, isSkew: Boolean): SparkPlan =
       SortMergeJoinExec(l.output.take(1), r.output.take(1), Inner, None, l, r, isSkewJoin = isSkew)
-    val skewEvaluator = SimpleCostEvaluator(forceOptimizeSkewedJoin = true, countLocalSort = true)
+    val skewEvaluator = SimpleCostEvaluator(
+      forceOptimizeSkewedJoin = true, countLocalSort = true, pushDownShuffleThroughUnion = false)
     // Skew-join plan: 1 skew join, 3 shuffles, 2 local sorts.
     val withSkewJoin = skewEvaluator.evaluateCost(
       join(localSort(shuffle(shuffle(leaf))), localSort(shuffle(leaf)), isSkew = true))
@@ -5328,11 +5330,10 @@ class AdaptiveQueryExecSuite
     // `EnsureRequirements` asks a `UnionExec` what it reports, and `StampUnionDecisions` freezes
     // that answer so every rule below it and the execution read what the exchanges were planned
     // against. `SnapshotUnionPreparationConf` has to run first, or the value the stamp reads
-    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. The two sit
-    // next to `EnsureRequirements` with nothing in between, and nothing at the list itself says the
-    // three have to stay contiguous: an injected rule cannot land between them, since those are
-    // appended at the tail, but an edit to the list can. AQE builds its own list, and
-    // `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
+    // is whatever `conf` says by then rather than the one `EnsureRequirements` saw. Shuffle
+    // push-down runs under that snapshot before the stamp fixes the rebuilt unions. An injected
+    // rule cannot land between these preparation rules, but an edit to the list can. AQE builds
+    // its own list, and `UnionCodegenSuite` covers the one `QueryExecution` builds when AQE is off.
     withSQLConf(SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "true") {
       // The repartition exchanges are what bring AQE in, with the aggregate's distribution
       // requirement as a second reason: `InsertAdaptiveSparkPlan` tests for either and leaves a
@@ -5356,8 +5357,11 @@ class AdaptiveQueryExecSuite
       assert(snapshot >= 0 && snapshot == ensureRequirements - 1,
         s"expected the conf snapshot right before EnsureRequirements at $ensureRequirements, " +
           s"got $snapshot")
-      assert(stamps.headOption.contains(ensureRequirements + 1),
-        s"expected the stamp right behind EnsureRequirements at $ensureRequirements, got $stamps")
+      val pushDown = rules.indexWhere(_.isInstanceOf[PushDownShuffleExchangeThroughUnion])
+      assert(pushDown == ensureRequirements + 1,
+        s"expected shuffle push-down after EnsureRequirements, got $pushDown")
+      assert(stamps.headOption.contains(pushDown + 1),
+        s"expected the union stamp after shuffle push-down at $pushDown, got $stamps")
       assert(stamps.last == rules.length - 1,
         s"expected the trailing stamp last of ${rules.length} rules, got $stamps")
     }

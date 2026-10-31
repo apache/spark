@@ -46,7 +46,13 @@ case class InsertAdaptiveSparkPlan(
 
   override def conf: SQLConf = adaptiveExecutionContext.session.sessionState.conf
 
-  override def apply(plan: SparkPlan): SparkPlan = applyInternal(plan, false)
+  override def apply(plan: SparkPlan): SparkPlan = {
+    if (!adaptiveExecutionContext.queryContainsSubqueries &&
+        plan.containsAnyPattern(SCALAR_SUBQUERY, IN_SUBQUERY, DYNAMIC_PRUNING_SUBQUERY)) {
+      adaptiveExecutionContext.queryContainsSubqueries = true
+    }
+    applyInternal(plan, false)
+  }
 
   private def applyInternal(plan: SparkPlan, isSubquery: Boolean): SparkPlan = plan match {
     case _ if !conf.adaptiveExecutionEnabled => plan

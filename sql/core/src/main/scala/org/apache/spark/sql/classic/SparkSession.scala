@@ -33,7 +33,7 @@ import org.apache.spark.annotation.{DeveloperApi, Experimental, Stable, Unstable
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.internal.Logging
 import org.apache.spark.internal.LogKeys.{CALL_SITE_LONG_FORM, CLASS_NAME, CONFIG}
-import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT}
+import org.apache.spark.internal.config.{ConfigEntry, EXECUTOR_ALLOW_SPARK_CONTEXT, OptionalConfigEntry}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.{SparkListener, SparkListenerApplicationEnd}
 import org.apache.spark.sql
@@ -1143,19 +1143,27 @@ object SparkSession extends SparkSessionCompanion with Logging {
 
   /**
    * Returns a cloned SparkSession with all specified configurations disabled, or
-   * the original SparkSession if all configurations are already disabled.
+   * the original SparkSession if all configurations are already disabled. Optional configurations
+   * are explicitly set to false when unset, since their effective default may enable them.
    */
   private[sql] def getOrCloneSessionWithConfigsOff(
       session: SparkSession,
-      configurations: Seq[ConfigEntry[Boolean]]): SparkSession = {
+      configurations: Seq[ConfigEntry[Boolean]],
+      optionalConfigurations: Seq[OptionalConfigEntry[Boolean]] = Nil): SparkSession = {
     val configsEnabled = configurations.filter(session.sessionState.conf.getConf[Boolean])
-    if (configsEnabled.isEmpty) {
+    val optionalConfigsEnabled = optionalConfigurations.filter { entry =>
+      !session.sessionState.conf.getConf(entry).contains(false)
+    }
+    if (configsEnabled.isEmpty && optionalConfigsEnabled.isEmpty) {
       session
     } else {
       val newSession = session.cloneSession()
       configsEnabled.foreach(conf => {
         newSession.sessionState.conf.setConf(conf, false)
       })
+      optionalConfigsEnabled.foreach { entry =>
+        newSession.sessionState.conf.setConf(entry, Some(false))
+      }
       newSession
     }
   }
