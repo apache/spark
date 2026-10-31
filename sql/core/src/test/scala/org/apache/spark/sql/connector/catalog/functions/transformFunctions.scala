@@ -21,6 +21,7 @@ import java.time.temporal.ChronoUnit
 
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.util.DateTimeUtils
+import org.apache.spark.sql.connector.catalog.InMemoryBaseTable
 import org.apache.spark.sql.types._
 import org.apache.spark.unsafe.types.UTF8String
 
@@ -196,21 +197,45 @@ case class DaysToYearsReducerWithLongResult() extends DaysToYearsReducerBase[Lon
 }
 
 object UnboundBucketFunction extends UnboundFunction {
-  override def bind(inputType: StructType): BoundFunction = BucketFunction
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.length == 2 && inputType.head.dataType == IntegerType) {
+      inputType(1).dataType match {
+        case LongType | TimestampType | TimestampNTZType => return BucketFunction
+        case dt @ (ByteType | ShortType | IntegerType | BinaryType) =>
+          return new TypedBucketFunction(dt)
+        case dt: StringType if dt.isUTF8BinaryCollation => return new TypedBucketFunction(dt)
+        case _ =>
+      }
+    }
+    // The table can store other types using its legacy hashCode convention, but that convention
+    // is not a safe SQL partition transform (for example, complex values have multiple internal
+    // representations). Declining the binding makes the planner ignore this partitioning.
+    throw new UnsupportedOperationException("Unsupported bucket input types")
+  }
   override def description(): String = name()
   override def name(): String = "bucket"
 }
 
 // the result should be consistent with BucketTransform defined at InMemoryBaseTable.scala
-object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
-  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+object BucketFunction extends TypedBucketFunction(LongType) {
+  // Scalar function resolution looks for a declared method on the concrete function class.
+  override def produceResult(input: InternalRow): Int = super.produceResult(input)
+}
+
+class TypedBucketFunction(valueType: DataType)
+    extends ScalarFunction[Int] with ReducibleFunction[Int, Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, valueType)
   override def resultType(): DataType = IntegerType
   override def name(): String = "bucket"
-  override def canonicalName(): String = name()
+  override def canonicalName(): String = valueType match {
+    case _: StringType => s"${name()}_${valueType.sql}"
+    case BinaryType => s"${name()}_binary"
+    case _ => name()
+  }
   override def toString: String = name()
   override def produceResult(input: InternalRow): Int = {
-    val value = if (input.isNullAt(1)) 0L else input.getLong(1)
-    Math.floorMod(value, input.getInt(0))
+    val value = if (input.isNullAt(1)) null else input.get(1, valueType)
+    Math.floorMod(InMemoryBaseTable.bucketValueHash(value, valueType), input.getInt(0))
   }
 
   override def reducer(
@@ -218,7 +243,11 @@ object BucketFunction extends ScalarFunction[Int] with ReducibleFunction[Int, In
       otherFunc: ReducibleFunction[_, _],
       otherNumBuckets: Int): Reducer[Int, Int] = {
 
-    if (otherFunc == BucketFunction) {
+    val compatible = otherFunc match {
+      case other: TypedBucketFunction => other.canonicalName() == canonicalName()
+      case _ => false
+    }
+    if (compatible) {
       val gcd = this.gcd(thisNumBuckets, otherNumBuckets)
       if (gcd > 1 && gcd != thisNumBuckets) {
         return BucketReducer(gcd)

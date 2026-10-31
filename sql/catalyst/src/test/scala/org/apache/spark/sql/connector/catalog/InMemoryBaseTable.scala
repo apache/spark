@@ -306,22 +306,8 @@ abstract class InMemoryBaseTable(
       // the result should be consistent with BucketFunctions defined at transformFunctions.scala
       case BucketTransform(numBuckets, cols, _) =>
         val hash: Long = cols.foldLeft(0L) { (acc, col) =>
-          val valueHash = extractor(col.fieldNames, cleanedSchema, row) match {
-            case (null, _) => 0L
-            case (value: Byte, _: ByteType) => value.toLong
-            case (value: Short, _: ShortType) => value.toLong
-            case (value: Int, _: IntegerType) => value.toLong
-            case (value: Long, _: LongType) => value
-            case (value: Long, _: TimestampType) => value
-            case (value: Long, _: TimestampNTZType) => value
-            case (value: UTF8String, _: StringType) =>
-              value.hashCode.toLong
-            case (value: Array[Byte], BinaryType) =>
-              util.Arrays.hashCode(value).toLong
-            case (v, t) =>
-              throw new IllegalArgumentException(s"Match: unsupported argument(s) type - ($v, $t)")
-          }
-          acc + valueHash
+          val (value, dataType) = extractor(col.fieldNames, cleanedSchema, row)
+          acc + InMemoryBaseTable.bucketValueHash(value, dataType)
         }
         Math.floorMod(hash, numBuckets)
       case NamedTransform("truncate", Seq(ref: NamedReference, length: V2Literal[_])) =>
@@ -1113,6 +1099,20 @@ object InMemoryBaseTable {
   }
 
   val SIMULATE_FAILED_WRITE_OPTION = "spark.sql.test.simulateFailedWrite"
+
+  // Keep storage hashing and the bound test bucket function in agreement. Other types remain
+  // writable with their historical hashCode behavior, but the function catalog must not bind
+  // them as evaluable partition transforms unless it can reproduce their storage hash.
+  def bucketValueHash(value: Any, dataType: DataType): Long = (value, dataType) match {
+    case (null, _) => 0L
+    case (v: Byte, ByteType) => v.toLong
+    case (v: Short, ShortType) => v.toLong
+    case (v: Int, IntegerType) => v.toLong
+    case (v: Long, LongType | TimestampType | TimestampNTZType) => v
+    case (v: UTF8String, _: StringType) => v.hashCode.toLong
+    case (v: Array[Byte], BinaryType) => util.Arrays.hashCode(v).toLong
+    case (v, _) => v.hashCode.toLong
+  }
 
   def extractValue(
       attr: String,
