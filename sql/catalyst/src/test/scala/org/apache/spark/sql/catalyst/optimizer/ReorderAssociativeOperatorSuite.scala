@@ -123,4 +123,52 @@ class ReorderAssociativeOperatorSuite extends PlanTest {
       comparePlans(optimized2, correctAnswer2)
     }
   }
+
+  test("Do not reorder associative operators across different evaluation modes") {
+    // Numeric try_add and try_multiply are replaced by TRY-mode Add and Multiply.
+    val tryAdd = Add($"a", $"b", EvalMode.TRY)
+    val tryMultiply = Multiply($"a", $"b", EvalMode.TRY)
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> true.toString) {
+      val originalQuery = testRelation.select(
+        (tryAdd + 1).as("try_add_plus_1"),
+        (tryMultiply * 2).as("try_multiply_times_2"),
+        Add($"a" + $"b", 1, EvalMode.TRY).as("try_add_of_ansi_add"),
+        Multiply($"a" * $"b", 2, EvalMode.TRY).as("try_multiply_of_ansi_multiply"),
+        (tryAdd + 1 + 2).as("try_add_plus_1_plus_2")).analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = testRelation.select(
+        (tryAdd + 1).as("try_add_plus_1"),
+        (tryMultiply * 2).as("try_multiply_times_2"),
+        Add($"a" + $"b", 1, EvalMode.TRY).as("try_add_of_ansi_add"),
+        Multiply($"a" * $"b", 2, EvalMode.TRY).as("try_multiply_of_ansi_multiply"),
+        (tryAdd + 3).as("try_add_plus_1_plus_2")).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+
+    withSQLConf(SQLConf.ANSI_ENABLED.key -> false.toString) {
+      // ANSI-mode operators can come from a view created with ANSI enabled.
+      val ansiAdd = Add($"a", $"b", EvalMode.ANSI)
+      val ansiMultiply = Multiply($"a", $"b", EvalMode.ANSI)
+      val originalQuery = testRelation.select(
+        (ansiAdd + 1 + 2).as("ansi_add_plus_1_plus_2"),
+        (ansiMultiply * 2 * 3).as("ansi_multiply_times_2_times_3"),
+        Add($"a" + 1 + 2, $"b", EvalMode.ANSI).as("ansi_add_of_legacy_add"),
+        Multiply($"a" * 2 * 3, $"b", EvalMode.ANSI).as("ansi_multiply_of_legacy_multiply"),
+        (tryAdd + 1 + 2).as("try_add_plus_1_plus_2"),
+        (tryMultiply * 2 * 3).as("try_multiply_times_2_times_3")).analyze
+
+      val optimized = Optimize.execute(originalQuery)
+
+      val correctAnswer = testRelation.select(
+        (ansiAdd + 3).as("ansi_add_plus_1_plus_2"),
+        (ansiMultiply * 6).as("ansi_multiply_times_2_times_3"),
+        Add($"a" + 3, $"b", EvalMode.ANSI).as("ansi_add_of_legacy_add"),
+        Multiply($"a" * 6, $"b", EvalMode.ANSI).as("ansi_multiply_of_legacy_multiply"),
+        (tryAdd + 3).as("try_add_plus_1_plus_2"),
+        (tryMultiply * 6).as("try_multiply_times_2_times_3")).analyze
+      comparePlans(optimized, correctAnswer)
+    }
+  }
 }

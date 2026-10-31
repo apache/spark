@@ -273,19 +273,23 @@ object ConstantPropagation extends Rule[LogicalPlan] {
  * Reorder associative integral-type operators and fold all constants into one.
  */
 object ReorderAssociativeOperator extends Rule[LogicalPlan] {
+  // Flatten only operators evaluated in the same mode as the root: rebuilding a TRY-mode Add or
+  // Multiply (try_add, try_multiply) in the enclosing mode would change its overflow behavior.
   private def flattenAdd(
     expression: Expression,
-    groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Add(l, r, _) if !groupSet.contains(expr) =>
-      flattenAdd(l, groupSet) ++ flattenAdd(r, groupSet)
+    groupSet: ExpressionSet,
+    evalContext: NumericEvalContext): Seq[Expression] = expression match {
+    case expr @ Add(l, r, c) if c == evalContext && !groupSet.contains(expr) =>
+      flattenAdd(l, groupSet, evalContext) ++ flattenAdd(r, groupSet, evalContext)
     case other => other :: Nil
   }
 
   private def flattenMultiply(
     expression: Expression,
-    groupSet: ExpressionSet): Seq[Expression] = expression match {
-    case expr @ Multiply(l, r, _) if !groupSet.contains(expr) =>
-      flattenMultiply(l, groupSet) ++ flattenMultiply(r, groupSet)
+    groupSet: ExpressionSet,
+    evalContext: NumericEvalContext): Seq[Expression] = expression match {
+    case expr @ Multiply(l, r, c) if c == evalContext && !groupSet.contains(expr) =>
+      flattenMultiply(l, groupSet, evalContext) ++ flattenMultiply(r, groupSet, evalContext)
     case other => other :: Nil
   }
 
@@ -306,11 +310,10 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
       // We have to respect aggregate expressions which exists in grouping expressions when plan
       // is an Aggregate operator, otherwise the optimized expression could not be derived from
       // grouping expressions.
-      // TODO: do not reorder consecutive `Add`s or `Multiply`s with different `failOnError` flags
       val groupingExpressionSet = collectGroupingExpressions(q)
       q.transformExpressionsDownWithPruning(_.containsPattern(BINARY_ARITHMETIC)) {
       case a @ Add(_, _, f) if a.deterministic && a.dataType.isInstanceOf[IntegralType] =>
-        val (literals, others) = flattenAdd(a, groupingExpressionSet)
+        val (literals, others) = flattenAdd(a, groupingExpressionSet, f)
           .partition(_.isInstanceOf[Literal])
         if (literals.nonEmpty) {
           val literalExpr = literals.reduce((x, y) => Add(x, y, f))
@@ -325,7 +328,7 @@ object ReorderAssociativeOperator extends Rule[LogicalPlan] {
           a
         }
       case m @ Multiply(_, _, f) if m.deterministic && m.dataType.isInstanceOf[IntegralType] =>
-        val (literals, others) = flattenMultiply(m, groupingExpressionSet)
+        val (literals, others) = flattenMultiply(m, groupingExpressionSet, f)
           .partition(_.isInstanceOf[Literal])
         if (literals.nonEmpty) {
           val literalExpr = literals.reduce((x, y) => Multiply(x, y, f))
