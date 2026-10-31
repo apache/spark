@@ -1342,6 +1342,26 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
     }
   }
 
+  test("SPARK-60757: a later write carries a row that a non-ANSI writer auto-filled") {
+    withRowLevelCatalog {
+      val tblName = "my_tab"
+      withTable(s"$rowLevelCat.$tblName") {
+        withSQLConf(SQLConf.ANSI_ENABLED.key -> "false") {
+          sql(s"""CREATE TABLE $rowLevelCat.$tblName(
+                 |  id INT,
+                 |  a STRING,
+                 |  b DOUBLE GENERATED ALWAYS AS (a + 1)
+                 |) USING foo""".stripMargin)
+          sql(s"INSERT INTO $rowLevelCat.$tblName(id, a) VALUES (1, '9007199254740993'), (2, '2')")
+          sql(s"DELETE FROM $rowLevelCat.$tblName WHERE id >= 2")
+        }
+        checkAnswer(
+          spark.table(s"$rowLevelCat.$tblName"),
+          Row(1, "9007199254740993", 9007199254740994D))
+      }
+    }
+  }
+
   test("SPARK-60757: an explicit cast and arithmetic keep failing under a non-ANSI writer") {
     val tblName = "my_tab"
     withTable(s"testcat.$tblName") {
@@ -1440,7 +1460,9 @@ class GeneratedColumnWriteSuite extends QueryTest with DatasourceV2SQLBase {
           sql(s"INSERT INTO testcat.$tblName(a, arr) VALUES (1, array(1))")
         }
       }
-      withSQLConf(SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
+      withSQLConf(
+          SQLConf.ANSI_ENABLED.key -> "false",
+          SQLConf.LEGACY_SIZE_OF_NULL.key -> "true") {
         sql(s"INSERT INTO testcat.$tblName(a, arr) VALUES (1, NULL)")
       }
       checkAnswer(spark.table(s"testcat.$tblName"), Row(1, null, 1, null, null))

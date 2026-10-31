@@ -19,7 +19,7 @@ package org.apache.spark.sql.catalyst.analysis
 import scala.collection.mutable
 
 import org.apache.spark.sql.catalyst.expressions.{And, CheckInvariant, EqualNullSafe, Expression, V2ExpressionUtils}
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LogicalPlan, V2WriteCommand, WriteDelta}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LocalRelation, LogicalPlan, V2WriteCommand, WriteDelta}
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.util.{GeneratedColumn, StoredExpressionText}
@@ -27,8 +27,16 @@ import org.apache.spark.sql.connector.catalog.{CatalogManager, GenerationExpress
 import org.apache.spark.sql.connector.catalog.constraints.Check
 import org.apache.spark.sql.connector.write.RowLevelOperation
 import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.internal.SQLConf
 
-class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[LogicalPlan] {
+/**
+ * @param analyze Analyzes a plan under the active [[SQLConf]]. The check of a generated column goes
+ *                through it, so that the settings its stored text is read under cover its analysis
+ *                without applying to the query of the write.
+ */
+class ResolveTableConstraints(
+    val catalogManager: CatalogManager,
+    analyze: LogicalPlan => LogicalPlan) extends Rule[LogicalPlan] {
 
   override def apply(plan: LogicalPlan): LogicalPlan = plan.resolveOperatorsWithPruning(
     _.containsPattern(COMMAND), ruleId) {
@@ -107,13 +115,31 @@ class ResolveTableConstraints(val catalogManager: CatalogManager) extends Rule[L
           val colRef = UnresolvedAttribute.quoted(col.name)
           val columnExtractors = Seq(col.name -> colRef)
           val genExprSql = Option(genExpr.getSql()).getOrElse(catalystExpr.sql)
-          CheckInvariant(
-            EqualNullSafe(colRef, catalystExpr),
-            columnExtractors,
-            "Generated Column",
-            s"${col.name} <=> $genExprSql")
+          analyzeGeneratedColumnCheck(
+            CheckInvariant(
+              EqualNullSafe(colRef, catalystExpr),
+              columnExtractors,
+              "Generated Column",
+              s"${col.name} <=> $genExprSql"),
+            v2Write.query)
         }
     }.toSeq
+  }
+
+  /**
+   * Analyzes the check of a provided value under the settings an auto-filled value is analyzed
+   * under, so that a row Spark auto-filled passes the check when a later write carries it. What
+   * those settings cannot resolve is left to the analysis of the write, as for an auto-filled
+   * value.
+   */
+  private def analyzeGeneratedColumnCheck(check: Expression, query: LogicalPlan): Expression = {
+    SQLConf.withExistingConf(StoredExpressionText.conf(conf)) {
+      analyze(Filter(check, LocalRelation(query.output)))
+    } match {
+      case Filter(analyzed, _: LocalRelation) => analyzed
+      // A catalog can store a text that analyzes to another plan. The write analyzes it as is.
+      case _ => check
+    }
   }
 
   /**
