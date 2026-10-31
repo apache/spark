@@ -119,7 +119,9 @@ case class CheckOverflow(
 
   override def nullIntolerant: Boolean = true
 
-  override def nullable: Boolean = true
+  // When `nullOnOverflow` is false, an overflow throws instead of producing null, so the result is
+  // null only when the input is. When true, an overflow yields null regardless of the input.
+  override def nullable: Boolean = child.nullable || nullOnOverflow
 
   override def nullSafeEval(input: Any): Any =
     input.asInstanceOf[Decimal].toPrecision(
@@ -132,11 +134,13 @@ case class CheckOverflow(
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode = {
     val errorContextCode = getContextOrNullCode(ctx, !nullOnOverflow)
     nullSafeCodeGen(ctx, ev, eval => {
+      // Only assign isNull when nullable; nullSafeCodeGen makes it a literal otherwise.
+      val setIsNull = if (nullable) s"${ev.isNull} = ${ev.value} == null;" else ""
       // scalastyle:off line.size.limit
       s"""
          |${ev.value} = $eval.toPrecision(
          |  ${dataType.precision}, ${dataType.scale}, Decimal.ROUND_HALF_UP(), $nullOnOverflow, $errorContextCode);
-         |${ev.isNull} = ${ev.value} == null;
+         |$setIsNull
        """.stripMargin
       // scalastyle:on line.size.limit
     })
