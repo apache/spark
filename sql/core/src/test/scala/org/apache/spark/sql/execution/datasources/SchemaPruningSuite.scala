@@ -131,6 +131,18 @@ abstract class SchemaPruningSuite
       Nil)
   }
 
+  testSchemaPruning("SPARK-60768: select only top-level fields including complex fields") {
+    val query = sql("select id, name, friends from contacts where p=1 and employer is not null")
+    checkScan(query,
+      "struct<id:int,name:struct<first:string,middle:string,last:string>," +
+      "friends:array<struct<first:string,middle:string,last:string>>," +
+      "employer:struct<id:int,company:struct<name:string,address:string>>>")
+    checkAnswer(query.orderBy("id"),
+      Row(0, Row("Jane", "X.", "Doe"), Array(Row("Susan", "Z.", "Smith"))) ::
+      Row(1, Row("John", "Y.", "Doe"), Array.empty[Row]) ::
+      Nil)
+  }
+
   testSchemaPruning("select a single complex field with disabled nested schema pruning") {
     withSQLConf(SQLConf.NESTED_SCHEMA_PRUNING_ENABLED.key -> "false") {
       val query = sql("select name.middle from contacts")

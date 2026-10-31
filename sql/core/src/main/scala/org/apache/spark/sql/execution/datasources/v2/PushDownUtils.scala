@@ -687,15 +687,15 @@ object PushDownUtils extends Logging {
     val exprs = projects ++ filters
     val requiredColumns = AttributeSet(exprs.flatMap(_.references))
     val neededOutput = relation.output.filter(requiredColumns.contains)
+    lazy val rootFields = SchemaPruning.identifyRootFields(projects, filters)
 
     scanBuilder match {
-      case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled =>
-        val rootFields = SchemaPruning.identifyRootFields(projects, filters)
-        val prunedSchema = if (rootFields.nonEmpty) {
-          SchemaPruning.pruneSchema(relation.schema, rootFields)
-        } else {
-          new StructType()
-        }
+      // Same as the v1 `SchemaPruning` rule, only prune nested fields if the scan reads some
+      // nested field. If it reads whole columns only, nested schema pruning returns the needed
+      // columns as they are, so use the plain column pruning below and skip its cost.
+      case r: SupportsPushDownRequiredColumns if SQLConf.get.nestedSchemaPruningEnabled &&
+          rootFields.exists(!_.derivedFromAtt) =>
+        val prunedSchema = SchemaPruning.pruneSchema(relation.schema, rootFields)
         val neededFieldNames = neededOutput.map(_.name).toSet
         r.pruneColumns(StructType(prunedSchema.filter(f => neededFieldNames.contains(f.name))))
         val scan = r.build()
