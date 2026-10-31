@@ -19,6 +19,8 @@ package org.apache.spark.ml.feature
 
 import java.io.{DataInputStream, DataOutputStream}
 
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.hadoop.fs.Path
 
 import org.apache.spark.{SparkException, SparkIllegalArgumentException}
@@ -30,6 +32,7 @@ import org.apache.spark.ml.param._
 import org.apache.spark.ml.param.shared._
 import org.apache.spark.ml.util._
 import org.apache.spark.sql.{AnalysisException, Column, DataFrame, Dataset}
+import org.apache.spark.sql.expressions.UserDefinedFunction
 import org.apache.spark.sql.functions.{get => fget, printf => fprintf, _}
 import org.apache.spark.sql.types._
 import org.apache.spark.util.ArrayImplicits._
@@ -339,56 +342,43 @@ class StringIndexerModel (
   @Since("3.0.0")
   def setOutputCols(value: Array[String]): this.type = set(outputCols, value)
 
-  // This filters out any null values and also the input labels which are not in
-  // the dataset used for fitting.
-  private def filterInvalidData(
-      dataset: Dataset[_],
-      inputColNames: Seq[String],
-      labelsToIndexArray: Array[OpenHashMap[String, Int]]): Dataset[_] = {
-    val conditions: Seq[Column] = inputColNames.indices.map { i =>
-      val inputColName = inputColNames(i)
-      val labelToIndex = labelsToIndexArray(i)
-      // We have this additional lookup at `labelToIndex` when `handleInvalid` is set to
-      // `StringIndexer.SKIP_INVALID`. Another idea is to do this lookup natively by SQL
-      // expression, however, lookup for a key in a map is not efficient in SparkSQL now.
-      // See `ElementAt` and `GetMapValue` expressions. If SQL's map lookup is improved,
-      // we can consider to change this.
-      val filter = udf { label: String =>
-        labelToIndex.contains(label)
+  private def getKeepInvalidIndexer(
+      labels: Array[String],
+      labelToIndex: OpenHashMap[String, Int]): UserDefinedFunction = {
+    val unknownIndex = labels.length.toDouble
+    udf { label: String =>
+      if (label == null) {
+        unknownIndex
+      } else {
+        labelToIndex.get(label).map(_.toDouble).getOrElse(unknownIndex)
       }
-      filter(dataset(inputColName))
-    }
-
-    dataset.na.drop(inputColNames.filter(dataset.schema.fieldNames.contains(_)))
-      .where(conditions.reduce(_ and _))
+    }.asNondeterministic()
   }
 
-  private def getIndexer(
-      labels: Seq[String],
-      labelToIndex: OpenHashMap[String, Int],
-      keepInvalid: Boolean) = {
-    val unknownIndex = labels.length
-    if (keepInvalid) {
-      udf { label: String =>
-        if (label == null) {
-          unknownIndex
-        } else {
-          labelToIndex.get(label).getOrElse(unknownIndex)
+  private def getSkipInvalidIndexer(
+      labelToIndex: OpenHashMap[String, Int]): UserDefinedFunction = {
+    udf { label: String =>
+      if (label == null) {
+        null
+      } else {
+        labelToIndex.get(label).map(index => java.lang.Double.valueOf(index.toDouble)).orNull
+      }
+    }.asNondeterministic()
+  }
+
+  private def getErrorInvalidIndexer(
+      labelToIndex: OpenHashMap[String, Int]): UserDefinedFunction = {
+    udf { label: String =>
+      if (label == null) {
+        throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
+          "NULLS, try setting StringIndexer.handleInvalid.")
+      } else {
+        labelToIndex.get(label).map(_.toDouble).getOrElse {
+          throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
+            s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
         }
-      }.asNondeterministic()
-    } else {
-      udf { label: String =>
-        if (label == null) {
-          throw new SparkException("StringIndexer encountered NULL value. To handle or skip " +
-            "NULLS, try setting StringIndexer.handleInvalid.")
-        } else {
-          labelToIndex.get(label).getOrElse {
-            throw new SparkException(s"Unseen label: $label. To handle unseen labels, " +
-              s"set Param handleInvalid to ${StringIndexer.KEEP_INVALID}.")
-          }
-        }
-      }.asNondeterministic()
-    }
+      }
+    }.asNondeterministic()
   }
 
   @Since("2.0.0")
@@ -403,15 +393,10 @@ class StringIndexerModel (
       }
       map
     }
-    val outputColumns = new Array[Column](outputColNames.length)
-    val keepInvalid = getHandleInvalid == StringIndexer.KEEP_INVALID
-
-    // Skips invalid rows if `handleInvalid` is set to `StringIndexer.SKIP_INVALID`.
-    val filteredDataset = if (getHandleInvalid == StringIndexer.SKIP_INVALID) {
-      filterInvalidData(dataset, inputColNames.toImmutableArraySeq, labelsToIndexArray)
-    } else {
-      dataset
-    }
+    val handleInvalid = getHandleInvalid
+    val keepInvalid = handleInvalid == StringIndexer.KEEP_INVALID
+    val filteredOutputColNames = ArrayBuffer.empty[String]
+    val filteredOutputColumns = ArrayBuffer.empty[Column]
 
     for (i <- outputColNames.indices) {
       val inputColName = inputColNames(i)
@@ -427,26 +412,37 @@ class StringIndexerModel (
           .withValues(filteredLabels)
           .toMetadata()
 
-        val indexer = getIndexer(labels.toImmutableArraySeq, labelToIndex, keepInvalid)
+        val indexer = handleInvalid match {
+          case StringIndexer.KEEP_INVALID => getKeepInvalidIndexer(labels, labelToIndex)
+          case StringIndexer.SKIP_INVALID => getSkipInvalidIndexer(labelToIndex)
+          case StringIndexer.ERROR_INVALID => getErrorInvalidIndexer(labelToIndex)
+        }
 
-        outputColumns(i) = indexer(dataset(inputColName).cast(StringType)).cast(DoubleType)
+        filteredOutputColNames += outputColName
+        filteredOutputColumns += indexer(dataset(inputColName).cast(StringType))
           .as(outputColName, metadata)
       } catch {
         case _: AnalysisException =>
           logWarning(log"Input column ${MDC(LogKeys.COLUMN_NAME, inputColName)} does not exist " +
             log"during transformation. Skip StringIndexerModel for this column.")
-          outputColNames(i) = null
       }
     }
-    val filteredOutputColNames = outputColNames.filter(_ != null)
-    val filteredOutputColumns = outputColumns.filter(_ != null)
 
     require(filteredOutputColNames.length == filteredOutputColumns.length)
-    if (filteredOutputColNames.length > 0) {
-      filteredDataset.withColumns(
-        filteredOutputColNames.toImmutableArraySeq, filteredOutputColumns.toImmutableArraySeq)
+    if (filteredOutputColNames.nonEmpty) {
+      val outputNames = filteredOutputColNames.toArray
+      val transformedDataset = dataset.withColumns(
+        outputNames.toImmutableArraySeq,
+        filteredOutputColumns.toArray.toImmutableArraySeq)
+      if (handleInvalid == StringIndexer.SKIP_INVALID) {
+        // Nondeterministic indexers keep this filter above the projection, avoiding a
+        // second lookup.
+        transformedDataset.na.drop(outputNames)
+      } else {
+        transformedDataset
+      }
     } else {
-      filteredDataset.toDF()
+      dataset.toDF()
     }
   }
 
