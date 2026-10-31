@@ -69,3 +69,4 @@ class JettyUtilsSuite extends SparkFunSuite {
     assert(!JettyUtils.isValidCsrfToken(newRequest(csrfTokenParam = "abc"), ""))
   }
 }
+

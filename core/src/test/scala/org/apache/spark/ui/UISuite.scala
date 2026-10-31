@@ -562,8 +562,136 @@ class UISuite extends SparkFunSuite {
         assert(conn.getResponseCode === HttpServletResponse.SC_OK)
         assert(forwardedContext === "/proxy/app-123")
       }
+      TestUtils.withHttpConnection(
+          new URI(proxyUrl).toURL,
+          headers = Seq("X-Forwarded-Context" -> "/outer")) { conn =>
+        assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+        assert(forwardedContext === "/outer/proxy/app-123")
+      }
     } finally {
       stopServer(proxyServer)
+      stopServer(targetServer)
+    }
+  }
+
+  test("SPARK-58893: createProxyHandler X-Forwarded-Context and Location with reverseProxyUrl") {
+    val (conf, securityMgr, sslOptions) = sslDisabledConf()
+    val targetServer = JettyUtils.startJettyServer("0.0.0.0", 0, sslOptions, conf)
+    val targetAddr = s"http://$localhost:${targetServer.boundPort}"
+
+    @volatile var forwardedContext: String = null
+    val targetHandler = new ServletContextHandler()
+    targetHandler.setContextPath("/")
+    targetHandler.addServlet(new ServletHolder(new HttpServlet {
+      override def doGet(req: HttpServletRequest, resp: HttpServletResponse): Unit = {
+        forwardedContext = req.getHeader("X-Forwarded-Context")
+        if (req.getRequestURI.endsWith("/redirect")) {
+          resp.sendRedirect(s"$targetAddr/jobs/")
+        } else {
+          resp.setStatus(HttpServletResponse.SC_OK)
+        }
+      }
+    }), "/*")
+    targetServer.addHandler(targetHandler, securityMgr)
+
+    def withProxyServer(
+        reverseProxyUrl: String,
+        proxyRedirectUri: Option[String] = None)(f: Int => Unit): Unit = {
+      val (pConf, pSecurityMgr, pSslOptions) = sslDisabledConf()
+      proxyRedirectUri.foreach(pConf.set(UI.PROXY_REDIRECT_URI, _))
+      val proxyServer = JettyUtils.startJettyServer("0.0.0.0", 0, pSslOptions, pConf)
+      val proxyHandler = JettyUtils.createProxyHandler(
+        _ => Some(targetAddr), reverseProxyUrl, proxyRedirectUri)
+      proxyServer.addHandler(proxyHandler, pSecurityMgr)
+      try {
+        f(proxyServer.boundPort)
+      } finally {
+        stopServer(proxyServer)
+      }
+    }
+
+    try {
+      // 1. Absolute reverseProxyUrl without proxyRedirectUri
+      withProxyServer("http://proxyhost:8080/path/to/spark/") { port =>
+        val stagesUrl = new URI(s"http://$localhost:$port/proxy/app-123/stages/").toURL
+        forwardedContext = null
+        TestUtils.withHttpConnection(stagesUrl) { conn =>
+          assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+          assert(forwardedContext === "/path/to/spark/proxy/app-123")
+        }
+
+        // Gateway already supplies X-Forwarded-Context: must not double the prefix
+        forwardedContext = null
+        TestUtils.withHttpConnection(
+            stagesUrl,
+            headers = Seq("X-Forwarded-Context" -> "/path/to/spark")) { conn =>
+          assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+          assert(forwardedContext === "/path/to/spark/proxy/app-123")
+        }
+
+        // Redirect Location is re-rooted onto reverseProxyUrl
+        val redirectUrl = new URI(s"http://$localhost:$port/proxy/app-123/redirect").toURL
+        TestUtils.withHttpConnection(redirectUrl) { conn =>
+          conn.setInstanceFollowRedirects(false)
+          assert(conn.getResponseCode === HttpServletResponse.SC_FOUND)
+          assert(conn.getHeaderField("Location") ===
+            "http://proxyhost:8080/path/to/spark/proxy/app-123/jobs/")
+        }
+      }
+
+      // 2. Relative reverseProxyUrl without proxyRedirectUri
+      withProxyServer("/path/to/spark/") { port =>
+        val stagesUrl = new URI(s"http://$localhost:$port/proxy/app-123/stages/").toURL
+        forwardedContext = null
+        TestUtils.withHttpConnection(stagesUrl) { conn =>
+          assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+          assert(forwardedContext === "/path/to/spark/proxy/app-123")
+        }
+
+        forwardedContext = null
+        TestUtils.withHttpConnection(
+            stagesUrl,
+            headers = Seq("X-Forwarded-Context" -> "/path/to/spark")) { conn =>
+          assert(conn.getResponseCode === HttpServletResponse.SC_OK)
+          assert(forwardedContext === "/path/to/spark/proxy/app-123")
+        }
+
+        val redirectUrl = new URI(s"http://$localhost:$port/proxy/app-123/redirect").toURL
+        TestUtils.withHttpConnection(redirectUrl) { conn =>
+          conn.setInstanceFollowRedirects(false)
+          assert(conn.getResponseCode === HttpServletResponse.SC_FOUND)
+          assert(conn.getHeaderField("Location") === "/path/to/spark/proxy/app-123/jobs/")
+        }
+      }
+
+      // 3. Relative reverseProxyUrl with spark.ui.proxyRedirectUri configured:
+      // ProxyRedirectHandler applies the prefix once (no double prefixing)
+      System.setProperty("spark.ui.proxyBase", "/path/to/spark")
+      try {
+        withProxyServer("/path/to/spark", Some("https://mydomain.com")) { port =>
+          val redirectUrl = new URI(s"http://$localhost:$port/proxy/app-123/redirect").toURL
+          TestUtils.withHttpConnection(redirectUrl) { conn =>
+            conn.setInstanceFollowRedirects(false)
+            assert(conn.getResponseCode === HttpServletResponse.SC_FOUND)
+            assert(conn.getHeaderField("Location") ===
+              "https://mydomain.com/path/to/spark/proxy/app-123/jobs/")
+          }
+        }
+      } finally {
+        System.clearProperty("spark.ui.proxyBase")
+      }
+
+      // 4. Empty reverseProxyUrl keeps host-rooted redirect Location
+      withProxyServer("") { port =>
+        val redirectUrl = new URI(s"http://$localhost:$port/proxy/app-123/redirect").toURL
+        TestUtils.withHttpConnection(redirectUrl) { conn =>
+          conn.setInstanceFollowRedirects(false)
+          assert(conn.getResponseCode === HttpServletResponse.SC_FOUND)
+          assert(conn.getHeaderField("Location") ===
+            s"http://$localhost:$port/proxy/app-123/jobs/")
+        }
+      }
+    } finally {
       stopServer(targetServer)
     }
   }

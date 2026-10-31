@@ -76,7 +76,9 @@ private[spark] object UI {
     .doc("This is the URL where your proxy is running. This URL is for proxy which is running " +
       "in front of Spark Master. This is useful when running proxy for authentication e.g. " +
       "OAuth proxy. Make sure this is a complete URL including scheme (http/https) and port to " +
-      "reach your proxy.")
+      "reach your proxy. When spark.ui.proxyRedirectUri is not set, the Spark Master points " +
+      "redirects from proxied worker and application UIs to this URL, so front-end redirect " +
+      "rewriting should only handle redirects that point at the Spark Master itself.")
     .version("2.1.0")
     .stringConf
     .checkValue ({ s =>
