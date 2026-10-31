@@ -136,6 +136,11 @@ class DatasetOptimizationSuite extends SharedSparkSession {
     val ds = spark.range(1).map { _ =>
       ((Map("k" -> ("map-a", "map-b")), ("other-a", "other-b")), "k")
     }
+    val mapValue = ds.selectExpr("_1._1[_2]._2")
+    testSerializer(mapValue, Seq(Seq("_1"), Seq("_2")))
+    checkAnswer(mapValue, Row("map-b"))
+
+    // When the sibling is also requested, the serializer can keep its original type.
     checkAnswer(ds.selectExpr("_1._1[_2]._2", "_1._2._1"), Row("map-b", "other-a"))
   }
 

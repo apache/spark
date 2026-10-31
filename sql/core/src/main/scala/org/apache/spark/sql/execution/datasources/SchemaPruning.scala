@@ -71,6 +71,8 @@ object SchemaPruning extends Rule[LogicalPlan] {
       case _: OrcFileFormat => false
       case _: ParquetFileFormat
           if (projects.iterator ++ filters.iterator).exists(hasDynamicLookup) =>
+        // Match the reader's effective configuration, including Hadoop settings and per-read
+        // options. A different value here can hide an array bounds error.
         val hadoopConf = hadoopFsRelation.sparkSession.sessionState
           .newHadoopConfWithOptions(hadoopFsRelation.options)
         !ParquetReadSupport.returnNullStructIfAllFieldsMissing(hadoopConf)

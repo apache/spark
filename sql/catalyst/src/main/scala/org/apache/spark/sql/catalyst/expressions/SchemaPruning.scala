@@ -152,7 +152,7 @@ object SchemaPruning extends SQLConfHelper {
     }
   }
 
-  private object DynamicLookup {
+  private[expressions] object DynamicLookup {
     def unapply(expr: Expression): Option[Expression] = expr match {
       case GetArrayItem(input, index, _) if !index.foldable => Some(input)
       case GetMapValue(input, key) if !key.foldable => Some(input)

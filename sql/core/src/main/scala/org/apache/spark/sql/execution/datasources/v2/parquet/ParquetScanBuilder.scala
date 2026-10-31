@@ -24,7 +24,7 @@ import org.apache.spark.sql.catalyst.util.RebaseDateTime.RebaseSpec
 import org.apache.spark.sql.connector.expressions.aggregate.Aggregation
 import org.apache.spark.sql.connector.read.{SupportsPushDownAggregates, SupportsPushDownVariantExtractions, VariantExtraction}
 import org.apache.spark.sql.execution.datasources.{AggregatePushDownUtils, PartitioningAwareFileIndex}
-import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, SparkToParquetSchemaConverter}
+import org.apache.spark.sql.execution.datasources.parquet.{ParquetFilters, ParquetReadSupport, SparkToParquetSchemaConverter}
 import org.apache.spark.sql.execution.datasources.v2.FileScanBuilder
 import org.apache.spark.sql.internal.LegacyBehaviorPolicy
 import org.apache.spark.sql.sources.Filter
@@ -54,6 +54,9 @@ case class ParquetScanBuilder(
   private var pushedVariantExtractions = Array.empty[VariantExtraction]
 
   override protected val supportsNestedSchemaPruning: Boolean = true
+
+  override private[sql] def supportsDynamicSelectorPruning: Boolean =
+    !ParquetReadSupport.returnNullStructIfAllFieldsMissing(hadoopConf)
 
   override def pushDataFilters(dataFilters: Array[Filter]): Array[Filter] = {
     val sqlConf = sparkSession.sessionState.conf

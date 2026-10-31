@@ -185,8 +185,9 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
         val data = spark.read.schema(spark.table("t").schema).parquet(path)
         Seq("true", "false").foreach { vectorized =>
           withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
-            val query = data.selectExpr("arr[idx].b", "m[k].b", "items[0].b", "byKey['k'].b")
-            checkAnswer(query, Row(22, 44, 6, 8))
+            val query = data.selectExpr("arr[idx].b", "m[k].b", "items[0].b", "byKey['k'].b",
+              "filter(items, x -> array(true, false)[idx])[0].b")
+            checkAnswer(query, Row(22, 44, 6, 8, 6))
             checkScanSchemata(query, "struct<idx:int,k:string,items:array<struct<b:int>>," +
               "byKey:map<string,struct<b:int>>,arr:array<struct<a:int,b:int>>," +
               "m:map<string,struct<a:int,b:int>>>")
@@ -214,10 +215,12 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
         .add("s", new StructType().add(arr))
         .add("m", MapType(IntegerType, new StructType().add("anchor", IntegerType).add(n)))
 
-      withSQLConf(vectorizedReaderEnabledKey -> "false") {
-        val data = spark.read.schema(schema).parquet(path)
-        checkAnswer(data.selectExpr("s.arr[i].b", "m[i].n.b"), Row(22, 44))
-        checkAnswer(data.selectExpr("m[i].anchor", "m[0].n.b"), Row(7, 44))
+      for (vectorized <- Seq("true", "false")) {
+        withSQLConf(vectorizedReaderEnabledKey -> vectorized) {
+          val data = spark.read.schema(schema).parquet(path)
+          checkAnswer(data.selectExpr("s.arr[i].b", "m[i].n.b"), Row(22, 44))
+          checkAnswer(data.selectExpr("m[i].anchor", "m[0].n.b"), Row(7, 44))
+        }
       }
     }
   }
