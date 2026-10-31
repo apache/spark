@@ -66,19 +66,6 @@ private[sql] class TransactionAwareCatalogManager(
   override def setCurrentNamespace(namespace: Array[String]): Unit =
     delegate.setCurrentNamespace(namespace)
 
-  override private[sql] def storedCurrentCatalogName: Option[String] =
-    delegate.storedCurrentCatalogName
-
-  override private[sql] def restoreStoredCurrentCatalogName(name: Option[String]): Unit =
-    delegate.restoreStoredCurrentCatalogName(name)
-
-  override private[sql] def storedCurrentNamespace: Option[Array[String]] =
-    delegate.storedCurrentNamespace
-
-  override private[sql] def restoreStoredCurrentNamespace(
-      namespace: Option[Array[String]]): Unit =
-    delegate.restoreStoredCurrentNamespace(namespace)
-
   override def sessionPathEntries: Option[Seq[SessionPathEntry]] =
     delegate.sessionPathEntries
 

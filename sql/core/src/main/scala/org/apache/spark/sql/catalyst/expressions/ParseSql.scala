@@ -24,9 +24,7 @@ import org.apache.spark.sql.catalyst.analysis.{
 }
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
 import org.apache.spark.sql.catalyst.expressions.codegen.CodegenFallback
-import org.apache.spark.sql.catalyst.parser.{
-  ParseSqlAnalyzeContext, ParseSqlMode, ParseSqlResult
-}
+import org.apache.spark.sql.catalyst.parser.{ParseSqlMode, ParseSqlResult}
 import org.apache.spark.sql.catalyst.plans.logical.{FunctionSignature, InputParameter}
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryErrorsBase, QueryExecutionErrors}
 import org.apache.spark.sql.internal.SQLConf
@@ -47,13 +45,11 @@ import org.apache.spark.unsafe.types.UTF8String
  * User-facing parse / analyze errors become JSON; unexpected internal
  * failures propagate. `ANALYZE` needs an active Spark session (catalog)
  * and inherits the invoker's current catalog, schema, and SQL path.
- * Optional named `current_catalog`, `current_schema`, and `current_path`
- * override that context for the duration of analysis.
  */
 // scalastyle:off line.size.limit
 // scalastyle:off nonascii
 @ExpressionDescription(
-  usage = """_FUNC_(sqlStmt[, mode[, current_catalog[, current_schema[, current_path]]]]) -
+  usage = """_FUNC_(sqlStmt[, mode]) -
     Splits `sqlStmt` into SQL statements, parses each with the stock Spark SQL parser, and
     returns a JSON array describing them so callers can inspect SQL text (lineage, statement
     kind, select-list types) without running the statements. Each object has 1-based
@@ -69,14 +65,8 @@ import org.apache.spark.unsafe.types.UTF8String
     without being executed, so a DECLARE, CREATE, USE, or SET does not affect later
     statements. `CALL` is analyzed but the procedure is not run. A SQL script calling
     `parse_sql` does not lend it its locals or cursors. `ANALYZE` inherits the invoker's
-    current catalog, schema, and SQL path. Named `current_catalog`, `current_schema`, and
-    `current_path` override that context for analysis only. Omitted or NULL keeps the
-    invoker value except that `current_catalog` alone uses the new catalog's default
-    namespace. The invoker catalog, namespace, path, and PATH flag are restored after
-    the call. An override changes the session for the duration of the call, so other
-    queries running concurrently on the same session can observe it; `current_path`
-    also enables the SQL path for the call.
-    `PARSE` ignores the catalog arguments. Statement length excludes surrounding
+    current catalog, schema, and SQL path and does not change them.
+    Statement length excludes surrounding
     whitespace and the terminating semicolon. Session parser extensions are not applied.
     The JSON contract may still change while spark.sql.function.parseSql.enabled remains
     off by default. On syntax / parse error returns JSON for that statement with
@@ -93,14 +83,6 @@ import org.apache.spark.unsafe.types.UTF8String
       * mode - Optional `PARSE` or `ANALYZE` (case-insensitive). Defaults to `PARSE`.
         An expression that evaluates to a string. NULL returns NULL. Any other value
         fails the outer query with INVALID_PARAMETER_VALUE.PARSE_SQL_MODE.
-      * current_catalog - Optional catalog name used as current catalog during `ANALYZE`.
-        NULL or omitted inherits the invoker session. Ignored in `PARSE`. The invoker
-        catalog, schema, and path are restored after analysis.
-      * current_schema - Optional schema / namespace used as current schema during `ANALYZE`.
-        NULL or omitted inherits the invoker session. Ignored in `PARSE`.
-      * current_path - Optional SQL PATH used during `ANALYZE` (SET PATH grammar, or the
-        string returned by `current_path()`). NULL or omitted inherits the invoker session.
-        Ignored in `PARSE`.
   """,
   examples = """
     Examples:
@@ -117,11 +99,9 @@ import org.apache.spark.unsafe.types.UTF8String
   """,
   note = """
     Requires spark.sql.function.parseSql.enabled=true. The result type is STRING JSON.
-    ANALYZE needs an active session, and every argument must be constant for the query
-    (DATATYPE_MISMATCH.NON_FOLDABLE_INPUT otherwise); a DataFrame column of statements
-    can use PARSE only. An invalid `current_catalog`, `current_schema`, or `current_path`
-    is reported as JSON (`analyze_success` false, INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT)
-    and does not fail the outer query. Each JSON object has `start` (1-based character
+    ANALYZE needs an active session, and `sqlStmt` and `mode` must be constant for the
+    query (DATATYPE_MISMATCH.NON_FOLDABLE_INPUT otherwise); a DataFrame column of
+    statements can use PARSE only. Each JSON object has `start` (1-based character
     offset in the batch), `length`, and `parse_success`. Parse success also has
     `statement_identifier` / `statement_code` (ISO/IEC 9075-2:2023 Table 39). ANALYZE
     adds `analyze_success`. Optional fields are omitted when empty:
@@ -141,34 +121,17 @@ import org.apache.spark.unsafe.types.UTF8String
 // scalastyle:on line.size.limit
 case class ParseSql(
     sqlStmt: Expression,
-    mode: Expression,
-    currentCatalog: Expression,
-    currentSchema: Expression,
-    currentPath: Expression)
+    mode: Expression)
   extends Expression
   with ImplicitCastInputTypes
   with CodegenFallback
   with QueryErrorsBase {
 
-  def this(
-      sqlStmt: Expression,
-      mode: Expression,
-      currentCatalog: Expression,
-      currentSchema: Expression) =
-    this(sqlStmt, mode, currentCatalog, currentSchema, Literal.create(null, StringType))
-
-  def this(sqlStmt: Expression, mode: Expression, currentCatalog: Expression) =
-    this(sqlStmt, mode, currentCatalog, Literal.create(null, StringType))
-
-  def this(sqlStmt: Expression, mode: Expression) =
-    this(sqlStmt, mode, Literal.create(null, StringType))
-
   def this(sqlStmt: Expression) = this(sqlStmt, Literal("PARSE"))
 
   override def prettyName: String = "parse_sql"
 
-  override def children: Seq[Expression] =
-    Seq(sqlStmt, mode, currentCatalog, currentSchema, currentPath)
+  override def children: Seq[Expression] = Seq(sqlStmt, mode)
 
   override def nullable: Boolean = sqlStmt.nullable || mode.nullable
 
@@ -180,7 +143,7 @@ case class ParseSql(
   override def dataType: DataType = StringType
 
   override def inputTypes: Seq[AbstractDataType] =
-    Seq.fill(5)(StringTypeWithCollation(supportsTrimCollation = true))
+    Seq.fill(2)(StringTypeWithCollation(supportsTrimCollation = true))
 
   // ANALYZE reads the session catalog, so results are not context-independent.
   override def contextIndependentFoldable: Boolean = false
@@ -212,24 +175,17 @@ case class ParseSql(
             throw QueryCompilationErrors.invalidParseSqlMode(mode)
           }
         }
-        // ANALYZE needs the session, which only the driver has: every argument
-        // must fold, or be current_catalog() / current_schema() / current_path()
-        // / current_user(), so the optimizer can replace them with literals.
-        def constant(e: Expression): Boolean = e.foldable || (e match {
-          case _: CurrentDatabase | _: CurrentCatalog | _: CurrentPath | _: CurrentUser =>
-            true
-          case _ => false
-        })
-        val nonFoldable = ParseSql.parameterNames.zip(children).find(c => !constant(c._2))
-        (parsedMode, nonFoldable) match {
-          case (Some(ParseSqlMode.Analyze), Some((name, child))) =>
-            DataTypeMismatch(
-              errorSubClass = "NON_FOLDABLE_INPUT",
-              messageParameters = Map(
-                "inputName" -> toSQLId(name),
-                "inputType" -> toSQLType(child.dataType),
-                "inputExpr" -> toSQLExpr(child)))
-          case _ => TypeCheckResult.TypeCheckSuccess
+        // ANALYZE needs the session, which only the driver has, so sqlStmt
+        // must fold. PARSE may take a column of statement text.
+        if (parsedMode.contains(ParseSqlMode.Analyze) && !sqlStmt.foldable) {
+          DataTypeMismatch(
+            errorSubClass = "NON_FOLDABLE_INPUT",
+            messageParameters = Map(
+              "inputName" -> toSQLId("sqlStmt"),
+              "inputType" -> toSQLType(sqlStmt.dataType),
+              "inputExpr" -> toSQLExpr(sqlStmt)))
+        } else {
+          TypeCheckResult.TypeCheckSuccess
         }
       }
     }
@@ -249,28 +205,12 @@ case class ParseSql(
     val parsedMode = ParseSqlMode.parse(modeStr).getOrElse {
       throw QueryExecutionErrors.invalidParseSqlMode(modeStr)
     }
-    val context = if (parsedMode == ParseSqlMode.Analyze) {
-      ParseSqlAnalyzeContext(
-        catalog = utf8Option(currentCatalog.eval(input)),
-        schema = utf8Option(currentSchema.eval(input)),
-        path = utf8Option(currentPath.eval(input)))
-    } else {
-      ParseSqlAnalyzeContext.empty
-    }
-    UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode, context))
+    UTF8String.fromString(ParseSqlResult.fromSql(sqlText, parsedMode))
   }
-
-  private def utf8Option(value: Any): Option[String] =
-    Option(value).map(_.asInstanceOf[UTF8String].toString)
 
   override protected def withNewChildrenInternal(
       newChildren: IndexedSeq[Expression]): ParseSql =
-    copy(
-      sqlStmt = newChildren(0),
-      mode = newChildren(1),
-      currentCatalog = newChildren(2),
-      currentSchema = newChildren(3),
-      currentPath = newChildren(4))
+    copy(sqlStmt = newChildren(0), mode = newChildren(1))
 }
 
 object ParseSql extends ExpressionBuilder {
@@ -279,20 +219,15 @@ object ParseSql extends ExpressionBuilder {
   def apply(sqlStmt: Expression, mode: Expression): ParseSql = new ParseSql(sqlStmt, mode)
 
   /** Parameter names in argument order. */
-  val parameterNames: Seq[String] =
-    Seq("sqlStmt", "mode", "current_catalog", "current_schema", "current_path")
+  val parameterNames: Seq[String] = Seq("sqlStmt", "mode")
 
-  // All five parameters are named-invocation eligible, including required `sqlStmt`.
   override def functionSignature: Option[FunctionSignature] = Some(FunctionSignature(Seq(
     InputParameter("sqlStmt"),
-    InputParameter("mode", Some(Literal("PARSE"))),
-    InputParameter("current_catalog", Some(Literal.create(null, StringType))),
-    InputParameter("current_schema", Some(Literal.create(null, StringType))),
-    InputParameter("current_path", Some(Literal.create(null, StringType))))))
+    InputParameter("mode", Some(Literal("PARSE"))))))
 
   override def build(funcName: String, expressions: Seq[Expression]): Expression = {
-    assert(expressions.size == 5)
-    ParseSql(expressions(0), expressions(1), expressions(2), expressions(3), expressions(4))
+    assert(expressions.size == 2)
+    ParseSql(expressions(0), expressions(1))
   }
 
   /** Register the builtin with a session function registry and the global builtin set. */

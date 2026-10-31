@@ -5090,11 +5090,6 @@
           "expects a positive integer, but got <actual>."
         ]
       },
-      "PARSE_SQL_CONTEXT" : {
-        "message" : [
-          "expects a valid catalog, schema, or SQL path, but got <invalidValue>."
-        ]
-      },
       "PARSE_SQL_MODE" : {
         "message" : [
           "expects one of 'PARSE', 'ANALYZE', but got <invalidValue>."

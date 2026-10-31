@@ -96,7 +96,7 @@ object InvokeProcedures {
    * CALL inside EXECUTE IMMEDIATE. For callers that analyze statements without
    * running them.
    */
-  def withoutInvocation[T](f: => T): T = {
+  private[sql] def withoutInvocation[T](f: => T): T = {
     val previous = suppressed.get()
     suppressed.set(true)
     try f finally suppressed.set(previous)

@@ -2,7 +2,7 @@
 -- !query
 SELECT parse_sql('SELECT 1 AS a')
 -- !query schema
-struct<parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL):string>
+struct<parse_sql(SELECT 1 AS a, PARSE):string>
 -- !query output
 [{"start":1,"length":13,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":["a"]}]}]
 
@@ -10,7 +10,7 @@ struct<parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL):string>
 -- !query
 SELECT parse_sql('SELECT 1 AS a', 'PARSE')
 -- !query schema
-struct<parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL):string>
+struct<parse_sql(SELECT 1 AS a, PARSE):string>
 -- !query output
 [{"start":1,"length":13,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"select_list":[{"name":["a"]}]}]
 
@@ -18,7 +18,7 @@ struct<parse_sql(SELECT 1 AS a, PARSE, NULL, NULL, NULL):string>
 -- !query
 SELECT parse_sql('SELECT 1 AS a', 'ANALYZE')
 -- !query schema
-struct<parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL):string>
+struct<parse_sql(SELECT 1 AS a, ANALYZE):string>
 -- !query output
 [{"start":1,"length":13,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"analyze_success":true,"select_list":[{"name":["a"],"type":{"name":"int"}}]}]
 
@@ -26,7 +26,7 @@ struct<parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL):string>
 -- !query
 SELECT get_json_object(parse_sql('SELECT 1 AS a', 'analyze'), '$[0].select_list[0].type.name')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT 1 AS a, analyze, NULL, NULL, NULL), $[0].select_list[0].type.name):string>
+struct<get_json_object(parse_sql(SELECT 1 AS a, analyze), $[0].select_list[0].type.name):string>
 -- !query output
 int
 
@@ -35,7 +35,7 @@ int
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].parse_success')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].parse_success):string>
+struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE), $[0].parse_success):string>
 -- !query output
 true
 
@@ -44,7 +44,7 @@ true
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].analyze_success')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].analyze_success):string>
+struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE), $[0].analyze_success):string>
 -- !query output
 false
 
@@ -53,7 +53,7 @@ false
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].error.errorClass')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].error.errorClass):string>
+struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE), $[0].error.errorClass):string>
 -- !query output
 TABLE_OR_VIEW_NOT_FOUND
 
@@ -62,7 +62,7 @@ TABLE_OR_VIEW_NOT_FOUND
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].source_table_references[0][0]')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].source_table_references[0][0]):string>
+struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE), $[0].source_table_references[0][0]):string>
 -- !query output
 spark_catalog
 
@@ -71,7 +71,7 @@ spark_catalog
 SELECT get_json_object(parse_sql('SELECT a FROM missing_parse_sql_analyze_t', 'ANALYZE'),
   '$[0].source_table_references[0][1]')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL), $[0].source_table_references[0][1]):string>
+struct<get_json_object(parse_sql(SELECT a FROM missing_parse_sql_analyze_t, ANALYZE), $[0].source_table_references[0][1]):string>
 -- !query output
 default
 
@@ -87,7 +87,7 @@ struct<>
 -- !query
 SELECT parse_sql('SELECT a, b FROM parse_sql_analyze_v', 'ANALYZE')
 -- !query schema
-struct<parse_sql(SELECT a, b FROM parse_sql_analyze_v, ANALYZE, NULL, NULL, NULL):string>
+struct<parse_sql(SELECT a, b FROM parse_sql_analyze_v, ANALYZE):string>
 -- !query output
 [{"start":1,"length":36,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"analyze_success":true,"source_table_references":[["system","session","parse_sql_analyze_v"]],"select_list":[{"name":["a"],"type":{"name":"int"}},{"name":["b"],"type":{"name":"string","collation":"UTF8_BINARY"}}]}]
 
@@ -111,7 +111,7 @@ struct<>
 -- !query
 SELECT parse_sql('SELECT count(a) AS c FROM parse_sql_analyze_t', 'ANALYZE')
 -- !query schema
-struct<parse_sql(SELECT count(a) AS c FROM parse_sql_analyze_t, ANALYZE, NULL, NULL, NULL):string>
+struct<parse_sql(SELECT count(a) AS c FROM parse_sql_analyze_t, ANALYZE):string>
 -- !query output
 [{"start":1,"length":45,"parse_success":true,"statement_identifier":"SELECT","statement_code":21,"analyze_success":true,"source_table_references":[["spark_catalog","default","parse_sql_analyze_t"]],"function_references":[["system","builtin","count"]],"select_list":[{"name":["c"],"type":{"name":"bigint"}}]}]
 
@@ -144,21 +144,13 @@ org.apache.spark.sql.AnalysisException
 -- !query
 SELECT get_json_object(parse_sql('SELECT 1 AS a', mode => 'ANALYZE'), '$[0].select_list[0].type.name')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, NULL, NULL), $[0].select_list[0].type.name):string>
+struct<get_json_object(parse_sql(SELECT 1 AS a, ANALYZE), $[0].select_list[0].type.name):string>
 -- !query output
 int
 
 
 -- !query
 CREATE DATABASE parse_sql_ctx_a
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-CREATE DATABASE parse_sql_ctx_b
 -- !query schema
 struct<>
 -- !query output
@@ -174,7 +166,7 @@ struct<>
 
 
 -- !query
-USE parse_sql_ctx_b
+USE parse_sql_ctx_a
 -- !query schema
 struct<>
 -- !query output
@@ -184,27 +176,16 @@ struct<>
 -- !query
 SELECT get_json_object(parse_sql('SELECT a FROM t', 'ANALYZE'), '$[0].analyze_success')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, NULL, NULL), $[0].analyze_success):string>
--- !query output
-false
-
-
--- !query
-SELECT get_json_object(
-  parse_sql('SELECT a FROM t', 'ANALYZE', current_schema => 'parse_sql_ctx_a'),
-  '$[0].analyze_success')
--- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, parse_sql_ctx_a, NULL), $[0].analyze_success):string>
+struct<get_json_object(parse_sql(SELECT a FROM t, ANALYZE), $[0].analyze_success):string>
 -- !query output
 true
 
 
 -- !query
-SELECT get_json_object(
-  parse_sql('SELECT a FROM t', 'ANALYZE', current_schema => 'parse_sql_ctx_a'),
+SELECT get_json_object(parse_sql('SELECT a FROM t', 'ANALYZE'),
   '$[0].source_table_references[0][1]')
 -- !query schema
-struct<get_json_object(parse_sql(SELECT a FROM t, ANALYZE, NULL, parse_sql_ctx_a, NULL), $[0].source_table_references[0][1]):string>
+struct<get_json_object(parse_sql(SELECT a FROM t, ANALYZE), $[0].source_table_references[0][1]):string>
 -- !query output
 parse_sql_ctx_a
 
@@ -214,27 +195,7 @@ SELECT current_schema()
 -- !query schema
 struct<current_schema():string>
 -- !query output
-parse_sql_ctx_b
-
-
--- !query
-SELECT get_json_object(
-  parse_sql('SELECT 1 AS a', 'ANALYZE', current_schema => '!!!'),
-  '$[0].analyze_success')
--- !query schema
-struct<get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, !!!, NULL), $[0].analyze_success):string>
--- !query output
-false
-
-
--- !query
-SELECT get_json_object(
-  parse_sql('SELECT 1 AS a', 'ANALYZE', current_schema => '!!!'),
-  '$[0].error.errorClass')
--- !query schema
-struct<get_json_object(parse_sql(SELECT 1 AS a, ANALYZE, NULL, !!!, NULL), $[0].error.errorClass):string>
--- !query output
-INVALID_PARAMETER_VALUE.PARSE_SQL_CONTEXT
+parse_sql_ctx_a
 
 
 -- !query
@@ -255,14 +216,6 @@ struct<>
 
 -- !query
 DROP DATABASE parse_sql_ctx_a
--- !query schema
-struct<>
--- !query output
-
-
-
--- !query
-DROP DATABASE parse_sql_ctx_b
 -- !query schema
 struct<>
 -- !query output
