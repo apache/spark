@@ -36,7 +36,7 @@ import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.command.DataWritingCommandExec
 import org.apache.spark.sql.execution.datasources.{BasicWriteJobStatsTracker, InsertIntoHadoopFsRelationCommand, SQLHadoopMapReduceCommitProtocol, V1WriteCommand}
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ShuffleExchangeExec}
-import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec}
+import org.apache.spark.sql.execution.joins.{BroadcastHashJoinExec, BroadcastRangeJoinExec, ShuffledHashJoinExec, SortMergeAsOfJoinExec}
 import org.apache.spark.sql.execution.window.WindowGroupLimitExec
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.functions._
@@ -627,6 +627,76 @@ class SQLMetricsSuite extends SharedSparkSession with SQLMetricsTestUtils
               "number of output rows" -> 12L)))),
             enableWholeStage
           )
+        }
+      }
+    }
+  }
+
+  test("BroadcastRangeJoin metrics") {
+    withSQLConf(SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true") {
+      withTempView("rangeProbe", "rangeBuild") {
+        sql("CREATE OR REPLACE TEMP VIEW rangeProbe(p) AS VALUES (5), (15), (25)")
+        sql("CREATE OR REPLACE TEMP VIEW rangeBuild(lo, hi) AS VALUES (0, 10), (10, 20), (20, 30)")
+        // ... -> BroadcastRangeJoin(nodeId = 1) -> TungstenProject(nodeId = 0)
+        val query = "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe p " +
+          "JOIN rangeBuild b ON p.p >= b.lo AND p.p <= b.hi"
+        Seq((0L, false), (1L, true)).foreach { case (nodeId, enableWholeStage) =>
+          val df = spark.sql(query)
+          testSparkPlanMetrics(df, 2, Map(
+            nodeId -> ("BroadcastRangeJoin", Map(
+              "number of output rows" -> 3L))),
+            enableWholeStage
+          )
+        }
+      }
+    }
+  }
+
+  test("BroadcastRangeJoin metrics count only accepted, non-duplicated output rows") {
+    // The query above only covers an inner join whose surfaced candidates all pass the
+    // condition, so numOutputRows would read the same whether it counts every candidate
+    // the index surfaces or only the ones the join actually emits. rangeBuild3's
+    // overlapping (5, 25) row gives p=5, 15, and 25 more than one surfaced candidate, and
+    // the residual accepts only some of them, so a bug that increments on every surfaced
+    // candidate -- or on every loop iteration, including a rejected or padding one, not
+    // just an accepted one -- reports more than the actual output; p=100 also covers an
+    // unmatched streamed row, which an outer join must pad with nulls exactly once. The
+    // residual must reference both sides, or predicate pushdown moves it into a Filter
+    // below the join and the join's own condition never rejects a surfaced candidate.
+    // Expected counts come from the nested-loop join (range join off), not a hand count,
+    // so a wrong fixture can't quietly make this pass.
+    withTempView("rangeProbe3", "rangeBuild3") {
+      sql("CREATE OR REPLACE TEMP VIEW rangeProbe3(p) AS VALUES (5), (15), (25), (100)")
+      sql(
+        "CREATE OR REPLACE TEMP VIEW rangeBuild3(lo, hi) AS VALUES " +
+          "(0, 10), (10, 20), (20, 30), (5, 25)")
+      val cond = "p.p >= b.lo AND p.p <= b.hi AND p.p + b.lo <> 25"
+      val queries = Seq(
+        "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe3 p JOIN rangeBuild3 b " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeProbe3 p LEFT JOIN rangeBuild3 b " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p, b.lo, b.hi FROM rangeBuild3 b RIGHT JOIN rangeProbe3 p " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p FROM rangeProbe3 p LEFT SEMI JOIN rangeBuild3 b " +
+          s"ON $cond",
+        "SELECT /*+ BROADCAST(b) */ p.p FROM rangeProbe3 p LEFT ANTI JOIN rangeBuild3 b " +
+          s"ON $cond")
+      queries.foreach { query =>
+        val expected = sql(query).collect()
+        Seq(false, true).foreach { enableWholeStage =>
+          withSQLConf(
+            SQLConf.BROADCAST_RANGE_JOIN_ENABLED.key -> "true",
+            SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> enableWholeStage.toString) {
+            val df = spark.sql(query)
+            val label = s"$query (wholeStage=$enableWholeStage)"
+            checkAnswer(df, expected)
+            val joins = df.queryExecution.executedPlan.collect {
+              case j: BroadcastRangeJoinExec => j
+            }
+            assert(joins.size == 1, label)
+            assert(joins.head.metrics("numOutputRows").value == expected.length, label)
+          }
         }
       }
     }
