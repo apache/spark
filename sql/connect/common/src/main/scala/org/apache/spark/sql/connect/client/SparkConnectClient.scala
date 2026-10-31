@@ -606,15 +606,17 @@ private[sql] class SparkConnectClient(
   private lazy val localIvySettingsPath: Option[String] =
     new ConfigReader((key: String) => conf.getOption(key))
       .get(MavenUtils.JAR_IVY_SETTING_PATH_KEY)
-      .filter { settingsPath =>
+      .flatMap { settingsPath =>
         try {
           val settingsUri = SparkFileUtils.resolveURI(settingsPath)
-          settingsUri.getScheme == "file" && {
+          if (settingsUri.getScheme == "file") {
             val path = Paths.get(settingsUri)
-            Files.isRegularFile(path) && Files.isReadable(path)
+            Option.when(Files.isRegularFile(path) && Files.isReadable(path))(settingsUri.toString)
+          } else {
+            None
           }
         } catch {
-          case NonFatal(_) => false
+          case NonFatal(_) => None
         }
       }
 
