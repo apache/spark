@@ -1,0 +1,80 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+#
+
+# Scheduled to avoid pull_request_target; never check out or run PR code here.
+# Labels in .github/labeler.yml must already exist; this job cannot create them.
+#
+# To retry or backfill beyond the default 12-hour window:
+#   gh workflow run labeler.yml --repo apache/spark --ref master -f hours=24
+
+name: Label pull requests
+
+on:
+  schedule:
+  - cron: "5,20,35,50 * * * *"
+  workflow_dispatch:
+    inputs:
+      hours:
+        description: Label open PRs updated within this many hours
+        type: number
+        default: 12
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  label:
+    name: Label pull requests
+    if: github.repository == 'apache/spark' && github.ref == 'refs/heads/master'
+    runs-on: ubuntu-slim
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout labeler configuration
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          sparse-checkout: .github
+      - name: List recently updated PRs
+        id: prs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOURS: ${{ inputs.hours }}
+        run: |
+          hours=${HOURS:-12}
+          if ! [[ "$hours" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::hours must be a positive integer"
+            exit 1
+          fi
+          since=$(date -u -d "$hours hours ago" +%Y-%m-%dT%H:%M:%SZ)
+          numbers=$(gh api --method GET --paginate "repos/$GITHUB_REPOSITORY/pulls" \
+            -f state=open -f per_page=100 \
+            --jq ".[] | select(.updated_at >= \"$since\") | .number")
+          echo "Open PRs updated since $since: $(tr '\n' ' ' <<< "$numbers")"
+          if [ -n "$numbers" ]; then
+            printf 'numbers<<EOF\n%s\nEOF\n' "$numbers" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Label PRs
+        if: steps.prs.outputs.numbers != ''
+        uses: actions/labeler@v7
+        with:
+          pr-number: ${{ steps.prs.outputs.numbers }}
+          sync-labels: true
