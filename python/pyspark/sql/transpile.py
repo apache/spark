@@ -1007,6 +1007,13 @@ def _get_transpilers(session: "SparkSession") -> List[AbstractTranspiler]:
     if not configured_transpilers:
         return []
     transpiler_names = configured_transpilers.split(",")
+    unknown_names = [name for name in transpiler_names if name not in AbstractTranspiler.varieties]
+    if unknown_names:
+        warnings.warn(
+            f"Ignoring unknown transpilers {unknown_names} in "
+            "spark.sql.experimental.optimizer.pyTranspilers; registered transpilers are "
+            f"{sorted(AbstractTranspiler.varieties)}"
+        )
     return [
         AbstractTranspiler.varieties[name]()
         for name in transpiler_names
