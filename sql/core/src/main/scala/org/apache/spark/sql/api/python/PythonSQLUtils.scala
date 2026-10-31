@@ -74,8 +74,17 @@ private[sql] object PythonSQLUtils extends Logging {
   def listBuiltinFunctionInfos(): Array[ExpressionInfo] = {
     (FunctionRegistry.functionSet.flatMap(f => FunctionRegistry.builtin.lookupFunction(f)) ++
       TableFunctionRegistry.functionSet.flatMap(
-        f => TableFunctionRegistry.builtin.lookupFunction(f))).
-      groupBy(_.getName).map(v => v._2.head).toArray
+        f => TableFunctionRegistry.builtin.lookupFunction(f)))
+      .groupBy(_.getName)
+      .toSeq
+      .sortBy(_._1)
+      .map { case (_, infos) =>
+        infos.minBy(info => (
+          Option(info.getClassName).getOrElse(""),
+          Option(info.getUsage).getOrElse(""),
+          Option(info.getExamples).getOrElse("")))
+      }
+      .toArray
   }
 
   private def listAllSQLConfigs(): Seq[(String, String, String, String)] = {
