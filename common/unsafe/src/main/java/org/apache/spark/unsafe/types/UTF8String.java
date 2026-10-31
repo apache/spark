@@ -1313,17 +1313,17 @@ public final class UTF8String implements Comparable<UTF8String>, Externalizable,
    * occurrence 1, 2 respectively).
    *
    * @param pattern    the substring to search for
-   * @param start      1-based start position; if negative, search direction is reversed
+   * @param start      1-based position; negative searches backward, zero returns -1
    * @param occurrence which occurrence to return (must be >= 1)
    * @return 0-based character index of the match, or -1 if not found
    */
   public int indexOf(UTF8String pattern, int start, int occurrence) {
     assert occurrence > 0;
-    if (pattern.numBytes() == 0) {
-      return indexOfEmpty(start);
-    }
     if (start == 0) {
       return -1;
+    }
+    if (pattern.numBytes() == 0) {
+      return indexOfEmpty(start);
     }
 
     int charCount = 0;
