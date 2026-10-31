@@ -4159,6 +4159,12 @@ private[sql] object QueryCompilationErrors extends QueryErrorsBase with Compilat
       messageParameters = Map("catalogName" -> catalogName))
   }
 
+  def changelogMetadataColumnNotSupportedError(columnName: String): AnalysisException = {
+    new AnalysisException(
+      errorClass = "UNSUPPORTED_FEATURE.CHANGELOG_METADATA_COLUMN",
+      messageParameters = Map("columnName" -> toSQLId(columnName)))
+  }
+
   def cdcUpdateDetectionRequiresCarryOverRemoval(
       changelogName: String): AnalysisException = {
     new AnalysisException(
