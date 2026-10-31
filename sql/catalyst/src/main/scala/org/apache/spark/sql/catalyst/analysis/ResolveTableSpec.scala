@@ -128,6 +128,14 @@ object ResolveTableSpec extends Rule[LogicalPlan] {
         external = u.external,
         constraints = u.constraints.map(_.toV2Constraint))
       withNewSpec(newTableSpec)
+    // `ResolveSubquery` skips these commands, so a subquery in an option value never resolves.
+    case u: UnresolvedTableSpec =>
+      u.optionExpression.options.foreach {
+        case (key, value) if SubqueryExpression.hasSubquery(value) =>
+          throw QueryCompilationErrors.optionMustBeConstant(key)
+        case _ =>
+      }
+      input
     case _ =>
       input
   }
