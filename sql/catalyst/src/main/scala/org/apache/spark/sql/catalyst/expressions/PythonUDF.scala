@@ -426,7 +426,8 @@ case class TranspiledPythonUDF(
   name: String,
   pythonUDFExpr: Expression,
   transpiledOptions: List[Expression],
-  // Per-option input-type categories ("numeric"/"string" per public param),
+  // Per-option input-type categories (one per public param; see
+  // ResolveTranspiledPythonUDFOptions for the vocabulary),
   // parallel to `transpiledOptions`. ResolveTranspiledPythonUDFOptions prunes the
   // options to those whose categories match the resolved input types (before
   // CheckAnalysis can reject a type-incompatible option) and clears this field;

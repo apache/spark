@@ -23,7 +23,8 @@ import org.apache.spark.sql.catalyst.expressions.{
   Add, Alias, AttributeReference, Concat, Expression, Literal, PythonUDF, TranspiledPythonUDF}
 import org.apache.spark.sql.catalyst.plans.PlanTest
 import org.apache.spark.sql.catalyst.plans.logical.{LocalRelation, Project}
-import org.apache.spark.sql.types.{DecimalType, DoubleType, FloatType, LongType}
+import org.apache.spark.sql.types.{
+  DecimalType, DoubleType, FloatType, LongType, MapType, StringType}
 
 /**
  * Unit tests for [[ResolveTranspiledPythonUDFOptions]], which prunes a
@@ -153,5 +154,61 @@ class ResolveTranspiledPythonUDFOptionsSuite extends PlanTest {
       List(floatOpt), List(List("float")))
     val pruned = prune(node, LocalRelation(a))
     assert(pruned.transpiledOptions == List(floatOpt))
+  }
+
+  test("keeps the timestamp option for a timestamp column and drops the numeric one") {
+    val a = $"a".timestamp
+    val tsOpt = a
+    val numOpt = Add(a, Literal(1L))
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(tsOpt, numOpt),
+      List(List("timestamp"), List("numeric")))
+    val pruned = prune(node, LocalRelation(a))
+    assert(pruned.transpiledOptions == List(tsOpt))
+    assert(pruned.optionInputCategories.isEmpty)
+  }
+
+  test("keeps the array option for an array column and drops the numeric one") {
+    val a = $"a".array(StringType)
+    val arrOpt = a
+    val numOpt = Add(a, Literal(1L))
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(arrOpt, numOpt),
+      List(List("array"), List("numeric")))
+    val pruned = prune(node, LocalRelation(a))
+    assert(pruned.transpiledOptions == List(arrOpt))
+    assert(pruned.optionInputCategories.isEmpty)
+  }
+
+  test("keeps the map option for a map column and drops the string one") {
+    // Symbol, not $"a": TreeNode.map(BaseType => A) shadows the dsl's map(MapType).
+    val a = Symbol("a").map(MapType(StringType, StringType))
+    val mapOpt = a
+    val strOpt = Add(a, Literal(1L))
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(mapOpt, strOpt),
+      List(List("map"), List("string")))
+    val pruned = prune(node, LocalRelation(a))
+    assert(pruned.transpiledOptions == List(mapOpt))
+    assert(pruned.optionInputCategories.isEmpty)
+  }
+
+  test("drops the timestamp option against a non-timestamp column (falls back to Python UDF)") {
+    val a = $"a".long
+    val tsOpt = a
+    val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(tsOpt),
+      List(List("timestamp")))
+    val pruned = prune(node, LocalRelation(a))
+    assert(pruned.transpiledOptions.isEmpty)
+    assert(pruned.optionInputCategories.isEmpty)
+  }
+
+  test("map and array options are dropped against the wrong container or a scalar") {
+    val m = Symbol("m").map(MapType(StringType, StringType))
+    val arr = $"arr".array(StringType)
+    val l = $"l".long
+    Seq(
+      ("map", arr), ("map", l), ("array", m), ("array", l)).foreach { case (cat, a) =>
+      val node = TranspiledPythonUDF("udf", pyUDF(Seq(a)), List(a), List(List(cat)))
+      val pruned = prune(node, LocalRelation(a))
+      assert(pruned.transpiledOptions.isEmpty, s"$cat kept over ${a.dataType}")
+    }
   }
 }
