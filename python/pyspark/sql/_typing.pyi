@@ -96,5 +96,6 @@ ProfileResults = Dict[Union[int, str], Tuple[Optional[pstats.Stats], Optional[Co
 class ProfileResult(TypedDict, total=False):
     perf: pstats.Stats
     memory: CodeMapDict
+    sampling: dict
 
 ProfileResultsV2 = Dict[Union[int, str], ProfileResult]

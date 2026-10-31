@@ -762,6 +762,67 @@ class UDFProfiler2TestsMixin:
         self.spark.profile.clear()
         self.assertEqual(0, len(self.profile_results), str(list(self.profile_results)))
 
+    @property
+    def sampling_profile_results(self):
+        return self.spark._profiler_collector._sampling_profile_results
+
+    def test_sampling_profiler_udf(self):
+        import time
+
+        @udf("long")
+        def busy_add1(x):
+            # Sleep so the sampling thread reliably catches this frame on the stack.
+            time.sleep(0.05)
+            return x + 1
+
+        # Without the conf enabled, no sampling results are collected.
+        self.spark.range(5, numPartitions=1).select(busy_add1("id")).collect()
+        self.assertEqual(0, len(self.sampling_profile_results))
+
+        with self.sql_conf(
+            {
+                "spark.sql.pyspark.udf.profiler": "sampling",
+                "spark.sql.pyspark.udf.profiler.samplingInterval": "10",
+            }
+        ):
+            self.spark.range(10, numPartitions=2).select(busy_add1("id")).collect()
+
+        results = self.sampling_profile_results
+        # Two partitions -> two tasks -> two call-trees keyed by task.
+        self.assertEqual(2, len(results), str(list(results)))
+
+        # Flatten the per-thread call trees and assert the UDF frame was sampled.
+        def collect_idents(node, idents):
+            for key, child in node.items():
+                if key == "count":
+                    continue
+                idents.append(key)
+                collect_idents(child, idents)
+
+        for result in results.values():
+            idents = []
+            for thread_tree in result["callstack"].values():
+                collect_idents(thread_tree, idents)
+            self.assertTrue(
+                any("busy_add1" in ident for ident in idents),
+                f"UDF frame not found in samples: {idents}",
+            )
+
+        # Clearing a single result removes only that result.
+        ids = list(results)
+        self.spark._profiler_collector.clear_sampling_profiles(ids[0])
+        self.assertEqual([ids[1]], list(self.sampling_profile_results))
+
+        # Clearing other profiler types keeps the sampling results.
+        self.spark.profile.clear(type="perf")
+        self.spark.profile.clear(type="memory")
+        self.assertEqual([ids[1]], list(self.sampling_profile_results))
+
+        # Clearing all profiles removes the sampling results and the emptied entries.
+        self.spark.profile.clear()
+        self.assertEqual(0, len(self.sampling_profile_results))
+        self.assertEqual(0, len(self.spark._profiler_collector._profile_results))
+
 
 class UDFProfiler2Tests(UDFProfiler2TestsMixin, ReusedSQLTestCase):
     def setUp(self) -> None:

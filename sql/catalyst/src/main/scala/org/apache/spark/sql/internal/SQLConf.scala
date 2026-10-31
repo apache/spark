@@ -5482,13 +5482,24 @@ object SQLConf {
   val PYTHON_UDF_PROFILER =
     buildConf("spark.sql.pyspark.udf.profiler")
       .doc("Configure the Python/Pandas UDF profiler by enabling or disabling it " +
-        "with the option to choose between \"perf\" and \"memory\" types, " +
+        "with the option to choose between \"perf\", \"memory\" and \"sampling\" types, " +
         "or unsetting the config disables the profiler. This is disabled by default.")
       .version("4.0.0")
       .stringConf
       .transform(_.toLowerCase(Locale.ROOT))
-      .checkValues(Set("perf", "memory"))
+      .checkValues(Set("perf", "memory", "sampling"))
       .createOptional
+
+  val PYTHON_UDF_PROFILER_SAMPLING_INTERVAL =
+    buildConf("spark.sql.pyspark.udf.profiler.samplingInterval")
+      .doc("The interval in milliseconds at which the sampling profiler samples the call " +
+        "stack. This takes effect only when spark.sql.pyspark.udf.profiler is set to " +
+        "\"sampling\".")
+      .version("4.4.0")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .timeConf(TimeUnit.MILLISECONDS)
+      .checkValue(v => v > 0L, "The sampling interval must be at least 1 millisecond.")
+      .createWithDefault(100)
 
   val PYTHON_UDF_WORKER_FAULTHANLDER_ENABLED =
     buildConf("spark.sql.execution.pyspark.udf.faulthandler.enabled")
@@ -10121,6 +10132,8 @@ class SQLConf extends Serializable with Logging with SqlApiConf {
   def pysparkJVMStacktraceEnabled: Boolean = getConf(PYSPARK_JVM_STACKTRACE_ENABLED)
 
   def pythonUDFProfiler: Option[String] = getConf(PYTHON_UDF_PROFILER)
+
+  def pythonUDFProfilerSamplingInterval: Long = getConf(PYTHON_UDF_PROFILER_SAMPLING_INTERVAL)
 
   def pythonDataSourceProfiler: Option[String] = getConf(PYTHON_DATA_SOURCE_PROFILER)
 
