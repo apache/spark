@@ -33,6 +33,9 @@ import org.apache.spark.unsafe.types.UTF8String
 abstract class ToNumberBase(left: Expression, right: Expression, errorOnFail: Boolean)
   extends BinaryExpression with Serializable with ImplicitCastInputTypes {
   override def nullIntolerant: Boolean = true
+  // ToNumberParser mutates its working state during parsing/formatting. Stateful fresh
+  // copies give each evaluator its own parser instead of sharing one across threads.
+  override def stateful: Boolean = true
 
   private lazy val numberFormatter = {
     val value = right.eval()
@@ -302,6 +305,9 @@ object ToCharacterBuilder extends ExpressionBuilder {
 case class ToCharacter(left: Expression, right: Expression)
   extends BinaryExpression with ImplicitCastInputTypes with DefaultStringProducingExpression {
   override def nullIntolerant: Boolean = true
+  // ToNumberParser mutates its working state during parsing/formatting. Stateful fresh
+  // copies give each evaluator its own parser instead of sharing one across threads.
+  override def stateful: Boolean = true
 
   private lazy val numberFormatter = {
     val value = right.eval()
