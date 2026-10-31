@@ -18,14 +18,15 @@
 package org.apache.spark.sql.execution
 
 import java.util.Locale
-import java.util.concurrent.Executors
+import java.util.concurrent.{ConcurrentLinkedQueue, Executors}
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 
 import scala.collection.parallel.immutable.ParRange
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 
-import org.apache.spark.{SparkConf, SparkContext, SparkEnv, SparkFunSuite}
+import org.apache.spark.{CleanerListener, SparkConf, SparkContext, SparkEnv, SparkFunSuite}
 import org.apache.spark.launcher.SparkLauncher
 import org.apache.spark.scheduler.{SparkListener, SparkListenerEvent, SparkListenerJobStart}
 import org.apache.spark.sql.{Observation, Row, SparkSession}
@@ -597,6 +598,42 @@ class SQLExecutionSuite extends SparkFunSuite with SQLConfHelper {
           assert(warnings.exists(_.contains(s"shuffle $id ")), s"no warning for shuffle $id")
         }
         assert(warnings.forall(_.contains(s"execution $executionId")))
+      }
+    } finally {
+      spark.stop()
+    }
+  }
+
+  test("SPARK-59776: RemoveShuffleFiles cleanup notifies cleaner listeners") {
+    val spark = SparkSession.builder().master("local[*]").appName("test").getOrCreate()
+    try {
+      withSQLConf(
+        SQLConf.ADAPTIVE_EXECUTION_ENABLED.key -> "false",
+        SQLConf.AUTO_BROADCASTJOIN_THRESHOLD.key -> "-1",
+        SQLConf.CLASSIC_SHUFFLE_DEPENDENCY_FILE_CLEANUP_ENABLED.key -> "true") {
+        val filesRemoved = new ConcurrentLinkedQueue[Int]()
+        val cleaned = new ConcurrentLinkedQueue[Int]()
+        spark.sparkContext.cleaner.get.attachListener(new CleanerListener {
+          override def rddCleaned(rddId: Int): Unit = {}
+          override def shuffleCleaned(shuffleId: Int): Unit = cleaned.add(shuffleId)
+          override def shuffleFilesRemoved(shuffleId: Int): Unit = filesRemoved.add(shuffleId)
+          override def broadcastCleaned(broadcastId: Long): Unit = {}
+          override def accumCleaned(accId: Long): Unit = {}
+          override def checkpointCleaned(rddId: Long): Unit = {}
+        })
+
+        val df = spark.range(0, 10).join(spark.range(0, 20), "id")
+        val qe = df.queryExecution
+        assert(qe.shuffleCleanupMode == RemoveShuffleFiles)
+        val shuffleIds = qe.executedPlan.collect { case e: ShuffleExchangeLike => e.shuffleId }
+        assert(shuffleIds.size > 1)
+        assert(df.collect().length == 10)
+
+        // Every shuffle's files removal is reported, so e.g. the dynamic allocation
+        // ExecutorMonitor stops keeping executors alive for them. The shuffles are not cleaned
+        // through ContextCleaner, so they must not be reported as fully cleaned.
+        assert(filesRemoved.asScala.toSet == shuffleIds.toSet)
+        assert(cleaned.asScala.toSet.intersect(shuffleIds.toSet).isEmpty)
       }
     } finally {
       spark.stop()
