@@ -69,9 +69,10 @@ class NativeDataSourceClusterSuite extends QueryTest {
     }
   }
 
+  // The executors append the calls that the order of the calls rules out to the same file.
   private def nativeTest(name: String)(f: => Unit): Unit = test(name) {
     assume(toolchain.isDefined, "A C++ compiler and Java 22 or later are required.")
-    try f finally SparkSession.setActiveSession(spark)
+    try checkingOrderOfCalls(f) finally SparkSession.setActiveSession(spark)
   }
 
   // Like Python data sources, native data sources are found in the active session.

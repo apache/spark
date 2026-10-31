@@ -75,25 +75,31 @@ class ColumnarWrite(
  * A batch write. The writer of the data source is created with the writer factory, right before
  * the tasks of the write start: after the shuffle stages that adaptive query execution runs
  * before the write, so no writer is created if they fail. The rest of the data, such as its last
- * stage, is computed in the tasks of the write, and a failure there, as any later failure, aborts
- * the write. So irreversible work belongs in the commit of the writer.
+ * stage, is computed in the tasks of the write, and a failure there, as any later failure before
+ * the commit succeeds, aborts the write. So irreversible work belongs in the commit of the writer.
  */
 class ColumnarBatchWrite(createWriter: () => ColumnarWriter, schema: StructType)
   extends BatchWrite {
 
   private var writer: ColumnarWriter = _
+  // Whether the writer committed the write, after which it is not aborted, even if Spark fails
+  // afterwards: a native data source relies on it.
+  private var committed = false
 
   override def createBatchWriterFactory(info: PhysicalWriteInfo): DataWriterFactory = {
     if (writer == null) {
       writer = createWriter()
     }
-    new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema))
+    new ColumnarDataWriterFactory(writer, ArrowBatchingOptions(schema, writer.timeZoneId))
   }
 
-  override def commit(messages: Array[WriterCommitMessage]): Unit = writer.commit(messages)
+  override def commit(messages: Array[WriterCommitMessage]): Unit = {
+    writer.commit(messages)
+    committed = true
+  }
 
   override def abort(messages: Array[WriterCommitMessage]): Unit = {
-    if (writer != null) {
+    if (writer != null && !committed) {
       writer.abort(messages)
     }
   }
@@ -115,6 +121,9 @@ class ColumnarStreamingWrite(
   extends StreamingWrite {
 
   private var writer: ColumnarStreamWriter = _
+  // Whether the writer committed the micro-batch, which is not aborted then, as for a batch write.
+  // Spark creates a streaming write for each micro-batch, so it commits at most one epoch.
+  private var committed = false
 
   override def createStreamingWriterFactory(
       info: PhysicalWriteInfo): StreamingDataWriterFactory = {
@@ -127,15 +136,16 @@ class ColumnarStreamingWrite(
     if (writer == null) {
       writer = createWriter()
     }
-    new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema))
+    new ColumnarStreamingDataWriterFactory(writer, ArrowBatchingOptions(schema, writer.timeZoneId))
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
     writer.commit(epochId, messages)
+    committed = true
   }
 
   override def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
-    if (writer != null) {
+    if (writer != null && !committed) {
       writer.abort(epochId, messages)
     }
   }
@@ -173,12 +183,13 @@ case class ArrowBatchingOptions(
     maxBytesPerBatch: Long)
 
 object ArrowBatchingOptions {
-  def apply(schema: StructType): ArrowBatchingOptions = {
+  /** @param timeZoneId the time zone of the writer of the data source */
+  def apply(schema: StructType, timeZoneId: String): ArrowBatchingOptions = {
     val conf = SQLConf.get
     val maxRecords = conf.arrowMaxRecordsPerBatch
     ArrowBatchingOptions(
       schema,
-      conf.sessionLocalTimeZone,
+      timeZoneId,
       if (maxRecords > 0) maxRecords else Int.MaxValue,
       conf.arrowMaxBytesPerBatch)
   }

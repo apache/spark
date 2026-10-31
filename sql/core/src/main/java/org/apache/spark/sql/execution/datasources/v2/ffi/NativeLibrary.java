@@ -75,11 +75,16 @@ final class NativeLibrary {
   static final long MICRO_BATCH_READ = 2;
   static final long BATCH_WRITE = 4;
   static final long STREAMING_WRITE = 8;
-  static final long TRUNCATE = 16;
+  static final long BATCH_TRUNCATE = 16;
+  static final long STREAMING_TRUNCATE = 32;
 
   // The modes of a write, SPARK_DS_WRITE_APPEND and SPARK_DS_WRITE_TRUNCATE.
   static final int WRITE_APPEND = 0;
   static final int WRITE_TRUNCATE = 1;
+
+  // The kinds of a read, SPARK_DS_READ_BATCH and SPARK_DS_READ_MICRO_BATCH.
+  static final int READ_BATCH = 0;
+  static final int READ_MICRO_BATCH = 1;
 
   // The C types of the parameters and the results of the functions.
   private enum C { VOID, BOOL, I32, I64, PTR }
@@ -89,30 +94,27 @@ final class NativeLibrary {
     LAST_ERROR("last_error", C.PTR),
     CREATE("create", C.I32, C.PTR, C.PTR, C.PTR),
     SCHEMA("schema", C.I32, C.PTR, C.PTR),
-    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR),
-    CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
-    CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CREATE_READER("create_reader", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CREATE_STREAM_READER("create_stream_reader", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    CREATE_WRITER("create_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE("close", C.VOID, C.PTR),
     PUSH_LIMIT("push_limit", C.I32, C.PTR, C.I32, C.PTR),
     PRUNE_COLUMNS("prune_columns", C.I32, C.PTR, C.PTR, C.I64, C.PTR),
-    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR),
-    SERIALIZE_READER("serialize_reader", C.I32, C.PTR, C.PTR, C.PTR),
+    PARTITIONS("partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
     CLOSE_READER("close_reader", C.VOID, C.PTR),
-    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR),
-    LATEST_OFFSET("latest_offset", C.I32, C.PTR, C.PTR, C.PTR),
+    INITIAL_OFFSET("initial_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    LATEST_OFFSET("latest_offset", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
     STREAM_PARTITIONS("stream_partitions", C.I32, C.PTR, C.PTR, C.PTR, C.PTR, C.PTR),
-    SERIALIZE_STREAM_READER("serialize_stream_reader", C.I32, C.PTR, C.PTR, C.PTR),
     COMMIT_OFFSET("commit_offset", C.I32, C.PTR, C.PTR),
     CLOSE_STREAM_READER("close_stream_reader", C.VOID, C.PTR),
-    READ("read", C.I32, C.PTR, C.PTR, C.I64, C.PTR, C.I64, C.PTR),
-    SERIALIZE_WRITER("serialize_writer", C.I32, C.PTR, C.PTR, C.PTR),
-    COMMIT("commit", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
-    ABORT("abort", C.I32, C.PTR, C.I64, C.PTR, C.PTR, C.I64),
+    READ("read", C.I32, C.PTR, C.PTR, C.PTR),
+    COMMIT("commit", C.I32, C.PTR, C.PTR),
+    ABORT("abort", C.I32, C.PTR, C.PTR),
     CLOSE_WRITER("close_writer", C.VOID, C.PTR),
-    CREATE_DATA_WRITER("create_data_writer", C.I32, C.PTR, C.PTR, C.I64, C.I64, C.PTR),
-    WRITE("write", C.I32, C.PTR, C.PTR, C.PTR),
-    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
-    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR),
+    CREATE_DATA_WRITER("create_data_writer", C.I32, C.PTR, C.PTR, C.PTR),
+    WRITE("write", C.I32, C.PTR, C.PTR),
+    COMMIT_DATA_WRITER("commit_data_writer", C.I32, C.PTR, C.PTR, C.PTR, C.PTR),
+    ABORT_DATA_WRITER("abort_data_writer", C.I32, C.PTR, C.PTR),
     CLOSE_DATA_WRITER("close_data_writer", C.VOID, C.PTR);
 
     /** The name of the field of the function in the table. */
@@ -136,15 +138,28 @@ final class NativeLibrary {
   // struct starts with its size.
   private static final long TABLE_ABI_VERSION = 8;
   private static final long TABLE_FUNCTIONS = 16;
-  private static final long HOST_SIZE = 32;
+  private static final long HOST_SIZE = 40;
   private static final long HOST_ABI_VERSION = 8;
   private static final long HOST_SPARK_VERSION = 16;
   private static final long HOST_LOG = 24;
+  private static final long HOST_IS_LOG_ENABLED = 32;
   private static final long CREATE_INFO_SIZE = 40;
   private static final long CREATE_INFO_NAME = 8;
   private static final long CREATE_INFO_OPTION_KEYS = 16;
   private static final long CREATE_INFO_OPTION_VALUES = 24;
   private static final long CREATE_INFO_NUM_OPTIONS = 32;
+  private static final long READER_INFO_SIZE = 8;
+  private static final long PARTITIONS_INFO_SIZE = 8;
+  private static final long INITIAL_OFFSET_INFO_SIZE = 8;
+  private static final long STREAM_PARTITIONS_INFO_SIZE = 24;
+  private static final long STREAM_PARTITIONS_INFO_START = 8;
+  private static final long STREAM_PARTITIONS_INFO_END = 16;
+  private static final long COMMIT_OFFSET_INFO_SIZE = 16;
+  private static final long COMMIT_OFFSET_INFO_END = 8;
+  private static final long STREAM_READER_INFO_SIZE = 16;
+  private static final long STREAM_READER_INFO_CHECKPOINT_LOCATION = 8;
+  private static final long LATEST_OFFSET_INFO_SIZE = 16;
+  private static final long LATEST_OFFSET_INFO_START = 8;
   private static final long TASK_SIZE = 40;
   private static final long TASK_STAGE_ID = 8;
   private static final long TASK_STAGE_ATTEMPT_NUMBER = 12;
@@ -152,9 +167,41 @@ final class NativeLibrary {
   private static final long TASK_ATTEMPT_NUMBER = 20;
   private static final long TASK_ATTEMPT_ID = 24;
   private static final long TASK_IS_INTERRUPTED = 32;
+  private static final long READ_INFO_SIZE = 56;
+  private static final long READ_INFO_KIND = 8;
+  private static final long READ_INFO_SCHEMA = 16;
+  private static final long READ_INFO_READER_STATE = 24;
+  private static final long READ_INFO_READER_STATE_LENGTH = 32;
+  private static final long READ_INFO_PARTITION = 40;
+  private static final long READ_INFO_PARTITION_LENGTH = 48;
   private static final long WRITE_INFO_SIZE = 24;
   private static final long WRITE_INFO_MODE = 8;
   private static final long WRITE_INFO_QUERY_ID = 16;
+  private static final long DATA_WRITER_INFO_SIZE = 40;
+  private static final long DATA_WRITER_INFO_SCHEMA = 8;
+  private static final long DATA_WRITER_INFO_WRITER_STATE = 16;
+  private static final long DATA_WRITER_INFO_WRITER_STATE_LENGTH = 24;
+  private static final long DATA_WRITER_INFO_EPOCH_ID = 32;
+  private static final long FINISH_WRITE_INFO_SIZE = 48;
+  private static final long FINISH_WRITE_INFO_EPOCH_ID = 8;
+  private static final long FINISH_WRITE_INFO_MESSAGES = 16;
+  private static final long FINISH_WRITE_INFO_MESSAGE_LENGTHS = 24;
+  private static final long FINISH_WRITE_INFO_NUM_MESSAGES = 32;
+  private static final long FINISH_WRITE_INFO_REJECTED = 40;
+  private static final long FINISH_DATA_WRITER_INFO_SIZE = 8;
+
+  // The structs that only hold their size, which the library gets as const pointers. Until fields
+  // are added to them, a single struct of each kind is allocated once, and never freed.
+  private static final long READER_INFO = sizeOnlyInfo(READER_INFO_SIZE);
+  private static final long PARTITIONS_INFO = sizeOnlyInfo(PARTITIONS_INFO_SIZE);
+  private static final long INITIAL_OFFSET_INFO = sizeOnlyInfo(INITIAL_OFFSET_INFO_SIZE);
+  private static final long FINISH_DATA_WRITER_INFO = sizeOnlyInfo(FINISH_DATA_WRITER_INFO_SIZE);
+
+  private static long sizeOnlyInfo(long size) {
+    long info = Platform.allocateMemory(size);
+    Platform.putLong(null, info, size);
+    return info;
+  }
 
   /**
    * The offsets of the fields of the structs that Spark reads or writes, by {@code struct.field},
@@ -173,12 +220,33 @@ final class NativeLibrary {
     layout.put("SparkDsHost.abi_version", HOST_ABI_VERSION);
     layout.put("SparkDsHost.spark_version", HOST_SPARK_VERSION);
     layout.put("SparkDsHost.log", HOST_LOG);
+    layout.put("SparkDsHost.is_log_enabled", HOST_IS_LOG_ENABLED);
     layout.put("SparkDsCreateInfo", CREATE_INFO_SIZE);
     layout.put("SparkDsCreateInfo.size", 0L);
     layout.put("SparkDsCreateInfo.name", CREATE_INFO_NAME);
     layout.put("SparkDsCreateInfo.option_keys", CREATE_INFO_OPTION_KEYS);
     layout.put("SparkDsCreateInfo.option_values", CREATE_INFO_OPTION_VALUES);
     layout.put("SparkDsCreateInfo.num_options", CREATE_INFO_NUM_OPTIONS);
+    layout.put("SparkDsReaderInfo", READER_INFO_SIZE);
+    layout.put("SparkDsReaderInfo.size", 0L);
+    layout.put("SparkDsPartitionsInfo", PARTITIONS_INFO_SIZE);
+    layout.put("SparkDsPartitionsInfo.size", 0L);
+    layout.put("SparkDsInitialOffsetInfo", INITIAL_OFFSET_INFO_SIZE);
+    layout.put("SparkDsInitialOffsetInfo.size", 0L);
+    layout.put("SparkDsStreamPartitionsInfo", STREAM_PARTITIONS_INFO_SIZE);
+    layout.put("SparkDsStreamPartitionsInfo.size", 0L);
+    layout.put("SparkDsStreamPartitionsInfo.start", STREAM_PARTITIONS_INFO_START);
+    layout.put("SparkDsStreamPartitionsInfo.end", STREAM_PARTITIONS_INFO_END);
+    layout.put("SparkDsCommitOffsetInfo", COMMIT_OFFSET_INFO_SIZE);
+    layout.put("SparkDsCommitOffsetInfo.size", 0L);
+    layout.put("SparkDsCommitOffsetInfo.end", COMMIT_OFFSET_INFO_END);
+    layout.put("SparkDsStreamReaderInfo", STREAM_READER_INFO_SIZE);
+    layout.put("SparkDsStreamReaderInfo.size", 0L);
+    layout.put(
+      "SparkDsStreamReaderInfo.checkpoint_location", STREAM_READER_INFO_CHECKPOINT_LOCATION);
+    layout.put("SparkDsLatestOffsetInfo", LATEST_OFFSET_INFO_SIZE);
+    layout.put("SparkDsLatestOffsetInfo.size", 0L);
+    layout.put("SparkDsLatestOffsetInfo.start", LATEST_OFFSET_INFO_START);
     layout.put("SparkDsTaskContext", TASK_SIZE);
     layout.put("SparkDsTaskContext.size", 0L);
     layout.put("SparkDsTaskContext.stage_id", TASK_STAGE_ID);
@@ -187,10 +255,34 @@ final class NativeLibrary {
     layout.put("SparkDsTaskContext.attempt_number", TASK_ATTEMPT_NUMBER);
     layout.put("SparkDsTaskContext.task_attempt_id", TASK_ATTEMPT_ID);
     layout.put("SparkDsTaskContext.is_interrupted", TASK_IS_INTERRUPTED);
+    layout.put("SparkDsReadInfo", READ_INFO_SIZE);
+    layout.put("SparkDsReadInfo.size", 0L);
+    layout.put("SparkDsReadInfo.kind", READ_INFO_KIND);
+    layout.put("SparkDsReadInfo.schema", READ_INFO_SCHEMA);
+    layout.put("SparkDsReadInfo.reader_state", READ_INFO_READER_STATE);
+    layout.put("SparkDsReadInfo.reader_state_length", READ_INFO_READER_STATE_LENGTH);
+    layout.put("SparkDsReadInfo.partition", READ_INFO_PARTITION);
+    layout.put("SparkDsReadInfo.partition_length", READ_INFO_PARTITION_LENGTH);
     layout.put("SparkDsWriteInfo", WRITE_INFO_SIZE);
     layout.put("SparkDsWriteInfo.size", 0L);
     layout.put("SparkDsWriteInfo.mode", WRITE_INFO_MODE);
     layout.put("SparkDsWriteInfo.query_id", WRITE_INFO_QUERY_ID);
+    layout.put("SparkDsDataWriterInfo", DATA_WRITER_INFO_SIZE);
+    layout.put("SparkDsDataWriterInfo.size", 0L);
+    layout.put("SparkDsDataWriterInfo.schema", DATA_WRITER_INFO_SCHEMA);
+    layout.put("SparkDsDataWriterInfo.writer_state", DATA_WRITER_INFO_WRITER_STATE);
+    layout.put(
+      "SparkDsDataWriterInfo.writer_state_length", DATA_WRITER_INFO_WRITER_STATE_LENGTH);
+    layout.put("SparkDsDataWriterInfo.epoch_id", DATA_WRITER_INFO_EPOCH_ID);
+    layout.put("SparkDsFinishWriteInfo", FINISH_WRITE_INFO_SIZE);
+    layout.put("SparkDsFinishWriteInfo.size", 0L);
+    layout.put("SparkDsFinishWriteInfo.epoch_id", FINISH_WRITE_INFO_EPOCH_ID);
+    layout.put("SparkDsFinishWriteInfo.messages", FINISH_WRITE_INFO_MESSAGES);
+    layout.put("SparkDsFinishWriteInfo.message_lengths", FINISH_WRITE_INFO_MESSAGE_LENGTHS);
+    layout.put("SparkDsFinishWriteInfo.num_messages", FINISH_WRITE_INFO_NUM_MESSAGES);
+    layout.put("SparkDsFinishWriteInfo.rejected", FINISH_WRITE_INFO_REJECTED);
+    layout.put("SparkDsFinishDataWriterInfo", FINISH_DATA_WRITER_INFO_SIZE);
+    layout.put("SparkDsFinishDataWriterInfo.size", 0L);
     return layout;
   }
 
@@ -293,10 +385,14 @@ final class NativeLibrary {
     // NativeLibrary.log, which SparkDsHost.log calls with the path of its library.
     static final MethodHandle LOG;
     // The addresses of the C functions that call Java, which live as long as the JVM:
-    // SparkDsSink, which calls NativeLibrary.sink, and SparkDsTaskContext.is_interrupted, which
-    // calls NativeLibrary.isInterrupted.
+    // SparkDsSink, which calls NativeLibrary.sink, the SparkDsSink set_state of the functions
+    // that also return a state, which calls NativeLibrary.stateSink,
+    // SparkDsTaskContext.is_interrupted, which calls NativeLibrary.isInterrupted, and
+    // SparkDsHost.is_log_enabled, which calls NativeLibrary.isLogEnabled.
     static final long SINK;
+    static final long STATE_SINK;
     static final long IS_INTERRUPTED;
+    static final long IS_LOG_ENABLED;
 
     static {
       try {
@@ -347,10 +443,18 @@ final class NativeLibrary {
           lookup.findStatic(NativeLibrary.class, "sink",
             MethodType.methodType(void.class, long.class, long.class, long.class)),
           C.VOID, C.PTR, C.PTR, C.I64);
+        STATE_SINK = upcall(
+          lookup.findStatic(NativeLibrary.class, "stateSink",
+            MethodType.methodType(void.class, long.class, long.class, long.class)),
+          C.VOID, C.PTR, C.PTR, C.I64);
         IS_INTERRUPTED = upcall(
           lookup.findStatic(NativeLibrary.class, "isInterrupted",
             MethodType.methodType(boolean.class, long.class)),
           C.BOOL, C.PTR);
+        IS_LOG_ENABLED = upcall(
+          lookup.findStatic(NativeLibrary.class, "isLogEnabled",
+            MethodType.methodType(boolean.class, int.class)),
+          C.BOOL, C.I32);
       } catch (Throwable e) {
         // The message names the cause, because the JVM only keeps this message for the later
         // uses of the class.
@@ -432,6 +536,7 @@ final class NativeLibrary {
       Platform.putInt(null, host + HOST_ABI_VERSION, ABI_VERSION);
       Platform.putLong(null, host + HOST_SPARK_VERSION, versionAddress);
       Platform.putLong(null, host + HOST_LOG, log);
+      Platform.putLong(null, host + HOST_IS_LOG_ENABLED, IS_LOG_ENABLED);
       return host;
     }
   }
@@ -470,24 +575,60 @@ final class NativeLibrary {
   }
 
   /**
+   * The SPARK_DS_LOG_* levels, which {@link #log} and {@link #isLogEnabled} share: a level that
+   * is not one of them is treated as SPARK_DS_LOG_INFO.
+   */
+  private enum LogLevel {
+    ERROR, WARN, INFO, DEBUG, TRACE;
+
+    static LogLevel of(int level) {
+      return switch (level) {
+        case 1 -> ERROR;
+        case 2 -> WARN;
+        case 4 -> DEBUG;
+        case 5 -> TRACE;
+        default -> INFO;
+      };
+    }
+  }
+
+  /**
    * Called by the library, through {@code SparkDsHost.log}, with the path of the library. It must
    * not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void log(String path, int level, long message) {
     try {
       String text = message == 0 ? "" : new String(readCString(message), StandardCharsets.UTF_8);
-      switch (level) {
-        case 1 -> LOGGER.error("Native data source library {}: {}",
+      switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.error("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 2 -> LOGGER.warn("Native data source library {}: {}",
+        case WARN -> LOGGER.warn("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
-        case 4 -> LOGGER.debug("Native data source library {}: {}", path, text);
-        case 5 -> LOGGER.trace("Native data source library {}: {}", path, text);
-        default -> LOGGER.info("Native data source library {}: {}",
+        case DEBUG -> LOGGER.debug("Native data source library {}: {}", path, text);
+        case TRACE -> LOGGER.trace("Native data source library {}: {}", path, text);
+        case INFO -> LOGGER.info("Native data source library {}: {}",
           MDC.of(LogKeys.PATH, path), MDC.of(LogKeys.MESSAGE, text));
       }
     } catch (Throwable e) {
       // The message is lost.
+    }
+  }
+
+  /**
+   * Called by the library, through {@code SparkDsHost.is_log_enabled}, with the level of the
+   * messages of {@link #log}. It must not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static boolean isLogEnabled(int level) {
+    try {
+      return switch (LogLevel.of(level)) {
+        case ERROR -> LOGGER.isErrorEnabled();
+        case WARN -> LOGGER.isWarnEnabled();
+        case INFO -> LOGGER.isInfoEnabled();
+        case DEBUG -> LOGGER.isDebugEnabled();
+        case TRACE -> LOGGER.isTraceEnabled();
+      };
+    } catch (Throwable e) {
+      return false;
     }
   }
 
@@ -569,41 +710,83 @@ final class NativeLibrary {
   }
 
   long createReader(long dataSource, long schemaAddress) throws Throwable {
-    return createWithSchema(Function.CREATE_READER, dataSource, schemaAddress);
-  }
-
-  long createStreamReader(long dataSource, long schemaAddress) throws Throwable {
-    return createWithSchema(Function.CREATE_STREAM_READER, dataSource, schemaAddress);
-  }
-
-  private long createWithSchema(Function function, long dataSource, long schemaAddress)
-      throws Throwable {
-    MethodHandle f = function(function);
+    MethodHandle f = function(Function.CREATE_READER);
     try (Memory memory = new Memory()) {
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, out), function);
-      return readHandle(out, function);
+      check((int) f.invokeExact(dataSource, schemaAddress, READER_INFO, out),
+        Function.CREATE_READER);
+      return readHandle(out, Function.CREATE_READER);
     }
   }
 
   /**
-   * Creates a writer.
+   * Creates a stream reader.
+   *
+   * @param checkpointLocation the location of the checkpoint of the source
+   */
+  long createStreamReader(long dataSource, long schemaAddress, String checkpointLocation)
+      throws Throwable {
+    MethodHandle f = function(Function.CREATE_STREAM_READER);
+    try (Memory memory = new Memory()) {
+      long info = memory.zeroed(STREAM_READER_INFO_SIZE);
+      Platform.putLong(null, info, STREAM_READER_INFO_SIZE);
+      Platform.putLong(
+        null, info + STREAM_READER_INFO_CHECKPOINT_LOCATION, memory.string(checkpointLocation));
+      long out = memory.zeroed(8);
+      check((int) f.invokeExact(dataSource, schemaAddress, info, out),
+        Function.CREATE_STREAM_READER);
+      return readHandle(out, Function.CREATE_STREAM_READER);
+    }
+  }
+
+  /** A writer handle, with the state of the writer that the data writers need. */
+  static final class WriterHandle {
+    final long handle;
+    /** The state of the writer, or null if it has none. */
+    final byte[] state;
+
+    WriterHandle(long handle, byte[] state) {
+      this.handle = handle;
+      this.state = state;
+    }
+  }
+
+  /**
+   * Creates a writer. If the library returns an invalid state, the writer is aborted, as rejected,
+   * and closed.
    *
    * @param mode {@link #WRITE_APPEND} or {@link #WRITE_TRUNCATE}
    * @param queryId the ID of the streaming query of a streaming write, or null for a batch write
    */
-  long createWriter(long dataSource, long schemaAddress, int mode, String queryId)
+  WriterHandle createWriter(long dataSource, long schemaAddress, int mode, String queryId)
       throws Throwable {
     MethodHandle f = function(Function.CREATE_WRITER);
-    try (Memory memory = new Memory()) {
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
       long info = memory.zeroed(WRITE_INFO_SIZE);
       Platform.putLong(null, info, WRITE_INFO_SIZE);
       Platform.putInt(null, info + WRITE_INFO_MODE, mode);
       Platform.putLong(
         null, info + WRITE_INFO_QUERY_ID, queryId == null ? 0 : memory.string(queryId));
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(dataSource, schemaAddress, info, out), Function.CREATE_WRITER);
-      return readHandle(out, Function.CREATE_WRITER);
+      check((int) f.invokeExact(dataSource, schemaAddress, info, Ffm.STATE_SINK, sink.id, out),
+        Function.CREATE_WRITER);
+      long handle = readHandle(out, Function.CREATE_WRITER);
+      try {
+        return new WriterHandle(handle, state(sink, Function.CREATE_WRITER));
+      } catch (Throwable e) {
+        // So that the library can undo what create_writer prepared.
+        try {
+          finishWrite(Function.ABORT, handle, -1, new byte[0][], true);
+        } catch (Throwable abortError) {
+          e.addSuppressed(abortError);
+        }
+        try {
+          closeWriter(handle);
+        } catch (Throwable closeError) {
+          e.addSuppressed(closeError);
+        }
+        throw e;
+      }
     }
   }
 
@@ -630,16 +813,25 @@ final class NativeLibrary {
     }
   }
 
-  byte[][] partitions(long reader) throws Throwable {
-    MethodHandle f = function(Function.PARTITIONS);
-    try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(reader, Ffm.SINK, sink.id), Function.PARTITIONS);
-      return sink.all();
+  /** The partitions that a reader planned, with the state of the reader that reads them. */
+  static final class PlannedPartitions {
+    final byte[][] partitions;
+    /** The state of the reader, or null if it has none. */
+    final byte[] state;
+
+    PlannedPartitions(byte[][] partitions, byte[] state) {
+      this.partitions = partitions;
+      this.state = state;
     }
   }
 
-  byte[] serializeReader(long reader) throws Throwable {
-    return serialize(Function.SERIALIZE_READER, reader);
+  PlannedPartitions partitions(long reader) throws Throwable {
+    MethodHandle f = function(Function.PARTITIONS);
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(reader, PARTITIONS_INFO, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+        Function.PARTITIONS);
+      return new PlannedPartitions(sink.values(), state(sink, Function.PARTITIONS));
+    }
   }
 
   void closeReader(long reader) throws Throwable {
@@ -647,38 +839,60 @@ final class NativeLibrary {
   }
 
   String initialOffset(long streamReader) throws Throwable {
-    return offset(Function.INITIAL_OFFSET, streamReader);
+    MethodHandle f = function(Function.INITIAL_OFFSET);
+    try (Sink sink = new Sink()) {
+      check((int) f.invokeExact(streamReader, INITIAL_OFFSET_INFO, Ffm.SINK, sink.id),
+        Function.INITIAL_OFFSET);
+      return offset(Function.INITIAL_OFFSET, sink);
+    }
   }
 
-  String latestOffset(long streamReader) throws Throwable {
-    return offset(Function.LATEST_OFFSET, streamReader);
+  /**
+   * Returns the latest offset.
+   *
+   * @param start the offset that the next micro-batch starts after
+   */
+  String latestOffset(long streamReader, String start) throws Throwable {
+    MethodHandle f = function(Function.LATEST_OFFSET);
+    try (Memory memory = new Memory(); Sink sink = new Sink()) {
+      long info = memory.zeroed(LATEST_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info, LATEST_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info + LATEST_OFFSET_INFO_START, memory.string(start));
+      check((int) f.invokeExact(streamReader, info, Ffm.SINK, sink.id), Function.LATEST_OFFSET);
+      return offset(Function.LATEST_OFFSET, sink);
+    }
   }
 
-  private String offset(Function function, long streamReader) throws Throwable {
-    byte[] offset = serialize(function, streamReader);
+  /** Returns the offset that a function passed to the sink, which it must pass. */
+  private static String offset(Function function, Sink sink) throws Throwable {
+    byte[] offset = single(sink, function);
     if (offset == null) {
       throw new IllegalStateException(function.fieldName + " returned no offset.");
     }
     return new String(offset, StandardCharsets.UTF_8);
   }
 
-  byte[][] streamPartitions(long streamReader, String start, String end) throws Throwable {
+  PlannedPartitions streamPartitions(long streamReader, String start, String end)
+      throws Throwable {
     MethodHandle f = function(Function.STREAM_PARTITIONS);
     try (Memory memory = new Memory(); Sink sink = new Sink()) {
-      check((int) f.invokeExact(streamReader, memory.string(start), memory.string(end),
-        Ffm.SINK, sink.id), Function.STREAM_PARTITIONS);
-      return sink.all();
+      long info = memory.zeroed(STREAM_PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info, STREAM_PARTITIONS_INFO_SIZE);
+      Platform.putLong(null, info + STREAM_PARTITIONS_INFO_START, memory.string(start));
+      Platform.putLong(null, info + STREAM_PARTITIONS_INFO_END, memory.string(end));
+      check((int) f.invokeExact(streamReader, info, Ffm.SINK, Ffm.STATE_SINK, sink.id),
+        Function.STREAM_PARTITIONS);
+      return new PlannedPartitions(sink.values(), state(sink, Function.STREAM_PARTITIONS));
     }
-  }
-
-  byte[] serializeStreamReader(long streamReader) throws Throwable {
-    return serialize(Function.SERIALIZE_STREAM_READER, streamReader);
   }
 
   void commitOffset(long streamReader, String end) throws Throwable {
     MethodHandle f = function(Function.COMMIT_OFFSET);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(streamReader, memory.string(end)), Function.COMMIT_OFFSET);
+      long info = memory.zeroed(COMMIT_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info, COMMIT_OFFSET_INFO_SIZE);
+      Platform.putLong(null, info + COMMIT_OFFSET_INFO_END, memory.string(end));
+      check((int) f.invokeExact(streamReader, info), Function.COMMIT_OFFSET);
     }
   }
 
@@ -686,30 +900,52 @@ final class NativeLibrary {
     function(Function.CLOSE_STREAM_READER).invokeExact(streamReader);
   }
 
-  void read(Task task, byte[] readerState, byte[] partition, long streamAddress)
-      throws Throwable {
+  /**
+   * Reads a partition, into the stream at the given address.
+   *
+   * @param kind {@link #READ_BATCH} or {@link #READ_MICRO_BATCH}
+   * @param schemaAddress the address of the {@code ArrowSchema} of the schema to read
+   */
+  void read(
+      Task task,
+      int kind,
+      long schemaAddress,
+      byte[] readerState,
+      byte[] partition,
+      long streamAddress) throws Throwable {
     MethodHandle f = function(Function.READ);
     try (Memory memory = new Memory()) {
-      check((int) f.invokeExact(task.address, memory.bytes(readerState),
-        (long) readerState.length, memory.bytes(partition), (long) partition.length,
-        streamAddress), Function.READ);
+      long info = memory.zeroed(READ_INFO_SIZE);
+      Platform.putLong(null, info, READ_INFO_SIZE);
+      Platform.putInt(null, info + READ_INFO_KIND, kind);
+      Platform.putLong(null, info + READ_INFO_SCHEMA, schemaAddress);
+      Platform.putLong(null, info + READ_INFO_READER_STATE, memory.bytes(readerState));
+      Platform.putLong(null, info + READ_INFO_READER_STATE_LENGTH, readerState.length);
+      Platform.putLong(null, info + READ_INFO_PARTITION, memory.bytes(partition));
+      Platform.putLong(null, info + READ_INFO_PARTITION_LENGTH, partition.length);
+      check((int) f.invokeExact(task.address, info, streamAddress), Function.READ);
     }
   }
 
-  byte[] serializeWriter(long writer) throws Throwable {
-    return serialize(Function.SERIALIZE_WRITER, writer);
-  }
-
   void commit(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(Function.COMMIT, writer, epochId, messages);
+    finishWrite(Function.COMMIT, writer, epochId, messages, false);
   }
 
   void abort(long writer, long epochId, byte[][] messages) throws Throwable {
-    finishWrite(Function.ABORT, writer, epochId, messages);
+    finishWrite(Function.ABORT, writer, epochId, messages, false);
   }
 
-  private void finishWrite(Function function, long writer, long epochId, byte[][] messages)
-      throws Throwable {
+  /**
+   * Commits or aborts a write.
+   *
+   * @param rejected whether Spark rejected what create_writer returned, for an abort
+   */
+  private void finishWrite(
+      Function function,
+      long writer,
+      long epochId,
+      byte[][] messages,
+      boolean rejected) throws Throwable {
     MethodHandle f = function(function);
     try (Memory memory = new Memory()) {
       long pointers = memory.zeroed(8L * Math.max(1, messages.length));
@@ -720,8 +956,14 @@ final class NativeLibrary {
           Platform.putLong(null, lengths + 8L * i, messages[i].length);
         }
       }
-      check((int) f.invokeExact(writer, epochId, pointers, lengths, (long) messages.length),
-        function);
+      long info = memory.zeroed(FINISH_WRITE_INFO_SIZE);
+      Platform.putLong(null, info, FINISH_WRITE_INFO_SIZE);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_EPOCH_ID, epochId);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGES, pointers);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_MESSAGE_LENGTHS, lengths);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_NUM_MESSAGES, messages.length);
+      Platform.putLong(null, info + FINISH_WRITE_INFO_REJECTED, rejected ? 1L : 0L);
+      check((int) f.invokeExact(writer, info), function);
     }
   }
 
@@ -729,19 +971,31 @@ final class NativeLibrary {
     function(Function.CLOSE_WRITER).invokeExact(writer);
   }
 
-  long createDataWriter(Task task, byte[] writerState, long epochId) throws Throwable {
+  /**
+   * Creates a data writer.
+   *
+   * @param schemaAddress the address of the {@code ArrowSchema} of the data to write
+   * @param epochId the ID of the micro-batch of a streaming write, or -1 for a batch write
+   */
+  long createDataWriter(Task task, long schemaAddress, byte[] writerState, long epochId)
+      throws Throwable {
     MethodHandle f = function(Function.CREATE_DATA_WRITER);
     try (Memory memory = new Memory()) {
+      long info = memory.zeroed(DATA_WRITER_INFO_SIZE);
+      Platform.putLong(null, info, DATA_WRITER_INFO_SIZE);
+      Platform.putLong(null, info + DATA_WRITER_INFO_SCHEMA, schemaAddress);
+      Platform.putLong(null, info + DATA_WRITER_INFO_WRITER_STATE, memory.bytes(writerState));
+      Platform.putLong(null, info + DATA_WRITER_INFO_WRITER_STATE_LENGTH, writerState.length);
+      Platform.putLong(null, info + DATA_WRITER_INFO_EPOCH_ID, epochId);
       long out = memory.zeroed(8);
-      check((int) f.invokeExact(task.address, memory.bytes(writerState),
-        (long) writerState.length, epochId, out), Function.CREATE_DATA_WRITER);
+      check((int) f.invokeExact(task.address, info, out), Function.CREATE_DATA_WRITER);
       return readHandle(out, Function.CREATE_DATA_WRITER);
     }
   }
 
-  void write(long dataWriter, long arrayAddress, long schemaAddress) throws Throwable {
-    check((int) function(Function.WRITE).invokeExact(dataWriter, arrayAddress, schemaAddress),
-      Function.WRITE);
+  /** Writes the array at the given address, of the schema that the data writer got. */
+  void write(long dataWriter, long arrayAddress) throws Throwable {
+    check((int) function(Function.WRITE).invokeExact(dataWriter, arrayAddress), Function.WRITE);
   }
 
   /**
@@ -751,7 +1005,8 @@ final class NativeLibrary {
   byte[] commitDataWriter(long dataWriter, Runnable committed) throws Throwable {
     MethodHandle f = function(Function.COMMIT_DATA_WRITER);
     try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(dataWriter, Ffm.SINK, sink.id), Function.COMMIT_DATA_WRITER);
+      check((int) f.invokeExact(dataWriter, FINISH_DATA_WRITER_INFO, Ffm.SINK, sink.id),
+        Function.COMMIT_DATA_WRITER);
       committed.run();
       byte[] message = single(sink, Function.COMMIT_DATA_WRITER);
       return message == null ? new byte[0] : message;
@@ -759,7 +1014,8 @@ final class NativeLibrary {
   }
 
   void abortDataWriter(long dataWriter) throws Throwable {
-    check((int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter),
+    check(
+      (int) function(Function.ABORT_DATA_WRITER).invokeExact(dataWriter, FINISH_DATA_WRITER_INFO),
       Function.ABORT_DATA_WRITER);
   }
 
@@ -767,26 +1023,22 @@ final class NativeLibrary {
     function(Function.CLOSE_DATA_WRITER).invokeExact(dataWriter);
   }
 
-  /**
-   * Calls a function that returns a single byte array through a sink. Returns null if the
-   * function does not call the sink.
-   */
-  private byte[] serialize(Function function, long handle) throws Throwable {
-    MethodHandle f = function(function);
-    try (Sink sink = new Sink()) {
-      check((int) f.invokeExact(handle, Ffm.SINK, sink.id), function);
-      return single(sink, function);
-    }
-  }
-
   /** Returns the single byte array that a function passed to the sink, or null if none. */
   private static byte[] single(Sink sink, Function function) throws Throwable {
-    byte[][] values = sink.all();
-    if (values.length > 1) {
+    return atMostOne(sink.values(), function, "values");
+  }
+
+  /** Returns the state that a function passed to the set_state sink, or null if none. */
+  private static byte[] state(Sink sink, Function function) throws Throwable {
+    return atMostOne(sink.states(), function, "states");
+  }
+
+  private static byte[] atMostOne(byte[][] arrays, Function function, String what) {
+    if (arrays.length > 1) {
       throw new IllegalStateException(
-        function.fieldName + " returned " + values.length + " values instead of one.");
+        function.fieldName + " returned " + arrays.length + " " + what + " instead of one.");
     }
-    return values.length == 0 ? null : values[0];
+    return arrays.length == 0 ? null : arrays[0];
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -911,23 +1163,35 @@ final class NativeLibrary {
   private static final ConcurrentHashMap<Long, Sink> sinks = new ConcurrentHashMap<>();
 
   /**
-   * Collects the byte arrays that a library returns during a call, through the C function
-   * {@link Ffm#SINK}. The library passes {@link #id} back to identify it.
+   * Collects the byte arrays that a library returns during a call, through the C functions
+   * {@link Ffm#SINK} and {@link Ffm#STATE_SINK}, which a function that returns values and a
+   * state gets with the same sink. The library passes {@link #id} back to identify it.
    */
   private static final class Sink implements AutoCloseable {
     final long id = nextSinkId.getAndIncrement();
     final List<byte[]> values = new ArrayList<>();
+    final List<byte[]> states = new ArrayList<>();
     Throwable error;
 
     Sink() {
       sinks.put(id, this);
     }
 
-    byte[][] all() throws Throwable {
+    /** The byte arrays passed to {@link Ffm#SINK}. */
+    byte[][] values() throws Throwable {
+      return collected(values);
+    }
+
+    /** The byte arrays passed to {@link Ffm#STATE_SINK}. */
+    byte[][] states() throws Throwable {
+      return collected(states);
+    }
+
+    private byte[][] collected(List<byte[]> arrays) throws Throwable {
       if (error != null) {
         throw error;
       }
-      return values.toArray(new byte[0][]);
+      return arrays.toArray(new byte[0][]);
     }
 
     @Override
@@ -941,6 +1205,18 @@ final class NativeLibrary {
    * It must not throw: an exception thrown by an upcall crashes the JVM.
    */
   private static void sink(long id, long data, long length) {
+    collect(id, data, length, false);
+  }
+
+  /**
+   * Called by the library, through the upcall stub {@link Ffm#STATE_SINK}, with a state to copy.
+   * It must not throw: an exception thrown by an upcall crashes the JVM.
+   */
+  private static void stateSink(long id, long data, long length) {
+    collect(id, data, length, true);
+  }
+
+  private static void collect(long id, long data, long length, boolean state) {
     Sink sink = null;
     try {
       sink = sinks.get(id);
@@ -953,7 +1229,7 @@ final class NativeLibrary {
       }
       byte[] bytes = new byte[(int) length];
       Platform.copyMemory(null, data, bytes, Platform.BYTE_ARRAY_OFFSET, length);
-      sink.values.add(bytes);
+      (state ? sink.states : sink.values).add(bytes);
     } catch (Throwable e) {
       if (sink != null) {
         sink.error = e;
