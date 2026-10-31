@@ -21,6 +21,7 @@ import java.math.{BigDecimal => JBigDecimal}
 import java.time.Duration
 
 import org.apache.spark.SparkException
+import org.apache.spark.metrics.source.CodegenMetrics
 import org.apache.spark.rdd.MapPartitionsWithEvaluatorRDD
 import org.apache.spark.sql.{DataFrame, Dataset, Row, SaveMode}
 import org.apache.spark.sql.catalyst.expressions.{And, Cast, CodegenObjectFactoryMode, Expression, IsNotNull, Literal}
