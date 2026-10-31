@@ -109,4 +109,7 @@ private[sql] class TransactionAwareCatalogManager(
     delegate.sessionFunctionKindsForUnqualifiedResolution()
 
   override private[sql] def reset(): Unit = delegate.reset()
+
+  // The catalogs are owned by the delegate, which is closed by the owning session.
+  override private[sql] def close(): Unit = {}
 }

@@ -17,9 +17,14 @@
 
 package org.apache.spark.sql.connector.catalog
 
+import java.io.{Closeable, IOException}
 import java.net.URI
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.jdk.CollectionConverters._
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
@@ -127,6 +132,77 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
           catalogManager.setCurrentNamespace(Array("ns1", "ns2"))
         }
       }
+    }
+  }
+
+  test("close should close the loaded closeable catalogs") {
+    val defaultSessionCatalog = new CloseableCatalog
+    val catalogManager = new DefaultCatalogManager(defaultSessionCatalog, createSessionCatalog())
+    withSQLConf("spark.sql.catalog.dummy" -> classOf[DummyCatalog].getName,
+      "spark.sql.catalog.failing" -> classOf[FailingCloseableCatalog].getName,
+      "spark.sql.catalog.linkage" -> classOf[LinkageErrorCloseableCatalog].getName,
+      "spark.sql.catalog.closeable" -> classOf[CloseableCatalog].getName) {
+      assert(catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME) eq defaultSessionCatalog)
+      catalogManager.catalog("dummy")
+      val failing = catalogManager.catalog("failing").asInstanceOf[FailingCloseableCatalog]
+      val linkage = catalogManager.catalog("linkage").asInstanceOf[LinkageErrorCloseableCatalog]
+      val closeable = catalogManager.catalog("closeable").asInstanceOf[CloseableCatalog]
+      assert(!failing.closed && !linkage.closed && !closeable.closed)
+
+      catalogManager.close()
+      // A failure while closing one catalog should not prevent closing the others.
+      assert(failing.closed)
+      assert(linkage.closed)
+      assert(closeable.closed)
+      // The default session catalog is not loaded by the manager, so it is not closed.
+      assert(!defaultSessionCatalog.closed)
+
+      // Closing is terminal, so no catalog is loaded that would never be closed.
+      intercept[IllegalStateException](catalogManager.catalog("closeable"))
+      // The default session catalog is still available.
+      assert(catalogManager.catalog(CatalogManager.SESSION_CATALOG_NAME) eq defaultSessionCatalog)
+    }
+  }
+
+  test("close should close a custom v2 session catalog") {
+    val catalogManager = new DefaultCatalogManager(new CloseableCatalog, createSessionCatalog())
+    withSQLConf(
+      SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[CloseableCatalog].getName) {
+      val sessionCatalog = catalogManager.v2SessionCatalog.asInstanceOf[CloseableCatalog]
+      assert(!sessionCatalog.closed)
+
+      catalogManager.close()
+      assert(sessionCatalog.closed)
+      intercept[IllegalStateException](catalogManager.v2SessionCatalog)
+    }
+  }
+
+  test("a custom v2 session catalog loaded while closing is closed") {
+    val catalogManager = new DefaultCatalogManager(new CloseableCatalog, createSessionCatalog())
+    BlockingInitializeCatalog.reset()
+    withSQLConf(
+      SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[BlockingInitializeCatalog].getName) {
+      // A direct `v2SessionCatalog` lookup starts loading the catalog before `close()`...
+      val conf = SQLConf.get
+      val loader = new Thread(() => SQLConf.withExistingConf(conf) {
+        catalogManager.v2SessionCatalog
+      })
+      loader.start()
+      assert(BlockingInitializeCatalog.initializing.await(1, TimeUnit.MINUTES))
+      // ... and `close()` waits for the load to complete.
+      val closer = new Thread(() => catalogManager.close())
+      closer.start()
+      eventually(timeout(1.minute)) {
+        assert(closer.getState == Thread.State.BLOCKED)
+      }
+      BlockingInitializeCatalog.resume.countDown()
+      loader.join(TimeUnit.MINUTES.toMillis(1))
+      closer.join(TimeUnit.MINUTES.toMillis(1))
+      assert(!loader.isAlive && !closer.isAlive)
+
+      // The catalog loaded concurrently is closed, and no unclosed one can be served afterwards.
+      assert(BlockingInitializeCatalog.lastInstance.closed)
+      intercept[IllegalStateException](catalogManager.v2SessionCatalog)
     }
   }
 
@@ -294,4 +370,46 @@ class DummyCatalog extends CatalogPlugin {
   private var _name: String = null
   override def name(): String = _name
   override def defaultNamespace(): Array[String] = Array("a", "b")
+}
+
+class CloseableCatalog extends DummyCatalog with Closeable {
+  @volatile var closed: Boolean = false
+  override def close(): Unit = closed = true
+}
+
+class FailingCloseableCatalog extends CloseableCatalog {
+  override def close(): Unit = {
+    super.close()
+    throw new IOException("failed to close")
+  }
+}
+
+class BlockingInitializeCatalog extends CloseableCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    super.initialize(name, options)
+    BlockingInitializeCatalog.lastInstance = this
+    BlockingInitializeCatalog.initializing.countDown()
+    assert(BlockingInitializeCatalog.resume.await(1, TimeUnit.MINUTES))
+  }
+}
+
+object BlockingInitializeCatalog {
+  @volatile var initializing: CountDownLatch = _
+  @volatile var resume: CountDownLatch = _
+  @volatile var lastInstance: BlockingInitializeCatalog = _
+
+  def reset(): Unit = {
+    initializing = new CountDownLatch(1)
+    resume = new CountDownLatch(1)
+    lastInstance = null
+  }
+}
+
+class LinkageErrorCloseableCatalog extends CloseableCatalog {
+  override def close(): Unit = {
+    super.close()
+    // scalastyle:off throwerror
+    throw new NoClassDefFoundError("failed to close")
+    // scalastyle:on throwerror
+  }
 }

@@ -21,8 +21,10 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.collection.mutable
 import scala.util.Try
+import scala.util.control.NonFatal
 
 import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.CATALOG_NAME
 import org.apache.spark.sql.AnalysisException
 import org.apache.spark.sql.catalyst.SQLConfHelper
 import org.apache.spark.sql.catalyst.catalog.{SessionCatalog, TempVariableManager}
@@ -104,6 +106,9 @@ private[sql] trait CatalogManager extends SQLConfHelper with Logging {
 
   // Reset the manager to its initial state. Only used in tests.
   private[sql] def reset(): Unit
+
+  // Release the catalogs loaded by this manager. Called when the owning session is closed.
+  private[sql] def close(): Unit
 }
 
 /**
@@ -118,6 +123,9 @@ private[sql] class DefaultCatalogManager(
 
   private val catalogs = mutable.HashMap.empty[String, CatalogPlugin]
 
+  // Set by `close()`. Once closed, no catalog can be loaded, so none can leak.
+  @volatile private var closed = false
+
   // TODO: create a real SYSTEM catalog to host `TempVariableManager` under the SESSION namespace.
   override val tempVariableManager: TempVariableManager = new TempVariableManager
 
@@ -131,7 +139,17 @@ private[sql] class DefaultCatalogManager(
     if (name.equalsIgnoreCase(SESSION_CATALOG_NAME)) {
       v2SessionCatalog
     } else {
-      catalogs.getOrElseUpdate(name, Catalogs.load(name, conf))
+      catalogs.getOrElseUpdate(name, {
+        checkNotClosed(name)
+        Catalogs.load(name, conf)
+      })
+    }
+  }
+
+  private def checkNotClosed(name: String): Unit = {
+    if (closed) {
+      throw new IllegalStateException(
+        s"Cannot load catalog $name: the session that owns the catalog manager is closed.")
     }
   }
 
@@ -156,7 +174,14 @@ private[sql] class DefaultCatalogManager(
   override private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) match {
       case "builtin" => defaultSessionCatalog
-      case _ => catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, loadV2SessionCatalog())
+      // Under the manager lock, like `catalog(name)`, so that a load racing with `close()`
+      // either completes before it, and is closed by it, or fails.
+      case _ => synchronized {
+        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, {
+          checkNotClosed(SESSION_CATALOG_NAME)
+          loadV2SessionCatalog()
+        })
+      }
     }
   }
 
@@ -525,6 +550,34 @@ private[sql] class DefaultCatalogManager(
       confDefaultPathCache.set(None)
     }
     v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
+  }
+
+  // Unregister every catalog loaded by this manager, and close the ones that are `AutoCloseable`.
+  // `defaultSessionCatalog` is not closed since it is owned by the caller, not by this manager.
+  // Closing is terminal: loading a catalog afterwards fails instead of creating an instance
+  // that would never be closed.
+  //
+  // SPARK-56939: catalog implementations are closed outside of the manager lock so that a
+  // catalog calling back into the manager while closing cannot deadlock.
+  override private[sql] def close(): Unit = {
+    val loaded = synchronized {
+      closed = true
+      val entries = catalogs.toSeq
+      catalogs.clear()
+      entries
+    }
+    loaded.foreach {
+      case (name, closeable: AutoCloseable) =>
+        try {
+          closeable.close()
+        } catch {
+          // A catalog loaded by a session classloader can fail with a `LinkageError` while
+          // closing. It must not prevent the other catalogs from being closed.
+          case e @ (NonFatal(_) | _: LinkageError) =>
+            logWarning(log"Failed to close catalog ${MDC(CATALOG_NAME, name)}", e)
+        }
+      case _ =>
+    }
   }
 }
 

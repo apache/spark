@@ -97,7 +97,24 @@ private[sql] class SessionState(
   // The following fields are lazy to avoid creating the Hive client when creating SessionState.
   lazy val catalog: SessionCatalog = catalogBuilder()
 
-  lazy val analyzer: Analyzer = analyzerBuilder()
+  // Coordinates `close()` with the lazy creation of `analyzer`, which owns the `CatalogManager`:
+  // `close()` does not build an analyzer only to close it, and an analyzer first built after
+  // `close()` gets a closed catalog manager, so no catalog can be loaded through a closed state.
+  private val lifecycleLock = new Object
+  private var analyzerInitialized = false // Guarded by `lifecycleLock`.
+  private var closed = false // Guarded by `lifecycleLock`.
+
+  lazy val analyzer: Analyzer = {
+    val built = analyzerBuilder()
+    val closeCatalogs = lifecycleLock.synchronized {
+      analyzerInitialized = true
+      closed
+    }
+    if (closeCatalogs) {
+      built.catalogManager.close()
+    }
+    built
+  }
 
   lazy val optimizer: Optimizer = optimizerBuilder()
 
@@ -132,6 +149,30 @@ private[sql] class SessionState(
    * Get an identical copy of the `SessionState` and associate it with the given `SparkSession`
    */
   def clone(newSparkSession: SparkSession): SessionState = createClone(newSparkSession, this)
+
+  /**
+   * Release the resources owned by this `SessionState`: the catalogs loaded by its
+   * [[CatalogManager]], then the session artifacts. Catalogs are closed first since they may have
+   * been loaded by the session classloader, which is closed with the artifacts. No catalog can be
+   * loaded afterwards. Closing does not build the analyzer if it was never used.
+   *
+   * Clones load their own catalogs and have their own artifacts. However, plans copied into a
+   * clone, e.g. temporary views, can still refer to catalog instances of this state, which
+   * then are closed.
+   */
+  def close(): Unit = {
+    val closeCatalogs = lifecycleLock.synchronized {
+      closed = true
+      analyzerInitialized
+    }
+    try {
+      if (closeCatalogs) {
+        catalogManager.close()
+      }
+    } finally {
+      artifactManager.close()
+    }
+  }
 
   // ------------------------------------------------------
   //  Helper methods, partially leftover from pre-2.0 days
