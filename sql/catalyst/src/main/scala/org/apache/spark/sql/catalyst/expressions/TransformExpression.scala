@@ -17,11 +17,19 @@
 
 package org.apache.spark.sql.catalyst.expressions
 
+import java.util.concurrent.ConcurrentHashMap
+
+import scala.util.{Failure, Success, Try}
+import scala.util.control.NonFatal
+
+import org.apache.spark.internal.Logging
+import org.apache.spark.internal.LogKeys.{ARGS, CLASS_NAME, ERROR, FUNCTION_NAME, FUNCTION_PARAM}
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.expressions.codegen.{CodegenContext, ExprCode}
+import org.apache.spark.sql.catalyst.types.{PhysicalDataType, UninitializedPhysicalType}
 import org.apache.spark.sql.connector.catalog.functions.{BoundFunction, Reducer, ReducibleFunction, ScalarFunction}
 import org.apache.spark.sql.errors.QueryExecutionErrors
-import org.apache.spark.sql.types.DataType
+import org.apache.spark.sql.types.{ArrayType, DataType, DecimalType, IntegralType, MapType, StructType, UpCastRule, UserDefinedType}
 
 /**
  * The identity of a partition transform function. It holds the two values
@@ -167,30 +175,153 @@ case class TransformExpression(
     copy(children = newChildren)
 
   /**
-   * The scalar function call this transform stands for, with the bucket count prepended as a
-   * literal argument. `None` when the bound function is not a [[ScalarFunction]], and also when a
-   * join reduced this expression's keys, since then the call no longer computes them. Evaluating it
-   * to place a row would send the row to a partition it does not belong to. That second arm is a
-   * local gate. No caller reaches it today, because every consumer of a reduced partitioning
-   * refuses it first, and the write path never sees one.
+   * The bound function, when Spark could call it for this transform: a [[ScalarFunction]], over
+   * keys no join reduced. See [[resolvedFunction]].
    */
-  lazy val resolvedFunction: Option[Expression] = function match {
-    case scalarFunc: ScalarFunction[_] if reducedWith.isEmpty =>
-      val arguments = numBucketsOpt.fold(children)(n => Literal(n) +: children)
-      Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, arguments))
+  private def scalarFunction: Option[ScalarFunction[_]] = function match {
+    case scalarFunc: ScalarFunction[_] if reducedWith.isEmpty => Some(scalarFunc)
     case _ => None
   }
 
-  override def eval(input: InternalRow): Any = resolvedFunction match {
+  /** The arguments of the call: the bucket count, if any, as a literal, then the children. */
+  private def callArguments: Seq[Expression] =
+    numBucketsOpt.fold(children)(n => Literal(n) +: children)
+
+  /**
+   * The scalar function call this transform stands for, over its arguments as they are. `None`
+   * when the bound function is not a [[ScalarFunction]], and also when a join reduced this
+   * expression's keys, since then the call no longer computes them. Evaluating it to place a row
+   * would send the row to a partition it does not belong to. That second arm is a local gate. No
+   * caller reaches it today, because every consumer of a reduced partitioning refuses it first,
+   * and the write path never sees one. The write path (`DistributionAndOrderingUtils`) casts the
+   * arguments to the function's input types itself. `eval` uses [[evaluableFunction]] instead.
+   */
+  lazy val resolvedFunction: Option[Expression] =
+    scalarFunction.map(V2ExpressionUtils.resolveScalarFunction(_, callArguments))
+
+  /**
+   * The call `eval` runs: [[resolvedFunction]], with each argument at the type the function
+   * declares for it in `inputTypes()`. Nothing casts the arguments after analysis, so the call
+   * gets the values as the argument holds them. Most arguments go as they are, when they are held
+   * the way the declared type is, which is what a function read before this check. One kind is
+   * cast: an integral argument narrower than declared is widened with a [[Cast]], which keeps its
+   * value and needs no time zone. A function bound to a `SMALLINT` column but declaring `INT`
+   * stays evaluable that way. Any other mismatch, or a different number of arguments, gives
+   * `None`, as does everything `resolvedFunction` is `None` for. See `atDeclaredType`. A mismatch
+   * is logged at info level once per function class and argument types, since it makes a
+   * storage-partitioned join shuffle where it would not otherwise.
+   *
+   * Resolving the call can throw, e.g. when Spark finds no method to call on a `ScalarFunction`
+   * that inherits `produceResult` from a base class, or when connector code it calls throws. That
+   * gives `None` too, and `eval` rethrows it. So does a `LinkageError`, e.g. a connector class
+   * whose dependency is missing, which the planner would otherwise hit for a layout it does not
+   * pick. The planner asks this of such layouts on every query, so a failure is logged as a
+   * warning once per function class and kind of failure, and with its stack trace at debug level.
+   * Not serialized, so an executor resolves it again rather than receiving the call (or the
+   * failure) the driver resolved while planning.
+   */
+  def evaluableFunction: Option[Expression] = evaluableFunctionAttempt.toOption.flatten
+
+  /**
+   * The call, or why it failed to resolve, computed and logged once, since a `lazy val` whose
+   * initializer throws runs it again on each access.
+   */
+  @transient private lazy val evaluableFunctionAttempt: Try[Option[Expression]] = {
+    val attempt = try Success(resolveEvaluableFunction()) catch {
+      case NonFatal(e) => Failure(e)
+      case e: LinkageError => Failure(e)
+    }
+    attempt.failed.foreach(TransformExpression.logCannotResolve(function, _))
+    attempt
+  }
+
+  private def resolveEvaluableFunction(): Option[Expression] =
+    scalarFunction.flatMap { scalarFunc =>
+      val arguments = callArguments
+      val declaredTypes = scalarFunc.inputTypes().toSeq
+      val typed = if (arguments.length == declaredTypes.length) {
+        arguments.zip(declaredTypes).map { case (argument, declaredType) =>
+          TransformExpression.atDeclaredType(argument, declaredType)
+        }
+      } else {
+        Seq(None)
+      }
+      if (typed.forall(_.isDefined)) {
+        Some(V2ExpressionUtils.resolveScalarFunction(scalarFunc, typed.flatten))
+      } else {
+        TransformExpression.logArgumentsMismatch(scalarFunc, arguments.map(_.dataType),
+          declaredTypes)
+        None
+      }
+    }
+
+  override def eval(input: InternalRow): Any = evaluableFunction match {
     case Some(fn) => fn.eval(input)
-    case None => throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
+    case None =>
+      evaluableFunctionAttempt.failed.foreach(e => throw e)
+      throw QueryExecutionErrors.cannotEvaluateExpressionError(this)
   }
 
   override protected def doGenCode(ctx: CodegenContext, ev: ExprCode): ExprCode =
     throw QueryExecutionErrors.cannotGenerateCodeForExpressionError(this)
 }
 
-object TransformExpression {
+object TransformExpression extends Logging {
+  /**
+   * The function classes and kinds of failure a failure to resolve a call was logged as a warning
+   * for, as `functionClass:failureClass`. A function class that fails in another way is warned
+   * about again.
+   */
+  private val failuresWarnedAbout: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
+
+  /**
+   * The function classes and argument types a mismatch with the function's input types was
+   * logged for, as `functionClass:argumentTypes`.
+   */
+  private val mismatchesLogged: java.util.Set[String] = ConcurrentHashMap.newKeySet[String]()
+
+  /**
+   * `text`, or `fallback` when it throws. `name()` and a failure's message are connector code,
+   * which can throw as the call did, e.g. a `NoClassDefFoundError` for a missing dependency. A log
+   * line must not fail planning.
+   */
+  private def orElse(text: => String, fallback: String): String =
+    try text catch { case NonFatal(_) | _: LinkageError => fallback }
+
+  /**
+   * Logs that `function`'s input types do not take `argumentTypes`, see `evaluableFunction`.
+   */
+  private def logArgumentsMismatch(
+      function: BoundFunction,
+      argumentTypes: Seq[DataType],
+      declaredTypes: Seq[DataType]): Unit = {
+    def typeList(types: Seq[DataType]): String = types.map(_.catalogString).mkString("(", ", ", ")")
+    val functionClass = function.getClass.getName
+    val arguments = typeList(argumentTypes)
+    if (mismatchesLogged.add(s"$functionClass:$arguments")) {
+      val functionName = orElse(function.name(), functionClass)
+      logInfo(log"The partition transform ${MDC(FUNCTION_NAME, functionName)} " +
+        log"(${MDC(CLASS_NAME, functionClass)}) declares the input types " +
+        log"${MDC(FUNCTION_PARAM, typeList(declaredTypes))}, which do not take arguments of " +
+        log"types ${MDC(ARGS, arguments)}, so a storage-partitioned join does not evaluate it")
+    }
+  }
+
+  /** Logs that a call of `function` failed to resolve, see `evaluableFunction`. */
+  private def logCannotResolve(function: BoundFunction, e: Throwable): Unit = {
+    val functionClass = function.getClass.getName
+    val failureClass = e.getClass.getName
+    val functionName = orElse(function.name(), functionClass)
+    if (failuresWarnedAbout.add(s"$functionClass:$failureClass")) {
+      logWarning(log"Cannot resolve a call of the partition transform " +
+        log"${MDC(FUNCTION_NAME, functionName)} " +
+        log"(${MDC(CLASS_NAME, functionClass)}), so a storage-partitioned join " +
+        log"does not evaluate it: ${MDC(ERROR, orElse(e.toString, failureClass))}")
+    }
+    logDebug(log"Cannot resolve a call of the partition transform " +
+      log"${MDC(FUNCTION_NAME, functionName)}", e)
+  }
+
   /**
    * Whether `e` is a partition expression whose keys a join reduced onto a key space that no
    * transform describes, so that `e` no longer computes them. False after a one-side reduce, where
@@ -202,4 +333,60 @@ object TransformExpression {
     case t: TransformExpression => t.reducedWith.isDefined
     case _ => false
   }
+
+  /**
+   * `argument` at `declaredType`, or `None` when the function could not take it. See
+   * [[TransformExpression.evaluableFunction]].
+   *
+   * An argument goes as it is when it is stored the way the declared type is (`storedAlike`),
+   * which is how a function read it before this check. A narrower integral argument is held as
+   * another JVM type, so it is cast. Anything else is refused, a `DATE` against a `TIMESTAMP` in
+   * particular, whose cast takes the session time zone.
+   */
+  private def atDeclaredType(argument: Expression, declaredType: DataType): Option[Expression] =
+    (argument.dataType, declaredType) match {
+      case (argumentType, _) if storedAlike(argumentType, declaredType, nested = false) =>
+        Some(argument)
+      case (argumentType: IntegralType, declared: IntegralType)
+          if UpCastRule.legalNumericPrecedence(argumentType, declared) =>
+        Some(Cast(argument, declaredType))
+      case _ =>
+        None
+    }
+
+  /**
+   * Whether a value of type `from` is stored the way one of type `to` is, so that a function
+   * declaring `to` reads it as it is:
+   *  - two types with one physical type, e.g. a `VARCHAR` and a string of the same collation, a
+   *    `DATE` and an `INT`, or a `TIMESTAMP` and a `BIGINT`. A user-defined type is stored as its
+   *    `sqlType`;
+   *  - two structs, arrays or maps whose fields, elements, keys and values are stored alike, by
+   *    position. Field names and nullability do not change how a value is stored. A function
+   *    declaring a non-nullable field gets the values a nullable one holds;
+   *  - two decimals of one scale, `to` with no less precision, so that the unscaled digits a
+   *    function reads are the same. A decimal is read as an object at the top level, but nested in
+   *    an unsafe row it is stored as a `long` up to `Decimal.MAX_LONG_DIGITS` digits and as bytes
+   *    above, so there both have to be on one side of that.
+   */
+  private def storedAlike(from: DataType, to: DataType, nested: Boolean): Boolean =
+    (from, to) match {
+      case _ if from == to => true
+      case (udt: UserDefinedType[_], _) => storedAlike(udt.sqlType, to, nested)
+      case (_, udt: UserDefinedType[_]) => storedAlike(from, udt.sqlType, nested)
+      case (f: StructType, t: StructType) =>
+        f.length == t.length && f.fields.zip(t.fields).forall { case (ff, tf) =>
+          storedAlike(ff.dataType, tf.dataType, nested = true)
+        }
+      case (f: ArrayType, t: ArrayType) => storedAlike(f.elementType, t.elementType, nested = true)
+      case (f: MapType, t: MapType) =>
+        storedAlike(f.keyType, t.keyType, nested = true) &&
+          storedAlike(f.valueType, t.valueType, nested = true)
+      case (f: DecimalType, t: DecimalType) =>
+        f.scale == t.scale && f.precision <= t.precision &&
+          (!nested ||
+            DecimalType.isByteArrayDecimalType(f) == DecimalType.isByteArrayDecimalType(t))
+      case _ =>
+        val physical = PhysicalDataType(from)
+        physical != UninitializedPhysicalType && physical == PhysicalDataType(to)
+    }
 }

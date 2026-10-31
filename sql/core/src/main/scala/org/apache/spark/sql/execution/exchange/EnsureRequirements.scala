@@ -356,9 +356,9 @@ case class EnsureRequirements(
     // consider the minimum parallelism iff ALL children need to be re-shuffled.
     //
     // A child needs to be re-shuffled iff either of the following is true:
-    //   1. It can't create partitioning by itself, i.e., `canCreatePartitioning` returns false
-    //      (as for the case of `RangePartitioning`), therefore it needs to be re-shuffled
-    //      according to another child's shuffle spec.
+    //   1. It can't create partitioning by itself, i.e., no member of its spec can serve as the
+    //      layout (`canServe` below, as for the case of `RangePartitioning`), therefore it needs
+    //      to be re-shuffled according to another child's shuffle spec.
     //   2. It already has `ShuffleExchangeLike`, so we can re-use existing shuffle without
     //      introducing extra shuffle.
     //
@@ -366,17 +366,47 @@ case class EnsureRequirements(
     //   HashPartitioning(5) <-> HashPartitioning(6)
     // while `spark.sql.shuffle.partitions` is 10, we'll only re-shuffle the left side and make it
     // HashPartitioning(6).
-    val shouldConsiderMinParallelism = children.zip(specs).forall { case (child, spec) =>
-      spec.forall(!_.canCreatePartitioning) || child.isInstanceOf[ShuffleExchangeLike]
+    //
+    // A member of a child serves as the layout when it can create a partitioning, and either Spark
+    // can evaluate that partitioning or no child has to be shuffled onto it: every other
+    // co-partitioned child pairs with it as it stands, which evaluates nothing. One that cannot
+    // serve does not keep its child from being re-shuffled, so it counts towards neither the
+    // parallelism guard nor the ranking below.
+    //
+    // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
+    // winner alone does not say which member the sides agreed on. The projection pushed into a
+    // paired child and the partitioning built for a re-shuffled child both have to come from one
+    // member, otherwise the sides end up grouped on different keys, or on a key set the child does
+    // not even have. So what is picked here is the pairing, not a member per side.
+    //
+    // Per child, each member of its spec with the member each child pairs with it, in child order.
+    // The pairing compares partition keys, so it is worked out when first asked for, and once: for
+    // a member that cannot be evaluated by `canServe`, and for the winner's members below.
+    val childMembers: Seq[Seq[LeafShuffleSpec]] = specs.map(_.toSeq.flatMap(_.flatten))
+    final class Pairing(val member: LeafShuffleSpec, index: Int) {
+      lazy val paired: Seq[Option[LeafShuffleSpec]] =
+        childMembers.map(_.find(member.isCompatibleWith))
+      // `canEvaluatePartitioning` first: it is kept by the spec, while the pairing compares keys.
+      lazy val canServe: Boolean =
+        member.canCreatePartitioning && (member.canEvaluatePartitioning ||
+          paired.zip(specs).zipWithIndex.forall { case ((pairedMember, spec), j) =>
+            j == index || spec.isEmpty || pairedMember.isDefined
+          })
+    }
+    val pairings: Seq[Seq[Pairing]] = childMembers.zipWithIndex.map { case (members, index) =>
+      members.map(new Pairing(_, index))
+    }
+    val shouldConsiderMinParallelism = children.zipWithIndex.forall { case (child, index) =>
+      !pairings(index).exists(_.canServe) || child.isInstanceOf[ShuffleExchangeLike]
     }
     // Choose all the children whose spec can be used to shuffle other children, each with the
     // members that can serve as the layout. Any other member would build a partitioning its own
-    // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew.
-    // It does not count towards the ranking below either.
-    val candidateSpecs = children.zip(specs).flatMap {
-      case (child, Some(spec)) if !shouldConsiderMinParallelism ||
+    // child is not laid out on, or is turned away by a co-partition key requirement to avoid skew,
+    // or cannot place the rows of a child shuffled onto it.
+    val candidateSpecs = children.zip(specs).zipWithIndex.flatMap {
+      case ((child, Some(_)), index) if !shouldConsiderMinParallelism ||
           child.outputPartitioning.numPartitions >= conf.defaultNumShufflePartitions =>
-        val members = spec.flatten.filter(_.canCreatePartitioning)
+        val members = pairings(index).filter(_.canServe)
         if (members.nonEmpty) Some(child -> members) else None
       case _ => None
     }
@@ -387,25 +417,14 @@ case class EnsureRequirements(
     // new shuffle for A. Then the best parallelism decides, and for a collection that is the best
     // any serving member offers, since a collection has no count of its own.
     //
-    // What the winner contributes is its members, the alternatives the layout is picked from below.
-    // Empty when no child can serve as the layout.
-    val bestMembers: Seq[LeafShuffleSpec] = candidateSpecs.maxByOption { case (child, members) =>
-      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.numPartitions).max)
+    // What the winner contributes is its members, the alternatives the layout is picked from below,
+    // each with the member every child pairs with it. Empty when no child can serve as the layout.
+    val bestPairings: Seq[Pairing] = candidateSpecs.maxByOption { case (child, members) =>
+      (!child.isInstanceOf[ShuffleExchangeLike], members.map(_.member.numPartitions).max)
     }.toSeq.flatMap(_._2)
 
-    // A `ShuffleSpecCollection` answers `isCompatibleWith` if *any* of its members does, so the
-    // winner alone does not say which member the sides agreed on. The projection pushed into a
-    // paired child and the partitioning built for a re-shuffled child both have to come from one
-    // member, otherwise the sides end up grouped on different keys, or on a key set the child does
-    // not even have. So what is picked here is the pairing, not a member per side.
-    //
-    // Per member of the winner, the member each child pairs with it, in child order.
-    val childMembers: Seq[Seq[LeafShuffleSpec]] = specs.map(_.toSeq.flatMap(_.flatten))
-    val pairings: Seq[(LeafShuffleSpec, Seq[Option[LeafShuffleSpec]])] = bestMembers.map { member =>
-      member -> childMembers.map(_.find(member.isCompatibleWith))
-    }
     // Which children the winner reaches at all, over all of its serving members.
-    val reached: Seq[Boolean] = pairings.map(_._2).transpose.map(_.exists(_.isDefined))
+    val reached: Seq[Boolean] = bestPairings.map(_.paired).transpose.map(_.exists(_.isDefined))
     // The member picked has to pair with every child the winner reaches. A child it does not
     // reach, and a child that is not in the decision, are shuffled whichever member wins, so
     // neither asks for anything here. None surviving means there is no layout to align them on, so
@@ -413,14 +432,14 @@ case class EnsureRequirements(
     // two the member that reported the match serves both, and no operator has three today.
     //
     // Ranked by parallelism, preferring the finest.
-    pairings
-      .filter { case (_, paired) =>
-        paired.zip(reached).forall { case (pairedMember, isReached) =>
+    bestPairings
+      .filter { pairing =>
+        pairing.paired.zip(reached).forall { case (pairedMember, isReached) =>
           pairedMember.isDefined || !isReached
         }
       }
-      .maxByOption { case (member, _) => member.numPartitions }
-      .map { case (member, paired) => CoPartitionTarget(member, paired) }
+      .maxByOption(_.member.numPartitions)
+      .map(pairing => CoPartitionTarget(pairing.member, pairing.paired))
   }
 
   private def hasKeyedPartitioning(p: Partitioning): Boolean = p match {

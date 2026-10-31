@@ -235,6 +235,128 @@ case class BucketReducer(divisor: Int) extends Reducer[Int, Int] {
   override def displayName(): String = toString
 }
 
+object UnboundNonScalarBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = NonScalarBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+// A `bucket` that is neither a ScalarFunction nor an AggregateFunction, so Spark cannot evaluate
+// it. The in-memory table computes the bucket values itself, see BucketTransform in
+// InMemoryBaseTable.scala.
+object NonScalarBucketFunction extends BoundFunction {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+}
+
+object UnboundInheritedBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = InheritedBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+abstract class BucketFunctionBase extends ScalarFunction[Int] {
+  override def produceResult(input: InternalRow): Int = {
+    Math.floorMod(input.getLong(1), input.getInt(0))
+  }
+}
+
+// A `bucket` ScalarFunction that inherits `produceResult`, which Spark does not find when it
+// resolves the function, so Spark cannot evaluate it either.
+object InheritedBucketFunction extends BucketFunctionBase {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, LongType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+}
+
+object UnboundIntBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = IntBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+// A `bucket` that declares `INT` for the value whatever it is bound to, with a magic `invoke`, as
+// Apache Iceberg's does for a `TINYINT`, `SMALLINT` or `INT` column. Consistent with
+// BucketTransform in InMemoryBaseTable.scala.
+object IntBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, IntegerType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  def invoke(numBuckets: Int, value: Int): Int = Math.floorMod(value, numBuckets)
+}
+
+object UnboundStringBucketFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = StringBucketFunction
+  override def description(): String = name()
+  override def name(): String = "bucket"
+}
+
+// A `bucket` that declares a plain `STRING` for the value whatever it is bound to. Consistent with
+// BucketTransform in InMemoryBaseTable.scala, which hashes any string type.
+object StringBucketFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType, StringType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "bucket"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  override def produceResult(input: InternalRow): Int =
+    Math.floorMod(input.getUTF8String(1).hashCode.toLong, input.getInt(0).toLong).toInt
+}
+
+class UnboundPhysicalDaysFunction(bound: BoundFunction) extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = bound
+  override def description(): String = name()
+  override def name(): String = "days"
+}
+
+// `days` that declares `INT` for a `DATE` column, which is held as the days since the epoch.
+// Consistent with DaysTransform in InMemoryBaseTable.scala.
+object IntDaysFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(IntegerType)
+  override def resultType(): DataType = DateType
+  override def name(): String = "days"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  def invoke(days: Int): Int = days
+}
+
+// `days` that declares `BIGINT` for a `TIMESTAMP` column, which is held as the micros since the
+// epoch. Consistent with DaysTransform in InMemoryBaseTable.scala.
+object LongDaysFunction extends ScalarFunction[Int] {
+  override def inputTypes(): Array[DataType] = Array(LongType)
+  override def resultType(): DataType = DateType
+  override def name(): String = "days"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  def invoke(micros: Long): Int = Math.floorDiv(micros, 86400000000L).toInt
+}
+
+object UnboundDateYearsFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = DateYearsFunction
+  override def description(): String = name()
+  override def name(): String = "years"
+}
+
+// A `years` that declares `DATE`, with a magic `invoke` over the days since the epoch, as Apache
+// Iceberg's does for a `DATE` column. Consistent with YearsTransform in InMemoryBaseTable.scala.
+object DateYearsFunction extends ScalarFunction[Int] {
+  private val epoch = LocalDate.of(1970, 1, 1)
+  override def inputTypes(): Array[DataType] = Array(DateType)
+  override def resultType(): DataType = IntegerType
+  override def name(): String = "years"
+  override def canonicalName(): String = name()
+  override def toString: String = name()
+  def invoke(days: Int): Int =
+    ChronoUnit.YEARS.between(epoch, DateTimeUtils.daysToLocalDate(days)).toInt
+}
+
 object UnboundStringSelfFunction extends UnboundFunction {
   override def bind(inputType: StructType): BoundFunction = StringSelfFunction
   override def description(): String = name()

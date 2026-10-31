@@ -30,7 +30,7 @@ import org.apache.spark.sql.catalyst.expressions.aggregate.Complete
 import org.apache.spark.sql.catalyst.plans.{Cross, ExistenceJoin, Inner, JoinType, LeftAnti, LeftSemi, LeftSingle, RightOuter}
 import org.apache.spark.sql.catalyst.plans.physical
 import org.apache.spark.sql.catalyst.plans.physical.{HASH_ROUTING, KeyedPartitioning, PartitioningCollection, REPLICATED_FOR_JOIN, ROUTING_LOST, SPLIT_FOR_JOIN}
-import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
+import org.apache.spark.sql.connector.catalog.{Column, Identifier, InMemoryBaseTable, InMemoryCatalog, InMemoryCatalystRuntimeFilterCatalog, InMemoryTable, InMemoryTableCatalog}
 import org.apache.spark.sql.connector.catalog.constraints.Constraint
 import org.apache.spark.sql.connector.catalog.functions._
 import org.apache.spark.sql.connector.distributions.{Distribution, Distributions}
@@ -1788,6 +1788,251 @@ class KeyGroupedPartitioningSuite
              |JOIN testcat.ns.ident i ON p.b = i.id""".stripMargin)
         checkAnswer(df,
           bs.filter(b => (0L until 8L).contains(keyOf(b))).map(b => Row(keyOf(b), b, b)))
+      }
+    }
+  }
+
+  test("SPARK-60522: a transform Spark cannot evaluate is not reduced onto or shuffled onto") {
+    // With `UnboundBucketFunction`, the first join reduces `ident` onto `bucket(4, id)`, and the
+    // second shuffles `plain` onto it, both by evaluating `bucket`. A connector may bind `bucket`
+    // to a function that is not a `ScalarFunction`, or to one Spark finds nothing to call on, and
+    // Spark cannot evaluate either. Then both joins shuffle both sides.
+    Seq(
+      UnboundBucketFunction -> (0, 1),
+      UnboundNonScalarBucketFunction -> (2, 2),
+      UnboundInheritedBucketFunction -> (2, 2)
+    ).foreach {
+      case (fn, (reduceShuffles, oneSideShuffles)) =>
+        withFunction(fn) {
+          createBucketedIdTable("bucket4", 4, numIds = 8)
+          createIdentityIdTable()
+          createPlainTable()
+
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+              SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+            val df = sql(
+              "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.id = i.id")
+            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
+              fn.name())
+          }
+
+          withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+            val df = sql(
+              "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.id = p.b")
+            checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
+              fn.name())
+          }
+          catalog.clearTables()
+        }
+    }
+  }
+
+  test("SPARK-60522: a child Spark cannot evaluate leaves the other child as the shuffle target") {
+    // One side's `bucket` is `UnboundInheritedBucketFunction`, which Spark cannot evaluate, and
+    // the other side's, in a second catalog, is `UnboundBucketFunction`. Picking the target,
+    // `EnsureRequirements` asks every child whether it can serve as one, and the first must answer
+    // no, not throw. `pickCoPartitionTarget` ranks the candidates by partition count, so only with
+    // the first side's count the higher one does the answer decide the target.
+    val catalogName = "spark60522cat"
+    spark.conf.set(s"spark.sql.catalog.$catalogName", classOf[InMemoryCatalog].getName)
+    val catalog2 = spark.sessionState.catalogManager.catalog(catalogName)
+      .asInstanceOf[InMemoryCatalog]
+    try {
+      Seq((4, 8), (8, 4)).foreach { case (inheritedCount, scalarCount) =>
+        withFunction(UnboundInheritedBucketFunction) {
+          catalog2.createFunction(Identifier.of(Array.empty, "bucket"), UnboundBucketFunction)
+          createBucketedIdTable("inherited", inheritedCount, numIds = 8)
+          createTable("scalar", Array(Column.create("id", LongType)),
+            Array(bucket(scalarCount, "id")), catalog = catalog2)
+          sql(s"INSERT INTO $catalogName.ns.scalar VALUES " +
+            (0 until 8).map(i => s"($i)").mkString(", "))
+
+          withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+            Seq(s"testcat.ns.inherited a JOIN $catalogName.ns.scalar b",
+                s"$catalogName.ns.scalar b JOIN testcat.ns.inherited a").foreach { join =>
+              val df = sql(s"SELECT a.id FROM $join ON a.id = b.id")
+              checkAnswer(df, (0 until 8).map(i => Row(i.toLong)))
+              assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+                s"bucket($inheritedCount) against bucket($scalarCount): $join")
+            }
+          }
+          catalog.clearTables()
+          catalog2.clearTables()
+          catalog2.clearFunctions()
+        }
+      }
+    } finally {
+      catalog2.clearTables()
+      catalog2.clearFunctions()
+      spark.conf.unset(s"spark.sql.catalog.$catalogName")
+    }
+  }
+
+  test("SPARK-60027: a transform whose arguments are not its input types is evaluated or refused") {
+    // Nothing casts a transform's arguments to its function's `inputTypes()` after analysis. The
+    // identity reduce and the one-side shuffle evaluate it, and without a check a mismatch failed
+    // or returned wrong rows there. A narrower integral argument is widened, so the join keeps its
+    // plan. Anything else is refused, so both sides are shuffled.
+    def ids(dataType: DataType): Seq[Row] = (0 until 8).map { i =>
+      Row(dataType match {
+        case ShortType => i.toShort
+        case IntegerType => i
+        case _ => i.toLong
+      })
+    }
+    def createIdTables(dataType: DataType): Unit = {
+      createTable("bucket4", Array(Column.create("id", dataType)), Array(bucket(4, "id")))
+      createTable("ident", Array(Column.create("id", dataType)), Array(identity("id")))
+      createTable("plain", Array(Column.create("b", dataType)), Array.empty)
+      Seq("bucket4", "ident", "plain").foreach { t =>
+        sql(s"INSERT INTO testcat.ns.$t VALUES " + (0 until 8).map(i => s"($i)").mkString(", "))
+      }
+    }
+
+    // (the `bucket`, the column type, shuffles for the identity reduce, for the one-side shuffle)
+    Seq(
+      // `UnboundBucketFunction` reads the value as a `BIGINT` with `produceResult`, so an `INT`
+      // is widened. Without the cast it failed with a `ClassCastException`.
+      (UnboundBucketFunction, IntegerType, 0, 1),
+      // `IntBucketFunction` declares `INT`, as Iceberg's `bucket` does for a `SMALLINT` column,
+      // so a `SMALLINT` is widened and the join keeps its plan.
+      (UnboundIntBucketFunction, ShortType, 0, 1),
+      (UnboundIntBucketFunction, IntegerType, 0, 1),
+      // A `BIGINT` would be narrowed, so it is refused. Without the check it failed with
+      // `INTERNAL_ERROR`, as no `invoke(int, long)` exists.
+      (UnboundIntBucketFunction, LongType, 2, 2)
+    ).foreach { case (fn, dataType, reduceShuffles, oneSideShuffles) =>
+      withFunction(fn) {
+        createIdTables(dataType)
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          val df = sql(
+            "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.id = i.id")
+          checkAnswer(df, ids(dataType))
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
+            s"identity reduce, ${fn.name()} over $dataType")
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          val df = sql(
+            "SELECT k.id FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.id = p.b")
+          checkAnswer(df, ids(dataType))
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
+            s"one-side shuffle, ${fn.name()} over $dataType")
+        }
+        catalog.clearTables()
+      }
+    }
+
+    // A `DATE` matches only a declared `DATE`. The test catalog's `years` binds a `DATE` but
+    // declares a `TIMESTAMP`, and its `invoke` takes the micros of a timestamp. The one-side
+    // shuffle used to hand it the raw days, which put every row in 1970, and the join returned 1 of
+    // 3 rows. A cast would take the session time zone, so it is refused. `DateYearsFunction`
+    // declares `DATE`, as Iceberg's `years` does for a `DATE` column, so it keeps its plan.
+    val dates = Seq("2020-06-01", "2021-06-01", "2022-06-01")
+    Seq(
+      (UnboundYearsFunction, 2, 2),
+      (UnboundDateYearsFunction, 0, 1)
+    ).foreach { case (fn, reduceShuffles, oneSideShuffles) =>
+      withFunction(fn) {
+        createTable("yearly", Array(Column.create("d", DateType)), Array(years("d")))
+        createTable("ident", Array(Column.create("d", DateType)), Array(identity("d")))
+        createTable("plain", Array(Column.create("d", DateType)), Array.empty)
+        Seq("yearly", "ident", "plain").foreach { t =>
+          sql(s"INSERT INTO testcat.ns.$t VALUES " + dates.map(d => s"(DATE'$d')").mkString(", "))
+        }
+        val expected = dates.map(d => Row(java.sql.Date.valueOf(d)))
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          val df = sql("SELECT y.d FROM testcat.ns.yearly y JOIN testcat.ns.ident i ON y.d = i.d")
+          checkAnswer(df, expected)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == reduceShuffles,
+            s"identity reduce, ${fn.getClass.getSimpleName}")
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          val df = sql("SELECT y.d FROM testcat.ns.yearly y JOIN testcat.ns.plain p ON y.d = p.d")
+          checkAnswer(df, expected)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == oneSideShuffles,
+            s"one-side shuffle, ${fn.getClass.getSimpleName}")
+        }
+        catalog.clearTables()
+      }
+    }
+  }
+
+  test("SPARK-60027: a DATE or TIMESTAMP column keeps its plan against the type it is held as") {
+    // A `DATE` is held as an `INT` of days and a `TIMESTAMP` as a `BIGINT` of micros, so a
+    // function that declares those reads them as it did before the input type check.
+    Seq(
+      (new UnboundPhysicalDaysFunction(IntDaysFunction), DateType, "DATE'2021-06-0%d'"),
+      (new UnboundPhysicalDaysFunction(LongDaysFunction), TimestampType,
+        "TIMESTAMP'2021-06-0%d 10:00:00'")
+    ).foreach { case (fn, dataType, literal) =>
+      withFunction(fn) {
+        createTable("daily", Array(Column.create("t", dataType)), Array(days("t")))
+        createTable("ident", Array(Column.create("t", dataType)), Array(identity("t")))
+        createTable("plain", Array(Column.create("t", dataType)), Array.empty)
+        val values = (1 to 3).map(d => s"(${literal.format(d)})").mkString(", ")
+        Seq("daily", "ident", "plain").foreach { t =>
+          sql(s"INSERT INTO testcat.ns.$t VALUES $values")
+        }
+        val expected = sql("SELECT t FROM testcat.ns.plain").collect().toSeq
+        withSQLConf(
+            SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+            SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+          val df = sql("SELECT d.t FROM testcat.ns.daily d JOIN testcat.ns.ident i ON d.t = i.t")
+          checkAnswer(df, expected)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
+            s"identity reduce over $dataType")
+        }
+        withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+          val df = sql("SELECT d.t FROM testcat.ns.daily d JOIN testcat.ns.plain p ON d.t = p.t")
+          checkAnswer(df, expected)
+          assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+            s"one-side shuffle over $dataType")
+        }
+        catalog.clearTables()
+      }
+    }
+  }
+
+  test("SPARK-60027: a VARCHAR column keeps its plan against a function declaring STRING") {
+    // With `spark.sql.preserveCharVarcharTypeInfo`, the plan keeps the column at `VARCHAR(10)`,
+    // which is not the `STRING` that `StringBucketFunction` declares. It holds a plain string of
+    // the same collation, though, so the call takes it as it is, and both joins keep their plan.
+    val values = ('a' to 'h').map(_.toString)
+    Seq("true", "false").foreach { preserve =>
+      withFunction(UnboundStringBucketFunction) {
+        withSQLConf(SQLConf.PRESERVE_CHAR_VARCHAR_TYPE_INFO.key -> preserve) {
+          val varchar = VarcharType(10)
+          createTable("bucket4", Array(Column.create("s", varchar)), Array(bucket(4, "s")))
+          createTable("ident", Array(Column.create("s", varchar)), Array(identity("s")))
+          createTable("plain", Array(Column.create("s", varchar)), Array.empty)
+          Seq("bucket4", "ident", "plain").foreach { t =>
+            sql(s"INSERT INTO testcat.ns.$t VALUES " + values.map(v => s"('$v')").mkString(", "))
+          }
+          withSQLConf(
+              SQLConf.V2_BUCKETING_PUSH_PART_VALUES_ENABLED.key -> "true",
+              SQLConf.V2_BUCKETING_ALLOW_COMPATIBLE_TRANSFORMS.key -> "true") {
+            val df = sql(
+              "SELECT k.s FROM testcat.ns.bucket4 k JOIN testcat.ns.ident i ON k.s = i.s")
+            checkAnswer(df, values.map(Row(_)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).isEmpty,
+              s"identity reduce, preserveCharVarcharTypeInfo=$preserve")
+          }
+          withSQLConf(SQLConf.V2_BUCKETING_SHUFFLE_ENABLED.key -> "true") {
+            val df = sql(
+              "SELECT k.s FROM testcat.ns.bucket4 k JOIN testcat.ns.plain p ON k.s = p.s")
+            checkAnswer(df, values.map(Row(_)))
+            assert(collectAllShuffles(df.queryExecution.executedPlan).size == 1,
+              s"one-side shuffle, preserveCharVarcharTypeInfo=$preserve")
+          }
+          catalog.clearTables()
+        }
       }
     }
   }
