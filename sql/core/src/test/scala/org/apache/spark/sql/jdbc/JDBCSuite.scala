@@ -1774,7 +1774,7 @@ class JDBCSuite extends SharedSparkSession {
     }
   }
 
-  test("SPARK-58876: Oracle NTZ wall-clock follows the legacy flag, even wrapped") {
+  test("SPARK-58876: Oracle defaults to NTZ wall-clock conversion, even wrapped") {
     val custom = new JdbcDialect {
       override def canHandle(url: String): Boolean = url.startsWith("jdbc:oracle")
     }
@@ -1782,12 +1782,7 @@ class JDBCSuite extends SharedSparkSession {
       OracleDialect(),
       new AggregatedDialect(List(custom, OracleDialect())),
       new AggregatedDialect(List(OracleDialect(), custom)))
-    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
-      dialects.foreach(d => assert(d.timestampNTZAsWallClock, s"dialect=$d"))
-    }
-    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-      dialects.foreach(d => assert(!d.timestampNTZAsWallClock, s"dialect=$d"))
-    }
+    dialects.foreach(d => assert(d.timestampNTZAsWallClock, s"dialect=$d"))
     // Dialects that don't opt in keep the java.sql.Timestamp conversion.
     assert(!NoopDialect.timestampNTZAsWallClock)
   }
@@ -1811,53 +1806,45 @@ class JDBCSuite extends SharedSparkSession {
       JdbcUtils.getSchema(mock(classOf[Connection]), rs, OracleDialect(), options).fields.head
     }
 
-    // zonelessTimestampAsNTZ, defaulting to !legacy, maps to NTZ regardless of preferTimestampNTZ;
+    // zonelessTimestampAsNTZ defaults to true and maps to NTZ regardless of preferTimestampNTZ;
     // otherwise the shared mapping honors preferTimestampNTZ.
     for {
-      legacy <- Seq(true, false)
       prefer <- Seq(true, false)
       zoneless <- Seq(None, Some(true), Some(false))
     } {
-      withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
-        val field = resolve(prefer, zoneless)
-        val expectedType =
-          if (zoneless.getOrElse(!legacy) || prefer) TimestampNTZType else TimestampType
-        val hint = s"legacy=$legacy prefer=$prefer zoneless=$zoneless"
-        assert(field.dataType === expectedType, hint)
-      }
+      val field = resolve(prefer, zoneless)
+      val expectedType =
+        if (zoneless.getOrElse(true) || prefer) TimestampNTZType else TimestampType
+      assert(field.dataType === expectedType, s"prefer=$prefer zoneless=$zoneless")
     }
   }
 
-  test("SPARK-58876: Oracle NTZ reads wall-clock via frozen options after a flag flip") {
+  test("SPARK-58876: Oracle NTZ reads honor timestampNTZAsWallClock") {
     val schema = new StructType().add("t", TimestampNTZType, nullable = true)
-    val options = withSQLConf(
-        SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "false") {
-      new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t", Map.empty[String, String])
-    }
     val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
-    withSQLConf(SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> "true") {
-      val rs = mock(classOf[ResultSet])
-      when(rs.next()).thenReturn(true, false)
-      when(rs.getObject(1, classOf[java.time.LocalDateTime])).thenReturn(ldt)
-      val rows = JdbcUtils.resultSetToSparkInternalRows(
-        rs, OracleDialect(), schema, new InputMetrics, options = Some(options)).toArray
-      assert(rows.length === 1)
-      assert(rows.head.getLong(0) === DateTimeUtils.localDateTimeToMicros(ldt))
-    }
-  }
-
-  test("SPARK-58876: Oracle NTZ writes pick the setter from the snapshotted options") {
-    val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
-    val schema = new StructType().add("t", TimestampNTZType, nullable = true)
-    for {
-      legacy <- Seq(true, false)
-      wallClock <- Seq(None, Some(true), Some(false))
-    } {
-      val options = withSQLConf(
-          SQLConf.LEGACY_ORACLE_TIMESTAMP_NTZ_MAPPING_ENABLED.key -> legacy.toString) {
-        new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+    DateTimeTestUtils.withDefaultTimeZone(DateTimeTestUtils.LA) {
+      Seq(None, Some(true), Some(false)).foreach { wallClock =>
+        val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
           wallClock.map("timestampNTZAsWallClock" -> _.toString).toMap)
+        val rs = mock(classOf[ResultSet])
+        when(rs.next()).thenReturn(true, false)
+        when(rs.getObject(1, classOf[LocalDateTime])).thenReturn(ldt)
+        when(rs.getTimestamp(1)).thenReturn(Timestamp.valueOf(ldt))
+        val rows = JdbcUtils.resultSetToSparkInternalRows(
+          rs, OracleDialect(), schema, new InputMetrics, options = Some(options)).toArray
+        val expected = if (wallClock.getOrElse(true)) ldt else ldt.plusHours(8)
+        assert(rows.length === 1)
+        assert(rows.head.getLong(0) === DateTimeUtils.localDateTimeToMicros(expected))
       }
+    }
+  }
+
+  test("SPARK-58876: Oracle NTZ writes honor timestampNTZAsWallClock") {
+    val ldt = LocalDateTime.of(1991, 11, 9, 0, 0, 0)
+    val schema = new StructType().add("t", TimestampNTZType, nullable = true)
+    Seq(None, Some(true), Some(false)).foreach { wallClock =>
+      val options = new JDBCOptions("jdbc:oracle:thin:@//host:1521/db", "t",
+        wallClock.map("timestampNTZAsWallClock" -> _.toString).toMap)
       val stmt = mock(classOf[java.sql.PreparedStatement])
       val conn = mock(classOf[Connection])
       when(conn.prepareStatement(anyString())).thenReturn(stmt)
@@ -1872,7 +1859,7 @@ class JDBCSuite extends SharedSparkSession {
       } finally {
         TaskContext.unset()
       }
-      if (wallClock.getOrElse(!legacy)) {
+      if (wallClock.getOrElse(true)) {
         verify(stmt).setObject(1, ldt)
         verify(stmt, never()).setTimestamp(anyInt(), any())
       } else {

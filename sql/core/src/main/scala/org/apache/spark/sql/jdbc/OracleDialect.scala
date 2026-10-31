@@ -238,7 +238,7 @@ private case class OracleDialect() extends JdbcDialect with SQLConfHelper with N
     }
   }
 
-  override def timestampNTZAsWallClock: Boolean = !conf.legacyOracleTimestampNTZMappingEnabled
+  override def timestampNTZAsWallClock: Boolean = true
 
   override def getJDBCType(dt: DataType): Option[JdbcType] = dt match {
     // For more details, please see
