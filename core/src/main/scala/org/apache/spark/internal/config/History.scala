@@ -156,6 +156,15 @@ private[spark] object History {
       .booleanConf
       .createWithDefault(true)
 
+  val SKIP_COMPLETED_ROLLING_LOG_LISTING =
+    ConfigBuilder("spark.history.fs.skipCompletedRollingLogListing.enabled")
+      .doc("Whether to avoid listing the rolling event log directory of a completed application " +
+        "on every scan, as long as the modification time of the directory hasn't changed. " +
+        "The directory is always listed if the file system doesn't report that time.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(true)
+
   val END_EVENT_REPARSE_CHUNK_SIZE =
     ConfigBuilder("spark.history.fs.endEventReparseChunkSize")
       .doc("How many bytes to parse at the end of log files looking for the end event. " +

@@ -21,12 +21,13 @@ import java.io._
 import java.nio.charset.StandardCharsets
 import java.nio.file.{Files, StandardOpenOption}
 import java.util.{Date, Locale}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ConcurrentHashMap, TimeUnit}
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.{ZipInputStream, ZipOutputStream}
 
 import scala.concurrent.duration._
 
-import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, Path}
+import org.apache.hadoop.fs.{FileStatus, FileSystem, FSDataInputStream, LocalFileSystem, Path}
 import org.apache.hadoop.hdfs.{DFSInputStream, DistributedFileSystem}
 import org.apache.hadoop.ipc.{CallerContext => HadoopCallerContext}
 import org.apache.hadoop.security.AccessControlException
@@ -41,7 +42,7 @@ import org.scalatest.matchers.should.Matchers._
 import org.apache.spark.{JobExecutionStatus, SecurityManager, SPARK_VERSION, SparkConf, SparkFunSuite}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.deploy.history.EventLogTestHelper._
-import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPRESS}
+import org.apache.spark.internal.config.{DRIVER_LOG_DFS_DIR, EVENT_LOG_COMPRESS, EVENT_LOG_OVERWRITE}
 import org.apache.spark.internal.config.History._
 import org.apache.spark.internal.config.UI.{ADMIN_ACLS, ADMIN_ACLS_GROUPS, UI_VIEW_ACLS, UI_VIEW_ACLS_GROUPS, USER_GROUPS_MAPPING}
 import org.apache.spark.io._
@@ -1634,6 +1635,7 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
       val infoAfterSerDe = serializer.deserialize(serializer.serialize(info), classOf[LogInfo])
       assert(infoAfterSerDe === info)
       assertOptionAfterSerde(infoAfterSerDe.lastIndex, info.lastIndex)
+      assertOptionAfterSerde(infoAfterSerDe.rootModificationTime, info.rootModificationTime)
     }
 
     val serializer = new KVStoreScalaSerializer()
@@ -1644,6 +1646,10 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
     val logInfoWithIndex = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
       Some("attemptId"), 100, Some(3), None, false)
     assertSerDe(serializer, logInfoWithIndex)
+
+    val logInfoWithRootModificationTime = LogInfo("dummy", 0, LogType.EventLogs, Some("appId"),
+      Some("attemptId"), 100, Some(3), None, true, Some(5L))
+    assertSerDe(serializer, logInfoWithRootModificationTime)
   }
 
   test("SPARK-29755 AttemptInfoWrapper should be serialized/deserialized by jackson properly") {
@@ -1810,6 +1816,125 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
         val job2 = appStore.job(2)
         assert(job2.status === JobExecutionStatus.SUCCEEDED)
       }
+    }
+  }
+
+  private def createListCountingConf(dir: File): SparkConf = {
+    createTestConf()
+      .set(HISTORY_LOG_DIR, dir.getAbsolutePath)
+      .set("spark.hadoop.fs.file.impl", classOf[ListCountingFileSystem].getName)
+      .set("spark.hadoop.fs.file.impl.disable.cache", "true")
+  }
+
+  private def startRollingLog(
+      conf: SparkConf,
+      dir: File,
+      appId: String): RollingEventLogFilesWriter = {
+    val writer = new RollingEventLogFilesWriter(appId, None, dir.toURI, conf,
+      SparkHadoopUtil.newConfiguration(conf))
+    writer.start()
+    writeEventsToRollingWriter(writer,
+      Seq(SparkListenerApplicationStart(appId, Some(appId), 0, "user", None)), rollFile = false)
+    writer
+  }
+
+  private def finishRollingLog(writer: RollingEventLogFilesWriter): Unit = {
+    writeEventsToRollingWriter(writer, Seq(SparkListenerApplicationEnd(1)), rollFile = false)
+    writer.stop()
+  }
+
+  /** Returns how many times the given log directory is listed while scanning the event logs. */
+  private def listingsOnScan(provider: FsHistoryProvider, logDirName: String): Int = {
+    ListCountingFileSystem.takeCount(logDirName)
+    updateAndCheck(provider) { _ => }
+    ListCountingFileSystem.takeCount(logDirName)
+  }
+
+  test("SPARK-48575: rolling event log directory is listed once per scan") {
+    withTempDir { dir =>
+      val conf = createListCountingConf(dir)
+      val provider = new FsHistoryProvider(conf)
+      val writer = startRollingLog(conf, dir, "app")
+      val logDirName = new Path(writer.logPath).getName
+
+      assert(listingsOnScan(provider, logDirName) === 1)
+      // The application is in progress, so its directory has to be listed on every scan.
+      assert(listingsOnScan(provider, logDirName) === 1)
+      writeEventsToRollingWriter(writer, Seq(SparkListenerJobStart(1, 0, Seq.empty)),
+        rollFile = true)
+      assert(listingsOnScan(provider, logDirName) === 1)
+      provider.stop()
+    }
+  }
+
+  test("SPARK-48575: skip listing rolling event log directory of completed application") {
+    withTempDir { dir =>
+      val conf = createListCountingConf(dir)
+      val clock = new ManualClock(1000)
+      val provider = new FsHistoryProvider(conf, clock)
+      val writer = startRollingLog(conf, dir, "app")
+      val logDirName = new Path(writer.logPath).getName
+      assert(listingsOnScan(provider, logDirName) === 1)
+
+      finishRollingLog(writer)
+      assert(listingsOnScan(provider, logDirName) === 1)
+
+      (1 to 3).foreach { _ =>
+        clock.advance(1000)
+        assert(listingsOnScan(provider, logDirName) === 0)
+        // The skipped log must not be considered as stale.
+        assert(provider.listing.read(classOf[LogInfo], writer.logPath).lastProcessed ===
+          clock.getTimeMillis())
+        val apps = provider.getListing().toSeq
+        assert(apps.map(_.id) === Seq("app"))
+        assert(apps.head.attempts.head.completed)
+      }
+      provider.stop()
+    }
+  }
+
+  test("SPARK-48575: detect overwritten rolling event log of completed application") {
+    withTempDir { dir =>
+      val conf = createListCountingConf(dir).set(EVENT_LOG_OVERWRITE, true)
+      val provider = new FsHistoryProvider(conf)
+      val writer = startRollingLog(conf, dir, "app")
+      val logDirName = new Path(writer.logPath).getName
+      finishRollingLog(writer)
+      assert(listingsOnScan(provider, logDirName) === 1)
+      assert(listingsOnScan(provider, logDirName) === 0)
+      updateAndCheck(provider) { list => assert(list.head.attempts.head.completed) }
+
+      // Run the application again with the same ID.
+      startRollingLog(conf, dir, "app")
+      new File(dir, logDirName).setLastModified(System.currentTimeMillis() + 10000)
+      assert(listingsOnScan(provider, logDirName) === 1)
+      updateAndCheck(provider) { list => assert(!list.head.attempts.head.completed) }
+      provider.stop()
+    }
+  }
+
+  test("SPARK-48575: list rolling event log directory if it has no modification time") {
+    withTempDir { dir =>
+      val conf = createListCountingConf(dir)
+      val provider = new FsHistoryProvider(conf)
+      val writer = startRollingLog(conf, dir, "app")
+      val logDirName = new Path(writer.logPath).getName
+      finishRollingLog(writer)
+      assert(new File(dir, logDirName).setLastModified(0))
+      (1 to 3).foreach { _ => assert(listingsOnScan(provider, logDirName) === 1) }
+      provider.stop()
+    }
+  }
+
+  test("SPARK-48575: always list rolling event log directory if the optimization is disabled") {
+    withTempDir { dir =>
+      val conf = createListCountingConf(dir).set(SKIP_COMPLETED_ROLLING_LOG_LISTING, false)
+      val provider = new FsHistoryProvider(conf)
+      val writer = startRollingLog(conf, dir, "app")
+      val logDirName = new Path(writer.logPath).getName
+      finishRollingLog(writer)
+      (1 to 3).foreach { _ => assert(listingsOnScan(provider, logDirName) === 1) }
+      provider.stop()
     }
   }
 
@@ -3195,6 +3320,22 @@ abstract class FsHistoryProviderSuite extends SparkFunSuite with Matchers with P
 
   }
 
+}
+
+/** A local file system which counts the listings of each path, keyed by the name of the path. */
+class ListCountingFileSystem extends LocalFileSystem {
+  override def listStatus(f: Path): Array[FileStatus] = {
+    ListCountingFileSystem.counts
+      .computeIfAbsent(f.getName, _ => new AtomicInteger).incrementAndGet()
+    super.listStatus(f)
+  }
+}
+
+object ListCountingFileSystem {
+  private val counts = new ConcurrentHashMap[String, AtomicInteger]()
+
+  /** Returns the number of listings of the path with the given name, and resets the number. */
+  def takeCount(name: String): Int = Option(counts.remove(name)).map(_.get).getOrElse(0)
 }
 
 class TestGroupsMappingProvider extends GroupMappingServiceProvider {
