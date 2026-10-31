@@ -27,21 +27,21 @@ import scala.util.Random
 
 import org.scalatest.matchers.should.Matchers._
 
-import org.apache.spark.SparkException
+import org.apache.spark.{SparkArithmeticException, SparkException}
 import org.apache.spark.api.python.PythonEvalType
 import org.apache.spark.sql.catalyst.{InternalRow, TableIdentifier}
 import org.apache.spark.sql.catalyst.analysis.MultiInstanceRelation
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder
-import org.apache.spark.sql.catalyst.expressions.{Attribute, AttributeReference, Cast, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery}
+import org.apache.spark.sql.catalyst.expressions.{Add, And, Attribute, AttributeReference, Cast, Contains, EndsWith, EqualTo, ExpressionSet, GreaterThan, Literal, PythonUDF, ScalarSubquery, StartsWith}
 import org.apache.spark.sql.catalyst.optimizer.ConvertToLocalRelation
 import org.apache.spark.sql.catalyst.parser.ParseException
-import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{Filter, LeafNode, LocalRelation, LogicalPlan, OneRowRelation, Project}
 import org.apache.spark.sql.connector.FakeV2Provider
 import org.apache.spark.sql.execution.{FilterExec, LogicalRDD, QueryExecution, SortExec, WholeStageCodegenExec}
 import org.apache.spark.sql.execution.adaptive.AdaptiveSparkPlanHelper
 import org.apache.spark.sql.execution.aggregate.HashAggregateExec
 import org.apache.spark.sql.execution.exchange.{BroadcastExchangeExec, ReusedExchangeExec, ShuffleExchangeExec, ShuffleExchangeLike}
-import org.apache.spark.sql.expressions.{Aggregator, Window}
+import org.apache.spark.sql.expressions.{Aggregator, UserDefinedFunction, Window}
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.{ExamplePoint, ExamplePointUDT, SharedSparkSession}
@@ -2946,6 +2946,142 @@ class DataFrameSuite extends SharedSparkSession
           checkAnswer(splitAliasQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
         }
       }
+    }
+  }
+
+  test("SPARK-60730: a filter condition that can fail is not evaluated ahead of its order") {
+    val f = udf((i: Long) => i)
+    val g = udf((i: Long) => i)
+    val h = udf((i: Long) => { require(i > 5, s"h called with $i"); i })
+    // Each query fails if the conjunct after the first is evaluated on an id <= 5, which the
+    // first conjunct filters out.
+    def divideQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" > 5 && lit(10L) / ($"id" - 3) > 0)
+    def castQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", when($"id" > 5, lit("1")).otherwise(lit("x")) as "s")
+      .where($"f" > 5 && $"s".cast("int") > 0)
+    def udfQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" > 5 && h($"id") > 0)
+    // The same inside a projected alias. `InferFiltersFromConstraints` adds `isnotnull(x)` in
+    // front, which must not be pushed either. `nf` is nullable, so `isnotnull(f)` is added too.
+    val nf = udf((i: Long) => java.lang.Long.valueOf(i))
+    def divideAliasQuery(fn: UserDefinedFunction): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", fn($"id") as "f", lit(10L) / ($"id" - 3) as "x")
+      .where($"f" > 5 && $"x" > 0)
+    def castAliasQuery(fn: UserDefinedFunction): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", fn($"id") as "f",
+        when($"id" > 5, lit("1")).otherwise(lit("x")).cast("int") as "i")
+      .where($"f" > 5 && $"i" > 0)
+    // With three expensive aliases, so the projection split is involved too. The division over
+    // `g` can fail, so the projection is not split and the filter stays as written.
+    val k = udf((i: Long) => i)
+    def splitQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", k($"id") as "h", g($"id") as "g")
+      .where($"f" + $"h" > 10 && lit(10L) / ($"g" - 3) > 0)
+    // `q` only works for the ids the first conjunct keeps. The split must put that conjunct
+    // lowest, as written, even though the check rejects its addition.
+    val q = udf((i: Long) => { require(i > 4, s"q called with $i"); i })
+    def firstQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", q($"id") as "q")
+      .where($"f" + 1 > 5 && $"q" > 0)
+    // `r` only works for the ids the second conjunct keeps, so the split must not put the third
+    // conjunct below the second, which can fail; the projection is then not split, and an
+    // interpreted projection computes `r` for every row it gets.
+    val r = udf((i: Long) => { require(i > 5, s"r called with $i"); i })
+    def laterQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g", r($"id") as "r")
+      .where($"f" >= 0 && $"g" + 1 > 6 && $"r" > 0)
+    // The non-deterministic conjunct drops every row, so the division after it is never
+    // evaluated; a later pass must not merge the division below it.
+    def afterRandQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", f($"id") as "f", g($"id") as "g")
+      .where($"f" >= 0 && rand(10) * 10 > 100 && lit(10L) / ($"id" - 3) > 0 && $"g" > 0)
+    // With nullable UDFs, `InferFiltersFromConstraints` adds `IS NOT NULL` conditions in front,
+    // which must not let the split compute `nr` ahead of `ng + 1 > 6`.
+    val ng = udf((i: Long) => java.lang.Long.valueOf(i))
+    val nr = udf((i: Long) => { require(i > 5, s"nr called with $i"); java.lang.Long.valueOf(i) })
+    val ns = udf((i: Long) => java.lang.Long.valueOf(i))
+    def inferredQuery(): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", nf($"id") as "f", ng($"id") as "g", nr($"id") as "r", ns($"id") as "s")
+      .where($"f" > rand(10) && $"g" + 1 > 6 && $"r" > 0 && $"s" > 0)
+    // A non-deterministic conjunct sees the same rows as with the whole filter pushed.
+    def randQuery(): DataFrame = spark.range(0, 100, 1, 1)
+      .select($"id", f($"id") as "f")
+      .where($"f" >= 50 && rand(10) > 0.5)
+    val randExpected = withSQLConf(SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> "false") {
+      randQuery().collect().toSeq
+    }
+    for (codegen <- Seq(true, false); split <- Seq(true, false); avoid <- Seq(true, false)) {
+      withSQLConf(
+        SQLConf.ANSI_ENABLED.key -> "true",
+        SQLConf.WHOLESTAGE_CODEGEN_ENABLED.key -> codegen.toString,
+        SQLConf.AVOID_DOUBLE_FILTER_EVAL.key -> avoid.toString,
+        SQLConf.SPLIT_PROJECTION_FOR_EXPENSIVE_FILTERS.key -> split.toString) {
+        checkAnswer(divideQuery(), (6L until 10L).map(i => Row(i, i)))
+        checkAnswer(castQuery(), (6L until 10L).map(i => Row(i, i, "1")))
+        checkAnswer(udfQuery(), (6L until 10L).map(i => Row(i, i)))
+        checkAnswer(splitQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
+        checkAnswer(randQuery(), randExpected)
+        checkAnswer(afterRandQuery(), Seq.empty)
+        // Without the split, an interpreted projection computes `q` for every row it gets.
+        if (codegen || split || !avoid) {
+          checkAnswer(firstQuery(), (5L until 10L).map(i => Row(i, i, i)))
+        }
+        if (codegen || !avoid) {
+          checkAnswer(laterQuery(), (6L until 10L).map(i => Row(i, i, i, i)))
+          checkAnswer(inferredQuery(), (6L until 10L).map(i => Row(i, i, i, i, i)))
+          // An interpreted projection computes `x` and `i` for every row it gets.
+          Seq(f, nf).foreach { fn =>
+            checkAnswer(divideAliasQuery(fn), (6L until 10L).map(i => Row(i, i, 10.0 / (i - 3))))
+            checkAnswer(castAliasQuery(fn), (6L until 10L).map(i => Row(i, i, 1)))
+          }
+        }
+      }
+    }
+    // The legacy config pushes the division below the projection again.
+    withSQLConf(
+      SQLConf.ANSI_ENABLED.key -> "true",
+      SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      val e = intercept[SparkArithmeticException](divideQuery().collect())
+      assert(e.getCondition === "DIVIDE_BY_ZERO")
+    }
+  }
+
+  test("SPARK-60730: an expensive filter condition sees the rows a later condition drops " +
+    "unless that condition is a plain comparison") {
+    val p = udf((i: Long) => { require(i > 5, s"p called with $i"); i })
+    // `p` only works for the ids the later conjunct keeps, so these queries depend on that
+    // conjunct being pushed below the projection and evaluated first.
+    def query(later: Column): DataFrame = spark.range(0, 10, 1, 1)
+      .select($"id", p($"id") as "p")
+      .where($"p" > 0 && later)
+    val expected = (6L until 10L).map(i => Row(i, i))
+    // A plain comparison can not fail, so it is still pushed.
+    checkAnswer(query($"id" > 5), expected)
+    // An addition is not a plain comparison, so it now stays behind `p > 0` in the top filter,
+    // as in Spark 4.1.
+    val plan = query($"id" + 1 > 6).queryExecution.optimizedPlan
+    val heldBehind = plan.collectFirst {
+      case Filter(And(first, second), _: Project) =>
+        !first.exists(_.isInstanceOf[Add]) && second.exists(_.isInstanceOf[Add])
+    }
+    assert(heldBehind === Some(true), plan)
+    // The legacy config pushes it below the projection again, ahead of `p > 0`.
+    withSQLConf(SQLConf.LEGACY_PUSH_FILTER_AHEAD_OF_EXPENSIVE_CONJUNCT.key -> "true") {
+      checkAnswer(query($"id" + 1 > 6), expected)
+    }
+    // A LIKE without `_` becomes plain string checks, so it is pushed too.
+    val s = udf((v: String) => v)
+    Seq("1%", "%2", "%0%", "1%2").foreach { pattern =>
+      val likePlan = Seq("12", "102").toDF("v").select($"v", s($"v") as "s")
+        .where($"s" =!= "x" && $"v".like(pattern)).queryExecution.optimizedPlan
+      val pushed = likePlan.collectFirst {
+        case Project(_, Filter(condition, _)) => condition.exists(_.isInstanceOf[StartsWith]) ||
+          condition.exists(_.isInstanceOf[EndsWith]) || condition.exists(_.isInstanceOf[Contains])
+      }
+      assert(pushed === Some(true), likePlan)
     }
   }
 
