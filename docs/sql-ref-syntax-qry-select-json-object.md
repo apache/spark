@@ -78,11 +78,10 @@ JSON_OBJECT ( [ key, value [, key, value] ... ]
     (e.g. `JSON_OBJECT('n' VALUE JSON_QUERY('{"n":"Ada"}', '$.n' OMIT QUOTES))` produces
     `{"n":"Ada"}`). Without `FORMAT JSON`, an ordinary string value is always quoted, even when its
     contents are themselves valid JSON text (e.g. `JSON_OBJECT('a' VALUE '{"b":1}')` produces
-    `{"a":"{\"b\":1}"}`). Implicit raw splicing applies to the direct syntax above and to the
-    unqualified comma form (e.g. `json_object('a', json_object('b', 1))`, which carries the nested
-    producer through to the built-in and produces `{"a":{"b":1}}`). A qualified or otherwise generic
-    routed call (e.g. `builtin.json_object('a', json_object('b', 1))`) currently quotes the nested
-    result instead, producing `{"a":"{\"b\":1}"}`.
+    `{"a":"{\"b\":1}"}`). Implicit raw splicing applies to the direct syntax above, to the
+    unqualified comma form (e.g. `json_object('a', json_object('b', 1))`), and to a qualified or
+    otherwise generic routed call (e.g. `builtin.json_object('a', json_object('b', 1))`); each
+    produces `{"a":{"b":1}}`.
 
 * **FORMAT JSON**
 

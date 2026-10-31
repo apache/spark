@@ -472,6 +472,24 @@ class FunctionResolution(
     }
   }
 
+  /**
+   * Like [[functionNameResolvesToBuiltin]], but false for an `injectFunction` replacement: it keeps
+   * the built-in name, yet must be called like an ordinary function.
+   */
+  def functionNameResolvesToStockBuiltin(nameParts: Seq[String], expectedName: String): Boolean = {
+    functionNameResolvesToBuiltin(nameParts, expectedName) &&
+      v1SessionCatalog.isStockBuiltinFunction(expectedName)
+  }
+
+  /**
+   * Whether a routine or an `injectFunction` replacement, not the built-in, owns a routed JSON
+   * constructor call.
+   */
+  def routesJsonConstructorToFunction(j: UnresolvedJsonConstructor): Boolean = {
+    j.routeThroughResolution &&
+      !functionNameResolvesToStockBuiltin(Seq(j.prettyName), j.prettyName)
+  }
+
   // All routed SQL/JSON functions forbid a direct star argument (a bare `*` or a qualified
   // `t.*`). Derived from the single registry list so a newly routed function is covered without
   // editing this file too.

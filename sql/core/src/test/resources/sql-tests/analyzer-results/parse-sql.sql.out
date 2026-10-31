@@ -620,3 +620,19 @@ Project [parse_sql(BEGIN
    END FOR;
  END)#x]
 +- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(parse_sql('SELECT json_object(\'a\', json_object(\'b\', 1))'),
+  '$[0].function_references') AS function_references
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT json_object('a', json_object('b', 1))), $[0].function_references) AS function_references#x]
++- OneRowRelation
+
+
+-- !query
+SELECT get_json_object(parse_sql('SELECT json_array(json_array(1))'),
+  '$[0].function_references') AS function_references
+-- !query analysis
+Project [get_json_object(parse_sql(SELECT json_array(json_array(1))), $[0].function_references) AS function_references#x]
++- OneRowRelation

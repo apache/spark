@@ -19,15 +19,45 @@ package org.apache.spark.sql
 
 import org.apache.spark.SparkRuntimeException
 import org.apache.spark.sql.catalyst.FunctionIdentifier
+import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.catalyst.analysis.{NoSuchFunctionException, NoSuchNamespaceException, Star}
 import org.apache.spark.sql.catalyst.analysis.TypeCheckResult.DataTypeMismatch
-import org.apache.spark.sql.catalyst.expressions.{Cast, Collate, JsonArray, JsonConstructorNullBehavior, JsonQuery, JsonQueryBehavior, JsonQueryQuotes, JsonQueryWrapper, Literal, ResolvedCollation}
+import org.apache.spark.sql.catalyst.analysis.resolver.ExplicitlyUnsupportedResolverFeature
+import org.apache.spark.sql.catalyst.expressions.{
+  ApplyFunctionExpression,
+  Cast,
+  Collate,
+  JsonArray,
+  JsonConstructorNullBehavior,
+  JsonQuery,
+  JsonQueryBehavior,
+  JsonQueryQuotes,
+  JsonQueryWrapper,
+  Literal,
+  ResolvedCollation,
+  UnresolvedJsonConstructor
+}
 import org.apache.spark.sql.catalyst.plans.logical.{Project, Range}
 import org.apache.spark.sql.connector.catalog.{CatalogManager, Identifier, InMemoryCatalog}
-import org.apache.spark.sql.connector.catalog.functions.UnboundFunction
+import org.apache.spark.sql.connector.catalog.functions.{
+  BoundFunction,
+  ScalarFunction,
+  UnboundFunction
+}
 import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.test.SharedSparkSession
-import org.apache.spark.sql.types.{CharType, GeographyType, GeometryType, IntegerType, MapType, StringType, VarcharType}
+import org.apache.spark.sql.types.{
+  CharType,
+  DataType,
+  GeographyType,
+  GeometryType,
+  IntegerType,
+  MapType,
+  StringType,
+  StructType,
+  VarcharType
+}
+import org.apache.spark.unsafe.types.UTF8String
 
 /**
  * Test suite for the `JSON_ARRAY` ANSI SQL:2016 constructor function.
@@ -342,10 +372,9 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     // as-is: reparse re-derives implicit FORMAT JSON.
     val spliced = JsonArray(
       Seq(inner), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
-    // The outer splices, so it is on the direct grammar path already; the inner built-in renders a
-    // default `RETURNING STRING` so its own clause-free form would not reparse into a
-    // shadowing routine.
-    assert(spliced.sql == "JSON_ARRAY(JSON_ARRAY(1 RETURNING STRING))")
+    // Both levels carry a default `RETURNING STRING`: a bare nested splice reparses as a routable
+    // (shadowable) clause-free call, so each level needs the clause to stay bound to the built-in.
+    assert(spliced.sql == "JSON_ARRAY(JSON_ARRAY(1 RETURNING STRING) RETURNING STRING)")
     // But a constructor inlined into a quoted (formatJson = false) position must be wrapped so
     // reparse keeps it quoted -- otherwise ["[1]"] would round-trip to [[1]].
     val quoted = JsonArray(
@@ -392,13 +421,13 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     def jsonQuery(quotes: JsonQueryQuotes): JsonQuery = JsonQuery(
       Literal("""{"a":{"x":1}}"""), "$.a", StringType, JsonQueryWrapper.Without, quotes,
       JsonQueryBehavior.Null, JsonQueryBehavior.Null)
-    // KEEP QUOTES emits JSON text, so a nested JSON_QUERY left in an implicit (spliced) position
-    // round-trips as-is: reparse re-derives the implicit FORMAT JSON.
+    // KEEP QUOTES emits JSON text, so a nested JSON_QUERY stays spliced: reparse re-derives the
+    // implicit FORMAT JSON. Each clause-free level carries a default RETURNING STRING.
     val keep = jsonQuery(JsonQueryQuotes.Keep)
     val splicedKeep = JsonArray(
       Seq(keep), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(splicedKeep.sql ==
-      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING))""")
+      """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING) RETURNING STRING)""")
     // A KEEP QUOTES JSON_QUERY inlined into a quoted position must be neutralized with a cast so
     // reparse keeps it quoted rather than re-deriving implicit FORMAT JSON.
     val quotedKeep = JsonArray(
@@ -446,7 +475,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
       Seq(query), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
     assert(
       spliced.sql ==
-        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', '$.a' RETURNING STRING COLLATE UTF8_BINARY))""")
+        """JSON_ARRAY(JSON_QUERY('{"a":{"x":1}}', """ +
+          """'$.a' RETURNING STRING COLLATE UTF8_BINARY) RETURNING STRING)""")
     // Reparsing and evaluating the emitted SQL reproduces the raw splice.
     checkAnswer(sql(s"SELECT ${spliced.sql}"), Row("""[{"x":1}]"""))
   }
@@ -549,11 +579,16 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         checkAnswer(sql("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)"), Row("shadowed"))
         // The clause-bearing form is not a function call, so it stays the built-in constructor.
         checkAnswer(sql("SELECT json_array('x' NULL ON NULL)"), Row("""["x"]"""))
-        // Nested JSON-producing children stay on the direct-construction path, so they are not
-        // shadowed. This preserves JSON_ARRAY's parse-time splice decisions.
-        checkAnswer(sql("SELECT json_array(json_array(1))"), Row("[[1]]"))
+        // A nested clause-free call routes too, so it is shadowed like a flat call (see the
+        // SPARK-59243 nested-shadowing test). Qualifying every level keeps the built-in splice.
+        checkAnswer(sql("SELECT builtin.json_array(builtin.json_array(1))"), Row("[[1]]"))
         checkAnswer(
-          sql("""SELECT json_array(json_query('{"a":{"x":1}}', '$.a'))"""),
+          sql("""SELECT builtin.json_array(builtin.json_query('{"a":{"x":1}}', '$.a'))"""),
+          Row("""[{"x":1}]"""))
+        // A JSON_QUERY written as a direct constructor argument stays the stock built-in under a
+        // json_query shadow, so the stock-owned outer call still splices it.
+        checkAnswer(
+          sql("""SELECT json_array(json_query('{"a":{"x":1}}', '$.a') NULL ON NULL)"""),
           Row("""[{"x":1}]"""))
         // Plain scalar and predicate children are still ordinary function calls. Use an explicit
         // outer NULL clause to keep the parent on the direct path while the children are shadowed.
@@ -646,23 +681,197 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     checkAnswer(sql("SELECT system.builtin.json_array(1, 'x')"), Row("""[1,"x"]"""))
   }
 
-  test("a nested JSON-producing argument through a routed JSON_ARRAY call is quoted, not spliced") {
-    // A routed call carries no lexical FORMAT JSON, so a nested JSON-producing argument (a JSON
-    // constructor like json_array or a path function like json_query) is quoted as a plain value,
-    // unlike the JSON_ARRAY(...) grammar which splices it (see the unqualified
-    // `json_array(json_array(1))` -> `[[1]]` cases above). The outer call routes whenever it sees
-    // no lexical implicit-JSON element: `JsonArray.isImplicitlyJson` recognizes only a
-    // grammar-built nested JSON expression, so a qualified outer call and an unqualified call over
-    // a qualified nested JSON expression (whose child is still unresolved) both route and quote.
-    // Only a fully unqualified nested JSON expression stays on the direct grammar path; splicing
-    // through a routed call is left as a follow-up.
-    checkAnswer(sql("SELECT builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
-    checkAnswer(sql("SELECT system.builtin.json_array(json_array(1))"), Row("""["[1]"]"""))
-    checkAnswer(sql("SELECT builtin.json_array(json_array(1), 2)"), Row("""["[1]",2]"""))
-    checkAnswer(sql("SELECT json_array(builtin.json_array(1))"), Row("""["[1]"]"""))
+  test("SPARK-59243: a nested JSON constructor through a routed JSON_ARRAY call is spliced") {
+    // A routed or qualified built-in JSON_ARRAY splices a lexically-nested JSON constructor
+    // argument, matching the JSON_ARRAY(...) grammar (`json_array(json_array(1))` -> `[[1]]`).
+    // The built-in builder derives the FORMAT JSON flag from the resolved argument via
+    // `ImplicitlyFormattedAsJson.splicesThroughCollationCast`, so a qualified outer call and an
+    // unqualified call over a qualified nested constructor both splice, matching the fully
+    // unqualified grammar form.
+    checkAnswer(sql("SELECT builtin.json_array(json_array(1))"), Row("[[1]]"))
+    checkAnswer(sql("SELECT system.builtin.json_array(json_array(1))"), Row("[[1]]"))
+    checkAnswer(sql("SELECT builtin.json_array(json_array(1), 2)"), Row("[[1],2]"))
+    checkAnswer(sql("SELECT json_array(builtin.json_array(1))"), Row("[[1]]"))
+    checkAnswer(sql("SELECT json_array(json_array(0), builtin.json_array(1))"), Row("[[0],[1]]"))
     checkAnswer(
       sql("""SELECT builtin.json_array(json_query('{"a":{"x":1}}', '$.a'))"""),
-      Row("""["{\"x\":1}"]"""))
+      Row("""[{"x":1}]"""))
+    // A user CAST still detaches FORMAT JSON, so the element stays quoted (the routed splice check
+    // sees through an analyzer collation Cast, but not a user `CAST(... AS STRING)`).
+    checkAnswer(sql("SELECT builtin.json_array(CAST(json_array(1) AS STRING))"), Row("""["[1]"]"""))
+    // Only the user-cast mark tells this cast apart from an analyzer collation cast; it must quote.
+    checkAnswer(
+      sql("SELECT builtin.json_array(CAST(json_array(1) AS STRING COLLATE UTF8_LCASE))"),
+      Row("""["[1]"]"""))
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql("CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS " +
+          "SELECT builtin.json_array(CAST(json_array(1) AS STRING)) AS a")
+        checkAnswer(spark.table("t"), Row("""["[1]"]"""))
+      }
+    }
+  }
+
+  test("SPARK-59243: clause-bearing JSON_ARRAY splices qualified nested constructors") {
+    // Clause-bearing direct forms do not route through function resolution, but still need to
+    // recover the qualified nested constructor after children resolve.
+    checkAnswer(sql("SELECT json_array(builtin.json_array(1) NULL ON NULL)"), Row("[[1]]"))
+    checkAnswer(sql("SELECT json_array(builtin.json_array(1) RETURNING STRING)"), Row("[[1]]"))
+    checkAnswer(
+      sql("SELECT json_array(builtin.json_array(1) FORMAT JSON NULL ON NULL)"),
+      Row("[[1]]"))
+    checkAnswer(
+      sql("SELECT json_array(CAST(builtin.json_array(1) AS STRING) NULL ON NULL)"),
+      Row("""["[1]"]"""))
+
+    Seq(false, true).foreach { singlePass =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        val analyzed =
+          sql("SELECT json_array(builtin.json_array(1) FORMAT JSON NULL ON NULL)")
+            .queryExecution.analyzed
+        assert(analyzed.resolved, s"singlePass=$singlePass")
+        val arrays = analyzed.expressions.flatMap(_.collect { case j: JsonArray => j })
+        val outer = arrays.find(_.nullBehavior == JsonConstructorNullBehavior.Null).get
+        assert(outer.formatJson == Seq(true), s"singlePass=$singlePass")
+        assert(outer.needsValidation == Seq(false), s"singlePass=$singlePass")
+      }
+    }
+  }
+
+  test("SPARK-59243: routed JSON_ARRAY splice round-trips through canonical SQL") {
+    // The analyzed expression's canonical SQL must reparse to the same spliced result.
+    Seq(
+      "SELECT builtin.json_array(json_array(1))",
+      "SELECT json_array(builtin.json_array(1))").foreach { query =>
+      val analyzed = sql(query).queryExecution.analyzed
+      val jsonArray = analyzed.expressions.flatMap(_.collect { case j: JsonArray => j }).head
+      checkAnswer(sql(s"SELECT ${jsonArray.sql}"), Row("[[1]]"))
+    }
+  }
+
+  test("SPARK-59243: spliced nested JSON_ARRAY canonical SQL stays built-in under a shadow") {
+    // Canonical SQL of a resolved built-in must reparse to the built-in even under a shadow: the
+    // nested splice now routes, so each clause-free level carries an ownership clause.
+    val inner = JsonArray(
+      Seq(Literal(1)), Seq(false), Seq(false), JsonConstructorNullBehavior.Absent, StringType)
+    val canonical = JsonArray(
+      Seq(inner), Seq(true), Seq(false), JsonConstructorNullBehavior.Absent, StringType).sql
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        checkAnswer(sql(s"SELECT $canonical"), Row("[[1]]"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
+  test("SPARK-59243: an explicit collation-changing string() cast detaches splicing") {
+    // `string(... COLLATE c)` is an explicit cast (via the cast alias) that detaches FORMAT JSON,
+    // so the nested constructor is quoted, not spliced. The analyzer-collation-cast unwrap in
+    // `splicesThroughCollationCast` must not treat it as an `ApplyDefaultCollation` cast.
+    checkAnswer(
+      sql("SELECT builtin.json_array(string(json_array(1) COLLATE UTF8_LCASE))"),
+      Row("""["[1]"]"""))
+    // Also when the cast itself changes the collation: it is still a user cast, not a
+    // default-collation recoloring, on both the routed and the direct grammar paths.
+    val nested = "string(json_array(1 RETURNING STRING COLLATE UTF8_LCASE))"
+    checkAnswer(sql(s"SELECT builtin.json_array($nested)"), Row("""["[1]"]"""))
+    checkAnswer(sql(s"SELECT json_array($nested NULL ON NULL)"), Row("""["[1]"]"""))
+  }
+
+  test("SPARK-59243: a nested clause-free JSON_ARRAY call is shadowed like a flat call") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // The inner json_array(1) is a grammar element (built-in) producing "[1]"; the outer
+        // clause-free call routes, so the temp shadows it.
+        checkAnswer(sql("SELECT json_array(json_array(1))"), Row("shadowed"))
+        // Strict single-pass routes the outer clause-free call to the shadow owner too, but the
+        // owner is a SQL function, which the single-pass analyzer does not yet resolve: it reaches
+        // that owner (proving the routing) and then aborts with an
+        // ExplicitlyUnsupportedResolverFeature on the SQL function body. The guard-gated modes fall
+        // back to fixed-point, which produces the shadow result asserted above.
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+          intercept[ExplicitlyUnsupportedResolverFeature] {
+            sql("SELECT json_array(json_array(1))").queryExecution.analyzed
+          }
+        }
+        // Qualifying every level selects Spark's constructor and splices.
+        checkAnswer(sql("SELECT builtin.json_array(builtin.json_array(1))"), Row("[[1]]"))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
+  }
+
+  test("SPARK-59243: nested constructors splice in subqueries, grouping, and INSERT VALUES") {
+    // ResolveFunctions routes or finalizes wrappers in every operator, not just a top-level
+    // Project.
+    checkAnswer(sql("SELECT (SELECT builtin.json_array(json_array(1)))"), Row("[[1]]"))
+    checkAnswer(
+      sql("SELECT 1 WHERE '[[1]]' IN (SELECT json_array(builtin.json_array(1)))"),
+      Row(1))
+    checkAnswer(
+      sql("SELECT json_array(json_array(count(*))) FROM VALUES (1), (2) AS t(a)"),
+      Row("[[2]]"))
+    // HAVING and ORDER BY are checked separately: combining them with GROUP BY hits an unrelated
+    // dual-run plan mismatch for any select-list expression.
+    val grouped = "FROM VALUES (1), (2), (2) AS t(a) GROUP BY a"
+    checkAnswer(
+      sql(s"SELECT builtin.json_array(json_array(a)) AS j $grouped " +
+        "HAVING builtin.json_array(json_array(count(*))) = '[[2]]'"),
+      Row("[[2]]"))
+    checkAnswer(
+      sql(s"SELECT builtin.json_array(json_array(a)) AS j $grouped " +
+        "ORDER BY json_array(builtin.json_array(a))"),
+      Seq(Row("[[1]]"), Row("[[2]]")))
+    withTable("t") {
+      sql("CREATE TABLE t (j STRING) USING parquet")
+      sql("INSERT INTO t VALUES (builtin.json_array(json_array(1))), (json_object('a', " +
+        "builtin.json_object('b', 1)))")
+      checkAnswer(sql("SELECT j FROM t"), Seq(Row("[[1]]"), Row("""{"a":{"b":1}}""")))
+    }
+  }
+
+  test("SPARK-59243: a persistent function cannot reference a temp shadow via a nested call") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'shadowed'")
+        sql("SET PATH = system.session, system.builtin")
+        // The routed nested call is a reference to the temp shadow, like the flat call.
+        Seq("json_array(1)", "json_array(json_array(1))").foreach { body =>
+          val e = intercept[AnalysisException] {
+            sql(s"CREATE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+          }
+          assert(e.getCondition == "INVALID_TEMP_OBJ_REFERENCE", s"for $body")
+        }
+        // Stock-owned (clause-bearing or FORMAT JSON) bodies do not reference the temp shadow.
+        Seq(
+          "json_array(1 NULL ON NULL)" -> "[1]",
+          "json_array(json_array(1) NULL ON NULL)" -> "[[1]]",
+          "json_array('[1]' FORMAT JSON)" -> "[[1]]"
+        ).foreach { case (body, expected) =>
+          sql(s"CREATE OR REPLACE FUNCTION perm_json_fn() RETURNS STRING RETURN $body")
+          checkAnswer(sql("SELECT spark_catalog.default.perm_json_fn()"), Row(expected))
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP FUNCTION IF EXISTS perm_json_fn")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+      }
+    }
   }
 
   test("invalid: a bare star argument in plain JSON_ARRAY is not expanded") {
@@ -692,6 +901,12 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     checkAnswer(
       sql("SELECT json_array(array(*) NULL ON NULL) FROM VALUES (1, 2) AS t(a, b)"),
       Row("[[1,2]]"))
+    // The outer wrapper routes through UnresolvedRoutedJsonArray because of the nested constructor
+    // sibling; the nested star still belongs to array(*) and must expand before the outer direct
+    // star guard runs.
+    checkAnswer(
+      sql("SELECT json_array(array(*), json_array(1)) FROM VALUES (1, 2) AS t(a, b)"),
+      Row("[[1,2],[1]]"))
     // Alongside count(*): the array's star expands, count(*) is rewritten, neither is rejected.
     checkAnswer(
       sql("SELECT json_array(count(*), array(max(a))) FROM VALUES (1), (2) AS t(a)"),
@@ -702,7 +917,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
       Seq(
         "SELECT json_array(array(*)) FROM VALUES (1, 2) AS t(a, b)",
-        "SELECT json_array(array(*) NULL ON NULL) FROM VALUES (1, 2) AS t(a, b)"
+        "SELECT json_array(array(*) NULL ON NULL) FROM VALUES (1, 2) AS t(a, b)",
+        "SELECT json_array(array(*), json_array(1)) FROM VALUES (1, 2) AS t(a, b)"
       ).foreach { query =>
         // Analyze only: the single-pass analyzer cannot yet analyze or resolve every operator the
         // action path needs, so assert the nested star is neither rejected nor left unexpanded
@@ -711,6 +927,12 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         assert(analyzed.resolved, s"for $query")
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
           s"star should not survive analysis for $query")
+        if (query.contains("json_array(1)")) {
+          val arrays = analyzed.expressions.flatMap(_.collect { case j: JsonArray => j })
+          val outer = arrays.find(_.values.length == 2).get
+          assert(outer.formatJson == Seq(false, true),
+            s"nested constructor sibling should still be spliced for $query")
+        }
       }
     }
   }
@@ -766,6 +988,23 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("single-pass: nested clause-free JSON_ARRAY resolves with qualified sibling splice") {
+    withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+      val analyzed =
+        sql("SELECT json_array(json_array(0), builtin.json_array(1))").queryExecution.analyzed
+      assert(analyzed.resolved)
+      val arrays = analyzed.expressions.flatMap(_.collect { case j: JsonArray => j })
+      val outer = arrays.find(_.values.length == 2).get
+      assert(outer.formatJson == Seq(true, true))
+    }
+  }
+
+  test("SPARK-59243: nested JSON_ARRAY in a lambda preserves qualified sibling splicing") {
+    checkAnswer(
+      sql("SELECT transform(array(1), x -> json_array(json_array(x), builtin.json_array(x)))"),
+      Row(Seq("[[1],[1]]")))
+  }
+
   test("invalid: a bare star next to count(*) is still rejected in JSON_ARRAY") {
     // count(*) is excluded from the star check, but a bare `*` element still would be expanded and
     // must be rejected, even when it sits next to a count(*).
@@ -777,6 +1016,53 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
             .queryExecution.analyzed
         }
         assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"singlePass=$singlePass")
+      }
+    }
+  }
+
+  test("SPARK-59243: a bare star in a nested clause-free JSON_ARRAY is rejected") {
+    // An implicit-JSON sibling (`json_array(1)`) routes the outer call through
+    // `UnresolvedRoutedJsonArray`; the bare `*` is rejected there, like the flat built-in rather
+    // than being expanded.
+    Seq(false, true).foreach { singlePass =>
+      withSQLConf(
+        SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
+        val e = intercept[AnalysisException] {
+          sql("SELECT json_array(*, json_array(1)) FROM VALUES (1, 'x') AS t(a, b)")
+            .queryExecution.analyzed
+        }
+        assert(e.getCondition == "INVALID_USAGE_OF_STAR_OR_REGEX", s"singlePass=$singlePass")
+      }
+    }
+  }
+
+  test("SPARK-59243: a routed nested call is checked for cyclic SQL function references") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      try {
+        sql("CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS STRING RETURN 'x'")
+        sql("SET PATH = system.session, system.builtin")
+        // A routed nested call references the same-named function, like the flat call.
+        Seq("json_array(a)", "json_array(json_array(1))").foreach { body =>
+          val e = intercept[AnalysisException] {
+            sql("CREATE OR REPLACE TEMPORARY FUNCTION json_array(a STRING) " +
+              s"RETURNS STRING RETURN $body")
+          }
+          assert(e.getCondition == "CYCLIC_FUNCTION_REFERENCE", s"for $body")
+        }
+        // Stock-owned (clause-bearing or FORMAT JSON) bodies are not routine calls.
+        Seq(
+          "json_array(json_array(1) NULL ON NULL)" -> "[[1]]",
+          "json_array('[1]' FORMAT JSON)" -> "[[1]]"
+        ).foreach { case (body, expected) =>
+          sql("CREATE OR REPLACE TEMPORARY FUNCTION json_array(a STRING) " +
+            s"RETURNS STRING RETURN $body")
+          checkAnswer(sql("SELECT json_array('ignored')"), Row(expected))
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
       }
     }
   }
@@ -796,6 +1082,70 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
           sql("SET PATH = DEFAULT_PATH")
           sql("DROP FUNCTION IF EXISTS path_json_array.json_array")
         }
+      }
+    }
+  }
+
+  test("SPARK-59243: a built-in-owned nested call checks the PATH no more than a flat call") {
+    // A lambda body takes several iterations to resolve; the owner must be looked up only once.
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.ANALYZER_DUAL_RUN_LEGACY_AND_SINGLE_PASS_RESOLVER.key -> "false",
+      "spark.sql.catalog.lookup_cnt_cat" -> classOf[LookupCountingFunctionCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("lookup_cnt_cat")
+        .asInstanceOf[LookupCountingFunctionCatalog]
+      def lookups(query: String): Int = {
+        catalog.lookups.set(0)
+        sql(query).queryExecution.assertAnalyzed()
+        catalog.lookups.get
+      }
+      try {
+        sql("SET PATH = lookup_cnt_cat.fns, system.builtin")
+        val flat = lookups("SELECT transform(array(1, 2), x -> json_array(x))")
+        val nested = lookups("SELECT transform(array(1, 2), x -> json_array(json_array(x)))")
+        assert(nested <= flat, s"nested=$nested flat=$flat")
+        checkAnswer(
+          sql("SELECT transform(array(1, 2), x -> json_array(json_array(x)))"),
+          Row(Seq("[[1]]", "[[2]]")))
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+      }
+    }
+  }
+
+  test("nested JSON_ARRAY with star can be shadowed by a V2 function in PATH") {
+    withSQLConf(
+      SQLConf.PATH_ENABLED.key -> "true",
+      "spark.sql.catalog.path_json_array_cat" -> classOf[InMemoryCatalog].getName) {
+      val catalog = spark.sessionState.catalogManager.catalog("path_json_array_cat")
+        .asInstanceOf[InMemoryCatalog]
+      catalog.createFunction(
+        Identifier.of(Array("fns"), "json_array"),
+        UnboundJsonArrayShadowFunction)
+      try {
+        sql("SET PATH = path_json_array_cat.fns, system.builtin")
+        val query = "SELECT json_array(*, json_array(1)) FROM VALUES (1, 'x') AS t(a, b)"
+        // Default mode runs the dual-run comparison, so this also asserts the single-pass resolver
+        // routes to the V2 owner identically to fixed-point before the result is produced.
+        checkAnswer(sql(query), Row("v2 persistent"))
+        // Analyze only under strict single-pass: the collect() action path needs operators the
+        // single-pass analyzer cannot yet resolve, so assert the direct star expanded, the wrapper
+        // resolved, and the call bound to the V2 shadow rather than executing it.
+        withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> "true") {
+          val analyzed = sql(query).queryExecution.analyzed
+          assert(analyzed.resolved)
+          assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))))
+          assert(!analyzed.exists(_.expressions.exists(_.exists(
+            _.isInstanceOf[UnresolvedJsonConstructor]))))
+          val shadowCalls = analyzed.expressions.flatMap(_.collect {
+            case a: ApplyFunctionExpression if a.function.isInstanceOf[JsonArrayShadowFunction] => a
+          })
+          assert(shadowCalls.length == 1,
+            s"the outer call should bind to the V2 shadow, plan:\n$analyzed")
+        }
+      } finally {
+        sql("SET PATH = DEFAULT_PATH")
+        catalog.clearFunctions()
       }
     }
   }
@@ -926,10 +1276,16 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         sql("SET PATH = vanishing_cat.some_ns, system.builtin")
         Seq(false, true).foreach { singlePass =>
           withSQLConf(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key -> singlePass.toString) {
-            val e = intercept[AnalysisException] {
-              sql("SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)").queryExecution.analyzed
+            Seq(
+              "SELECT json_array(*) FROM VALUES (1, 'x') AS t(a, b)",
+              "SELECT json_array(*, json_array(1)) FROM VALUES (1, 'x') AS t(a, b)"
+            ).foreach { query =>
+              val e = intercept[AnalysisException] {
+                sql(query).queryExecution.analyzed
+              }
+              assert(e.getCondition == "UNRESOLVED_ROUTINE",
+                s"singlePass=$singlePass for $query")
             }
-            assert(e.getCondition == "UNRESOLVED_ROUTINE", s"singlePass=$singlePass")
           }
         }
       } finally {
@@ -939,8 +1295,8 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
   }
 
   test("default collation recurses into a nested JSON_ARRAY value") {
-    // Col a (parser-built nested, direct grammar path) and col b (flat routed built-in) both
-    // adopt the table default UTF8_LCASE collation.
+    // Col a (nested clause-free call, routed via `UnresolvedRoutedJsonArray`) and col b (flat
+    // routed built-in) both adopt the table default UTF8_LCASE collation.
     withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
       withTable("t") {
         sql(
@@ -950,6 +1306,102 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
         assert(spark.table("t").schema("a").dataType === StringType("UTF8_LCASE"))
         assert(spark.table("t").schema("b").dataType === StringType("UTF8_LCASE"))
         checkAnswer(spark.table("t"), Row("[[1]]", "[1]"))
+      }
+    }
+  }
+
+  test("SPARK-59243: routed/qualified nested JSON_ARRAY splices under a default collation") {
+    // Each nested producer gets a default-collation cast before the splice decision, which must
+    // see through it. Cols a, b and d decide in the builder (b is a flat call: the parser cannot
+    // see a qualified inner call), col c in the routed wrapper; c and d add a user COLLATE.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(
+          """CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT builtin.json_array(json_array(1)) AS a,
+            |       json_array(builtin.json_array(1)) AS b,
+            |       json_array(json_array(0), builtin.json_array(1) COLLATE UNICODE) AS c,
+            |       builtin.json_array(json_array(1) COLLATE UNICODE) AS d""".stripMargin)
+        checkAnswer(spark.table("t"), Row("[[1]]", "[[1]]", "[[0],[1]]", "[[1]]"))
+      }
+    }
+  }
+
+  test("SPARK-59243: routed/qualified nested JSON_ARRAY splices under a view default collation") {
+    // Reading the view re-analyzes it (under dual-run in tests), so both analyzers must see
+    // through their own default-collation casts, including one under a user COLLATE.
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withView("v") {
+        sql(
+          """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT builtin.json_array(json_array(1)) AS a,
+            |       json_array(builtin.json_array(1)) AS b,
+            |       json_array(json_array(1)) AS c,
+            |       builtin.json_array(json_array(1) COLLATE UNICODE) AS d""".stripMargin)
+        checkAnswer(spark.table("v"), Row("[[1]]", "[[1]]", "[[1]]", "[[1]]"))
+        val schema = spark.table("v").schema
+        Seq("a", "b", "c").foreach { c =>
+          assert(schema(c).dataType === StringType("UTF8_LCASE"), s"for $c")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59243: a shadowed nested call keeps the owner's type under a default collation") {
+    // A routed wrapper stands for an ordinary call until its owner is known, so the default
+    // collation must not cast a shadow's result: the nested call matches the flat call.
+    withSQLConf(
+      SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true",
+      SQLConf.PATH_ENABLED.key -> "true",
+      SQLConf.SESSION_FUNCTION_RESOLUTION_ORDER.key -> "second") {
+      Seq(
+        // The inner call is a direct constructor argument, so it stays stock (`[1]`, length 3).
+        "INT" -> "length(a)" -> Row(3, 1),
+        "STRING" -> "'shadowed'" -> Row("shadowed", "shadowed")
+      ).foreach { case ((returnType, body), expected) =>
+        try {
+          sql(s"CREATE TEMPORARY FUNCTION json_array(a STRING) RETURNS $returnType RETURN $body")
+          sql("SET PATH = system.session, system.builtin")
+          withTable("t") {
+            sql("CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS " +
+              "SELECT json_array(json_array(1)) AS nested, json_array(1) AS flat")
+            // Read back on the default path, which reaches the current schema.
+            sql("SET PATH = DEFAULT_PATH")
+            val schema = spark.table("t").schema
+            assert(schema("nested").dataType === schema("flat").dataType, s"for $returnType")
+            checkAnswer(spark.table("t"), expected)
+          }
+        } finally {
+          sql("SET PATH = DEFAULT_PATH")
+          sql("DROP TEMPORARY FUNCTION IF EXISTS json_array")
+        }
+      }
+    }
+  }
+
+  test("SPARK-59243: a routed nested JSON_ARRAY keeps the ABSENT ON NULL default") {
+    // The routed wrapper supplies the clause-free default itself (dual-run covers both analyzers).
+    checkAnswer(sql("SELECT json_array(json_array(1), NULL)"), Row("[[1]]"))
+    checkAnswer(sql("SELECT json_array(json_array(1), CAST(NULL AS INT), 2)"), Row("[[1],2]"))
+  }
+
+  test("SPARK-59243: a user cast stays quoted when a sibling defers the splice decision") {
+    // The subquery sibling delays the splice decision until after the default-collation rule has
+    // rebuilt the user cast. It must still count as a user cast, so the value stays quoted.
+    val cast = "CAST(json_array(json_array(1)) AS STRING)"
+    val select =
+      s"""SELECT builtin.json_array($cast, (SELECT 1)) AS q,
+         |       json_array($cast, (SELECT 1)) AS u,
+         |       json_array($cast, (SELECT 1) NULL ON NULL) AS c""".stripMargin
+    val expected = Row.fromSeq(Seq.fill(3)("""["[[1]]",1]"""))
+    withSQLConf(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key -> "true") {
+      withTable("t") {
+        sql(s"CREATE TABLE t DEFAULT COLLATION UTF8_LCASE AS $select")
+        checkAnswer(spark.table("t"), expected)
+      }
+      withView("v") {
+        sql(s"CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS $select")
+        checkAnswer(spark.table("v"), expected)
       }
     }
   }
@@ -1117,6 +1569,70 @@ class JsonArraySuite extends QueryTest with SharedSparkSession {
     }
   }
 
+  test("SPARK-59243: deeply nested JSON constructors finalize in a bounded number of passes") {
+    // ResolveFunctions finalizes nested wrappers in one pass, so depth must not scale
+    // analyzer iterations: nest well past a deliberately low maxIterations for both constructors.
+    val depth = 60
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> "30") {
+      val array = s"${"JSON_ARRAY(" * depth}1${")" * depth}"
+      checkAnswer(sql(s"SELECT $array"), Row(("[" * depth) + "1" + ("]" * depth)))
+      val obj = s"${"JSON_OBJECT('k' VALUE " * depth}1${")" * depth}"
+      checkAnswer(sql(s"SELECT $obj"), Row(("{\"k\":" * depth) + "1" + ("}" * depth)))
+    }
+  }
+
+  test("SPARK-59243: ordinary functions between JSON constructor levels resolve in one pass") {
+    // A function between constructor levels must not cost an iteration per level. `length` keeps
+    // each level's value fixed: `[3]` and `{"k":7}`.
+    val depth = 40
+    withSQLConf(SQLConf.ANALYZER_MAX_ITERATIONS.key -> "20") {
+      val array = "JSON_ARRAY(length(" * depth + "JSON_ARRAY(1 RETURNING STRING)" +
+        ") RETURNING STRING)" * depth
+      checkAnswer(sql(s"SELECT $array"), Row("[3]"))
+      val obj = "JSON_OBJECT('k' VALUE length(" * depth + "JSON_OBJECT('k' VALUE 1 NULL ON NULL)" +
+        ") NULL ON NULL)" * depth
+      checkAnswer(sql(s"SELECT $obj"), Row("""{"k":7}"""))
+    }
+  }
+
+  test("SPARK-59243: a late-resolving child adds no analyzer iteration to a JSON constructor") {
+    // `date_format` resolves late in an iteration. The constructor must still need no more
+    // iterations than an ordinary function over the same child.
+    def resolveAliasesInvocations(selectExpr: String): Long = {
+      val df = sql(s"SELECT $selectExpr FROM VALUES (TIMESTAMP'2024-01-01 00:00:00') AS t(ts)")
+      df.queryExecution.analyzed
+      df.queryExecution.tracker.rules.collectFirst {
+        case (name, summary) if name.endsWith("ResolveAliases") => summary.numInvocations
+      }.get
+    }
+    val baseline = resolveAliasesInvocations("concat('d', date_format(ts, 'yyyy'))")
+    Seq(
+      "JSON_OBJECT('d' VALUE date_format(ts, 'yyyy') NULL ON NULL)",
+      "JSON_ARRAY(date_format(ts, 'yyyy') RETURNING STRING)",
+      "JSON_ARRAY(CAST(ts AS STRING) NULL ON NULL)"
+    ).foreach { e =>
+      assert(resolveAliasesInvocations(e) <= baseline, s"for $e")
+    }
+  }
+
+}
+
+/** A [[org.apache.spark.sql.connector.catalog.FunctionCatalog]] that counts function lookups. */
+class LookupCountingFunctionCatalog extends InMemoryCatalog {
+  val lookups = new java.util.concurrent.atomic.AtomicInteger(0)
+  override def functionExists(ident: Identifier): Boolean = {
+    lookups.incrementAndGet()
+    try {
+      super.loadFunction(ident)
+      true
+    } catch {
+      case _: NoSuchFunctionException => false
+    }
+  }
+  override def loadFunction(ident: Identifier): UnboundFunction = {
+    lookups.incrementAndGet()
+    super.loadFunction(ident)
+  }
 }
 
 /**
@@ -1138,4 +1654,30 @@ class VanishingShadowFunctionCatalog extends InMemoryCatalog {
   override def functionExists(ident: Identifier): Boolean = true
   override def loadFunction(ident: Identifier): UnboundFunction =
     throw new NoSuchFunctionException(ident)
+}
+
+object UnboundJsonArrayShadowFunction extends UnboundFunction {
+  override def bind(inputType: StructType): BoundFunction = {
+    if (inputType.size != 3) {
+      throw new UnsupportedOperationException(
+        s"expected expanded star plus nested value, got $inputType")
+    }
+    JsonArrayShadowFunction(inputType.fields.map(_.dataType).toSeq)
+  }
+
+  override def description(): String = "test-only json_array shadow"
+  override def name(): String = "json_array"
+}
+
+// The input types are held as a Seq (not Array) so the case class has value-based equality and
+// toString: the dual-run analyzer binds the function once per pass and compares the two plans, and
+// an Array field would render its identity hash and spuriously mismatch.
+case class JsonArrayShadowFunction(inputTypesSeq: Seq[DataType])
+    extends ScalarFunction[UTF8String] {
+  override def inputTypes(): Array[DataType] = inputTypesSeq.toArray
+  override def resultType(): DataType = StringType
+  override def name(): String = "json_array_shadow"
+  override def canonicalName(): String = name()
+  override def produceResult(input: InternalRow): UTF8String =
+    UTF8String.fromString("v2 persistent")
 }

@@ -4391,25 +4391,28 @@ class AstBuilder extends DataTypeAstBuilder
    */
   override def visitJsonArray(ctx: JsonArrayContext): Expression = withOrigin(ctx) {
     val arrayValues = ctx.values.asScala.map(v => expression(v.value)).toSeq
-    // Route a flat, clause-free call through routine resolution so it can be shadowed. Cheap
-    // clause/nesting checks come first to skip the recursive per-value FORMAT scans when a clause
-    // already forces direct construction.
-    val routeThroughResolution =
+    // A clause-free call (no RETURNING, no ON NULL, no explicit FORMAT JSON, and not written
+    // directly as another constructor's value) routes through function resolution, so a routine
+    // can shadow it.
+    val clauseFree =
       ctx.returning == null && ctx.nullBehavior == null && !isDirectJsonConstructorArgument(ctx) &&
-        !ctx.values.asScala.exists(_.FORMAT() != null) &&
-        !arrayValues.exists(JsonArray.isImplicitlyJson)
-    if (routeThroughResolution) {
+        !ctx.values.asScala.exists(_.FORMAT() != null)
+    if (clauseFree && !arrayValues.exists(ImplicitlyFormattedAsJson.isImplicitlyJson)) {
       UnresolvedFunction("json_array", arrayValues, isDistinct = false)
+    } else if (clauseFree) {
+      // A nested constructor argument: still routed, but the wrapper keeps the splice flags for
+      // the built-in.
+      UnresolvedRoutedJsonArray(
+        arrayValues, arrayValues.map(ImplicitlyFormattedAsJson.isImplicitlyJson))
     } else {
-      // Decide each element's FORMAT JSON flags now, from the lexical argument, so a later
-      // rewrite that wraps or swaps the child cannot change them (see [[JsonArray]]):
-      //  - `formatJson`: spliced raw as already-JSON text -- an explicit `FORMAT JSON` clause,
-      //    or a lexically nested JSON constructor (via `JsonArray.isImplicitlyJson`).
-      //  - `needsValidation`: raw text is arbitrary user input to JSON-validate at eval -- only
-      //    an explicit `FORMAT JSON` on a non-constructor; a nested constructor is trusted.
+      // The parser's FORMAT JSON flags; analysis can still add a splice for a resolved
+      // qualified or routed constructor (see [[StockJsonConstructor]]):
+      //  - `formatJson`: splice the value -- an explicit `FORMAT JSON` or a nested constructor.
+      //  - `needsValidation`: validate the text at eval -- an explicit `FORMAT JSON` on a value
+      //    that is not a constructor.
       val formatArgs = ctx.values.asScala.zip(arrayValues).map { case (v, expr) =>
         val explicit = v.FORMAT() != null
-        val implicitlyJson = JsonArray.isImplicitlyJson(expr)
+        val implicitlyJson = ImplicitlyFormattedAsJson.isImplicitlyJson(expr)
         (explicit || implicitlyJson, explicit && !implicitlyJson)
       }.toSeq
       val formatJson = formatArgs.map(_._1)
@@ -4429,7 +4432,7 @@ class AstBuilder extends DataTypeAstBuilder
       val nullBehavior = Option(ctx.nullBehavior)
         .map(buildJsonConstructorNullBehavior)
         .getOrElse(JsonConstructorNullBehavior.Absent)
-      JsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
+      UnresolvedJsonArray(arrayValues, formatJson, needsValidation, nullBehavior, returning)
     }
   }
 
@@ -4468,26 +4471,19 @@ class AstBuilder extends DataTypeAstBuilder
     }
     val rawJson = formatArgs.map(_._1)
     val needsValidation = formatArgs.map(_._2)
-    // Route a clause-free call through routine resolution so a same-named routine can shadow it,
-    // mirroring JSON_ARRAY. The comma form (the pre-existing MySQL-style spelling a user routine
-    // may match) routes even with a nested JSON producer value, so argument shape no longer removes
-    // routine candidates; the unshadowed built-in still splices it raw via the carrier attached
-    // below. Explicit FORMAT JSON and the dedicated VALUE form keep a raw value on the direct path
-    // (its lexical splice must stay frozen; VALUE syntax has no pre-existing routine call anyway).
-    val isCommaForm = standardMembers.isEmpty
+    // As in JSON_ARRAY, a clause-free call routes so a routine can shadow it, in every spelling
+    // (comma, VALUE, colon). A call with a nested producer keeps its splice flags in a wrapper.
+    // Explicit FORMAT JSON stays with the built-in, since its validation flag cannot be passed as
+    // an ordinary argument.
+    val hasExplicitFormatJson = taggedMembers.exists(_._3)
     val routeThroughResolution =
       body.returning == null && body.nullBehavior == null &&
-        !isDirectJsonConstructorArgument(ctx) &&
-        (isCommaForm || !rawJson.contains(true))
-    if (routeThroughResolution) {
-      // Carry a nested producer's lexical raw eligibility to the built-in; transparent, so a
-      // shadowing routine and qualified/generic calls are unaffected.
-      val routedArgs = members.flatMap { case (k, v) =>
-        val carried =
-          if (JsonObjectExpr.rawJsonValue(v).isDefined) JsonImplicitFormatCarrier(v) else v
-        Seq(k, carried)
-      }
-      UnresolvedFunction("json_object", routedArgs, isDistinct = false)
+        !isDirectJsonConstructorArgument(ctx) && !hasExplicitFormatJson
+    if (routeThroughResolution && !rawJson.contains(true)) {
+      UnresolvedFunction("json_object", members.flatMap { case (k, v) => Seq(k, v) },
+        isDistinct = false)
+    } else if (routeThroughResolution) {
+      UnresolvedRoutedJsonObject(members, rawJson)
     } else {
       // Default RETURNING is STRING (the result is JSON text). A CHAR/VARCHAR RETURNING is
       // normalized to STRING: JSON_OBJECT serializes the fragment itself and never advertises a
@@ -4501,7 +4497,7 @@ class AstBuilder extends DataTypeAstBuilder
       // JSON_OBJECT defaults to NULL ON NULL per the standard (emits keys with null values).
       val nullBehavior = Option(body.nullBehavior)
         .map(buildJsonConstructorNullBehavior).getOrElse(JsonConstructorNullBehavior.Null)
-      JsonObjectExpr(members, rawJson, needsValidation, nullBehavior, returning)
+      UnresolvedJsonObject(members, rawJson, needsValidation, nullBehavior, returning)
     }
   }
 

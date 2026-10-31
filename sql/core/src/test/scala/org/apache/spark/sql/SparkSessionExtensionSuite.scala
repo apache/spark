@@ -62,6 +62,18 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
   private def create(
       builder: SparkSessionExtensionsProvider): Seq[SparkSessionExtensionsProvider] = Seq(builder)
 
+  private def assertSingleProjectLiteral(
+      plan: LogicalPlan,
+      expected: Any,
+      clue: String): Unit = {
+    val literals = plan.collect {
+      case Project(projectList, _) => projectList.collect {
+        case Alias(Literal(value, _), _) => value
+      }
+    }.flatten
+    assert(literals === Seq(expected), s"$clue, plan:\n$plan")
+  }
+
   private def stop(spark: SparkSession): Unit = {
     spark.stop()
     SparkSession.clearActiveSession()
@@ -204,6 +216,10 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
           SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
         val analyzed = session.sql(query).queryExecution.analyzed
         assert(analyzed.resolved, s"singlePass=$singlePass")
+        assertSingleProjectLiteral(
+          analyzed,
+          2,
+          s"injected function should receive expanded star, singlePass=$singlePass")
         assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
           s"star should be expanded for the injected function, singlePass=$singlePass")
       }
@@ -211,6 +227,187 @@ class SparkSessionExtensionSuite extends PlanTest with AdaptiveSparkPlanHelper {
       // The fixed-point analyzer runs it end to end: the two columns expand to two arguments.
       val rows = session.sql(query).collect()
       assert(rows.length === 1 && rows(0) === Row(2))
+    }
+  }
+
+  test("SPARK-59243: injected json_array replacement wins a nested clause-free call") {
+    // An injected replacement must own `json_array(json_array(1))`, as it owns the flat call. It
+    // returns its argument count, so the result is 1 (the inner built-in call) iff it won.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_array"),
+        new ExpressionInfo("noClass", "json_array"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      val query = "SELECT json_array(json_array(1))"
+      try {
+        Seq(false, true).foreach { singlePass =>
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          val analyzed = session.sql(query).queryExecution.analyzed
+          assert(analyzed.resolved, s"singlePass=$singlePass")
+          assertSingleProjectLiteral(
+            analyzed,
+            1,
+            s"injected replacement should win the nested call, singlePass=$singlePass")
+        }
+
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+        assert(
+          session.sql(query).collect() === Array(Row(1)),
+          "injected replacement should win the nested call")
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      }
+    }
+  }
+
+  test("SPARK-59243: injected replacements keep their type for nested calls under a view " +
+      "default collation") {
+    // An INT-returning replacement keeps INT for nested calls under a view default collation.
+    // Strict single-pass rejects a view body with a non-builtin function, so only fixed-point.
+    val extensions = create { extensions =>
+      Seq("json_array", "json_object").foreach { name =>
+        extensions.injectFunction((
+          FunctionIdentifier(name),
+          new ExpressionInfo("noClass", name),
+          (children: Seq[Expression]) => Literal(children.size)))
+      }
+    }
+    withSession(extensions) { session =>
+      session.conf.set(SQLConf.OBJECT_LEVEL_COLLATIONS_ENABLED.key, "true")
+      try {
+        session.sql(
+          """CREATE VIEW v DEFAULT COLLATION UTF8_LCASE AS
+            |SELECT json_array(json_array(1)) AS a,
+            |       json_object('a', json_object('b', 1)) AS o,
+            |       json_object('a' VALUE json_object('b' VALUE 1)) AS ov""".stripMargin)
+        val schema = session.table("v").schema
+        Seq("a", "o", "ov").foreach { c =>
+          assert(schema(c).dataType === IntegerType, s"for $c")
+        }
+        assert(session.table("v").collect() === Array(Row(1, 2, 2)))
+      } finally {
+        session.sql("DROP VIEW IF EXISTS v")
+      }
+    }
+  }
+
+  test("SPARK-59243: injected json_array replacement receives expanded star in a nested call") {
+    // The outer clause-free call routes through `UnresolvedRoutedJsonArray` because of the nested
+    // JSON_ARRAY sibling. If an injected replacement owns `json_array`, the direct star must expand
+    // for that replacement instead of taking the stock built-in rejection path.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_array"),
+        new ExpressionInfo("noClass", "json_array"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      val query = "SELECT json_array(*, json_array(1)) FROM VALUES (1, 'x') AS t(a, b)"
+      try {
+        Seq(false, true).foreach { singlePass =>
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          val analyzed = session.sql(query).queryExecution.analyzed
+          assert(analyzed.resolved, s"singlePass=$singlePass")
+          assertSingleProjectLiteral(
+            analyzed,
+            3,
+            s"injected function should receive expanded nested star, singlePass=$singlePass")
+          assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+            s"star should be expanded for the injected function, singlePass=$singlePass")
+        }
+
+        session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+        assert(
+          session.sql(query).collect() === Array(Row(3)),
+          "injected replacement should receive both star columns plus the nested array")
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      }
+    }
+  }
+
+  test("SPARK-59243: injected json_object replacement receives plain nested arguments") {
+    // A routed JSON_OBJECT wrapper must keep stock built-in splice metadata out of replacement
+    // functions: the replacement should see ordinary key/value expressions, not parser-only tags.
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_object"),
+        new ExpressionInfo("noClass", "json_object"),
+        (children: Seq[Expression]) => {
+          val hasTaggingExpression = children.exists(_.exists(_.isInstanceOf[TaggingExpression]))
+          Literal(if (hasTaggingExpression) "wrapped" else s"plain-${children.length}")
+        }))
+    }
+    withSession(extensions) { session =>
+      val queries = Seq(
+        "SELECT json_object('a', json_object('b', 1))",
+        "SELECT json_object('a' VALUE json_object('b' VALUE 1))",
+        "SELECT json_object('a': json_object('b': 1))")
+      try {
+        Seq(false, true).foreach { singlePass =>
+          session.conf.set(
+            SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+          queries.foreach { query =>
+            val analyzed = session.sql(query).queryExecution.analyzed
+            assert(analyzed.resolved, s"singlePass=$singlePass for $query")
+            assertSingleProjectLiteral(
+              analyzed,
+              UTF8String.fromString("plain-2"),
+              s"injected replacement should receive plain arguments, singlePass=$singlePass")
+          }
+        }
+      } finally {
+        session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+      }
+    }
+  }
+
+  test("SPARK-59243: injected json_object replacement receives an expanded star") {
+    // A routed JSON_OBJECT with a direct star (`'a' VALUE *`) plus a nested JSON_OBJECT sibling
+    // goes through `UnresolvedRoutedJsonObject`. If an injected replacement owns `json_object`, the
+    // direct star must expand for that replacement instead of taking the stock built-in rejection
+    // -- the json_object analog of the nested json_array star case. The replacement returns its
+    // argument count, so the flattened list ['a', a, b, 'b', json_object('c' VALUE 1)] yields 5
+    // iff the star expanded (the nested object is itself one argument, however it resolves).
+    val extensions = create { extensions =>
+      extensions.injectFunction((
+        FunctionIdentifier("json_object"),
+        new ExpressionInfo("noClass", "json_object"),
+        (children: Seq[Expression]) => Literal(children.size)))
+    }
+    withSession(extensions) { session =>
+      Seq(
+        "SELECT json_object('a' VALUE *, 'b' VALUE json_object('c' VALUE 1)) " +
+          "FROM VALUES ('id', 7) AS t(a, b)",
+        "SELECT json_object('a': *, 'b': json_object('c': 1)) " +
+          "FROM VALUES ('id', 7) AS t(a, b)"
+      ).foreach { query =>
+        try {
+          Seq(false, true).foreach { singlePass =>
+            session.conf.set(
+              SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, singlePass.toString)
+            val analyzed = session.sql(query).queryExecution.analyzed
+            assert(analyzed.resolved, s"singlePass=$singlePass for $query")
+            assertSingleProjectLiteral(
+              analyzed,
+              5,
+              s"injected replacement should receive the expanded star, singlePass=$singlePass")
+            assert(!analyzed.exists(_.expressions.exists(_.exists(_.isInstanceOf[Star]))),
+              s"star should be expanded for the injected function, singlePass=$singlePass")
+          }
+
+          session.conf.set(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key, "false")
+          assert(
+            session.sql(query).collect() === Array(Row(5)),
+            s"injected replacement should receive both star columns plus the nested object: $query")
+        } finally {
+          session.conf.unset(SQLConf.ANALYZER_SINGLE_PASS_RESOLVER_ENABLED.key)
+        }
+      }
     }
   }
 

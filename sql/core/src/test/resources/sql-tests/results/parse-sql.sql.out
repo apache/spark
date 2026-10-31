@@ -592,3 +592,21 @@ struct<parse_sql(BEGIN
  END):string>
 -- !query output
 [{"start":1,"length":783,"parse_success":true,"statement_identifier":"BEGIN END","statement_code":-22,"target_table_references":[["error_log"],["output_names"],["update_target"],["delete_target"]],"source_table_references":[["error_source"],["input_names"],["control_flags"],["update_source"],["delete_source"],["loop_source"],["loop_body"]],"function_references":[["format_string"],["normalize_name"],["is_valid"],["upper"],["enabled"],["coalesce"],["should_update"],["max"],["expired"],["ready"],["audit"],["count"]]}]
+
+
+-- !query
+SELECT get_json_object(parse_sql('SELECT json_object(\'a\', json_object(\'b\', 1))'),
+  '$[0].function_references') AS function_references
+-- !query schema
+struct<function_references:string>
+-- !query output
+[["json_object"]]
+
+
+-- !query
+SELECT get_json_object(parse_sql('SELECT json_array(json_array(1))'),
+  '$[0].function_references') AS function_references
+-- !query schema
+struct<function_references:string>
+-- !query output
+[["json_array"]]

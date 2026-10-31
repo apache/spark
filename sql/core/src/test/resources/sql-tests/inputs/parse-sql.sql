@@ -262,3 +262,9 @@ SELECT parse_sql(
    END FOR;
  END');
 --QUERY-DELIMITER-END
+
+-- a routed nested SQL/JSON constructor is a function reference, like a flat call
+SELECT get_json_object(parse_sql('SELECT json_object(\'a\', json_object(\'b\', 1))'),
+  '$[0].function_references') AS function_references;
+SELECT get_json_object(parse_sql('SELECT json_array(json_array(1))'),
+  '$[0].function_references') AS function_references;
