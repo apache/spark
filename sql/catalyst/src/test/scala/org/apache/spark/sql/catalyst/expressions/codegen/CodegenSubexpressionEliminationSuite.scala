@@ -64,7 +64,8 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite {
     Seq(true, false).foreach { useSubexprElimination =>
       Seq((false, false, false), (true, true, true), (null, true, false)).foreach {
         case (first, leafEvaluated, result) =>
-          val leaf = ExprWithEvaluatedState()
+          // Distinct `id`s, so that the first conjunct and the leaf are not the same expression.
+          val leaf = ExprWithEvaluatedState(id = 1)
           val cond = And(And(ExprWithEvaluatedState(first, isNullable = first == null),
             Not(leaf)), Not(leaf))
           val instance = GeneratePredicate.generate(cond, useSubexprElimination)
@@ -76,12 +77,53 @@ class CodegenSubexpressionEliminationSuite extends SparkFunSuite {
       }
     }
   }
+
+  test("SPARK-60332: GeneratePredicate evaluates nested common subexpressions in the order of " +
+      "the conjuncts that first reference them") {
+    // `Not(leaf)` is first referenced by the second conjunct and `Or(Not(leaf), leaf2)`, which
+    // contains it, by the third. Each is evaluated just before its conjunct, the inner one first,
+    // so the outer one reads the evaluated inner one, not its default. A FALSE first conjunct
+    // evaluates neither.
+    Seq((false, false, false), (true, true, true)).foreach { case (first, leafEvaluated, result) =>
+      val leaf = ExprWithEvaluatedState(id = 1)
+      val leaf2 = ExprWithEvaluatedState(id = 2)
+      val inner = Not(leaf)
+      val outer = Or(inner, leaf2)
+      val cond = And(And(And(ExprWithEvaluatedState(first), inner), And(inner, outer)), outer)
+      val instance = GeneratePredicate.generate(cond, useSubexprElimination = true)
+      instance.initialize(0)
+      withClue(s"first = $first: ") {
+        assert(instance.eval(null) === result)
+        assert(leaf.evaluated === leafEvaluated)
+        // `Or(TRUE, leaf2)` never evaluates `leaf2`.
+        assert(!leaf2.evaluated)
+      }
+    }
+  }
+
+  test("SPARK-60332: GeneratePredicate splits the evaluation of many common subexpressions " +
+      "into functions") {
+    // The calls of the functions of 100 common subexpressions before the conjunct that first
+    // references them exceed the length at which they are split into functions of their own.
+    Seq((false, false, false), (true, true, true)).foreach {
+      case (first, leavesEvaluated, result) =>
+      val leaves = (1 to 100).map(i => ExprWithEvaluatedState(id = i))
+      val common = leaves.map(leaf => Not(leaf): Expression).reduce(And)
+      val cond = And(And(ExprWithEvaluatedState(first), common), common)
+      val instance = GeneratePredicate.generate(cond, useSubexprElimination = true)
+      instance.initialize(0)
+      withClue(s"first = $first: ") {
+        assert(instance.eval(null) === result)
+        assert(leaves.forall(_.evaluated == leavesEvaluated))
+      }
+    }
+  }
 }
 
 /**
  * An expression with evaluated state so we can know whether it is evaluated.
  */
-case class ExprWithEvaluatedState(value: Any = false, isNullable: Boolean = false)
+case class ExprWithEvaluatedState(value: Any = false, isNullable: Boolean = false, id: Int = 0)
   extends LeafExpression with CodegenFallback {
   var evaluated: Boolean = false
   override def eval(input: InternalRow): Any = {

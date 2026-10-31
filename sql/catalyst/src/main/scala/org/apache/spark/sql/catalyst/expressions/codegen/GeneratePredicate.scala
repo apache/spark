@@ -39,37 +39,47 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with P
 
     // Do sub-expression elimination for predicates.
     val conjuncts = splitConjunctivePredicates(predicate)
-    val evalCode = if (useSubexprElimination && conjuncts.length > 1 &&
-        hasCommonSubexpressions(conjuncts)) {
-      // A subexpression common to several top-level conjuncts is evaluated just before the first
-      // conjunct that references it, not before the whole condition, so that a FALSE conjunct
-      // before them stops the evaluation, as `And.eval` and the whole-stage codegen of a filter
-      // do (SPARK-60332). The conjuncts are evaluated like `And.eval`: a FALSE one stops the
-      // evaluation, a NULL one does not, and the condition is TRUE only if all of them are.
-      val nullConjunct = ctx.freshName("nullConjunct")
-      val checks = ctx.generateExpressionsWithSubexprCodes(conjuncts).map { case (subexprs, ev) =>
-        s"""
-           |$subexprs
-           |${ev.code}
-           |if (${ev.isNull}) {
-           |  $nullConjunct = true;
-           |} else if (!${ev.value}) {
-           |  return false;
-           |}
-         """.stripMargin
-      }
-      s"""
-         |boolean $nullConjunct = false;
-         |${checks.mkString("\n")}
-         |return !$nullConjunct;
-       """.stripMargin
+    // With a subexpression common to several top-level conjuncts, or within one of them, the
+    // conjuncts are generated one by one, and the subexpression is evaluated just before the
+    // first conjunct that references it, not before the whole condition, so that a FALSE
+    // conjunct before them stops the evaluation, as `And.eval` and the whole-stage codegen of a
+    // filter do (SPARK-60332). The conjuncts are evaluated like `And.eval`: a FALSE one stops
+    // the evaluation, a NULL one does not, and the condition is TRUE only if all of them are.
+    // Otherwise the condition is generated as a whole, as before.
+    val conjunctCodes = if (useSubexprElimination && conjuncts.length > 1) {
+      ctx.generateExpressionsWithSubexprCodes(conjuncts)
     } else {
-      val eval = ctx.generateExpressions(Seq(predicate), useSubexprElimination).head
-      s"""
-         |${ctx.subexprFunctionsCode}
-         |${eval.code}
-         |return !${eval.isNull} && ${eval.value};
-       """.stripMargin
+      None
+    }
+    val evalCode = conjunctCodes match {
+      case Some(codes) =>
+        val nullConjunct = ctx.freshName("nullConjunct")
+        val checks = codes.map { case (subexprs, ev) =>
+          s"""
+             |$subexprs
+             |${ev.code}
+             |if (${ev.isNull}) {
+             |  $nullConjunct = true;
+             |} else if (!${ev.value}) {
+             |  return false;
+             |}
+           """.stripMargin
+        }
+        s"""
+           |boolean $nullConjunct = false;
+           |${checks.mkString("\n")}
+           |return !$nullConjunct;
+         """.stripMargin
+      case None =>
+        // The conjuncts have no common subexpression when they were looked at, so the elimination
+        // is not run again on them.
+        val eliminate = useSubexprElimination && conjuncts.length <= 1
+        val eval = ctx.generateExpressions(Seq(predicate), eliminate).head
+        s"""
+           |${ctx.subexprFunctionsCode}
+           |${eval.code}
+           |return !${eval.isNull} && ${eval.value};
+         """.stripMargin
     }
 
     val codeBody = s"""
@@ -103,12 +113,5 @@ object GeneratePredicate extends CodeGenerator[Expression, BasePredicate] with P
 
     val (clazz, _) = CodeGenerator.compile(code)
     clazz.generate(ctx.references.toArray).asInstanceOf[BasePredicate]
-  }
-
-  /** Whether `conjuncts` have a subexpression in common, within one of them or across them. */
-  private def hasCommonSubexpressions(conjuncts: Seq[Expression]): Boolean = {
-    val equivalentExpressions = new EquivalentExpressions
-    conjuncts.foreach(equivalentExpressions.addExprTree(_))
-    equivalentExpressions.getCommonSubexpressions.nonEmpty
   }
 }
