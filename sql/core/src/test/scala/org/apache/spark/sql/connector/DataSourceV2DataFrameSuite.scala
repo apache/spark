@@ -1551,7 +1551,7 @@ class DataSourceV2DataFrameSuite
   // Unlike the disabled case above, this behavior is not parameterized over ANSI: reserved keyword
   // enforcement (enforceReservedKeywords = ansiEnabled && ENFORCE_RESERVED_KEYWORDS) can only be on
   // when ANSI is enabled. With ANSI disabled the conf is a no-op.
-  test("generation expression resolves a reserved keyword to the function when " +
+  test("generation expression with a reserved keyword is rejected when " +
     "enforceReservedKeywords is enabled") {
     val tableName = "testcat.ns1.ns2.tbl"
     withSQLConf(
@@ -1559,21 +1559,25 @@ class DataSourceV2DataFrameSuite
         SQLConf.ENFORCE_RESERVED_KEYWORDS.key -> "true") {
       withTable(tableName) {
         // With reserved keyword enforcement on, the unquoted `current_date` in the generation
-        // expression binds to the built-in CURRENT_DATE function rather than the same-named
-        // column. This matches the SQL standard.
-        val createExec = executeAndKeepPhysicalPlan[CreateTableExec] {
-          sql(
-            s"""CREATE TABLE $tableName (
-               |  `current_date` DATE,
-               |  c2 DATE GENERATED ALWAYS AS (current_date)
-               |) USING foo""".stripMargin)
-        }
-        val genExpr = createExec.columns.find(_.name == "c2").get.columnGenerationExpression()
-        assert(genExpr != null)
-        assert(genExpr.getSql == "current_date")
-        // CURRENT_DATE has no V2 representation, so the connector falls back to the SQL form. A
-        // non-null field reference here would mean the column incorrectly took priority.
-        assert(genExpr.getExpression == null)
+        // expression binds to the built-in CURRENT_DATE function. A write reads the stored text
+        // without the enforcement and would bind it to the same-named column instead.
+        checkError(
+          exception = intercept[AnalysisException] {
+            sql(
+              s"""CREATE TABLE $tableName (
+                 |  `current_date` DATE,
+                 |  c2 DATE GENERATED ALWAYS AS (current_date)
+                 |) USING foo""".stripMargin)
+          },
+          condition = "UNSUPPORTED_EXPRESSION_GENERATED_COLUMN",
+          parameters = Map(
+            "fieldName" -> "c2",
+            "expressionStr" -> "current_date",
+            "reason" -> ("generation expression reads differently under the settings of this " +
+              "session than under the settings a write reads it with")))
+
+        // CURDATE is not a reserved keyword, so it reads as the function in both cases.
+        sql(s"CREATE TABLE $tableName (c2 DATE GENERATED ALWAYS AS (curdate())) USING foo")
       }
     }
   }
