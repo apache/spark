@@ -87,11 +87,12 @@ object SelectedField {
       hasDynamicLookup: Boolean = false): Option[StructField] = {
     expr match {
       case a: Attribute =>
-        // Readers evaluate stored defaults against the requested type. Keep the previous
-        // projection for these columns when a dynamic lookup would narrow it.
+        // A separate projection can read a nested default under this same root. Keep the
+        // previous lookup behavior if the declared schema contains a stored default.
         dataTypeOpt.map { dt =>
           StructField(a.name, dt, a.nullable, a.metadata)
-        }.filterNot(field => hasDynamicLookup && field.hasExistenceDefaultValue)
+        }.filterNot(field => hasDynamicLookup &&
+          (field.hasExistenceDefaultValue || hasNestedDefault(a.dataType)))
       case c: GetStructField =>
         val field = c.childSchema(c.ordinal)
         val newField = field.copy(dataType = dataTypeOpt.getOrElse(field.dataType))
@@ -190,6 +191,11 @@ object SelectedField {
       case _ =>
         None
     }
+  }
+
+  private def hasNestedDefault(dataType: DataType): Boolean = dataType.existsRecursively {
+    case s: StructType => s.exists(_.hasExistenceDefaultValue)
+    case _ => false
   }
 
   private def struct(field: StructField): StructType = StructType(Array(field))

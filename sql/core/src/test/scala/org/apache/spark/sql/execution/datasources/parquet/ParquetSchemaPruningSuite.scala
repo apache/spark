@@ -196,6 +196,32 @@ abstract class ParquetSchemaPruningSuite extends SchemaPruningSuite with Adaptiv
     }
   }
 
+  test("dynamic lookups preserve defaults on nested fields") {
+    withTempPath { dir =>
+      val path = dir.getCanonicalPath
+      sql(
+        """SELECT 0 AS i,
+          |  named_struct('arr', array(named_struct('a', 1, 'b', 22))) AS s,
+          |  map(0, named_struct('anchor', 7, 'n', named_struct('a', 3, 'b', 44))) AS m
+          |""".stripMargin).write.parquet(path)
+
+      val pair = StructType.fromDDL("a INT, b INT")
+      val default = "named_struct('a', 5, 'b', 6)"
+      val arr = StructField("arr", ArrayType(pair)).withExistenceDefaultValue(s"array($default)")
+      val n = StructField("n", pair).withExistenceDefaultValue(default)
+      val schema = new StructType()
+        .add("i", IntegerType)
+        .add("s", new StructType().add(arr))
+        .add("m", MapType(IntegerType, new StructType().add("anchor", IntegerType).add(n)))
+
+      withSQLConf(vectorizedReaderEnabledKey -> "false") {
+        val data = spark.read.schema(schema).parquet(path)
+        checkAnswer(data.selectExpr("s.arr[i].b", "m[i].n.b"), Row(22, 44))
+        checkAnswer(data.selectExpr("m[i].anchor", "m[0].n.b"), Row(7, 44))
+      }
+    }
+  }
+
   test("dynamic array selection preserves bounds in legacy missing-field mode") {
     withTempPath { dir =>
       val path = dir.getCanonicalPath
