@@ -203,9 +203,10 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(escape(rVal.asInstanceOf[UTF8String].toString()))
-        val pattern = ctx.addMutableState(patternClass, "patternLike",
+        // The matcher is built once and reset per row, to avoid allocating a Matcher per row.
+        val matcher = ctx.addMutableState(classOf[Matcher].getName, "matcherLike",
           v =>
-            s"""$v = $patternClass.compile("$regexStr", $collationRegexFlags);""".stripMargin)
+            s"""$v = $patternClass.compile("$regexStr", $collationRegexFlags).matcher("");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -214,7 +215,7 @@ case class Like(left: Expression, right: Expression, escapeChar: Char)
           boolean ${ev.isNull} = ${eval.isNull};
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).matches();
+            ${ev.value} = $matcher.reset(${eval.value}.toString()).matches();
           }
         """)
       } else {
@@ -545,8 +546,10 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
       if (rVal != null) {
         val regexStr =
           StringEscapeUtils.escapeJava(rVal.asInstanceOf[UTF8String].toString())
-        val pattern = ctx.addMutableState(patternClass, "patternRLike",
-          v => s"""$v = $patternClass.compile("$regexStr", $collationRegexFlags);""".stripMargin)
+        // The matcher is built once and reset per row, to avoid allocating a Matcher per row.
+        val matcher = ctx.addMutableState(classOf[Matcher].getName, "matcherRLike",
+          v =>
+            s"""$v = $patternClass.compile("$regexStr", $collationRegexFlags).matcher("");""")
 
         // We don't use nullSafeCodeGen here because we don't want to re-evaluate right again.
         val eval = left.genCode(ctx)
@@ -555,7 +558,7 @@ case class RLike(left: Expression, right: Expression) extends StringRegexExpress
           boolean ${ev.isNull} = ${eval.isNull};
           ${CodeGenerator.javaType(dataType)} ${ev.value} = ${CodeGenerator.defaultValue(dataType)};
           if (!${ev.isNull}) {
-            ${ev.value} = $pattern.matcher(${eval.value}.toString()).find(0);
+            ${ev.value} = $matcher.reset(${eval.value}.toString()).find(0);
           }
         """)
       } else {
