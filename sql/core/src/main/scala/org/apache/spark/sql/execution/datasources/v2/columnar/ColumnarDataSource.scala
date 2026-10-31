@@ -21,7 +21,9 @@ import java.util
 import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
+import org.apache.spark.sql.connector.read.streaming.ReadLimit
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -47,8 +49,17 @@ trait ColumnarDataSource {
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
-  /** Returns a reader for a micro-batch streaming scan of the given schema. */
-  def streamReader(schema: StructType): ColumnarStreamReader
+  /**
+   * Returns a reader for a micro-batch streaming scan of the given schema: the columns to read,
+   * which may be only the top-level columns of the schema of the data that the query needs. The
+   * partitions return exactly these columns.
+   *
+   * @param checkpointLocation the location of a directory in the checkpoint of the streaming
+   *                           query that is reserved for this source. It stays the same when the
+   *                           query restarts from its checkpoint. The names that start with
+   *                           `_spark` are reserved for Spark there.
+   */
+  def streamReader(schema: StructType, checkpointLocation: String): ColumnarStreamReader
 
   /**
    * Returns a writer for a batch write.
@@ -105,9 +116,30 @@ case class ColumnarPlannedBatch(
  * to the executors, where `read` is called for each partition.
  */
 trait ColumnarStreamReader extends Serializable {
+  /**
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it in
+   * the checkpoint of the source, and only asks for it when the checkpoint does not have it yet.
+   */
   def initialOffset(): String
 
-  def latestOffset(): String
+  /**
+   * Returns the limit on the data of each micro-batch, which Spark asks for once, when the query
+   * starts: `ReadLimit.allAvailable()` by default, or a `ReadLimit.maxRows`.
+   */
+  def defaultReadLimit(): ReadLimit = ReadLimit.allAvailable()
+
+  /**
+   * Returns the latest offset available, within a limit.
+   *
+   * @param start the offset that the next micro-batch starts after: the end of the last
+   *              micro-batch, or the initial offset before the first one
+   * @param limit `ReadLimit.allAvailable()`, or the default read limit: the latest offset is then
+   *              the end of the data of the next micro-batch. Spark only passes the default read
+   *              limit when the latest offset without a limit is not `start`
+   * @param runEnd with `Trigger.AvailableNow` and a limit, the offset that the run reads up to,
+   *               which the latest offset does not go beyond
+   */
+  def latestOffset(start: String, limit: ReadLimit, runEnd: Option[String]): String
 
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]
@@ -132,6 +164,12 @@ trait ColumnarWriter extends Serializable {
   def commit(messages: Array[WriterCommitMessage]): Unit
 
   def abort(messages: Array[WriterCommitMessage]): Unit
+
+  /**
+   * The time zone of the timestamps of the Arrow batches that the data writers get, read on the
+   * driver: by default, the session time zone when the data writers are planned.
+   */
+  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }
 
 /** Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. */
@@ -141,4 +179,7 @@ trait ColumnarStreamWriter extends Serializable {
   def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit
 
   def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit
+
+  /** As for [[ColumnarWriter.timeZoneId]]. */
+  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }

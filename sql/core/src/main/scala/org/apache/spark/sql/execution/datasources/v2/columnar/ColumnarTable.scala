@@ -16,21 +16,28 @@
  */
 package org.apache.spark.sql.execution.datasources.v2.columnar
 
+import java.io.{InputStream, OutputStream}
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util
 import java.util.Locale
 
 import scala.util.Try
 
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark.SparkException
+import org.apache.spark.sql.SparkSession
 import org.apache.spark.sql.catalyst.InternalRow
 import org.apache.spark.sql.connector.catalog.{SupportsRead, SupportsWrite, Table, TableCapability}
 import org.apache.spark.sql.connector.read._
-import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset}
+import org.apache.spark.sql.connector.read.streaming.{MicroBatchStream, Offset, ReadLimit, SupportsTriggerAvailableNow}
 import org.apache.spark.sql.connector.write.{LogicalWriteInfo, WriteBuilder}
+import org.apache.spark.sql.execution.streaming.checkpointing.HDFSMetadataLog
 import org.apache.spark.sql.internal.connector.SupportsMetadata
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.util.CaseInsensitiveStringMap
 import org.apache.spark.sql.vectorized.ColumnarBatch
+import org.apache.spark.util.Utils
 
 /**
  * The Data Source V2 [[Table]] of a [[ColumnarDataSource]]. It creates a new data source for each
@@ -95,7 +102,8 @@ class ColumnarScanBuilder(
   private var pushedLimit: Option[Int] = None
   // The limit passed to the reader, and whether the reader applies it.
   private var limitResult: Option[(Int, Boolean)] = None
-  private var readSchema: StructType = schema
+  // The top-level columns that the query needs, if fewer than those of the schema.
+  private var requiredSchema: Option[StructType] = None
 
   private def batchPlanner: ColumnarBatchPlanner = {
     if (planner == null) {
@@ -123,39 +131,60 @@ class ColumnarScanBuilder(
 
   override def pruneColumns(requiredSchema: StructType): Unit = {
     // Only top-level columns are pruned by the data source. Spark prunes the nested fields of the
-    // columns it reads.
+    // columns it reads. The required columns are only recorded here: a batch scan asks its planner
+    // to prune the others, and a streaming scan, which has no planner, passes the required
+    // columns to its stream reader.
     val required =
       StructType(requiredSchema.fieldNames.flatMap(name => schema.find(_.name == name)))
-    if (required.length < schema.length && batchPlanner.pruneColumns(required)) {
-      readSchema = required
+    if (required.length < schema.length) {
+      this.requiredSchema = Some(required)
     }
   }
 
   // The scan takes over the planner, so it is built once.
   private lazy val scan = new ColumnarScan(
-    shortName, schema, readSchema, dataSource, Option(planner), pushedLimit)
+    shortName, schema, requiredSchema, dataSource, Option(planner), pushedLimit)
 
   override def build(): Scan = scan
 }
 
 /**
+ * @param requiredSchema the top-level columns that the query needs, if fewer than those of the
+ *                       full schema. A batch scan asks its planner to prune the other columns,
+ *                       while a streaming scan reads only these columns: they are the schema that
+ *                       its stream reader gets.
  * @param pushedDownPlanner the planner that the operations were pushed down to, if any. Otherwise,
- *                          the scan creates one when its batch is planned.
+ *                          the scan creates one when its batch is planned or pruned.
  */
 class ColumnarScan(
     shortName: String,
     fullSchema: StructType,
-    prunedSchema: StructType,
+    requiredSchema: Option[StructType],
     dataSource: ColumnarDataSource,
     pushedDownPlanner: Option[ColumnarBatchPlanner],
     pushedLimit: Option[Int])
   extends Scan with SupportsMetadata {
 
-  // Spark may call `toBatch` more than once for the same scan; the partitions are planned once.
-  private lazy val batch = new ColumnarBatchScan(
-    pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema)))
+  private lazy val planner = pushedDownPlanner.getOrElse(dataSource.batchPlanner(fullSchema))
 
-  override def readSchema(): StructType = prunedSchema
+  // The columns that the batch reads: the required ones if the planner prunes the others.
+  private lazy val batchSchema = requiredSchema.filter(planner.pruneColumns).getOrElse(fullSchema)
+
+  // The columns that the stream reads.
+  private def streamSchema: StructType = requiredSchema.getOrElse(fullSchema)
+
+  // Spark may call `toBatch` more than once for the same scan; the partitions are planned once,
+  // after the columns are pruned.
+  private lazy val batch = {
+    batchSchema
+    new ColumnarBatchScan(planner)
+  }
+
+  // Whether the scan is the one of a micro-batch stream, which Spark asks for its read schema
+  // after it creates the stream.
+  @volatile private var streaming = false
+
+  override def readSchema(): StructType = if (streaming) streamSchema else batchSchema
 
   override def description(): String = shortName
 
@@ -165,11 +194,13 @@ class ColumnarScan(
   override def toBatch: Batch = batch
 
   override def toMicroBatchStream(checkpointLocation: String): MicroBatchStream = {
-    new ColumnarMicroBatchStream(dataSource.streamReader(fullSchema))
+    streaming = true
+    new ColumnarMicroBatchStream(
+      dataSource.streamReader(streamSchema, checkpointLocation), checkpointLocation)
   }
 
   override def getMetaData(): Map[String, String] = {
-    Map("ReadSchema" -> prunedSchema.simpleString) ++
+    Map("ReadSchema" -> readSchema().simpleString) ++
       pushedLimit.map(limit => "PushedLimit" -> s"LIMIT $limit")
   }
 }
@@ -189,11 +220,87 @@ class ColumnarBatchScan(planner: ColumnarBatchPlanner) extends Batch {
 
 case class ColumnarStreamOffset(json: String) extends Offset
 
-class ColumnarMicroBatchStream(reader: ColumnarStreamReader) extends MicroBatchStream {
+/**
+ * The micro-batch stream of a [[ColumnarDataSource]]. The reader gets the offset that each
+ * micro-batch starts after, the end of the last one, for every trigger, and the limit on the data
+ * of a micro-batch, its default read limit, all the available data unless it limits it. With
+ * `Trigger.AvailableNow`, Spark runs micro-batches up to the first latest offset without a limit
+ * that Spark asks for, rather than wrapping the stream in one that asks for the latest offset from
+ * the initial offset: in one micro-batch, or within the limit in several.
+ *
+ * @param checkpointLocation the location of the checkpoint of the source, where the stream keeps
+ *                           the initial offset, under `ColumnarMicroBatchStream.InitialOffsetLog`
+ */
+class ColumnarMicroBatchStream(reader: ColumnarStreamReader, checkpointLocation: String)
+  extends MicroBatchStream with SupportsTriggerAvailableNow {
 
-  override def initialOffset(): Offset = ColumnarStreamOffset(reader.initialOffset())
+  // The latest offset without a limit that the reader returned last, which the progress of the
+  // query reports.
+  @volatile private var lastLatestOffset: Offset = _
+  // The limit on the data of each micro-batch, asked once, when the query starts. Spark asks for
+  // it before it records the streams to stop when the query stops, so a stream whose limit fails
+  // stops its reader itself.
+  private lazy val readLimit = try {
+    reader.defaultReadLimit()
+  } catch {
+    case e: Throwable =>
+      try reader.stop() catch { case stopError: Throwable => e.addSuppressed(stopError) }
+      throw e
+  }
+  // Whether the trigger is Trigger.AvailableNow.
+  @volatile private var availableNow = false
+  // The end of the run with Trigger.AvailableNow: the first latest offset without a limit asked.
+  @volatile private var availableNowEnd: Offset = _
+  // Spark asks for the initial offset for the start of the first latest offset, and again to plan
+  // the first micro-batch, which both get the same offset. The reader is only asked when the
+  // checkpoint does not have it yet: a query that restarts before its first micro-batch is
+  // committed plans it again from the same start, also when the initial offset of the reader
+  // depends on when it is asked, such as the latest data.
+  private lazy val initial = {
+    val log = new ColumnarInitialOffsetLog(SparkSession.active,
+      new Path(checkpointLocation, ColumnarMicroBatchStream.InitialOffsetLog).toString)
+    ColumnarStreamOffset(log.get(0).getOrElse {
+      val offset = reader.initialOffset()
+      log.add(0, offset)
+      offset
+    })
+  }
 
-  override def latestOffset(): Offset = ColumnarStreamOffset(reader.latestOffset())
+  override def initialOffset(): Offset = initial
+
+  override def latestOffset(): Offset = {
+    throw SparkException.internalError(
+      "latestOffset(Offset, ReadLimit) should be called instead of latestOffset().")
+  }
+
+  override def getDefaultReadLimit: ReadLimit = readLimit
+
+  override def latestOffset(start: Offset, limit: ReadLimit): Offset = {
+    def ask(limit: ReadLimit, runEnd: Option[Offset]): Offset =
+      ColumnarStreamOffset(reader.latestOffset(start.json(), limit, runEnd.map(_.json())))
+    // The latest offset without a limit, which the progress reports: with Trigger.AvailableNow,
+    // the end of the run, asked once, and otherwise asked for each micro-batch.
+    val latest = if (!availableNow) {
+      ask(ReadLimit.allAvailable(), None)
+    } else {
+      if (availableNowEnd == null) availableNowEnd = ask(ReadLimit.allAvailable(), None)
+      availableNowEnd
+    }
+    lastLatestOffset = latest
+    // When the latest offset without a limit is the start, as Spark compares offsets, there is no
+    // data after the start to limit, so the reader is not asked again with the limit.
+    if (limit == ReadLimit.allAvailable() || latest.json() == start.json()) {
+      latest
+    } else {
+      ask(limit, Option(availableNowEnd))
+    }
+  }
+
+  override def prepareForTriggerAvailableNow(): Unit = {
+    availableNow = true
+  }
+
+  override def reportLatestOffset(): Offset = lastLatestOffset
 
   override def planInputPartitions(start: Offset, end: Offset): Array[InputPartition] = {
     reader.partitions(start.json(), end.json())
@@ -208,6 +315,37 @@ class ColumnarMicroBatchStream(reader: ColumnarStreamReader) extends MicroBatchS
   override def commit(end: Offset): Unit = reader.commit(end.json())
 
   override def stop(): Unit = reader.stop()
+}
+
+object ColumnarMicroBatchStream {
+  /**
+   * The directory, in the checkpoint of the source, of the log that keeps the initial offset. The
+   * names that start with `_spark` are reserved for Spark there, while the reader may keep what it
+   * needs under the other names.
+   */
+  val InitialOffsetLog = "_spark_initial_offset"
+}
+
+/** Keeps the initial offset of a [[ColumnarMicroBatchStream]], as the JSON of the reader. */
+class ColumnarInitialOffsetLog(session: SparkSession, path: String)
+  extends HDFSMetadataLog[String](session, path) {
+
+  private val Version = 1
+
+  override protected def serialize(offset: String, out: OutputStream): Unit = {
+    out.write(s"v$Version\n$offset".getBytes(UTF_8))
+  }
+
+  override protected def deserialize(in: InputStream): String = {
+    val content = Utils.toString(in)
+    val newLine = content.indexOf('\n')
+    if (newLine < 0) {
+      throw new IllegalStateException(
+        "Log file was malformed: failed to detect the log file version line.")
+    }
+    validateVersion(content.substring(0, newLine), Version)
+    content.substring(newLine + 1)
+  }
 }
 
 /**
