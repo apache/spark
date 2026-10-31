@@ -179,7 +179,7 @@ object TruncateFunction extends ScalarFunction[UTF8String] {
 }
 
 // Reducible `hours`, `days` and `years`, matching the in-memory table's transforms of those
-// names. Hours reduce onto days with floorDiv(h, 24), and days onto years. Unlike bucket's x % n,
+// names. Hours reduce onto days with h / 24, and days onto years. Unlike bucket's x % n,
 // neither reducer is idempotent, so applying one twice gives a wrong value.
 object ReducibleHoursFunction extends ScalarFunction[Long] with ReducibleFunction[Long, Long] {
   override def inputTypes(): Array[DataType] = Array(TimestampType)
@@ -214,7 +214,7 @@ object ReducibleYearsFunction extends ScalarFunction[Long] with ReducibleFunctio
 }
 
 case object HoursToDaysReducer extends Reducer[Long, Long] {
-  override def reduce(hours: Long): Long = Math.floorDiv(hours, 24L)
+  override def reduce(hours: Long): Long = hours / 24
 }
 
 case object DaysToYearsReducer extends Reducer[Long, Long] {
