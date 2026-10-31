@@ -174,10 +174,14 @@ private[sql] class DefaultCatalogManager(
   override private[sql] def v2SessionCatalog: CatalogPlugin = {
     conf.getConf(SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION) match {
       case "builtin" => defaultSessionCatalog
-      case _ => catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, {
-        checkNotClosed(SESSION_CATALOG_NAME)
-        loadV2SessionCatalog()
-      })
+      // Under the manager lock, like `catalog(name)`, so that a load racing with `close()`
+      // either completes before it, and is closed by it, or fails.
+      case _ => synchronized {
+        catalogs.getOrElseUpdate(SESSION_CATALOG_NAME, {
+          checkNotClosed(SESSION_CATALOG_NAME)
+          loadV2SessionCatalog()
+        })
+      }
     }
   }
 
@@ -548,7 +552,7 @@ private[sql] class DefaultCatalogManager(
     v1SessionCatalog.setCurrentDatabase(conf.defaultDatabase)
   }
 
-  // Close and unregister every catalog loaded by this manager that implements `AutoCloseable`.
+  // Unregister every catalog loaded by this manager, and close the ones that are `AutoCloseable`.
   // `defaultSessionCatalog` is not closed since it is owned by the caller, not by this manager.
   // Closing is terminal: loading a catalog afterwards fails instead of creating an instance
   // that would never be closed.

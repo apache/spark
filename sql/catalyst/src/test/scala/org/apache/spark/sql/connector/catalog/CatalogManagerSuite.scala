@@ -19,8 +19,12 @@ package org.apache.spark.sql.connector.catalog
 
 import java.io.{Closeable, IOException}
 import java.net.URI
+import java.util.concurrent.{CountDownLatch, TimeUnit}
 
 import scala.jdk.CollectionConverters._
+
+import org.scalatest.concurrent.Eventually._
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkFunSuite
 import org.apache.spark.sql.AnalysisException
@@ -169,6 +173,35 @@ class CatalogManagerSuite extends SparkFunSuite with SQLHelper {
 
       catalogManager.close()
       assert(sessionCatalog.closed)
+      intercept[IllegalStateException](catalogManager.v2SessionCatalog)
+    }
+  }
+
+  test("a custom v2 session catalog loaded while closing is closed") {
+    val catalogManager = new DefaultCatalogManager(new CloseableCatalog, createSessionCatalog())
+    BlockingInitializeCatalog.reset()
+    withSQLConf(
+      SQLConf.V2_SESSION_CATALOG_IMPLEMENTATION.key -> classOf[BlockingInitializeCatalog].getName) {
+      // A direct `v2SessionCatalog` lookup starts loading the catalog before `close()`...
+      val conf = SQLConf.get
+      val loader = new Thread(() => SQLConf.withExistingConf(conf) {
+        catalogManager.v2SessionCatalog
+      })
+      loader.start()
+      assert(BlockingInitializeCatalog.initializing.await(1, TimeUnit.MINUTES))
+      // ... and `close()` waits for the load to complete.
+      val closer = new Thread(() => catalogManager.close())
+      closer.start()
+      eventually(timeout(1.minute)) {
+        assert(closer.getState == Thread.State.BLOCKED)
+      }
+      BlockingInitializeCatalog.resume.countDown()
+      loader.join(TimeUnit.MINUTES.toMillis(1))
+      closer.join(TimeUnit.MINUTES.toMillis(1))
+      assert(!loader.isAlive && !closer.isAlive)
+
+      // The catalog loaded concurrently is closed, and no unclosed one can be served afterwards.
+      assert(BlockingInitializeCatalog.lastInstance.closed)
       intercept[IllegalStateException](catalogManager.v2SessionCatalog)
     }
   }
@@ -348,6 +381,27 @@ class FailingCloseableCatalog extends CloseableCatalog {
   override def close(): Unit = {
     super.close()
     throw new IOException("failed to close")
+  }
+}
+
+class BlockingInitializeCatalog extends CloseableCatalog {
+  override def initialize(name: String, options: CaseInsensitiveStringMap): Unit = {
+    super.initialize(name, options)
+    BlockingInitializeCatalog.lastInstance = this
+    BlockingInitializeCatalog.initializing.countDown()
+    assert(BlockingInitializeCatalog.resume.await(1, TimeUnit.MINUTES))
+  }
+}
+
+object BlockingInitializeCatalog {
+  @volatile var initializing: CountDownLatch = _
+  @volatile var resume: CountDownLatch = _
+  @volatile var lastInstance: BlockingInitializeCatalog = _
+
+  def reset(): Unit = {
+    initializing = new CountDownLatch(1)
+    resume = new CountDownLatch(1)
+    lastInstance = null
   }
 }
 

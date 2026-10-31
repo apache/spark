@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.connect.service
 
+import java.nio.charset.StandardCharsets
+import java.nio.file.{Files, Paths}
 import java.util.UUID
 
 import org.scalatest.time.SpanSugar._
@@ -193,6 +195,32 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     assert(catalog.closed)
   }
 
+  test("Catalogs are closed before the session artifacts are released") {
+    val key = SessionKey("user", UUID.randomUUID().toString)
+    val sessionHolder = SparkConnectService.sessionManager.getOrCreateIsolatedSession(key, None)
+    val artifact = Files.createTempFile("test-artifact", ".jar")
+    Files.write(artifact, "test content".getBytes(StandardCharsets.UTF_8))
+    sessionHolder.artifactManager.addArtifact(Paths.get("jars/test.jar"), artifact, None)
+    sessionHolder.session.conf
+      .set("spark.sql.catalog.checking", classOf[ArtifactCheckingCatalog].getName)
+    val catalog = sessionHolder.withSession {
+      _.sessionState.catalogManager.catalog("checking").asInstanceOf[ArtifactCheckingCatalog]
+    }
+
+    @volatile var artifactPresentWhenClosing = false
+    ArtifactCheckingCatalog.onClose = () => {
+      artifactPresentWhenClosing = sessionHolder.artifactManager.getAddedJars.nonEmpty
+    }
+    try {
+      SparkConnectService.sessionManager.closeSession(sessionHolder.key)
+      assert(catalog.closed)
+      assert(artifactPresentWhenClosing)
+      assert(sessionHolder.artifactManager.getAddedJars.isEmpty)
+    } finally {
+      ArtifactCheckingCatalog.onClose = () => ()
+    }
+  }
+
   test("baseSession allows creating sessions after default session is cleared") {
     // Create a new session manager to test initialization
     val sessionManager = new SparkConnectSessionManager()
@@ -240,3 +268,15 @@ class SparkConnectSessionManagerSuite extends SharedSparkSession {
     sessionManager.closeSession(key2)
   }
 }
+
+class ArtifactCheckingCatalog extends CloseableCatalog {
+  override def close(): Unit = {
+    ArtifactCheckingCatalog.onClose()
+    super.close()
+  }
+}
+
+object ArtifactCheckingCatalog {
+  @volatile var onClose: () => Unit = () => ()
+}
+

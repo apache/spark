@@ -42,9 +42,16 @@ import org.apache.spark.sql.util.CaseInsensitiveStringMap;
  * <p>
  * Catalog instances are loaded per session. Implementations that hold resources such as clients,
  * connections or thread pools can also implement {@link java.io.Closeable} (or
- * {@link AutoCloseable}). Spark calls {@code close()} when it releases the session that loaded
- * the catalog, which currently happens when a Spark Connect session is closed. Other sessions may
- * never be released, so implementations must not depend on {@code close()} being called.
+ * {@link AutoCloseable}) to release them. Spark calls {@code close()} at most once, when it
+ * releases the session that loaded the catalog. Currently this only happens when a Spark Connect
+ * session is closed; other sessions may never be released, so implementations must not depend on
+ * {@code close()} being called. {@code close()} is called on a Spark-internal thread, without the
+ * session's classloader or active session set, and should not block for long. Exceptions it throws
+ * are logged and otherwise ignored.
+ * <p>
+ * Spark may still call a catalog after closing it, e.g. from an execution of the released session
+ * that is still being interrupted, when refreshing a table cached through the catalog, or from a
+ * temporary view copied into a cloned session. Such calls should fail cleanly.
  *
  * @since 3.0.0
  */

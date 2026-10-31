@@ -408,41 +408,46 @@ case class SessionHolder(userId: String, sessionId: String, session: SparkSessio
     // intended use is that the client session will get closed when it's really not used anymore,
     // or that it expires due to inactivity, in which case there should be no races.
 
-    // Clean up running streaming queries.
-    // Note: there can be concurrent streaming queries being started.
-    SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = true)
-    streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
-    removeAllListeners() // removes all listener and stop python listener processes if necessary.
-    // Stops all pipeline execution and clears the pipeline execution cache
-    removeAllPipelineExecutions()
+    Utils.tryWithSafeFinally {
+      // Clean up running streaming queries.
+      // Note: there can be concurrent streaming queries being started.
+      SparkConnectService.streamingSessionManager.cleanupRunningQueries(this, blocking = true)
+      streamingForeachBatchRunnerCleanerCache.cleanUpAll() // Clean up any streaming workers.
+      removeAllListeners() // removes all listener and stop python listener processes if necessary.
+      // Stops all pipeline execution and clears the pipeline execution cache
+      removeAllPipelineExecutions()
 
-    // Clean up dataflow graphs
-    dataflowGraphRegistry.dropAllDataflowGraphs()
+      // Clean up dataflow graphs
+      dataflowGraphRegistry.dropAllDataflowGraphs()
 
-    // if there is a server side listener, clean up related resources
-    if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
-      streamingServersideListenerHolder.cleanUp()
+      // if there is a server side listener, clean up related resources
+      if (streamingServersideListenerHolder.isServerSideListenerRegistered) {
+        streamingServersideListenerHolder.cleanUp()
+      }
+
+      // Clean up all executions.
+      // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new
+      // executions to be added for this session anymore. Because both
+      // SessionHolder.addExecuteHolder() and
+      // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
+      // executionsLock, this guarantees that removeAllExecutionsForSession triggered here will
+      // remove all executions and no new executions will be added in the meanwhile.
+      SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
+
+      // Clean up ML cache (only if ML models were created)
+      mlCache.close()
+    } {
+      // Close the catalogs loaded by this session, then clean up all artifacts, even if an
+      // earlier step failed. Catalogs are closed first because they may have been loaded by the
+      // session classloader, which is closed with the artifacts. Otherwise resources held by the
+      // catalogs (e.g. thread pools) keep the session classloader alive. Cloned sessions load
+      // their own catalogs, but plans copied into them, e.g. temporary views, can still refer to
+      // the catalogs closed here.
+      // Note: interrupted executions may still be running; they fail if they try to load a
+      // catalog after this point. There can also be concurrent AddArtifact calls still adding
+      // something.
+      session.sessionState.close()
     }
-
-    // Clean up all executions.
-    // After closedTimeMs is defined, SessionHolder.addExecuteHolder() will not allow new executions
-    // to be added for this session anymore. Because both SessionHolder.addExecuteHolder() and
-    // SparkConnectExecutionManager.removeAllExecutionsForSession() are executed under
-    // executionsLock, this guarantees that removeAllExecutionsForSession triggered here will
-    // remove all executions and no new executions will be added in the meanwhile.
-    SparkConnectService.executionManager.removeAllExecutionsForSession(this.key)
-
-    // Clean up ML cache (only if ML models were created)
-    mlCache.close()
-
-    // Close the catalogs loaded by this session, then clean up all artifacts. Catalogs are closed
-    // first because they may have been loaded by the session classloader, which is closed with
-    // the artifacts. Otherwise resources held by the catalogs (e.g. thread pools) keep the
-    // session classloader alive. Cloned sessions own their catalogs and artifacts, so this does
-    // not affect them.
-    // Note: interrupted executions may still be running; they fail if they try to load a catalog
-    // after this point. There can also be concurrent AddArtifact calls still adding something.
-    session.sessionState.close()
 
     session.cleanupPythonWorkerLogs()
 
