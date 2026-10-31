@@ -58,7 +58,6 @@ from pyspark.sql.conversion import (
     ArrowTableToRowsConversion,
     LocalDataToArrowConversion,
 )
-from pyspark.sql.pandas.serializers import ArrowStreamSerializer
 from pyspark.sql.pandas.types import to_arrow_schema, to_arrow_type
 from pyspark.sql.pandas.utils import require_minimum_pyarrow_version
 from pyspark.sql.types import StructField, StructType
@@ -827,6 +826,7 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
     variant_conf = "use_legacy_pandas_udf_conversion"
     variant_value = False
     _multi_udf = True
+    _supports_detailed_timing = True
     # run wraps the row-by-row evaluation in fail_on_stopiteration itself.
     _fail_on_stopiteration = False
 
@@ -869,28 +869,12 @@ class ArrowBatchedUDFArrowHandler(BatchEvalTypeHandler["pa.RecordBatch"]):
             for f in eval_conf.input_type  # type: ignore[union-attr]
         ]
 
-    @property
-    def serializer(self) -> ArrowStreamSerializer:
-        return ArrowStreamSerializer(
-            write_start_stream=True,
-            collect_timing=self._runner_conf.detailed_timing_enabled,
-        )
-
     def run(self, split_index: int, data: Iterator[pa.RecordBatch]) -> Iterator[pa.RecordBatch]:
         import pyarrow as pa
 
         runner_conf = self._runner_conf
         metrics = WorkerMetrics()
-        if runner_conf.detailed_timing_enabled:
-            phase_timers = (
-                metrics.measure("pythonInputPreparationTime"),
-                metrics.measure("pythonUDFExecutionTime"),
-                metrics.measure("pythonOutputPreparationTime"),
-            )
-            metrics.set("pythonNumTimingReports", 1)
-            metrics.set("pythonNumTimedBatches", 0)
-        else:
-            phase_timers = None
+        phase_timers = self._create_phase_timers()
 
         @fail_on_stopiteration
         def _evaluate_batch_udf(udf_func: Any, rows: list[tuple]) -> list[Any]:

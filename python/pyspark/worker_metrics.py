@@ -33,8 +33,9 @@ class _WorkerTimer:
     clock twice and updates the duration dictionary. In a hot batch loop, accumulate
     locally and call add_duration_ns once instead of entering this context per batch.
 
-    Pipelined reads can overlap UDF work on another thread. An additive phase breakdown
-    for that mode would require tracking those overlapping intervals.
+    Pipelined reads can overlap UDF work on another thread. Do not sum the five phase
+    durations as elapsed time when pythonNumPipelinedTasks is nonzero. An additive
+    breakdown for that mode would require tracking those overlapping intervals.
     """
 
     def __init__(self, shared_duration_totals_ns: dict[str, int], metric_name: str) -> None:
@@ -99,6 +100,7 @@ class WorkerMetrics:
         # Existing timers keep the old dictionary. A fresh dictionary keeps their
         # measurements out of the next task's report.
         self._duration_totals_ns: dict[str, int] = {}
+        self._sub_durations: dict[str, str] = {}
 
     def set_current_timestamp(self, name: str) -> None:
         """Read the current clock and store its epoch milliseconds under name."""
@@ -121,14 +123,24 @@ class WorkerMetrics:
         self._duration_totals_ns.setdefault(name, 0)
         return _WorkerTimer(self._duration_totals_ns, name)
 
+    def record_sub_duration(self, *, parent_metric: str, sub_metric: str) -> None:
+        """Record that sub_metric is included in parent_metric, without registering either."""
+        self._sub_durations[parent_metric] = sub_metric
+
     def to_dict(self) -> dict[str, int]:
         """Build the numeric report dictionary consumed by report_metrics.
 
         Counters, bytes, and epoch timestamps already have their reporting units. Only the
         accumulated duration totals require conversion from nanoseconds to milliseconds.
+        Parents are reported exclusive of their recorded sub-duration.
         """
-        # Round once per task, preserving sub-millisecond contributions from individual batches.
+        durations = self._duration_totals_ns.copy()
+        for parent_metric in durations:
+            sub_metric = self._sub_durations.get(parent_metric)
+            if sub_metric is not None:
+                durations[parent_metric] -= self._duration_totals_ns.get(sub_metric, 0)
+        # Subtract before rounding, preserving sub-millisecond contributions from each phase.
         return {
             **self._values_in_report_units,
-            **{name: duration // 1_000_000 for name, duration in self._duration_totals_ns.items()},
+            **{name: duration // 1_000_000 for name, duration in durations.items()},
         }

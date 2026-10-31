@@ -215,7 +215,7 @@ class ArrowBatchedUDFArrowHandlerTests(ArrowEvalTypeHandlerTestCase):
                     (lambda a, b: a * b, [0, 1], {}, LongType()),
                     runner_conf=RunnerConf({timing_conf: str(enabled).lower()}),
                 )
-                self.assertEqual(handler.serializer._collect_timing, enabled)
+                self.assertEqual(handler.serializer._detailed_timing_enabled, enabled)
                 output = list(
                     handler.run(
                         0,

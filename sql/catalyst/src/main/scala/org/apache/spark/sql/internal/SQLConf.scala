@@ -5893,7 +5893,10 @@ object SQLConf {
   val PYTHON_UDF_DETAILED_TIMING_ENABLED =
     buildConf("spark.sql.execution.pythonUDF.detailedTiming.enabled")
       .internal()
-      .doc("When true, collect detailed timing metrics for supported Python UDFs.")
+      .doc("When true, collect detailed timing metrics for supported Python UDFs. " +
+        "With spark.python.udf.pipelined.enabled, phase timings can overlap and their sum " +
+        "does not represent elapsed time. Exclude reports with nonzero " +
+        "pythonNumPipelinedTasks from additive phase breakdowns.")
       .version("4.4.0")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
       .booleanConf
