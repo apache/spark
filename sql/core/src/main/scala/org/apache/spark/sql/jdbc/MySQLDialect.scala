@@ -17,7 +17,6 @@
 
 package org.apache.spark.sql.jdbc
 
-import java.nio.charset.StandardCharsets
 import java.sql.{Connection, SQLException, Types}
 import java.util
 import java.util.Locale
@@ -125,12 +124,10 @@ private case class MySQLDialect() extends JdbcDialect with SQLConfHelper with No
     }
   }
 
-  private val Utf8mb4Introducer = "_utf8mb4"
-
   override def compileValue(value: Any): Any = value match {
     case stringValue: String if stringValue.contains('\\') =>
-      val hex = stringValue.getBytes(StandardCharsets.UTF_8).map("%02X".format(_)).mkString
-      s"$Utf8mb4Introducer X'$hex'"
+      val escaped = escapeSql(stringValue.replace("\\", "\\\\"))
+      raw"""REPLACE('$escaped', '\\', LEFT('\\', 1))"""
     case other => super.compileValue(other)
   }
 

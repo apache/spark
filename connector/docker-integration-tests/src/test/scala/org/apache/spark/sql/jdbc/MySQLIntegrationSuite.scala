@@ -106,6 +106,9 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
         stmt.executeUpdate()
       }
     }
+    conn.prepareStatement("SET collation_connection = 'utf8mb3_bin'").executeUpdate()
+    conn.prepareStatement("CREATE VIEW backslash_case AS SELECT CASE WHEN s = 'C:/temp' " +
+      "THEN 'c:\\\\temp' ELSE 'C:\\\\temp' END AS s FROM backslash").executeUpdate()
   }
 
   def testConnection(): Unit = {
@@ -382,6 +385,13 @@ class MySQLIntegrationSuite extends SharedJDBCIntegrationSuite {
       checkAnswer(df.filter(col("s") === "C:\\temp"), Row("C:\\temp"))
       checkAnswer(df.filter(col("s").startsWith("C:\\")), Row("C:\\temp"))
       checkAnswer(df.filter(col("s") === "x\\' OR 1=1) #"), Seq.empty)
+
+      val view = spark.read
+        .option("sessionInitStatement",
+          s"SET SESSION sql_mode = '$mode', collation_connection = 'utf8mb3_bin'")
+        .jdbc(jdbcUrl, "backslash_case", new Properties)
+      checkAnswer(view.filter(col("s") === "C:\\temp"), Row("C:\\temp"))
+      checkAnswer(view.filter(col("s").startsWith("C:\\")), Row("C:\\temp"))
     }
   }
 }
