@@ -5185,6 +5185,37 @@ object SQLConf {
       .booleanConf
       .createWithDefault(false)
 
+  val WINDOW_REORDER_ENABLED =
+    buildConf("spark.sql.optimizer.windowReorder.enabled")
+      .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
+      .doc("When true, the optimizer reorders multiple window functions to reduce shuffles " +
+        "when their PARTITION BY columns nest or repeat, and places windows next to " +
+        "each other so that a window whose PARTITION BY and ORDER BY columns start with " +
+        "another's can reuse that window's sort. Among the orders it considers, it never " +
+        "inserts more shuffles than leaving the windows in source order, but the input's " +
+        "existing partitioning is not considered, so relative to a plan that already " +
+        "matches it this can still add a shuffle. A window may share a shuffle keyed " +
+        "on fewer PARTITION BY columns than it would use on its own when that saves shuffles; " +
+        "that can hurt performance when the shared key has few distinct values or is skewed, " +
+        "because each task then sorts and evaluates more rows in fewer partitions. A filter " +
+        "on a row_number, rank, or dense_rank result normally keeps the rank calculation " +
+        "directly below the filter, so the per-partition top-k optimization (reading only " +
+        "the leading rows of each group) still applies. When the rank calculation is combined " +
+        "with another window expression that does not support early stopping, such as an " +
+        "aggregate with a non-expanding frame, the optimization does not apply. If keeping it " +
+        "there would cost an extra shuffle relative to the order the optimizer would otherwise " +
+        "pick, the shuffle wins and that optimization is given up. If instead the " +
+        "window functions cannot be reordered as a group, or a computed column breaks " +
+        "the run of windows, a rank window stays where it is, which can keep a shuffle " +
+        "that disabling this option would remove. Among orders with the same number " +
+        "of shuffles, window functions whose output grows with the partition (for " +
+        "example collect_list or listagg) are evaluated later so those columns cross " +
+        "fewer shuffles. When false, a window function is moved before an adjacent " +
+        "one only when its PARTITION BY columns are a strict subset of the other's.")
+      .version("4.4.0")
+      .booleanConf
+      .createWithDefault(false)
+
   val WINDOW_SEGMENT_TREE_ENABLED =
     buildConf("spark.sql.window.segmentTree.enabled")
       .withBindingPolicy(ConfigBindingPolicy.NOT_APPLICABLE)
