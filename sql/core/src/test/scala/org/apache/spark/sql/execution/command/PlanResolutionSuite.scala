@@ -3301,7 +3301,9 @@ class PlanResolutionSuite extends SharedSparkSession with AnalysisTest {
       "serialization.format" -> "x",
       "line.delim" -> "\n",
       "colelction.delim" -> "a", // yes, it's a typo from Hive :)
-      "mapkey.delim" -> "b"))
+      "mapkey.delim" -> "b",
+      "serialization.null.format" -> "c"))
+    assert(desc3.storage.properties.get("serialization.null.format") == Some("c"))
   }
 
   test("create table(hive) - file format") {
