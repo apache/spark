@@ -17,6 +17,8 @@
 
 package org.apache.spark.sql.execution
 
+import java.util.{Collections, IdentityHashMap, Set => JSet}
+
 import scala.annotation.tailrec
 import scala.util.control.NonFatal
 
@@ -634,26 +636,45 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
       fs: FileSystem,
       includeTimeTravel: Boolean): Unit = {
     val qualifiedPath = fs.makeQualified(resourcePath)
+    // recacheByCondition eagerly filters all entries before rebuilding any of them, so an
+    // index shared across entries needs refreshing only once during this call. Use object
+    // identity: equal root paths can have independent file-listing caches.
+    val refreshedIndexes = Collections.newSetFromMap(
+      new IdentityHashMap[FileIndex, java.lang.Boolean]())
     recacheByCondition(
       spark,
-      _.plan.exists(lookupAndRefresh(_, fs, qualifiedPath, includeTimeTravel)))
+      cached => {
+        var refreshed = false
+        // lookupAndRefresh has side effects: exists would stop after the first matching read.
+        // Refresh matching indexes in the operator tree before rebuilding a multi-read cache.
+        // As before, this traversal does not enter plans held by subquery expressions.
+        cached.plan.foreach { plan =>
+          if (lookupAndRefresh(plan, fs, qualifiedPath, includeTimeTravel, refreshedIndexes)) {
+            refreshed = true
+          }
+        }
+        refreshed
+      })
   }
 
   /**
-   * Traverses a given `plan` and searches for the occurrences of `qualifiedPath` in the
-   * [[org.apache.spark.sql.execution.datasources.FileIndex]] of any [[HadoopFsRelation]] nodes
-   * in the plan. If found, we refresh the metadata and return true. Otherwise, this method returns
-   * false.
+   * Checks whether `plan` is a V1 [[HadoopFsRelation]] or V2 [[FileTable]] read with a file-index
+   * root path under `qualifiedPath`. Time-travel snapshots are skipped unless `includeTimeTravel`
+   * is true. A matching index is refreshed only the first time it is seen during the current
+   * recacheByPath call, as tracked by `refreshedIndexes`.
+   * @return whether the read matches, including one whose index was already refreshed.
    */
   private def lookupAndRefresh(
       plan: LogicalPlan,
       fs: FileSystem,
       qualifiedPath: Path,
-      includeTimeTravel: Boolean): Boolean = {
+      includeTimeTravel: Boolean,
+      refreshedIndexes: JSet[FileIndex]): Boolean = {
     plan match {
       case lr: LogicalRelation => lr.relation match {
         case hr: HadoopFsRelation =>
-          refreshFileIndexIfNecessary(hr.location, fs, qualifiedPath, includeTimeTravel)
+          refreshFileIndexIfNecessary(
+            hr.location, fs, qualifiedPath, includeTimeTravel, refreshedIndexes)
         case _ => false
       }
 
@@ -663,7 +684,8 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
           fileTable.fileIndex,
           fs,
           qualifiedPath,
-          includeTimeTravel)
+          includeTimeTravel,
+          refreshedIndexes)
 
       case _ => false
     }
@@ -672,19 +694,21 @@ class CacheManager extends Logging with AdaptiveSparkPlanHelper {
   /**
    * Refresh the given [[FileIndex]] if one of its root paths is a subdirectory of
    * `qualifiedPath` and either `includeTimeTravel` is true or the index is not an immutable
-   * time-travel snapshot.
-   * @return whether the [[FileIndex]] was refreshed.
+   * time-travel snapshot. Refresh each index at most once per recacheByPath call.
+   * @return whether the [[FileIndex]] matches, including one already refreshed during this call.
    */
   private def refreshFileIndexIfNecessary(
       fileIndex: FileIndex,
       fs: FileSystem,
       qualifiedPath: Path,
-      includeTimeTravel: Boolean): Boolean = {
+      includeTimeTravel: Boolean,
+      refreshedIndexes: JSet[FileIndex]): Boolean = {
     val needToRefresh = (includeTimeTravel || !fileIndex.isTimeTravel) &&
       fileIndex.rootPaths
         .map(_.makeQualified(fs.getUri, fs.getWorkingDirectory))
         .exists(isSubDir(qualifiedPath, _))
-    if (needToRefresh) fileIndex.refresh()
+    if (needToRefresh && refreshedIndexes.add(fileIndex)) fileIndex.refresh()
+    // An already refreshed index must still select every dependent cache entry for rebuilding.
     needToRefresh
   }
 
