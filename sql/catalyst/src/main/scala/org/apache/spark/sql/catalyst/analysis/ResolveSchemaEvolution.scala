@@ -26,7 +26,7 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.rules.Rule
 import org.apache.spark.sql.catalyst.trees.TreePattern.COMMAND
 import org.apache.spark.sql.catalyst.types.DataTypeUtils
-import org.apache.spark.sql.catalyst.util.CaseInsensitiveMap
+import org.apache.spark.sql.catalyst.util.{CaseInsensitiveMap, TypeUtils}
 import org.apache.spark.sql.connector.catalog.{CatalogV2Util, Identifier, SupportsSchemaEvolution, Table, TableCatalog, TableChange}
 import org.apache.spark.sql.connector.catalog.TableChange.ColumnChange
 import org.apache.spark.sql.errors.{QueryCompilationErrors, QueryExecutionErrors}
@@ -50,6 +50,14 @@ object ResolveSchemaEvolution extends Rule[LogicalPlan] {
     case write: WriteWithSchemaEvolution if write.pendingSchemaChanges.nonEmpty =>
       write.table match {
         case relation @ ExtractV2CatalogAndIdentifier(catalog, ident) =>
+          // A table cannot store a FILE without a qualifier, so schema evolution cannot add one.
+          // This is checked before the catalog changes the table.
+          TypeUtils.checkNoUnknownFileTypeInColumns(write.pendingSchemaChanges.collect {
+            case add: TableChange.AddColumn =>
+              add.fieldNames.toImmutableArraySeq -> add.dataType
+            case update: TableChange.UpdateColumnType =>
+              update.fieldNames.toImmutableArraySeq -> update.newDataType
+          })
           if (relation.skipSchemaResolution && relation.autoSchemaEvolution) {
             val dataSource = relation.table.properties().getOrDefault(
               TableCatalog.PROP_PROVIDER, relation.table.getClass.getName)
