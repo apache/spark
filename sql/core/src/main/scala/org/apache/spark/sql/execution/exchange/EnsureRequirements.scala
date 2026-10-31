@@ -807,6 +807,7 @@ case class EnsureRequirements(
       var replicateLeftSide = false
       var replicateRightSide = false
       var applyPartialClustering = false
+      var replicateSideChosen = false
 
       // This means we allow partitions that are not clustered on their values,
       // that is, multiple partitions with the same partition value. In the
@@ -824,8 +825,9 @@ case class EnsureRequirements(
         // Otherwise, query result could be incorrect.
         val canReplicateLeft = ShuffledJoin.canDuplicateLeftSide(joinType)
         val canReplicateRight = ShuffledJoin.canDuplicateRightSide(joinType)
+        replicateSideChosen = canReplicateLeft || canReplicateRight
 
-        if (!canReplicateLeft && !canReplicateRight) {
+        if (!replicateSideChosen) {
           logInfo(log"Skipping partially clustered distribution as it cannot be applied for " +
             log"join type '${MDC(LogKeys.JOIN_TYPE, joinType)}'")
         } else {
@@ -913,7 +915,9 @@ case class EnsureRequirements(
         }
       }
 
-      // Now we need to push-down the common partition information to the `GroupPartitionsExec`s.
+      // Now we need to push-down the common partition information to the sides that need it. A
+      // side whose alignment is the identity keeps its child instead (see `regroupOrIdentity`
+      // below), which is common when one side was shuffled onto the other side's layout.
       //
       // Where `applyPartialClustering` holds, exactly one side repeats: `replicateRightSide` is
       // the negation of `replicateLeftSide`, and the branch above is taken only when the side it
@@ -924,15 +928,27 @@ case class EnsureRequirements(
       // them. Each side stamps why it is left ungrouped (`UngroupingOrigin`), so a reader of the
       // finished plan judges the pair on the layouts it holds; the stamp also decides the node's
       // routing (`GroupPartitionsExec.distributePartitions`).
-      (
-        GroupPartitionsExec(rawLeft, leftSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), leftReducers,
+      def regroupOrIdentity(
+          child: SparkPlan,
+          spec: KeyedShuffleSpec,
+          reducers: Option[Seq[Option[KeyReducer]]],
+          replicates: Boolean): SparkPlan = {
+        val gpe = GroupPartitionsExec(child, spec.joinKeyPositions,
+          Some(mergedPartitionKeys), reducers,
           ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateLeftSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)),
-        GroupPartitionsExec(rawRight, rightSpec.joinKeyPositions,
-          Some(mergedPartitionKeys), rightReducers,
-          ungroupingOrigin = Option.when(applyPartialClustering)(
-            if (replicateRightSide) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN)))
+            if (replicates) REPLICATED_FOR_JOIN else SPLIT_FOR_JOIN))
+        // Keep both alignment nodes when a replicate side is chosen, even if the join type
+        // declines it: a re-run peels a local sort only through a `GroupPartitionsExec`, and
+        // that peel is how the replicate-side choice is reproduced.
+        if (!replicateSideChosen &&
+            gpe.outputPartitioning == child.outputPartitioning) {
+          child
+        } else {
+          gpe
+        }
+      }
+      (regroupOrIdentity(rawLeft, leftSpec, leftReducers, replicateLeftSide),
+        regroupOrIdentity(rawRight, rightSpec, rightReducers, replicateRightSide))
     }
 
     // The pairing is only worth committing to if both children still declare the same aligned key
