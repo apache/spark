@@ -338,8 +338,10 @@ case class CheckInvariant(
     columnExtractors.map {
       case (name, extractor) =>
         val colValue = extractor.genCode(ctx)
+        // The name is not Java source, so pass it by reference instead of embedding it.
+        val nameRef = ctx.addReferenceObj("columnName", name)
         code"""
-              |$colList.add("$name");
+              |$colList.add($nameRef);
               |${colValue.code}
               |if (${colValue.isNull}) {
               |  $valList.add(null);
@@ -354,12 +356,15 @@ case class CheckInvariant(
     val elementValue = child.genCode(ctx)
     val colListName = ctx.freshName("colList")
     val valListName = ctx.freshName("valList")
+    // These texts are not Java source, so pass them by reference instead of embedding them.
+    val nameRef = ctx.addReferenceObj("constraintName", constraintName)
+    val sqlRef = ctx.addReferenceObj("predicateSql", predicateSql)
     val ret = code"""${elementValue.code}
           |
           |if (!${elementValue.isNull} && ${elementValue.value} == false) {
           |  ${generateColumnValuesCode(colListName, valListName, ctx)}
           |  throw org.apache.spark.sql.errors.QueryExecutionErrors.checkViolationJava(
-          |     "$constraintName", "$predicateSql", $colListName, $valListName);
+          |     $nameRef, $sqlRef, $colListName, $valListName);
           |}
      """.stripMargin
     ret
