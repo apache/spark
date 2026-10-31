@@ -132,7 +132,10 @@ case class PositionMapper(
         val newSubstitutedPos = substitutedPos + textBeforeLength
 
         // Create range for the substitution
-        val substitutedLength = substitution.replacement.length
+        // Parser and mapper indexes are Unicode code points. A supplementary
+        // character is one code point, not String.length's two UTF-16 units.
+        val replacement = substitution.replacement
+        val substitutedLength = replacement.codePointCount(0, replacement.length)
         val originalLength = substitution.end - substitution.start
         val offsetDelta = originalLength - substitutedLength
 

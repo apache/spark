@@ -71,6 +71,16 @@ case class Origin(
       case _ => true
     }.toArray
   }
+
+  /**
+   * The SQL text covered by this origin. Indexes are Unicode code points, matching parser
+   * origins.
+   */
+  def sqlTextSlice: Option[String] = (sqlText, startIndex, stopIndex) match {
+    case (Some(text), Some(from), Some(to)) =>
+      Some(SQLQueryContext.sliceByCodePoints(text, from, to))
+    case _ => None
+  }
 }
 
 /**
