@@ -80,7 +80,8 @@ class NativeDataSource(
    * Returns the batch writes that the data source declares, and always the reads and the
    * streaming writes: Data Source V2 handles a table without those as a Data Source V1 source,
    * which then fails with errors that do not say why. A scan or a streaming write that the data
-   * source does not declare fails when Spark plans it instead, on the driver.
+   * source does not declare fails when Spark plans it instead, on the driver. The capability
+   * TRUNCATE is the one of batch writes, which Spark checks while it analyzes a query.
    */
   override def capabilities(): util.Set[TableCapability] = {
     val library = NativeLibraries.get(location)
@@ -89,11 +90,16 @@ class NativeDataSource(
     if ((declared & NativeLibrary.BATCH_WRITE) != 0) {
       capabilities.add(BATCH_WRITE)
     }
-    if ((declared & NativeLibrary.TRUNCATE) != 0) {
+    if ((declared & NativeLibrary.BATCH_TRUNCATE) != 0) {
       capabilities.add(TRUNCATE)
     }
     capabilities
   }
+
+  // The readers and the writers export the schemas with the time zone of the session on the
+  // driver, also on the executors, where they pass the same schemas to the library again. A data
+  // source is created for each scan and each write, so it is read once for each.
+  private val timeZoneId = SQLConf.get.sessionLocalTimeZone
 
   override def batchPlanner(schema: StructType): ColumnarBatchPlanner = {
     NativeArrow.checkSupported(schema, name, "plan a scan of")
@@ -102,35 +108,37 @@ class NativeDataSource(
     val handle = create(library, "plan a scan of", NativeLibrary.BATCH_READ,
         "DATA_SOURCE_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.BatchReadFunctions) {
       dataSource =>
-        NativeArrow.exportSchema(schema) { address =>
+        NativeArrow.exportSchema(schema, timeZoneId) { address =>
           library.createReader(dataSource.handle, address)
         }
     }
-    new NativeBatchPlanner(
-      library, executorLocation, name, schema, new NativeHandle(handle, library.closeReader))
+    new NativeBatchPlanner(library, executorLocation, name, schema, timeZoneId,
+      new NativeHandle(handle, library.closeReader))
   }
 
-  override def streamReader(schema: StructType): ColumnarStreamReader = {
+  override def streamReader(
+      schema: StructType,
+      checkpointLocation: String): ColumnarStreamReader = {
     NativeArrow.checkSupported(schema, name, "plan a scan of")
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
     val handle = create(library, "plan a scan of", NativeLibrary.MICRO_BATCH_READ,
         "DATA_SOURCE_MICRO_BATCH_SCAN_NOT_SUPPORTED", NativeDataSource.MicroBatchReadFunctions) {
       dataSource =>
-        NativeArrow.exportSchema(schema) { address =>
-          library.createStreamReader(dataSource.handle, address)
+        NativeArrow.exportSchema(schema, timeZoneId) { address =>
+          library.createStreamReader(dataSource.handle, address, checkpointLocation)
         }
     }
-    new NativeDataSourceStreamReader(
-      executorLocation, name, schema, new NativeHandle(handle, library.closeStreamReader))
+    new NativeDataSourceStreamReader(executorLocation, name, schema, timeZoneId,
+      new NativeHandle(handle, library.closeStreamReader))
   }
 
   override def writer(schema: StructType, overwrite: Boolean): ColumnarWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle = new NativeHandle(
-      createWriter(library, schema, overwrite, queryId = null), library.closeWriter)
-    new NativeDataSourceWriter(executorLocation, name, handle, serializeWriter(library, handle))
+    val created = createWriter(library, schema, overwrite, queryId = null)
+    new NativeDataSourceWriter(executorLocation, name, schema, timeZoneId,
+      new NativeHandle(created.handle, library.closeWriter), bytesOrEmpty(Option(created.state)))
   }
 
   override def streamWriter(
@@ -139,10 +147,10 @@ class NativeDataSource(
       queryId: String): ColumnarStreamWriter = {
     val executorLocation = NativeDataSourceRegistry.distribute(location)
     val library = NativeLibraries.get(location)
-    val handle =
-      new NativeHandle(createWriter(library, schema, overwrite, queryId), library.closeWriter)
+    val created = createWriter(library, schema, overwrite, queryId)
+    val handle = new NativeHandle(created.handle, library.closeWriter)
     val writer = new NativeDataSourceStreamWriter(
-      executorLocation, name, handle, serializeWriter(library, handle))
+      executorLocation, name, schema, timeZoneId, handle, bytesOrEmpty(Option(created.state)))
     NativeStreamWriters.register(queryId, handle)
     writer
   }
@@ -170,13 +178,13 @@ class NativeDataSource(
    * Creates a reader or a writer with `f`, which fails if the data source does not declare the
    * capability, or if the library does not implement the functions that it requires.
    */
-  private def create(
+  private def create[T](
       library: NativeLibrary,
       action: String,
       capability: Long,
       unsupportedError: String,
       functions: Seq[NativeLibrary.Function])(
-      f: NativeLibrary.DataSourceHandle => Long): Long = {
+      f: NativeLibrary.DataSourceHandle => T): T = {
     withDataSource(library, action) { dataSource =>
       if ((dataSource.capabilities & capability) == 0) {
         throw new SparkUnsupportedOperationException(unsupportedError, Map("description" -> name))
@@ -186,28 +194,31 @@ class NativeDataSource(
     }
   }
 
-  /** Creates a writer for a batch write, or for a streaming write with the ID of its query. */
+  /**
+   * Creates a writer for a batch write, or for a streaming write with the ID of its query, with
+   * the state that its data writers need.
+   */
   private def createWriter(
       library: NativeLibrary,
       schema: StructType,
       overwrite: Boolean,
-      queryId: String): Long = {
+      queryId: String): NativeLibrary.WriterHandle = {
     val action = "plan a write to"
     NativeArrow.checkSupported(schema, name, action)
-    val (capability, unsupportedError, overwriteMode) = if (queryId == null) {
-      (NativeLibrary.BATCH_WRITE, "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED",
-        "the save mode overwrite")
+    val (capability, truncate, unsupportedError, overwriteMode) = if (queryId == null) {
+      (NativeLibrary.BATCH_WRITE, NativeLibrary.BATCH_TRUNCATE,
+        "DATA_SOURCE_BATCH_WRITE_NOT_SUPPORTED", "the save mode overwrite")
     } else {
-      (NativeLibrary.STREAMING_WRITE, "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED",
-        "the output mode complete")
+      (NativeLibrary.STREAMING_WRITE, NativeLibrary.STREAMING_TRUNCATE,
+        "DATA_SOURCE_STREAMING_WRITE_NOT_SUPPORTED", "the output mode complete")
     }
     create(library, action, capability, unsupportedError, NativeDataSource.WriteFunctions) {
       dataSource =>
-        if (overwrite && (dataSource.capabilities & NativeLibrary.TRUNCATE) == 0) {
+        if (overwrite && (dataSource.capabilities & truncate) == 0) {
           throw error(name, action, s"The data source does not support $overwriteMode.")
         }
         val mode = if (overwrite) NativeLibrary.WRITE_TRUNCATE else NativeLibrary.WRITE_APPEND
-        NativeArrow.exportSchema(schema) { address =>
+        NativeArrow.exportSchema(schema, timeZoneId) { address =>
           library.createWriter(dataSource.handle, address, mode, queryId)
         }
     }
@@ -219,16 +230,6 @@ class NativeDataSource(
       functions: Seq[NativeLibrary.Function]): Unit = {
     functions.find(!library.hasFunction(_)).foreach { function =>
       throw error(name, action, s"The library does not implement ${function.fieldName}.")
-    }
-  }
-
-  private def serializeWriter(library: NativeLibrary, handle: NativeHandle): Array[Byte] = {
-    try {
-      bytesOrEmpty(call(name, "plan a write to")(optional(library.serializeWriter(handle.get))))
-    } catch {
-      case e: Throwable =>
-        handle.close()
-        throw e
     }
   }
 }
@@ -248,15 +249,17 @@ object NativeDataSource {
 /**
  * Plans a batch scan of a native data source, on the driver, with a reader of the library. The
  * reader is released once the scan is planned, or when the planner becomes unreachable if the
- * scan is never planned: the executors read the partitions with the state that it serialized.
+ * scan is never planned: the executors read the partitions with the state that it returned.
  *
  * @param executorLocation where the executors find the library
+ * @param timeZoneId the time zone of the timestamps of the schema that the reader got
  */
 class NativeBatchPlanner(
     library: NativeLibrary,
     executorLocation: NativeLibraryLocation,
     name: String,
     schema: StructType,
+    timeZoneId: String,
     handle: NativeHandle)
   extends ColumnarBatchPlanner {
   import NativeCalls._
@@ -279,14 +282,13 @@ class NativeBatchPlanner(
 
   override def plan(): ColumnarPlannedBatch = {
     try {
-      val partitions = call(name, "plan a scan of")(library.partitions(handle.get))
-      val readerState = bytesOrEmpty(
-        call(name, "plan a scan of")(optional(library.serializeReader(handle.get))))
+      val planned = call(name, "plan a scan of")(library.partitions(handle.get))
       ColumnarPlannedBatch(
-        NativeInputPartition.from(partitions),
-        new NativePartitionReaderFactory(executorLocation, name, readerState, readSchema))
+        NativeInputPartition.from(planned.partitions),
+        new NativePartitionReaderFactory(executorLocation, name,
+          bytesOrEmpty(Option(planned.state)), readSchema, timeZoneId))
     } finally {
-      // The executors only need the serialized state.
+      // The executors only need the state that the reader returned.
       handle.close()
     }
   }
@@ -297,19 +299,25 @@ class NativePartitionReaderFactory(
     location: NativeLibraryLocation,
     name: String,
     readerState: Array[Byte],
-    readSchema: StructType)
+    readSchema: StructType,
+    timeZoneId: String)
   extends ColumnarOnlyPartitionReaderFactory {
   override def createColumnarReader(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    new NativePartitionReader(
-      location, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, readSchema)
+    new NativePartitionReader(location, name, NativeLibrary.READ_BATCH, readerState,
+      partition.asInstanceOf[NativeInputPartition].bytes, readSchema, timeZoneId)
   }
 }
 
-/** Reads a native data source for a micro-batch streaming scan. */
+/**
+ * Reads a native data source for a micro-batch streaming scan.
+ *
+ * @param timeZoneId the time zone of the timestamps of the schema that the stream reader got
+ */
 class NativeDataSourceStreamReader(
     location: NativeLibraryLocation,
     name: String,
     schema: StructType,
+    timeZoneId: String,
     @transient private val handle: NativeHandle)
   extends ColumnarStreamReader {
   import NativeCalls._
@@ -317,6 +325,12 @@ class NativeDataSourceStreamReader(
   // Set on the driver whenever the partitions of a micro-batch are planned, and serialized to
   // the executors with the partitions of that micro-batch.
   private var readerState: Array[Byte] = Array.emptyByteArray
+  // The range that was planned last, and its partitions, which only the driver keeps. All the
+  // scans of the source in a micro-batch plan the same range, such as both sides of a union of the
+  // source with itself, so they read the partitions of a single stream_partitions call, whose
+  // state readerState is.
+  @transient private var plannedRange: (String, String) = _
+  @transient private var plannedPartitions: Array[InputPartition] = _
 
   @transient private lazy val library = NativeLibraries.get(location)
 
@@ -324,8 +338,9 @@ class NativeDataSourceStreamReader(
     checkOffset("initial_offset", call(name, "plan a scan of")(library.initialOffset(handle.get)))
   }
 
-  override def latestOffset(): String = {
-    checkOffset("latest_offset", call(name, "plan a scan of")(library.latestOffset(handle.get)))
+  override def latestOffset(start: String): String = {
+    checkOffset("latest_offset",
+      call(name, "plan a scan of")(library.latestOffset(handle.get, start)))
   }
 
   /**
@@ -351,17 +366,20 @@ class NativeDataSourceStreamReader(
   }
 
   override def partitions(start: String, end: String): Array[InputPartition] = {
-    val partitions = call(name, "plan a scan of") {
-      library.streamPartitions(handle.get, start, end)
+    if (plannedRange != (start, end)) {
+      val planned = call(name, "plan a scan of") {
+        library.streamPartitions(handle.get, start, end)
+      }
+      readerState = bytesOrEmpty(Option(planned.state))
+      plannedPartitions = NativeInputPartition.from(planned.partitions)
+      plannedRange = (start, end)
     }
-    readerState = bytesOrEmpty(
-      call(name, "plan a scan of")(optional(library.serializeStreamReader(handle.get))))
-    NativeInputPartition.from(partitions)
+    plannedPartitions
   }
 
   override def read(partition: InputPartition): PartitionReader[ColumnarBatch] = {
-    new NativePartitionReader(
-      location, name, readerState, partition.asInstanceOf[NativeInputPartition].bytes, schema)
+    new NativePartitionReader(location, name, NativeLibrary.READ_MICRO_BATCH, readerState,
+      partition.asInstanceOf[NativeInputPartition].bytes, schema, timeZoneId)
   }
 
   override def commit(end: String): Unit = {
@@ -377,10 +395,17 @@ object NativeDataSourceStreamReader {
     JsonMapper.builder().enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS).build()
 }
 
-/** Writes to a native data source for a batch write. */
+/**
+ * Writes to a native data source for a batch write.
+ *
+ * @param schema the schema of the data to write
+ * @param timeZoneId the time zone of the timestamps of the schema that the writer got
+ */
 class NativeDataSourceWriter(
     location: NativeLibraryLocation,
     name: String,
+    schema: StructType,
+    override val timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarWriter {
@@ -389,7 +414,8 @@ class NativeDataSourceWriter(
   @transient private lazy val library = NativeLibraries.get(location)
 
   override def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch] = {
-    new NativeDataWriter(location, name, writerState, partitionId, taskId, epochId = -1L)
+    new NativeDataWriter(
+      location, name, schema, timeZoneId, writerState, partitionId, taskId, epochId = -1L)
   }
 
   override def commit(messages: Array[WriterCommitMessage]): Unit = {
@@ -411,11 +437,14 @@ class NativeDataSourceWriter(
 
 /**
  * Writes to a native data source for a streaming write. Its handle is closed when the streaming
- * query creates its next stream writer, see [[NativeStreamWriters]].
+ * query creates its next stream writer, or, for the last stream writer of the query, once the
+ * handle becomes unreachable, see [[NativeStreamWriters]].
  */
 class NativeDataSourceStreamWriter(
     location: NativeLibraryLocation,
     name: String,
+    schema: StructType,
+    override val timeZoneId: String,
     @transient private val handle: NativeHandle,
     writerState: Array[Byte])
   extends ColumnarStreamWriter {
@@ -427,7 +456,8 @@ class NativeDataSourceStreamWriter(
       partitionId: Int,
       taskId: Long,
       epochId: Long): DataWriter[ColumnarBatch] = {
-    new NativeDataWriter(location, name, writerState, partitionId, taskId, epochId)
+    new NativeDataWriter(
+      location, name, schema, timeZoneId, writerState, partitionId, taskId, epochId)
   }
 
   override def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit = {
@@ -478,13 +508,20 @@ object NativeWriterCommitMessage {
  * for it and keep the task from completing. That [[next]] then returns false, or throws the error
  * of its read. A [[next]] called once the reader is closed returns false without calling the
  * library.
+ *
+ * @param kind the kind of the scan, `NativeLibrary.READ_BATCH` or `READ_MICRO_BATCH`
+ * @param schema the schema to read
+ * @param timeZoneId the time zone of the timestamps of the schema to read, as the reader of the
+ *                   library got it on the driver
  */
 class NativePartitionReader(
     location: NativeLibraryLocation,
     name: String,
+    kind: Int,
     readerState: Array[Byte],
     partition: Array[Byte],
-    schema: StructType)
+    schema: StructType,
+    timeZoneId: String)
   extends PartitionReader[ColumnarBatch] {
   import NativeCalls._
 
@@ -522,7 +559,11 @@ class NativePartitionReader(
   private def openStream(): Unit = {
     val library = NativeLibraries.get(location)
     task = NativeTask.create()
-    call(name, "read")(library.read(task, readerState, partition, stream.memoryAddress()))
+    NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
+      call(name, "read") {
+        library.read(task, kind, schemaAddress, readerState, partition, stream.memoryAddress())
+      }
+    }
   }
 
   private def importSchema(): Schema = {
@@ -742,6 +783,8 @@ class NativePartitionReader(
    *    array to what its parent refers to.
    *  - An array without a validity buffer has a null_count of 0, as the C data interface requires:
    *    Arrow Java fails to import it otherwise.
+   *  - An array that has buffers has a pointer to them, as the C data interface requires: Spark
+   *    reads the offsets of a list or a map through it, to check the lengths of its elements.
    *  - The batch itself has no null rows. Arrow Java ignores the validity of the struct of the
    *    batch, so it would read a null row as a row of the values of its columns. As in Arrow C++,
    *    which also rejects them, the nulls are counted when the library did not count them.
@@ -767,8 +810,16 @@ class NativePartitionReader(
         ArrowArray.wrap(child).snapshot()
       }
     }
-    // The last offset of a list or a map, in its second buffer. Arrow Java rejects the array if
-    // the buffer is missing.
+    // The C data interface requires the pointer to the buffers of an array that has buffers, even
+    // if a buffer itself is NULL. Arrow Java reads the buffers through it, as `lastOffset` does.
+    def checkBuffers(array: ArrowArray.Snapshot, owner: String): Unit = {
+      if (array.n_buffers > 0 && array.buffers == 0) {
+        throw error(name, "read", s"$owner has ${array.n_buffers} buffers, but a NULL pointer " +
+          "to them.")
+      }
+    }
+    // The last offset of a list or a map, in its second buffer, of an array whose buffers were
+    // checked. Arrow Java rejects the array if the buffer itself is missing.
     def lastOffset(array: ArrowArray.Snapshot): Long = {
       val offsets = if (array.length > 0 && array.n_buffers >= 2) {
         Platform.getLong(null, array.buffers + 8L)
@@ -802,6 +853,7 @@ class NativePartitionReader(
         throw error(name, "read", s"The column $column has an offset of ${array.offset}, but " +
           "Spark only reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
       }
+      checkBuffers(array, s"The column $column")
       checkValidity(array, s"The column $column")
       val length = referenced(array, field.getType)
       val fields = field.getChildren.size
@@ -818,6 +870,7 @@ class NativePartitionReader(
       throw error(name, "read", s"The batch has an offset of ${batch.offset}, but Spark only " +
         "reads arrays with an offset of 0. Copy sliced arrays before exporting them.")
     }
+    checkBuffers(batch, "The batch")
     checkValidity(batch, "The batch")
     val nullRows = batch.null_count match {
       // The library did not count the nulls, so they are counted from the validity buffer, which
@@ -886,10 +939,18 @@ class NativePartitionReader(
   }
 }
 
-/** Writes the batches of a task to the data writer of a native library. */
+/**
+ * Writes the batches of a task to the data writer of a native library. The data writer gets the
+ * schema of the data once, when it is created, and then only the arrays of the batches.
+ *
+ * @param schema the schema of the data to write
+ * @param timeZoneId the time zone of the timestamps of the schema, as the writer got it
+ */
 class NativeDataWriter(
     location: NativeLibraryLocation,
     name: String,
+    schema: StructType,
+    timeZoneId: String,
     writerState: Array[Byte],
     partitionId: Int,
     taskId: Long,
@@ -901,7 +962,11 @@ class NativeDataWriter(
   // The task, which the library may use until the data writer is closed.
   private val task = NativeTask.create(Some(partitionId), Some(taskId))
   private val handle: Long = try {
-    call(name, "write to")(library.createDataWriter(task, writerState, epochId))
+    NativeArrow.exportSchema(schema, timeZoneId) { schemaAddress =>
+      call(name, "write to") {
+        library.createDataWriter(task, schemaAddress, writerState, epochId)
+      }
+    }
   } catch {
     case e: Throwable =>
       task.close()
@@ -927,18 +992,14 @@ class NativeDataWriter(
     val root = new VectorSchemaRoot(
       vectors.map(_.getField).asJava, vectors.asJava, batch.numRows())
     val array = ArrowArray.allocateNew(ArrowUtils.rootAllocator)
-    val arrowSchema = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
     try {
-      Data.exportVectorSchemaRoot(ArrowUtils.rootAllocator, root, null, array, arrowSchema)
-      call(name, "write to") {
-        library.write(handle, array.memoryAddress(), arrowSchema.memoryAddress())
-      }
+      // Only the array: the data writer got the schema when it was created.
+      Data.exportVectorSchemaRoot(ArrowUtils.rootAllocator, root, null, array)
+      call(name, "write to")(library.write(handle, array.memoryAddress()))
     } finally {
       // Releases the batch unless the library moved it to take ownership.
       array.release()
       array.close()
-      arrowSchema.release()
-      arrowSchema.close()
     }
   }
 
@@ -1131,11 +1192,14 @@ object NativeArrow {
   /** Shows the character U+0000 in a message. */
   def printable(value: String): String = value.replace("\u0000", "\\u0000")
 
-  /** Exports the schema as an `ArrowSchema`, and calls `f` with its address. */
-  def exportSchema[T](schema: StructType)(f: Long => T): T = {
+  /**
+   * Exports the schema as an `ArrowSchema`, and calls `f` with its address.
+   *
+   * @param timeZoneId the time zone of the timestamps, the time zone of the session on the driver
+   */
+  def exportSchema[T](schema: StructType, timeZoneId: String)(f: Long => T): T = {
     val arrowSchema = ArrowUtils.toArrowSchema(
-      schema, SQLConf.get.sessionLocalTimeZone, errorOnDuplicatedFieldNames = true,
-      largeVarTypes = false)
+      schema, timeZoneId, errorOnDuplicatedFieldNames = true, largeVarTypes = false)
     val struct = ArrowSchema.allocateNew(ArrowUtils.rootAllocator)
     try {
       Data.exportSchema(ArrowUtils.rootAllocator, arrowSchema, null, struct)

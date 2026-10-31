@@ -22,6 +22,7 @@ import org.apache.spark.sql.connector.catalog.TableCapability
 import org.apache.spark.sql.connector.catalog.TableCapability.{BATCH_READ, BATCH_WRITE, MICRO_BATCH_READ, STREAMING_WRITE, TRUNCATE}
 import org.apache.spark.sql.connector.read.{InputPartition, PartitionReader, PartitionReaderFactory}
 import org.apache.spark.sql.connector.write.{DataWriter, WriterCommitMessage}
+import org.apache.spark.sql.internal.SQLConf
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.vectorized.ColumnarBatch
 
@@ -47,8 +48,17 @@ trait ColumnarDataSource {
   /** Returns the planner of a batch scan of the given schema. */
   def batchPlanner(schema: StructType): ColumnarBatchPlanner
 
-  /** Returns a reader for a micro-batch streaming scan of the given schema. */
-  def streamReader(schema: StructType): ColumnarStreamReader
+  /**
+   * Returns a reader for a micro-batch streaming scan of the given schema: the columns to read,
+   * which may be only the top-level columns of the schema of the data that the query needs. The
+   * partitions return exactly these columns.
+   *
+   * @param checkpointLocation the location of a directory in the checkpoint of the streaming
+   *                           query that is reserved for this source. It stays the same when the
+   *                           query restarts from its checkpoint. The names that start with
+   *                           `_spark` are reserved for Spark there.
+   */
+  def streamReader(schema: StructType, checkpointLocation: String): ColumnarStreamReader
 
   /**
    * Returns a writer for a batch write.
@@ -105,9 +115,19 @@ case class ColumnarPlannedBatch(
  * to the executors, where `read` is called for each partition.
  */
 trait ColumnarStreamReader extends Serializable {
+  /**
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it in
+   * the checkpoint of the source, and only asks for it when the checkpoint does not have it yet.
+   */
   def initialOffset(): String
 
-  def latestOffset(): String
+  /**
+   * Returns the latest offset available.
+   *
+   * @param start the offset that the next micro-batch starts after: the end of the last
+   *              micro-batch, or the initial offset before the first one
+   */
+  def latestOffset(start: String): String
 
   /** Plans the partitions that read the data after `start` up to and including `end`. */
   def partitions(start: String, end: String): Array[InputPartition]
@@ -123,8 +143,17 @@ trait ColumnarStreamReader extends Serializable {
 /**
  * Writes data to a [[ColumnarDataSource]] for a batch write. Spark serializes the writer to the
  * executors, where `createWriter` is called for each task, and then commits or aborts the write
- * on the driver. The batches passed to the data writers are backed by Arrow, and are only valid
- * during the call.
+ * on the driver. The batches passed to the data writers are backed by new Arrow vectors, with the
+ * Arrow types of the schema, except for the time zones of timestamps and the `keysSorted` flag of
+ * maps, though not necessarily with its names, nullability and metadata, nor the Spark types that
+ * `ArrowColumnVector` infers from them. A batch is only valid during the call, but nothing else
+ * writes to the buffers of its vectors, so a data writer may take ownership of them to keep its
+ * data, until it is closed: the buffers belong to the data writer, which must release them by
+ * the time its `close` returns. The columns that Spark copies from the Arrow batches of a scan
+ * have the values that the scan returned: they are not checked as converted values are, for
+ * example against the precision of a decimal. The batches have at most
+ * `spark.sql.execution.arrow.maxRecordsPerBatch` rows, and may have fewer, since the batches that
+ * Spark copies end with the batches of the scan.
  */
 trait ColumnarWriter extends Serializable {
   def createWriter(partitionId: Int, taskId: Long): DataWriter[ColumnarBatch]
@@ -132,6 +161,13 @@ trait ColumnarWriter extends Serializable {
   def commit(messages: Array[WriterCommitMessage]): Unit
 
   def abort(messages: Array[WriterCommitMessage]): Unit
+
+  /**
+   * The time zone of the timestamps that Spark converts for the data writers, read on the driver:
+   * by default, the session time zone when the data writers are planned. The timestamps that Spark
+   * copies from the Arrow batches of a scan keep the time zone of the scan.
+   */
+  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }
 
 /** Writes data to a [[ColumnarDataSource]] for a streaming write, one micro-batch at a time. */
@@ -141,4 +177,7 @@ trait ColumnarStreamWriter extends Serializable {
   def commit(epochId: Long, messages: Array[WriterCommitMessage]): Unit
 
   def abort(epochId: Long, messages: Array[WriterCommitMessage]): Unit
+
+  /** As for [[ColumnarWriter.timeZoneId]]. */
+  def timeZoneId: String = SQLConf.get.sessionLocalTimeZone
 }

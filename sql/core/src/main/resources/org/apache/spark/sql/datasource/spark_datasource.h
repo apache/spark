@@ -48,55 +48,62 @@
  * Spark loads a library once in each JVM, and calls spark_ds_init before any other function. It
  * creates a data source with create on the driver for each schema inference, scan and write, and
  * closes it right after. create also returns the capabilities of the data source: Spark reports
- * the operations that a data source does not declare as unsupported, without calling the library.
- * Spark also creates a data source while it analyzes a query, to reject a batch write that the
- * data source does not support before it computes the data to write. That data source has the
- * options of the table, those of CREATE TABLE for a table in a catalog, which the options of a
- * write can override, so Spark checks the capabilities of each operation again.
+ * the operations that a data source does not declare as unsupported, without calling their
+ * functions. Spark also creates a data source while it analyzes a query, to reject a batch write
+ * that the data source does not support before it computes the data to write. That data source
+ * has the options of the table, those of CREATE TABLE for a table in a catalog, which the options
+ * of a write can override, so Spark checks the capabilities of each operation again.
  *
  * - Batch reads. On the driver, Spark creates a reader with create_reader, pushes operations down
  *   by calling, each at most once and in this order, push_limit and prune_columns, plans the
- *   partitions with partitions, serializes the state of the reader with serialize_reader, and
- *   closes it. Then it calls read on the executors, in one task for each partition. If Spark never
- *   plans the partitions, for example to only explain the plan of the query, it closes the reader
- *   once the reader is no longer referenced.
- * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader and
- *   keeps it until the streaming query stops. For each micro-batch, it asks for the latest_offset,
- *   plans the partitions with stream_partitions and serializes the state with
- *   serialize_stream_reader, then calls read on the executors. Offsets are defined by the library,
- *   as compact JSON on a single line: Spark stores each offset as a line of the offset log of the
- *   checkpoint, so it rejects an offset that is not valid JSON or contains a line break. When a
- *   streaming query restarts, from its checkpoint, Spark creates a new stream reader and may call
- *   stream_partitions again for the last range that it planned before, so the partitions of a
- *   range must read the same data each time.
+ *   partitions with partitions, which also returns the state of the reader, and closes it. Then it
+ *   calls read on the executors, in one task for each partition, with the schema to read and the
+ *   state of the reader. If Spark never plans the partitions, for example to only explain the plan
+ *   of the query, it closes the reader once the reader is no longer referenced.
+ * - Streaming reads. On the driver, Spark creates a stream reader with create_stream_reader, with
+ *   the columns to read and the location of the checkpoint of the source, and keeps it until the
+ *   streaming query stops. When the checkpoint does not have the initial offset of the source yet,
+ *   Spark asks for it with initial_offset, and keeps it in the checkpoint. For each micro-batch, or
+ *   only before the first one with Trigger.AvailableNow, it asks for the latest_offset, with the
+ *   offset that the micro-batch starts after, plans the partitions with stream_partitions, which
+ *   also returns the state of the stream reader, then calls read on the executors. Offsets are
+ *   defined by the library, as compact JSON on a single line: Spark stores each offset as a line of
+ *   the offset log of the checkpoint, so it rejects an offset that is not valid JSON or contains a
+ *   line break. When a streaming query restarts, from its checkpoint, Spark creates a new stream
+ *   reader and may call stream_partitions again for the last range that it planned before, so the
+ *   partitions of a range must read the same data each time.
  * - Writes. On the driver, right before it starts the tasks of the write (or of a micro-batch),
- *   Spark creates a writer with create_writer, and serializes its state with serialize_writer.
- *   With adaptive query execution, Spark first runs the stages of the data to write that end with
- *   a shuffle, and creates no writer if they fail. The rest of the data, such as its last stage,
- *   is computed in the tasks of the write, so a writer may still be aborted because computing the
- *   data failed: do irreversible work, such as removing the existing data for an overwrite, in
- *   commit. On the executors, each task creates a data writer with create_data_writer, calls write
- *   for each batch of at most spark.sql.execution.arrow.maxRecordsPerBatch rows, which also ends
- *   once it holds spark.sql.execution.arrow.maxBytesPerBatch bytes, and calls commit_data_writer,
- *   or abort_data_writer if the task or the commit fails, before it closes the data writer. Then
- *   the driver calls commit with the messages of the tasks if they all succeeded, or abort
- *   otherwise, including when commit fails, and closes the writer. Several attempts of a task may
- *   write the same partition, after a failure or with speculative execution, each with a data
- *   writer of its own. Spark lets the attempts of a partition commit one at a time, and passes to
- *   commit the message of one committed attempt for each partition, so the write consists of the
- *   data of these attempts only. It aborts the data writers of the other attempts, except on an
- *   executor that is lost, where a data writer is neither committed nor aborted, and may even have
- *   committed before its message reached the driver. A streaming write commits or aborts each
- *   micro-batch (epoch). Spark may commit the same epoch more than once, for example when a
- *   streaming query restarts after a failure, so committing an epoch that is already committed
- *   must have no effect, for exactly-once output. The ID of the query, which create_writer gets for
- *   a streaming write, stays the same when the query restarts from its checkpoint, so the ID of the
- *   query and the epoch ID identify the output of a micro-batch, also when other queries write to
- *   the same destination. A micro-batch streaming query creates a new stream writer for each
- *   micro-batch, and Spark closes the previous stream writer of the query when the query creates a
- *   new one. Spark is not told when a streaming query stops, so it closes the last stream writer of
- *   the query once the writer is no longer referenced, or when the query is restarted. Streaming
- *   writes are micro-batch only: a query with continuous processing fails before create_writer.
+ *   Spark creates a writer with create_writer, which also returns the state of the writer. If Spark
+ *   rejects what create_writer returned, such as a state set more than once, it aborts the writer,
+ *   with the field rejected of SparkDsFinishWriteInfo set to 1, before it closes it. With adaptive
+ *   query execution, Spark first runs the stages of the data to write that end with a shuffle, and
+ *   creates no writer if they fail. The rest of the data, such as its last stage, is computed in
+ *   the tasks of the write, so a writer may still be aborted because computing the data failed: do
+ *   irreversible work, such as removing the existing data for an overwrite, in commit. On the
+ *   executors, each task creates a data writer with create_data_writer, with the schema of the data
+ *   and the state of the writer, and calls write for each batch. A batch has at most
+ *   spark.sql.execution.arrow.maxRecordsPerBatch rows, and also ends once it holds
+ *   spark.sql.execution.arrow.maxBytesPerBatch bytes, or earlier when Spark copies the batches of
+ *   a scan, which end with them. The task then calls commit_data_writer, or abort_data_writer if
+ *   the task or the commit fails, before it closes the data writer. Then the
+ *   driver calls commit with the messages of the tasks if they all succeeded, or abort otherwise,
+ *   including when commit fails, and closes the writer. Several attempts of a task may write the
+ *   same partition, after a failure or with speculative execution, each with a data writer of its
+ *   own. Spark lets the attempts of a partition commit one at a time, and passes to commit the
+ *   message of one committed attempt for each partition, so the write consists of the data of these
+ *   attempts only. It aborts the data writers of the other attempts, except on an executor that is
+ *   lost, where a data writer is neither committed nor aborted, and may even have committed before
+ *   its message reached the driver. A streaming write commits or aborts each micro-batch (epoch).
+ *   Spark may commit the same epoch more than once, for example when a streaming query restarts
+ *   after a failure, so committing an epoch that is already committed must have no effect, for
+ *   exactly-once output. The ID of the query, which create_writer gets for a streaming write, stays
+ *   the same when the query restarts from its checkpoint, so the ID of the query and the epoch ID
+ *   identify the output of a micro-batch, also when other queries write to the same destination. A
+ *   micro-batch streaming query creates a new stream writer for each micro-batch, and Spark closes
+ *   the previous stream writer of the query when the query creates a new one. Spark is not told
+ *   when a streaming query stops, so it closes the last stream writer of the query once the writer
+ *   is no longer referenced, or when the query is restarted. Streaming writes are micro-batch only:
+ *   a query with continuous processing fails before create_writer.
  *
  * Conventions
  * -----------
@@ -115,8 +122,8 @@
  *   released once they are no longer referenced (see Lifecycle above). A reader or writer handle
  *   must not depend on the data source handle it was created from, because Spark closes the data
  *   source handle right after creating it.
- * - Memory. What Spark passes to a function, such as strings, byte arrays, SparkDsCreateInfo and
- *   SparkDsWriteInfo, is only valid during the call, except for SparkDsHost and
+ * - Memory. What Spark passes to a function, such as strings, byte arrays and the structs whose
+ *   names end with Info, is only valid during the call, except for SparkDsHost and
  *   SparkDsTaskContext, which document how long they live. Strings are UTF-8 and NUL-terminated:
  *   Spark fails an operation whose options or column names contain the character U+0000. The
  *   library returns strings and byte arrays by passing them to a SparkDsSink, which copies them.
@@ -125,17 +132,17 @@
  * - Arrow data. Schemas and data are exchanged with the Arrow C data interface
  *   (https://arrow.apache.org/docs/format/CDataInterface.html), as structs allocated by Spark.
  *   For an output struct, the library initializes it and Spark takes ownership. For an input
- *   struct, the library may move it to take ownership; otherwise, Spark releases it after the
- *   call returns, so the library must not use it afterwards. The arrays that the library exports
- *   must have an offset of 0, at every level: Arrow Java ignores the offsets of the arrays it
- *   imports, so Spark rejects an array with another offset, such as a zero-copy slice. Copy a
- *   sliced array before exporting it. Spark also rejects an array with fewer values than its
- *   parent refers to, such as a column shorter than its batch, and a batch with null rows, since
- *   Arrow Java ignores the validity of the struct of a batch: mark the values of its columns as
- *   null instead. As the C data interface requires, an array without a validity buffer must have
- *   a null_count of 0, and the buffers of an array must hold all of its values: the interface
- *   does not carry the sizes of the buffers, so Spark cannot check them, and reads past the end
- *   of a buffer that is too short.
+ *   struct, including the schemas in SparkDsReadInfo and SparkDsDataWriterInfo, the library may
+ *   move it to take ownership; otherwise, Spark releases it after the call returns, so the library
+ *   must not use it afterwards. The arrays that the library exports must have an offset of 0, at
+ *   every level: Arrow Java ignores the offsets of the arrays it imports, so Spark rejects an
+ *   array with another offset, such as a zero-copy slice. Copy a sliced array before exporting
+ *   it. Spark also rejects an array with fewer values than its parent refers to, such as a column
+ *   shorter than its batch, and a batch with null rows, since Arrow Java ignores the validity of
+ *   the struct of a batch: mark the values of its columns as null instead. As the C data
+ *   interface requires, an array without a validity buffer must have a null_count of 0, and the
+ *   buffers of an array must hold all of its values: the interface does not carry the sizes of
+ *   the buffers, so Spark cannot check them, and reads past the end of a buffer that is too short.
  * - Schemas. These are the types of version 1, with their Arrow types and the formats of the C
  *   data interface: boolean is bool (b), tinyint, smallint, int and bigint are int8 (c), int16
  *   (s), int32 (i) and int64 (l), float and double are float32 (f) and float64 (g), decimal(p, s)
@@ -155,10 +162,10 @@
  *   case-insensitively.
  * - Optional functions. A library only sets the functions of the operations it supports in its
  *   table, and leaves the others NULL. A data source must not declare a capability whose
- *   functions are NULL: Spark then fails the operation. The pushdown functions and the serialize
- *   functions are optional: without them, Spark pushes nothing down, and the reader or writer has
- *   no state. So are schema, without which the user must specify the schema, commit_offset and
- *   last_error.
+ *   functions are NULL: Spark then fails the operation. The pushdown functions are optional:
+ *   without them, Spark pushes nothing down. So are schema, without which the user must specify
+ *   the schema, commit_offset and last_error. A reader or a writer without a state does not call
+ *   the set_state sink of partitions, stream_partitions or create_writer.
  * - Threads. Spark calls the library from multiple threads, and calls on different handles may
  *   run concurrently. Calls on the same handle never run concurrently. A handle may be released
  *   from a thread other than the threads that used it, such as a JVM Cleaner thread when Spark
@@ -177,7 +184,8 @@
  * - Spark only reads the functions that fit in the size of the table of a library, so a library
  *   built against an earlier header keeps working, with the functions that it does not know as
  *   NULL. A library must only read the fields that fit in the size of a struct that Spark passes;
- * - Spark only uses a new capability or write mode with a data source that declares it.
+ * - Spark only uses a new capability, write mode or kind of read with a data source that declares
+ *   it.
  * An incompatible change uses a new SPARK_DS_ABI_VERSION: spark_ds_init gets the newest version
  * that Spark supports, the library returns a table of a version that it implements, and Spark
  * rejects a table of a version that it does not support. Spark supports version 1 at least in all
@@ -253,7 +261,8 @@ struct ArrowArrayStream {
 
 /*
  * Receives a string or a byte array that the library returns, and copies it. `sink` is the
- * argument passed with the sink to the function that returns it.
+ * argument passed with the sink to the function that returns it: a function that gets several
+ * sinks gets a single such argument, for all of them.
  */
 typedef void (*SparkDsSink)(void* sink, const uint8_t* data, int64_t length);
 
@@ -304,6 +313,70 @@ typedef struct SparkDsCreateInfo {
   int64_t num_options;
 } SparkDsCreateInfo;
 
+/* A batch scan, as create_reader gets it. */
+typedef struct SparkDsReaderInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+} SparkDsReaderInfo;
+
+/* A request for the partitions of a batch scan, as partitions gets it. */
+typedef struct SparkDsPartitionsInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+} SparkDsPartitionsInfo;
+
+/* A micro-batch streaming scan, as create_stream_reader gets it. */
+typedef struct SparkDsStreamReaderInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * The location of a directory in the checkpoint of the streaming query that is reserved for this
+   * source, such as file:/tmp/checkpoint/sources/0, where the library may keep what it needs to
+   * recover from a failure. It stays the same when the query restarts from its checkpoint. It is a
+   * fully qualified Hadoop path, whose characters are not escaped as in a URI: a space stays a
+   * space, and % stays %. Its file system may be one that the library cannot access, such as s3a
+   * or hdfs. Spark keeps what it needs there under the names that start with _spark, such as the
+   * initial offset of the source, and the library must not use them.
+   */
+  const char* checkpoint_location;
+} SparkDsStreamReaderInfo;
+
+/* A request for the initial offset of a stream reader, as initial_offset gets it. */
+typedef struct SparkDsInitialOffsetInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+} SparkDsInitialOffsetInfo;
+
+/* A request for the latest offset of a stream reader, as latest_offset gets it. */
+typedef struct SparkDsLatestOffsetInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * The offset, as JSON, that the next micro-batch starts after: the end of the last micro-batch,
+   * or the initial offset before the first one, for every trigger. With Trigger.AvailableNow,
+   * Spark asks for the latest offset only once, before the first micro-batch that it plans, and
+   * reads up to it.
+   */
+  const char* start;
+} SparkDsLatestOffsetInfo;
+
+/* A request for the partitions of a micro-batch, as stream_partitions gets it. */
+typedef struct SparkDsStreamPartitionsInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /* The offsets, as JSON, that the micro-batch reads the data after, up to and including end. */
+  const char* start;
+  const char* end;
+} SparkDsStreamPartitionsInfo;
+
+/* The end of the data that Spark processed, as commit_offset gets it. */
+typedef struct SparkDsCommitOffsetInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /* The offset, as JSON, up to and including which Spark processed the data. */
+  const char* end;
+} SparkDsCommitOffsetInfo;
+
 /*
  * The task that calls read or create_data_writer, on an executor. It stays valid until the stream
  * that read returns is released, or until the data writer is closed.
@@ -327,6 +400,33 @@ typedef struct SparkDsTaskContext {
   bool (*is_interrupted)(const struct SparkDsTaskContext* task);
 } SparkDsTaskContext;
 
+/* The kinds of a read. */
+#define SPARK_DS_READ_BATCH 0
+#define SPARK_DS_READ_MICRO_BATCH 1
+
+/* A partition to read, as read gets it, on an executor. */
+typedef struct SparkDsReadInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * SPARK_DS_READ_BATCH for a partition of a batch scan, which partitions planned, or
+   * SPARK_DS_READ_MICRO_BATCH for a partition of a micro-batch, which stream_partitions planned.
+   */
+  int32_t kind;
+  /*
+   * The schema to read: the schema that create_reader got, or only the columns that prune_columns
+   * pruned it to, or the schema that create_stream_reader got. The stream that read initializes
+   * has this schema.
+   */
+  struct ArrowSchema* schema;
+  /* The state that partitions or stream_partitions returned with the partition, or empty. */
+  const uint8_t* reader_state;
+  int64_t reader_state_length;
+  /* The partition, as partitions or stream_partitions returned it. */
+  const uint8_t* partition;
+  int64_t partition_length;
+} SparkDsReadInfo;
+
 /* The modes of a write. */
 #define SPARK_DS_WRITE_APPEND 0
 #define SPARK_DS_WRITE_TRUNCATE 1
@@ -339,7 +439,8 @@ typedef struct SparkDsWriteInfo {
    * SPARK_DS_WRITE_APPEND to add the data to the existing data, or SPARK_DS_WRITE_TRUNCATE to
    * replace the existing data: with the save mode "overwrite" of a batch write, and in each
    * micro-batch with the output mode "complete" of a streaming write. Spark only passes
-   * SPARK_DS_WRITE_TRUNCATE to a data source with the capability SPARK_DS_TRUNCATE.
+   * SPARK_DS_WRITE_TRUNCATE to a data source with the capability SPARK_DS_BATCH_TRUNCATE for a
+   * batch write, or SPARK_DS_STREAMING_TRUNCATE for a streaming write.
    */
   int32_t mode;
   /*
@@ -350,16 +451,62 @@ typedef struct SparkDsWriteInfo {
   const char* query_id;
 } SparkDsWriteInfo;
 
+/* The data writer of a task, as create_data_writer gets it, on an executor. */
+typedef struct SparkDsDataWriterInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * The schema of the data to write, as create_writer got it. Each array that write gets has this
+   * schema, so the library keeps it, or what it needs of it, to read the arrays.
+   */
+  struct ArrowSchema* schema;
+  /* The state that create_writer returned, or empty. */
+  const uint8_t* writer_state;
+  int64_t writer_state_length;
+  /* The ID of the micro-batch for a streaming write, or -1 for a batch write. */
+  int64_t epoch_id;
+} SparkDsDataWriterInfo;
+
+/* The end of a write, as commit and abort get it. */
+typedef struct SparkDsFinishWriteInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+  /*
+   * The ID of the micro-batch for a streaming write, or -1 for a batch write, and for a writer
+   * whose create_writer Spark rejected, before it knew the micro-batch.
+   */
+  int64_t epoch_id;
+  /*
+   * The num_messages messages returned by commit_data_writer of each task. For abort, a message
+   * is NULL if its task did not commit.
+   */
+  const uint8_t* const* messages;
+  const int64_t* message_lengths;
+  int64_t num_messages;
+  /*
+   * For abort, 1 if Spark rejected what create_writer returned, such as a state set more than
+   * once: no task ran, so there are no messages. 0 otherwise.
+   */
+  int64_t rejected;
+} SparkDsFinishWriteInfo;
+
+/* The end of the data written by a task, as commit_data_writer and abort_data_writer get it. */
+typedef struct SparkDsFinishDataWriterInfo {
+  /* The size of this struct in the header that Spark was built with, as in SparkDsHost. */
+  int64_t size;
+} SparkDsFinishDataWriterInfo;
+
 /* ---------------------------------------------------------------------------------------------
  * What the library returns to Spark
  * --------------------------------------------------------------------------------------------- */
 
 /* The capabilities of a data source, which create returns: the operations that it supports. */
-#define SPARK_DS_BATCH_READ 1       /* batch reads, with create_reader */
-#define SPARK_DS_MICRO_BATCH_READ 2 /* micro-batch streaming reads, with create_stream_reader */
-#define SPARK_DS_BATCH_WRITE 4      /* batch writes, with create_writer */
-#define SPARK_DS_STREAMING_WRITE 8  /* streaming writes, with create_writer */
-#define SPARK_DS_TRUNCATE 16        /* writes with the mode SPARK_DS_WRITE_TRUNCATE */
+#define SPARK_DS_BATCH_READ 1          /* batch reads, with create_reader */
+#define SPARK_DS_MICRO_BATCH_READ 2    /* micro-batch streaming reads, with create_stream_reader */
+#define SPARK_DS_BATCH_WRITE 4         /* batch writes, with create_writer */
+#define SPARK_DS_STREAMING_WRITE 8     /* streaming writes, with create_writer */
+#define SPARK_DS_BATCH_TRUNCATE 16     /* batch writes with the mode SPARK_DS_WRITE_TRUNCATE */
+#define SPARK_DS_STREAMING_TRUNCATE 32 /* streaming writes with the mode SPARK_DS_WRITE_TRUNCATE */
 
 /*
  * The functions of a library, which spark_ds_init returns. A library sets the functions of the
@@ -406,27 +553,35 @@ typedef struct SparkDsLibrary {
    * Creates a reader for a batch scan.
    *
    * schema: the schema to read: the one the user specified, or the one returned by schema
+   * info: nothing yet but its size, so that inputs can be added within this version
    * reader: set to the reader handle
    */
-  int (*create_reader)(void* source, struct ArrowSchema* schema, void** reader);
+  int (*create_reader)(void* source, struct ArrowSchema* schema, const SparkDsReaderInfo* info,
+                       void** reader);
 
   /*
    * Creates a reader for a micro-batch streaming scan.
    *
-   * schema: the schema to read: the one the user specified, or the one returned by schema
+   * schema: the columns to read: those of the schema that the user specified, or of the one
+   *         returned by schema, or only the top-level columns of it that the query needs. Each
+   *         array that read returns has exactly these columns.
+   * info: the location of the checkpoint of the source
    * reader: set to the stream reader handle
    */
-  int (*create_stream_reader)(void* source, struct ArrowSchema* schema, void** reader);
+  int (*create_stream_reader)(void* source, struct ArrowSchema* schema,
+                              const SparkDsStreamReaderInfo* info, void** reader);
 
   /*
    * Creates a writer for a batch write, or for a micro-batch of a streaming write.
    *
    * schema: the schema of the data to write
    * info: the mode of the write, and the ID of the query of a streaming write
+   * set_state: called once with the state of the writer that create_data_writer needs on the
+   *            executors, or not at all if there is none
    * writer: set to the writer handle
    */
   int (*create_writer)(void* source, struct ArrowSchema* schema, const SparkDsWriteInfo* info,
-                       void** writer);
+                       SparkDsSink set_state, void* sink, void** writer);
 
   /* Releases a data source handle. */
   void (*close)(void* source);
@@ -458,17 +613,13 @@ typedef struct SparkDsLibrary {
   /*
    * Plans the partitions of the scan. Spark reads each partition in a separate task.
    *
+   * info: nothing yet but its size, so that inputs can be added within this version
    * add_partition: called with each partition, serialized in a format defined by the library
+   * set_state: called once with the state of the reader that read needs on the executors, such as
+   *            the pruned columns, or not at all if there is none
    */
-  int (*partitions)(void* reader, SparkDsSink add_partition, void* sink);
-
-  /*
-   * Serializes the state of the reader that read needs on the executors, such as the pruned
-   * columns. Spark calls it after partitions.
-   *
-   * set_state: called once with the state, or not at all if there is none
-   */
-  int (*serialize_reader)(void* reader, SparkDsSink set_state, void* sink);
+  int (*partitions)(void* reader, const SparkDsPartitionsInfo* info, SparkDsSink add_partition,
+                    SparkDsSink set_state, void* sink);
 
   /* Releases a batch reader handle. */
   void (*close_reader)(void* reader);
@@ -478,41 +629,45 @@ typedef struct SparkDsLibrary {
    * ------------------------------------------------------------------------------------------- */
 
   /*
-   * Returns the offset to start from when the streaming query has no checkpoint.
+   * Returns the offset to start from when the streaming query has no checkpoint. Spark keeps it
+   * under checkpoint_location, and only asks for it when the checkpoint does not have it yet: a
+   * query that restarts before its first micro-batch is committed starts from the same offset.
    *
+   * info: nothing yet but its size, so that inputs can be added within this version
    * set_offset: called once with the offset, as compact JSON on a single line
    */
-  int (*initial_offset)(void* reader, SparkDsSink set_offset, void* sink);
+  int (*initial_offset)(void* reader, const SparkDsInitialOffsetInfo* info, SparkDsSink set_offset,
+                        void* sink);
 
   /*
    * Returns the most recent offset available.
    *
+   * info: the offset that the next micro-batch starts after
    * set_offset: called once with the offset, as compact JSON on a single line
    */
-  int (*latest_offset)(void* reader, SparkDsSink set_offset, void* sink);
+  int (*latest_offset)(void* reader, const SparkDsLatestOffsetInfo* info, SparkDsSink set_offset,
+                       void* sink);
 
   /*
-   * Plans the partitions that read the data after `start` up to and including `end`, two offsets
-   * as JSON.
+   * Plans the partitions of a micro-batch. All the scans of the source in a micro-batch, such as
+   * both sides of a union of the source with itself, read the partitions of a single call, with
+   * the state that it returned.
    *
+   * info: the offsets that the micro-batch reads the data after, up to and including the end
    * add_partition: called with each partition, serialized in a format defined by the library
+   * set_state: called once with the state of the stream reader that read needs on the executors
+   *            to read these partitions, or not at all if there is none
    */
-  int (*stream_partitions)(void* reader, const char* start, const char* end,
-                           SparkDsSink add_partition, void* sink);
+  int (*stream_partitions)(void* reader, const SparkDsStreamPartitionsInfo* info,
+                           SparkDsSink add_partition, SparkDsSink set_state, void* sink);
 
   /*
-   * Serializes the state of the stream reader that read needs on the executors. Spark calls it
-   * after each call to stream_partitions.
+   * Tells the library that Spark has processed all the data up to and including an offset, and
+   * will not ask for it again.
    *
-   * set_state: called once with the state, or not at all if there is none
+   * info: the offset
    */
-  int (*serialize_stream_reader)(void* reader, SparkDsSink set_state, void* sink);
-
-  /*
-   * Tells the library that Spark has processed all the data up to and including `end`, an offset
-   * as JSON, and will not ask for it again.
-   */
-  int (*commit_offset)(void* reader, const char* end);
+  int (*commit_offset)(void* reader, const SparkDsCommitOffsetInfo* info);
 
   /* Releases a stream reader handle, when the streaming query stops. */
   void (*close_stream_reader)(void* reader);
@@ -525,20 +680,17 @@ typedef struct SparkDsLibrary {
    * Reads a partition of a batch or streaming scan.
    *
    * task: the task that reads the partition, valid until the stream is released
-   * reader_state: the state returned by serialize_reader or serialize_stream_reader, empty if
-   *               there is none
-   * partition: a partition returned by partitions or stream_partitions
+   * info: the partition, the kind of the scan, the schema to read and the state of the reader
    * out: the stream to initialize. Each array of the stream is a struct array whose fields are the
-   *      columns to read: the columns of the schema to read, or the pruned columns. The
-   *      callbacks of the stream can be called from any thread, but never concurrently. get_next
-   *      may block, for example on network I/O, but Spark cannot interrupt native code: when the
-   *      task is killed, Spark only stops reading once get_next returns, and then releases the
-   *      stream. So a get_next that blocks forever keeps the task running, unless the task reaper
-   *      (spark.task.reaper.enabled and spark.task.reaper.killTimeout) kills the executor. Use
-   *      timeouts for blocking operations, and check task->is_interrupted.
+   *      columns of the schema to read, info->schema. The callbacks of the stream can be called
+   *      from any thread, but never concurrently. get_next may block, for example on network
+   *      I/O, but Spark cannot interrupt native code: when the task is killed, Spark only stops
+   *      reading once get_next returns, and then releases the stream. So a get_next that blocks
+   *      forever keeps the task running, unless the task reaper (spark.task.reaper.enabled and
+   *      spark.task.reaper.killTimeout) kills the executor. Use timeouts for blocking
+   *      operations, and check task->is_interrupted.
    */
-  int (*read)(const SparkDsTaskContext* task, const uint8_t* reader_state,
-              int64_t reader_state_length, const uint8_t* partition, int64_t partition_length,
+  int (*read)(const SparkDsTaskContext* task, const SparkDsReadInfo* info,
               struct ArrowArrayStream* out);
 
   /* -------------------------------------------------------------------------------------------
@@ -546,32 +698,20 @@ typedef struct SparkDsLibrary {
    * ------------------------------------------------------------------------------------------- */
 
   /*
-   * Serializes the state of the writer that create_data_writer needs on the executors. Spark
-   * calls it once, after creating the writer.
-   *
-   * set_state: called once with the state, or not at all if there is none
-   */
-  int (*serialize_writer)(void* writer, SparkDsSink set_state, void* sink);
-
-  /*
    * Commits a write, when all the tasks succeeded.
    *
-   * epoch_id: the ID of the micro-batch for a streaming write, or -1 for a batch write
-   * messages, message_lengths: the num_messages messages returned by commit_data_writer of each
-   *                            task
+   * info: the ID of the micro-batch, and the messages of the tasks
    */
-  int (*commit)(void* writer, int64_t epoch_id, const uint8_t* const* messages,
-                const int64_t* message_lengths, int64_t num_messages);
+  int (*commit)(void* writer, const SparkDsFinishWriteInfo* info);
 
   /*
-   * Aborts a write, when it failed.
+   * Aborts a write, when it failed, or when Spark rejected what create_writer returned, such as a
+   * state set more than once.
    *
-   * epoch_id: the ID of the micro-batch for a streaming write, or -1 for a batch write
-   * messages, message_lengths: the num_messages messages returned by commit_data_writer of each
-   *                            task. A message is NULL if its task did not commit.
+   * info: the ID of the micro-batch, the messages of the tasks, and whether Spark rejected what
+   *       create_writer returned
    */
-  int (*abort)(void* writer, int64_t epoch_id, const uint8_t* const* messages,
-               const int64_t* message_lengths, int64_t num_messages);
+  int (*abort)(void* writer, const SparkDsFinishWriteInfo* info);
 
   /* Releases a writer handle. */
   void (*close_writer)(void* writer);
@@ -584,33 +724,42 @@ typedef struct SparkDsLibrary {
    * Creates the writer for one task.
    *
    * task: the task, with the partition that it writes, valid until the data writer is closed
-   * writer_state: the state returned by serialize_writer, empty if there is none
-   * epoch_id: the ID of the micro-batch for a streaming write, or -1 for a batch write
+   * info: the schema of the data, the state of the writer, and the ID of the micro-batch
    * data_writer: set to the data writer handle
    */
-  int (*create_data_writer)(const SparkDsTaskContext* task, const uint8_t* writer_state,
-                            int64_t writer_state_length, int64_t epoch_id, void** data_writer);
+  int (*create_data_writer)(const SparkDsTaskContext* task, const SparkDsDataWriterInfo* info,
+                            void** data_writer);
 
   /*
    * Writes a batch of data.
    *
-   * array: a struct array whose fields are the columns
-   * schema: the schema of the array
+   * array: a struct array whose fields are the columns, with the schema that create_data_writer
+   *        got. The library may move it to keep its data, until close_data_writer: its buffers
+   *        belong to the data writer, so the library must release it before close_data_writer
+   *        returns. When Spark writes the batches of a native scan without converting them to
+   *        rows, it copies the values of their columns as the scan returned them, without the
+   *        checks of a conversion, such as the precision of a decimal.
    */
-  int (*write)(void* data_writer, struct ArrowArray* array, struct ArrowSchema* schema);
+  int (*write)(void* data_writer, struct ArrowArray* array);
 
   /*
    * Commits the data written by the task. If it fails, Spark calls abort_data_writer. If it
    * succeeds, Spark does not call abort_data_writer, even if it then fails the task, for example
    * because set_message was called more than once.
    *
+   * info: nothing yet but its size, so that inputs can be added within this version
    * set_message: called once with the message to pass to commit on the driver, or not at all for
    *              an empty message
    */
-  int (*commit_data_writer)(void* data_writer, SparkDsSink set_message, void* sink);
+  int (*commit_data_writer)(void* data_writer, const SparkDsFinishDataWriterInfo* info,
+                            SparkDsSink set_message, void* sink);
 
-  /* Aborts the data written by the task. */
-  int (*abort_data_writer)(void* data_writer);
+  /*
+   * Aborts the data written by the task.
+   *
+   * info: nothing yet but its size, so that inputs can be added within this version
+   */
+  int (*abort_data_writer)(void* data_writer, const SparkDsFinishDataWriterInfo* info);
 
   /* Releases a data writer handle, after its commit or abort. */
   void (*close_data_writer)(void* data_writer);
