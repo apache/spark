@@ -53,6 +53,12 @@ class InvokeTargetSubClass extends InvokeTargetClass {
 }
 
 // Tests for NewInstance
+class NewInstanceTarget(val first: Int, val second: Int) extends Serializable
+
+class BinaryArgumentsTarget(val first: Array[Byte], val second: Array[Byte]) extends Serializable {
+  def same(left: Array[Byte], right: Array[Byte]): Boolean = java.util.Arrays.equals(left, right)
+}
+
 class Outer extends Serializable {
   class Inner(val value: Int) {
     override def hashCode(): Int = super.hashCode()
@@ -212,6 +218,73 @@ class ObjectExpressionsSuite extends SparkFunSuite with ExpressionEvalHelper {
       checkObjectExprEvaluation(StaticInvoke(cls, dataType, methodName,
         Seq(BoundReference(0, argType, true))), expected, InternalRow.fromSeq(Seq(arg)))
     }
+  }
+
+  test("InvokeLike should short-circuit interpreted arguments after a null") {
+    val nullArgument = NonFoldableLiteral.create(null, IntegerType)
+    // Keep the throwing argument non-foldable so constant folding does not evaluate it early.
+    val throwingArgument = StaticInvoke(
+      classOf[Math],
+      IntegerType,
+      "addExact",
+      Seq(NonFoldableLiteral.create(Int.MaxValue, IntegerType), Literal(1)),
+      returnNullable = false)
+    val expression = StaticInvoke(
+      classOf[java.lang.Integer],
+      IntegerType,
+      "compare",
+      Seq(nullArgument, throwingArgument),
+      returnNullable = false)
+
+    checkEvaluationWithoutCodegen(expression, null)
+    checkEvaluationWithMutableProjection(expression, null)
+
+    val newInstance = NewInstance(
+      cls = classOf[NewInstanceTarget],
+      arguments = Seq(nullArgument, throwingArgument),
+      inputTypes = Nil,
+      propagateNull = true,
+      dataType = ObjectType(classOf[NewInstanceTarget]),
+      outerPointer = None)
+    checkObjectExprEvaluation(newInstance, null)
+  }
+
+  test("InvokeLike clears arguments skipped after a null") {
+    trait InspectableInvokeLike extends InvokeLike {
+      def retainedArguments: Array[Object] = evaluatedArgs
+    }
+
+    val arguments = Seq(
+      BoundReference(0, BinaryType, nullable = true),
+      BoundReference(1, BinaryType, nullable = true))
+    val target = Literal.fromObject(new BinaryArgumentsTarget(null, null))
+    val expressions: Seq[InspectableInvokeLike] = Seq(
+      new StaticInvoke(classOf[java.util.Arrays], BooleanType, "equals", arguments,
+        returnNullable = false) with InspectableInvokeLike,
+      new Invoke(target, "same", BooleanType, arguments,
+        returnNullable = false) with InspectableInvokeLike,
+      new NewInstance(classOf[BinaryArgumentsTarget], arguments, Nil, propagateNull = true,
+        dataType = ObjectType(classOf[BinaryArgumentsTarget]),
+        outerPointer = None) with InspectableInvokeLike)
+
+    expressions.foreach { expression =>
+      val payload = Array[Byte](1)
+      assert(expression.eval(InternalRow(payload, payload)) != null)
+      assert(expression.retainedArguments(1) eq payload)
+      // The skipped second argument has no input field, so evaluating it would fail.
+      assert(expression.eval(InternalRow(null)) == null)
+      assert(expression.retainedArguments.forall(_ == null))
+      val nextPayload = Array[Byte](2)
+      assert(expression.eval(InternalRow(nextPayload, nextPayload)) != null)
+      assert(expression.retainedArguments.forall(_ eq nextPayload))
+    }
+
+    val nonPropagating = new StaticInvoke(
+      classOf[java.util.Arrays], BooleanType, "equals", arguments, propagateNull = false,
+      returnNullable = false) with InspectableInvokeLike
+    val payload = Array[Byte](1)
+    assert(nonPropagating.eval(InternalRow(null, payload)) == false)
+    assert(nonPropagating.retainedArguments(1) eq payload)
   }
 
   test("SPARK-23583: Invoke should support interpreted execution") {

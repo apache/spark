@@ -18,6 +18,7 @@
 package org.apache.spark.sql.catalyst.expressions.objects
 
 import java.lang.reflect.{Method, Modifier}
+import java.util.Arrays
 
 import scala.collection.immutable
 import scala.collection.mutable
@@ -182,13 +183,15 @@ trait InvokeLike extends Expression with NonSQLExpression with ImplicitCastInput
     var i = 0
     val len = arguments.length
     var resultNull = false
-    while (i < len) {
+    // Short-circuit after a result-determining null to match prepareArguments.
+    while (i < len && !resultNull) {
       val result = arguments(i).eval(input).asInstanceOf[Object]
       evaluatedArgs(i) = result
       resultNull = resultNull || (result == null && needNullCheckForIndex(i))
       i += 1
     }
     if (needNullCheck && resultNull) {
+      Arrays.fill(evaluatedArgs, i, len, null)
       // return null if one of arguments is null
       null
     } else {
@@ -654,13 +657,15 @@ case class NewInstance(
     var i = 0
     val len = arguments.length
     var resultNull = false
-    while (i < len) {
+    // Short-circuit after a result-determining null to match prepareArguments.
+    while (i < len && !resultNull) {
       val result = arguments(i).eval(input).asInstanceOf[Object]
       evaluatedArgs(i) = result
       resultNull = resultNull || (result == null && needNullCheckForIndex(i))
       i += 1
     }
     if (needNullCheck && resultNull) {
+      Arrays.fill(evaluatedArgs, i, len, null)
       // return null if one of arguments is null
       null
     } else {
