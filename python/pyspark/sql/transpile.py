@@ -95,8 +95,9 @@ only as a whole when pushdown applies. The divergences below are therefore the
   living only in a short-circuited position is hoisted and evaluated
   unconditionally. ``Expression.throwable`` does NOT help -- this rule never
   consults it, so SPARK-58627 does not cover this one.
-* NaN -- OPEN. Spark orders NaN above every value and treats ``NaN = NaN`` as
-  true where Python does neither (SPARK-58781).
+* NaN ordering -- OPEN. Spark orders NaN above every value where Python's NaN
+  comparisons are all False (SPARK-58781). Equality matches Python since
+  SPARK-59091's NaN guard.
 
 Subexpression elimination and BooleanSimplification are INDEPENDENTLY sufficient,
 which is worth knowing before reaching for a conf to prove a theory. On the
@@ -270,8 +271,9 @@ _MAX_MATERIALIZED_WEIGHT = 1 << 16  # 65536: flat 64-link chains pass, depth-20 
 # Nodes a lowering adds around its operands (`when` / raise_error, NULL guard, ...).
 _NODE_OVERHEAD = 4
 
-# How often a comparison link reads each operand: `_lower_eq` three times, `is`
-# only the subject, `_lower_value_compare` (the default) twice.
+# How often a comparison link reads each operand: `_lower_eq` three times (its
+# NaN guard adds a fourth read, but only of numeric leaves, which never nest),
+# `is` only the subject, `_lower_value_compare` (the default) twice.
 _OPERAND_READS: dict[type, int] = {ast.Eq: 3, ast.NotEq: 3, ast.Is: 1, ast.IsNot: 1}
 
 # The four ordering comparisons: same lowering, differing only in the operator
