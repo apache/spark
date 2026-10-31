@@ -2349,4 +2349,235 @@ class FilterPushdownSuite extends PlanTest {
     val optimizedC = Optimize.execute(queryC)
     comparePlans(optimizedC, queryC, checkAnalysis = false)
   }
+
+  test("SPARK-60150: push a filter on a float/double grouping key with the normalized key") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    // SELECT * FROM (SELECT DISTINCT x FROM t) WHERE cast(x AS STRING) = '-0.0'
+    // DISTINCT becomes Aggregate(x, x) in the optimizer, so build that shape directly.
+    val originalQuery = relation.groupBy(x)(x).where(x.cast(StringType) === "-0.0")
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    // The Aggregate normalizes -0.0 to 0.0 (NormalizeFloatingNumbers), so the pushed predicate
+    // must read the normalized key.
+    val correctAnswer = relation
+      .where(normX.cast(StringType) === "-0.0")
+      .groupBy(x)(x)
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: normalize only the keys that can change a pushed filter's result") {
+    val x = $"x".double
+    val y = $"y".float
+    val relation = LocalRelation(x, y)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    // Within an OR, the key is normalized under the Cast but not as a direct comparison operand.
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x, y)(x, y).where(x > 5.0 || x.cast(StringType) === "-0.0").analyze),
+      relation.where(x > 5.0 || normX.cast(StringType) === "-0.0")
+        .groupBy(x, y)(x, y).analyze)
+
+    // Across conjuncts, only the one that reads the key through a Cast changes.
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x, y)(x, y).where(y > 1.0f && x.cast(StringType) === "-0.0").analyze),
+      relation.where(y > 1.0f && normX.cast(StringType) === "-0.0")
+        .groupBy(x, y)(x, y).analyze)
+  }
+
+  test("SPARK-60150: normalize aliases computed from a float/double key after alias expansion") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    // The alias is computed from the normalized key above the Aggregate, even when the alias
+    // itself is not float/double or is compared directly.
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(x.cast(StringType).as("s")).where($"s" === "-0.0").analyze),
+      relation.where(normX.cast(StringType) === "-0.0")
+        .groupBy(x)(x.cast(StringType).as("s")).analyze)
+
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(Length(x.cast(StringType)).as("k")).where($"k" === 4).analyze),
+      relation.where(Length(normX.cast(StringType)) === 4)
+        .groupBy(x)(Length(x.cast(StringType)).as("k")).analyze)
+
+    // A plain rename of the key compared directly is pushed down unchanged.
+    comparePlans(
+      Optimize.execute(relation.groupBy(x)(x.as("k")).where($"k" === 0.0).analyze),
+      relation.where(x === 0.0).groupBy(x)(x.as("k")).analyze)
+  }
+
+  test("SPARK-60150: push down comparisons on a float/double grouping key unchanged") {
+    val x = $"x".double
+    val y = $"y".float
+    val relation = LocalRelation(x, y, $"b".int)
+
+    // Comparisons treat -0.0/0.0 and all NaNs as equal, so they need no normalization. That
+    // includes a FLOAT key widened to DOUBLE to be compared with a DOUBLE value, and InSet.
+    val comparisons = x > 1.0 || (y === 0.0f && !IsNaN(x)) || x.in(2.0, 3.0) || x.isNull ||
+      y > 1.5 || y.in(1.5, 2.5) || InSet(x, Set(4.0, 5.0))
+    val originalQuery = relation
+      .groupBy(x, y)(x, y, count($"b").as("c"))
+      .where(comparisons)
+
+    val optimized = Optimize.execute(originalQuery.analyze)
+
+    val correctAnswer = relation
+      .where(comparisons)
+      .groupBy(x, y)(x, y, count($"b").as("c"))
+      .analyze
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("SPARK-60150: normalize grouping expressions and complex keys in pushed filters") {
+    val x = $"x".double
+    val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
+    val relation = LocalRelation(x, s)
+
+    // The grouping expression, not the column it reads, is what the Aggregate normalizes.
+    val k = x * 2.0
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(k)(k.as("k")).where($"k".cast(StringType) === "-0.0").analyze),
+      relation.where(NormalizeFloatingNumbers.normalize(k).cast(StringType) === "-0.0")
+        .groupBy(k)(k.as("k")).analyze)
+
+    // A struct key is normalized field by field.
+    val field = GetStructField(s, 0)
+    comparePlans(
+      Optimize.execute(relation.groupBy(s)(s).where(field.cast(StringType) === "-0.0").analyze),
+      relation.where(GetStructField(NormalizeFloatingNumbers.normalize(s), 0)
+        .cast(StringType) === "-0.0").groupBy(s)(s).analyze)
+  }
+
+  test("SPARK-60150: don't normalize a pushed filter twice") {
+    val x = $"x".double
+    val relation = LocalRelation(x)
+    val normX = NormalizeFloatingNumbers.normalize(x)
+
+    comparePlans(
+      Optimize.execute(
+        relation.groupBy(x)(x).groupBy(x)(x).where(x.cast(StringType) === "-0.0").analyze),
+      relation.where(normX.cast(StringType) === "-0.0").groupBy(x)(x).groupBy(x)(x).analyze)
+
+    // The upper key is computed from the lower key, so the lower key inside the normalized upper
+    // key is normalized too.
+    val k = Pow(x, Literal(-1.0)).as("k")
+    val lower = relation.groupBy(x)(k)
+    val upperKey = k.toAttribute
+    comparePlans(
+      Optimize.execute(
+        lower.groupBy(upperKey)(upperKey).where(upperKey.cast(StringType) === "Infinity").analyze),
+      relation
+        .where(NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))).cast(StringType) ===
+          "Infinity")
+        .groupBy(x)(k)
+        .groupBy(upperKey)(upperKey)
+        .analyze)
+  }
+
+  test("SPARK-60150: keep a normalization-sensitive filter above a pandas UDF aggregate") {
+    val x = $"x".double
+    val v = $"v".int
+    val relation = LocalRelation(x, v)
+    // Whether such an aggregate outputs normalized keys depends on which of its aggregate
+    // functions column pruning keeps later, so a conjunct that normalizing would change stays
+    // above it, while a plain comparison is still pushed below it.
+    val pandasAgg = PythonUDAF("pandasAgg", null, IntegerType, Seq(v), udfDeterministic = true)
+      .toAggregateExpression().as("p")
+    val sensitive = x.cast(StringType) === "-0.0"
+    for (aggregates <- Seq(Seq(pandasAgg), Seq(pandasAgg, count(v).as("c")))) {
+      comparePlans(
+        Optimize.execute(
+          relation.groupBy(x)(x +: aggregates: _*).where(sensitive && x > 1.0).analyze),
+        relation.where(x > 1.0).groupBy(x)(x +: aggregates: _*).where(sensitive).analyze)
+    }
+  }
+
+  test("SPARK-60150: push a filter below a streaming aggregate unnormalized, as before") {
+    val x = $"x".double
+    val streaming = LocalRelation(Seq(x, $"v".int), isStreaming = true)
+    // A streaming aggregate can still be replaced with a Project of the raw keys, and a filter kept
+    // above it could add a stateful operator.
+    val condition = x.cast(StringType) === "-0.0" && x > 1.0
+    comparePlans(
+      Optimize.execute(streaming.groupBy(x)(x, count($"v").as("c")).where(condition).analyze),
+      streaming.where(condition).groupBy(x)(x, count($"v").as("c")).analyze)
+  }
+
+  test("SPARK-60150: normalizeGroupingExpressions") {
+    val x = $"x".double
+    val f = $"f".float
+    val y = $"y".int
+    val s = $"s".struct(StructType(Seq(StructField("d", DoubleType))))
+    val normX = NormalizeFloatingNumbers.normalize(x)
+    val normS = NormalizeFloatingNumbers.normalize(s)
+    val arr = $"arr".array(DoubleType)
+    def normalize(e: Expression): Expression =
+      PushPredicateThroughNonJoin.normalizeGroupingExpressions(e, Seq(x, f, s, arr))
+    def unchanged(e: Expression): Unit = assert(normalize(e) == e)
+
+    // A grouping key on its own is normalized; other columns and literals are not.
+    assert(normalize(x) == normX)
+    unchanged(y)
+    unchanged(Literal(0.0))
+
+    // A float/double key that is a direct operand of these comparisons is left as is.
+    unchanged(x === 0.0)
+    unchanged(EqualNullSafe(x, Literal(0.0)))
+    unchanged(x < 1.0)
+    unchanged(f >= 1.0f)
+    unchanged(x === x)
+    unchanged(x.in(1.0, 2.0))
+    unchanged(InSet(x, Set(1.0, 2.0)))
+    unchanged(InSubquery(Seq(x), ListQuery(LocalRelation($"y".double))))
+    unchanged(x.isNull)
+    unchanged(x.isNotNull)
+    unchanged(IsNaN(x))
+
+    // A key under any other expression is normalized, even inside a comparison.
+    assert(normalize(x.cast(StringType) === "-0.0") == (normX.cast(StringType) === "-0.0"))
+    assert(normalize(Length(x.cast(StringType)) === 4) == (Length(normX.cast(StringType)) === 4))
+    assert(normalize((x + 0.0) > 5.0) == ((normX + 0.0) > 5.0))
+
+    // A float key widened to double is left as is too, but other casts of it are normalized.
+    unchanged(f.cast(DoubleType) > 1.5)
+    unchanged(f.cast(DoubleType).in(1.5, 2.5))
+    assert(normalize(f.cast(StringType) === "-0.0") ==
+      (NormalizeFloatingNumbers.normalize(f).cast(StringType) === "-0.0"))
+
+    // Only float/double attributes are left as is, so a struct key is normalized.
+    assert(normalize(s.isNull) == normS.isNull)
+    assert(normalize(GetStructField(s, 0) === 0.0) == (GetStructField(normS, 0) === 0.0))
+
+    // Boolean connectives are rewritten child by child.
+    unchanged(x === 0.0 || x > 5.0)
+    unchanged(!(x === 0.0))
+    assert(normalize(x > 5.0 || x.cast(StringType) === "-0.0") ==
+      (x > 5.0 || normX.cast(StringType) === "-0.0"))
+    assert(normalize(y === 1 && !(x.cast(StringType) === "-0.0")) ==
+      (y === 1 && !(normX.cast(StringType) === "-0.0")))
+
+    // An already normalized key, including an array key, is not normalized again, but a key
+    // inside another normalized expression is.
+    unchanged(normX.cast(StringType) === "-0.0")
+    unchanged(NormalizeFloatingNumbers.normalize(arr).cast(StringType) === "[0.0]")
+    assert(normalize(NormalizeFloatingNumbers.normalize(Pow(x, Literal(-1.0))) > 0.0) ==
+      (NormalizeFloatingNumbers.normalize(Pow(normX, Literal(-1.0))) > 0.0))
+
+    // Only the given grouping expressions count, matched semantically rather than by name.
+    assert(PushPredicateThroughNonJoin.normalizeGroupingExpressions(
+      x.cast(StringType), Seq.empty) == x.cast(StringType))
+    val renamed = x.withName("X").withQualifier(Seq("t")).withNullability(false)
+    assert(normalize(renamed) == NormalizeFloatingNumbers.normalize(renamed))
+    unchanged($"x".double)
+  }
 }
